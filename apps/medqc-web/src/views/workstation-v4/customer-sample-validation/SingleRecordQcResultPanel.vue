@@ -1498,8 +1498,8 @@ watch(
   min-width: 0;
   margin-top: 9px;
   color: #1d1d1f;
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 14px;
+  line-height: 22px;
   font-weight: 700;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1536,8 +1536,8 @@ watch(
   align-items: center;
   gap: 6px 8px;
   color: rgba(29, 29, 31, 0.82);
-  font-size: 14px;
-  line-height: 21px;
+  font-size: 12px;
+  line-height: 19px;
 }
 
 .copy-match-headline-documents > span {
@@ -1575,8 +1575,8 @@ watch(
   gap: 6px 8px;
   align-items: center;
   color: rgba(29, 29, 31, 0.65);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 11px;
+  line-height: 18px;
 }
 
 .copy-match-headline-metrics > span {
@@ -1592,7 +1592,7 @@ watch(
 
 .copy-match-headline-metrics strong {
   color: inherit;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -2099,14 +2099,18 @@ watch(
   }
 
   .rule-name {
-    font-size: 15px;
+    font-size: 14px;
     line-height: 22px;
   }
 
-  .rule-conclusion,
-  .copy-match-headline-documents {
+  .rule-conclusion {
     font-size: 14px;
     line-height: 21px;
+  }
+
+  .copy-match-headline-documents {
+    font-size: 12px;
+    line-height: 19px;
   }
 
   .timeliness-metric {
