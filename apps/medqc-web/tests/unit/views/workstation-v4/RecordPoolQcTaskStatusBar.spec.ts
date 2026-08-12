@@ -67,7 +67,7 @@ describe('RecordPoolQcTaskStatusBar', () => {
     expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
     expect(wrapper.get('[role="status"]').text()).toContain('正在执行质控')
     expect(wrapper.text()).toContain('已处理 1 / 4 份病历')
-    expect(wrapper.text()).toContain('已执行 18 / 75 个质控点')
+    expect(wrapper.text()).toContain('当前单份规则进度 18 / 75 个质控点')
     expect(wrapper.text()).toContain('当前：LX0609-017 不合理复制病历')
 
     wrapper.unmount()
@@ -142,6 +142,55 @@ describe('RecordPoolQcTaskStatusBar', () => {
     expect(stages.find('[data-stage-key="records"]').classes()).toContain('is-complete')
     expect(stages.find('[data-stage-key="rules"]').classes()).toContain('is-active')
     expect(stages.find('[data-stage-key="result"]').classes()).toContain('is-pending')
+
+    wrapper.unmount()
+  })
+
+  it('shows honest multi-record concurrency, completed and queued counts', async () => {
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: job({
+        status: 'running',
+        total_records: 14,
+        summary: {
+          total_records: 14,
+          success_count: 1,
+          failed_count: 0,
+          issue_records: 0,
+          compliant_records: 1,
+          total_tokens: 0,
+          total_processing_time: 0,
+          rule_count: 49,
+          progress: {
+            step_key: 'run',
+            processed_rule_count: 18,
+            rule_count: 49,
+            processed_records: 1,
+            total_records: 14,
+            max_parallel_records: 4,
+            active_record_count: 4,
+            queued_record_count: 9,
+          },
+        },
+      }),
+    })
+
+    const wrapper = mount(RecordPoolQcTaskStatusBar, {
+      props: { job: job({ total_records: 14 }) },
+      global: {
+        stubs: {
+          AProgress: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const concurrency = wrapper.get('[data-testid="record-pool-qc-concurrency"]')
+    expect(concurrency.text()).toContain('并发 4 份')
+    expect(concurrency.text()).toContain('执行中 4 份')
+    expect(concurrency.text()).toContain('已完成 1 份')
+    expect(concurrency.text()).toContain('排队 9 份')
+    expect(wrapper.text()).toContain('当前单份规则进度 18 / 49 个质控点')
 
     wrapper.unmount()
   })

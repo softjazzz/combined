@@ -850,6 +850,9 @@ def _safe_operational_progress(value: Any) -> Dict[str, Any]:
         "progress_percent",
         "processed_records",
         "total_records",
+        "max_parallel_records",
+        "active_record_count",
+        "queued_record_count",
         "rule_count",
         "completed",
         "total",
@@ -4782,6 +4785,7 @@ class CustomQCWorkspaceService:
         processed_records: int,
         total_records: int,
         summary_patch: Optional[Dict[str, Any]] = None,
+        progress_patch: Optional[Dict[str, Any]] = None,
         items: Optional[List[Dict[str, Any]]] = None,
         failed_records: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[Dict[str, Any]]:
@@ -4801,7 +4805,22 @@ class CustomQCWorkspaceService:
                 current_summary = {}
             merged_summary = {**current_summary, **(summary_patch or {})}
             merged_summary["rule_count"] = max(1, int(merged_summary.get("rule_count") or rule_count or 1))
+            current_progress = (
+                current_summary.get("progress")
+                if isinstance(current_summary.get("progress"), dict)
+                else {}
+            )
+            runtime_progress: Dict[str, int] = {}
+            for key in (
+                "max_parallel_records",
+                "active_record_count",
+                "queued_record_count",
+            ):
+                value = (progress_patch or {}).get(key, current_progress.get(key))
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    runtime_progress[key] = max(0, int(value))
             merged_summary["progress"] = {
+                **runtime_progress,
                 "step_key": _safe_text(step_key) or "run",
                 "rule_index": max(0, int(rule_index or 0)),
                 "rule_count": max(1, int(rule_count or merged_summary.get("rule_count") or 1)),

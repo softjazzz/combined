@@ -31,6 +31,9 @@ def test_customer_safe_batch_job_projects_inflight_rule_progress() -> None:
                     "rule_count": 49,
                     "processed_records": 0,
                     "total_records": 1,
+                    "max_parallel_records": 1,
+                    "active_record_count": 1,
+                    "queued_record_count": 0,
                 },
             },
             "items": [],
@@ -44,6 +47,9 @@ def test_customer_safe_batch_job_projects_inflight_rule_progress() -> None:
         "rule_count": 49,
         "processed_records": 0,
         "total_records": 1,
+        "max_parallel_records": 1,
+        "active_record_count": 1,
+        "queued_record_count": 0,
     }
     assert projected["summary"]["processed_rule_count"] == 18
 

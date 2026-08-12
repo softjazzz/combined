@@ -2704,6 +2704,27 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         enable_incremental_results = bool(filters.get("sample_pool_id"))
         job_started_at = datetime.now(timezone.utc)
         completed_records_state = {"count": 0}
+        active_records_state = {"count": 0}
+        effective_parallel_records = (
+            min(max_parallel_records, total_records)
+            if run_mode == "parallel" and total_records > 1
+            else 1
+        )
+
+        def _record_runtime_progress(processed_records_count: int) -> Dict[str, int]:
+            processed_count = min(total_records, max(0, int(processed_records_count)))
+            active_count = min(
+                max(0, total_records - processed_count),
+                max(0, int(active_records_state["count"])),
+            )
+            return {
+                "max_parallel_records": effective_parallel_records,
+                "active_record_count": active_count,
+                "queued_record_count": max(
+                    0,
+                    total_records - processed_count - active_count,
+                ),
+            }
 
         def _is_cancelled() -> bool:
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -4145,6 +4166,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 processed_records=processed_records_count,
                 total_records=total_records,
                 summary_patch=summary_patch,
+                progress_patch=_record_runtime_progress(processed_records_count),
                 **update_kwargs,
             )
 
@@ -4176,6 +4198,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             processed_records=0,
             total_records=total_records,
             summary_patch=initial_progress_patch,
+            progress_patch=_record_runtime_progress(0),
         )
 
         if run_mode == "parallel" and total_records > 1:
@@ -4183,7 +4206,25 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
             async def _evaluate_with_limit(record: Dict[str, Any]) -> Dict[str, Any]:
                 async with semaphore:
-                    return await _evaluate_single_record(record)
+                    active_records_state["count"] += 1
+                    processed_count = int(completed_records_state["count"])
+                    workspace.update_batch_job_progress(
+                        job_id=job_id,
+                        step_key="run",
+                        rule_index=0,
+                        rule_count=total_rules,
+                        processed_records=processed_count,
+                        total_records=total_records,
+                        summary_patch=_build_progress_patch(processed_count),
+                        progress_patch=_record_runtime_progress(processed_count),
+                    )
+                    try:
+                        return await _evaluate_single_record(record)
+                    finally:
+                        active_records_state["count"] = max(
+                            0,
+                            int(active_records_state["count"]) - 1,
+                        )
 
             tasks = [
                 asyncio.create_task(
@@ -4210,12 +4251,26 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 await asyncio.gather(*tasks, return_exceptions=True)
         else:
             for processed_index, record in enumerate(hydrated_records, start=1):
+                active_records_state["count"] = 1
+                processed_count = int(completed_records_state["count"])
+                workspace.update_batch_job_progress(
+                    job_id=job_id,
+                    step_key="run",
+                    rule_index=0,
+                    rule_count=total_rules,
+                    processed_records=processed_count,
+                    total_records=total_records,
+                    summary_patch=_build_progress_patch(processed_count),
+                    progress_patch=_record_runtime_progress(processed_count),
+                )
                 try:
                     _raise_if_cancelled()
                     record_result = await _evaluate_single_record(record)
                 except QCJobCancelled:
                     logger.info("四川批量任务 %s 已取消，停止执行", job_id)
                     return
+                finally:
+                    active_records_state["count"] = 0
                 _merge_record_result(record_result, processed_index)
 
         rule_results = _build_rule_results_snapshot(
@@ -4366,6 +4421,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             processed_records=total_records,
             total_records=total_records,
             summary_patch=summary,
+            progress_patch=_record_runtime_progress(total_records),
         )
         workspace.complete_batch_job(
             job_id=job_id,

@@ -39,6 +39,18 @@
           <span v-if="terminalSummary">{{ terminalSummary }}</span>
         </div>
 
+        <div
+          v-if="multiRecordRuntime"
+          class="record-pool-qc-status__concurrency"
+          data-testid="record-pool-qc-concurrency"
+          aria-label="多病历并发执行状态"
+        >
+          <span>并发 <strong>{{ multiRecordRuntime.parallel }}</strong> 份</span>
+          <span class="is-active">执行中 <strong>{{ multiRecordRuntime.active }}</strong> 份</span>
+          <span class="is-complete">已完成 <strong>{{ multiRecordRuntime.completed }}</strong> 份</span>
+          <span>排队 <strong>{{ multiRecordRuntime.queued }}</strong> 份</span>
+        </div>
+
         <div class="record-pool-qc-status__progress">
           <a-progress
             v-if="progressPercent !== null"
@@ -201,7 +213,24 @@ const totalRules = computed(() =>
 
 const ruleProgressText = computed(() => {
   if (processedRules.value === null || totalRules.value === null) return ''
-  return `已执行 ${Math.min(processedRules.value, totalRules.value)} / ${totalRules.value} 个质控点`
+  const prefix = (totalRecords.value ?? 0) > 1 ? '当前单份规则进度' : '已执行'
+  return `${prefix} ${Math.min(processedRules.value, totalRules.value)} / ${totalRules.value} 个质控点`
+})
+
+const multiRecordRuntime = computed(() => {
+  if (!currentJob.value || currentJob.value.status !== 'running' || (totalRecords.value ?? 0) <= 1)
+    return null
+  const progress = currentJob.value.summary?.progress
+  const parallel = firstCount(progress?.max_parallel_records)
+  const active = firstCount(progress?.active_record_count)
+  const queued = firstCount(progress?.queued_record_count)
+  if (parallel === null || active === null || queued === null) return null
+  return {
+    parallel,
+    active,
+    completed: Math.min(processedRecords.value ?? 0, totalRecords.value ?? 0),
+    queued,
+  }
 })
 
 const progressPercent = computed(() => {
@@ -489,6 +518,53 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__progress {
   max-width: 560px;
   margin-top: 7px;
+}
+
+.record-pool-qc-status__concurrency {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.record-pool-qc-status__concurrency span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.025);
+  color: rgba(29, 29, 31, 0.62);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 550;
+}
+
+.record-pool-qc-status__concurrency strong {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.record-pool-qc-status__concurrency span.is-active {
+  border-color: rgba(0, 102, 204, 0.14);
+  background: rgba(0, 102, 204, 0.07);
+  color: #0055aa;
+}
+
+.record-pool-qc-status__concurrency span.is-active strong {
+  color: #0066cc;
+}
+
+.record-pool-qc-status__concurrency span.is-complete {
+  border-color: rgba(16, 185, 129, 0.14);
+  background: rgba(16, 185, 129, 0.065);
+  color: #047857;
+}
+
+.record-pool-qc-status__concurrency span.is-complete strong {
+  color: #047857;
 }
 
 .record-pool-qc-status__indeterminate {

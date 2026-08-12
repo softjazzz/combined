@@ -297,6 +297,7 @@ class _WorkspaceStub:
         processed_records: int,
         total_records: int,
         summary_patch: Optional[Dict[str, Any]] = None,
+        progress_patch: Optional[Dict[str, Any]] = None,
     ) -> None:
         if job_id != self.job["id"]:
             return
@@ -306,12 +307,14 @@ class _WorkspaceStub:
             "rule_count": rule_count,
             "processed_records": processed_records,
             "total_records": total_records,
+            **dict(progress_patch or {}),
         }
         self.job["progress"] = progress
         self.progress_updates.append(
             {
                 **progress,
                 "summary_patch": dict(summary_patch or {}),
+                "progress_patch": dict(progress_patch or {}),
             }
         )
         if summary_patch:
@@ -753,6 +756,23 @@ async def test_workspace_parallel_batch_default_and_explicit_record_limits(
 
     assert service.evaluate_calls == 0
     assert concurrency["peak"] == expected_peak
+    runtime_updates = [
+        item
+        for item in workspace.progress_updates
+        if "active_record_count" in item["progress_patch"]
+    ]
+    assert runtime_updates
+    assert max(item["progress_patch"]["active_record_count"] for item in runtime_updates) == expected_peak
+    assert {
+        item["progress_patch"]["max_parallel_records"] for item in runtime_updates
+    } == {expected_peak}
+    assert all(
+        item["processed_records"]
+        + item["progress_patch"]["active_record_count"]
+        + item["progress_patch"]["queued_record_count"]
+        == 8
+        for item in runtime_updates
+    )
     assert workspace.job["status"] == "completed"
 
 
@@ -3004,7 +3024,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
 
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
         captured_rule_ids.append(list(kwargs["rule_ids"]))
-        assert kwargs.get("execution_trace_sink") is None
+        assert callable(kwargs.get("execution_trace_sink"))
         return {
             "evaluation_results": [
                 {
