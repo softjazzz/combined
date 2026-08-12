@@ -173,33 +173,30 @@ describe('SingleRecordQcResultPanel', () => {
   it('默认以紧凑摘要展示，客户可明确展开和收起完整详情', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [items[0]!] } })
     const trigger = wrapper.get('[data-testid="single-record-result-toggle"]')
+    const ruleName = wrapper.get('.rule-name')
 
     expect(trigger.attributes('aria-expanded')).toBe('false')
-    expect(trigger.text()).toContain('查看详情')
+    expect(trigger.text()).not.toContain('查看详情')
+    expect(trigger.text()).not.toContain('收起详情')
     expect(wrapper.text()).toContain(items[0]!.conclusion)
     expect(wrapper.find('.result-detail').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('完整判定说明')
     expect(wrapper.text()).not.toContain('关键证据')
     expect(wrapper.text()).not.toContain('处理建议')
 
-    await wrapper.get('.rule-name').trigger('click')
-
-    expect(trigger.attributes('aria-expanded')).toBe('false')
-    expect(wrapper.find('.result-detail').exists()).toBe(false)
-
-    await trigger.trigger('click')
+    await ruleName.trigger('click')
 
     expect(trigger.attributes('aria-expanded')).toBe('true')
-    expect(trigger.text()).toContain('收起详情')
+    expect(trigger.text()).not.toContain('收起详情')
     expect(wrapper.find('.result-detail').exists()).toBe(true)
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('关键证据')
     expect(wrapper.text()).toContain('处理建议')
 
-    await trigger.trigger('click')
+    await ruleName.trigger('click')
 
     expect(trigger.attributes('aria-expanded')).toBe('false')
-    expect(trigger.text()).toContain('查看详情')
+    expect(trigger.text()).not.toContain('查看详情')
     expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
 
