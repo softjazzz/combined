@@ -390,6 +390,18 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('待处理')
     expect(wrapper.text()).toContain('不适用')
     expect(wrapper.text()).toContain('合规')
+    expect(wrapper.get('[data-testid="single-record-result-tab-all"]').classes()).toEqual(
+      expect.arrayContaining(['result-tab', 'is-all', 'is-active']),
+    )
+    expect(
+      wrapper.get('[data-testid="single-record-result-tab-non_compliant"]').classes(),
+    ).toContain('is-non_compliant')
+    expect(wrapper.get('[data-testid="single-record-result-tab-pending"]').classes()).toContain(
+      'is-pending',
+    )
+    expect(wrapper.get('[data-testid="single-record-result-tab-compliant"]').get('b').text()).toBe(
+      '0',
+    )
     expect(wrapper.find('[data-testid="single-record-document-group"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid^="single-record-report-tab-"]').exists()).toBe(false)
   })

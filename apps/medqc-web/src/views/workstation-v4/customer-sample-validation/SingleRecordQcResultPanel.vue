@@ -26,7 +26,7 @@
             type="button"
             role="tab"
             class="result-tab"
-            :class="{ 'is-active': activeTab === tab.key }"
+            :class="[`is-${tab.key}`, { 'is-active': activeTab === tab.key }]"
             :aria-selected="activeTab === tab.key"
             :data-testid="`single-record-result-tab-${tab.key}`"
             @click="activeTab = tab.key"
@@ -47,7 +47,7 @@
             type="button"
             role="tab"
             class="result-tab"
-            :class="{ 'is-active': activeReportTab === tab.key }"
+            :class="[`is-${tab.key}`, { 'is-active': activeReportTab === tab.key }]"
             :aria-selected="activeReportTab === tab.key"
             :data-testid="`single-record-report-tab-${tab.key}`"
             @click="activeReportTab = tab.key"
@@ -1198,9 +1198,9 @@ watch(
 
 .result-tabs {
   display: flex;
-  gap: 2px;
+  gap: 7px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 5px 10px 10px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1255,51 +1255,90 @@ watch(
 }
 
 .result-tab {
-  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 38px;
-  padding: 7px 9px 9px;
-  border: 0;
-  background: transparent;
+  gap: 7px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.84);
   color: rgba(29, 29, 31, 0.62);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
   white-space: nowrap;
 }
 
 .result-tab:hover {
-  background: rgba(0, 0, 0, 0.025);
+  border-color: rgba(0, 0, 0, 0.14);
+  background: #fff;
   color: rgba(29, 29, 31, 0.84);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.07);
 }
 
 .result-tab.is-active {
-  background: transparent;
-  color: #0066cc;
+  border-color: #0066cc;
+  background: #0066cc;
+  color: #fff;
+  box-shadow: 0 3px 9px rgba(0, 102, 204, 0.2);
 }
 
-.result-tab.is-active::after {
-  position: absolute;
-  right: 8px;
-  bottom: 0;
-  left: 8px;
-  height: 2px;
-  border-radius: 999px;
-  background: #0066cc;
-  content: '';
+.result-tab.is-non_compliant:not(.is-active) {
+  border-color: rgba(239, 68, 68, 0.14);
+  background: rgba(239, 68, 68, 0.055);
+  color: #c62828;
+}
+
+.result-tab.is-pending:not(.is-active),
+.result-tab.is-data_gap:not(.is-active) {
+  border-color: rgba(245, 158, 11, 0.18);
+  background: rgba(245, 158, 11, 0.07);
+  color: #9a6200;
+}
+
+.result-tab.is-uncertain:not(.is-active) {
+  border-color: rgba(0, 102, 204, 0.14);
+  background: rgba(0, 102, 204, 0.055);
+  color: #245f9e;
+}
+
+.result-tab.is-not_applicable:not(.is-active) {
+  background: rgba(0, 0, 0, 0.035);
+  color: rgba(29, 29, 31, 0.58);
+}
+
+.result-tab.is-compliant:not(.is-active) {
+  border-color: rgba(16, 185, 129, 0.14);
+  background: rgba(16, 185, 129, 0.055);
+  color: #087443;
 }
 
 .result-tab b {
-  min-width: auto;
-  padding: 0;
-  background: transparent;
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.065);
   color: inherit;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
+  line-height: 20px;
   text-align: center;
+}
+
+.result-tab.is-active b {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .result-system-status {
