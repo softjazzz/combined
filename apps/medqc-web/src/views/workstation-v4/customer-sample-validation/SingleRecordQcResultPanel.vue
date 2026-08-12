@@ -182,6 +182,47 @@
             </span>
             <strong class="rule-name">{{ item.rule_name }}</strong>
             <span
+              v-if="copyMatchHeadline(item)"
+              class="copy-match-headline"
+              data-testid="copy-match-headline"
+            >
+              <span
+                class="copy-match-headline-documents"
+                data-testid="copy-match-headline-documents"
+              >
+                <span>
+                  <strong>{{ copyMatchHeadline(item)?.leftLabel }}</strong>
+                  <i aria-hidden="true">·</i>
+                  <time>{{ copyMatchHeadline(item)?.leftTime }}</time>
+                </span>
+                <ArrowRight
+                  aria-hidden="true"
+                  :size="16"
+                  :stroke-width="2"
+                />
+                <span>
+                  <strong>{{ copyMatchHeadline(item)?.rightLabel }}</strong>
+                  <i aria-hidden="true">·</i>
+                  <time>{{ copyMatchHeadline(item)?.rightTime }}</time>
+                </span>
+              </span>
+              <span
+                class="copy-match-headline-metrics"
+                data-testid="copy-match-headline-metrics"
+              >
+                <span class="is-primary">
+                  相似度 <strong>{{ copyMatchHeadline(item)?.similarity }}</strong>
+                </span>
+                <span>
+                  判定阈值 <strong>{{ copyMatchHeadline(item)?.threshold }}</strong>
+                </span>
+                <span v-if="copyMatchHeadline(item)?.additionalCount">
+                  另有 <strong>{{ copyMatchHeadline(item)?.additionalCount }}</strong> 组
+                </span>
+              </span>
+            </span>
+            <span
+              v-else
               class="rule-conclusion"
               data-testid="single-record-result-conclusion"
             >{{
@@ -794,6 +835,26 @@ function copyMatchPairs(item: SingleRecordQcResultItem) {
   })
 }
 
+function copyMatchHeadline(item: SingleRecordQcResultItem) {
+  const pairs = copyMatchPairs(item)
+  const firstPair = pairs[0]
+  const threshold = item.customer_display_facts?.copy_similarity_threshold
+  if (
+    !firstPair ||
+    typeof threshold !== 'number' ||
+    !Number.isFinite(threshold) ||
+    threshold < 0 ||
+    threshold > 1
+  ) {
+    return null
+  }
+  return {
+    ...firstPair,
+    threshold: formatCopyPercentage(threshold),
+    additionalCount: Math.max(0, pairs.length - 1),
+  }
+}
+
 function dataGapValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map(dataGapValue).filter(Boolean).join('、')
@@ -1152,7 +1213,7 @@ watch(
   background: rgba(0, 0, 0, 0.045);
   padding: 2px 8px;
   color: rgba(29, 29, 31, 0.58);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 17px;
   white-space: nowrap;
@@ -1400,7 +1461,7 @@ watch(
   padding: 1px 5px;
   color: rgba(29, 29, 31, 0.46);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
@@ -1435,11 +1496,11 @@ watch(
 .rule-name {
   display: block;
   min-width: 0;
-  margin-top: 7px;
-  color: rgba(29, 29, 31, 0.92);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 650;
+  margin-top: 9px;
+  color: #1d1d1f;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 700;
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
@@ -1447,13 +1508,92 @@ watch(
 
 .rule-conclusion {
   display: block;
-  margin-top: 5px;
-  color: rgba(29, 29, 31, 0.62);
-  font-size: 12px;
-  line-height: 19px;
+  margin-top: 7px;
+  color: rgba(29, 29, 31, 0.76);
+  font-size: 14px;
+  font-weight: 520;
+  line-height: 22px;
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
+}
+
+.copy-match-headline {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  padding: 10px 11px;
+  border-left: 3px solid #ef4444;
+  border-radius: 0 9px 9px 0;
+  background: rgba(239, 68, 68, 0.045);
+  text-align: left;
+}
+
+.copy-match-headline-documents {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  color: rgba(29, 29, 31, 0.82);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.copy-match-headline-documents > span {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: baseline;
+}
+
+.copy-match-headline-documents strong {
+  color: #1d1d1f;
+  font-weight: 650;
+}
+
+.copy-match-headline-documents i {
+  color: rgba(29, 29, 31, 0.32);
+  font-style: normal;
+}
+
+.copy-match-headline-documents time {
+  color: rgba(29, 29, 31, 0.66);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.copy-match-headline-documents svg {
+  flex: 0 0 auto;
+  color: rgba(29, 29, 31, 0.38);
+}
+
+.copy-match-headline-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  color: rgba(29, 29, 31, 0.65);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.copy-match-headline-metrics > span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.copy-match-headline-metrics .is-primary {
+  background: rgba(239, 68, 68, 0.09);
+  color: #c62828;
+}
+
+.copy-match-headline-metrics strong {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 750;
 }
 
 .result-row:not(.is-expanded) .rule-name,
@@ -1955,12 +2095,18 @@ watch(
   }
 
   .status-pill {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .rule-name {
-    font-size: 13px;
-    line-height: 19px;
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .rule-conclusion,
+  .copy-match-headline-documents {
+    font-size: 14px;
+    line-height: 21px;
   }
 
   .timeliness-metric {

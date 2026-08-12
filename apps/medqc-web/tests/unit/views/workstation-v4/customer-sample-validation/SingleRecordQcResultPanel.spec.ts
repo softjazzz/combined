@@ -306,6 +306,24 @@ describe('SingleRecordQcResultPanel', () => {
       },
     })
 
+    const headline = wrapper.get('[data-testid="copy-match-headline"]')
+    expect(headline.get('[data-testid="copy-match-headline-documents"]').text()).toContain(
+      '日常病程记录·2026-07-08 08:35:49',
+    )
+    expect(headline.get('[data-testid="copy-match-headline-documents"]').text()).toContain(
+      '日常病程记录·2026-07-11 09:13:25',
+    )
+    expect(headline.get('[data-testid="copy-match-headline-metrics"]').text()).toContain(
+      '相似度 100%',
+    )
+    expect(headline.get('[data-testid="copy-match-headline-metrics"]').text()).toContain(
+      '判定阈值 70%',
+    )
+    expect(headline.get('[data-testid="copy-match-headline-metrics"]').text()).toContain(
+      '另有 3 组',
+    )
+    expect(wrapper.find('[data-testid="single-record-result-conclusion"]').exists()).toBe(false)
+
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
 
     const groups = wrapper.findAll('[data-testid="copy-match-pair"]')
