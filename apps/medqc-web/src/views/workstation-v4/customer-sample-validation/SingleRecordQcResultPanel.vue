@@ -1054,6 +1054,7 @@ function evidenceLabel(evidence: SingleRecordQcEvidence) {
     exam_item_report: 'CT/MRI 检查报告',
     labtest_master: '细菌培养报告',
     labtest_item_report: '细菌培养报告',
+    bloodtrans_record: '输血记录',
     surgery_record: '手术记录',
     inpat_drug_order: '药物医嘱',
     inpat_nondrug_order: '医嘱',

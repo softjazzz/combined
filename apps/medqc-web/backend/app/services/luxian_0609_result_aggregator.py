@@ -2498,13 +2498,47 @@ def safe_luxian_0609_customer_display_facts(
             missing = controlled_list(raw.get("missing_fields"), allowed=allowed_fields)
             if checked is None or missing is None or raw.get("performed_transfusion_confirmed") is not True:
                 return None
-            return {
+            record_count = raw.get("record_count")
+            if type(record_count) is not int or record_count < 0:
+                return None
+            result = {
                 "verification_kind" if kind == "transfusion_course_record_complete" else "failure_kind": kind,
                 "performed_transfusion_confirmed": True,
-                "record_count": raw.get("record_count") if isinstance(raw.get("record_count"), int) else 0,
+                "record_count": record_count,
                 "checked_fields": checked,
                 "missing_fields": missing,
             }
+            incomplete_record_count = raw.get("incomplete_record_count")
+            raw_missing_counts = raw.get("missing_field_record_counts")
+            if incomplete_record_count is not None or raw_missing_counts is not None:
+                if (
+                    type(incomplete_record_count) is not int
+                    or incomplete_record_count < 0
+                    or incomplete_record_count > record_count
+                    or not isinstance(raw_missing_counts, Mapping)
+                    or set(raw_missing_counts) != set(missing)
+                    or any(
+                        key not in allowed_fields
+                        or type(value) is not int
+                        or value < 1
+                        or value > incomplete_record_count
+                        for key, value in raw_missing_counts.items()
+                    )
+                    or (
+                        kind == "transfusion_course_record_complete"
+                        and incomplete_record_count != 0
+                    )
+                    or (
+                        kind == "transfusion_course_record_incomplete"
+                        and incomplete_record_count < 1
+                    )
+                ):
+                    return None
+                result["incomplete_record_count"] = incomplete_record_count
+                result["missing_field_record_counts"] = {
+                    key: raw_missing_counts[key] for key in missing
+                }
+            return result
         if rule_id == "LX0609-047" and kind in {
             "posttransfusion_evaluation_complete", "posttransfusion_evaluation_missing",
         }:

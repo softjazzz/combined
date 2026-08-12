@@ -1511,7 +1511,10 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
     )
     facts = dict(result.customer_display_facts)["LX0609-046"]
     assert facts["record_count"] == 9
+    assert facts["incomplete_record_count"] == 1
     assert facts["missing_fields"] == ["component", "dose"]
+    assert facts["missing_field_record_counts"] == {"component": 1, "dose": 1}
+    assert facts["source_document_ids"] == ["blood-046-incomplete-9"]
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -1925,6 +1928,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             "failure_kind": "transfusion_course_record_incomplete",
             "performed_transfusion_confirmed": True,
             "record_count": 1,
+            "incomplete_record_count": 1,
             "checked_fields": [
                 "component",
                 "dose",
@@ -1934,6 +1938,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
                 "start_and_end_time",
             ],
             "missing_fields": ["reason_or_indication"],
+            "missing_field_record_counts": {"reason_or_indication": 1},
         },
         "LX0609-047": {
             "failure_kind": "posttransfusion_evaluation_missing",

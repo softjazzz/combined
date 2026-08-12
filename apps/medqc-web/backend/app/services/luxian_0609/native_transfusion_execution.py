@@ -1870,15 +1870,25 @@ def _programmatic_transfusion_display_facts(
             for field in field_names
         }
         missing = sorted(key for key, present in checked.items() if not present)
+        missing_field_record_counts = {
+            field: sum(1 for item in checks_by_record if not item[field])
+            for field in missing
+        }
+        incomplete_record_count = sum(
+            1 for item in checks_by_record if not all(item.values())
+        )
         payload = {
             "performed_transfusion_confirmed": True,
             "record_count": len(records),
+            "incomplete_record_count": incomplete_record_count,
             "checked_fields": sorted(checked),
             "missing_fields": missing,
+            "missing_field_record_counts": missing_field_record_counts,
         }
         source_document_ids = [
             document_id
-            for record in records
+            for record, record_checks in zip(records, checks_by_record, strict=True)
+            if status == "compliant" or not all(record_checks.values())
             if (document_id := _clean(record.get("document_id")))
         ]
         if source_document_ids:

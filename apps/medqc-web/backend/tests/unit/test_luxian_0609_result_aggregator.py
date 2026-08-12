@@ -26,6 +26,29 @@ CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
 
 
+def test_046_preserves_controlled_per_record_missing_counts() -> None:
+    facts = {
+        "failure_kind": "transfusion_course_record_incomplete",
+        "performed_transfusion_confirmed": True,
+        "record_count": 3,
+        "incomplete_record_count": 2,
+        "checked_fields": [
+            "component",
+            "dose",
+            "process_observation",
+            "reaction_and_handling",
+            "reason_or_indication",
+            "start_and_end_time",
+        ],
+        "missing_fields": ["component", "dose"],
+        "missing_field_record_counts": {"component": 2, "dose": 1},
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-046", raw=facts
+    ) == facts
+
+
 def _010_association_facts() -> dict[str, object]:
     return {
         "failure_kind": "exam_order_exam_association_failed",

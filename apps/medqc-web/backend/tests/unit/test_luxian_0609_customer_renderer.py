@@ -95,9 +95,15 @@ def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course
         rule_id="LX0609-046",
         facts={
             "failure_kind": "transfusion_course_record_incomplete",
+            "record_count": 3,
+            "incomplete_record_count": 2,
             "missing_fields": ["component"],
+            "missing_field_record_counts": {"component": 2},
         },
-    ) == "输血记录单未明确记录实际输注血液成分。"
+    ) == (
+        "共核对 3 份输血病程记录，其中 2 份存在缺项："
+        "2 份未明确记录实际输注血液成分。"
+    )
     assert customer_finding_from_controlled_facts(
         rule_id="LX0609-042",
         facts={

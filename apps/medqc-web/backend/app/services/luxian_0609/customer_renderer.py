@@ -1914,6 +1914,38 @@ def customer_finding_from_controlled_facts(
             return "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。"
         if kind == "transfusion_course_record_incomplete":
             raw_missing = facts.get("missing_fields")
+            record_count = facts.get("record_count")
+            incomplete_record_count = facts.get("incomplete_record_count")
+            raw_counts = facts.get("missing_field_record_counts")
+            if (
+                isinstance(raw_missing, list)
+                and type(record_count) is int
+                and record_count > 0
+                and type(incomplete_record_count) is int
+                and 0 < incomplete_record_count <= record_count
+                and isinstance(raw_counts, Mapping)
+            ):
+                field_phrases = {
+                    "reason_or_indication": "缺少输血原因或指征",
+                    "start_and_end_time": "缺少输血开始及结束时间",
+                    "component": "未明确记录实际输注血液成分",
+                    "dose": "缺少输注量",
+                    "process_observation": "缺少输血过程观察",
+                    "reaction_and_handling": "缺少输血反应及处理",
+                }
+                details = [
+                    f"{raw_counts[field]} 份{field_phrases[field]}"
+                    for field in raw_missing
+                    if field in field_phrases
+                    and type(raw_counts.get(field)) is int
+                    and raw_counts[field] > 0
+                ]
+                if details:
+                    return (
+                        f"共核对 {record_count} 份输血病程记录，其中 "
+                        f"{incomplete_record_count} 份存在缺项："
+                        f"{'；'.join(details)}。"
+                    )
             if isinstance(raw_missing, list) and raw_missing == ["component"]:
                 return "输血记录单未明确记录实际输注血液成分。"
             missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)

@@ -596,6 +596,32 @@ describe('SingleRecordQcResultPanel', () => {
     )
   })
 
+  it('将输血证据显示为输血记录而不是泛化的来源文书', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-046',
+            rule_name: '输血病程记录完整性',
+            status: 'non_compliant',
+            conclusion: '共核对 3 份输血病程记录，其中 2 份存在缺项。',
+            evidence: [
+              {
+                source_ref: 'src_bloodtrans_record_046',
+                source_type: 'bloodtrans_record',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain('输血记录')
+    expect(wrapper.get('[data-testid="single-record-evidence"]').text()).not.toContain('来源文书')
+  })
+
   it('占位结果单独计为未执行，不把质控点总数冒充执行完成数', () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
