@@ -399,6 +399,44 @@
                 </dl>
               </section>
               <section
+                v-if="copyMatchPairs(item).length"
+                class="detail-block copy-pair-block"
+                data-testid="copy-match-pairs"
+              >
+                <div class="copy-pair-title">
+                  <h4>重复病程组合</h4>
+                  <span>共 {{ copyMatchPairs(item).length }} 组</span>
+                </div>
+                <div class="copy-pair-list">
+                  <article
+                    v-for="pair in copyMatchPairs(item)"
+                    :key="pair.key"
+                    class="copy-pair-row"
+                    data-testid="copy-match-pair"
+                  >
+                    <div class="copy-pair-head">
+                      <strong>组合 {{ pair.index }}</strong>
+                      <span>相似度 {{ pair.similarity }}</span>
+                    </div>
+                    <div class="copy-pair-documents">
+                      <span>{{ pair.leftLabel }} · {{ pair.leftTime }}</span>
+                      <ArrowRight
+                        aria-hidden="true"
+                        :size="14"
+                        :stroke-width="1.8"
+                      />
+                      <span>{{ pair.rightLabel }} · {{ pair.rightTime }}</span>
+                    </div>
+                  </article>
+                </div>
+                <p
+                  v-if="displayEvidence(item).length"
+                  class="copy-pair-hint"
+                >
+                  下方关键证据可分别定位这些病程原文。
+                </p>
+              </section>
+              <section
                 v-if="!isCompliantResult(item) && dataGapRows(item).length"
                 class="detail-block fact-block"
               >
@@ -624,6 +662,10 @@ const hiddenDataGapKeys = new Set(['reason_code', 'missing_fields'])
 
 const TIMELINESS_METRIC_KEYS = ['threshold_hours', 'elapsed_hours', 'overdue_hours'] as const
 const TIMELINESS_TIME_KEYS = ['anchor_time', 'observed_time'] as const
+const COPY_SOURCE_LABELS: Record<string, string> = {
+  daily_course_record: '日常病程记录',
+  senior_course_record: '上级医师查房记录',
+}
 
 function displayFactRows(item: SingleRecordQcResultItem) {
   const facts = item.customer_display_facts
@@ -701,6 +743,55 @@ function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
   const displayedKeys = new Set(timelinessTimeline(item).map((row) => row.key))
   timelinessMetrics(item).forEach((row) => displayedKeys.add(row.key))
   return displayFactRows(item).filter((row) => !displayedKeys.has(row.key))
+}
+
+function formatCopyPercentage(value: number): string {
+  const percentage = Math.round(value * 1000) / 10
+  return `${Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1)}%`
+}
+
+function copyMatchPairs(item: SingleRecordQcResultItem) {
+  if (item.rule_id !== 'LX0609-017') return []
+  const rawPairs = item.customer_display_facts?.copy_match_pairs
+  if (!Array.isArray(rawPairs)) return []
+  return rawPairs.slice(0, 4).flatMap((rawPair, rawIndex) => {
+    if (!rawPair || typeof rawPair !== 'object') return []
+    const pair = rawPair as Record<string, unknown>
+    const sourceTypes = pair.source_types
+    const recordTimes = pair.record_times
+    const similarity = pair.similarity
+    if (
+      !Array.isArray(sourceTypes) ||
+      sourceTypes.length !== 2 ||
+      !sourceTypes.every(
+        (sourceType): sourceType is string =>
+          typeof sourceType === 'string' && Boolean(COPY_SOURCE_LABELS[sourceType]),
+      ) ||
+      !Array.isArray(recordTimes) ||
+      recordTimes.length !== 2 ||
+      !recordTimes.every(
+        (recordTime): recordTime is string =>
+          typeof recordTime === 'string' && Boolean(recordTime.trim()),
+      ) ||
+      typeof similarity !== 'number' ||
+      !Number.isFinite(similarity) ||
+      similarity < 0 ||
+      similarity > 1
+    ) {
+      return []
+    }
+    return [
+      {
+        key: `${rawIndex}-${sourceTypes.join('-')}-${recordTimes.join('-')}`,
+        index: rawIndex + 1,
+        leftLabel: COPY_SOURCE_LABELS[sourceTypes[0]] || sourceTypes[0],
+        leftTime: recordTimes[0],
+        rightLabel: COPY_SOURCE_LABELS[sourceTypes[1]] || sourceTypes[1],
+        rightTime: recordTimes[1],
+        similarity: formatCopyPercentage(similarity),
+      },
+    ]
+  })
 }
 
 function dataGapValue(value: unknown): string {
@@ -1580,6 +1671,80 @@ watch(
   font-size: 12px;
   line-height: 19px;
   overflow-wrap: anywhere;
+}
+
+.copy-pair-title,
+.copy-pair-head,
+.copy-pair-documents {
+  display: flex;
+  align-items: center;
+}
+
+.copy-pair-title {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.copy-pair-title h4 {
+  margin-bottom: 0;
+}
+
+.copy-pair-title > span {
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.copy-pair-list {
+  display: grid;
+  gap: 6px;
+}
+
+.copy-pair-row {
+  display: grid;
+  gap: 5px;
+  padding: 8px 9px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 8px;
+  background: rgba(0, 102, 204, 0.025);
+}
+
+.copy-pair-head {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.copy-pair-head strong {
+  color: rgba(29, 29, 31, 0.78);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.copy-pair-head span {
+  color: #d92d20;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.copy-pair-documents {
+  flex-wrap: wrap;
+  gap: 6px;
+  color: rgba(29, 29, 31, 0.66);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.copy-pair-documents svg {
+  flex: 0 0 auto;
+  color: rgba(0, 102, 204, 0.55);
+}
+
+.copy-pair-hint {
+  margin-top: 7px !important;
+  color: rgba(29, 29, 31, 0.48) !important;
+  font-size: 11px !important;
+  line-height: 17px !important;
 }
 
 .medical-analysis summary {

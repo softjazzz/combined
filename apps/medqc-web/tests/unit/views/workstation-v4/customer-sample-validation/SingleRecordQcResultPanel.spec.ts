@@ -265,6 +265,60 @@ describe('SingleRecordQcResultPanel', () => {
     expect(detail).not.toContain('copy_similarity_threshold_exceeded')
   })
 
+  it('将 017 命中的多组病程配对按时间和相似度逐组展示', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-017',
+            rule_name: '不合理复制病历：2次以上病程记录完全相同（相似度大于70%）',
+            status: 'non_compliant',
+            conclusion: '最高相似度100%，另有3组病程记录达到判定阈值。',
+            customer_display_facts: {
+              failure_kind: 'copy_similarity_threshold_exceeded',
+              copy_similarity: 1,
+              copy_similarity_threshold: 0.7,
+              copy_match_pairs: [
+                {
+                  source_types: ['daily_course_record', 'daily_course_record'],
+                  record_times: ['2026-07-08 08:35:49', '2026-07-11 09:13:25'],
+                  similarity: 1,
+                },
+                {
+                  source_types: ['daily_course_record', 'senior_course_record'],
+                  record_times: ['2026-07-08 08:35:49', '2026-07-12 09:05:00'],
+                  similarity: 0.936,
+                },
+                {
+                  source_types: ['daily_course_record', 'daily_course_record'],
+                  record_times: ['2026-07-09 08:20:00', '2026-07-11 09:13:25'],
+                  similarity: 0.812,
+                },
+                {
+                  source_types: ['daily_course_record', 'daily_course_record'],
+                  record_times: ['2026-07-10 08:10:00', '2026-07-13 09:00:00'],
+                  similarity: 0.701,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    const groups = wrapper.findAll('[data-testid="copy-match-pair"]')
+    expect(groups).toHaveLength(4)
+    expect(groups[0]?.text()).toContain('组合 1')
+    expect(groups[0]?.text()).toContain('相似度 100%')
+    expect(groups[0]?.text()).toContain('日常病程记录 · 2026-07-08 08:35:49')
+    expect(groups[0]?.text()).toContain('日常病程记录 · 2026-07-11 09:13:25')
+    expect(groups[1]?.text()).toContain('上级医师查房记录 · 2026-07-12 09:05:00')
+    expect(groups[1]?.text()).toContain('相似度 93.6%')
+    expect(wrapper.text()).not.toContain('[object Object]')
+  })
+
   it('未知内部原因码没有客户文案时不在结果卡片中直接显示', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
