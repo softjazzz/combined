@@ -590,7 +590,7 @@
                   v-else
                   class="muted"
                 >
-                  未返回可定位原文。
+                  {{ emptyEvidenceText(item) }}
                 </p>
               </section>
 
@@ -669,6 +669,32 @@ const factLabels: Record<string, string> = {
   observed_time: '记录时间',
   elapsed_hours: '实际间隔',
   overdue_hours: '超出时限',
+  identified_implants: '已识别植入物',
+  missing_visit_sources: '缺少访视记录',
+  performed_anesthesia_confirmed: '已实施麻醉',
+  performed_transfusion_confirmed: '已实施输血',
+  record_count: '已核对记录',
+  report_time: '报告时间',
+  response_record_count: '相关病程记录',
+  antimicrobials: '抗菌药物',
+  window_hours: '评估时限',
+  special_antimicrobials: '特殊级抗菌药物',
+  expert_support_present: '专家支持记录',
+  performed_surgery_count: '已实施手术',
+  surgery_time: '手术时间',
+  required_postop_dates: '应记录日期',
+  covered_postop_dates: '已覆盖日期',
+  surgeon_round_present: '术者查房记录',
+  diagnosis_change_count: '诊断修正或补充',
+  reason_recorded: '修改理由',
+  basis_recorded: '诊断依据',
+  completed_opinion_episode_count: '已完成会诊',
+  recommendation_count: '会诊建议',
+  specific_execution_count: '明确执行记录',
+  generic_execution_count: '笼统执行记录',
+  missing_execution_count: '未找到执行记录',
+  ordered_procedures: '有创操作医嘱',
+  course_documented: '对应病程记录',
 }
 
 const factValueLabels: Record<string, string> = {
@@ -746,7 +772,7 @@ function displayFactRows(item: SingleRecordQcResultItem) {
       const value = values
         .map((entry) => {
           if (
-            ['threshold_hours', 'elapsed_hours', 'overdue_hours'].includes(key) &&
+            ['threshold_hours', 'elapsed_hours', 'overdue_hours', 'window_hours'].includes(key) &&
             typeof entry === 'number' &&
             Number.isFinite(entry)
           ) {
@@ -805,6 +831,16 @@ function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
   const displayedKeys = new Set(timelinessTimeline(item).map((row) => row.key))
   timelinessMetrics(item).forEach((row) => displayedKeys.add(row.key))
   return displayFactRows(item).filter((row) => !displayedKeys.has(row.key))
+}
+
+function emptyEvidenceText(item: SingleRecordQcResultItem): string {
+  if (item.status === 'non_compliant') {
+    return '当前结果尚无可定位证据，请先人工核对相关文书后再处理。'
+  }
+  if (item.status === 'data_gap' || item.status === 'uncertain') {
+    return '当前没有可定位证据，请根据资料缺口补齐或核对相关记录。'
+  }
+  return '本次结果没有可定位证据。'
 }
 
 function formatCopyPercentage(value: number): string {

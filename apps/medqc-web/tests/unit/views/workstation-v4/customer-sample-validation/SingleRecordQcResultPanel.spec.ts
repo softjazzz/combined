@@ -810,6 +810,113 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain('手术记录')
   })
 
+  it.each([
+    {
+      rule_id: 'LX0609-055',
+      facts: {
+        verification_kind: 'antimicrobial_response_evaluation_check',
+        antimicrobials: ['青霉素', '哌拉西林', '头孢他啶'],
+        evaluation_intervals: [47.5, 50, 73],
+        window_hours: [48, 72],
+      },
+      expected: ['抗菌药物', '青霉素、哌拉西林、头孢他啶', '评估时限', '48 小时、72 小时'],
+    },
+    {
+      rule_id: 'LX0609-058',
+      facts: {
+        verification_kind: 'special_antimicrobial_expert_support_check',
+        special_antimicrobials: ['美罗培南'],
+        expert_support_present: false,
+      },
+      expected: ['特殊级抗菌药物', '美罗培南', '专家支持记录', '否'],
+    },
+    {
+      rule_id: 'LX0609-064',
+      facts: {
+        verification_kind: 'postoperative_three_day_coverage_check',
+        performed_surgery_count: 2,
+        surgery_time: '2026-07-07 18:30:00',
+        required_postop_dates: ['2026-07-08', '2026-07-09', '2026-07-10'],
+        covered_postop_dates: ['2026-07-08', '2026-07-09'],
+        surgeon_round_present: false,
+      },
+      expected: ['已实施手术', '2', '手术时间', '应记录日期', '已覆盖日期', '术者查房记录'],
+    },
+    {
+      rule_id: 'LX0609-074',
+      facts: {
+        verification_kind: 'diagnosis_change_documentation_check',
+        diagnosis_change_count: 2,
+        reason_recorded: false,
+        basis_recorded: true,
+      },
+      expected: ['诊断修正或补充', '2', '修改理由', '否', '诊断依据', '是'],
+    },
+    {
+      rule_id: 'LX0609-020',
+      facts: {
+        verification_kind: 'consultation_execution_relation_check',
+        completed_opinion_episode_count: 2,
+        recommendation_count: 4,
+        specific_execution_count: 1,
+        generic_execution_count: 1,
+        missing_execution_count: 2,
+      },
+      expected: ['已完成会诊', '2', '会诊建议', '4', '明确执行记录', '未找到执行记录'],
+    },
+    {
+      rule_id: 'LX0609-075',
+      facts: {
+        failure_kind: 'invasive_procedure_course_record_missing',
+        ordered_procedures: ['中心静脉置管', '气管插管'],
+        course_documented: false,
+      },
+      expected: ['有创操作医嘱', '中心静脉置管、气管插管', '对应病程记录', '否'],
+    },
+  ])('$rule_id 展开后展示客户可读的关键判定事实', async ({ rule_id, facts, expected }) => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id,
+            rule_name: '质控点',
+            status: 'non_compliant',
+            conclusion: '已核对受控事实。',
+            customer_display_facts: facts,
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    const detail = wrapper.get('[data-testid="single-record-decision-facts"]').text()
+    expected.forEach((text) => expect(detail).toContain(text))
+    expect(detail).not.toContain('verification_kind')
+    expect(detail).not.toContain('failure_kind')
+  })
+
+  it('确定问题没有定位证据时明确提示先人工核对，不显示技术化空值文案', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-029',
+            rule_name: '术前小结',
+            status: 'non_compliant',
+            conclusion: '已实施手术，但未找到对应术前小结。',
+            evidence_items: [],
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    expect(wrapper.text()).toContain('当前结果尚无可定位证据，请先人工核对相关文书后再处理。')
+    expect(wrapper.text()).not.toContain('未返回可定位原文')
+  })
+
   it('012只把触发报告作为关键证据，并以中文说明已核对的病程范围', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {

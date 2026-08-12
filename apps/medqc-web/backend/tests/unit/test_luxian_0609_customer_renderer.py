@@ -113,11 +113,170 @@ def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course
     ) == "输血知情同意书缺少：拟输血成分。"
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "facts", "expected_finding"),
+    [
+        (
+            "LX0609-029",
+            {
+                "failure_kind": "surgery_document_missing",
+                "target_document": "presurg_summary",
+                "performed_surgery_confirmed": True,
+            },
+            "已确认本次实施手术，但未找到对应的术前小结。",
+        ),
+        (
+            "LX0609-038",
+            {
+                "failure_kind": "anesthesia_record_missing",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["anesthesia_record"],
+            },
+            "已确认本次实施非局部麻醉，但未找到麻醉记录单。",
+        ),
+        (
+            "LX0609-059",
+            {
+                "failure_kind": "antimicrobial_course_documentation_missing",
+                "antimicrobials": ["青霉素", "哌拉西林", "头孢他啶"],
+                "course_documented": False,
+            },
+            "已核对抗菌药物青霉素、哌拉西林、头孢他啶，未找到对应的用药病程记录。",
+        ),
+        (
+            "LX0609-075",
+            {
+                "failure_kind": "invasive_procedure_course_record_missing",
+                "ordered_procedures": ["中心静脉置管", "气管插管", "支气管镜"],
+                "course_documented": False,
+            },
+            "已识别有创操作医嘱：中心静脉置管、气管插管、支气管镜；"
+            "未找到对应的有创操作病程记录。",
+        ),
+    ],
+)
+def test_customer_finding_uses_existing_controlled_facts_instead_of_generic_copy(
+    rule_id: str,
+    facts: dict[str, object],
+    expected_finding: str,
+) -> None:
+    assert customer_finding_from_controlled_facts(
+        rule_id=rule_id,
+        facts=facts,
+    ) == expected_finding
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "expected_suggestion"),
+    [
+        (
+            "LX0609-012",
+            "请在检查报告出具后24小时内的病程中，记录阳性结果的临床意义、处置措施及后续计划。",
+        ),
+        (
+            "LX0609-015",
+            "请在培养报告出具后24小时内的病程中，记录阳性菌结果的临床意义、抗感染调整及后续计划。",
+        ),
+        (
+            "LX0609-017",
+            "请逐组核对结果列出的高相似病程，删除机械复制内容，并补充当日病情变化、检查结果和诊疗调整。",
+        ),
+        (
+            "LX0609-025",
+            "请在手术记录中补全结果列出的植入物名称、种类、规格/型号、材质、条码及数量等缺项。",
+        ),
+        (
+            "LX0609-029",
+            "请为本次已实施手术补充术前小结，并记录术前诊断、手术指征、拟施手术及注意事项。",
+        ),
+        (
+            "LX0609-038",
+            "请补充本次麻醉记录单，并核对麻醉方式、用药、生命体征及术中事件记录。",
+        ),
+        (
+            "LX0609-040",
+            "请补充本次四级手术的术前多学科讨论记录，并记录参会科室、讨论意见及手术方案。",
+        ),
+        (
+            "LX0609-058",
+            "请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。",
+        ),
+        (
+            "LX0609-059",
+            "请在病程中补充上述抗菌药物的使用原因、方案调整及疗效观察。",
+        ),
+        (
+            "LX0609-064",
+            "请按每台手术分别补齐术后次日起连续3天的病程记录，并记录术者查房情况。",
+        ),
+        (
+            "LX0609-074",
+            "请对每次诊断修正或补充记录修改理由及诊断依据。",
+        ),
+        (
+            "LX0609-075",
+            "请分别补充上述有创操作的适应证、操作时间、过程、结果及并发症观察。",
+        ),
+    ],
+)
+def test_non_compliant_result_gives_rule_specific_action_instead_of_generic_advice(
+    rule_id: str,
+    expected_suggestion: str,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-rule-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["suggestion"] == expected_suggestion
+    assert result["suggestion"] != "请按质控要求核对并完善相关记录。"
+
+
 DEFINED_RULE_IDS = tuple(
     contract.rule_id
     for contract in load_luxian_0609_rule_contracts()
     if contract.phase_status != "pending_definition"
 )
+CUSTOMER_EXECUTABLE_RULE_IDS = tuple(
+    contract.rule_id
+    for contract in load_luxian_0609_rule_contracts()
+    if contract.rule_id != "LX0609-049"
+)
+
+
+@pytest.mark.parametrize("rule_id", CUSTOMER_EXECUTABLE_RULE_IDS)
+def test_every_customer_executable_rule_has_specific_action_instead_of_generic_advice(
+    rule_id: str,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            fact_refs=(FACT_REF,),
+            evaluator_version="customer-copy-audit-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["suggestion"] != "请按质控要求核对并完善相关记录。", rule_id
+    assert len(result["suggestion"]) >= 12, rule_id
+
+
 NOT_APPLICABLE_CASES = (
     ("LX0609-003", "performed_event_absent"),
     ("LX0609-007", "eligibility_not_met"),
@@ -186,7 +345,7 @@ NOT_APPLICABLE_CASES = (
                 "response_record_time": "2026-06-02 18:00:00",
                 "interval_hours": 4.0,
             },
-            "CT/MRI 报告于 2026-06-02 14:00:00 出具，找到 1 份相关病程，最早相关病程时间 2026-06-02 18:00:00，间隔 4 小时，但病程未记录阳性结果的临床意义判断或相应处置。",
+            "CT/MRI 报告于 2026-06-02 14:00:00 出具。已核对首次病程记录及后续病程记录，找到 1 份报告后相关病程，最早相关病程时间 2026-06-02 18:00:00，间隔 4 小时，但病程未记录阳性结果的临床意义判断或相应处置。",
         ),
         (
             "LX0609-020",
