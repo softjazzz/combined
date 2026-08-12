@@ -1463,10 +1463,46 @@ def _consultation_execution_display_facts(
         "evaluation_unknown": "association_unresolved",
         "technical_error": "source_error",
     }
+    assessment_rows = tuple(assessments or ())
+    assessments_by_recommendation = {
+        item.recommendation_ref: item for item in assessment_rows
+    }
+    completed_episode_refs = tuple(
+        dict.fromkeys(
+            item.episode_ref
+            for item in episodes
+            if item.opinion_state == "clear" and item.confidence == "high"
+        )
+    )
+    episode_indexes = {
+        episode_ref: index
+        for index, episode_ref in enumerate(completed_episode_refs, start=1)
+    }
+    missing_episode_refs: set[str] = set()
+    for item in completed_recommendations:
+        assessment = assessments_by_recommendation.get(
+            item.recommendation.recommendation_ref
+        )
+        if (
+            assessment is not None
+            and assessment.execution_record_state == "no_trace"
+            and not assessment.execution_refs
+        ):
+            missing_episode_refs.add(item.episode_ref)
+    evidence_episodes = tuple(
+        episode
+        for episode in episodes
+        if not (
+            rule_id == "LX0609-020"
+            and status == "non_compliant"
+            and missing_episode_refs
+        )
+        or episode.episode_ref in missing_episode_refs
+    )
     opinion_refs = tuple(
         dict.fromkeys(
             ref
-            for episode in episodes
+            for episode in evidence_episodes
             if episode.opinion_state == "clear" and episode.confidence == "high"
             for ref in episode.opinion_refs
         )
@@ -1477,7 +1513,6 @@ def _consultation_execution_display_facts(
         for ref in opinion_refs
         if (document_id := _clean(documents_by_ref.get(ref, {}).get("document_id")))
     ]
-    assessment_rows = tuple(assessments or ())
     candidate_by_ref = {item.ref: item for item in candidates}
     source_document_refs: list[dict[str, str]] = [
         {
@@ -1486,24 +1521,25 @@ def _consultation_execution_display_facts(
         }
         for document_id in source_document_ids
     ]
-    for assessment in assessment_rows:
-        for ref in (*assessment.trace_refs, *assessment.execution_refs):
-            candidate = candidate_by_ref.get(ref)
-            if candidate is None or not candidate.document_id:
-                continue
-            source_document_refs.append(
-                {
-                    "source_type": candidate.source_key,
-                    "source_document_id": candidate.document_id,
-                }
-            )
+    if not (rule_id == "LX0609-020" and status == "non_compliant"):
+        for assessment in assessment_rows:
+            for ref in (*assessment.trace_refs, *assessment.execution_refs):
+                candidate = candidate_by_ref.get(ref)
+                if candidate is None or not candidate.document_id:
+                    continue
+                source_document_refs.append(
+                    {
+                        "source_type": candidate.source_key,
+                        "source_document_id": candidate.document_id,
+                    }
+                )
     source_document_refs = list(
         {
             (item["source_type"], item["source_document_id"]): item
             for item in source_document_refs
         }.values()
     )[:8]
-    return {
+    facts: dict[str, Any] = {
         "verification_kind": (
             "consultation_execution_quality_check"
             if rule_id == "LX0609-023"
@@ -1538,6 +1574,38 @@ def _consultation_execution_display_facts(
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
         "source_document_refs": source_document_refs,
     }
+    if rule_id == "LX0609-020":
+        recommendation_results: list[dict[str, Any]] = []
+        for recommendation_index, item in enumerate(
+            completed_recommendations, start=1
+        ):
+            assessment = assessments_by_recommendation.get(
+                item.recommendation.recommendation_ref
+            )
+            execution_state = "unknown"
+            if assessment is not None:
+                if assessment.execution_record_state == "specific_trace":
+                    execution_state = "specific"
+                elif assessment.execution_record_state in {
+                    "generic_trace",
+                    "copied_opinion",
+                }:
+                    execution_state = "generic"
+                elif (
+                    assessment.execution_record_state == "no_trace"
+                    and not assessment.execution_refs
+                ):
+                    execution_state = "missing"
+            recommendation_results.append(
+                {
+                    "episode_index": episode_indexes[item.episode_ref],
+                    "recommendation_index": recommendation_index,
+                    "action_type": item.recommendation.action_type,
+                    "execution_state": execution_state,
+                }
+            )
+        facts["recommendation_results"] = recommendation_results
+    return facts
 
 
 def _completed_recommendations(

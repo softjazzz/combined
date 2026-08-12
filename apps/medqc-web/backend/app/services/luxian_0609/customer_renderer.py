@@ -461,6 +461,11 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "已按受控结构化段落逐字规范化比较，两段内容完全相同。",
         "请结合首次病程记录要求，补充病例特点的归纳、分析和诊疗思路。",
     ),
+    "LX0609-020": (
+        "会诊意见存在未闭环的执行记录",
+        "已逐条核对已完成会诊意见与后续病程或查房记录，存在未找到对应执行记录的会诊建议。",
+        "请针对结果列出的未闭环建议，在后续病程中补记具体执行措施、执行结果或未执行原因。",
+    ),
     "LX0609-023": (
         "会诊意见执行情况记录过于笼统",
         "当前仅记录已按会诊意见执行，未说明具体执行措施、执行结果或后续安排。",
@@ -1460,6 +1465,89 @@ def customer_finding_from_controlled_facts(
         return "已确认存在病理取材事件；已核对手术记录和病程记录，均未找到取材情况记录。"
 
     if rule_id == "LX0609-020":
+        if kind == "consultation_execution_relation_check":
+            count_keys = (
+                "completed_opinion_episode_count",
+                "recommendation_count",
+                "specific_execution_count",
+                "generic_execution_count",
+                "missing_execution_count",
+            )
+            if any(
+                type(facts.get(key)) is not int or not 0 <= facts[key] <= 100
+                for key in count_keys
+            ):
+                return ""
+            action_labels = {
+                "medication": "用药类",
+                "test": "检查类",
+                "procedure": "操作处置类",
+                "transfer": "转诊转科类",
+                "monitoring": "监测类",
+                "other": "其他",
+            }
+            recommendation_results = facts.get("recommendation_results")
+            if not isinstance(recommendation_results, list):
+                return ""
+            missing_labels: list[str] = []
+            for item in recommendation_results:
+                if (
+                    not isinstance(item, Mapping)
+                    or set(item)
+                    != {
+                        "episode_index",
+                        "recommendation_index",
+                        "action_type",
+                        "execution_state",
+                    }
+                    or type(item.get("episode_index")) is not int
+                    or not 1 <= item["episode_index"] <= 100
+                    or type(item.get("recommendation_index")) is not int
+                    or not 1 <= item["recommendation_index"] <= 100
+                    or item.get("action_type") not in action_labels
+                    or item.get("execution_state")
+                    not in {"specific", "generic", "missing", "unknown"}
+                ):
+                    return ""
+                if item["execution_state"] == "missing":
+                    missing_labels.append(
+                        f"第{item['episode_index']}次会诊的"
+                        f"{action_labels[item['action_type']]}建议"
+                    )
+            if len(recommendation_results) != facts["recommendation_count"]:
+                return ""
+            if len(missing_labels) != facts["missing_execution_count"]:
+                return ""
+            unknown_count = facts["recommendation_count"] - sum(
+                facts[key]
+                for key in (
+                    "specific_execution_count",
+                    "generic_execution_count",
+                    "missing_execution_count",
+                )
+            )
+            if unknown_count < 0:
+                return ""
+            result_parts = [
+                f"{facts['specific_execution_count']}条已找到明确执行记录"
+            ]
+            if facts["generic_execution_count"]:
+                result_parts.append(
+                    f"{facts['generic_execution_count']}条找到笼统执行痕迹"
+                )
+            result_parts.append(
+                f"{facts['missing_execution_count']}条未找到对应执行记录"
+            )
+            if unknown_count:
+                result_parts.append(f"另有{unknown_count}条暂无法判断")
+            finding = (
+                f"共核对{facts['completed_opinion_episode_count']}次已完成会诊的"
+                f"{facts['recommendation_count']}条建议："
+                f"{'，'.join(result_parts)}。"
+            )
+            if missing_labels:
+                finding += f"未闭环：{'、'.join(missing_labels)}。"
+            return finding
         state = str(facts.get("execution_record_state") or "")
         if state == "未发现执行记录":
             return "已找到会诊意见，但未发现对应的请会诊执行记录。"

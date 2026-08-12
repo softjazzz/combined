@@ -865,6 +865,7 @@ function evidenceLabel(evidence: SingleRecordQcEvidence) {
     first_course_record: '首次病程记录',
     daily_course_record: '日常病程记录',
     senior_course_record: '上级医师查房记录',
+    consultation_record: '会诊记录',
     exam_master: 'CT/MRI 检查报告',
     exam_item_report: 'CT/MRI 检查报告',
     labtest_master: '细菌培养报告',

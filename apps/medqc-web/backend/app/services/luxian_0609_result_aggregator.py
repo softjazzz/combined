@@ -4229,6 +4229,8 @@ def safe_luxian_0609_customer_display_facts(
             "relation_state",
             "source_document_ids",
         }
+        if rule_id == "LX0609-020" and "recommendation_results" in raw:
+            expected_keys.add("recommendation_results")
         allowed_internal_keys = {"source_document_refs"}
         count_keys = (
             "completed_opinion_episode_count",
@@ -4270,12 +4272,74 @@ def safe_luxian_0609_customer_display_facts(
                     or not item["source_document_id"].strip()
                 ):
                     return None
-        return {
+        recommendation_results: list[dict[str, Any]] | None = None
+        if rule_id == "LX0609-020" and "recommendation_results" in raw:
+            raw_results = raw.get("recommendation_results")
+            allowed_action_types = {
+                "medication",
+                "test",
+                "procedure",
+                "transfer",
+                "monitoring",
+                "other",
+            }
+            allowed_execution_states = {
+                "specific",
+                "generic",
+                "missing",
+                "unknown",
+            }
+            if (
+                not isinstance(raw_results, list)
+                or len(raw_results) != raw["recommendation_count"]
+                or len(raw_results) > 96
+            ):
+                return None
+            recommendation_results = []
+            for index, item in enumerate(raw_results, start=1):
+                if (
+                    not isinstance(item, Mapping)
+                    or set(item)
+                    != {
+                        "episode_index",
+                        "recommendation_index",
+                        "action_type",
+                        "execution_state",
+                    }
+                    or type(item.get("episode_index")) is not int
+                    or not 1
+                    <= item["episode_index"]
+                    <= raw["completed_opinion_episode_count"]
+                    or type(item.get("recommendation_index")) is not int
+                    or item["recommendation_index"] != index
+                    or item.get("action_type") not in allowed_action_types
+                    or item.get("execution_state")
+                    not in allowed_execution_states
+                ):
+                    return None
+                recommendation_results.append(dict(item))
+            state_counts = {
+                state: sum(
+                    item["execution_state"] == state
+                    for item in recommendation_results
+                )
+                for state in ("specific", "generic", "missing")
+            }
+            if (
+                state_counts["specific"] != raw["specific_execution_count"]
+                or state_counts["generic"] != raw["generic_execution_count"]
+                or state_counts["missing"] != raw["missing_execution_count"]
+            ):
+                return None
+        safe_facts = {
             "verification_kind": expected_verification_kind,
             **{key: raw[key] for key in count_keys},
             "relation_state": raw["relation_state"],
             "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
         }
+        if recommendation_results is not None:
+            safe_facts["recommendation_results"] = recommendation_results
+        return safe_facts
     if rule_id == "LX0609-023":
         missing_details = raw.get("missing_details")
         source_document_ids = raw.get("source_document_ids")

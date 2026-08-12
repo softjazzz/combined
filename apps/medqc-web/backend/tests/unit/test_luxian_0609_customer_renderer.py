@@ -316,6 +316,92 @@ def test_transfusion_controlled_facts_render_customer_readable_finding(
     assert customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts) == expected
 
 
+def test_020_customer_finding_lists_missing_recommendations_by_episode_and_action_type():
+    facts = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 3,
+        "recommendation_count": 4,
+        "specific_execution_count": 3,
+        "generic_execution_count": 0,
+        "missing_execution_count": 1,
+        "relation_state": "execution_missing",
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "action_type": "medication",
+                "execution_state": "specific",
+            },
+            {
+                "episode_index": 2,
+                "recommendation_index": 2,
+                "action_type": "test",
+                "execution_state": "missing",
+            },
+            {
+                "episode_index": 3,
+                "recommendation_index": 3,
+                "action_type": "monitoring",
+                "execution_state": "specific",
+            },
+            {
+                "episode_index": 3,
+                "recommendation_index": 4,
+                "action_type": "procedure",
+                "execution_state": "specific",
+            },
+        ],
+        "source_document_ids": ["CONSULT-2"],
+    }
+
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-020", facts=facts
+    ) == (
+        "共核对3次已完成会诊的4条建议：3条已找到明确执行记录，"
+        "1条未找到对应执行记录。未闭环：第2次会诊的检查类建议。"
+    )
+
+
+def test_020_customer_finding_does_not_hide_generic_or_unknown_recommendations():
+    facts = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 2,
+        "recommendation_count": 3,
+        "specific_execution_count": 0,
+        "generic_execution_count": 1,
+        "missing_execution_count": 1,
+        "relation_state": "execution_missing",
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "action_type": "medication",
+                "execution_state": "generic",
+            },
+            {
+                "episode_index": 2,
+                "recommendation_index": 2,
+                "action_type": "test",
+                "execution_state": "missing",
+            },
+            {
+                "episode_index": 2,
+                "recommendation_index": 3,
+                "action_type": "monitoring",
+                "execution_state": "unknown",
+            },
+        ],
+        "source_document_ids": ["CONSULT-2"],
+    }
+
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-020", facts=facts
+    )
+
+    assert "1条找到笼统执行痕迹" in finding
+    assert "1条暂无法判断" in finding
+
+
 def test_controlled_finding_does_not_render_untrusted_matrix_values():
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-048",

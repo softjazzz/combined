@@ -2275,6 +2275,120 @@ async def test_020_display_facts_bind_selected_opinion_and_execution_documents(
 
 
 @pytest.mark.asyncio
+async def test_020_non_compliant_facts_list_each_recommendation_and_only_locate_missing_episode(
+    monkeypatch,
+):
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = [
+        {
+            "document_id": "CONSULT-1",
+            "document_title": "会诊记录一",
+            "record_time": "2026-07-20 10:00:00",
+            "record_content": "会诊意见：建议加强抗感染治疗。",
+        },
+        {
+            "document_id": "CONSULT-2",
+            "document_title": "会诊记录二",
+            "record_time": "2026-07-21 10:00:00",
+            "record_content": "会诊意见：建议复查血常规。",
+        },
+    ]
+    source_rows["daily_course_record"] = [
+        {
+            "document_id": "COURSE-1",
+            "document_title": "日常病程记录",
+            "record_time": "2026-07-20 12:00:00",
+            "record_content": "已按会诊意见加强抗感染治疗。",
+        }
+    ]
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1"],
+                    recommendations=[
+                        {
+                            "recommendation_ref": "consultation_record-1#r1",
+                            "action_type": "medication",
+                            "source_quote": "加强抗感染治疗",
+                        }
+                    ],
+                ),
+                _episode(
+                    "consultation_record-2",
+                    ["consultation_record-2"],
+                    recommendations=[
+                        {
+                            "recommendation_ref": "consultation_record-2#r1",
+                            "action_type": "test",
+                            "source_quote": "复查血常规",
+                        }
+                    ],
+                ),
+            ]
+        ),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            },
+            {
+                "recommendation_ref": "consultation_record-2#r1",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            },
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020",),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 32
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert facts["recommendation_results"] == [
+        {
+            "episode_index": 1,
+            "recommendation_index": 1,
+            "action_type": "medication",
+            "execution_state": "specific",
+        },
+        {
+            "episode_index": 2,
+            "recommendation_index": 2,
+            "action_type": "test",
+            "execution_state": "missing",
+        },
+    ]
+    assert facts["source_document_refs"] == [
+        {
+            "source_type": "consultation_record",
+            "source_document_id": "CONSULT-2",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_020_course_source_incomplete_is_data_gap_even_when_order_exists(monkeypatch):
     """病程来源不完整时，医嘱不能替代 4.20.4 要求的病程记录。"""
 

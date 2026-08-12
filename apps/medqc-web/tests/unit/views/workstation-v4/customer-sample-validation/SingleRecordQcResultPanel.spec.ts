@@ -891,4 +891,32 @@ describe('SingleRecordQcResultPanel', () => {
     await evidence.trigger('click')
     expect(wrapper.emitted('locate-evidence')).toEqual([[item.evidence[0]]])
   })
+
+  it('会诊执行问题将会诊证据显示为会诊记录而不是泛化来源文书', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-020',
+            rule_name: '会诊记录：有会诊记录单无请会诊执行记录',
+            status: 'non_compliant',
+            conclusion:
+              '共核对2次已完成会诊的2条建议：1条已找到明确执行记录，1条未找到对应执行记录。未闭环：第2次会诊的检查类建议。',
+            evidence: [
+              {
+                source_ref: 'src_consult_missing',
+                source_type: 'consultation_record',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    const evidence = wrapper.get('[data-testid="single-record-evidence"]')
+    expect(evidence.text()).toContain('会诊记录')
+    expect(evidence.text()).not.toContain('来源文书')
+  })
 })

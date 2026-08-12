@@ -227,6 +227,20 @@ def test_extended_defect_facts_survive_customer_projection(rule_id, facts):
                 "generic_execution_count": 0,
                 "missing_execution_count": 0,
                 "relation_state": "all_linked",
+                "recommendation_results": [
+                    {
+                        "episode_index": 1,
+                        "recommendation_index": 1,
+                        "action_type": "medication",
+                        "execution_state": "specific",
+                    },
+                    {
+                        "episode_index": 1,
+                        "recommendation_index": 2,
+                        "action_type": "test",
+                        "execution_state": "specific",
+                    },
+                ],
                 "source_document_ids": ["CONSULT-1"],
             },
         ),
@@ -293,6 +307,97 @@ def test_020_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
 
     assert result["customer_evidence"] == facts["source_document_refs"]
     assert "source_document_refs" not in result.get("customer_display_facts", {})
+
+
+def test_020_non_compliant_delivery_explains_missing_recommendation_and_locates_only_its_opinion():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    facts = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 2,
+        "recommendation_count": 2,
+        "specific_execution_count": 1,
+        "generic_execution_count": 0,
+        "missing_execution_count": 1,
+        "relation_state": "execution_missing",
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "action_type": "medication",
+                "execution_state": "specific",
+            },
+            {
+                "episode_index": 2,
+                "recommendation_index": 2,
+                "action_type": "test",
+                "execution_state": "missing",
+            },
+        ],
+        "source_document_ids": ["CONSULT-MISSING"],
+        "source_document_refs": [
+            {
+                "source_type": "consultation_record",
+                "source_document_id": "CONSULT-MISSING",
+            }
+        ],
+    }
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-020"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-020", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-020", facts),),
+    )[0]
+
+    assert result["findings"] == (
+        "共核对2次已完成会诊的2条建议：1条已找到明确执行记录，"
+        "1条未找到对应执行记录。未闭环：第2次会诊的检查类建议。"
+    )
+    assert result["suggestion"] == (
+        "请针对结果列出的未闭环建议，在后续病程中补记具体执行措施、"
+        "执行结果或未执行原因。"
+    )
+    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert result["customer_display_facts"]["recommendation_results"] == facts[
+        "recommendation_results"
+    ]
+
+
+def test_020_customer_projection_rejects_boolean_recommendation_index():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["safe_luxian_0609_customer_display_facts"],
+    )
+    facts = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 1,
+        "relation_state": "execution_missing",
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": True,
+                "action_type": "test",
+                "execution_state": "missing",
+            }
+        ],
+        "source_document_ids": ["CONSULT-MISSING"],
+    }
+
+    assert (
+        module.safe_luxian_0609_customer_display_facts(
+            rule_id="LX0609-020", raw=facts
+        )
+        is None
+    )
 
 
 def test_023_uses_exact_opinion_and_execution_document_refs_for_customer_evidence():
