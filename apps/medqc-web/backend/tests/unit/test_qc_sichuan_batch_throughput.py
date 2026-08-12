@@ -3213,6 +3213,8 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
         "rule_ids": ["LX0609-020"],
+        "selected_rule_ids": ["LX0609-020"],
+        "scoped_customer_rule_ids": ["LX0609-020", "LX0609-049"],
         "paused_customer_rule_ids": ["LX0609-049"],
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",

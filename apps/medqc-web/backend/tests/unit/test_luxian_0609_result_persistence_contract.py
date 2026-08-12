@@ -205,6 +205,54 @@ def test_complete_batch_job_rejects_luxian_result_without_frozen_case_envelope(
     assert session.rollback_count == 1
 
 
+def test_complete_batch_job_rejects_incomplete_luxian_rule_delivery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """活动、门控和暂停规则必须全部形成唯一 Canonical 结果后才能完成。"""
+
+    session = _CompletionSession(
+        {
+            "id": "job-1",
+            "parent_job_id": None,
+            "created_by": "reviewer-1",
+            "filters_json": (
+                '{"rule_set_key":"luxian_0609_qc_v1",'
+                '"rule_ids":["LX0609-001","LX0609-002"],'
+                '"paused_customer_rule_ids":["LX0609-033"],'
+                '"record_refs":[{"institute_id":"inst-1",'
+                '"patient_id":"patient-1","visit_id":"visit-1"}]}'
+            ),
+        }
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    with pytest.raises(ValueError, match="Canonical Envelope 规则集合不完整"):
+        CustomQCWorkspaceService().complete_batch_job(
+            job_id="job-1",
+            summary={"total_records": 1, "success_count": 1},
+            items=[
+                {
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                    "rule_id": "LX0609-001",
+                    "status": "compliant",
+                },
+                {
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                    "rule_id": "LX0609-033",
+                    "status": "not_executed",
+                },
+            ],
+            failed_records=[],
+        )
+
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
+
+
 def test_latest_single_record_result_uses_case_coordinate_without_scanning_record_ids_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

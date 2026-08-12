@@ -1379,11 +1379,19 @@ async def run_sample_pool_intrinsic_validation(
         job_filters["record_rule_map"] = record_rule_map
 
     luxian_family_scopes: list[dict[str, Any]] = []
+    paused_rule_ids_by_family: dict[str, list[str]] = {}
     if payload.group_by_luxian_family and rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
         luxian_scope_rule_ids = requested_selected_rule_ids
         if not luxian_scope_rule_ids:
             luxian_scope_rule_ids = _normalize_rule_id_list(rule_ids)
         luxian_family_scopes = _build_luxian_0609_family_scopes(luxian_scope_rule_ids)
+        paused_rule_ids_by_family = {
+            str(scope.get("key") or "").strip(): _normalize_rule_id_list(
+                list(scope.get("rule_ids") or [])
+            )
+            for scope in _build_luxian_0609_family_scopes(paused_customer_rule_ids)
+            if str(scope.get("key") or "").strip()
+        }
 
     selected_sample_item_ids = [
         str(item.get("id") or "").strip()
@@ -1505,6 +1513,14 @@ async def run_sample_pool_intrinsic_validation(
         child_job_ids: list[str] = []
         for family_scope in luxian_family_scopes:
             family_rule_ids = _normalize_rule_id_list(list(family_scope.get("rule_ids") or []))
+            family_key = str(family_scope.get("key") or "").strip()
+            family_paused_rule_ids = paused_rule_ids_by_family.get(family_key, [])
+            family_delivery_rule_ids = _normalize_rule_id_list(
+                [
+                    *family_rule_ids,
+                    *family_paused_rule_ids,
+                ]
+            )
             family_execution_rule_ids, invalid_family_rule_ids, family_gate_only_rule_ids = (
                 _resolve_luxian_0609_execution_scope(
                     family_rule_ids,
@@ -1533,16 +1549,18 @@ async def run_sample_pool_intrinsic_validation(
                 **job_filters,
                 "rule_ids": family_execution_rule_ids,
                 "rule_count": len(family_execution_rule_ids),
-                "customer_rule_count": len(family_rule_ids),
+                "customer_rule_count": len(family_delivery_rule_ids),
                 "execution_rule_count": len(family_execution_rule_ids),
                 "gate_only_customer_rule_ids": family_gate_only_rule_ids,
                 "gate_only_customer_rule_count": len(family_gate_only_rule_ids),
+                "paused_customer_rule_ids": family_paused_rule_ids,
+                "paused_customer_rule_count": len(family_paused_rule_ids),
                 "selected_rule_ids": family_rule_ids,
-                "scoped_customer_rule_ids": family_rule_ids,
+                "scoped_customer_rule_ids": family_delivery_rule_ids,
                 "record_rule_map": family_record_rule_map,
                 "group_by_luxian_family": False,
                 "parent_job_id": parent_job_id,
-                "family_key": str(family_scope.get("key") or "").strip(),
+                "family_key": family_key,
                 "family_name": str(family_scope.get("name") or "").strip(),
                 "max_parallel_records": 1,
             }

@@ -2280,6 +2280,98 @@ async def test_run_sample_pool_intrinsic_validation_should_create_luxian_parent_
 
 
 @pytest.mark.asyncio
+async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_scope(
+    monkeypatch,
+):
+    """暂停规则不执行，但必须由所属规则族 worker 交付 not_executed 结果。"""
+
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_refs=[_run_record_ref()],
+            sample_item_ids=["item-1"],
+            rule_set_key="luxian_0609_qc_v1",
+            group_by_luxian_family=True,
+        ),
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    child_calls = workspace_service.create_batch_job_calls[1:]
+    children_by_family = {call["family_key"]: call for call in child_calls}
+
+    surgery = children_by_family["surgery_anesthesia"]["filters"]
+    assert surgery["rule_ids"] == [
+        "LX0609-003",
+        "LX0609-024",
+        "LX0609-025",
+        "LX0609-028",
+        "LX0609-029",
+        "LX0609-030",
+        "LX0609-031",
+        "LX0609-032",
+        "LX0609-035",
+        "LX0609-036",
+        "LX0609-037",
+        "LX0609-038",
+        "LX0609-039",
+        "LX0609-040",
+    ]
+    assert surgery["scoped_customer_rule_ids"] == [
+        *surgery["rule_ids"][:8],
+        "LX0609-033",
+        "LX0609-034",
+        *surgery["rule_ids"][8:],
+    ]
+    assert surgery["paused_customer_rule_ids"] == ["LX0609-033", "LX0609-034"]
+
+    transfusion = children_by_family["transfusion"]["filters"]
+    assert transfusion["rule_ids"] == [
+        "LX0609-043",
+        "LX0609-044",
+        "LX0609-045",
+        "LX0609-046",
+        "LX0609-047",
+        "LX0609-048",
+    ]
+    assert transfusion["scoped_customer_rule_ids"] == [
+        "LX0609-041",
+        "LX0609-042",
+        *transfusion["rule_ids"],
+        "LX0609-049",
+    ]
+    assert transfusion["paused_customer_rule_ids"] == [
+        "LX0609-041",
+        "LX0609-042",
+        "LX0609-049",
+    ]
+
+    all_delivery_rule_ids = {
+        rule_id
+        for child in child_calls
+        for rule_id in child["filters"]["scoped_customer_rule_ids"]
+    }
+    all_execution_rule_ids = {
+        rule_id
+        for child in child_calls
+        for rule_id in child["filters"]["rule_ids"]
+    }
+    assert len(all_delivery_rule_ids) == 75
+    assert len(all_execution_rule_ids) == 70
+    assert set(qc_sample_pools._LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS).isdisjoint(
+        all_execution_rule_ids
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_sample_pool_intrinsic_validation_should_reject_unknown_rule_set_key(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()

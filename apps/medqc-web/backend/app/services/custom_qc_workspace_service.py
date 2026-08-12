@@ -5113,7 +5113,31 @@ class CustomQCWorkspaceService:
         ):
             raise ValueError("Canonical Envelope 病例集合不完整，拒绝完成质控任务")
 
+        scoped_rule_ids = list(filters.get("scoped_customer_rule_ids") or [])
+        expected_delivery_rule_ids = {
+            _safe_text(rule_id).upper()
+            for rule_id in [
+                *(scoped_rule_ids or list(filters.get("rule_ids") or [])),
+                *list(filters.get("gate_only_customer_rule_ids") or []),
+                *list(filters.get("paused_customer_rule_ids") or []),
+            ]
+            if _safe_text(rule_id)
+        }
         for record_ref, record_items in grouped.items():
+            delivered_rule_ids = [
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                for item in record_items
+            ]
+            if (
+                rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                and expected_delivery_rule_ids
+                and (
+                    any(not rule_id for rule_id in delivered_rule_ids)
+                    or len(delivered_rule_ids) != len(set(delivered_rule_ids))
+                    or set(delivered_rule_ids) != expected_delivery_rule_ids
+                )
+            ):
+                raise ValueError("Canonical Envelope 规则集合不完整，拒绝完成质控任务")
             record_id = record_ref.visit_id
             envelope = {
                 "schema_version": _RECORD_RESULT_ENVELOPE_SCHEMA,
