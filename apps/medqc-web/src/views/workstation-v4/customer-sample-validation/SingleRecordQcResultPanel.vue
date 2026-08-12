@@ -426,9 +426,30 @@
             <div class="detail-column detail-column-main">
               <section
                 v-if="remainingDisplayFactRows(item).length"
-                class="detail-block fact-block"
+                class="detail-block fact-block decision-fact-block"
+                :data-testid="
+                  isCompliantResult(item)
+                    ? 'single-record-verification-facts'
+                    : 'single-record-decision-facts'
+                "
               >
-                <h4>{{ isCompliantResult(item) ? '核对依据' : '判定事实' }}</h4>
+                <header
+                  class="fact-block-header"
+                  :data-testid="
+                    isCompliantResult(item)
+                      ? 'single-record-verification-facts-header'
+                      : 'single-record-decision-facts-header'
+                  "
+                >
+                  <h4>{{ isCompliantResult(item) ? '核对依据' : '判定事实' }}</h4>
+                  <span>
+                    {{
+                      isCompliantResult(item)
+                        ? '本次质控采用的核对信息'
+                        : '本次质控采用的关键判定信息'
+                    }}
+                  </span>
+                </header>
                 <dl class="fact-list">
                   <template
                     v-for="row in remainingDisplayFactRows(item)"
@@ -1836,6 +1857,50 @@ watch(
   grid-template-columns: 82px minmax(0, 1fr);
   gap: 5px 10px;
   margin: 0;
+}
+
+.decision-fact-block {
+  overflow: hidden;
+  padding: 0 !important;
+  border: 1px solid rgba(18, 38, 63, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.fact-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(18, 38, 63, 0.07);
+  background: rgba(22, 119, 255, 0.035);
+}
+
+.detail-block .fact-block-header h4 {
+  margin: 0;
+  color: rgba(20, 42, 68, 0.78);
+  font-weight: 700;
+}
+
+.fact-block-header span {
+  color: rgba(20, 42, 68, 0.5);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.decision-fact-block .fact-list {
+  padding: 9px 10px 10px;
+}
+
+.decision-fact-block .fact-list dt {
+  color: rgba(20, 42, 68, 0.58);
+  font-weight: 550;
+}
+
+.decision-fact-block .fact-list dd {
+  color: rgba(20, 42, 68, 0.9);
+  font-weight: 550;
 }
 
 .fact-list dt {

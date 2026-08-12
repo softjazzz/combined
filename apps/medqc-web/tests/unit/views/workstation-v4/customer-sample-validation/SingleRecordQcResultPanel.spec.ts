@@ -259,6 +259,16 @@ describe('SingleRecordQcResultPanel', () => {
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
 
     const detail = wrapper.get('[data-testid="single-record-detail-grid"]').text()
+    const factBlock = wrapper.get('[data-testid="single-record-decision-facts"]')
+    expect(factBlock.get('[data-testid="single-record-decision-facts-header"]').text()).toContain(
+      '判定事实',
+    )
+    expect(factBlock.get('[data-testid="single-record-decision-facts-header"]').text()).toContain(
+      '本次质控采用的关键判定信息',
+    )
+    expect(factBlock.text()).toContain('问题说明病程记录相似度达到判定阈值')
+    expect(factBlock.text()).toContain('实际相似度100%')
+    expect(factBlock.text()).toContain('判定阈值70%')
     expect(detail).toContain('问题说明病程记录相似度达到判定阈值')
     expect(detail).toContain('实际相似度100%')
     expect(detail).toContain('判定阈值70%')
