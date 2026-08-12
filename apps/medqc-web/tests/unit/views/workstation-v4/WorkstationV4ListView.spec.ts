@@ -92,7 +92,10 @@ const BatchTablePanelStub = defineComponent({
   },
   emits: ['filter-qc'],
   setup(_props, { attrs, slots }) {
-    return () => h('div', attrs, slots.default?.())
+    return () =>
+      h('div', attrs, [
+        h('div', { 'data-testid': 'batch-table-task-status-slot' }, slots['task-status']?.()),
+      ])
   },
 })
 
@@ -240,7 +243,7 @@ describe('WorkstationV4ListView filters', () => {
     expect(table.props('filterQcLoading')).toBe(true)
   })
 
-  it('shows the persistent task progress returned by a record-pool QC action', () => {
+  it('shows the persistent task progress inside the visible batch toolbar surface', () => {
     const task = {
       id: 'job-1',
       rule_code: 'LX0609',
@@ -251,7 +254,8 @@ describe('WorkstationV4ListView filters', () => {
     }
     const wrapper = mountListView({ recordPoolQcTask: task })
 
-    const statusBar = wrapper.findComponent({ name: 'RecordPoolQcTaskStatusBar' })
+    const table = wrapper.findComponent({ name: 'BatchTablePanel' })
+    const statusBar = table.findComponent({ name: 'RecordPoolQcTaskStatusBar' })
     expect(statusBar.exists()).toBe(true)
     expect(statusBar.props('job')).toEqual(task)
   })

@@ -82,6 +82,14 @@
       </div>
     </div>
 
+    <div
+      v-if="$slots['task-status']"
+      class="batch-table-panel__task-status"
+      data-testid="batch-table-task-status"
+    >
+      <slot name="task-status" />
+    </div>
+
     <a-table
       class="batch-table-panel__table"
       :columns="columns"
@@ -347,6 +355,16 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 </script>
 
 <style scoped>
+.batch-table-panel__task-status {
+  padding: 0 12px 12px;
+}
+
+.batch-table-panel__task-status :deep(.record-pool-qc-status) {
+  border-radius: 10px;
+  background: rgba(0, 102, 204, 0.045);
+  box-shadow: none;
+}
+
 .batch-table-panel {
   overflow: hidden;
   border-radius: 18px;

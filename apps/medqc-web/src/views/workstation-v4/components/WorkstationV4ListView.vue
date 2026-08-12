@@ -168,16 +168,6 @@
         </div>
 
         <div
-          v-if="recordPoolQcTask && !isStageQueueMode"
-          class="workstation-surface-enter mb-4"
-        >
-          <RecordPoolQcTaskStatusBar
-            :job="recordPoolQcTask"
-            @dismiss="emit('dismiss-qc-task')"
-          />
-        </div>
-
-        <div
           v-if="loadError"
           class="workstation-empty-state mb-4 flex items-center gap-2 px-4 py-3 text-[13px]"
           role="alert"
@@ -235,7 +225,17 @@
                 @batch-assign="emit('batch-assign', $event)"
                 @clear-filters="emit('clear-filters')"
                 @page-change="handleBatchPageChange"
-              />
+              >
+                <template
+                  v-if="recordPoolQcTask && !isStageQueueMode"
+                  #task-status
+                >
+                  <RecordPoolQcTaskStatusBar
+                    :job="recordPoolQcTask"
+                    @dismiss="emit('dismiss-qc-task')"
+                  />
+                </template>
+              </BatchTablePanel>
             </div>
           </div>
         </div>

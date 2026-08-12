@@ -91,6 +91,40 @@ function mountTable() {
 }
 
 describe('BatchTablePanel 病历池列表', () => {
+  it('renders task progress directly below the action toolbar and before the table', () => {
+    const wrapper = mount(BatchTablePanel, {
+      props: {
+        rows: [],
+        selectedRowKeys: [],
+        summaryText: '',
+        showPrimaryAction: true,
+      },
+      slots: {
+        'task-status': '<div data-testid="live-task-progress">实时任务进度</div>',
+      },
+      global: {
+        stubs: {
+          ATable: TableStub,
+          AButton: defineComponent({
+            name: 'AButton',
+            setup(_props, { attrs, slots }) {
+              return () => h('button', attrs, slots.default?.())
+            },
+          }),
+          APopconfirm: PopconfirmStub,
+        },
+      },
+    })
+
+    const status = wrapper.find('[data-testid="batch-table-task-status"]')
+    const table = wrapper.find('[data-testid="table-stub"]')
+    expect(status.exists()).toBe(true)
+    expect(status.text()).toContain('实时任务进度')
+    expect(
+      status.element.compareDocumentPosition(table.element) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it('shows a secondary full-filter QC action with the server total', () => {
     const wrapper = mount(BatchTablePanel, {
       props: {
