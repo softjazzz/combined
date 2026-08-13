@@ -718,6 +718,7 @@ watch([departmentFilter, keyword], () => {
   color: #1d1d1f;
 }
 .qc-home-canvas {
+  --qc-home-dashboard-columns: minmax(0, 1.65fr) minmax(330px, 0.85fr);
   display: grid;
   gap: 18px;
   min-height: calc(100vh - 64px);
@@ -848,13 +849,13 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(330px, 0.85fr);
+  grid-template-columns: var(--qc-home-dashboard-columns);
   gap: 18px;
   align-items: stretch;
 }
 .qc-home-analysis {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr);
+  grid-template-columns: var(--qc-home-dashboard-columns);
   gap: 18px;
   align-items: stretch;
 }
