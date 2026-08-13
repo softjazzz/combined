@@ -179,7 +179,10 @@ function readDocumentSections(source: Record<string, unknown>) {
     .sort((left, right) => left.order_index - right.order_index)
 }
 
-function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalRecordDocumentsResult {
+function normalizeEditableDocumentsResponse(
+  value: unknown,
+  options: { includeSummaries?: boolean } = {},
+): EditableMedicalRecordDocumentsResult {
   const payload =
     value && typeof value === 'object' && 'data' in value
       ? (value as { data?: unknown }).data
@@ -204,6 +207,7 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
         'document_content',
         'original_text',
       ])
+      const hasContent = row.has_content === true || Boolean(content)
       const title = readStringField(
         row,
         [
@@ -275,10 +279,11 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
           ['key', 'doc_key', 'document_id', 'id'],
           `${documentType}-${index + 1}`,
         ),
-        source_document_id: readStringField(row, ['document_id', 'id']),
+        source_document_id: readStringField(row, ['document_id', 'doc_id', 'id']),
         source_ref: readStringField(row, ['source_ref']),
-        source_table: readStringField(row, ['source_table', 'table_name']),
+        source_table: readStringField(row, ['source_table', 'table_name', 'doc_type']),
         document_type: documentType,
+        execution_domain: readStringField(row, ['execution_domain']),
         title,
         sections: readDocumentSections(row),
         report_items: reportItems,
@@ -327,29 +332,125 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
         doctor_name: readStringField(row, ['doctor_name', 'submitter', 'recorder']),
         doctor_code: readStringField(row, ['doctor_code', 'submitter_id']),
         enabled: true,
+        has_content: hasContent,
+        content_loaded: Boolean(content),
         content,
       }
     })
     .filter(
       (item): item is EditableMedicalRecordDocument =>
-        Boolean(item) && item.enabled !== false && Boolean(item.content.trim()),
+        Boolean(item) &&
+        item.enabled !== false &&
+        (Boolean(item.content.trim()) ||
+          (options.includeSummaries === true && item.has_content === true)),
     )
   return {
     visit_id: readStringField(candidate, ['visit_id']),
+    empty_reason: readStringField(candidate, [
+      'empty_reason',
+    ]) as EditableMedicalRecordDocumentsResult['empty_reason'],
     documents,
     raw: payload,
   }
 }
 
+function normalizeEditableDocumentRender(
+  value: unknown,
+  summary: EditableMedicalRecordDocument,
+): EditableMedicalRecordDocument {
+  const payload =
+    value && typeof value === 'object' && 'data' in value
+      ? (value as { data?: unknown }).data
+      : value
+  const candidate =
+    payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
+  const metadata =
+    candidate.metadata && typeof candidate.metadata === 'object'
+      ? (candidate.metadata as Record<string, unknown>)
+      : {}
+  const renderBlocks = Array.isArray(candidate.render_blocks)
+    ? candidate.render_blocks.filter((block): block is Record<string, unknown> =>
+        Boolean(block && typeof block === 'object'),
+      )
+    : []
+  const sections = renderBlocks
+    .map((block, index) => {
+      const blockType = readStringField(block, ['block_type'])
+      let text = readStringField(block, ['text'])
+      if (!text && blockType === 'kv_section' && Array.isArray(block.fields)) {
+        text = block.fields
+          .filter((field): field is Record<string, unknown> =>
+            Boolean(field && typeof field === 'object'),
+          )
+          .map((field) => {
+            const label = readStringField(field, ['label', 'key'])
+            const fieldValue = readStringField(field, ['value'])
+            return label && fieldValue ? `${label}：${fieldValue}` : ''
+          })
+          .filter(Boolean)
+          .join('\n')
+      }
+      if (!text) return null
+      return {
+        key: readStringField(block, ['block_id'], `section-${index + 1}`),
+        label: readStringField(block, ['title'], '文书内容'),
+        text,
+        source_field: readStringField(block, ['source_field']),
+        order_index: index,
+      }
+    })
+    .filter((section): section is NonNullable<typeof section> => Boolean(section))
+  const orderRow = renderBlocks
+    .filter((block) => readStringField(block, ['block_type']) === 'order_table')
+    .flatMap((block) => (Array.isArray(block.rows) ? block.rows : []))
+    .find((row): row is Record<string, unknown> => Boolean(row && typeof row === 'object'))
+  const content = readStringField(candidate, ['content'])
+  return {
+    ...summary,
+    key: readStringField(metadata, ['doc_key'], summary.key),
+    source_document_id: readStringField(
+      metadata,
+      ['document_id', 'doc_id'],
+      summary.source_document_id,
+    ),
+    source_table: summary.source_table || readStringField(metadata, ['doc_type']),
+    document_type: readStringField(metadata, ['doc_type'], summary.document_type),
+    title: readStringField(metadata, ['doc_name'], summary.title),
+    record_time: readStringField(metadata, ['record_time'], summary.record_time),
+    sections,
+    order_start_time: orderRow
+      ? readStringField(orderRow, ['order_start_time', 'start_time'], summary.order_start_time)
+      : summary.order_start_time,
+    order_stop_time: orderRow
+      ? readStringField(orderRow, ['order_stop_time', 'stop_time'], summary.order_stop_time)
+      : summary.order_stop_time,
+    order_category: orderRow
+      ? readStringField(orderRow, ['order_category', 'order_type'], summary.order_category)
+      : summary.order_category,
+    order_item: orderRow
+      ? readStringField(orderRow, ['order_item', 'item'], summary.order_item)
+      : summary.order_item,
+    order_status: orderRow
+      ? readStringField(orderRow, ['order_status', 'status'], summary.order_status)
+      : summary.order_status,
+    content,
+    has_content: Boolean(content) || summary.has_content === true,
+    content_loaded: true,
+  }
+}
+
+type EditableDocumentRequestParams = {
+  institute_id?: string
+  patient_id?: string
+  visit_id?: string
+  job_id?: string
+  record_ref?: string
+  view?: 'full' | 'summary'
+}
+
 export async function getEditableMedicalRecordDocuments(
   visitId: string,
-  params?: {
-    institute_id?: string
-    patient_id?: string
-    visit_id?: string
-    job_id?: string
-    record_ref?: string
-  },
+  params?: EditableDocumentRequestParams,
 ) {
   try {
     const response = await ApiService.requestRaw<unknown>({
@@ -363,7 +464,9 @@ export async function getEditableMedicalRecordDocuments(
     })
     return {
       success: true,
-      data: normalizeEditableDocumentsResponse(response.data),
+      data: normalizeEditableDocumentsResponse(response.data, {
+        includeSummaries: params?.view === 'summary',
+      }),
     } satisfies ServiceResult<EditableMedicalRecordDocumentsResult>
   } catch (error) {
     return {
@@ -371,6 +474,37 @@ export async function getEditableMedicalRecordDocuments(
       message: toErrorMessage(error, '读取病历文书失败'),
       errorType: classifyRequestError(error),
     } satisfies ServiceResult<EditableMedicalRecordDocumentsResult>
+  }
+}
+
+export async function getEditableMedicalRecordDocument(
+  visitId: string,
+  summary: EditableMedicalRecordDocument,
+  params?: Omit<EditableDocumentRequestParams, 'view' | 'job_id' | 'record_ref'>,
+) {
+  try {
+    const response = await ApiService.requestRaw<unknown>({
+      method: 'GET',
+      url: `/api/v1/emr/${encodeURIComponent(visitId)}/render`,
+      timeout: EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS,
+      params: {
+        ...(params || {}),
+        visit_id: params?.visit_id || visitId,
+        execution_domain: summary.execution_domain,
+        doc_type: summary.document_type,
+        doc_id: summary.source_document_id || summary.key,
+      },
+    })
+    return {
+      success: true,
+      data: normalizeEditableDocumentRender(response.data, summary),
+    } satisfies ServiceResult<EditableMedicalRecordDocument>
+  } catch (error) {
+    return {
+      success: false,
+      message: toErrorMessage(error, '读取病历文书正文失败'),
+      errorType: classifyRequestError(error),
+    } satisfies ServiceResult<EditableMedicalRecordDocument>
   }
 }
 

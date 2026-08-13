@@ -4,12 +4,14 @@ import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/comp
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 import type { QCRecordCompareIssue } from '@/views/workstation-v4/semantic-rules/types'
 
-const { getDocumentsMock } = vi.hoisted(() => ({
+const { getDocumentsMock, getDocumentMock } = vi.hoisted(() => ({
   getDocumentsMock: vi.fn(),
+  getDocumentMock: vi.fn(),
 }))
 
 vi.mock('@/services/manual-case-sample-service', () => ({
   getEditableMedicalRecordDocuments: getDocumentsMock,
+  getEditableMedicalRecordDocument: getDocumentMock,
 }))
 
 const issues: QCRecordCompareIssue[] = [
@@ -51,6 +53,7 @@ const issues: QCRecordCompareIssue[] = [
 describe('QCRecordCompareWorkbench', () => {
   beforeEach(() => {
     getDocumentsMock.mockReset()
+    getDocumentMock.mockReset()
     getDocumentsMock.mockResolvedValue({
       success: true,
       data: {
@@ -79,6 +82,91 @@ describe('QCRecordCompareWorkbench', () => {
     })
   })
 
+  it('先读取轻量目录并只按需加载证据文书正文', async () => {
+    getDocumentsMock.mockResolvedValue({
+      success: true,
+      data: {
+        visit_id: 'visit-1',
+        documents: [
+          {
+            key: 'admission-key',
+            source_document_id: 'doc-admission',
+            source_table: 'admission_record',
+            document_type: 'admission_record',
+            execution_domain: 'admission',
+            title: '入院记录',
+            record_time: '2026-07-24 08:00:00',
+            has_content: true,
+            content_loaded: false,
+            content: '',
+          },
+          {
+            key: 'first-course-key',
+            source_document_id: 'doc-first-course',
+            source_table: 'first_course_record',
+            document_type: 'first_course_record',
+            execution_domain: 'course',
+            title: '首次病程记录',
+            record_time: '2026-07-24 11:00:00',
+            has_content: true,
+            content_loaded: false,
+            content: '',
+          },
+        ],
+      },
+    })
+    getDocumentMock.mockResolvedValue({
+      success: true,
+      data: {
+        key: 'first-course-key',
+        source_document_id: 'doc-first-course',
+        source_table: 'first_course_record',
+        document_type: 'first_course_record',
+        execution_domain: 'course',
+        title: '首次病程记录',
+        record_time: '2026-07-24 11:00:00',
+        has_content: true,
+        content_loaded: true,
+        content: '患者入院后第九小时完成首次病程记录，已超过规定时限。',
+      },
+    })
+
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-1',
+        instituteId: 'inst-1',
+        patientId: 'patient-1',
+        issues,
+      },
+    })
+
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(getDocumentsMock).toHaveBeenCalledTimes(1)
+    expect(getDocumentsMock).toHaveBeenCalledWith('visit-1', {
+      institute_id: 'inst-1',
+      patient_id: 'patient-1',
+      visit_id: 'visit-1',
+      view: 'summary',
+    })
+    expect(getDocumentMock).toHaveBeenCalledTimes(1)
+    expect(getDocumentMock).toHaveBeenCalledWith(
+      'visit-1',
+      expect.objectContaining({
+        key: 'first-course-key',
+        execution_domain: 'course',
+      }),
+      {
+        institute_id: 'inst-1',
+        patient_id: 'patient-1',
+        visit_id: 'visit-1',
+      },
+    )
+    expect(wrapper.find('mark').text()).toBe('患者入院后第九小时完成首次病程记录')
+    expect(wrapper.text()).toContain('已定位到证据段落')
+  })
+
   it('按问题优先级排列，并用文书ID精确定位及高亮证据', async () => {
     const wrapper = mount(QCRecordCompareWorkbench, {
       props: {
@@ -96,6 +184,7 @@ describe('QCRecordCompareWorkbench', () => {
       institute_id: 'inst-1',
       patient_id: 'patient-1',
       visit_id: 'visit-1',
+      view: 'summary',
     })
     const resultItems = wrapper.findAll('.record-result-item')
     expect(resultItems[0]?.text()).toContain('LX0609-001')
@@ -170,6 +259,7 @@ describe('QCRecordCompareWorkbench', () => {
       visit_id: 'visit-1',
       job_id: 'job-safe-1',
       record_ref: 'rec_1234567890abcdef12345678',
+      view: 'summary',
     })
     expect(
       (wrapper.find('.record-document-select select').element as HTMLSelectElement).value,

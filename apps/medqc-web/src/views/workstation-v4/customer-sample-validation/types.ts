@@ -401,6 +401,9 @@ export type ManualTestRecordSourceMeta = {
 
 export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   key: string
+  execution_domain?: string
+  has_content?: boolean
+  content_loaded?: boolean
   source_ref?: string
   source_document_id?: string
   source_table?: string

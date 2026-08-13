@@ -83,7 +83,28 @@
         </div>
 
         <div
-          v-if="selectedDocument"
+          v-if="contentLoading"
+          class="record-content-empty"
+        >
+          <strong>正在读取当前文书</strong>
+          <span>文书目录已经就绪，正文正在按需加载。</span>
+        </div>
+        <div
+          v-else-if="contentLoadError"
+          class="record-content-empty"
+        >
+          <strong>当前文书读取失败</strong>
+          <span>{{ contentLoadError }}</span>
+          <button
+            type="button"
+            class="record-content-retry"
+            @click="retrySelectedDocument"
+          >
+            重新读取
+          </button>
+        </div>
+        <div
+          v-else-if="selectedDocument"
           ref="recordScroller"
           class="record-content-scroll"
           tabindex="0"
@@ -321,7 +342,10 @@
 <script setup lang="ts">
 import { ChevronDown, ClipboardCheck, FileSearch, Lightbulb, Scale, Target } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { getEditableMedicalRecordDocuments } from '@/services/manual-case-sample-service'
+import {
+  getEditableMedicalRecordDocument,
+  getEditableMedicalRecordDocuments,
+} from '@/services/manual-case-sample-service'
 import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentDirectory.vue'
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
@@ -368,6 +392,8 @@ type LocationState = 'matched' | 'section' | 'document' | 'missing' | 'idle'
 const documents = ref<EditableMedicalRecordDocument[]>([])
 const loading = ref(false)
 const loadError = ref('')
+const contentLoadError = ref('')
+const contentLoadingKey = ref('')
 const selectedDocumentKey = ref('')
 const selectedIssueKey = ref('')
 const expandedIssueKey = ref('')
@@ -378,6 +404,7 @@ const mobileTab = ref<'record' | 'result'>('record')
 const recordScroller = ref<HTMLElement | null>(null)
 const highlightElement = ref<HTMLElement | null>(null)
 let loadGeneration = 0
+const documentRequests = new Map<string, ReturnType<typeof getEditableMedicalRecordDocument>>()
 
 const STATUS_PRIORITY: Record<string, number> = {
   non_compliant: 0,
@@ -465,8 +492,13 @@ function resolveIssueDetailLines(issue: QCRecordCompareIssue) {
 const selectedDocument = computed(
   () => documents.value.find((document) => document.key === selectedDocumentKey.value) || null,
 )
+const contentLoading = computed(
+  () => Boolean(selectedDocumentKey.value) && contentLoadingKey.value === selectedDocumentKey.value,
+)
 const locationMessage = computed(() => {
-  if (loading.value) return '正在读取原文'
+  if (loading.value) return '正在读取文书目录'
+  if (contentLoading.value) return '正在读取当前文书'
+  if (contentLoadError.value) return '当前文书读取失败'
   if (loadError.value) return '原文读取失败'
   if (locationState.value === 'matched') return '已定位到证据段落'
   if (locationState.value === 'section') {
@@ -681,6 +713,61 @@ function matchDocumentById(evidence: QCRecordCompareEvidence) {
   )
 }
 
+function isDocumentLoaded(document: EditableMedicalRecordDocument) {
+  return (
+    document.content_loaded === true ||
+    Boolean(document.content?.trim()) ||
+    Boolean(document.sections?.length) ||
+    Boolean(document.report_items?.length)
+  )
+}
+
+function replaceDocument(document: EditableMedicalRecordDocument) {
+  documents.value = documents.value.map((item) =>
+    item.key === document.key ? { ...item, ...document } : item,
+  )
+}
+
+async function ensureDocumentLoaded(documentKey: string) {
+  const summary = documents.value.find((document) => document.key === documentKey)
+  if (!summary) return null
+  if (isDocumentLoaded(summary)) return summary
+  if (!summary.execution_domain) {
+    if (selectedDocumentKey.value === documentKey) {
+      contentLoadError.value = '当前文书缺少按需读取标识，请刷新页面后重试。'
+    }
+    return null
+  }
+
+  const generation = loadGeneration
+  if (selectedDocumentKey.value === documentKey) {
+    contentLoadingKey.value = documentKey
+    contentLoadError.value = ''
+  }
+  let request = documentRequests.get(documentKey)
+  if (!request) {
+    request = getEditableMedicalRecordDocument(props.visitId, summary, {
+      institute_id: String(props.instituteId || '').trim() || undefined,
+      patient_id: String(props.patientId || '').trim() || undefined,
+      visit_id: String(props.visitId || '').trim(),
+    })
+    documentRequests.set(documentKey, request)
+  }
+  const result = await request
+  if (documentRequests.get(documentKey) === request) documentRequests.delete(documentKey)
+  if (generation !== loadGeneration) return null
+  if (contentLoadingKey.value === documentKey) contentLoadingKey.value = ''
+  if (!result.success || !result.data) {
+    if (selectedDocumentKey.value === documentKey) {
+      contentLoadError.value = result.message || '读取当前文书失败'
+    }
+    return null
+  }
+  const loadedDocument = { ...summary, ...result.data, content_loaded: true }
+  replaceDocument(loadedDocument)
+  return loadedDocument
+}
+
 function scoreDocumentMetadata(
   document: EditableMedicalRecordDocument,
   evidence: QCRecordCompareEvidence,
@@ -746,8 +833,11 @@ async function tryLocateEvidence(
   evidence: QCRecordCompareEvidence,
   allowMetadataFallback: boolean,
 ) {
-  const exactDocument = matchDocumentById(evidence)
-  if (exactDocument) {
+  const exactSummary = matchDocumentById(evidence)
+  if (exactSummary) {
+    selectedDocumentKey.value = exactSummary.key
+    const exactDocument = await ensureDocumentLoaded(exactSummary.key)
+    if (!exactDocument) return false
     const range = findQuoteRange(exactDocument, evidence.quote)
     await applyLocatedDocument(
       exactDocument,
@@ -759,6 +849,7 @@ async function tryLocateEvidence(
   // 安全引用是精确定位合同；存在但未命中时不得再猜测其他文书。
   if (normalizeReference(evidence.source_ref)) return false
   const quoteDocument = documents.value
+    .filter(isDocumentLoaded)
     .map((document) => ({ document, range: findQuoteRange(document, evidence.quote) }))
     .find((item) => item.range)
   if (quoteDocument) {
@@ -766,8 +857,11 @@ async function tryLocateEvidence(
     return true
   }
   if (allowMetadataFallback) {
-    const metadataDocument = matchDocumentByMetadata(evidence)
-    if (metadataDocument) {
+    const metadataSummary = matchDocumentByMetadata(evidence)
+    if (metadataSummary) {
+      selectedDocumentKey.value = metadataSummary.key
+      const metadataDocument = await ensureDocumentLoaded(metadataSummary.key)
+      if (!metadataDocument) return false
       await applyLocatedDocument(
         metadataDocument,
         null,
@@ -853,7 +947,13 @@ async function locateSelectedIssue() {
     quote: '',
   })
   if (document) {
-    await applyLocatedDocument(document, null)
+    selectedDocumentKey.value = document.key
+    const loadedDocument = await ensureDocumentLoaded(document.key)
+    if (!loadedDocument) {
+      locationState.value = 'missing'
+      return
+    }
+    await applyLocatedDocument(loadedDocument, null)
     return
   }
   locationState.value = 'missing'
@@ -879,11 +979,13 @@ function setHighlightElement(value: unknown) {
   if (value instanceof HTMLElement) highlightElement.value = value
 }
 
-function selectDocument(documentKey: string) {
+async function selectDocument(documentKey: string) {
   selectedDocumentKey.value = documentKey
+  contentLoadError.value = ''
   matchedRange.value = null
   matchedSectionKey.value = ''
   locationState.value = 'idle'
+  await ensureDocumentLoaded(documentKey)
 }
 
 function isAdmissionRecordDocument(document: EditableMedicalRecordDocument) {
@@ -904,19 +1006,18 @@ function isAdmissionRecordDocument(document: EditableMedicalRecordDocument) {
 }
 
 function resolveDefaultDocumentKey() {
-  return (
-    documents.value.find(
-      (document) => isAdmissionRecordDocument(document) && Boolean(document.content?.trim()),
-    )?.key ||
-    documents.value.find(isAdmissionRecordDocument)?.key ||
-    documents.value.find((document) => Boolean(document.content?.trim()))?.key ||
-    documents.value[0]?.key ||
-    ''
-  )
+  return documents.value.find(isAdmissionRecordDocument)?.key || documents.value[0]?.key || ''
 }
 
 function handleDocumentSelect(event: Event) {
-  selectDocument((event.target as HTMLSelectElement).value)
+  void selectDocument((event.target as HTMLSelectElement).value)
+}
+
+function retrySelectedDocument() {
+  const documentKey = selectedDocumentKey.value
+  if (!documentKey) return
+  documentRequests.delete(documentKey)
+  void ensureDocumentLoaded(documentKey)
 }
 
 function resolveStatusTone(status: string) {
@@ -940,6 +1041,9 @@ async function loadDocuments() {
   matchedSectionKey.value = ''
   locationState.value = 'idle'
   loadError.value = ''
+  contentLoadError.value = ''
+  contentLoadingKey.value = ''
+  documentRequests.clear()
   if (!visitId && !(jobId && recordRef)) {
     loadError.value = '当前结果缺少可读取病历的就诊标识'
     return
@@ -956,6 +1060,7 @@ async function loadDocuments() {
           record_ref: recordRef,
         }
       : {}),
+    view: 'summary',
   })
   if (generation !== loadGeneration) return
   loading.value = false
@@ -965,7 +1070,8 @@ async function loadDocuments() {
   }
   documents.value = result.data.documents.filter((document) => document.enabled !== false)
   selectedDocumentKey.value = resolveDefaultDocumentKey()
-  await locateSelectedIssue()
+  if (selectedIssue.value) await locateSelectedIssue()
+  else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
 }
 
 watch(
@@ -996,6 +1102,7 @@ watch(
 )
 onBeforeUnmount(() => {
   loadGeneration += 1
+  documentRequests.clear()
   documents.value = []
 })
 </script>
@@ -1466,6 +1573,17 @@ onBeforeUnmount(() => {
 .record-content-empty strong {
   color: rgba(29, 29, 31, 0.72);
   font-size: 14px;
+}
+.record-content-retry {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(0, 102, 204, 0.2);
+  border-radius: 8px;
+  background: rgba(0, 102, 204, 0.07);
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
 }
 .record-document-select,
 .record-compare-mobile-tabs {

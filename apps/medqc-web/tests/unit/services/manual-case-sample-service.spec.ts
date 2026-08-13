@@ -11,6 +11,7 @@ vi.mock('@/services/apiService', () => ({
 }))
 
 import {
+  getEditableMedicalRecordDocument,
   getEditableMedicalRecordDocuments,
   previewManualSamplePoolHospitalizationScope,
   runManualSamplePool,
@@ -20,6 +21,109 @@ import {
 describe('editable medical-record document normalization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('keeps summary documents without returning full content', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_key: 'daily_course_record::course-1',
+            doc_id: 'course-1',
+            doc_type: 'daily_course_record',
+            doc_name: '日常病程记录',
+            execution_domain: 'course',
+            record_time: '2026-08-01 09:00:00',
+            has_content: true,
+            length: 128,
+          },
+        ],
+      },
+    })
+
+    const result = await getEditableMedicalRecordDocuments('visit-1', { view: 'summary' })
+
+    expect(mocks.requestRaw).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: '/api/v1/emr/visit-1/documents',
+        params: expect.objectContaining({ view: 'summary' }),
+      }),
+    )
+    expect(result.data?.documents).toEqual([
+      expect.objectContaining({
+        key: 'daily_course_record::course-1',
+        source_document_id: 'course-1',
+        execution_domain: 'course',
+        content: '',
+        content_loaded: false,
+        has_content: true,
+      }),
+    ])
+  })
+
+  it('loads one selected document through the render endpoint', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        content: '患者今日病情稳定。',
+        metadata: {
+          doc_key: 'daily_course_record::course-1',
+          doc_id: 'course-1',
+          document_id: 'course-1',
+          doc_type: 'daily_course_record',
+          doc_name: '日常病程记录',
+          record_time: '2026-08-01 09:00:00',
+        },
+        render_blocks: [
+          {
+            block_id: 'daily_course_record::course-1:paragraph:0',
+            block_type: 'paragraph',
+            title: '病程内容',
+            text: '患者今日病情稳定。',
+          },
+        ],
+      },
+    })
+
+    const summary = {
+      key: 'daily_course_record::course-1',
+      source_document_id: 'course-1',
+      source_table: 'daily_course_record',
+      document_type: 'daily_course_record',
+      execution_domain: 'course',
+      title: '日常病程记录',
+      record_time: '2026-08-01 09:00:00',
+      content: '',
+      has_content: true,
+      content_loaded: false,
+    }
+    const result = await getEditableMedicalRecordDocument('visit-1', summary, {
+      institute_id: 'H1',
+      patient_id: 'P1',
+      visit_id: 'visit-1',
+    })
+
+    expect(mocks.requestRaw).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: '/api/v1/emr/visit-1/render',
+        params: expect.objectContaining({
+          execution_domain: 'course',
+          doc_type: 'daily_course_record',
+          doc_id: 'course-1',
+        }),
+      }),
+    )
+    expect(result.data).toMatchObject({
+      key: 'daily_course_record::course-1',
+      content: '患者今日病情稳定。',
+      content_loaded: true,
+      sections: [
+        {
+          key: 'daily_course_record::course-1:paragraph:0',
+          label: '病程内容',
+          text: '患者今日病情稳定。',
+        },
+      ],
+    })
   })
 
   it('uses an order display time when the bundle has no generic record_time', async () => {
