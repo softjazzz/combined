@@ -102,6 +102,13 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
             "rule_name": "Canonical 质控点",
             "status": "compliant",
             "reason_code": "internal_reason_must_not_render",
+            "evidence": [{
+                "source_type": "daily_course_record",
+                "source_ref": "src_1234567890abcdef12345678",
+                "record_time": "2026-07-08 08:35:49",
+                "evidence_excerpt": "患者术后第1日精神可，切口无渗血。",
+                "excerpt_kind": "字段级依据",
+            }],
         }],
     }
     session = _ReadSession([{
@@ -143,6 +150,8 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     assert "LX0609-999" not in html
     assert "legacy-record-must-not-render" not in html
     assert "internal_reason_must_not_render" not in html
+    assert "患者术后第1日精神可，切口无渗血" in html
+    assert "src_1234567890abcdef12345678" not in html
     assert "原因码" not in html
     assert html.count("data-record-group") == 1
 

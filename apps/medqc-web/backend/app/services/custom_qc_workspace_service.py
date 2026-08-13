@@ -48,6 +48,7 @@ from .luxian_0609_rule_catalog import (
 from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
 from .luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
+from .luxian_0609_result_export_service import customer_evidence_summary
 from .luxian_0609.customer_renderer import compliant_customer_finding
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
@@ -310,6 +311,21 @@ def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str
         ).lower()
         if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", field_path):
             row["field_path"] = field_path
+        # Canonical 中已经绑定到安全 src_ref 的授权短摘录可以用于离线核查；
+        # 这里只保留固定长度摘录和受控层级，不接受任意正文或定位对象。
+        excerpt = _compact_authorized_evidence_excerpt(
+            candidate.get("evidence_excerpt")
+        )
+        excerpt_kind = _safe_text(candidate.get("excerpt_kind"))
+        if excerpt and excerpt_kind in {"字段级依据", "文书级依据"}:
+            row["evidence_excerpt"] = excerpt
+            row["excerpt_kind"] = excerpt_kind
+        record_time = _safe_text(candidate.get("record_time"))
+        if re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:?\d{2})?)?",
+            record_time,
+        ):
+            row["record_time"] = record_time
         rows.append(row)
         if len(rows) >= 8:
             break
@@ -2080,11 +2096,7 @@ def _customer_export_rows(
     items = flatten_customer_safe_result_items(job, hmac_key=hmac_key)
     rows: List[List[str]] = []
     for item in items:
-        evidence_text = "；".join(
-            f"{_safe_text(evidence.get('source_type'))}:{_safe_text(evidence.get('source_ref'))}"
-            for evidence in list(item.get("evidence") or [])
-            if isinstance(evidence, dict)
-        )
+        evidence_text = customer_evidence_summary(list(item.get("evidence") or []))
         rows.append(
             [
                 _safe_text(item.get("record_ref")),

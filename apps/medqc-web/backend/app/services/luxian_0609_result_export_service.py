@@ -31,6 +31,21 @@ _ATTENTION_STATUSES = {
     "technical_error",
     "not_executed",
 }
+_EVIDENCE_SOURCE_LABELS = {
+    "admission_record": "入院记录",
+    "anesthesia_record": "麻醉记录单",
+    "consultation_record": "会诊记录",
+    "daily_course_record": "日常病程记录",
+    "discharge_record": "出院记录",
+    "exam_item_report": "检查报告",
+    "first_course_record": "首次病程记录",
+    "inpat_drug_order": "药品医嘱",
+    "inpat_nondrug_order": "非药品医嘱",
+    "labtest_item_report": "检验报告",
+    "mr_surgery": "手术记录",
+    "postsurg_firstcourse_record": "术后首次病程记录",
+    "senior_course_record": "上级医师查房记录",
+}
 
 
 def _text(value: Any) -> str:
@@ -51,18 +66,37 @@ def _escape(value: Any) -> str:
     return html.escape(_text(value), quote=True)
 
 
-def _evidence_text(item: Mapping[str, Any]) -> str:
+def customer_evidence_summary(evidence_items: Sequence[Any]) -> str:
+    """将 Canonical 授权证据转换为客户可核查摘要，绝不展示内部引用键。"""
+
     values: list[str] = []
-    for evidence in item.get("evidence") or []:
+    seen: set[str] = set()
+    for evidence in evidence_items:
         if not isinstance(evidence, Mapping):
             continue
-        label = _text(evidence.get("source_label") or evidence.get("source_type"))
-        source_ref = _text(evidence.get("source_ref"))
+        source_type = _text(evidence.get("source_type")).lower()
+        label = _text(evidence.get("source_label")) or _EVIDENCE_SOURCE_LABELS.get(
+            source_type,
+            "来源文书",
+        )
         record_time = _text(evidence.get("record_time"))
-        parts = [part for part in (label, record_time, source_ref) if part]
-        if parts:
-            values.append(" · ".join(parts))
+        excerpt = " ".join(_text(evidence.get("evidence_excerpt")).split())
+        if len(excerpt) > 300:
+            excerpt = excerpt[:300].rstrip() + "…"
+        excerpt_kind = _text(evidence.get("excerpt_kind"))
+        if excerpt_kind not in {"字段级依据", "文书级依据"}:
+            excerpt_kind = ""
+        context = "、".join(part for part in (record_time, excerpt_kind) if part)
+        prefix = f"{label}（{context}）" if context else label
+        value = f"{prefix}：{excerpt}" if excerpt else prefix
+        if value and value not in seen:
+            seen.add(value)
+            values.append(value)
     return "；".join(values)
+
+
+def _evidence_text(item: Mapping[str, Any]) -> str:
+    return customer_evidence_summary(list(item.get("evidence") or []))
 
 
 def _status_counts(items: Sequence[Mapping[str, Any]]) -> Counter[str]:

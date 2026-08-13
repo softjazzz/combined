@@ -36,6 +36,8 @@ def _ready_result():
                         "source_label": "日常病程记录",
                         "source_ref": "doc_safe_001",
                         "record_time": "2026-07-08 08:35:49",
+                        "evidence_excerpt": "术后第1日病程：患者神志清楚，切口敷料干燥。",
+                        "excerpt_kind": "字段级依据",
                     }
                 ],
                 "prompt": "SECRET_PROMPT",
@@ -74,7 +76,8 @@ def test_single_record_html_uses_customer_fields_and_hides_internal_payload():
     assert "确定问题 1" in content
     assert "病程记录" in content
     assert "发现 3 组病程记录达到判定阈值" in content
-    assert "doc_safe_001" in content
+    assert "术后第1日病程：患者神志清楚，切口敷料干燥" in content
+    assert "doc_safe_001" not in content
     assert "SECRET_PROMPT" not in content
     assert "SECRET_RESPONSE" not in content
     assert "reason_code" not in content
@@ -98,6 +101,8 @@ def test_filtered_workbook_contains_summary_and_rule_details_without_internal_fi
     assert issue_rows[1][3] == "LX0609-017"
     assert len(all_rows) == 3
     flattened = "\n".join(str(value) for row in all_rows for value in row if value is not None)
+    assert "术后第1日病程：患者神志清楚，切口敷料干燥" in flattened
+    assert "doc_safe_001" not in flattened
     assert "SECRET_PROMPT" not in flattened
     assert "SECRET_RESPONSE" not in flattened
     assert "reason_code" not in flattened
