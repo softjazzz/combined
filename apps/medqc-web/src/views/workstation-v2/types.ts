@@ -198,9 +198,23 @@ export interface ClinicalQcHomePriorityItem {
 export interface ClinicalQcHomeDepartmentItem {
   department: string
   records_total: number
+  completed_record_total: number
   high_risk_review_total: number
   data_gap_record_total: number
   uncertain_record_total: number
+  defect_total: number
+  average_defect_count: number
+}
+
+export interface ClinicalQcHomePhysicianItem {
+  physician: string
+  records_total: number
+  completed_record_total: number
+  high_risk_review_total: number
+  data_gap_record_total: number
+  uncertain_record_total: number
+  defect_total: number
+  average_defect_count: number
 }
 
 export interface ClinicalQcHomeProjection {
@@ -222,6 +236,7 @@ export interface ClinicalQcHomeProjection {
   canonical_status_counts: Record<string, number>
   priority_items: ClinicalQcHomePriorityItem[]
   department_distribution: ClinicalQcHomeDepartmentItem[]
+  physician_distribution: ClinicalQcHomePhysicianItem[]
   rule_family_distribution: unknown[]
   trend: unknown | null
   comparison: unknown | null

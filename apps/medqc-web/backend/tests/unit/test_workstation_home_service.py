@@ -8,13 +8,19 @@ class _FakeSession:
         return None
 
 
-def _record(index: int, *, department: str = "神经外科") -> dict[str, str]:
+def _record(
+    index: int,
+    *,
+    department: str = "神经外科",
+    attending_physician: str = "",
+) -> dict[str, str]:
     return {
         "institute_id": "hospital-a",
         "patient_id": f"patient-{index}",
         "visit_id": f"visit-{index}",
         "patient_name": f"患者{index}",
         "department": department,
+        "attending_physician": attending_physician,
     }
 
 
@@ -155,6 +161,107 @@ def test_home_department_options_come_from_full_clinical_scope_not_legacy_items(
         "神经外科",
         "骨科",
         "ICU",
+    }
+
+
+def test_home_clinical_qc_aggregates_department_and_physician_defect_analysis(monkeypatch):
+    records = [
+        _record(1, department="神经外科", attending_physician="张医生"),
+        _record(2, department="神经外科", attending_physician="张医生"),
+        _record(3, department="骨科", attending_physician="李医生"),
+        _record(4, department="骨科"),
+        _record(5, department="ICU"),
+    ]
+    summaries = {
+        ("hospital-a", "patient-1", "visit-1"): _ready(
+            non_compliant=2,
+            data_gap=3,
+            uncertain=1,
+        ),
+        ("hospital-a", "patient-2", "visit-2"): _ready(
+            non_compliant=1,
+            uncertain=2,
+        ),
+        ("hospital-a", "patient-3", "visit-3"): _ready(data_gap=4),
+        ("hospital-a", "patient-4", "visit-4"): {"status": "not_run"},
+        ("hospital-a", "patient-5", "visit-5"): _ready(non_compliant=3),
+    }
+    service = _service(monkeypatch, records, summaries)
+
+    payload = service.get_home(hotspot_limit=12, todo_limit=1)["clinical_qc"]
+
+    departments = {
+        item["department"]: item
+        for item in payload["department_distribution"]
+    }
+    assert departments == {
+        "神经外科": {
+            "department": "神经外科",
+            "records_total": 2,
+            "completed_record_total": 2,
+            "high_risk_review_total": 2,
+            "data_gap_record_total": 1,
+            "uncertain_record_total": 2,
+            "defect_total": 3,
+            "average_defect_count": 1.5,
+        },
+        "骨科": {
+            "department": "骨科",
+            "records_total": 2,
+            "completed_record_total": 1,
+            "high_risk_review_total": 0,
+            "data_gap_record_total": 1,
+            "uncertain_record_total": 0,
+            "defect_total": 0,
+            "average_defect_count": 0,
+        },
+        "ICU": {
+            "department": "ICU",
+            "records_total": 1,
+            "completed_record_total": 1,
+            "high_risk_review_total": 1,
+            "data_gap_record_total": 0,
+            "uncertain_record_total": 0,
+            "defect_total": 3,
+            "average_defect_count": 3.0,
+        },
+    }
+
+    physicians = {
+        item["physician"]: item
+        for item in payload["physician_distribution"]
+    }
+    assert physicians == {
+        "张医生": {
+            "physician": "张医生",
+            "records_total": 2,
+            "completed_record_total": 2,
+            "high_risk_review_total": 2,
+            "data_gap_record_total": 1,
+            "uncertain_record_total": 2,
+            "defect_total": 3,
+            "average_defect_count": 1.5,
+        },
+        "李医生": {
+            "physician": "李医生",
+            "records_total": 1,
+            "completed_record_total": 1,
+            "high_risk_review_total": 0,
+            "data_gap_record_total": 1,
+            "uncertain_record_total": 0,
+            "defect_total": 0,
+            "average_defect_count": 0,
+        },
+        "未登记主治医师": {
+            "physician": "未登记主治医师",
+            "records_total": 2,
+            "completed_record_total": 1,
+            "high_risk_review_total": 1,
+            "data_gap_record_total": 0,
+            "uncertain_record_total": 0,
+            "defect_total": 3,
+            "average_defect_count": 3.0,
+        },
     }
 
 

@@ -213,58 +213,160 @@
             data-testid="home-analysis"
           >
             <section
-              class="qc-home-panel qc-home-coverage"
-              data-testid="qc-coverage-chart"
-              aria-labelledby="qc-coverage-title"
+              class="qc-home-panel qc-home-defect-analysis"
+              data-testid="defect-analysis-chart"
+              aria-labelledby="defect-analysis-title"
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="qc-coverage-title">
-                    质控覆盖构成
+                  <h2 id="defect-analysis-title">
+                    质控缺陷分析
                   </h2>
-                  <p>
-                    {{
-                      isDemoPresentation
-                        ? '按病历汇总质控完成与待处理情况。'
-                        : '按病历汇总执行覆盖；结果校验异常仅反映系统数据状态。'
-                    }}
-                  </p>
+                  <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
                 </div>
               </header>
-              <div
-                class="qc-home-coverage__bar"
-                role="img"
-                :aria-label="coverageAriaLabel"
-              >
-                <span
-                  v-for="segment in visibleCoverageSegments"
-                  :key="segment.key"
-                  :class="['qc-home-coverage__segment', `is-${segment.tone}`]"
-                  :style="{ width: `${segment.percent}%` }"
-                />
+              <div class="qc-home-defect-analysis__toolbar">
+                <div class="qc-home-defect-analysis__control">
+                  <span>统计对象</span>
+                  <div
+                    role="group"
+                    aria-label="统计对象"
+                  >
+                    <button
+                      type="button"
+                      :class="{ 'is-active': analysisObject === 'department' }"
+                      data-testid="analysis-object-department"
+                      @click="analysisObject = 'department'"
+                    >
+                      按科室
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ 'is-active': analysisObject === 'physician' }"
+                      data-testid="analysis-object-physician"
+                      @click="analysisObject = 'physician'"
+                    >
+                      按主治医师
+                    </button>
+                  </div>
+                </div>
+                <div class="qc-home-defect-analysis__control">
+                  <span>分析指标</span>
+                  <div
+                    role="group"
+                    aria-label="分析指标"
+                  >
+                    <button
+                      type="button"
+                      :class="{ 'is-active': analysisMetric === 'total' }"
+                      data-testid="analysis-metric-total"
+                      @click="analysisMetric = 'total'"
+                    >
+                      缺陷总数
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ 'is-active': analysisMetric === 'average' }"
+                      data-testid="analysis-metric-average"
+                      @click="analysisMetric = 'average'"
+                    >
+                      平均缺陷数
+                    </button>
+                  </div>
+                </div>
+                <div class="qc-home-defect-analysis__control">
+                  <span>排序</span>
+                  <div
+                    role="group"
+                    aria-label="排序方式"
+                  >
+                    <button
+                      type="button"
+                      :class="{ 'is-active': analysisSort === 'metric' }"
+                      data-testid="analysis-sort-metric"
+                      @click="analysisSort = 'metric'"
+                    >
+                      当前指标
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ 'is-active': analysisSort === 'risk' }"
+                      data-testid="analysis-sort-risk"
+                      @click="analysisSort = 'risk'"
+                    >
+                      高风险病历
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ 'is-active': analysisSort === 'gap' }"
+                      data-testid="analysis-sort-gap"
+                      @click="analysisSort = 'gap'"
+                    >
+                      资料待核实
+                    </button>
+                  </div>
+                </div>
               </div>
-              <ul
-                class="qc-home-coverage__legend"
-                aria-label="质控覆盖构成图例"
+              <div
+                v-if="defectAnalysisItems.length"
+                class="qc-home-defect-analysis__list"
               >
-                <li
-                  v-for="segment in visibleCoverageSegments"
-                  :key="segment.key"
+                <component
+                  :is="analysisObject === 'department' ? 'button' : 'div'"
+                  v-for="item in defectAnalysisItems"
+                  :key="item.name"
+                  :type="analysisObject === 'department' ? 'button' : undefined"
+                  :class="[
+                    'qc-home-defect-analysis__row',
+                    {
+                      'is-active':
+                        analysisObject === 'department' && departmentFilter === item.name,
+                    },
+                  ]"
+                  data-testid="defect-analysis-row"
+                  :aria-label="
+                    analysisObject === 'department' ? `切换到${item.name}科室质控范围` : undefined
+                  "
+                  @click="analysisObject === 'department' && selectDepartment(item.name)"
                 >
-                  <i
-                    :class="`is-${segment.tone}`"
+                  <div class="qc-home-defect-analysis__meta">
+                    <strong>{{ item.name }}</strong>
+                    <span>纳入 {{ item.recordsTotal }} 份 · 完成
+                      {{ item.completedRecordTotal }} 份</span>
+                  </div>
+                  <div
+                    class="qc-home-defect-analysis__metric"
+                    aria-hidden="true"
+                  >
+                    <div class="qc-home-defect-analysis__track">
+                      <i :style="{ width: `${defectAnalysisPercent(item)}%` }" />
+                    </div>
+                    <strong>{{ formatAnalysisMetric(item) }}</strong>
+                  </div>
+                  <div class="qc-home-defect-analysis__counts">
+                    <strong>高风险 {{ item.highRiskReviewTotal }}</strong>
+                    <span>待核实 {{ item.dataGapRecordTotal }}</span>
+                  </div>
+                  <ChevronRight
+                    v-if="analysisObject === 'department'"
+                    :size="17"
                     aria-hidden="true"
                   />
-                  <span>{{ segment.label }} {{ segment.value }}</span>
-                  <small>{{ segment.percent }}%</small>
-                </li>
-              </ul>
-              <p
-                v-if="!coverageScopeIsClosed"
-                class="qc-home-chart-note is-warning"
-              >
-                统计范围待核实：三个覆盖状态与纳入病历数暂不一致。
-              </p>
+                </component>
+                <p
+                  v-if="hiddenDefectAnalysisCount"
+                  class="qc-home-defect-analysis__note"
+                >
+                  仅展示前 8 项；其余 {{ hiddenDefectAnalysisCount }} 个{{
+                    analysisObjectLabel
+                  }}已收起。
+                </p>
+              </div>
+              <a-empty
+                v-else
+                :description="`当前范围内暂无${analysisObjectLabel}统计`"
+                :image-style="{ height: '58px' }"
+              />
             </section>
 
             <section
@@ -315,57 +417,6 @@
               <a-empty
                 v-else
                 description="暂无已完成质控结论"
-                :image-style="{ height: '58px' }"
-              />
-            </section>
-
-            <section
-              class="qc-home-panel qc-home-department-panel"
-              data-testid="department-distribution"
-            >
-              <header class="qc-home-panel__head">
-                <div>
-                  <h2>科室风险排行</h2>
-                  <p>按高风险待复核病历数排序，辅助显示资料待核实。</p>
-                </div>
-              </header>
-              <div
-                v-if="departmentChartItems.length"
-                class="qc-home-department-chart"
-                data-testid="department-chart"
-              >
-                <div
-                  v-for="item in departmentChartItems"
-                  :key="item.department"
-                  class="qc-home-department-chart__row"
-                  data-testid="department-chart-row"
-                >
-                  <div class="qc-home-department-chart__meta">
-                    <strong>{{ item.department }}</strong>
-                    <span>纳入 {{ item.records_total }} 份</span>
-                  </div>
-                  <div
-                    class="qc-home-department-chart__track"
-                    aria-hidden="true"
-                  >
-                    <i :style="{ width: `${departmentRiskBarPercent(item)}%` }" />
-                  </div>
-                  <div class="qc-home-department-chart__counts">
-                    <em>待复核 {{ item.high_risk_review_total }}</em>
-                    <span v-if="item.data_gap_record_total">待核实 {{ item.data_gap_record_total }}</span>
-                  </div>
-                </div>
-                <p
-                  v-if="hiddenDepartmentCount"
-                  class="qc-home-department-chart__note"
-                >
-                  按待复核数量排序，仅展示前 8 个科室；其余
-                  {{ hiddenDepartmentCount }} 个科室已收起。
-                </p>
-              </div>
-              <a-empty
-                v-else
-                description="当前范围内暂无科室汇总"
                 :image-style="{ height: '58px' }"
               />
             </section>
@@ -423,6 +474,7 @@ import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import type {
   ClinicalQcHomeDepartmentItem,
+  ClinicalQcHomePhysicianItem,
   ClinicalQcHomePriorityItem,
   WorkstationHomePayload,
 } from '@/views/workstation-v2/types'
@@ -435,22 +487,26 @@ interface KpiCard {
   tone: 'brand' | 'warning' | 'success' | 'danger'
 }
 
-type ChartTone = 'success' | 'warning' | 'neutral'
-
-interface CoverageSegment {
-  key: 'completed' | 'pending' | 'technical'
-  label: string
-  value: number
-  tone: ChartTone
-  percent: number
-}
-
 interface ConclusionSegment {
   status: string
   label: string
   value: number
   color: string
   percent: number
+}
+
+type AnalysisObject = 'department' | 'physician'
+type AnalysisMetric = 'total' | 'average'
+type AnalysisSort = 'metric' | 'risk' | 'gap'
+
+interface DefectAnalysisItem {
+  name: string
+  recordsTotal: number
+  completedRecordTotal: number
+  highRiskReviewTotal: number
+  dataGapRecordTotal: number
+  defectTotal: number
+  averageDefectCount: number
 }
 
 const CONCLUSION_STATUS_META = [
@@ -462,23 +518,6 @@ const CONCLUSION_STATUS_META = [
   { status: 'not_executed', label: '未执行', color: '#94a3b8' },
 ] as const
 
-function withClosedPercent(
-  segments: Array<Omit<CoverageSegment, 'percent'>>,
-  denominator: number,
-): CoverageSegment[] {
-  if (!denominator) return segments.map((segment) => ({ ...segment, percent: 0 }))
-  const shouldClose = segments.reduce((sum, segment) => sum + segment.value, 0) === denominator
-  let accumulated = 0
-  return segments.map((segment, index) => {
-    const percent =
-      shouldClose && index === segments.length - 1
-        ? Number((100 - accumulated).toFixed(1))
-        : Number(((segment.value / denominator) * 100).toFixed(1))
-    accumulated += percent
-    return { ...segment, percent }
-  })
-}
-
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
@@ -488,6 +527,9 @@ const loadError = ref(false)
 const selectedDate = ref<Dayjs>(dayjs())
 const departmentFilter = ref('all')
 const keyword = ref('')
+const analysisObject = ref<AnalysisObject>('department')
+const analysisMetric = ref<AnalysisMetric>('total')
+const analysisSort = ref<AnalysisSort>('metric')
 const syncingFromRoute = ref(false)
 const homeData = ref<WorkstationHomePayload | null>(null)
 
@@ -534,44 +576,6 @@ const kpiCards = computed<KpiCard[]>(() => {
   ]
 })
 
-const coverageSegments = computed<CoverageSegment[]>(() => {
-  const kpis = clinicalQc.value?.kpis
-  const total = Math.max(0, Number(kpis?.records_total || 0))
-  const values = [
-    {
-      key: 'completed' as const,
-      label: '已完成',
-      value: Math.max(0, Number(kpis?.qc_completed_total || 0)),
-      tone: 'success' as const,
-    },
-    {
-      key: 'pending' as const,
-      label: '待质控',
-      value: Math.max(0, Number(kpis?.qc_pending_total || 0)),
-      tone: 'warning' as const,
-    },
-    {
-      key: 'technical' as const,
-      label: '结果校验异常',
-      value: Math.max(0, Number(clinicalQc.value?.data_health.technical_error_total || 0)),
-      tone: 'neutral' as const,
-    },
-  ]
-  return withClosedPercent(values, total)
-})
-const visibleCoverageSegments = computed(() => {
-  if (!isDemoPresentation.value) return coverageSegments.value
-  const visible = coverageSegments.value.filter((segment) => segment.key !== 'technical')
-  const visibleTotal = visible.reduce((sum, segment) => sum + segment.value, 0)
-  return withClosedPercent(visible, visibleTotal)
-})
-const coverageAriaLabel = computed(() =>
-  visibleCoverageSegments.value.map((segment) => `${segment.label} ${segment.value}`).join('，'),
-)
-const coverageScopeIsClosed = computed(() => {
-  const total = Math.max(0, Number(clinicalQc.value?.kpis.records_total || 0))
-  return coverageSegments.value.reduce((sum, segment) => sum + segment.value, 0) === total
-})
 const conclusionSegments = computed<ConclusionSegment[]>(() => {
   const counts = clinicalQc.value?.canonical_status_counts || {}
   const values = CONCLUSION_STATUS_META.map((meta) => ({
@@ -604,34 +608,84 @@ const sourceStateText = computed(() =>
 const runningTaskText = computed(() =>
   clinicalQc.value?.data_health.running_task_state === 'unknown' ? '待接入' : '待接入',
 )
-const departmentChartItems = computed<ClinicalQcHomeDepartmentItem[]>(() => {
-  const items = clinicalQc.value?.department_distribution || []
-  return [...items]
-    .sort(
-      (left, right) =>
-        right.high_risk_review_total - left.high_risk_review_total ||
-        right.data_gap_record_total - left.data_gap_record_total ||
-        right.records_total - left.records_total ||
-        left.department.localeCompare(right.department, 'zh-CN'),
-    )
-    .slice(0, 8)
-})
-const hiddenDepartmentCount = computed(() =>
-  Math.max(
-    0,
-    (clinicalQc.value?.department_distribution.length || 0) - departmentChartItems.value.length,
-  ),
+const analysisObjectLabel = computed(() =>
+  analysisObject.value === 'department' ? '科室' : '主治医师',
 )
-const departmentRiskMaximum = computed(() =>
-  Math.max(1, ...departmentChartItems.value.map((item) => item.high_risk_review_total)),
+const allDefectAnalysisItems = computed<DefectAnalysisItem[]>(() => {
+  if (analysisObject.value === 'physician') {
+    return (clinicalQc.value?.physician_distribution || []).map(
+      (item: ClinicalQcHomePhysicianItem) => ({
+        name: item.physician,
+        recordsTotal: Math.max(0, Number(item.records_total || 0)),
+        completedRecordTotal: Math.max(0, Number(item.completed_record_total || 0)),
+        highRiskReviewTotal: Math.max(0, Number(item.high_risk_review_total || 0)),
+        dataGapRecordTotal: Math.max(0, Number(item.data_gap_record_total || 0)),
+        defectTotal: Math.max(0, Number(item.defect_total || 0)),
+        averageDefectCount: Math.max(0, Number(item.average_defect_count || 0)),
+      }),
+    )
+  }
+  return (clinicalQc.value?.department_distribution || []).map(
+    (item: ClinicalQcHomeDepartmentItem) => ({
+      name: item.department,
+      recordsTotal: Math.max(0, Number(item.records_total || 0)),
+      completedRecordTotal: Math.max(0, Number(item.completed_record_total || 0)),
+      highRiskReviewTotal: Math.max(0, Number(item.high_risk_review_total || 0)),
+      dataGapRecordTotal: Math.max(0, Number(item.data_gap_record_total || 0)),
+      defectTotal: Math.max(0, Number(item.defect_total || 0)),
+      averageDefectCount: Math.max(0, Number(item.average_defect_count || 0)),
+    }),
+  )
+})
+const defectAnalysisItems = computed(() =>
+  [...allDefectAnalysisItems.value]
+    .sort((left, right) => {
+      const primary =
+        analysisSort.value === 'risk'
+          ? right.highRiskReviewTotal - left.highRiskReviewTotal
+          : analysisSort.value === 'gap'
+            ? right.dataGapRecordTotal - left.dataGapRecordTotal
+            : analysisMetric.value === 'average'
+              ? right.averageDefectCount - left.averageDefectCount
+              : right.defectTotal - left.defectTotal
+      return (
+        primary ||
+        right.defectTotal - left.defectTotal ||
+        right.recordsTotal - left.recordsTotal ||
+        left.name.localeCompare(right.name, 'zh-CN')
+      )
+    })
+    .slice(0, 8),
+)
+const hiddenDefectAnalysisCount = computed(() =>
+  Math.max(0, allDefectAnalysisItems.value.length - defectAnalysisItems.value.length),
+)
+const defectAnalysisMaximum = computed(() =>
+  Math.max(
+    1,
+    ...defectAnalysisItems.value.map((item) =>
+      analysisMetric.value === 'average' ? item.averageDefectCount : item.defectTotal,
+    ),
+  ),
 )
 
 function countOf(item: ClinicalQcHomePriorityItem, status: string): number {
   return Math.max(0, Number(item.status_counts?.[status] || 0))
 }
 
-function departmentRiskBarPercent(item: ClinicalQcHomeDepartmentItem): number {
-  return Math.round((item.high_risk_review_total / departmentRiskMaximum.value) * 100)
+function defectAnalysisPercent(item: DefectAnalysisItem): number {
+  const value = analysisMetric.value === 'average' ? item.averageDefectCount : item.defectTotal
+  return Number(((value / defectAnalysisMaximum.value) * 100).toFixed(1))
+}
+
+function formatAnalysisMetric(item: DefectAnalysisItem): string {
+  return analysisMetric.value === 'average'
+    ? item.averageDefectCount.toFixed(2)
+    : String(item.defectTotal)
+}
+
+function selectDepartment(department: string) {
+  departmentFilter.value = department
 }
 
 function formatDateTime(value?: string | null): string {
@@ -1058,66 +1112,169 @@ watch([departmentFilter, keyword], () => {
 .qc-home-health-list .is-danger {
   color: #dc2626;
 }
-.qc-home-coverage {
+.qc-home-defect-analysis {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
-.qc-home-coverage__bar {
+.qc-home-defect-analysis__toolbar {
   display: flex;
-  min-height: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px 18px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.025);
+}
+.qc-home-defect-analysis__control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.qc-home-defect-analysis__control > span {
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.qc-home-defect-analysis__control > div {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.045);
+}
+.qc-home-defect-analysis__control button {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(29, 29, 31, 0.62);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+.qc-home-defect-analysis__control button:hover {
+  color: #0066cc;
+}
+.qc-home-defect-analysis__control button.is-active {
+  background: #fff;
+  color: #0066cc;
+  font-weight: 650;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.qc-home-defect-analysis__control button:focus-visible {
+  outline: 2px solid rgba(0, 102, 204, 0.32);
+  outline-offset: 1px;
+}
+.qc-home-defect-analysis__list {
+  display: grid;
+}
+.qc-home-defect-analysis__row {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.9fr) minmax(170px, 1.45fr) auto 18px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 6px;
+  border: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.065);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.qc-home-defect-analysis__row {
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+.qc-home-defect-analysis__row:last-of-type {
+  border-bottom: 0;
+}
+button.qc-home-defect-analysis__row:hover,
+.qc-home-defect-analysis__row.is-active {
+  background: rgba(0, 102, 204, 0.045);
+}
+button.qc-home-defect-analysis__row:hover {
+  transform: translateX(2px);
+}
+button.qc-home-defect-analysis__row:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid rgba(0, 102, 204, 0.35);
+  outline-offset: -2px;
+}
+.qc-home-defect-analysis__meta {
+  min-width: 0;
+}
+.qc-home-defect-analysis__meta strong,
+.qc-home-defect-analysis__meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qc-home-defect-analysis__meta strong {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+}
+.qc-home-defect-analysis__meta span {
+  margin-top: 3px;
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 11px;
+}
+.qc-home-defect-analysis__metric {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+}
+.qc-home-defect-analysis__track {
+  height: 10px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.055);
+  background: rgba(0, 102, 204, 0.075);
 }
-.qc-home-coverage__segment {
+.qc-home-defect-analysis__track i {
   display: block;
-  min-width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #0066cc;
   transition: width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
-.qc-home-coverage__segment.is-success,
-.qc-home-coverage__legend i.is-success {
-  background: #10b981;
-}
-.qc-home-coverage__segment.is-warning,
-.qc-home-coverage__legend i.is-warning {
-  background: #f59e0b;
-}
-.qc-home-coverage__segment.is-neutral,
-.qc-home-coverage__legend i.is-neutral {
-  background: #94a3b8;
-}
-.qc-home-coverage__legend {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.qc-home-coverage__legend li {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  color: rgba(29, 29, 31, 0.72);
+.qc-home-defect-analysis__metric strong {
+  color: #0066cc;
   font-size: 13px;
+  font-weight: 700;
+  text-align: right;
 }
-.qc-home-coverage__legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.qc-home-defect-analysis__counts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 11px;
+  min-width: 132px;
+  font-size: 11px;
+  white-space: nowrap;
 }
-.qc-home-coverage__legend small {
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 12px;
+.qc-home-defect-analysis__counts strong {
+  color: #c2413a;
+  font-weight: 650;
 }
-.qc-home-chart-note {
-  margin: 0;
-  font-size: 12px;
-  line-height: 18px;
-}
-.qc-home-chart-note.is-warning {
+.qc-home-defect-analysis__counts span {
   color: #a16207;
+}
+.qc-home-defect-analysis__row > svg {
+  color: rgba(0, 102, 204, 0.54);
+}
+.qc-home-defect-analysis__note {
+  margin: 8px 6px 0;
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 11px;
+  line-height: 17px;
 }
 .qc-home-conclusion {
   display: grid;
@@ -1183,73 +1340,6 @@ watch([departmentFilter, keyword], () => {
 .qc-home-conclusion__legend small {
   color: rgba(29, 29, 31, 0.48);
   font-size: 12px;
-}
-.qc-home-department-chart {
-  display: grid;
-  gap: 12px;
-}
-.qc-home-department-chart__row {
-  display: grid;
-  grid-template-columns: minmax(90px, 0.8fr) minmax(88px, 1.35fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-.qc-home-department-chart__meta {
-  min-width: 0;
-}
-.qc-home-department-chart__meta strong,
-.qc-home-department-chart__meta span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.qc-home-department-chart__meta strong {
-  font-size: 13px;
-}
-.qc-home-department-chart__meta span {
-  margin-top: 2px;
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 11px;
-}
-.qc-home-department-chart__track {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
-}
-.qc-home-department-chart__track i {
-  display: block;
-  min-width: 2px;
-  height: 100%;
-  border-radius: inherit;
-  background: #0066cc;
-  transition: width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-.qc-home-department-chart__counts {
-  min-width: 80px;
-  text-align: right;
-}
-.qc-home-department-chart__counts em,
-.qc-home-department-chart__counts span {
-  display: block;
-  font-size: 11px;
-  font-style: normal;
-  white-space: nowrap;
-}
-.qc-home-department-chart__counts em {
-  color: #b45309;
-  font-weight: 650;
-}
-.qc-home-department-chart__counts span {
-  margin-top: 2px;
-  color: rgba(29, 29, 31, 0.48);
-}
-.qc-home-department-chart__note {
-  margin: 1px 0 0;
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 11px;
-  line-height: 17px;
 }
 .qc-home-notice {
   display: flex;
@@ -1325,8 +1415,8 @@ watch([departmentFilter, keyword], () => {
   .qc-home-analysis {
     grid-template-columns: 1fr;
   }
-  .qc-home-department-panel {
-    grid-column: auto;
+  .qc-home-defect-analysis__row {
+    grid-template-columns: minmax(145px, 0.9fr) minmax(150px, 1.2fr) auto 18px;
   }
 }
 @media (max-width: 620px) {
@@ -1355,9 +1445,34 @@ watch([departmentFilter, keyword], () => {
     grid-template-columns: 28px minmax(0, 1fr) 18px;
     gap: 10px;
   }
-  .qc-home-coverage__legend,
   .qc-home-conclusion__legend {
     grid-template-columns: 1fr;
+  }
+  .qc-home-defect-analysis__toolbar,
+  .qc-home-defect-analysis__control {
+    align-items: flex-start;
+    flex-direction: column;
+    width: 100%;
+  }
+  .qc-home-defect-analysis__control > div {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .qc-home-defect-analysis__row {
+    grid-template-columns: minmax(0, 1fr) 18px;
+    gap: 7px 10px;
+    padding: 11px 4px;
+  }
+  .qc-home-defect-analysis__metric,
+  .qc-home-defect-analysis__counts {
+    grid-column: 1;
+  }
+  .qc-home-defect-analysis__counts {
+    justify-content: flex-start;
+  }
+  .qc-home-defect-analysis__row > svg {
+    grid-column: 2;
+    grid-row: 1 / span 3;
   }
   .qc-home-conclusion__content {
     grid-template-columns: 1fr;

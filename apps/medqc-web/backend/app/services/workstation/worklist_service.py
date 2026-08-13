@@ -774,6 +774,7 @@ class WorkstationAggregationService:
         last_successful_qc_at: Optional[str] = None
         priority_items: List[Dict[str, Any]] = []
         department_distribution: Dict[str, Dict[str, int]] = {}
+        physician_distribution: Dict[str, Dict[str, int]] = {}
 
         for record in records:
             identity = (
@@ -788,12 +789,30 @@ class WorkstationAggregationService:
                 department_name,
                 {
                     "records_total": 0,
+                    "completed_record_total": 0,
                     "high_risk_review_total": 0,
                     "data_gap_record_total": 0,
                     "uncertain_record_total": 0,
+                    "defect_total": 0,
                 },
             )
             department_bucket["records_total"] += 1
+            physician_name = (
+                _safe_text(record.get("attending_physician")).strip()
+                or "未登记主治医师"
+            )
+            physician_bucket = physician_distribution.setdefault(
+                physician_name,
+                {
+                    "records_total": 0,
+                    "completed_record_total": 0,
+                    "high_risk_review_total": 0,
+                    "data_gap_record_total": 0,
+                    "uncertain_record_total": 0,
+                    "defect_total": 0,
+                },
+            )
+            physician_bucket["records_total"] += 1
 
             if summary_status == "technical_error":
                 technical_error_total += 1
@@ -803,6 +822,8 @@ class WorkstationAggregationService:
                 continue
 
             qc_completed_total += 1
+            department_bucket["completed_record_total"] += 1
+            physician_bucket["completed_record_total"] += 1
             raw_counts = summary.get("status_counts")
             status_counts = raw_counts if isinstance(raw_counts, dict) else {}
             normalized_counts: Dict[str, int] = {}
@@ -826,13 +847,18 @@ class WorkstationAggregationService:
             non_compliant_count = normalized_counts.get("non_compliant", 0)
             data_gap_count = normalized_counts.get("data_gap", 0)
             uncertain_count = normalized_counts.get("uncertain", 0)
+            department_bucket["defect_total"] += non_compliant_count
+            physician_bucket["defect_total"] += non_compliant_count
             if non_compliant_count:
                 high_risk_review_total += 1
                 department_bucket["high_risk_review_total"] += 1
+                physician_bucket["high_risk_review_total"] += 1
             if data_gap_count:
                 department_bucket["data_gap_record_total"] += 1
+                physician_bucket["data_gap_record_total"] += 1
             if uncertain_count:
                 department_bucket["uncertain_record_total"] += 1
+                physician_bucket["uncertain_record_total"] += 1
 
             if non_compliant_count:
                 priority_kind = "non_compliant"
@@ -901,10 +927,39 @@ class WorkstationAggregationService:
             "priority_items": priority_items[: max(1, priority_limit)],
             "department_options": sorted(department_distribution),
             "department_distribution": [
-                {"department": name, **counts}
+                {
+                    "department": name,
+                    **counts,
+                    "average_defect_count": round(
+                        counts["defect_total"] / counts["completed_record_total"],
+                        2,
+                    )
+                    if counts["completed_record_total"]
+                    else 0,
+                }
                 for name, counts in sorted(
                     department_distribution.items(),
                     key=lambda item: (-item[1]["high_risk_review_total"], -item[1]["records_total"], item[0]),
+                )
+            ],
+            "physician_distribution": [
+                {
+                    "physician": name,
+                    **counts,
+                    "average_defect_count": round(
+                        counts["defect_total"] / counts["completed_record_total"],
+                        2,
+                    )
+                    if counts["completed_record_total"]
+                    else 0,
+                }
+                for name, counts in sorted(
+                    physician_distribution.items(),
+                    key=lambda item: (
+                        -item[1]["high_risk_review_total"],
+                        -item[1]["records_total"],
+                        item[0],
+                    ),
                 )
             ],
             "rule_family_distribution": [],

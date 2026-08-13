@@ -86,9 +86,34 @@ const clinicalQcPayload = {
       {
         department: '神经外科',
         records_total: 18,
+        completed_record_total: 13,
         high_risk_review_total: 2,
         data_gap_record_total: 3,
         uncertain_record_total: 0,
+        defect_total: 12,
+        average_defect_count: 0.92,
+      },
+    ],
+    physician_distribution: [
+      {
+        physician: '张主任医师',
+        records_total: 10,
+        completed_record_total: 8,
+        high_risk_review_total: 2,
+        data_gap_record_total: 1,
+        uncertain_record_total: 0,
+        defect_total: 11,
+        average_defect_count: 1.38,
+      },
+      {
+        physician: '李主治医师',
+        records_total: 8,
+        completed_record_total: 5,
+        high_risk_review_total: 1,
+        data_gap_record_total: 2,
+        uncertain_record_total: 0,
+        defect_total: 9,
+        average_defect_count: 1.8,
       },
     ],
     rule_family_distribution: [],
@@ -224,17 +249,11 @@ describe('QCOverviewView', () => {
     expect(health).toContain('最近成功质控')
     expect(health).not.toContain('技术异常')
 
-    const coverage = wrapper.get('[data-testid="qc-coverage-chart"]').text()
-    expect(coverage).toContain('已完成 13')
-    expect(coverage).toContain('待质控 3')
-    expect(coverage).not.toContain('结果校验异常')
-    expect(coverage).toContain('81.3%')
-    expect(coverage).toContain('18.7%')
-    expect(coverage).not.toContain('72.2%')
-    expect(coverage).not.toContain('16.7%')
+    expect(wrapper.get('[data-testid="defect-analysis-chart"]').text()).toContain('神经外科')
+    expect(wrapper.find('[data-testid="qc-coverage-chart"]').exists()).toBe(false)
   })
 
-  it('将科室分布收敛为按待复核数量排序的前八个横向柱状图', async () => {
+  it('将科室缺陷分析收敛为当前指标的前八项', async () => {
     apiGet.mockResolvedValue({
       success: true,
       data: {
@@ -244,9 +263,12 @@ describe('QCOverviewView', () => {
           department_distribution: Array.from({ length: 9 }, (_, index) => ({
             department: `科室${index + 1}`,
             records_total: index + 10,
+            completed_record_total: index + 5,
             high_risk_review_total: index + 1,
             data_gap_record_total: 0,
             uncertain_record_total: 0,
+            defect_total: index + 1,
+            average_defect_count: Number(((index + 1) / (index + 5)).toFixed(2)),
           })),
         },
       },
@@ -254,13 +276,15 @@ describe('QCOverviewView', () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
-    const chartRows = wrapper.findAll('[data-testid="department-chart-row"]')
+    const chartRows = wrapper.findAll('[data-testid="defect-analysis-row"]')
     expect(chartRows).toHaveLength(8)
     expect(chartRows[0].text()).toContain('科室9')
-    expect(wrapper.get('[data-testid="department-chart"]').text()).toContain('其余 1 个科室已收起')
+    expect(wrapper.get('[data-testid="defect-analysis-chart"]').text()).toContain(
+      '其余 1 个科室已收起',
+    )
   })
 
-  it('使用同一首页响应展示质控覆盖构成，且不把技术异常混入医疗风险', async () => {
+  it('使用同一首页响应展示科室待办分布，且不把技术异常混入医疗风险', async () => {
     apiGet.mockResolvedValue({
       success: true,
       data: {
@@ -283,13 +307,96 @@ describe('QCOverviewView', () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
-    const coverage = wrapper.get('[data-testid="qc-coverage-chart"]').text()
-    expect(coverage).toContain('已完成 5')
-    expect(coverage).toContain('待质控 220')
-    expect(coverage).toContain('结果校验异常 229')
-    expect(coverage).not.toContain('统计范围待核实')
+    const workload = wrapper.get('[data-testid="defect-analysis-chart"]').text()
+    expect(workload).toContain('神经外科')
+    expect(workload).toContain('高风险 2')
+    expect(workload).toContain('待核实 3')
+    expect(workload).toContain('缺陷总数')
+    expect(workload).toContain('12')
+    expect(workload).not.toContain('结果校验异常')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
     expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('结果校验异常')
+  })
+
+  it('点击科室待办行后切换到该科室范围', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+    apiGet.mockClear()
+
+    await wrapper.get('[data-testid="defect-analysis-row"]').trigger('click')
+    await flushHomeLoad()
+
+    expect(apiGet).toHaveBeenCalledWith(
+      '/api/v1/workstation/home',
+      expect.objectContaining({ department: '神经外科' }),
+    )
+  })
+
+  it('支持在科室与主治医师之间切换，医生行不伪造后端筛选', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+    apiGet.mockClear()
+
+    await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
+    await nextTick()
+
+    const analysis = wrapper.get('[data-testid="defect-analysis-chart"]')
+    expect(analysis.text()).toContain('张主任医师')
+    expect(analysis.text()).toContain('李主治医师')
+    expect(analysis.findAll('[data-testid="defect-analysis-row"]')[0].element.tagName).toBe('DIV')
+    expect(apiGet).not.toHaveBeenCalled()
+  })
+
+  it('支持缺陷总数与平均缺陷数切换，并以已完成病历为平均值口径', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
+    await wrapper.get('[data-testid="analysis-metric-average"]').trigger('click')
+    await nextTick()
+
+    const rows = wrapper.findAll('[data-testid="defect-analysis-row"]')
+    expect(rows[0].text()).toContain('李主治医师')
+    expect(rows[0].text()).toContain('1.80')
+    expect(rows[0].text()).toContain('完成 5 份')
+    expect(wrapper.get('[data-testid="defect-analysis-chart"]').text()).toContain(
+      '缺陷仅统计确定问题',
+    )
+  })
+
+  it('支持按当前指标、高风险病历和资料待核实由多到少排序', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+    await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
+
+    await wrapper.get('[data-testid="analysis-sort-risk"]').trigger('click')
+    await nextTick()
+    expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].text()).toContain('张主任医师')
+
+    await wrapper.get('[data-testid="analysis-sort-gap"]').trigger('click')
+    await nextTick()
+    expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].text()).toContain('李主治医师')
+  })
+
+  it('主治医师统计未返回时展示真实空态', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          physician_distribution: [],
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+    await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
+    await nextTick()
+
+    expect(
+      wrapper.get('[data-testid="defect-analysis-chart"] a-empty-stub').attributes('description'),
+    ).toBe('当前范围内暂无主治医师统计')
   })
 
   it('将完成态 Canonical 结论以可读图例展示，技术异常不进入结论结构', async () => {
@@ -324,7 +431,7 @@ describe('QCOverviewView', () => {
     expect(conclusion).not.toContain('技术异常')
   })
 
-  it('在覆盖计数未闭合时明确提示统计范围待核实，并为零结论提供空状态', async () => {
+  it('为零结论提供空状态，且不再展示重复的质控覆盖比例', async () => {
     apiGet.mockResolvedValue({
       success: true,
       data: {
@@ -344,7 +451,7 @@ describe('QCOverviewView', () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
-    expect(wrapper.get('[data-testid="qc-coverage-chart"]').text()).toContain('统计范围待核实')
+    expect(wrapper.find('[data-testid="qc-coverage-chart"]').exists()).toBe(false)
     expect(
       wrapper.get('[data-testid="qc-conclusion-chart"] a-empty-stub').attributes('description'),
     ).toBe('暂无已完成质控结论')
@@ -357,12 +464,12 @@ describe('QCOverviewView', () => {
     const workspace = wrapper.get('[data-testid="home-workspace"]')
     expect(workspace.find('[data-testid="priority-queue"]').exists()).toBe(true)
     expect(workspace.find('[data-testid="data-health"]').exists()).toBe(true)
-    expect(workspace.find('[data-testid="department-chart"]').exists()).toBe(false)
+    expect(workspace.find('[data-testid="defect-analysis-chart"]').exists()).toBe(false)
 
     const analysis = wrapper.get('[data-testid="home-analysis"]')
-    expect(analysis.find('[data-testid="qc-coverage-chart"]').exists()).toBe(true)
+    expect(analysis.find('[data-testid="defect-analysis-chart"]').exists()).toBe(true)
     expect(analysis.find('[data-testid="qc-conclusion-chart"]').exists()).toBe(true)
-    expect(analysis.find('[data-testid="department-chart"]').exists()).toBe(true)
+    expect(analysis.find('[data-testid="department-distribution"]').exists()).toBe(false)
   })
 
   it('在请求失败时提供清晰的客户可见提示', async () => {
