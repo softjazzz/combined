@@ -14,7 +14,10 @@ from app.services.bundles import assembly as bundle_assembly
 from .surgery_procedure_catalog import catalog_surgery_state
 
 
-PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
+PERFORMED_TIME_FORMATS = (
+    "%Y-%m-%d %H:%M:%S+08",
+    "%Y-%m-%d %H:%M:%S+08:00",
+)
 SURGERY_TIME_FIELDS = (
     "surgery_begin_time",
     "surgery_begin_datetime",
@@ -841,15 +844,18 @@ def read_luxian_0609_course_round_timeline(
 
 
 def parse_strict_performed_time(value: Any) -> datetime | None:
-    """仅接受整值、trim 后可 round-trip 的已验收 +08 手术时间。"""
+    """仅接受整值、trim 后可 round-trip 的已验收北京时间。"""
     if not isinstance(value, str):
         return None
     candidate = value.strip()
-    try:
-        parsed = datetime.strptime(candidate, PERFORMED_TIME_FORMAT)
-    except ValueError:
-        return None
-    return parsed if parsed.strftime(PERFORMED_TIME_FORMAT) == candidate else None
+    for time_format in PERFORMED_TIME_FORMATS:
+        try:
+            parsed = datetime.strptime(candidate, time_format)
+        except ValueError:
+            continue
+        if parsed.strftime(time_format) == candidate:
+            return parsed
+    return None
 
 
 def has_strict_performed_time(row: Mapping[str, Any]) -> bool:

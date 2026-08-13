@@ -351,7 +351,7 @@ def _snapshot_for_surgery(mode: str, *, selected_rule_id: str = "LX0609-024"):
             elif mode == "empty":
                 rows = ()
             elif mode == "nonexact":
-                rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08:00"},)
+                rows = ({"surgery_begin_time": "2026-01-01 08:00:00+09:00"},)
             elif mode == "unavailable":
                 raise SourceEvidenceUnavailable()
             else:
@@ -1414,6 +1414,55 @@ async def test_typed_003_prefers_surgery_end_time_over_begin_time():
 
     assert reduced[0].final_state.value == "compliant"
     assert reduced[0].reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.asyncio
+async def test_typed_003_accepts_customer_iso_timezone_surgery_end_time():
+    """客户源库的标准 ISO ``+08:00`` 时间应按同一北京时间参与判定。"""
+
+    session = _typed_003_session(
+        surgery_begin_time="2026-07-15 16:10:00+08:00",
+        surgery_time="2026-07-15 18:20:00+08:00",
+        record_time=datetime(2026, 7, 15, 18, 55, 46),
+    )
+
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert result.customer_display_facts == (
+        (
+            "LX0609-003",
+            {
+                "failure_kind": "surgery_record_within_threshold",
+                "performed_surgery_confirmed": True,
+                "surgery_end_time": "2026-07-15 18:20:00",
+                "record_time": "2026-07-15 18:55:46",
+                "elapsed_hours": 0.6,
+                "threshold_hours": 24,
+                "source_label": "手术记录",
+            },
+        ),
+    )
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio

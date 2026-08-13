@@ -30,7 +30,7 @@ def _plan(*rules):
 def test_shared_strict_performed_parser_and_digest_accept_only_exact_whole_values():
     assert source_evidence_reader.parse_strict_performed_time(" 2026-01-01 08:00:00+08 ") is not None
     assert source_evidence_reader.has_strict_performed_time({"surgery_end_time": "2026-01-01 08:00:00+08"})
-    assert source_evidence_reader.parse_strict_performed_time("2026-01-01 08:00:00+08:00") is None
+    assert source_evidence_reader.parse_strict_performed_time("2026-01-01 08:00:00+08:00") is not None
     digest = source_evidence_reader.digest_source_evidence({"raw": "Authorization_sensitive_marker"})
     assert len(digest) == 64
     assert "Authorization_sensitive_marker" not in digest
@@ -384,7 +384,7 @@ def test_provider_032_target_qualification_rejects_title_only_and_shells(monkeyp
         ("surgery_begin_time", "2026-01-01 08:00:00+08", True),
         ("surgery_end_time", "2026-01-01 09:00:00+08", True),
         ("surgery_begin_time", " 2026-01-01 08:00:00+08 ", True),
-        ("surgery_begin_time", "2026-01-01 08:00:00+08:00", False),
+        ("surgery_begin_time", "2026-01-01 08:00:00+08:00", True),
         ("surgery_begin_time", "2026-01-01 08:00:00+09", False),
         ("surgery_begin_time", "prefix 2026-01-01 08:00:00+08", False),
         ("surgery_begin_time", "2026-01-01 08:00:00+08 suffix", False),
