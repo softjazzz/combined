@@ -94,6 +94,8 @@
               :doc-preview-active="!!activeDocType"
               :doc-preview-title="docPreviewTitle"
               :doc-preview-content="docPreviewContent"
+              :documents="documentsList"
+              :documents-loading="documentsLoading"
               @emr-loaded="handleEmrLoaded"
               @emr-error="handleEmrError"
               @emr-defect-click="handleEmrDefectClick"
@@ -1506,6 +1508,7 @@ function normalizeDocItem(raw: unknown): DocItem {
     record_time: pickText(source, ['record_time', 'sort_time']) || undefined,
     source_table: pickText(source, ['source_table']) || undefined,
     group_key: pickText(source, ['group_key']) || undefined,
+    execution_domain: pickText(source, ['execution_domain']) || undefined,
     authors: normalizeDocumentAuthors(source.authors),
     signatures: normalizeDocumentSignatures(source.signatures),
     projection_incomplete: source.projection_incomplete === true,
@@ -1734,9 +1737,12 @@ function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup
   return normalized
 }
 
+let documentsRequestSequence = 0
+
 async function loadDocuments(visitId: string) {
+  const requestSequence = ++documentsRequestSequence
   documentsLoading.value = true
-  concatLoading.value = true
+  concatLoading.value = false
   documentsList.value = []
   documentsTree.value = []
   concatText.value = ''
@@ -1751,7 +1757,9 @@ async function loadDocuments(visitId: string) {
       params.visit_id = visitId
     }
 
+    params.view = 'summary'
     const { data } = await apiClient.get(`/api/v1/emr/${visitId}/documents`, { params })
+    if (requestSequence !== documentsRequestSequence) return
     const payload = data?.data || data || {}
     const docsRaw = Array.isArray(payload.documents)
       ? payload.documents
@@ -1762,18 +1770,21 @@ async function loadDocuments(visitId: string) {
     const tree: DocTreeGroup[] = normalizeDocumentsTree(payload.documents_tree, docs)
     documentsList.value = docs
     documentsTree.value = tree
-    concatText.value = buildConcatTextFromDocuments(docs)
+    concatText.value = ''
     if (docs.length > 0) {
       const defaultDoc = docs.find((item) => item.has_content) || docs[0]
       activeDocType.value = docIdentityKey(defaultDoc)
       docPreviewTitle.value = resolveDocDisplayTitle(defaultDoc, true)
-      docPreviewContent.value = defaultDoc.content || ''
+      docPreviewContent.value = ''
     }
   } catch (err) {
+    if (requestSequence !== documentsRequestSequence) return
     console.error('加载病历文书失败:', err)
   } finally {
-    documentsLoading.value = false
-    concatLoading.value = false
+    if (requestSequence === documentsRequestSequence) {
+      documentsLoading.value = false
+      concatLoading.value = false
+    }
   }
 }
 

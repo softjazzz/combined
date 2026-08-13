@@ -83,4 +83,98 @@ describe('EMRViewer', () => {
     expect(text).toContain('已展示3条，仍有更多。')
     expect(text).not.toContain('资料缺失')
   })
+
+  it('复用父层轻量目录并按文书领域直接渲染，不重复请求目录', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        layout_version: 'bundle_struct_v1',
+        content: '首份病程正文',
+        content_type: 'text',
+        metadata: { doc_type: 'daily_course_record', doc_name: '日常病程记录' },
+        defect_annotations: [],
+        render_blocks: [],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    mount(EMRViewer, {
+      props: {
+        recordId: 'V1',
+        visitId: 'V1',
+        patientId: 'P1',
+        instituteId: 'H1',
+        documents: [
+          {
+            id: 'DOC-1',
+            doc_type: 'daily_course_record',
+            doc_name: '日常病程记录',
+            doc_key: 'daily_course_record::DOC-1',
+            execution_domain: 'course',
+            has_content: true,
+          },
+        ],
+        documentsManaged: true,
+        documentsLoading: false,
+      },
+      global: {
+        stubs: {
+          'a-spin': true,
+          FileTextOutlined: true,
+        },
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const url = String(fetchMock.mock.calls[0]?.[0] || '')
+    expect(url).toContain('/render?')
+    expect(url).toContain('execution_domain=course')
+    expect(url).not.toContain('/documents')
+  })
+
+  it('父层目录加载期间保持等待，目录到达后才请求首篇文书', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        content: '到达后的首篇正文',
+        content_type: 'text',
+        metadata: {},
+        defect_annotations: [],
+        render_blocks: [],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(EMRViewer, {
+      props: {
+        recordId: 'V1',
+        visitId: 'V1',
+        patientId: 'P1',
+        instituteId: 'H1',
+        documents: [],
+        documentsManaged: true,
+        documentsLoading: true,
+      },
+      global: { stubs: { 'a-spin': true, FileTextOutlined: true } },
+    })
+    await flushPromises()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await wrapper.setProps({
+      documentsLoading: false,
+      documents: [
+        {
+          id: 'DOC-2',
+          doc_type: 'daily_course_record',
+          doc_name: '日常病程记录',
+          execution_domain: 'course',
+          has_content: true,
+        },
+      ],
+    })
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0]?.[0] || '')).toContain('/render?')
+  })
 })

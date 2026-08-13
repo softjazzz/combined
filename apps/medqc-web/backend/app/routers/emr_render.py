@@ -4,10 +4,14 @@ import logging
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Request, Query
+from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 from ..services.bundles.emr_view import (
+    build_documents_tree,
+    load_bundle_document,
+    load_bundle_document_summaries,
     load_bundle_documents,
     pick_document,
     build_render_view,
@@ -72,6 +76,56 @@ def _load_documents_from_bundle(
         return _build_empty_documents_payload("bundle_load_failed")
 
 
+def _load_document_summaries_from_bundle(
+    *,
+    record_id: str,
+    institute_id: Optional[str],
+    patient_id: Optional[str],
+    visit_id: Optional[str],
+) -> Dict[str, Any]:
+    normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
+    normalized_institute_id = str(institute_id or "").strip()
+    normalized_patient_id = str(patient_id or "").strip()
+    if not (normalized_institute_id and normalized_patient_id and normalized_visit_id):
+        return _build_empty_documents_payload("missing_bundle_identity")
+    try:
+        return load_bundle_document_summaries(
+            institute_id=normalized_institute_id,
+            patient_id=normalized_patient_id,
+            visit_id=normalized_visit_id,
+            bundle_schema="public",
+        )
+    except Exception as exc:
+        logger.warning("加载 bundle 文书目录失败: error_type=%s", type(exc).__name__)
+        return _build_empty_documents_payload("bundle_load_failed")
+
+
+def _load_document_from_bundle(
+    *,
+    record_id: str,
+    institute_id: Optional[str],
+    patient_id: Optional[str],
+    visit_id: Optional[str],
+    execution_domain: str,
+    doc_type: str,
+    doc_id: str,
+) -> Dict[str, Any] | None:
+    normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
+    normalized_institute_id = str(institute_id or "").strip()
+    normalized_patient_id = str(patient_id or "").strip()
+    if not (normalized_institute_id and normalized_patient_id and normalized_visit_id):
+        return None
+    return load_bundle_document(
+        institute_id=normalized_institute_id,
+        patient_id=normalized_patient_id,
+        visit_id=normalized_visit_id,
+        execution_domain=str(execution_domain or "").strip(),
+        doc_type=str(doc_type or "").strip(),
+        doc_id=str(doc_id or "").strip(),
+        bundle_schema="public",
+    )
+
+
 @router.get("/{record_id}/documents")
 async def get_record_documents(
     request: Request,
@@ -79,9 +133,12 @@ async def get_record_documents(
     patient_id: Optional[str] = Query(None, description="患者号（兼容工作台）"),
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
+    view: str = Query("full", pattern="^(full|summary)$", description="目录视图或完整文书"),
 ):
     """获取病历文书列表（BundleOnly）。"""
-    payload = _load_documents_from_bundle(
+    loader = _load_document_summaries_from_bundle if view == "summary" else _load_documents_from_bundle
+    payload = await run_in_threadpool(
+        loader,
         record_id=record_id,
         institute_id=institute_id,
         patient_id=patient_id,
@@ -104,20 +161,38 @@ async def render_document(
     patient_id: Optional[str] = Query(None, description="患者号（兼容工作台）"),
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
+    execution_domain: str = Query("", description="目录返回的文书领域"),
 ):
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
-    documents_payload = _load_documents_from_bundle(
-        record_id=record_id,
-        institute_id=institute_id,
-        patient_id=patient_id,
-        visit_id=visit_id,
-    )
-    documents = list(documents_payload.get("documents") or [])
-    selected = pick_document(
-        documents=documents,
-        doc_type=str(doc_type or "").strip(),
-        doc_id=str(doc_id or "").strip(),
-    )
+    if execution_domain:
+        selected = await run_in_threadpool(
+            _load_document_from_bundle,
+            record_id=record_id,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            execution_domain=execution_domain,
+            doc_type=str(doc_type or "").strip(),
+            doc_id=str(doc_id or "").strip(),
+        )
+        documents_payload = {
+            "documents_tree": build_documents_tree([selected] if selected else []),
+            "empty_reason": "" if selected else "document_not_found",
+        }
+    else:
+        documents_payload = await run_in_threadpool(
+            _load_documents_from_bundle,
+            record_id=record_id,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+        )
+        documents = list(documents_payload.get("documents") or [])
+        selected = pick_document(
+            documents=documents,
+            doc_type=str(doc_type or "").strip(),
+            doc_id=str(doc_id or "").strip(),
+        )
     view_payload = build_render_view(selected)
 
     content = str(view_payload.get("content") or "")

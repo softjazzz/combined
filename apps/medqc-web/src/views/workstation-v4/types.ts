@@ -99,6 +99,7 @@ export interface DocItem {
   record_time?: string
   source_table?: string
   group_key?: string
+  execution_domain?: string
   sections?: Array<{
     section_key?: string
     section_label?: string

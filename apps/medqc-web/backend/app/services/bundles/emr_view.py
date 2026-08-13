@@ -4,7 +4,13 @@ from datetime import datetime
 import re
 from typing import Any
 
-from .assembly import assemble_domain_bundle, load_domain_bundle, load_or_assemble_domain_bundle
+from .assembly import (
+    assemble_domain_bundle,
+    load_domain_bundle,
+    load_domain_bundle_document_index,
+    load_domain_bundle_for_emr_render,
+    load_or_assemble_domain_bundle,
+)
 from .contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 
 _DOMAIN_LOAD_ORDER: tuple[str, ...] = (
@@ -813,6 +819,154 @@ def build_documents_tree(documents: list[dict[str, Any]]) -> list[dict[str, Any]
             }
         )
     return tree
+
+
+def _normalize_source_document_summary(
+    *,
+    raw_doc: dict[str, Any],
+    index: int,
+    execution_domain: str,
+) -> dict[str, Any]:
+    doc_type = _safe_text(raw_doc.get("document_type") or raw_doc.get("source_table"))
+    doc_id = _safe_text(raw_doc.get("document_id"))
+    title = _friendly_doc_label(doc_type, _safe_text(raw_doc.get("document_title")))
+    sort_time = _safe_text(raw_doc.get("display_time") or raw_doc.get("record_time"))
+    source_record_time = _safe_text(raw_doc.get("record_time"))
+    can_use_display_time_as_record_time = doc_type in _RECORD_TIME_FALLBACK_DOC_TYPES
+    length = max(0, int(raw_doc.get("length") or 0))
+    has_content = raw_doc.get("has_content") is True or length > 0
+    return {
+        "id": doc_id or _build_doc_key(doc_type, doc_id, index),
+        "doc_id": doc_id or _build_doc_key(doc_type, doc_id, index),
+        "doc_key": _build_doc_key(doc_type, doc_id, index),
+        "doc_type": doc_type,
+        "doc_name": title,
+        "type": doc_type,
+        "label": title,
+        "document_id": doc_id,
+        "document_title": title,
+        "sort_time": sort_time,
+        "record_time": source_record_time
+        or (sort_time if can_use_display_time_as_record_time else ""),
+        "has_content": has_content,
+        "length": length,
+        "group_key": _infer_group_key(doc_type),
+        "execution_domain": execution_domain,
+        "projection_incomplete": raw_doc.get("projection_incomplete") is True,
+        "projection_notice": _safe_text(raw_doc.get("projection_notice")),
+        "source": "bundle",
+    }
+
+
+def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    diagnosis_types = {
+        "admission_record_diagnosis",
+        "first_course_record_diagnosis",
+        "discharge_record_diagnosis",
+    }
+    visible = [doc for doc in documents if doc.get("doc_type") not in diagnosis_types]
+    applications = [doc for doc in visible if doc.get("doc_type") == "labtest_master"]
+    if len(applications) <= 1:
+        return visible
+    latest = max(
+        applications,
+        key=lambda item: (
+            _parse_sort_time(_safe_text(item.get("sort_time") or item.get("record_time"))),
+            _safe_text(item.get("document_id")),
+        ),
+    )
+    summary = {
+        **latest,
+        "id": "labtest-master-summary",
+        "doc_id": "labtest-master-summary",
+        "doc_key": "labtest_master::summary",
+        "doc_name": f"检验申请汇总（{len(applications)}）",
+        "document_id": "labtest-master-summary",
+        "document_title": f"检验申请汇总（{len(applications)}）",
+        "has_content": True,
+        "length": sum(int(item.get("length") or 0) for item in applications),
+    }
+    return [doc for doc in visible if doc.get("doc_type") != "labtest_master"] + [summary]
+
+
+def load_bundle_document_summaries(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    bundle_schema: str = "public",
+) -> dict[str, Any]:
+    documents: list[dict[str, Any]] = []
+    domain_hits: dict[str, bool] = {}
+    seen_keys: set[str] = set()
+    for domain in _DOMAIN_LOAD_ORDER:
+        bundle = load_domain_bundle_document_index(
+            execution_domain=domain,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            schema=bundle_schema,
+        )
+        domain_hits[domain] = bool(bundle)
+        if not bundle:
+            continue
+        for index, item in enumerate(bundle.get("source_documents") or []):
+            if not isinstance(item, dict):
+                continue
+            summary = _normalize_source_document_summary(
+                raw_doc=item,
+                index=index,
+                execution_domain=domain,
+            )
+            key = _safe_text(summary.get("doc_key"))
+            if key and key in seen_keys:
+                continue
+            if key:
+                seen_keys.add(key)
+            documents.append(summary)
+    documents = _collapse_summary_only_documents(documents)
+    documents.sort(
+        key=lambda item: (
+            _parse_sort_time(_safe_text(item.get("sort_time"))),
+            _safe_text(item.get("doc_name")),
+            _safe_text(item.get("doc_key")),
+        )
+    )
+    return {
+        "layout_version": "bundle_struct_v1",
+        "documents": documents,
+        # 前端可由同一份摘要构建分组；不在响应中重复 1,000+ 个目录节点。
+        "documents_tree": [],
+        "domain_bundle_hits": domain_hits,
+        "empty_reason": "" if documents else "bundle_documents_empty",
+    }
+
+
+def load_bundle_document(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    execution_domain: str,
+    doc_type: str,
+    doc_id: str,
+    bundle_schema: str = "public",
+) -> dict[str, Any] | None:
+    if execution_domain not in _DOMAIN_LOAD_ORDER:
+        return None
+    bundle = load_domain_bundle_for_emr_render(
+        execution_domain=execution_domain,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        doc_type=doc_type,
+        doc_id=doc_id,
+        schema=bundle_schema,
+    )
+    if not bundle:
+        return None
+    documents = build_documents_from_domain_bundles({execution_domain: bundle})
+    return pick_document(documents=documents, doc_type=doc_type, doc_id=doc_id)
 
 
 def load_bundle_documents(

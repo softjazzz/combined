@@ -2668,6 +2668,155 @@ def load_domain_bundle(
     return payload
 
 
+def load_domain_bundle_document_index(
+    *,
+    execution_domain: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    schema: str = "public",
+) -> dict[str, Any] | None:
+    """只读取 EMR 目录所需字段，避免把全部文书正文传入应用进程。"""
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; domain bundle loading unavailable.")
+    table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
+    if not table_name:
+        raise ValueError(f"Unsupported execution domain: {execution_domain}")
+    sql = text(
+        f"""
+        SELECT institute_id, patient_id, visit_id, execution_domain,
+               bundle_schema_version, bundle_updated_at,
+               COALESCE(
+                 (
+                   SELECT jsonb_agg(
+                     jsonb_build_object(
+                       'document_type', item -> 'document_type',
+                       'source_table', item -> 'source_table',
+                       'document_id', item -> 'document_id',
+                       'document_title', item -> 'document_title',
+                       'display_time', item -> 'display_time',
+                       'record_time', item -> 'record_time',
+                       'has_content', LENGTH(BTRIM(COALESCE(item ->> 'content', ''))) > 0,
+                       'length', LENGTH(COALESCE(item ->> 'content', '')),
+                       'projection_incomplete', item -> 'projection_incomplete',
+                       'projection_notice', item -> 'projection_notice'
+                     ) ORDER BY ordinal
+                   )
+                   FROM jsonb_array_elements(COALESCE(source_documents, '[]'::jsonb))
+                        WITH ORDINALITY AS document_rows(item, ordinal)
+                 ),
+                 '[]'::jsonb
+               ) AS source_documents,
+               jsonb_build_object(
+                 'domain_projection', structured_context -> 'domain_projection'
+               ) AS structured_context
+        FROM {_qualified_table(schema, table_name)}
+        WHERE institute_id = :institute_id
+          AND patient_id = :patient_id
+          AND visit_id = :visit_id
+        LIMIT 1
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(
+            sql,
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+            },
+        ).mappings().first()
+    if not row:
+        return None
+    payload = dict(row)
+    for field_name in ("source_documents", "structured_context"):
+        value = payload.get(field_name)
+        if isinstance(value, str):
+            try:
+                payload[field_name] = json.loads(value)
+            except Exception:
+                payload[field_name] = [] if field_name == "source_documents" else {}
+    return payload
+
+
+def load_domain_bundle_for_emr_render(
+    *,
+    execution_domain: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    doc_type: str,
+    doc_id: str,
+    schema: str = "public",
+) -> dict[str, Any] | None:
+    """在数据库内裁剪单篇文书，避免读取整个领域 Bundle。"""
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; domain bundle loading unavailable.")
+    table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
+    if not table_name:
+        raise ValueError(f"Unsupported execution domain: {execution_domain}")
+    diagnosis_type = {
+        "admission_record": "admission_record_diagnosis",
+        "first_course_record": "first_course_record_diagnosis",
+        "discharge_record": "discharge_record_diagnosis",
+    }.get(doc_type, "")
+    sql = text(
+        f"""
+        SELECT institute_id, patient_id, visit_id, execution_domain,
+               bundle_schema_version, bundle_updated_at,
+               COALESCE(
+                 (
+                   SELECT jsonb_agg(item ORDER BY ordinal)
+                   FROM jsonb_array_elements(COALESCE(source_documents, '[]'::jsonb))
+                        WITH ORDINALITY AS document_rows(item, ordinal)
+                   WHERE (
+                     :select_all_lab_applications
+                     AND COALESCE(item ->> 'document_type', item ->> 'source_table', '') = 'labtest_master'
+                   ) OR (
+                     COALESCE(item ->> 'document_type', item ->> 'source_table', '') = :doc_type
+                     AND item ->> 'document_id' = :doc_id
+                   ) OR (
+                     :diagnosis_type <> ''
+                     AND COALESCE(item ->> 'document_type', item ->> 'source_table', '') = :diagnosis_type
+                     AND LEFT(item ->> 'document_id', LENGTH(:diagnosis_prefix)) = :diagnosis_prefix
+                   )
+                 ),
+                 '[]'::jsonb
+               ) AS source_documents,
+               '{{}}'::jsonb AS structured_context
+        FROM {_qualified_table(schema, table_name)}
+        WHERE institute_id = :institute_id
+          AND patient_id = :patient_id
+          AND visit_id = :visit_id
+        LIMIT 1
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(
+            sql,
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+                "doc_type": doc_type,
+                "doc_id": doc_id,
+                "diagnosis_type": diagnosis_type,
+                "diagnosis_prefix": f"{doc_id}::diagnosis::",
+                "select_all_lab_applications": doc_id == "labtest-master-summary",
+            },
+        ).mappings().first()
+    if not row:
+        return None
+    payload = dict(row)
+    value = payload.get("source_documents")
+    if isinstance(value, str):
+        try:
+            payload["source_documents"] = json.loads(value)
+        except Exception:
+            payload["source_documents"] = []
+    return payload
+
+
 def refresh_domain_bundles_for_rows(
     *,
     rows: list[dict[str, Any]],

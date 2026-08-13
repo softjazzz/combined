@@ -35,6 +35,9 @@
         :patient-id="selectedRecord.patientId"
         :institute-id="selectedRecord.instituteId"
         :active-doc-key="activeDocType"
+        :documents="documents"
+        :documents-managed="true"
+        :documents-loading="documentsLoading"
         :max-height="760"
         :hide-doc-tabs="true"
         @loaded="emit('emr-loaded', $event)"
@@ -162,6 +165,15 @@ defineProps<{
   docPreviewActive?: boolean
   docPreviewTitle?: string
   docPreviewContent?: string
+  documents?: Array<{
+    id: string
+    doc_type: string
+    doc_name: string
+    doc_key?: string
+    execution_domain?: string
+    has_content?: boolean
+  }>
+  documentsLoading: boolean
   isSectionExpanded: (index: number) => boolean
 }>()
 

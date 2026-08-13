@@ -4,14 +4,14 @@
     class="emr-viewer"
   >
     <div
-      v-if="!hideDocTabs && documents.length > 1"
+      v-if="!hideDocTabs && documentItems.length > 1"
       class="mb-5"
     >
       <div
         class="inline-flex items-center gap-1 rounded-xl border border-gray-100/50 bg-gray-100/80 p-1"
       >
         <button
-          v-for="doc in documents"
+          v-for="doc in documentItems"
           :key="doc.id"
           :class="[
             'rounded-lg px-4 py-1.5 text-[13px] font-medium whitespace-nowrap transition-all duration-200',
@@ -239,7 +239,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { FileTextOutlined } from '@ant-design/icons-vue'
 import { useDefectHighlight } from '@/composables/useDefectHighlight'
 import type { DefectAnnotation } from '@/composables/useDefectHighlight'
@@ -250,6 +250,7 @@ interface EmrDocumentSummary {
   doc_type: string
   doc_name: string
   doc_key?: string
+  execution_domain?: string
   has_content?: boolean
 }
 
@@ -307,6 +308,9 @@ const props = withDefaults(
     instituteId?: string
     docType?: string
     activeDocKey?: string
+    documents?: EmrDocumentSummary[]
+    documentsManaged?: boolean
+    documentsLoading?: boolean
     maxHeight?: number
     hideDocTabs?: boolean
   }>(),
@@ -327,12 +331,24 @@ const rawContent = ref('')
 const contentType = ref<'text' | 'html'>('text')
 const metadata = ref<EmrDocumentMetadata>({})
 const annotations = ref<DefectAnnotation[]>([])
-const documents = ref<EmrDocumentSummary[]>([])
+const documentItems = ref<EmrDocumentSummary[]>([])
 const activeDocId = ref<string | null>(null)
 const showAnnotationPanel = ref(false)
 const layoutVersion = ref('')
 const renderBlocks = ref<EmrRenderBlock[]>([])
 const boundClickContainer = ref<HTMLElement | null>(null)
+let activeRequestController: AbortController | null = null
+
+function beginRequest() {
+  activeRequestController?.abort()
+  const controller = new AbortController()
+  activeRequestController = controller
+  return controller
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
 
 const viewerRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
@@ -569,7 +585,7 @@ function resetViewerState() {
   contentType.value = 'text'
   metadata.value = {}
   annotations.value = []
-  documents.value = []
+  documentItems.value = []
   activeDocId.value = null
   layoutVersion.value = ''
   renderBlocks.value = []
@@ -599,20 +615,32 @@ function readEnvelopeMessage(result: unknown, fallbackMessage: string): string {
 
 function findDocByActiveKey(activeKey?: string): EmrDocumentSummary | undefined {
   if (!activeKey) return undefined
-  return documents.value.find((doc) => docIdentityKey(doc) === activeKey)
+  return documentItems.value.find((doc) => docIdentityKey(doc) === activeKey)
 }
 
 function pickInitialDocument(): EmrDocumentSummary | undefined {
   const byExternal = findDocByActiveKey(props.activeDocKey)
   if (byExternal) return byExternal
   if (props.docType) {
-    const byType = documents.value.find((doc) => doc.doc_type === props.docType)
+    const byType = documentItems.value.find((doc) => doc.doc_type === props.docType)
     if (byType) return byType
   }
-  return documents.value.find((doc) => doc.has_content) || documents.value[0]
+  return documentItems.value.find((doc) => doc.has_content) || documentItems.value[0]
 }
 
 async function fetchDocuments() {
+  if (props.documentsManaged) {
+    documentItems.value = Array.isArray(props.documents) ? props.documents : []
+    const target = pickInitialDocument()
+    if (!target) {
+      resetViewerState()
+      if (!props.documentsLoading) emit('error', 'no-documents')
+      return
+    }
+    activeDocId.value = target.id || null
+    await loadDocument(target)
+    return
+  }
   const url = buildUrl('documents')
   if (!url) {
     resetViewerState()
@@ -620,9 +648,11 @@ async function fetchDocuments() {
     return
   }
 
+  const controller = beginRequest()
   try {
     const response = await fetch(url, {
       headers: getAuthHeaders(),
+      signal: controller.signal,
     })
     const result = await response.json()
     if (response.status === 401 || response.status === 403) {
@@ -639,7 +669,7 @@ async function fetchDocuments() {
       : Array.isArray(payload)
         ? payload
         : []
-    documents.value = docList
+    documentItems.value = docList
     const target = pickInitialDocument()
     if (!target) {
       rawContent.value = ''
@@ -652,6 +682,7 @@ async function fetchDocuments() {
     activeDocId.value = target.id || null
     await loadDocument(target)
   } catch (err) {
+    if (isAbortError(err)) return
     console.error('获取文书列表失败:', err)
     emit('error', 'load-documents-failed')
   }
@@ -667,12 +698,14 @@ function bindHighlightClicks() {
 
 async function loadDocument(doc?: EmrDocumentSummary) {
   if (!doc) return
+  const controller = beginRequest()
   loading.value = true
   activeDocId.value = doc.id || null
   try {
     const extraParams: Record<string, string> = {}
     if (doc.doc_type) extraParams.doc_type = doc.doc_type
     if (doc.id) extraParams.doc_id = doc.id
+    if (doc.execution_domain) extraParams.execution_domain = doc.execution_domain
     const url = buildUrl('render', extraParams)
     if (!url) {
       emit('error', 'missing-identifiers')
@@ -681,6 +714,7 @@ async function loadDocument(doc?: EmrDocumentSummary) {
 
     const response = await fetch(url, {
       headers: getAuthHeaders(),
+      signal: controller.signal,
     })
     const result = await response.json()
     if (response.status === 401 || response.status === 403) {
@@ -710,10 +744,11 @@ async function loadDocument(doc?: EmrDocumentSummary) {
       bindHighlightClicks()
     })
   } catch (err) {
+    if (isAbortError(err)) return
     console.error('加载文书内容失败:', err)
     emit('error', 'load-document-failed')
   } finally {
-    loading.value = false
+    if (activeRequestController === controller) loading.value = false
   }
 }
 
@@ -779,8 +814,19 @@ onDefectClick((defectId) => {
   emit('defect-click', defectId)
 })
 
+onBeforeUnmount(() => activeRequestController?.abort())
+
 watch(
-  () => [props.recordId, props.visitId, props.patientId, props.instituteId, props.docType],
+  () => [
+    props.recordId,
+    props.visitId,
+    props.patientId,
+    props.instituteId,
+    props.docType,
+    props.documents,
+    props.documentsManaged,
+    props.documentsLoading,
+  ],
   () => {
     if (effectiveRecordId.value || hasTripletContext.value) {
       void fetchDocuments()
