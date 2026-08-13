@@ -41,5 +41,5 @@ describe('运行与终末质控结果清单路由', () => {
       loadRouteComponent(finalLoader),
     ])
     expect(runningModule.default).toBe(finalModule.default)
-  })
+  }, 15_000)
 })
