@@ -1054,7 +1054,13 @@ const AsyncDRGGroupingTab = defineAsyncComponent(
 )
 
 // ========== 鐥呭巻鏂囦功棰勮 ==========
-const documentsList = ref<DocItem[]>([])
+type ManagedDocItem = DocItem & {
+  id: string
+  doc_type: string
+  doc_name: string
+}
+
+const documentsList = ref<ManagedDocItem[]>([])
 const documentsTree = ref<DocTreeGroup[]>([])
 const documentsLoading = ref(false)
 const activeDocType = ref<string>('')
@@ -1471,9 +1477,9 @@ function normalizeDocumentSignatures(raw: unknown): DocItem['signatures'] {
   })
 }
 
-function normalizeDocItem(raw: unknown): DocItem {
+function normalizeDocItem(raw: unknown, index: number): ManagedDocItem {
   const source = (raw || {}) as Record<string, unknown>
-  const docType = pickText(source, ['doc_type', 'type', 'document_type'])
+  const docType = pickText(source, ['doc_type', 'type', 'document_type', 'source_table'])
   const id = pickText(source, ['id', 'doc_id', 'document_id'])
   const docKey = pickText(source, ['doc_key']) || (docType && id ? `${docType}::${id}` : '')
   const contentRaw = source.content
@@ -1489,20 +1495,23 @@ function normalizeDocItem(raw: unknown): DocItem {
     pickText(source, ['label', 'doc_name', 'document_title', 'title', 'name']) ||
     docType ||
     (id ? `文书${id}` : '未命名文书')
+  const resolvedDocType = docType || 'unknown'
+  const resolvedId = id || docKey || `${resolvedDocType}::document-${index + 1}`
+  const resolvedDocKey = docKey || `${resolvedDocType}::${resolvedId}`
 
   return {
     ...(source as Partial<DocItem>),
-    id: id || undefined,
-    doc_id: pickText(source, ['doc_id']) || id || undefined,
-    doc_key: docKey || undefined,
-    doc_type: docType || undefined,
+    id: resolvedId,
+    doc_id: pickText(source, ['doc_id']) || resolvedId,
+    doc_key: resolvedDocKey,
+    doc_type: resolvedDocType,
     doc_name: pickText(source, ['doc_name', 'document_title', 'title']) || label,
-    type: pickText(source, ['type']) || docType || 'unknown',
+    type: pickText(source, ['type']) || resolvedDocType,
     label,
     has_content: hasContent,
     content,
     length,
-    document_id: pickText(source, ['document_id']) || id || undefined,
+    document_id: pickText(source, ['document_id']) || resolvedId,
     document_title: pickText(source, ['document_title', 'doc_name', 'title']) || label,
     sort_time: pickText(source, ['sort_time', 'record_time']) || undefined,
     record_time: pickText(source, ['record_time', 'sort_time']) || undefined,
@@ -1766,7 +1775,7 @@ async function loadDocuments(visitId: string) {
       : Array.isArray(payload)
         ? payload
         : []
-    const docs: DocItem[] = docsRaw.map((item) => normalizeDocItem(item))
+    const docs = docsRaw.map((item, index) => normalizeDocItem(item, index))
     const tree: DocTreeGroup[] = normalizeDocumentsTree(payload.documents_tree, docs)
     documentsList.value = docs
     documentsTree.value = tree
