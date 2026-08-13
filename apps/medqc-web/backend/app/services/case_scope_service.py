@@ -254,10 +254,9 @@ class CaseScopeService:
                     for row in (cursor.fetchall() or [])
                 ]
 
-            candidates = [
-                *fetch_source("active", plan.get("active")),
-                *fetch_source("discharged", plan.get("discharged")),
-            ]
+            candidates = [*fetch_source("active", plan.get("active"))]
+            for discharged_source in plan.get("discharged") or ():
+                candidates.extend(fetch_source("discharged", discharged_source))
             missing_name_identities = sorted(
                 {
                     (
@@ -592,6 +591,23 @@ def _resolve_source_plan(
             }
         return None
 
+    def choose_sources(
+        table_names: Sequence[str],
+        *,
+        require_admission_time: bool,
+    ) -> tuple[dict[str, Any], ...]:
+        """按权威优先级返回全部可用来源，避免仅首表存在就漏掉其他病例。"""
+
+        sources: list[dict[str, Any]] = []
+        for table_name in table_names:
+            source = choose_source(
+                (table_name,),
+                require_admission_time=require_admission_time,
+            )
+            if source is not None:
+                sources.append(source)
+        return tuple(sources)
+
     needs_active = scope_mode in {"active", "active_and_discharged"}
     needs_discharged = scope_mode in {"discharged", "active_and_discharged"}
     active_source = (
@@ -599,16 +615,16 @@ def _resolve_source_plan(
         if needs_active
         else None
     )
-    discharged_source = (
-        choose_source(
+    discharged_sources = (
+        choose_sources(
             ("discharge_record", "mr", "inpat_registration", "admission_record"),
             require_admission_time=False,
         )
         if needs_discharged
-        else None
+        else ()
     )
     if (needs_active and active_source is None) or (
-        needs_discharged and discharged_source is None
+        needs_discharged and not discharged_sources
     ):
         if blocked_by_missing_institute:
             raise ValueError(
@@ -621,8 +637,8 @@ def _resolve_source_plan(
     warnings: list[str] = []
     if (
         needs_discharged
-        and discharged_source
-        and discharged_source["table_name"] != "discharge_record"
+        and discharged_sources
+        and discharged_sources[0]["table_name"] != "discharge_record"
     ):
         warnings.append(
             "源库未提供可用出院记录表，已使用病案首页或住院记录识别期间出院患者。"
@@ -630,13 +646,13 @@ def _resolve_source_plan(
     sources_used = list(
         dict.fromkeys(
             source["table_name"]
-            for source in (active_source, discharged_source)
+            for source in (active_source, *discharged_sources)
             if source is not None
         )
     )
     return {
         "active": active_source,
-        "discharged": discharged_source,
+        "discharged": discharged_sources,
         "sources_used": sources_used,
         "source_status": "degraded" if warnings else "ready",
         "warnings": warnings,

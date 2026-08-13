@@ -334,7 +334,7 @@ def test_active_scope_deduplicates_full_coordinates_and_filters_effective_depart
     assert result.selected[0]["department_basis"] == "current_department"
 
 
-def test_discharged_scope_preserves_authoritative_source_priority():
+def test_discharged_scope_merges_sources_and_preserves_authoritative_priority():
     identity_columns = {"institute_id", "patient_id", "visit_id"}
     cursor = _SourceCursor(
         table_columns={
@@ -349,17 +349,32 @@ def test_discharged_scope_preserves_authoritative_source_priority():
                     "institute_id": "H1",
                     "patient_id": "P1",
                     "visit_id": "V1",
-                    "discharge_time": "2026-07-31 09:00:00",
+                    "discharge_time": "2026-08-10 09:00:00",
                 }
             ],
             "mr": [
                 {
                     "institute_id": "H1",
-                    "patient_id": "P-MR",
-                    "visit_id": "V-MR",
-                    "discharge_time": "2026-07-31 10:00:00",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "discharge_time": "2026-08-10 11:00:00",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-MR-ONLY",
+                    "visit_id": "V-MR-ONLY",
+                    "discharge_time": "2026-08-10 10:00:00",
                 }
             ],
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-AUGUST",
+                    "visit_id": "V-AUGUST",
+                    "discharge_time": "2026-08-10 12:00:00",
+                }
+            ],
+            "admission_record": [],
         },
     )
     service = CaseScopeService(
@@ -370,22 +385,36 @@ def test_discharged_scope_preserves_authoritative_source_priority():
 
     result = service.resolve_hospitalization_scope(
         scope_mode="discharged",
-        as_of_date=date(2026, 7, 31),
-        discharge_start_date=date(2026, 7, 31),
-        discharge_end_date=date(2026, 7, 31),
+        as_of_date=date(2026, 8, 13),
+        discharge_start_date=date(2026, 8, 7),
+        discharge_end_date=date(2026, 8, 13),
         departments=(),
     )
 
-    assert result.case_refs == (CaseRef("H1", "P1", "V1"),)
-    assert result.sources_used == ("discharge_record",)
+    assert result.case_refs == (
+        CaseRef("H1", "P1", "V1"),
+        CaseRef("H1", "P-MR-ONLY", "V-MR-ONLY"),
+        CaseRef("H1", "P-AUGUST", "V-AUGUST"),
+    )
+    assert result.selected[0]["source_table"] == "discharge_record"
+    assert result.selected[0]["authoritative_time"] == datetime(2026, 8, 10, 9, 0)
+    assert result.sources_used == (
+        "discharge_record",
+        "mr",
+        "inpat_registration",
+        "admission_record",
+    )
     assert result.source_status == "ready"
     source_queries = [
         query
         for query, _params in cursor.queries
         if "information_schema.columns" not in query
     ]
-    assert len(source_queries) == 1
+    assert len(source_queries) == 4
     assert "FROM public.discharge_record" in source_queries[0]
+    assert "FROM public.mr" in source_queries[1]
+    assert "FROM public.inpat_registration" in source_queries[2]
+    assert "FROM public.admission_record" in source_queries[3]
 
 
 def test_discharged_scope_accepts_31_day_window_and_rejects_32_days():
@@ -533,7 +562,8 @@ def test_discharged_scope_reports_degraded_fallback_when_discharge_record_unavai
                     "visit_id": "V1",
                     "discharge_time": "2026-07-31 09:00:00",
                 }
-            ]
+            ],
+            "inpat_registration": [],
         },
     )
     service = CaseScopeService(
@@ -550,7 +580,7 @@ def test_discharged_scope_reports_degraded_fallback_when_discharge_record_unavai
         departments=(),
     )
 
-    assert result.sources_used == ("mr",)
+    assert result.sources_used == ("mr", "inpat_registration")
     assert result.source_status == "degraded"
     assert result.warnings == (
         "源库未提供可用出院记录表，已使用病案首页或住院记录识别期间出院患者。",
