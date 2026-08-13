@@ -45,7 +45,6 @@ from ..services.sc_rule_launch_tier import (
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin, require_roles, get_current_user
-from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     customer_safe_projection_key,
@@ -1700,12 +1699,7 @@ def _can_view_result_trace(current_user: Optional[Dict[str, Any]]) -> bool:
 
 
 def _can_export_record_results(current_user: Optional[Dict[str, Any]]) -> bool:
-    normalized_email = str((current_user or {}).get("email") or "").strip().lower()
-    if (
-        not current_user
-        or current_user.get("is_demo_account") is True
-        or normalized_email in DEFAULT_DEMO_USER_EMAILS
-    ):
+    if not current_user:
         return False
     return bool(
         _extract_user_roles(current_user).intersection(

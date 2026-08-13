@@ -1,3 +1,5 @@
+import pytest
+
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers import qc_sichuan
@@ -79,11 +81,13 @@ class _Workspace:
         }
 
 
-def _authorize(client, *, email="qc-admin@hospital.local"):
+def _authorize(client, *, email="qc-admin@hospital.local", roles=None, is_demo_account=None):
     async def _auth_gate():
         return None
 
-    user = {"id": "u-admin", "email": email, "roles": ["admin"]}
+    user = {"id": "u-admin", "email": email, "roles": roles or ["admin"]}
+    if is_demo_account is not None:
+        user["is_demo_account"] = is_demo_account
     client.app.dependency_overrides[enforce_default_auth] = _auth_gate
     client.app.dependency_overrides[get_current_user] = lambda: user
 
@@ -175,8 +179,39 @@ def test_current_filter_excel_rechecks_loaded_count_after_scope_changes(client, 
     assert workspace.bulk_calls == []
 
 
-def test_builtin_demo_account_cannot_export_record_results(client, monkeypatch):
-    _authorize(client, email="admin@medqc.com")
+@pytest.mark.parametrize(
+    ("email", "roles"),
+    [
+        ("admin@medqc.com", ["admin"]),
+        ("qc@medqc.com", ["qc_manager"]),
+        ("sync_admin@medqc.com", ["sync_admin"]),
+    ],
+)
+def test_builtin_demo_management_account_can_export_record_results(
+    client, monkeypatch, email, roles
+):
+    _authorize(client, email=email, roles=roles, is_demo_account=True)
+    workspace = _Workspace()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    response = client.get(
+        "/api/v1/qc/sichuan/workspace/records/V-0/latest-result/export",
+        params={"institute_id": "H-1", "patient_id": "P-0"},
+    )
+
+    assert response.status_code == 200
+    assert workspace.latest_calls == [
+        {"institute_id": "H-1", "patient_id": "P-0", "visit_id": "V-0"}
+    ]
+
+
+def test_builtin_demo_doctor_still_cannot_export_record_results(client, monkeypatch):
+    _authorize(
+        client,
+        email="doctor@medqc.com",
+        roles=["doctor"],
+        is_demo_account=True,
+    )
     workspace = _Workspace()
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
@@ -186,5 +221,4 @@ def test_builtin_demo_account_cannot_export_record_results(client, monkeypatch):
     )
 
     assert response.status_code == 403
-    assert not hasattr(workspace, "collect_kwargs")
     assert workspace.latest_calls == []
