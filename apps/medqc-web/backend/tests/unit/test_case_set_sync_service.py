@@ -479,3 +479,87 @@ def test_case_set_sync_rejects_unknown_scene():
             policy_version="case-set-sync-v1",
             sync_scene="guessed-scene",
         )
+
+
+def test_full_visit_reload_replaces_exact_case_snapshot_even_when_source_is_empty():
+    case_ref = CaseRef("H1", "P1", "V1")
+    upsert_calls: list[dict[str, Any]] = []
+    refresh_calls: list[dict[str, Any]] = []
+
+    def _fetch(**kwargs: Any) -> list[dict[str, Any]]:
+        if kwargs["source_table"] == "mr":
+            return [case_ref.as_dict()]
+        return []
+
+    service = CaseSetSyncService(
+        table_catalog_loader=lambda: [
+            {
+                "name": "mr",
+                "key_fields": ["institute_id", "patient_id", "visit_id"],
+                "incremental_strategy": "full_visit_reload",
+            },
+            {
+                "name": "daily_course_record",
+                "key_fields": [
+                    "institute_id",
+                    "patient_id",
+                    "visit_id",
+                    "document_id",
+                ],
+                "incremental_strategy": "full_visit_reload",
+            },
+        ],
+        row_fetcher=_fetch,
+        row_upserter=lambda **kwargs: upsert_calls.append(kwargs) or len(
+            kwargs["records"]
+        ),
+        bundle_refresher=lambda **kwargs: refresh_calls.append(kwargs)
+        or {"scenes": {}, "domains": {}},
+        visit_index_ingester=lambda **_: {"processed": 1},
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    result = service.sync_case_set(
+        case_refs=(case_ref,),
+        table_names=("mr", "daily_course_record"),
+        policy_version="case-set-sync-v1",
+        sync_scene="final",
+    )
+
+    detail_call = next(
+        call for call in upsert_calls if call["table_name"] == "daily_course_record"
+    )
+    assert detail_call["records"] == []
+    assert detail_call["replace_case_refs"] == (case_ref,)
+    assert result.bundle_refresh
+    assert len(refresh_calls) == 1
+
+
+def test_incremental_table_does_not_replace_existing_case_snapshot():
+    case_ref = CaseRef("H1", "P1", "V1")
+    upsert_calls: list[dict[str, Any]] = []
+    service = CaseSetSyncService(
+        table_catalog_loader=lambda: [
+            {
+                "name": "mr",
+                "key_fields": ["institute_id", "patient_id", "visit_id"],
+                "incremental_strategy": "updated_at",
+            }
+        ],
+        row_fetcher=lambda **_: [case_ref.as_dict()],
+        row_upserter=lambda **kwargs: upsert_calls.append(kwargs) or 1,
+        bundle_refresher=lambda **_: {"scenes": {}, "domains": {}},
+        visit_index_ingester=lambda **_: {"processed": 1},
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    service.sync_case_set(
+        case_refs=(case_ref,),
+        table_names=("mr",),
+        policy_version="case-set-sync-v1",
+        sync_scene="final",
+    )
+
+    assert "replace_case_refs" not in upsert_calls[0]

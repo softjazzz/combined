@@ -250,15 +250,26 @@ class CaseSetSyncService:
                 rows,
                 default_institute_id=default_institute_id,
             )
-            upserted = self._row_upserter(
-                table_name=table_name,
-                records=normalized_source_rows,
-                primary_keys=[
+            upsert_kwargs: dict[str, Any] = {
+                "table_name": table_name,
+                "records": normalized_source_rows,
+                "primary_keys": [
                     str(key)
                     for key in table_config.get("key_fields") or ()
                     if str(key).strip()
                 ],
-                batch_size=self._upsert_batch_size,
+                "batch_size": self._upsert_batch_size,
+            }
+            if (
+                str(
+                    table_config.get("incremental_strategy")
+                    or "full_visit_reload"
+                ).strip()
+                == "full_visit_reload"
+            ):
+                upsert_kwargs["replace_case_refs"] = tuple(target_case_refs)
+            upserted = self._row_upserter(
+                **upsert_kwargs,
             )
             normalized_rows = tuple(normalized_source_rows)
             return (

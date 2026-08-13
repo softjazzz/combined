@@ -14,7 +14,7 @@ import uuid
 from contextlib import nullcontext
 from pathlib import Path
 from datetime import datetime, date
-from typing import Callable, Dict, List, Optional, Any, Tuple
+from typing import Callable, Dict, List, Optional, Any, Tuple, Sequence
 from dataclasses import dataclass, field, asdict
 
 import psycopg2
@@ -27,6 +27,7 @@ from ..database.connection import DB_SCHEMA_MODE, engine
 from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
 from .config_registry import get_config, set_config
+from .case_identity import CaseRefInput, normalize_case_refs
 
 logger = logging.getLogger(__name__)
 
@@ -2643,10 +2644,15 @@ def upsert_to_local(
     *,
     batch_size: int = 1,
     session: Optional[Session] = None,
+    replace_case_refs: Optional[Sequence[CaseRefInput]] = None,
 ) -> int:
-    """将数据写入本地 PG（按本地真实主键 UPSERT）。"""
-    if not records:
+    """将数据写入本地 PG；整次住院重载时按三坐标原子替换旧快照。"""
+    if not records and replace_case_refs is None:
         return 0
+
+    normalized_replace_refs = (
+        normalize_case_refs(replace_case_refs) if replace_case_refs is not None else ()
+    )
 
     requested_primary_keys = [str(key).strip().lower() for key in primary_keys if str(key).strip()]
     for key in requested_primary_keys:
@@ -2677,6 +2683,12 @@ def upsert_to_local(
 
         table_ident = f"{_safe_identifier(local_schema)}.{_safe_identifier(table_name)}"
         existing_columns = set(local_columns)
+        if normalized_replace_refs:
+            identity_columns = {"institute_id", "patient_id", "visit_id"}
+            if not identity_columns.issubset(existing_columns):
+                raise ValueError(
+                    f"表 {table_name} 缺少完整三坐标字段，无法执行整次住院重载"
+                )
 
         normalized_batch_size = max(1, min(int(batch_size), 2000))
         grouped_rows: Dict[Tuple[str, ...], List[Dict[str, Any]]] = {}
@@ -2708,6 +2720,30 @@ def upsert_to_local(
             grouped_rows.setdefault(column_shape, []).append(filtered)
 
         inserted = sum(len(rows) for rows in grouped_rows.values())
+        if inserted == 0 and records:
+            if skipped_missing_pk_rows:
+                missing_keys = ", ".join(sorted(missing_pk_names))
+                raise ValueError(
+                    f"表 {table_name} 源库返回 {len(records)} 行，但全部因缺少本地主键字段而未落库: {missing_keys}"
+                )
+            if skipped_empty_rows:
+                raise ValueError(
+                    f"表 {table_name} 源库返回 {len(records)} 行，但没有任何字段匹配本地 CDM 表结构"
+                )
+
+        if normalized_replace_refs:
+            delete_sql = (
+                f"DELETE FROM {table_ident} "
+                "WHERE institute_id = :institute_id "
+                "AND patient_id = :patient_id "
+                "AND visit_id = :visit_id"
+            )
+            delete_params = [case_ref.as_dict() for case_ref in normalized_replace_refs]
+            active_session.execute(
+                text(delete_sql),
+                delete_params if len(delete_params) > 1 else delete_params[0],
+            )
+
         for column_shape, rows_with_same_shape in grouped_rows.items():
             columns = list(column_shape)
             placeholders = ", ".join([f":{c}" for c in columns])
@@ -2734,16 +2770,6 @@ def upsert_to_local(
 
         if owns_session:
             active_session.commit()
-        if inserted == 0 and records:
-            if skipped_missing_pk_rows:
-                missing_keys = ", ".join(sorted(missing_pk_names))
-                raise ValueError(
-                    f"表 {table_name} 源库返回 {len(records)} 行，但全部因缺少本地主键字段而未落库: {missing_keys}"
-                )
-            if skipped_empty_rows:
-                raise ValueError(
-                    f"表 {table_name} 源库返回 {len(records)} 行，但没有任何字段匹配本地 CDM 表结构"
-                )
         if skipped_missing_pk_rows:
             logger.warning(
                 "表 %s 有 %s/%s 行因缺少本地主键字段被跳过: %s",

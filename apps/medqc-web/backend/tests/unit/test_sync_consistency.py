@@ -806,6 +806,183 @@ def test_upsert_to_local_uses_real_local_primary_keys(monkeypatch):
     assert "ON CONFLICT (institute_id, patient_id, visit_id)" in executed_sql[0]
 
 
+def test_upsert_to_local_replaces_exact_case_snapshot_before_insert(monkeypatch):
+    executed: list[tuple[str, object]] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed.append((str(stmt), params))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="daily_course_record",
+        records=[
+            {
+                "institute_id": "H1",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "D1",
+            }
+        ],
+        primary_keys=["document_id"],
+        replace_case_refs=(CaseRef("H1", "P1", "V1"),),
+    )
+
+    assert count == 1
+    assert executed[0][0].startswith("DELETE FROM cdm.daily_course_record")
+    assert executed[0][1] == {
+        "institute_id": "H1",
+        "patient_id": "P1",
+        "visit_id": "V1",
+    }
+    assert executed[1][0].startswith("INSERT INTO cdm.daily_course_record")
+
+
+def test_upsert_to_local_empty_full_reload_removes_withdrawn_rows(monkeypatch):
+    executed: list[tuple[str, object]] = []
+    commits = 0
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed.append((str(stmt), params))
+            return None
+
+        def commit(self):
+            nonlocal commits
+            commits += 1
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="daily_course_record",
+        records=[],
+        primary_keys=["document_id"],
+        replace_case_refs=(CaseRef("H1", "P1", "V1"),),
+    )
+
+    assert count == 0
+    assert len(executed) == 1
+    assert executed[0][0].startswith("DELETE FROM cdm.daily_course_record")
+    assert commits == 1
+
+
+def test_upsert_to_local_replacement_requires_full_case_identity_columns(monkeypatch):
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["patient_id", "visit_id", "document_id"],
+            ["patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="三坐标字段"):
+        etl_sync.upsert_to_local(
+            table_name="daily_course_record",
+            records=[],
+            primary_keys=["document_id"],
+            replace_case_refs=(CaseRef("H1", "P1", "V1"),),
+        )
+
+
+def test_upsert_to_local_does_not_commit_deleted_snapshot_when_insert_fails(
+    monkeypatch,
+):
+    execute_calls = 0
+    commits = 0
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, _stmt, _params=None):
+            nonlocal execute_calls
+            execute_calls += 1
+            if execute_calls == 2:
+                raise RuntimeError("insert failed")
+            return None
+
+        def commit(self):
+            nonlocal commits
+            commits += 1
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="insert failed"):
+        etl_sync.upsert_to_local(
+            table_name="daily_course_record",
+            records=[
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "document_id": "D1",
+                }
+            ],
+            primary_keys=["document_id"],
+            replace_case_refs=(CaseRef("H1", "P1", "V1"),),
+        )
+
+    assert execute_calls == 2
+    assert commits == 0
+
+
 def test_upsert_to_local_batches_rows_with_the_same_column_shape(monkeypatch):
     executed_params = []
 
