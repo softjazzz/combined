@@ -3,11 +3,12 @@
 import logging
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Depends, Request, Query
 from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
+from ..core.security import require_roles
 from ..services.bundles.emr_view import (
     build_documents_tree,
     load_bundle_document,
@@ -18,7 +19,13 @@ from ..services.bundles.emr_view import (
 )
 from ..services.custom_qc_workspace_service import build_customer_safe_source_ref
 
-router = APIRouter(prefix="/api/v1/emr", tags=["emr"])
+router = APIRouter(
+    prefix="/api/v1/emr",
+    tags=["emr"],
+    dependencies=[
+        Depends(require_roles("admin", "qc_manager", "sync_admin", "super_admin"))
+    ],
+)
 logger = logging.getLogger(__name__)
 
 

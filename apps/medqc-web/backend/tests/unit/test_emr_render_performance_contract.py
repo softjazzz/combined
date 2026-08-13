@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.security import get_current_user
 from app.routers import emr_render as emr_router_module
 from app.services.bundles import emr_view as emr_view_module
 
@@ -8,6 +9,11 @@ from app.services.bundles import emr_view as emr_view_module
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(emr_router_module.router)
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u-qc",
+        "roles": ["qc_manager"],
+        "role": "qc_manager",
+    }
     return TestClient(app)
 
 

@@ -100,7 +100,7 @@ class CaseScopeService:
         try:
             cursor.execute(
                 """
-                SELECT table_name, column_name
+                SELECT table_name, column_name, data_type
                 FROM information_schema.columns
                 WHERE table_schema = %s
                   AND table_name = ANY(%s)
@@ -108,13 +108,18 @@ class CaseScopeService:
                 (remote_schema, list(candidate_tables)),
             )
             table_columns: dict[str, set[str]] = {}
+            table_column_types: dict[str, dict[str, str]] = {}
             for row in cursor.fetchall() or []:
                 table_name = _text(row.get("table_name"))
                 column_name = _text(row.get("column_name"))
                 if table_name and column_name:
                     table_columns.setdefault(table_name, set()).add(column_name)
+                    table_column_types.setdefault(table_name, {})[column_name] = _text(
+                        row.get("data_type")
+                    ).lower()
             plan = _resolve_source_plan(
                 table_columns=table_columns,
+                table_column_types=table_column_types,
                 scope_mode=normalized_mode,
                 default_institute_id=_text(config.get("default_institute_id")),
             )
@@ -141,6 +146,8 @@ class CaseScopeService:
                     raise ValueError("住院来源表名称非法")
                 admission_column = _text(source.get("admission_time_column"))
                 discharge_column = _text(source.get("discharge_time_column"))
+                admission_data_type = _text(source.get("admission_time_data_type")).lower()
+                discharge_data_type = _text(source.get("discharge_time_data_type")).lower()
                 institute_expr = (
                     "institute_id::text"
                     if "institute_id" in columns
@@ -188,16 +195,26 @@ class CaseScopeService:
                     alias="discharge_department",
                 )
                 if role == "active":
+                    admission_calendar_value = (
+                        f"({admission_column} AT TIME ZONE 'Asia/Shanghai')"
+                        if admission_data_type == "timestamp with time zone"
+                        else admission_column
+                    )
+                    discharge_calendar_value = (
+                        f"({discharge_column} AT TIME ZONE 'Asia/Shanghai')"
+                        if discharge_data_type == "timestamp with time zone"
+                        else discharge_column
+                    )
                     admission_start_sql = (
-                        f"{admission_column} >= %s::date AND "
+                        f"{admission_calendar_value} >= %s::date AND "
                         if admission_start_date
                         else ""
                     )
                     where_sql = (
                         admission_start_sql
-                        + f"{admission_column} < (%s::date + INTERVAL '1 day') "
+                        + f"{admission_calendar_value} < (%s::date + INTERVAL '1 day') "
                         f"AND ({discharge_column} IS NULL "
-                        f"OR {discharge_column} >= (%s::date + INTERVAL '1 day'))"
+                        f"OR {discharge_calendar_value} >= (%s::date + INTERVAL '1 day'))"
                     )
                     date_params: list[Any] = []
                     if admission_start_date:
@@ -208,9 +225,14 @@ class CaseScopeService:
                 else:
                     if discharge_start_date is None or discharge_end_date is None:
                         raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
+                    discharge_calendar_value = (
+                        f"({discharge_column} AT TIME ZONE 'Asia/Shanghai')"
+                        if discharge_data_type == "timestamp with time zone"
+                        else discharge_column
+                    )
                     where_sql = (
-                        f"{discharge_column}::date >= %s::date "
-                        f"AND {discharge_column}::date <= %s::date"
+                        f"{discharge_calendar_value}::date >= %s::date "
+                        f"AND {discharge_calendar_value}::date <= %s::date"
                     )
                     date_params = [
                         discharge_start_date.isoformat(),
@@ -498,8 +520,53 @@ def _select_candidates(
                 "department_basis": department_basis,
             }
         )
-        selected_by_identity.setdefault(identity, normalized)
+        existing = selected_by_identity.get(identity)
+        if existing is None:
+            selected_by_identity[identity] = normalized
+            continue
+        if existing.get("hospitalization_status") == "active" and status == "discharged":
+            selected_by_identity[identity] = _fill_missing_candidate_fields(normalized, existing)
+            continue
+        selected_by_identity[identity] = _fill_missing_candidate_fields(existing, normalized)
     return list(selected_by_identity.values())
+
+
+def _fill_missing_candidate_fields(
+    authoritative: Mapping[str, Any],
+    fallback: Mapping[str, Any],
+) -> dict[str, Any]:
+    """保留权威来源，只从后续来源补齐空白展示字段。"""
+
+    merged = dict(authoritative)
+    for key in (
+        "patient_name",
+        "mr_no",
+        "inpat_no",
+        "admission_time",
+        "discharge_time",
+        "admission_department",
+        "current_department",
+        "discharge_department",
+    ):
+        if not merged.get(key) and fallback.get(key):
+            merged[key] = fallback.get(key)
+    department_candidates = (
+        (
+            ("current_department", merged.get("current_department")),
+            ("admission_department", merged.get("admission_department")),
+        )
+        if merged.get("hospitalization_status") == "active"
+        else (
+            ("discharge_department", merged.get("discharge_department")),
+            ("current_department", merged.get("current_department")),
+            ("admission_department", merged.get("admission_department")),
+        )
+    )
+    merged["department_basis"], merged["department"] = next(
+        ((basis, _text(value)) for basis, value in department_candidates if _text(value)),
+        ("unavailable", ""),
+    )
+    return merged
 
 
 def _backfill_patient_names(
@@ -561,6 +628,7 @@ def _normalize_scope(
 def _resolve_source_plan(
     *,
     table_columns: Mapping[str, set[str]],
+    table_column_types: Mapping[str, Mapping[str, str]],
     scope_mode: str,
     default_institute_id: str,
 ) -> dict[str, Any]:
@@ -587,7 +655,13 @@ def _resolve_source_plan(
                 "table_name": table_name,
                 "columns": columns,
                 "admission_time_column": admission_column,
+                "admission_time_data_type": _text(
+                    (table_column_types.get(table_name) or {}).get(admission_column)
+                ).lower(),
                 "discharge_time_column": discharge_column,
+                "discharge_time_data_type": _text(
+                    (table_column_types.get(table_name) or {}).get(discharge_column)
+                ).lower(),
             }
         return None
 

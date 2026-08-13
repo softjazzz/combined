@@ -4900,7 +4900,9 @@ async def get_latest_workspace_record_result(
     record_id: str,
     institute_id: str = Query(..., min_length=1, description="机构标识"),
     patient_id: str = Query(..., min_length=1, description="患者标识"),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
 ):
     """返回全院范围内、同一三坐标病历的最新 LX0609 保存结果。"""
 

@@ -15,9 +15,11 @@ class _SourceCursor:
         *,
         table_columns: dict[str, set[str]],
         source_rows: dict[str, list[dict[str, Any]]] | None = None,
+        table_column_types: dict[str, dict[str, str]] | None = None,
     ) -> None:
         self._table_columns = table_columns
         self._source_rows = source_rows or {}
+        self._table_column_types = table_column_types or {}
         self._rows: list[dict[str, Any]] = []
         self.queries: list[tuple[str, Any]] = []
 
@@ -29,6 +31,10 @@ class _SourceCursor:
                 for table_name, columns in self._table_columns.items()
                 for column_name in columns
             ]
+            for row in self._rows:
+                row["data_type"] = self._table_column_types.get(
+                    row["table_name"], {}
+                ).get(row["column_name"], "")
             return
         for table_name, rows in self._source_rows.items():
             if f"FROM public.{table_name}" in query:
@@ -415,6 +421,192 @@ def test_discharged_scope_merges_sources_and_preserves_authoritative_priority():
     assert "FROM public.mr" in source_queries[1]
     assert "FROM public.inpat_registration" in source_queries[2]
     assert "FROM public.admission_record" in source_queries[3]
+
+
+def test_combined_scope_prefers_period_discharge_over_stale_active_candidate():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_datetime", "discharge_datetime", "current_dept_name"},
+            "discharge_record": identity_columns
+            | {"discharge_datetime", "discharge_dept_name"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "admission_time": "2026-08-01 08:00:00",
+                    "discharge_time": None,
+                    "current_department": "重症医学科",
+                }
+            ],
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "discharge_time": "2026-08-10 09:00:00",
+                    "discharge_department": "神经外科",
+                }
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active_and_discharged",
+        as_of_date=date(2026, 8, 13),
+        discharge_start_date=date(2026, 8, 7),
+        discharge_end_date=date(2026, 8, 13),
+        departments=(),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P1", "V1"),)
+    assert result.selected[0]["hospitalization_status"] == "discharged"
+    assert result.selected[0]["source_table"] == "discharge_record"
+    assert result.selected[0]["department"] == "神经外科"
+
+
+def test_department_filter_uses_lower_priority_source_only_to_fill_missing_department():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "discharge_record": identity_columns | {"discharge_datetime"},
+            "mr": identity_columns | {"discharge_datetime", "discharge_dept_name"},
+        },
+        source_rows={
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "discharge_time": "2026-08-10 09:00:00",
+                }
+            ],
+            "mr": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "discharge_time": "2026-08-10 09:00:00",
+                    "discharge_department": "神经外科",
+                }
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="discharged",
+        as_of_date=date(2026, 8, 13),
+        discharge_start_date=date(2026, 8, 7),
+        discharge_end_date=date(2026, 8, 13),
+        departments=("神经外科",),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P1", "V1"),)
+    assert result.selected[0]["source_table"] == "discharge_record"
+    assert result.selected[0]["department"] == "神经外科"
+
+
+def test_timestamptz_discharge_filter_uses_hospital_calendar_day_in_source_sql():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns | {"discharge_datetime"},
+        },
+        table_column_types={
+            "inpat_registration": {"discharge_datetime": "timestamp with time zone"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "discharge_time": "2026-08-07T00:15:00+08:00",
+                }
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="discharged",
+        as_of_date=date(2026, 8, 13),
+        discharge_start_date=date(2026, 8, 7),
+        discharge_end_date=date(2026, 8, 13),
+        departments=(),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P1", "V1"),)
+    source_query = next(
+        query for query, _params in cursor.queries if "FROM public.inpat_registration" in query
+    )
+    assert "discharge_datetime AT TIME ZONE 'Asia/Shanghai'" in source_query
+
+
+def test_timestamptz_active_filter_uses_hospital_calendar_boundaries_in_source_sql():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_datetime", "discharge_datetime"},
+        },
+        table_column_types={
+            "inpat_registration": {
+                "admission_datetime": "timestamp with time zone",
+                "discharge_datetime": "timestamp with time zone",
+            },
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "admission_time": "2026-08-07T00:15:00+08:00",
+                    "discharge_time": None,
+                }
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active",
+        as_of_date=date(2026, 8, 13),
+        admission_start_date=date(2026, 8, 7),
+        discharge_start_date=None,
+        discharge_end_date=None,
+        departments=(),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P1", "V1"),)
+    source_query = next(
+        query for query, _params in cursor.queries if "FROM public.inpat_registration" in query
+    )
+    assert "admission_datetime AT TIME ZONE 'Asia/Shanghai'" in source_query
+    assert "discharge_datetime AT TIME ZONE 'Asia/Shanghai'" in source_query
 
 
 def test_discharged_scope_accepts_31_day_window_and_rejects_32_days():
