@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from collections import Counter
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from typing import Any, Callable, Optional
 
 from sqlalchemy import DateTime, String, and_, case, cast, func, inspect as sa_inspect, or_, text
@@ -14,6 +16,7 @@ from ...database.repository import get_repository
 from ...database.models.cdm import (
     AdmissionRecord,
     DischargeRecord,
+    InpatRegistration,
     MedicalRecordFrontpage,
     QCResult,
 )
@@ -82,6 +85,214 @@ def get_departments() -> list[str]:
     return repo.list_departments()
 
 
+def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
+    """读取已同步但尚无病案首页的病例，不向 ``mr`` 写入伪首页。"""
+
+    bind = session.get_bind()
+    if not sa_inspect(bind).has_table("visit_index"):
+        return []
+    indexed_rows = session.execute(
+        text("SELECT institute_id, patient_id, visit_id FROM visit_index")
+    ).mappings().all()
+    indexed_refs = {
+        (
+            str(row.get("institute_id") or "").strip(),
+            str(row.get("patient_id") or "").strip(),
+            str(row.get("visit_id") or "").strip(),
+        )
+        for row in indexed_rows
+        if all(
+            str(row.get(field) or "").strip()
+            for field in ("institute_id", "patient_id", "visit_id")
+        )
+    }
+    if not indexed_refs:
+        return []
+
+    visit_ids = sorted({visit_id for _institute_id, _patient_id, visit_id in indexed_refs})
+    frontpage_refs = {
+        (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+        for row in session.query(
+            MedicalRecordFrontpage.institute_id,
+            MedicalRecordFrontpage.patient_id,
+            MedicalRecordFrontpage.visit_id,
+        )
+        .filter(MedicalRecordFrontpage.visit_id.in_(visit_ids))
+        .all()
+    }
+    missing_refs = indexed_refs - frontpage_refs
+    if not missing_refs:
+        return []
+
+    missing_visit_ids = sorted({visit_id for _institute_id, _patient_id, visit_id in missing_refs})
+    registrations = [
+        row
+        for row in session.query(InpatRegistration)
+        .filter(InpatRegistration.visit_id.in_(missing_visit_ids))
+        .all()
+        if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+        in missing_refs
+    ]
+    admission_rows = session.query(AdmissionRecord).filter(
+        AdmissionRecord.visit_id.in_(missing_visit_ids)
+    ).all()
+    admission_rows = [
+        row
+        for row in admission_rows
+        if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+        in missing_refs
+    ]
+    registration_by_ref = {
+        (str(row.institute_id), str(row.patient_id), str(row.visit_id)): row
+        for row in registrations
+    }
+    admission_by_ref = {
+        (str(row.institute_id), str(row.patient_id), str(row.visit_id)): row
+        for row in admission_rows
+    }
+    discharge_by_ref: dict[tuple[str, str, str], Any] = {}
+    discharge_summary = _workstation_discharge_summary_subquery(session)
+    if discharge_summary is not None:
+        discharge_rows = (
+            session.query(
+                discharge_summary.c.institute_id,
+                discharge_summary.c.patient_id,
+                discharge_summary.c.visit_id,
+                discharge_summary.c.discharge_time,
+                discharge_summary.c.dept_name,
+            )
+            .filter(discharge_summary.c.visit_id.in_(missing_visit_ids))
+            .all()
+        )
+        discharge_by_ref = {
+            (str(row.institute_id), str(row.patient_id), str(row.visit_id)): row
+            for row in discharge_rows
+            if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+            in missing_refs
+        }
+    records: list[SimpleNamespace] = []
+    for identity in sorted(missing_refs):
+        registration = registration_by_ref.get(identity)
+        admission = admission_by_ref.get(identity)
+        discharge = discharge_by_ref.get(identity)
+        if registration is None and admission is None:
+            continue
+
+        def value(*names: str):
+            for source in (registration, admission):
+                if source is None:
+                    continue
+                for name in names:
+                    candidate = getattr(source, name, None)
+                    if candidate not in (None, ""):
+                        return candidate
+            return None
+
+        records.append(
+            SimpleNamespace(
+                institute_id=identity[0],
+                patient_id=identity[1],
+                visit_id=identity[2],
+                name=value("name"),
+                sex=value("sex"),
+                age_year=value("age_year"),
+                insurance_type=value("insurance_type"),
+                mr_no=value("mr_no"),
+                inpat_no=value("inpat_no"),
+                admission_dept_name=value("admission_dept_name", "dept_name"),
+                discharge_dept_name=(
+                    getattr(discharge, "dept_name", None)
+                    or value("discharge_dept_name")
+                ),
+                admission_datetime=value("admission_datetime"),
+                discharge_datetime=(
+                    getattr(discharge, "discharge_time", None)
+                    or value("discharge_datetime")
+                ),
+                update_time=value("update_time"),
+                record_content=value("record_content"),
+                hospital_duration=None,
+                attending_physician_sign=value("attending_physician_sign"),
+                _cdm_frontpage_empty=True,
+            )
+        )
+    return records
+
+
+def _filter_indexed_registration_records(
+    records: list[SimpleNamespace],
+    *,
+    dept: Optional[str],
+    doctor: Optional[str],
+    keyword: Optional[str],
+    start_date: Optional[date],
+    end_date: Optional[date],
+    date_field: Optional[str],
+    hospital_status: str,
+) -> list[SimpleNamespace]:
+    normalized_doctor = str(doctor or "").strip()
+    normalized_keyword = str(keyword or "").strip().lower()
+    normalized_date_field = str(date_field or "visit").strip().lower()
+
+    def in_range(value: Any) -> bool:
+        parsed = _parse_datetime_value(value)
+        if parsed is None:
+            return False
+        return (not start_date or parsed.date() >= start_date) and (
+            not end_date or parsed.date() <= end_date
+        )
+
+    filtered: list[SimpleNamespace] = []
+    for record in records:
+        department = record.discharge_dept_name or record.admission_dept_name or ""
+        if dept and department != dept:
+            continue
+        if normalized_doctor and str(record.attending_physician_sign or "").strip() != normalized_doctor:
+            continue
+        if normalized_keyword and normalized_keyword not in " ".join(
+            str(value or "").lower()
+            for value in (record.name, record.mr_no, record.inpat_no, record.visit_id)
+        ):
+            continue
+        if start_date or end_date:
+            if normalized_date_field == "admission":
+                date_matches = in_range(record.admission_datetime)
+            elif normalized_date_field == "discharge":
+                date_matches = in_range(record.discharge_datetime)
+            elif normalized_date_field == "updated":
+                date_matches = in_range(record.update_time)
+            else:
+                date_matches = in_range(record.admission_datetime) or in_range(
+                    record.discharge_datetime
+                )
+            if not date_matches:
+                continue
+        discharged = _parse_datetime_value(record.discharge_datetime) is not None
+        if hospital_status == "inpatient" and discharged:
+            continue
+        if hospital_status == "discharged" and not discharged:
+            continue
+        filtered.append(record)
+    return filtered
+
+
+def _workstation_python_sort_key(record) -> tuple[datetime, datetime, str]:
+    def comparable(value: Any) -> datetime | None:
+        parsed = _parse_datetime_value(value)
+        if parsed is not None and parsed.tzinfo is not None:
+            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+
+    discharge = comparable(record.discharge_datetime)
+    admission = comparable(record.admission_datetime)
+    updated = comparable(record.update_time)
+    return (
+        updated or discharge or admission or datetime.min,
+        discharge or admission or datetime.min,
+        str(record.visit_id or ""),
+    )
+
+
 def _serialize_real_workstation_record(
     record,
     bed_map: dict[str, str],
@@ -112,14 +323,18 @@ def _serialize_real_workstation_record(
     else:
         record_status = "completed"
 
-    cdm_frontpage_empty = not any([
-        record.name,
-        record.mr_no,
-        record.admission_datetime,
-        record.discharge_datetime,
-        record.discharge_dept_name,
-        record.record_content,
-    ])
+    cdm_frontpage_empty = bool(
+        getattr(record, "_cdm_frontpage_empty", False)
+    ) or not any(
+        [
+            record.name,
+            record.mr_no,
+            record.admission_datetime,
+            record.discharge_datetime,
+            record.discharge_dept_name,
+            record.record_content,
+        ]
+    )
     frontpage_generate_state = frontpage_generate_state_map.get(key) or {}
     queue_status = str(frontpage_generate_state.get("queue_status") or "pending").strip().lower()
     if queue_status not in {"unknown", "pending", "running", "succeeded", "failed"}:
@@ -611,7 +826,10 @@ def get_workstation_data(
 
     with session_factory() as session:
         settings, _ = settings_loader()
-        real_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
+        indexed_registration_records = _load_indexed_registration_records(session)
+        real_total_count = (
+            session.query(func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
+        ) + len(indexed_registration_records)
         demo_candidates = demo_records_builder()
         demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
         include_demo = demo_policy(settings, int(real_total_count))
@@ -644,6 +862,16 @@ def get_workstation_data(
             include_doctor=True,
             discharge_summary=discharge_summary,
         )
+        indexed_filtered_records = _filter_indexed_registration_records(
+            indexed_registration_records,
+            dept=dept,
+            doctor=doctor,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            hospital_status=normalized_hospital_status,
+        )
         if any(
             (
                 analytics_job_id,
@@ -668,6 +896,21 @@ def get_workstation_data(
                 ).all()
                 if all((row.institute_id, row.patient_id, row.visit_id))
             }
+            analytics_records_by_identity.update(
+                {
+                    (
+                        str(row.institute_id).strip(),
+                        str(row.patient_id).strip(),
+                        str(row.visit_id).strip(),
+                    ): {
+                        "department": str(
+                            row.discharge_dept_name or row.admission_dept_name or ""
+                        ).strip()
+                        or "未分科室"
+                    }
+                    for row in indexed_filtered_records
+                }
+            )
             analytics_service = WorkstationAggregationService(session_factory=session_factory)
             analytics_events, _ = analytics_service._load_luxian_0609_analytics_events(
                 session,
@@ -708,11 +951,21 @@ def get_workstation_data(
                 for institute_id, patient_id, visit_id in matching_identities
             ]
             q = q.filter(or_(*identity_conditions) if identity_conditions else text("FALSE"))
+            indexed_filtered_records = [
+                row
+                for row in indexed_filtered_records
+                if (
+                    str(row.institute_id).strip(),
+                    str(row.patient_id).strip(),
+                    str(row.visit_id).strip(),
+                )
+                in matching_identities
+            ]
             # 统计下钻只接受服务端 Canonical + 三坐标结果；演示病历没有该身份，
             # 不得以当前页可见演示数据混入图表明细。
             visible_demos = []
 
-        total_real_filtered = q.count()
+        total_real_filtered = q.count() + len(indexed_filtered_records)
         offset = (page - 1) * page_size
         demo_count = len(visible_demos)
 
@@ -730,12 +983,22 @@ def get_workstation_data(
 
         records = []
         if real_limit > 0:
-            records = (
+            candidate_limit = real_offset + real_limit
+            frontpage_candidates = (
                 q.order_by(*_workstation_default_order_by(discharge_summary))
-                .offset(real_offset)
-                .limit(real_limit)
+                .limit(candidate_limit)
                 .all()
             )
+            indexed_candidates = sorted(
+                indexed_filtered_records,
+                key=_workstation_python_sort_key,
+                reverse=True,
+            )[:candidate_limit]
+            records = sorted(
+                [*frontpage_candidates, *indexed_candidates],
+                key=_workstation_python_sort_key,
+                reverse=True,
+            )[real_offset : real_offset + real_limit]
 
         full_record_refs = [
             {
@@ -750,6 +1013,14 @@ def get_workstation_data(
             ).all()
             if all((row.institute_id, row.patient_id, row.visit_id))
         ]
+        full_record_refs.extend(
+            {
+                "institute_id": str(row.institute_id).strip(),
+                "patient_id": str(row.patient_id).strip(),
+                "visit_id": str(row.visit_id).strip(),
+            }
+            for row in indexed_filtered_records
+        )
         summary_loader = qc_projection_loader or (
             lambda refs: _load_latest_luxian_0609_qc_summaries(
                 refs,
@@ -816,6 +1087,20 @@ def get_workstation_data(
             discharge_summary=discharge_summary,
         )
         dept_stats = dept_stats_query.group_by(dept_expr).all()
+        indexed_department_records = _filter_indexed_registration_records(
+            indexed_registration_records,
+            dept=None,
+            doctor=doctor,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            hospital_status=normalized_hospital_status,
+        )
+        indexed_department_totals = Counter(
+            str(row.discharge_dept_name or row.admission_dept_name or "")
+            for row in indexed_department_records
+        )
 
         dept_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage)
         if discharge_summary is not None:
@@ -836,6 +1121,7 @@ def get_workstation_data(
             include_doctor=True,
             discharge_summary=discharge_summary,
         ).scalar() or 0
+        dept_total_count = int(dept_total_count) + len(indexed_department_records)
 
         doctor_name_expr = func.trim(MedicalRecordFrontpage.attending_physician_sign).label(
             "doctor_name"
@@ -869,6 +1155,21 @@ def get_workstation_data(
             func.count().desc(),
             doctor_name_expr.asc(),
         ).all()
+        indexed_doctor_records = _filter_indexed_registration_records(
+            indexed_registration_records,
+            dept=dept,
+            doctor=None,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            hospital_status=normalized_hospital_status,
+        )
+        indexed_doctor_totals = Counter(
+            str(row.attending_physician_sign or "").strip()
+            for row in indexed_doctor_records
+            if str(row.attending_physician_sign or "").strip()
+        )
 
         real_visit_ids = [r.visit_id for r in records]
         demo_visit_ids = [str(item.get("visitId") or item.get("id") or "").strip() for item in visible_demos]
@@ -896,15 +1197,9 @@ def get_workstation_data(
         frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
         demo_frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
         if visit_ids:
-            all_real_visit_counts = {
-                visit_id: int(visit_count)
-                for visit_id, visit_count in q.with_entities(
-                    MedicalRecordFrontpage.visit_id,
-                    func.count(MedicalRecordFrontpage.visit_id),
-                )
-                .group_by(MedicalRecordFrontpage.visit_id)
-                .all()
-            }
+            all_real_visit_counts = Counter(
+                str(ref["visit_id"]) for ref in full_record_refs
+            )
             safe_real_visit_ids = [
                 visit_id
                 for visit_id in real_visit_ids
@@ -939,6 +1234,8 @@ def get_workstation_data(
         for d in dept_stats:
             dept_name = d.dept_name or ""
             dept_total_map[dept_name] = int(d.total)
+        for dept_name, count in indexed_department_totals.items():
+            dept_total_map[dept_name] = dept_total_map.get(dept_name, 0) + int(count)
 
         real_items = []
         for record in records:
@@ -979,15 +1276,25 @@ def get_workstation_data(
 
         total_count = total_real_filtered + demo_count
         departments[0]["total"] = int(dept_total_count) + demo_count
+        doctor_total_map = Counter(
+            {
+                str(item.doctor_name).strip(): int(item.total)
+                for item in doctor_stats
+                if str(item.doctor_name or "").strip()
+            }
+        )
+        doctor_total_map.update(indexed_doctor_totals)
         doctors = [
             {
                 "name": "全部主管医师",
-                "total": sum(int(item.total) for item in doctor_stats),
+                "total": sum(doctor_total_map.values()),
             },
             *[
-                {"name": str(item.doctor_name).strip(), "total": int(item.total)}
-                for item in doctor_stats
-                if str(item.doctor_name or "").strip()
+                {"name": doctor_name, "total": int(total)}
+                for doctor_name, total in sorted(
+                    doctor_total_map.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
             ],
         ]
         demo_items = [

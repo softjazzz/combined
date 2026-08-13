@@ -10,7 +10,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.database.connection import Base
-from app.database.models.cdm import AdmissionRecord, MedicalRecordFrontpage, QCResult
+from app.database.models.cdm import (
+    AdmissionRecord,
+    InpatRegistration,
+    MedicalRecordFrontpage,
+    QCResult,
+)
 from app.services.frontpage_settings import FrontpageExtractionSettings
 import app.services.medical_records.query_service as query_service_module
 from app.services.medical_records.query_service import get_workstation_data
@@ -62,6 +67,7 @@ def workstation_session_factory(monkeypatch):
         engine,
         tables=[
             MedicalRecordFrontpage.__table__,
+            InpatRegistration.__table__,
             AdmissionRecord.__table__,
             QCResult.__table__,
         ],
@@ -76,6 +82,16 @@ def workstation_session_factory(monkeypatch):
                 dept_name VARCHAR(100),
                 discharge_time DATETIME,
                 update_time DATETIME
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE visit_index (
+                institute_id VARCHAR(100) NOT NULL,
+                patient_id VARCHAR(100) NOT NULL,
+                visit_id VARCHAR(100) NOT NULL,
+                scene_current VARCHAR(32) NOT NULL DEFAULT '',
+                updated_at DATETIME,
+                PRIMARY KEY (institute_id, patient_id, visit_id)
             )
         """))
         session.commit()
@@ -97,6 +113,7 @@ def workstation_session_factory_without_discharge_record(monkeypatch):
         engine,
         tables=[
             MedicalRecordFrontpage.__table__,
+            InpatRegistration.__table__,
             AdmissionRecord.__table__,
             QCResult.__table__,
         ],
@@ -139,6 +156,30 @@ def _insert_discharge_records(session_factory, *rows: dict) -> None:
                     :dept_name,
                     :discharge_time,
                     :update_time
+                )
+            """),
+            list(rows),
+        )
+        session.commit()
+
+
+def _insert_visit_index_rows(session_factory, *rows: dict) -> None:
+    with session_factory() as session:
+        session.execute(
+            text("""
+                INSERT INTO visit_index (
+                    institute_id,
+                    patient_id,
+                    visit_id,
+                    scene_current,
+                    updated_at
+                )
+                VALUES (
+                    :institute_id,
+                    :patient_id,
+                    :visit_id,
+                    :scene_current,
+                    :updated_at
                 )
             """),
             list(rows),
@@ -233,6 +274,297 @@ def test_get_workstation_data_excludes_demo_records_in_production_even_when_enab
 
     assert result["total"] == 1
     assert [record["id"] for record in result["records"]] == ["V1"]
+
+
+def test_synced_inpatient_without_frontpage_enters_workstation_by_visit_index(
+    workstation_session_factory,
+):
+    with workstation_session_factory() as session:
+        session.add(
+            InpatRegistration(
+                institute_id="H1",
+                patient_id="P-RUNNING",
+                visit_id="V-RUNNING",
+                name="在院患者",
+                sex="女",
+                age_year="56",
+                inpat_no="ZY-001",
+                admission_dept_name="重症医学科",
+                admission_datetime=datetime(2026, 8, 12, 9, 30),
+                discharge_datetime=None,
+                update_time=datetime(2026, 8, 13, 8, 0),
+            )
+        )
+        session.commit()
+    _insert_visit_index_rows(
+        workstation_session_factory,
+        {
+            "institute_id": "H1",
+            "patient_id": "P-RUNNING",
+            "visit_id": "V-RUNNING",
+            "scene_current": "running",
+            "updated_at": datetime(2026, 8, 13, 8, 5),
+        },
+    )
+
+    result = get_workstation_data(
+        hospital_status="inpatient",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 1
+    assert result["qc_summary"]["total_records"] == 1
+    assert result["departments"][0]["total"] == 1
+    assert result["records"] == [
+        {
+            **result["records"][0],
+            "id": "V-RUNNING",
+            "recordKey": '["H1","P-RUNNING","V-RUNNING"]',
+            "instituteId": "H1",
+            "patientId": "P-RUNNING",
+            "name": "在院患者",
+            "sex": "女",
+            "age": 56,
+            "department": "重症医学科",
+            "admissionDate": "2026-08-12",
+            "dischargeDate": "",
+            "cdmFrontpageEmpty": True,
+        }
+    ]
+
+
+def test_synced_admission_record_without_frontpage_or_registration_enters_workstation(
+    workstation_session_factory,
+):
+    with workstation_session_factory() as session:
+        session.add(
+            AdmissionRecord(
+                institute_id="H1",
+                patient_id="P-ADMISSION",
+                visit_id="V-ADMISSION",
+                document_id="AR-1",
+                name="入院记录患者",
+                sex="男",
+                age_year="42",
+                inpat_no="ZY-002",
+                dept_name="神经内科",
+                bed_no="08",
+                admission_datetime=datetime(2026, 8, 11, 10, 0),
+                attending_physician_sign="陈医师",
+                update_time=datetime(2026, 8, 13, 9, 0),
+            )
+        )
+        session.commit()
+    _insert_visit_index_rows(
+        workstation_session_factory,
+        {
+            "institute_id": "H1",
+            "patient_id": "P-ADMISSION",
+            "visit_id": "V-ADMISSION",
+            "scene_current": "running",
+            "updated_at": datetime(2026, 8, 13, 9, 5),
+        },
+    )
+
+    result = get_workstation_data(
+        dept="神经内科",
+        doctor="陈医师",
+        start_date=datetime(2026, 8, 11).date(),
+        end_date=datetime(2026, 8, 11).date(),
+        date_field="admission",
+        hospital_status="inpatient",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 1
+    assert result["records"][0]["recordKey"] == '["H1","P-ADMISSION","V-ADMISSION"]'
+    assert result["records"][0]["name"] == "入院记录患者"
+    assert result["records"][0]["department"] == "神经内科"
+    assert result["records"][0]["bedNo"] == "08"
+    assert result["doctors"] == [
+        {"name": "全部主管医师", "total": 1},
+        {"name": "陈医师", "total": 1},
+    ]
+
+
+def test_synced_record_without_frontpage_uses_discharge_record_for_final_scope(
+    workstation_session_factory,
+):
+    with workstation_session_factory() as session:
+        session.add(
+            AdmissionRecord(
+                institute_id="H1",
+                patient_id="P-FINAL",
+                visit_id="V-FINAL",
+                document_id="AR-FINAL",
+                name="无首页出院患者",
+                dept_name="外科",
+                admission_datetime=datetime(2026, 8, 1, 8, 0),
+            )
+        )
+        session.commit()
+    _insert_discharge_records(
+        workstation_session_factory,
+        {
+            "institute_id": "H1",
+            "patient_id": "P-FINAL",
+            "visit_id": "V-FINAL",
+            "document_id": "DR-FINAL",
+            "dept_name": "骨科",
+            "discharge_time": datetime(2026, 8, 12, 15, 30),
+            "update_time": datetime(2026, 8, 12, 16, 0),
+        },
+    )
+    _insert_visit_index_rows(
+        workstation_session_factory,
+        {
+            "institute_id": "H1",
+            "patient_id": "P-FINAL",
+            "visit_id": "V-FINAL",
+            "scene_current": "final",
+            "updated_at": datetime(2026, 8, 12, 16, 5),
+        },
+    )
+
+    result = get_workstation_data(
+        dept="骨科",
+        hospital_status="discharged",
+        start_date=datetime(2026, 8, 12).date(),
+        end_date=datetime(2026, 8, 12).date(),
+        date_field="discharge",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 1
+    assert result["records"][0]["dischargeDate"] == "2026-08-12"
+    assert result["records"][0]["department"] == "骨科"
+
+
+def test_pagination_merges_frontpage_and_no_frontpage_records_without_duplicates(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P-MR",
+            visit_id="V-MR",
+            name="首页患者",
+            admission_datetime=datetime(2026, 8, 10, 8, 0),
+            update_time=datetime(2026, 8, 10, 9, 0),
+        ),
+    )
+    with workstation_session_factory() as session:
+        session.add(
+            InpatRegistration(
+                institute_id="H1",
+                patient_id="P-NO-MR",
+                visit_id="V-NO-MR",
+                name="无首页患者",
+                admission_datetime=datetime(2026, 8, 11, 8, 0),
+                update_time=datetime(2026, 8, 11, 9, 0),
+            )
+        )
+        session.commit()
+    _insert_visit_index_rows(
+        workstation_session_factory,
+        {
+            "institute_id": "H1",
+            "patient_id": "P-NO-MR",
+            "visit_id": "V-NO-MR",
+            "scene_current": "running",
+            "updated_at": datetime(2026, 8, 11, 9, 5),
+        },
+    )
+
+    common = {
+        "page_size": 1,
+        "hospital_status": "inpatient",
+        "session_factory": workstation_session_factory,
+        "settings_loader": _workstation_settings_loader,
+        "demo_policy": _no_demo_policy,
+    }
+    first_page = get_workstation_data(page=1, **common)
+    second_page = get_workstation_data(page=2, **common)
+
+    assert first_page["total"] == second_page["total"] == 2
+    assert first_page["qc_summary"] == second_page["qc_summary"]
+    assert first_page["records"][0]["recordKey"] != second_page["records"][0]["recordKey"]
+
+
+def test_visit_index_does_not_duplicate_frontpage_or_cross_same_visit_coordinate(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P1",
+            visit_id="V-SHARED",
+            name="已有首页",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 8, 10, 8, 0),
+        ),
+    )
+    with workstation_session_factory() as session:
+        session.add_all(
+            [
+                InpatRegistration(
+                    institute_id="H1",
+                    patient_id="P1",
+                    visit_id="V-SHARED",
+                    name="首页对应登记",
+                    admission_dept_name="内科",
+                ),
+                InpatRegistration(
+                    institute_id="H2",
+                    patient_id="P2",
+                    visit_id="V-SHARED",
+                    name="另一机构在院患者",
+                    admission_dept_name="外科",
+                ),
+            ]
+        )
+        session.commit()
+    _insert_visit_index_rows(
+        workstation_session_factory,
+        {
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "visit_id": "V-SHARED",
+            "scene_current": "running",
+            "updated_at": datetime(2026, 8, 13, 10, 0),
+        },
+        {
+            "institute_id": "H2",
+            "patient_id": "P2",
+            "visit_id": "V-SHARED",
+            "scene_current": "running",
+            "updated_at": datetime(2026, 8, 13, 10, 0),
+        },
+    )
+
+    result = get_workstation_data(
+        hospital_status="inpatient",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 2
+    records_by_key = {row["recordKey"]: row for row in result["records"]}
+    assert set(records_by_key) == {
+        '["H1","P1","V-SHARED"]',
+        '["H2","P2","V-SHARED"]',
+    }
+    assert records_by_key['["H1","P1","V-SHARED"]']["name"] == "已有首页"
+    assert records_by_key['["H2","P2","V-SHARED"]']["name"] == "另一机构在院患者"
 
 
 def test_get_workstation_data_keeps_same_visit_id_records_isolated_by_three_coordinate(
