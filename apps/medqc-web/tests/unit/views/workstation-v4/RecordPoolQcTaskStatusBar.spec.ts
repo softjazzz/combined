@@ -2,11 +2,19 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  downloadBlob: vi.fn(),
+  exportSichuanWorkspaceBatchJob: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
 }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
+  exportSichuanWorkspaceBatchJob: mocks.exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob: mocks.getSichuanWorkspaceBatchJob,
+}))
+
+vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({
+  downloadBlob: mocks.downloadBlob,
+  normalizeBatchExportBlob: vi.fn(async (blob: Blob) => blob),
 }))
 
 import RecordPoolQcTaskStatusBar from '@/views/workstation-v4/components/workbench/RecordPoolQcTaskStatusBar.vue'
@@ -27,6 +35,24 @@ function job(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 describe('RecordPoolQcTaskStatusBar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('completed task downloads the exact batch HTML instead of current filters', async () => {
+    const blob = new Blob(['<!doctype html>'], { type: 'text/html' })
+    mocks.exportSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: blob })
+    const wrapper = mount(RecordPoolQcTaskStatusBar, {
+      props: { job: job({ status: 'completed', success_count: 4, failed_count: 0 }) },
+      global: { stubs: { AProgress: true } },
+    })
+
+    await wrapper.get('.record-pool-qc-status__export').trigger('click')
+    await flushPromises()
+
+    expect(mocks.exportSichuanWorkspaceBatchJob).toHaveBeenCalledWith({
+      job_id: 'job-1',
+      format: 'html',
+    })
+    expect(mocks.downloadBlob).toHaveBeenCalledWith(blob, '本次批量质控结果.html')
   })
 
   it('polls the created task and shows record, rule and current-stage progress', async () => {

@@ -102,23 +102,44 @@
       </div>
     </div>
 
-    <button
+    <div
       v-if="!isActive"
-      type="button"
-      class="record-pool-qc-status__dismiss"
-      aria-label="关闭质控任务状态"
-      @click="emit('dismiss')"
+      class="record-pool-qc-status__actions"
     >
-      <X :size="16" />
-    </button>
+      <button
+        v-if="currentJob.status === 'completed'"
+        type="button"
+        class="record-pool-qc-status__export"
+        :disabled="exporting"
+        @click="exportCurrentBatch"
+      >
+        {{ exporting ? '正在导出…' : '导出本次结果 HTML' }}
+      </button>
+      <button
+        type="button"
+        class="record-pool-qc-status__dismiss"
+        aria-label="关闭质控任务状态"
+        @click="emit('dismiss')"
+      >
+        <X :size="16" />
+      </button>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { message } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { CircleAlert, CircleCheckBig, LoaderCircle, X } from 'lucide-vue-next'
-import { getSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
+import {
+  exportSichuanWorkspaceBatchJob,
+  getSichuanWorkspaceBatchJob,
+} from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '../../semantic-rules/types'
+import {
+  downloadBlob,
+  normalizeBatchExportBlob,
+} from '../../customer-sample-validation/batchExport'
 
 const props = withDefaults(
   defineProps<{
@@ -136,8 +157,29 @@ const emit = defineEmits<{
 
 const currentJob = ref<SichuanBatchJob | null>(null)
 const pollError = ref(false)
+const exporting = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let requestSequence = 0
+
+async function exportCurrentBatch() {
+  const jobId = String(currentJob.value?.id || '').trim()
+  if (!jobId || currentJob.value?.status !== 'completed' || exporting.value) return
+  exporting.value = true
+  try {
+    const response = await exportSichuanWorkspaceBatchJob({ job_id: jobId, format: 'html' })
+    if (!response.success || !response.data) {
+      message.error(response.message || '导出本次质控结果失败')
+      return
+    }
+    const blob = await normalizeBatchExportBlob(response.data, 'html')
+    downloadBlob(blob, '本次批量质控结果.html')
+    message.success('本次批量质控结果已开始下载')
+  } catch {
+    message.error('导出本次质控结果失败，请稍后重试')
+  } finally {
+    exporting.value = false
+  }
+}
 
 const terminalStatuses = new Set(['completed', 'failed', 'canceled'])
 const isActive = computed(() =>
@@ -455,6 +497,30 @@ onBeforeUnmount(() => {
   min-width: 0;
   flex: 1;
   gap: 12px;
+}
+
+.record-pool-qc-status__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-pool-qc-status__export {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(5, 150, 105, 0.22);
+  border-radius: 9px;
+  background: rgba(5, 150, 105, 0.08);
+  color: #047857;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.record-pool-qc-status__export:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .record-pool-qc-status__indicator {

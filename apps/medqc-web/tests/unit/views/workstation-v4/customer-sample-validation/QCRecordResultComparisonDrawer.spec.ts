@@ -4,12 +4,21 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import QCRecordResultComparisonDrawer from '@/views/workstation-v4/customer-sample-validation/QCRecordResultComparisonDrawer.vue'
 
-const { getLatestLuxian0609RecordResult } = vi.hoisted(() => ({
-  getLatestLuxian0609RecordResult: vi.fn(),
-}))
+const { downloadBlob, exportLatestLuxian0609RecordResult, getLatestLuxian0609RecordResult } =
+  vi.hoisted(() => ({
+    downloadBlob: vi.fn(),
+    exportLatestLuxian0609RecordResult: vi.fn(),
+    getLatestLuxian0609RecordResult: vi.fn(),
+  }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
+  exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
+}))
+
+vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({
+  downloadBlob,
+  normalizeBatchExportBlob: vi.fn(async (blob: Blob) => blob),
 }))
 
 let workbenchProps: Record<string, unknown> | null = null
@@ -77,7 +86,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
           setup:
             (_, { slots }) =>
             () =>
-              h('section', slots.default?.()),
+              h('section', [slots.title?.(), slots.default?.()]),
         }),
         ASpin: defineComponent({
           setup:
@@ -98,7 +107,27 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
 describe('QCRecordResultComparisonDrawer', () => {
   beforeEach(() => {
     getLatestLuxian0609RecordResult.mockReset()
+    exportLatestLuxian0609RecordResult.mockReset()
+    downloadBlob.mockReset()
     workbenchProps = null
+  })
+
+  it('ready结果可按当前三坐标导出单病历HTML', async () => {
+    const blob = new Blob(['<!doctype html>'], { type: 'text/html' })
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    exportLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: blob })
+    const wrapper = mountDrawer('grouped')
+    await flushPromises()
+
+    await wrapper.get('.customer-record-result-title__export').trigger('click')
+    await flushPromises()
+
+    expect(exportLatestLuxian0609RecordResult).toHaveBeenCalledWith({
+      instituteId: 'H1',
+      patientId: 'P001',
+      visitId: 'V001',
+    })
+    expect(downloadBlob).toHaveBeenCalledWith(blob, '单病历质控结果.html')
   })
 
   it('关闭或未选择病历时不请求单病历结果接口', async () => {

@@ -1,17 +1,50 @@
 import csv
+import json
 from io import BytesIO, StringIO
+from typing import Any
+
+import pytest
 
 from openpyxl import load_workbook
 
+import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     customer_safe_projection_key,
+    flatten_customer_safe_result_items,
     project_customer_safe_batch_job,
 )
 
 
 def _service() -> CustomQCWorkspaceService:
-    return object.__new__(CustomQCWorkspaceService)
+    service = object.__new__(CustomQCWorkspaceService)
+    service._load_batch_job_canonical_items = lambda *, job: flatten_customer_safe_result_items(
+        job,
+        hmac_key=customer_safe_projection_key(),
+    )
+    return service
+
+
+class _Rows:
+    def __init__(self, rows: list[dict[str, Any]]):
+        self.rows = rows
+
+    def mappings(self) -> "_Rows":
+        return self
+
+    def all(self) -> list[dict[str, Any]]:
+        return self.rows
+
+
+class _ReadSession:
+    def __init__(self, rows: list[dict[str, Any]]):
+        self.rows = rows
+
+    def execute(self, _statement: Any) -> _Rows:
+        return _Rows(self.rows)
+
+    def close(self) -> None:
+        return None
 
 
 def test_customer_safe_batch_job_projects_inflight_rule_progress() -> None:
@@ -52,6 +85,88 @@ def test_customer_safe_batch_job_projects_inflight_rule_progress() -> None:
         "queued_record_count": 0,
     }
     assert projected["summary"]["processed_rule_count"] == 18
+
+
+def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypatch):
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = workspace_module._record_result_envelopes_table()
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "job_id": "job-canonical-child",
+        "root_job_id": "job-canonical-only",
+        "record_ref": "rec_0123456789abcdef01234567",
+        "items": [{
+            "rule_id": "LX0609-001",
+            "rule_version": "1.0",
+            "rule_name": "Canonical 质控点",
+            "status": "compliant",
+            "reason_code": "internal_reason_must_not_render",
+        }],
+    }
+    session = _ReadSession([{
+        "job_id": "job-canonical-child",
+        "root_job_id": "job-canonical-only",
+        "created_by": "owner-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(envelope, ensure_ascii=False),
+    }])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    job = {
+        "id": "job-canonical-only",
+        "created_by": "owner-1",
+        "status": "completed",
+        "total_records": 1,
+        "filters": {
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+            "record_refs": [{
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "visit_id": "visit-1",
+            }],
+        },
+        "items": [{
+            "record_id": "legacy-record-must-not-render",
+            "rule_id": "LX0609-999",
+            "status": "non_compliant",
+        }],
+    }
+
+    html = service.export_batch_job_html(job=job)
+
+    assert "LX0609-001" in html
+    assert "LX0609-999" not in html
+    assert "legacy-record-must-not-render" not in html
+    assert "internal_reason_must_not_render" not in html
+    assert "原因码" not in html
+    assert html.count("data-record-group") == 1
+
+
+def test_batch_html_rejects_incomplete_frozen_record_scope():
+    service = object.__new__(CustomQCWorkspaceService)
+
+    with pytest.raises(ValueError, match="冻结病历范围"):
+        service._load_batch_job_canonical_items(
+            job={
+                "id": "job-incomplete-scope",
+                "created_by": "owner-1",
+                "status": "completed",
+                "total_records": 2,
+                "filters": {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                    "record_refs": [],
+                },
+            },
+            session_factory=lambda: (_ for _ in ()).throw(
+                AssertionError("冻结范围无效时不得查询Envelope")
+            ),
+        )
 
 
 def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
@@ -126,6 +241,12 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
 
     assert html.startswith("\ufeff<!doctype html>")
     assert html.count("data-result-row") == 2
+    assert html.count("data-record-group") == 2
+    assert "病历数：2" in html
+    assert "结果总数：2" in html
+    assert "确定问题病历数：0" in html
+    assert "AI判断 1" in html
+    assert "数据不足 1" in html
     assert "LX0609-001" in html
     assert "LX0609-002" in html
     assert "发现该质控点对应的明确问题" not in html
@@ -193,6 +314,8 @@ def test_export_batch_job_html_flattens_parent_child_jobs():
     html = service.export_batch_job_html(job=job)
 
     assert html.count("data-result-row") == 2
+    assert html.count("data-record-group") == 1
+    assert "病历数：1" in html
     assert html.count("rec_") >= 2
     assert "V001" not in html
     assert "张某某" not in html
@@ -200,6 +323,25 @@ def test_export_batch_job_html_flattens_parent_child_jobs():
     assert "LX0609-020" in html
     assert "入院记录超时" not in html
     assert "会诊执行记录完整" not in html
+
+
+def test_export_batch_job_html_safely_reports_empty_result_set():
+    service = _service()
+    job = {
+        "id": "empty-job",
+        "status": "completed",
+        "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+        "items": [],
+    }
+
+    html = service.export_batch_job_html(job=job)
+
+    assert html.count("data-record-group") == 0
+    assert html.count("data-result-row") == 0
+    assert "病历数：0" in html
+    assert "结果总数：0" in html
+    assert "本次任务没有可导出的质控结果" in html
+    assert "empty-job" not in html
 
 
 def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():

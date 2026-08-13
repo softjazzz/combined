@@ -75,14 +75,24 @@
             查询
           </button>
         </div>
-        <button
-          class="qc-record-result-list-view__refresh-button"
-          type="button"
-          :disabled="loading"
-          @click="refreshData"
-        >
-          刷新
-        </button>
+        <div class="qc-record-result-list-view__toolbar-actions">
+          <button
+            class="qc-record-result-list-view__export-button"
+            type="button"
+            :disabled="loading || exporting"
+            @click="exportCurrentFilter"
+          >
+            {{ exporting ? '正在导出…' : '导出当前筛选 Excel' }}
+          </button>
+          <button
+            class="qc-record-result-list-view__refresh-button"
+            type="button"
+            :disabled="loading"
+            @click="refreshData"
+          >
+            刷新
+          </button>
+        </div>
       </div>
 
       <QcRecordResultTable
@@ -117,11 +127,11 @@
       </footer>
 
       <p
-        v-if="detailNotice"
+        v-if="detailNotice || exportNotice"
         class="qc-record-result-list-view__notice"
         role="status"
       >
-        {{ detailNotice }}
+        {{ detailNotice || exportNotice }}
       </p>
     </section>
 
@@ -138,6 +148,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
+
 import QCRecordResultComparisonDrawer, {
   type QCRecordResultFocus,
 } from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
@@ -147,6 +159,7 @@ import QcRecordResultTable, {
 } from './components/qc/QcRecordResultTable.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
+import { downloadBlob } from './customer-sample-validation/batchExport'
 
 const props = defineProps<{
   carePhase: QcRecordCarePhase
@@ -154,6 +167,8 @@ const props = defineProps<{
 
 const route = useRoute()
 const detailNotice = ref('')
+const exportNotice = ref('')
+const exporting = ref(false)
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
 const startDate = ref('')
@@ -167,6 +182,7 @@ const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' :
 const {
   allRecords,
   activeDept,
+  activeDoctor,
   currentPage,
   dateField,
   dateRange,
@@ -308,6 +324,40 @@ function applyFilters() {
   dateRange.value = startDate.value || endDate.value ? [startDate.value, endDate.value] : null
   currentPage.value = 1
   fetchData(1)
+}
+
+async function exportCurrentFilter() {
+  if (exporting.value) return
+  exporting.value = true
+  exportNotice.value = ''
+  const [rangeStart, rangeEnd] = dateRange.value || []
+  const department = String(activeDept.value || '').trim()
+  const doctor = String(activeDoctor.value || '').trim()
+  const keyword = String(searchText.value || '').trim()
+  try {
+    const response = await exportFilteredLuxian0609RecordResults({
+      scope: isInpatient.value ? 'running' : 'final',
+      ...(department && department !== '全部科室' ? { department } : {}),
+      ...(doctor && doctor !== '全部主管医师' ? { doctor } : {}),
+      date_field: isInpatient.value ? 'admission' : 'discharge',
+      ...(rangeStart ? { start_date: rangeStart } : {}),
+      ...(rangeEnd ? { end_date: rangeEnd } : {}),
+      ...(keyword ? { keyword } : {}),
+    })
+    if (!response.success || !response.data) {
+      exportNotice.value = response.message || '导出当前筛选质控结果失败'
+      return
+    }
+    downloadBlob(
+      response.data,
+      `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-当前筛选.xlsx`,
+    )
+    exportNotice.value = '当前筛选质控结果已开始下载'
+  } catch {
+    exportNotice.value = '导出当前筛选质控结果失败，请稍后重试'
+  } finally {
+    exporting.value = false
+  }
 }
 
 function updateStartDate(event: Event) {
@@ -497,6 +547,29 @@ function closeResultDrawer() {
   gap: 16px;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.qc-record-result-list-view__toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-record-result-list-view__export-button {
+  min-height: 38px;
+  padding: 0 15px;
+  border: 1px solid rgba(0, 102, 204, 0.2);
+  border-radius: 10px;
+  background: rgba(0, 102, 204, 0.07);
+  color: #0066cc;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.qc-record-result-list-view__export-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .qc-record-result-list-view__filters {

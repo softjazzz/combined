@@ -2107,6 +2107,13 @@ def _customer_export_rows(
         status_counts[status] = status_counts.get(status, 0) + 1
     return items, rows, {
         "operation_ref": _keyed_ref("op", job.get("id"), hmac_key=hmac_key),
+        "record_count": len(
+            {
+                _safe_text(item.get("record_ref"))
+                for item in items
+                if _safe_text(item.get("record_ref"))
+            }
+        ),
         "result_count": len(items),
         "issue_records": len(issue_refs),
         "status_counts": status_counts,
@@ -2163,15 +2170,84 @@ def _export_customer_safe_csv(job: Dict[str, Any], *, hmac_key: str) -> StringIO
     return output
 
 
-def _export_customer_safe_html(job: Dict[str, Any], *, hmac_key: str) -> str:
-    _items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
-    body_rows = "".join(
-        "<tr data-result-row>"
-        + "".join(f"<td>{html.escape(value, quote=True)}</td>" for value in row)
-        + "</tr>"
-        for row in rows
+def _export_customer_safe_html(
+    job: Dict[str, Any],
+    *,
+    hmac_key: str,
+    canonical_items: Sequence[Dict[str, Any]],
+) -> str:
+    canonical_job = {"id": job.get("id"), "items": list(canonical_items)}
+    items, rows, summary = _customer_export_rows(canonical_job, hmac_key=hmac_key)
+    # HTML 是客户报告，不展示内部原因码；CSV/XLSX 的现有结构保持不变。
+    html_columns = (0, 1, 2, 3, 5, 6, 7)
+    headers = "".join(
+        f"<th>{html.escape(_CUSTOMER_EXPORT_HEADERS[index])}</th>"
+        for index in html_columns
     )
-    headers = "".join(f"<th>{html.escape(header)}</th>" for header in _CUSTOMER_EXPORT_HEADERS)
+    groups: Dict[str, Dict[str, Any]] = {}
+    for item, row in zip(items, rows):
+        record_ref = _safe_text(item.get("record_ref"))
+        group = groups.setdefault(record_ref, {"rows": [], "status_counts": {}})
+        group["rows"].append(row)
+        status = _safe_text(item.get("status"), "uncertain")
+        status_counts = group["status_counts"]
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    status_order = (
+        "non_compliant",
+        "ai_suggested_non_compliant",
+        "data_gap",
+        "uncertain",
+        "ai_suggested_compliant",
+        "compliant",
+        "not_applicable",
+        "not_executed",
+        "technical_error",
+    )
+    record_sections: List[str] = []
+    for record_ref, group in groups.items():
+        body_rows = "".join(
+            "<tr data-result-row>"
+            + "".join(
+                f"<td>{html.escape(row[index], quote=True)}</td>"
+                for index in html_columns
+            )
+            + "</tr>"
+            for row in group["rows"]
+        )
+        status_badges = "".join(
+            '<span class="status-pill">'
+            f"{html.escape(_map_item_status_label(status, status == 'compliant'))} "
+            f"{group['status_counts'][status]}"
+            "</span>"
+            for status in status_order
+            if group["status_counts"].get(status)
+        )
+        record_sections.append(
+            f"""<section class="record-group" data-record-group>
+    <header class="record-heading">
+      <div>
+        <span class="eyebrow">病历引用</span>
+        <h2>{html.escape(record_ref, quote=True)}</h2>
+      </div>
+      <div class="status-counts">{status_badges}</div>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>{headers}</tr></thead>
+        <tbody>{body_rows}</tbody>
+      </table>
+    </div>
+  </section>"""
+        )
+    result_content = "".join(record_sections)
+    if not result_content:
+        result_content = (
+            '<section class="empty-state">'
+            "<h2>暂无质控结果</h2>"
+            "<p>本次任务没有可导出的质控结果。</p>"
+            "</section>"
+        )
     document = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -2182,28 +2258,34 @@ def _export_customer_safe_html(job: Dict[str, Any], *, hmac_key: str) -> str:
     body {{ margin: 0; padding: 24px; background: #f6f8fb; color: #1f2937; font-family: "Microsoft YaHei", sans-serif; }}
     main {{ max-width: 1180px; margin: 0 auto; }}
     section {{ margin-bottom: 18px; border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; padding: 18px; }}
-    .metrics {{ display: flex; gap: 24px; flex-wrap: wrap; }}
+    h1, h2, p {{ margin-top: 0; }}
+    h1 {{ margin-bottom: 14px; font-size: 24px; }}
+    h2 {{ margin-bottom: 0; font-size: 17px; overflow-wrap: anywhere; }}
+    .metrics {{ display: flex; gap: 12px 24px; flex-wrap: wrap; color: #475569; }}
+    .record-heading {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }}
+    .eyebrow {{ display: block; margin-bottom: 5px; color: #64748b; font-size: 12px; }}
+    .status-counts {{ display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }}
+    .status-pill {{ border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: 4px 9px; font-size: 12px; white-space: nowrap; }}
+    .table-wrap {{ overflow-x: auto; }}
     table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
     th, td {{ border-bottom: 1px solid #e5e7eb; padding: 9px; text-align: left; vertical-align: top; }}
     th {{ color: #4b5563; background: #f8fafc; }}
+    .empty-state {{ padding: 42px 18px; text-align: center; color: #64748b; }}
+    .empty-state h2 {{ margin-bottom: 8px; color: #334155; }}
   </style>
 </head>
 <body>
 <main>
   <section>
-    <h1>质控结果</h1>
+    <h1>批量质控结果</h1>
     <div class="metrics">
       <span>任务引用：{html.escape(summary["operation_ref"])}</span>
+      <span>病历数：{summary["record_count"]}</span>
       <span>结果总数：{summary["result_count"]}</span>
       <span>确定问题病历数：{summary["issue_records"]}</span>
     </div>
   </section>
-  <section>
-    <table>
-      <thead><tr>{headers}</tr></thead>
-      <tbody>{body_rows}</tbody>
-    </table>
-  </section>
+  {result_content}
 </main>
 </body>
 </html>"""
@@ -4119,12 +4201,17 @@ class CustomQCWorkspaceService:
                 for item in items
             ]
             valid_rule_ids = [rule_id for rule_id in delivered_rule_ids if rule_id]
+            invalid_statuses = [
+                _safe_text(item.get("status"))
+                for item in items
+                if _safe_text(item.get("status")) not in _CUSTOMER_STATUSES
+            ]
             conflicting_rule_ids = sorted(
                 rule_id
                 for rule_id in set(valid_rule_ids)
                 if valid_rule_ids.count(rule_id) > 1
             )
-            if len(valid_rule_ids) != len(items) or conflicting_rule_ids:
+            if len(valid_rule_ids) != len(items) or conflicting_rule_ids or invalid_statuses:
                 return {
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": "technical_error",
@@ -4179,6 +4266,7 @@ class CustomQCWorkspaceService:
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
         rule_set_version: str = RULE_SET_VERSION,
         session_factory: Optional[Callable[[], Session]] = None,
+        include_items: bool = False,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
         """批量读取病历池可展示的最新 Canonical 结果摘要。
 
@@ -4429,6 +4517,7 @@ class CustomQCWorkspaceService:
                     projections[identity] = self._summarize_completed_record_result_envelope(
                         envelope_row=selected_envelopes[0],
                         completed_at=ready_selection.job.get("finished_at"),
+                        include_items=include_items,
                     )
                     continue
 
@@ -4461,6 +4550,7 @@ class CustomQCWorkspaceService:
         *,
         envelope_row: Mapping[str, Any],
         completed_at: Any,
+        include_items: bool = False,
     ) -> Dict[str, Any]:
         """把一份通过结构校验的 Canonical Envelope 缩减为病历池摘要。"""
 
@@ -4494,12 +4584,98 @@ class CustomQCWorkspaceService:
             completed_at_value = completed_at.isoformat()
         else:
             completed_at_value = _safe_text(completed_at)
-        return {
+        result: Dict[str, Any] = {
             "status": "ready",
             "completed_at": completed_at_value or None,
             "total_rule_count": len(envelope["items"]),
             "status_counts": dict(sorted(status_counts.items())),
         }
+        if include_items:
+            rule_master_by_id = {
+                entry.rule_id: entry for entry in load_luxian_0609_rule_master()
+            }
+            projected_items: List[Dict[str, Any]] = []
+            for item in envelope["items"]:
+                projected_item = dict(item)
+                rule_id = _safe_text(
+                    projected_item.get("rule_id") or projected_item.get("rule_code")
+                ).upper()
+                master_entry = rule_master_by_id.get(rule_id)
+                if master_entry is not None:
+                    projected_item["source_document"] = master_entry.source_document
+                    projected_item["qc_point"] = master_entry.qc_point
+                projected_items.append(projected_item)
+            result.update(
+                {
+                    "record_ref": _safe_text(envelope.get("record_ref")),
+                    "items": projected_items,
+                }
+            )
+        return result
+
+    def build_latest_luxian_0609_record_result_dtos(
+        self,
+        *,
+        record_refs: Sequence[Mapping[str, Any]],
+        rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version: str = RULE_SET_VERSION,
+        session_factory: Optional[Callable[[], Session]] = None,
+    ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
+        """一次读取一组病历的最新 Canonical 完整结果，供服务端全量导出。"""
+
+        projections = self.build_luxian_0609_completed_record_result_summaries(
+            record_refs=record_refs,
+            rule_set_key=rule_set_key,
+            rule_set_version=rule_set_version,
+            session_factory=session_factory,
+            include_items=True,
+        )
+        expected_rule_ids = [
+            _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+            for item in load_luxian_0609_rules()
+            if _safe_text(item.get("rule_id") or item.get("rule_code"))
+        ]
+        results: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+        for identity, projection in projections.items():
+            status = _safe_text(projection.get("status"))
+            if status != "ready":
+                results[identity] = {
+                    "schema_version": "lx0609-single-record-result-v1",
+                    "state": "not_found" if status == "not_run" else "technical_error",
+                    "record_ref": "",
+                    "items": [],
+                    "expected_rule_count": len(expected_rule_ids),
+                    "result_rule_count": 0,
+                    "is_complete": False,
+                }
+                continue
+            items = [
+                dict(item)
+                for item in projection.get("items") or []
+                if isinstance(item, dict)
+            ]
+            delivered_rule_ids = {
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                for item in items
+                if _safe_text(item.get("rule_id") or item.get("rule_code"))
+            }
+            missing_rule_ids = [
+                rule_id for rule_id in expected_rule_ids if rule_id not in delivered_rule_ids
+            ]
+            results[identity] = {
+                "schema_version": "lx0609-single-record-result-v1",
+                "state": "ready",
+                "data_origin": "canonical_result_envelope",
+                "record_ref": _safe_text(projection.get("record_ref")),
+                "rule_set_key": rule_set_key,
+                "rule_set_version": rule_set_version,
+                "items": items,
+                "expected_rule_count": len(expected_rule_ids),
+                "result_rule_count": len(items),
+                "is_complete": not missing_rule_ids,
+                "missing_rule_ids": missing_rule_ids,
+            }
+        return results
 
     def get_latest_luxian_0609_record_result(
         self,
@@ -5586,11 +5762,95 @@ class CustomQCWorkspaceService:
         output.seek(0)
         return output
 
+    def _load_batch_job_canonical_items(
+        self,
+        *,
+        job: Dict[str, Any],
+        session_factory: Optional[Callable[[], Session]] = None,
+    ) -> List[Dict[str, Any]]:
+        """按任务身份一次读取 Canonical Envelope，禁止回退任务明细。"""
+
+        job_id = _safe_text(job.get("id"))
+        created_by = _safe_text(job.get("created_by"))
+        if not job_id or not created_by or _safe_text(job.get("status")) != "completed":
+            raise ValueError("批量质控任务尚未形成可导出的 Canonical 结果")
+        filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+        rule_set_key = _safe_text(filters.get("rule_set_key"), LUXIAN_0609_RULE_SET_KEY)
+        rule_set_version = _safe_text(filters.get("rule_set_version"), RULE_SET_VERSION)
+        expected_refs = {
+            CaseRef.from_mapping(ref)
+            for ref in list(filters.get("record_refs") or [])
+            if isinstance(ref, Mapping) and all(CaseRef.from_mapping(ref))
+        }
+        total_records = _to_int(job.get("total_records"))
+        if total_records > 0 and (
+            not expected_refs or len(expected_refs) != total_records
+        ):
+            raise ValueError("批量质控任务缺少完整的冻结病历范围")
+
+        session = (session_factory or _session)()
+        try:
+            envelope_rows = (
+                session.execute(
+                    select(self._record_result_envelope_table).where(
+                        and_(
+                            self._record_result_envelope_table.c.root_job_id == job_id,
+                            self._record_result_envelope_table.c.created_by == created_by,
+                            self._record_result_envelope_table.c.rule_set_key == rule_set_key,
+                            self._record_result_envelope_table.c.rule_set_version == rule_set_version,
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        finally:
+            session.close()
+
+        rows_by_ref: Dict[CaseRef, Dict[str, Any]] = {}
+        canonical_items: List[Dict[str, Any]] = []
+        for raw_row in envelope_rows:
+            row = dict(raw_row)
+            case_ref = CaseRef.from_mapping(row)
+            if not all(case_ref) or case_ref in rows_by_ref:
+                raise ValueError("批量质控 Canonical Envelope 病历身份无效")
+            rows_by_ref[case_ref] = row
+            envelope = _safe_json_loads(row.get("envelope_json"), {})
+            if (
+                not isinstance(envelope, dict)
+                or envelope.get("schema_version") != _RECORD_RESULT_ENVELOPE_SCHEMA
+                or envelope.get("delivery_mode") != _CANONICAL_RESULT_DELIVERY_MODE
+                or _safe_text(envelope.get("root_job_id")) != job_id
+                or not isinstance(envelope.get("items"), list)
+            ):
+                raise ValueError("批量质控 Canonical Envelope 结构无效")
+            record_ref = _safe_text(envelope.get("record_ref"))
+            if not re.fullmatch(r"rec_[0-9a-f]{24}", record_ref):
+                raise ValueError("批量质控 Canonical Envelope 病历引用无效")
+            delivered_rule_ids: set[str] = set()
+            for raw_item in envelope["items"]:
+                if not isinstance(raw_item, dict):
+                    raise ValueError("批量质控 Canonical Envelope 结果无效")
+                rule_id = _safe_text(raw_item.get("rule_id") or raw_item.get("rule_code")).upper()
+                status = _safe_text(raw_item.get("status"))
+                if not rule_id or rule_id in delivered_rule_ids or status not in _CUSTOMER_STATUSES:
+                    raise ValueError("批量质控 Canonical Envelope 结果无效")
+                delivered_rule_ids.add(rule_id)
+                canonical_items.append({**raw_item, "record_ref": record_ref})
+
+        actual_refs = set(rows_by_ref)
+        if expected_refs and actual_refs != expected_refs:
+            raise ValueError("批量质控 Canonical Envelope 病历集合不完整")
+        if not envelope_rows and int(job.get("total_records") or 0) > 0:
+            raise ValueError("批量质控 Canonical Envelope 缺失")
+        return canonical_items
+
     def export_batch_job_html(self, *, job: Dict[str, Any]) -> str:
         if _is_luxian_0609_export_job(job):
             return _export_customer_safe_html(
                 job,
                 hmac_key=customer_safe_projection_key(),
+                canonical_items=self._load_batch_job_canonical_items(job=job),
             )
         return self._export_batch_job_html_legacy(job=job)
 

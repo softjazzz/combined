@@ -11,6 +11,15 @@
       <div class="customer-record-result-title">
         <strong>病历质控结果</strong>
         <span>{{ focus?.label || '病历原文与质控结果对照' }}</span>
+        <button
+          v-if="latestResult"
+          type="button"
+          class="customer-record-result-title__export"
+          :disabled="exporting"
+          @click="exportCurrentRecord"
+        >
+          {{ exporting ? '正在导出…' : '导出本病历 HTML' }}
+        </button>
       </div>
     </template>
 
@@ -37,10 +46,15 @@
 </template>
 
 <script setup lang="ts">
+import { message } from 'ant-design-vue'
 import { ref, watch } from 'vue'
-import { getLatestLuxian0609RecordResult } from '@/services/sichuan-rule-workspace-service'
+import {
+  exportLatestLuxian0609RecordResult,
+  getLatestLuxian0609RecordResult,
+} from '@/services/sichuan-rule-workspace-service'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
 import type { SingleRecordQcResultPayload } from './single-record-result-model'
+import { downloadBlob, normalizeBatchExportBlob } from './batchExport'
 
 export interface QCRecordResultFocus {
   visitId: string
@@ -65,10 +79,42 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
+const exporting = ref(false)
 const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)
 const authorizedRecordRef = ref('')
 let activeRequestSequence = 0
+
+async function exportCurrentRecord() {
+  const focus = props.focus
+  if (
+    !latestResult.value ||
+    !focus?.instituteId ||
+    !focus.patientId ||
+    !focus.visitId ||
+    exporting.value
+  )
+    return
+  exporting.value = true
+  try {
+    const response = await exportLatestLuxian0609RecordResult({
+      instituteId: focus.instituteId,
+      patientId: focus.patientId,
+      visitId: focus.visitId,
+    })
+    if (!response.success || !response.data) {
+      message.error(response.message || '导出单病历质控结果失败')
+      return
+    }
+    const blob = await normalizeBatchExportBlob(response.data, 'html')
+    downloadBlob(blob, '单病历质控结果.html')
+    message.success('单病历质控结果已开始下载')
+  } catch {
+    message.error('导出单病历质控结果失败，请稍后重试')
+  } finally {
+    exporting.value = false
+  }
+}
 
 async function loadLatestResult() {
   const requestSequence = ++activeRequestSequence
@@ -146,5 +192,20 @@ watch(
   color: #7a8699;
   font-size: 13px;
   text-align: right;
+}
+.customer-record-result-title__export {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(0, 102, 204, 0.22);
+  border-radius: 9px;
+  background: rgba(0, 102, 204, 0.07);
+  color: #0066cc;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.customer-record-result-title__export:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 </style>

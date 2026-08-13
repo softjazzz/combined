@@ -3,6 +3,8 @@ import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  downloadBlob: vi.fn(),
+  exportFilteredLuxian0609RecordResults: vi.fn(),
   getRaw: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({
@@ -13,6 +15,14 @@ vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
   },
+}))
+
+vi.mock('@/services/sichuan-rule-workspace-service', () => ({
+  exportFilteredLuxian0609RecordResults: mocks.exportFilteredLuxian0609RecordResults,
+}))
+
+vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({
+  downloadBlob: mocks.downloadBlob,
 }))
 
 vi.mock('vue-router', () => ({
@@ -129,6 +139,10 @@ describe('QcRecordResultListView', () => {
     vi.clearAllMocks()
     routeState.query = {}
     mocks.getRaw.mockResolvedValue(response())
+    mocks.exportFilteredLuxian0609RecordResults.mockResolvedValue({
+      success: true,
+      data: new Blob(['xlsx']),
+    })
   })
 
   it.each([
@@ -198,6 +212,30 @@ describe('QcRecordResultListView', () => {
       end_date: '2026-08-10',
       hospital_status: 'discharged',
     })
+  })
+
+  it('按当前服务端筛选导出完整终末病历Excel，不使用当前页行拼接', async () => {
+    const wrapper = mountView('discharged')
+    await flushPromises()
+    const inputs = wrapper.findAll('input')
+    await inputs[0].setValue('患者甲')
+    await inputs[1].setValue('2026-08-01')
+    await inputs[2].setValue('2026-08-10')
+    await wrapper.find('select').setValue('重症医学科')
+    await flushPromises()
+
+    await wrapper.get('.qc-record-result-list-view__export-button').trigger('click')
+    await flushPromises()
+
+    expect(mocks.exportFilteredLuxian0609RecordResults).toHaveBeenCalledWith({
+      scope: 'final',
+      department: '重症医学科',
+      date_field: 'discharge',
+      start_date: '2026-08-01',
+      end_date: '2026-08-10',
+      keyword: '患者甲',
+    })
+    expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '终末病历质控-当前筛选.xlsx')
   })
 
   it('相同 visitId 的两份病历按 recordKey 定位，并向抽屉传入所选行的完整三坐标', async () => {

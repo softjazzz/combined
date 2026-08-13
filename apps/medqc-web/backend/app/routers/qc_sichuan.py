@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Sequence
+from typing import List, Dict, Any, Literal, Optional, Sequence
 import asyncio
 import uuid
 import json
@@ -13,6 +13,7 @@ from fastapi.responses import Response, StreamingResponse
 from datetime import datetime, timezone
 
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
+from ..core.audit import audit_event
 from ..services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.llm_observability import llm_observation_context
@@ -44,10 +45,15 @@ from ..services.sc_rule_launch_tier import (
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin, require_roles, get_current_user
+from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     customer_safe_projection_key,
     project_customer_safe_batch_job,
+)
+from ..services.luxian_0609_result_export_service import (
+    export_filtered_record_results_workbook,
+    export_single_record_result_html,
 )
 from ..services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from ..services.case_identity import CaseRef, case_refs_from_records
@@ -499,6 +505,16 @@ class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
     record_ids: Optional[List[str]] = None
     record_refs: Optional[List[Dict[str, str]]] = None
     run_mode: Optional[str] = None
+
+
+class Luxian0609RecordResultExportRequest(BaseModel):
+    scope: Literal["all", "running", "final"] = "all"
+    department: Optional[str] = None
+    doctor: Optional[str] = None
+    date_field: Literal["visit", "admission", "discharge"] = "admission"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    keyword: Optional[str] = None
 
 
 class SaveQCResultRequest(BaseModel):
@@ -1681,6 +1697,21 @@ def _extract_user_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
 
 def _can_view_result_trace(current_user: Optional[Dict[str, Any]]) -> bool:
     return bool(_extract_user_roles(current_user).intersection({"admin", "sync_admin", "super_admin"}))
+
+
+def _can_export_record_results(current_user: Optional[Dict[str, Any]]) -> bool:
+    normalized_email = str((current_user or {}).get("email") or "").strip().lower()
+    if (
+        not current_user
+        or current_user.get("is_demo_account") is True
+        or normalized_email in DEFAULT_DEMO_USER_EMAILS
+    ):
+        return False
+    return bool(
+        _extract_user_roles(current_user).intersection(
+            {"admin", "qc_manager", "sync_admin", "super_admin"}
+        )
+    )
 
 
 def _sanitize_trace_value(value: Any, removed_keys: set[str], *, max_text: int = 1200) -> Any:
@@ -4894,6 +4925,148 @@ async def get_latest_workspace_record_result(
     )
 
 
+@router.get("/workspace/records/{record_id}/latest-result/export")
+async def export_latest_workspace_record_result_html(
+    request: Request,
+    record_id: str,
+    institute_id: str = Query(..., min_length=1, description="机构标识"),
+    patient_id: str = Query(..., min_length=1, description="患者标识"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """导出一份三坐标病历的最新 Canonical HTML 结果。"""
+
+    if not _can_export_record_results(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
+    workspace = _sichuan_workspace_service()
+    result = workspace.get_latest_luxian_0609_record_result(
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=record_id,
+    )
+    result_state = str(result.get("state") or "")
+    if result_state == "technical_error":
+        raise HTTPException(status_code=409, detail="质控结果校验异常，请联系管理员复核")
+    if result_state != "ready":
+        raise HTTPException(status_code=404, detail="该病历暂无可导出的最终质控结果")
+    records = workspace.collect_records(
+        scope="all",
+        department=None,
+        doctor=None,
+        date_field="admission",
+        start_date=None,
+        end_date=None,
+        keyword=None,
+        record_refs=[
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": record_id,
+            }
+        ],
+    )
+    record = next(
+        (
+            item
+            for item in records
+            if str(item.get("institute_id") or "").strip() == institute_id.strip()
+            and str(item.get("patient_id") or "").strip() == patient_id.strip()
+            and str(item.get("visit_id") or "").strip() == record_id.strip()
+        ),
+        {
+            "institute_id": institute_id,
+            "patient_id": patient_id,
+            "visit_id": record_id,
+        },
+    )
+    content = export_single_record_result_html(result=result, record=record)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    audit_event(
+        request,
+        action="qc.record_result.export_html",
+        resource="/api/v1/qc/sichuan/workspace/records/{record_id}/latest-result/export",
+        outcome="success",
+        details={"record_count": 1, "result_rule_count": result.get("result_rule_count", 0)},
+        current_user=current_user,
+    )
+    return Response(
+        content=content,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename=qc_record_result_{timestamp}.html"
+        },
+    )
+
+
+@router.post("/workspace/records/export")
+async def export_filtered_workspace_record_results(
+    request: Request,
+    payload: Luxian0609RecordResultExportRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """按服务端完整筛选范围导出病历最新 Canonical 结果。"""
+
+    if not _can_export_record_results(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
+    workspace = _sichuan_workspace_service()
+    filters = {
+        "scope": payload.scope,
+        "department": str(payload.department or "").strip() or None,
+        "doctor": str(payload.doctor or "").strip() or None,
+        "date_field": payload.date_field,
+        "start_date": str(payload.start_date or "").strip() or None,
+        "end_date": str(payload.end_date or "").strip() or None,
+        "keyword": str(payload.keyword or "").strip() or None,
+    }
+    record_count = workspace.count_records(**filters)
+    if record_count > 1000:
+        raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
+    records = workspace.collect_records(**filters)
+    if len(records) > 1000:
+        raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
+    identities: set[tuple[str, str, str]] = set()
+    record_refs: List[Dict[str, str]] = []
+    for record in records:
+        identity = (
+            str(record.get("institute_id") or "").strip(),
+            str(record.get("patient_id") or "").strip(),
+            str(record.get("visit_id") or "").strip(),
+        )
+        if not all(identity) or identity in identities:
+            raise HTTPException(status_code=422, detail="当前筛选存在不完整或重复病历身份，已停止导出")
+        identities.add(identity)
+        record_refs.append(
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+            }
+        )
+    results = workspace.build_latest_luxian_0609_record_result_dtos(
+        record_refs=record_refs,
+    )
+    workbook = export_filtered_record_results_workbook(
+        records=records,
+        results=results,
+        filters=filters,
+    )
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    audit_event(
+        request,
+        action="qc.record_results.export_xlsx",
+        resource="/api/v1/qc/sichuan/workspace/records/export",
+        outcome="success",
+        details={"record_count": len(records), "scope": payload.scope},
+        current_user=current_user,
+    )
+    return StreamingResponse(
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=qc_record_results_{timestamp}.xlsx"
+        },
+    )
+
+
 @router.post("/workspace/batch-jobs/{job_id}/review")
 async def review_workspace_batch_job(
     request: Request,
@@ -5035,6 +5208,8 @@ async def export_workspace_batch_job(
     format: str = Query("xlsx"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if not _can_export_record_results(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
@@ -5042,7 +5217,21 @@ async def export_workspace_batch_job(
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     normalized_format = str(format or "").lower()
     if normalized_format == "html":
-        content = workspace.export_batch_job_html(job=job)
+        try:
+            content = workspace.export_batch_job_html(job=job)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        audit_event(
+            request,
+            action="qc.batch_result.export",
+            resource="/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}/export",
+            outcome="success",
+            details={
+                "format": "html",
+                "record_count": int(job.get("total_records") or 0),
+            },
+            current_user=current_user,
+        )
         filename = f"sichuan_rules_{job_id}_{timestamp}.html"
         return Response(
             content=content,

@@ -145,6 +145,61 @@ def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(m
     assert selector_calls <= 4
 
 
+def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monkeypatch):
+    job = {
+        "id": "job-1",
+        "status": "completed",
+        "created_at": "2026-08-08T10:00:00",
+        "finished_at": "2026-08-08T10:01:00",
+        "filters_json": json.dumps(
+            {
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+            }
+        ),
+        "record_ids_json": json.dumps(["visit-1"]),
+        "summary_json": "{}",
+    }
+    envelope = {
+        "root_job_id": "job-1",
+        "job_id": "job-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(
+            {
+                "schema_version": "lx0609-record-result-envelope-v1",
+                "delivery_mode": "canonical_straight_through",
+                "record_ref": "rec_0123456789abcdef01234567",
+                "items": [
+                    {
+                        "rule_id": "LX0609-001",
+                        "status": "non_compliant",
+                        "conclusion": "未在规定时限内完成。",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+    }
+    session = _ReadSession([[job], [envelope]])
+
+    result = CustomQCWorkspaceService().build_latest_luxian_0609_record_result_dtos(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+        ],
+        session_factory=lambda: session,
+    )
+
+    dto = result[("inst-1", "patient-1", "visit-1")]
+    assert dto["state"] == "ready"
+    assert dto["record_ref"] == "rec_0123456789abcdef01234567"
+    assert dto["items"][0]["rule_id"] == "LX0609-001"
+    assert dto["items"][0]["source_document"] == "入院记录"
+
+
 def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_is_missing(
     monkeypatch,
 ):
@@ -582,6 +637,7 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
     "canonical_items",
     [
         [{"status": "compliant"}],
+        [{"rule_id": "LX0609-025", "status": "invented_status"}],
         [
             {"rule_id": "LX0609-025", "status": "compliant"},
             {"rule_id": "LX0609-025", "status": "non_compliant"},

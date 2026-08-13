@@ -124,6 +124,57 @@ export async function getLatestLuxian0609RecordResult(record: {
   )
 }
 
+export async function exportLatestLuxian0609RecordResult(record: {
+  instituteId: string
+  patientId: string
+  visitId: string
+}) {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'GET',
+      url: `/api/v1/qc/sichuan/workspace/records/${encodeURIComponent(record.visitId)}/latest-result/export`,
+      params: {
+        institute_id: record.instituteId,
+        patient_id: record.patientId,
+      },
+      responseType: 'blob',
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    })
+    return { success: true, data: response.data }
+  } catch (error) {
+    return {
+      success: false,
+      message: toErrorMessage(error, '导出单病历质控结果失败'),
+    }
+  }
+}
+
+export async function exportFilteredLuxian0609RecordResults(payload: {
+  scope: 'all' | 'running' | 'final'
+  department?: string
+  doctor?: string
+  date_field: 'visit' | 'admission' | 'discharge'
+  start_date?: string
+  end_date?: string
+  keyword?: string
+}) {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'POST',
+      url: '/api/v1/qc/sichuan/workspace/records/export',
+      data: payload,
+      responseType: 'blob',
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    })
+    return { success: true, data: response.data }
+  } catch (error) {
+    return {
+      success: false,
+      message: toErrorMessage(error, '导出当前筛选质控结果失败'),
+    }
+  }
+}
+
 export async function cancelSichuanWorkspaceBatchJob(jobId: string) {
   return requestEnvelope<SichuanBatchJob>(
     {
