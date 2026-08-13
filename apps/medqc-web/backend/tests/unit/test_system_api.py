@@ -5,6 +5,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from tests.conftest import assert_response_success
+from app.routers import system as system_module
 
 
 @pytest.mark.unit
@@ -59,6 +60,62 @@ class TestSystemAPI:
         assert "ready" in data["data"]
         assert "dependencies" in data["data"]
         assert "runtime" in data["data"]
+
+    def test_readiness_requires_a_real_database_round_trip(self, monkeypatch, client):
+        class FailingConnection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, _statement):
+                raise RuntimeError("postgresql://secret-user:secret-password@private-host")
+
+        class FailingEngine:
+            def connect(self):
+                return FailingConnection()
+
+        monkeypatch.setattr(system_module.database_connection, "engine", FailingEngine())
+
+        response = client.get("/api/v1/ready")
+
+        assert response.status_code == 503
+        payload = response.json()["data"]
+        assert payload["ready"] is False
+        assert payload["dependencies"]["database"] is False
+        assert "secret-password" not in response.text
+        assert "private-host" not in response.text
+
+    def test_readiness_is_ready_after_successful_database_round_trip(
+        self, monkeypatch, client
+    ):
+        class ScalarResult:
+            def scalar_one(self):
+                return 1
+
+        class WorkingConnection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, _statement):
+                return ScalarResult()
+
+        class WorkingEngine:
+            def connect(self):
+                return WorkingConnection()
+
+        monkeypatch.setattr(system_module.database_connection, "engine", WorkingEngine())
+
+        response = client.get("/api/v1/ready")
+
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        assert payload["ready"] is True
+        assert payload["dependencies"]["database"] is True
 
     def test_cors_headers(self, client):
         """测试 CORS 头部"""
@@ -203,4 +260,3 @@ class TestSystemAPI:
 
         # 至少 95% 的请求应该成功
         assert success_count >= 95
-

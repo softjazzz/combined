@@ -5,12 +5,14 @@ from datetime import datetime
 import subprocess
 import os
 import time
+from sqlalchemy import text
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..core.response import success_response, get_trace_id
 from ..core.runtime_metrics import runtime_request_metrics
 from ..services.sichuan_qc_service import SichuanQCService
 from ..services.sync_run_history import get_sync_health_stats
+from ..database import connection as database_connection
 
 router = APIRouter(prefix="/api/v1", tags=["system"])
 logger = logging.getLogger(__name__)
@@ -23,6 +25,35 @@ _llm_health_cache = {
     "expires_at": 0.0,
     "llm_ok": False,
 }
+
+
+async def _probe_database_ready() -> bool:
+    db_engine = database_connection.engine
+    if db_engine is None:
+        return False
+
+    def probe() -> bool:
+        with db_engine.connect() as connection:
+            return connection.execute(text("SELECT 1")).scalar_one() == 1
+
+    try:
+        return bool(
+            await asyncio.wait_for(
+                asyncio.to_thread(probe),
+                timeout=_HEALTH_REMOTE_TIMEOUT_SECONDS,
+            )
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Database readiness probe timed out after %.1fs",
+            _HEALTH_REMOTE_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Database readiness probe failed error_type=%s",
+            type(exc).__name__,
+        )
+    return False
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -207,10 +238,9 @@ async def readiness(request: Request, response: Response):
     - returns 200 when minimum runtime dependencies are ready
     - returns 503 when critical dependency is unavailable
     """
-    supabase = get_supabase()
-    supabase_ok = supabase is not None
+    database_ok = await _probe_database_ready()
     runtime_metrics = runtime_request_metrics.snapshot()
-    is_ready = supabase_ok
+    is_ready = database_ok
 
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -219,7 +249,8 @@ async def readiness(request: Request, response: Response):
         data={
             "ready": is_ready,
             "dependencies": {
-                "supabase": supabase_ok,
+                "database": database_ok,
+                "supabase": database_ok,
             },
             "runtime": runtime_metrics,
             "timestamp": datetime.utcnow().isoformat() + "Z",

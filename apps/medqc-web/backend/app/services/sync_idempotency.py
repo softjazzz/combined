@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _MEMORY_LOCK = threading.Lock()
 _MEMORY_STORE: dict[str, dict[str, Any]] = {}
 _RETRYABLE_TRIGGER_STATUSES = frozenset({"failed", "rejected", "partial"})
+_SYNC_TRIGGER_TABLE = "qc.sync_trigger_idempotency"
 
 
 @dataclass
@@ -28,36 +29,6 @@ class SyncTriggerReservation:
     status: str
     result: dict[str, Any] | None = None
     error: str = ""
-
-
-def _ensure_table(session: Session) -> None:
-    session.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS sync_trigger_idempotency (
-                idempotency_key VARCHAR(255) PRIMARY KEY,
-                run_id VARCHAR(64) NOT NULL,
-                source VARCHAR(16) NOT NULL,
-                tier VARCHAR(16) NOT NULL,
-                sync_date VARCHAR(32) NOT NULL,
-                operator_email VARCHAR(255) NOT NULL,
-                status VARCHAR(32) NOT NULL DEFAULT 'pending',
-                result_json TEXT NULL,
-                error TEXT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-    )
-    session.execute(
-        text(
-            """
-            CREATE INDEX IF NOT EXISTS idx_sync_trigger_idempotency_created_at
-            ON sync_trigger_idempotency(created_at DESC)
-            """
-        )
-    )
 
 
 def _new_run_id() -> str:
@@ -124,11 +95,10 @@ def reserve_sync_trigger(
 
     run_id = _new_run_id()
     with Session(engine) as session:
-        _ensure_table(session)
         session.execute(
             text(
-                """
-                INSERT INTO sync_trigger_idempotency (
+                f"""
+                INSERT INTO {_SYNC_TRIGGER_TABLE} (
                     idempotency_key, run_id, source, tier, sync_date, operator_email, status
                 )
                 VALUES (
@@ -151,8 +121,8 @@ def reserve_sync_trigger(
         # 终态改成 pending；后续请求的条件 UPDATE 不命中，并复用新的 run_id。
         session.execute(
             text(
-                """
-                UPDATE sync_trigger_idempotency
+                f"""
+                UPDATE {_SYNC_TRIGGER_TABLE}
                 SET
                     run_id = :run_id,
                     source = :source,
@@ -179,9 +149,9 @@ def reserve_sync_trigger(
 
         row = session.execute(
             text(
-                """
+                f"""
                 SELECT run_id, status, result_json, error
-                FROM sync_trigger_idempotency
+                FROM {_SYNC_TRIGGER_TABLE}
                 WHERE idempotency_key = :idempotency_key
                 """
             ),
@@ -234,11 +204,10 @@ def complete_sync_trigger(
         return
 
     with Session(engine) as session:
-        _ensure_table(session)
         session.execute(
             text(
-                """
-                UPDATE sync_trigger_idempotency
+                f"""
+                UPDATE {_SYNC_TRIGGER_TABLE}
                 SET
                     status = :status,
                     result_json = :result_json,
@@ -267,10 +236,9 @@ def reset_sync_idempotency_for_testing() -> None:
     for attempt in range(1, max_attempts + 1):
         try:
             with Session(engine) as session:
-                _ensure_table(session)
                 # Avoid flaky deadlocks when previous test transactions are still releasing locks.
                 session.execute(text("SET LOCAL lock_timeout = '1000ms'"))
-                session.execute(text("DELETE FROM sync_trigger_idempotency"))
+                session.execute(text(f"DELETE FROM {_SYNC_TRIGGER_TABLE}"))
                 session.commit()
                 return
         except OperationalError as exc:

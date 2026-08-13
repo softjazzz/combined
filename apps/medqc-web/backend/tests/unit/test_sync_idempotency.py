@@ -4,13 +4,39 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from app.services import sync_idempotency
 
 
-def test_reserve_same_key_returns_same_run_id(monkeypatch):
+def _sqlite_engine_with_migrated_table():
     db_engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    with db_engine.begin() as connection:
+        connection.execute(text("ATTACH DATABASE ':memory:' AS qc"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE qc.sync_trigger_idempotency (
+                    idempotency_key VARCHAR(255) PRIMARY KEY,
+                    run_id VARCHAR(64) NOT NULL,
+                    source VARCHAR(16) NOT NULL,
+                    tier VARCHAR(16) NOT NULL,
+                    sync_date VARCHAR(32) NOT NULL,
+                    operator_email VARCHAR(255) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                    result_json TEXT NULL,
+                    error TEXT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+    return db_engine
+
+
+def test_reserve_same_key_returns_same_run_id(monkeypatch):
+    db_engine = _sqlite_engine_with_migrated_table()
     monkeypatch.setattr(sync_idempotency, "engine", db_engine)
 
     first = sync_idempotency.reserve_sync_trigger(
@@ -35,7 +61,7 @@ def test_reserve_same_key_returns_same_run_id(monkeypatch):
 
 
 def test_complete_persists_result(monkeypatch):
-    db_engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    db_engine = _sqlite_engine_with_migrated_table()
     monkeypatch.setattr(sync_idempotency, "engine", db_engine)
     key = "pg:all:2026-03-25:admin@medqc.com"
 
@@ -89,7 +115,7 @@ def test_reserve_status_contract_matches_memory_and_sqlite(
     db_engine = (
         None
         if storage == "memory"
-        else create_engine("sqlite+pysqlite:///:memory:", future=True)
+        else _sqlite_engine_with_migrated_table()
     )
     monkeypatch.setattr(sync_idempotency, "engine", db_engine)
     if storage == "memory":
@@ -175,3 +201,27 @@ def test_memory_concurrent_retry_creates_only_one_new_run(monkeypatch):
     assert len({item.run_id for item in reservations}) == 1
     assert reservations[0].run_id != first.run_id
     assert {item.status for item in reservations} == {"pending"}
+
+
+def test_runtime_idempotency_path_never_executes_ddl(monkeypatch):
+    db_engine = _sqlite_engine_with_migrated_table()
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(str(statement).upper())
+
+    from sqlalchemy import event
+
+    event.listen(db_engine, "before_cursor_execute", capture)
+    monkeypatch.setattr(sync_idempotency, "engine", db_engine)
+
+    sync_idempotency.reserve_sync_trigger(
+        idempotency_key="pg:all:2026-08-14:no-ddl@medqc.com",
+        source="pg",
+        tier="all",
+        sync_date="2026-08-14",
+        operator_email="no-ddl@medqc.com",
+    )
+
+    assert not any("CREATE TABLE" in statement for statement in statements)
+    assert not any("CREATE INDEX" in statement for statement in statements)
