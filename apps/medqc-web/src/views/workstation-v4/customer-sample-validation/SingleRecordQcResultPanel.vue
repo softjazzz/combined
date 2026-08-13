@@ -744,7 +744,7 @@ const dataGapLabels: Record<string, string> = {
 }
 
 // 这些字段保留在服务端结果中供追踪和调试，但不直接暴露给客户。
-const hiddenCustomerFactKeys = new Set(['missing_fields'])
+const hiddenCustomerFactKeys = new Set(['missing_fields', 'target_document'])
 const examLabInternalFactKeys = new Set(['failure_kind', 'checked_sources'])
 const hiddenDataGapKeys = new Set(['reason_code', 'missing_fields'])
 

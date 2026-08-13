@@ -1039,6 +1039,35 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('440.6 小时')
   })
 
+  it('时限结果不向客户展示内部目标文书代码', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-005',
+            rule_name: '上级医生查房记录：入院后48小时内完成',
+            status: 'non_compliant',
+            conclusion: '入院后48小时内未找到符合要求的上级医师查房记录。',
+            customer_display_facts: {
+              failure_kind: 'timeliness_requirement_not_met',
+              target_document: 'attending_course_record',
+              source_label: '主治医师及以上首次查房记录',
+              anchor_time: '2026-07-15 13:48:49',
+              threshold_hours: 48,
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    expect(wrapper.text()).toContain('核对文书')
+    expect(wrapper.text()).toContain('主治医师及以上首次查房记录')
+    expect(wrapper.text()).not.toContain('目标文书')
+    expect(wrapper.text()).not.toContain('attending_course_record')
+  })
+
   it('时限指标不完整时仍展示后端已返回的时间点', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {

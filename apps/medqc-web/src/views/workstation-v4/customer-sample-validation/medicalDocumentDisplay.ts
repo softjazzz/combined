@@ -62,6 +62,7 @@ export function formatMedicalDocumentTime(value?: string): string {
 }
 
 export function medicalDocumentHasContent(document: EditableMedicalRecordDocument): boolean {
+  if (document.has_content === true) return true
   if (String(document.content || '').trim()) return true
   return Boolean(document.sections?.some((section) => String(section.text || '').trim()))
 }

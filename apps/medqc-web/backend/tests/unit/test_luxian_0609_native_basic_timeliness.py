@@ -1084,6 +1084,39 @@ def test_005_accepts_customer_standard_upper_physician_round_within_48_hours():
 
 
 @pytest.mark.unit
+def test_005_accepts_senior_course_source_without_redundant_document_title():
+    selected = ("LX0609-005", "LX0609-006")
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "upper-round-without-title",
+                    "record_time": "2026-07-16 10:30:02",
+                    "record_content": "上级医师查房记录正文。",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+    )
+
+    execution, reduced = _reduce_typed_basic(session, selected)
+
+    assert execution.results == ()
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    facts = dict(execution.customer_display_facts)
+    assert facts["LX0609-005"]["source_document_id"] == "upper-round-without-title"
+    assert facts["LX0609-005"]["elapsed_hours"] == 20.69
+    # 来源身份只证明“上级医师”，不能自动升级为副主任医师或主任医师。
+    assert reduced[1].final_state is not CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.unit
 def test_006_explicit_senior_round_remains_zero_llm_call():
     class _LLM:
         async def generate(self, _prompt: str) -> dict:

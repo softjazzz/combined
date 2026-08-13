@@ -112,4 +112,26 @@ describe('ReadonlyMedicalDocumentDirectory', () => {
         .attributes('aria-expanded'),
     ).toBe('false')
   })
+
+  it('摘要文书标记有正文时允许点击并按需读取', async () => {
+    const summaryDocument: EditableMedicalRecordDocument = {
+      key: 'senior-summary',
+      source_table: 'senior_course_record',
+      document_type: 'senior_course_record',
+      title: '上级医师查房记录',
+      record_time: '2026-07-16 10:30:02',
+      content: '',
+      has_content: true,
+      content_loaded: false,
+      execution_domain: 'course',
+    }
+    const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+      props: { documents: [summaryDocument], selectedKey: '' },
+    })
+
+    const item = wrapper.get('.record-document-item')
+    expect(item.attributes('disabled')).toBeUndefined()
+    await item.trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['senior-summary']])
+  })
 })

@@ -235,7 +235,11 @@ def extract_rescue_events(rows: Sequence[Mapping[str, Any]]) -> tuple[RescueEven
     )
 
 
-def classify_course_round_role(row: Mapping[str, Any]) -> CourseRoundRole:
+def classify_course_round_role(
+    row: Mapping[str, Any],
+    *,
+    source_key: str = "",
+) -> CourseRoundRole:
     document_titles = tuple(
         re.sub(r"\s+", "", str(row.get(field) or "").strip())
         for field in ("document_title", "title")
@@ -246,21 +250,30 @@ def classify_course_round_role(row: Mapping[str, Any]) -> CourseRoundRole:
         return CourseRoundRole.SENIOR
     if any(marker in role_text for marker in _ATTENDING_MARKERS):
         return CourseRoundRole.ATTENDING_OR_ABOVE
-    if is_generic_upper_physician_round(row):
+    if is_generic_upper_physician_round(row, source_key=source_key):
         return CourseRoundRole.ATTENDING_OR_ABOVE
     if "查房" in role_text:
         return CourseRoundRole.AMBIGUOUS
     return CourseRoundRole.NONE
 
 
-def is_generic_upper_physician_round(row: Mapping[str, Any]) -> bool:
+def is_generic_upper_physician_round(
+    row: Mapping[str, Any],
+    *,
+    source_key: str = "",
+) -> bool:
     """识别仅声明“上级医师”、但未声明具体职称的标准查房文书类型。"""
 
-    return any(
+    document_titles = tuple(
         re.sub(r"\s+", "", str(row.get(field) or "").strip())
-        in _ATTENDING_OR_ABOVE_DOCUMENT_TITLES
         for field in ("document_title", "title")
     )
+    if (
+        source_key.strip().lower() == "senior_course_record"
+        and not any(document_titles)
+    ):
+        return True
+    return any(title in _ATTENDING_OR_ABOVE_DOCUMENT_TITLES for title in document_titles)
 
 
 def associate_timeliness_event(

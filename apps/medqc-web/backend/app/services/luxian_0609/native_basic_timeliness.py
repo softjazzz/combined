@@ -145,7 +145,10 @@ def _semantic_round_candidates(
     candidates: list[_SemanticRoundCandidate] = []
     for source_key in ("daily_course_record", "senior_course_record"):
         for row in materials.rows(source_key):
-            if not isinstance(row, Mapping) or not is_generic_upper_physician_round(row):
+            if not isinstance(row, Mapping) or not is_generic_upper_physician_round(
+                row,
+                source_key=source_key,
+            ):
                 continue
             body = next(
                 (
@@ -1065,19 +1068,19 @@ def _typed_basic_decisions(
         source_keys = ("daily_course_record", "senior_course_record")
         course_issue = source_issue(source_keys)
         try:
-            course_rows = tuple(
-                row
+            course_events = tuple(
+                (source_key, event)
                 for source_key in source_keys
                 if observation_by_source[source_key].query_state.value
                 in {"available", "empty"}
-                for row in rows(source_key)
+                for event in extract_document_events(rows(source_key))
             )
         except EvidenceMaterialTruncated:
             course_issue = ("source_truncated", False)
-            course_rows = ()
+            course_events = ()
         except ValueError:
             course_issue = ("snapshot_mismatch", True)
-            course_rows = ()
+            course_events = ()
 
         def qualifies(role: CourseRoundRole) -> bool:
             if rule_id == "LX0609-005":
@@ -1091,12 +1094,15 @@ def _typed_basic_decisions(
         qualifying_missing_time = False
         ambiguous_round = False
         semantic_round_unknown = False
-        for event in extract_document_events(course_rows):
+        for source_key, event in course_events:
             row_id = id(event.row)
             role = (
-                semantic_round_roles.get(row_id, classify_course_round_role(event.row))
+                semantic_round_roles.get(
+                    row_id,
+                    classify_course_round_role(event.row, source_key=source_key),
+                )
                 if semantic_round_roles is not None
-                else classify_course_round_role(event.row)
+                else classify_course_round_role(event.row, source_key=source_key)
             )
             if rule_id == "LX0609-006":
                 if row_id in semantic_round_body_missing:
