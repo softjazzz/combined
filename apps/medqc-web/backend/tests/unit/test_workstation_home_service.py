@@ -159,7 +159,7 @@ def test_home_department_options_come_from_full_clinical_scope_not_legacy_items(
 
 
 def test_home_record_loader_explicitly_uses_all_hospital_status(monkeypatch):
-    """首页复用病历池筛选器时必须显式传全量住院状态，不能因漏参运行失败。"""
+    """首页复用病历池筛选器时必须显式冻结不使用医生筛选，不能因漏参运行失败。"""
 
     class _Label:
         def label(self, _name):
@@ -208,6 +208,8 @@ def test_home_record_loader_explicitly_uses_all_hospital_status(monkeypatch):
     records = service._load_luxian_home_records(_SessionForLoader(), department=None, keyword=None)
 
     assert captured["hospital_status"] == "all"
+    assert captured["doctor"] is None
+    assert captured["include_doctor"] is False
     assert records == [
         {
             "institute_id": "I",

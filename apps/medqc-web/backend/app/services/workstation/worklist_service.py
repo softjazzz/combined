@@ -943,6 +943,7 @@ class WorkstationAggregationService:
         query = _apply_workstation_filters(
             query,
             dept=department,
+            doctor=None,
             keyword=keyword,
             start_date=None,
             end_date=None,
@@ -951,6 +952,7 @@ class WorkstationAggregationService:
             # 参数必须显式传入，避免新增筛选合同后首页运行时漏参。
             hospital_status="all",
             include_department=True,
+            include_doctor=False,
             discharge_summary=discharge_summary,
         )
         rows = query.with_entities(
