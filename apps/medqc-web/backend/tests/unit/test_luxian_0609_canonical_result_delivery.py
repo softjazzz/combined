@@ -727,3 +727,53 @@ def test_writer_marks_envelope_as_canonical_straight_through():
     assert envelope["items"][0]["reason_code"] == "customer_explanation_incomplete"
     assert envelope["items"][0]["is_compliant"] is None
     assert envelope["items"][0]["conclusion"] == "引擎结论原文"
+
+
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"status": "future_status", "result_status": "future_status", "is_compliant": None},
+        {"status": "non_compliant", "result_status": "uncertain", "is_compliant": False},
+        {"status": "non_compliant", "result_status": "non_compliant", "is_compliant": None},
+        {
+            "status": "non_compliant",
+            "result_status": "non_compliant",
+            "display_status": "uncertain",
+            "is_compliant": False,
+        },
+    ],
+)
+def test_writer_rejects_invalid_or_conflicting_canonical_status_fields(
+    invalid_fields: dict[str, Any],
+):
+    session = _WriteSession()
+    service = CustomQCWorkspaceService()
+
+    with pytest.raises(ValueError, match="Canonical Envelope 状态字段"):
+        service._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps(
+                    {
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }
+                ),
+            },
+            items=[
+                {
+                    "record_id": "visit-1",
+                    "visit_id": "visit-1",
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "rule_id": "LX0609-001",
+                    "reason_code": "requirement_violated",
+                    **invalid_fields,
+                }
+            ],
+            now=datetime(2026, 7, 30, 10, 0, 0),
+        )
+
+    assert session.statements == []

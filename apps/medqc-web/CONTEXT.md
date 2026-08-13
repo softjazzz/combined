@@ -27,11 +27,11 @@ Native 执行器和结果 API 只能处理这一集合，不能为未启用规�
 
 ## LX0609 Canonical 客户结果
 
-聚合器先装配规则决策、受控展示事实、子判定和可定位证据，再由
-`finalize_luxian_0609_canonical_result` 唯一确定最终客户状态。缺少可核对解释的
-`non_compliant` 在这里一次性降级为 `uncertain`；终结器返回后，聚合器、Envelope
-保存、单一结果接口和前端均不得再次修改 `status`、`result_status`、`reason_code`
-或 `is_compliant`。
+规则执行器唯一确定业务状态；聚合器装配规则决策、受控展示事实、子判定和可定位证据，
+`finalize_luxian_0609_canonical_result` 只补齐兼容状态字段和资料缺口说明，不得把
+`non_compliant` 改写为 `uncertain`。Envelope 保存前必须校验 `status`、
+`result_status`、`display_status` 和 `is_compliant` 一致；终结器返回后，聚合器、
+Envelope 保存、单一结果接口和前端均不得再次修改业务状态或原因码。
 
 `is_compliant` 是 Canonical 状态的兼容布尔投影，不是第二套判定：
 

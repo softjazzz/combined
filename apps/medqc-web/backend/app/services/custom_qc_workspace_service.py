@@ -47,6 +47,7 @@ from .luxian_0609_rule_catalog import (
 )
 from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
+from .luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
 from .luxian_0609.customer_renderer import compliant_customer_finding
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
@@ -5343,6 +5344,24 @@ class CustomQCWorkspaceService:
                 )
             ):
                 raise ValueError("Canonical Envelope 规则集合不完整，拒绝完成质控任务")
+            for item in record_items:
+                status = _safe_text(item.get("status")).lower()
+                result_status = _safe_text(item.get("result_status")).lower()
+                display_status = _safe_text(item.get("display_status")).lower()
+                expected_is_compliant = (
+                    True
+                    if status in {"compliant", "not_applicable"}
+                    else False
+                    if status == "non_compliant"
+                    else None
+                )
+                if (
+                    status not in CANONICAL_RESULT_STATUSES
+                    or result_status != status
+                    or (display_status and display_status != status)
+                    or item.get("is_compliant") is not expected_is_compliant
+                ):
+                    raise ValueError("Canonical Envelope 状态字段不一致，拒绝完成质控任务")
             record_id = record_ref.visit_id
             envelope = {
                 "schema_version": _RECORD_RESULT_ENVELOPE_SCHEMA,

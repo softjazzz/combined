@@ -16,15 +16,15 @@ def _finalize(result: dict):
 
 
 @pytest.mark.parametrize(
-    ("extra", "expected_status"),
+    "extra",
     [
-        ({}, "uncertain"),
-        ({"customer_display_facts": {"failure_kind": ""}}, "uncertain"),
-        ({"criterion_results": [{"status": "", "details": {}}]}, "uncertain"),
-        ({"customer_display_facts": {"failure_kind": "document_missing"}}, "non_compliant"),
-        ({"customer_display_facts": {"requirement_met": False}}, "non_compliant"),
-        ({"customer_display_facts": {"missing_count": 0}}, "non_compliant"),
-        ({"criterion_results": [{"criterion_id": "presence", "status": "failed"}]}, "non_compliant"),
+        {},
+        {"customer_display_facts": {"failure_kind": ""}},
+        {"criterion_results": [{"status": "", "details": {}}]},
+        {"customer_display_facts": {"failure_kind": "document_missing"}},
+        {"customer_display_facts": {"requirement_met": False}},
+        {"customer_display_facts": {"missing_count": 0}},
+        {"criterion_results": [{"criterion_id": "presence", "status": "failed"}]},
         (
             {
                 "evidence_items": [
@@ -33,15 +33,11 @@ def _finalize(result: dict):
                         "source_document_id": "document-1",
                     }
                 ]
-            },
-            "non_compliant",
+            }
         ),
     ],
 )
-def test_finalizer_owns_customer_explanation_safety_policy(
-    extra: dict,
-    expected_status: str,
-):
+def test_finalizer_never_rewrites_the_executor_non_compliant_status(extra: dict):
     result = _finalize(
         {
             "rule_id": "LX0609-029",
@@ -53,14 +49,10 @@ def test_finalizer_owns_customer_explanation_safety_policy(
         }
     )
 
-    assert result["status"] == expected_status
-    assert result["result_status"] == expected_status
-    assert result["is_compliant"] is (False if expected_status == "non_compliant" else None)
-    assert result["reason_code"] == (
-        "requirement_violated"
-        if expected_status == "non_compliant"
-        else "customer_explanation_incomplete"
-    )
+    assert result["status"] == "non_compliant"
+    assert result["result_status"] == "non_compliant"
+    assert result["is_compliant"] is False
+    assert result["reason_code"] == "requirement_violated"
 
 
 @pytest.mark.parametrize("status", CANONICAL_RESULT_STATUSES)
@@ -100,7 +92,7 @@ def test_finalizer_rejects_missing_identity_and_unknown_status():
         _finalize({"rule_id": "LX0609-001", "status": "future_status"})
 
 
-def test_location_without_excerpt_is_not_sufficient_customer_explanation():
+def test_location_without_excerpt_does_not_change_the_executor_status():
     result = _finalize(
         {
             "rule_id": "LX0609-029",
@@ -113,8 +105,8 @@ def test_location_without_excerpt_is_not_sufficient_customer_explanation():
         }
     )
 
-    assert result["status"] == "uncertain"
-    assert result["reason_code"] == "customer_explanation_incomplete"
+    assert result["status"] == "non_compliant"
+    assert result["reason_code"] == "requirement_violated"
 
 
 def test_finalizer_is_idempotent_and_does_not_mutate_nested_input():
@@ -140,7 +132,7 @@ def test_finalizer_is_idempotent_and_does_not_mutate_nested_input():
     assert first["evidence_items"][0] is not source["evidence_items"][0]
 
 
-def test_rule_040_keeps_the_controlled_customer_message_when_downgraded():
+def test_rule_040_does_not_replace_the_executor_decision_with_a_generic_result():
     result = _finalize(
         {
             "rule_id": "LX0609-040",
@@ -149,9 +141,11 @@ def test_rule_040_keeps_the_controlled_customer_message_when_downgraded():
         }
     )
 
-    assert result["status"] == "uncertain"
-    assert result["findings"] == "暂无法确认是否需要进行四级手术术前多学科讨论"
-    assert "手术级别" in result["evidence"]
+    assert result["status"] == "non_compliant"
+    assert result["result_status"] == "non_compliant"
+    assert result["reason_code"] == "requirement_violated"
+    assert "findings" not in result
+    assert "evidence" not in result
 
 
 def test_data_gap_always_has_customer_readable_missing_data_contract():

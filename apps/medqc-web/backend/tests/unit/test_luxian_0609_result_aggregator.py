@@ -615,7 +615,7 @@ def test_only_gate_attested_report_can_reach_final_mapping():
     ("status", "expected_is_compliant", "expected_customer_status"),
     [
         ("compliant", True, "compliant"),
-        ("non_compliant", None, "uncertain"),
+        ("non_compliant", False, "non_compliant"),
         ("not_applicable", True, "not_applicable"),
         ("data_gap", None, "data_gap"),
         ("technical_error", None, "technical_error"),
@@ -728,8 +728,8 @@ def test_surgery_document_missing_source_coverage_cannot_emit_defect(
             }
         },
     )[0]
-    assert covered["status"] == "uncertain"
-    assert covered["reason_code"] == "customer_explanation_incomplete"
+    assert covered["status"] == "non_compliant"
+    assert covered["is_compliant"] is False
 
     source_unproven = aggregate(
         wrapper_rules=[{"rule_id": rule_id}],
@@ -1416,7 +1416,7 @@ def test_026_customer_evidence_keeps_comparison_sources_and_excludes_diagnosis_t
     ]
 
 
-def test_reduced_non_compliant_without_explanation_facts_is_not_exposed_as_customer_defect():
+def test_reduced_non_compliant_without_explanation_facts_keeps_the_reducer_status():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
@@ -1429,11 +1429,9 @@ def test_reduced_non_compliant_without_explanation_facts_is_not_exposed_as_custo
         ),
     )[0]
 
-    assert result["status"] == "uncertain"
-    assert result["is_compliant"] is None
-    assert result["reason_code"] == "customer_explanation_incomplete"
-    assert result["findings"] == "本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。"
-    assert "发现质控问题" not in repr(result)
+    assert result["status"] == "non_compliant"
+    assert result["is_compliant"] is False
+    assert result["reason_code"] == "requirement_violated"
 
 
 def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_status():
@@ -2400,7 +2398,7 @@ def test_reduced_decision_does_not_copy_covered_legacy_result():
     assert result["schema_version"] == "lx0609-customer-result-v2"
 
 
-def test_empty_reduced_tuple_preserves_legacy_native_branch():
+def test_empty_reduced_tuple_does_not_let_finalizer_rewrite_the_native_status():
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
@@ -2415,8 +2413,8 @@ def test_empty_reduced_tuple_preserves_legacy_native_branch():
         reduced_decisions=(),
         format_evidence=False,
     )[0]
-    assert result["status"] == "uncertain"
-    assert result["reason_code"] == "customer_explanation_incomplete"
+    assert result["status"] == "non_compliant"
+    assert result["is_compliant"] is False
     assert result["metadata"]["execution_source"] == "lx0609_native"
 
 
