@@ -392,10 +392,41 @@ class CaseSetSyncService:
             int(item.get("rows_upserted") or 0) for item in table_results
         )
 
+        unavailable_detail_tables = tuple(
+            item
+            for item in table_results
+            if str(item.get("table_name") or "") not in PRIMARY_CASE_TABLES
+            and str(item.get("sync_status") or "") == "source_table_unavailable"
+        )
+
         if not primary_visible:
             return CaseSetSyncResult(
                 case_refs=normalized_refs,
                 primary_visible=False,
+                visible_case_refs=visible_case_refs,
+                missing_primary_case_refs=missing_primary_case_refs,
+                synced_tables=tuple(table_results),
+                source_rows_by_table=source_rows_by_table,
+                total_rows_pulled=total_rows_pulled,
+                total_rows_upserted=total_rows_upserted,
+                bundle_refresh={},
+            )
+        if unavailable_detail_tables:
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "step_key": "details_incomplete",
+                        "current_table": "",
+                        "processed_tables": len(ordered_tables),
+                        "total_tables": len(ordered_tables),
+                        "unavailable_detail_table_count": len(
+                            unavailable_detail_tables
+                        ),
+                    }
+                )
+            return CaseSetSyncResult(
+                case_refs=normalized_refs,
+                primary_visible=True,
                 visible_case_refs=visible_case_refs,
                 missing_primary_case_refs=missing_primary_case_refs,
                 synced_tables=tuple(table_results),

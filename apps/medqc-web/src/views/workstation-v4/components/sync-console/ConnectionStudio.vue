@@ -111,6 +111,22 @@
             </div>
 
             <div class="col-span-2">
+              <label class="text-[12px] font-medium text-slate-700 block mb-1">
+                本院机构标识 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model="state.pgConnectionForm.default_institute_id"
+                type="text"
+                :disabled="isReadonly"
+                class="studio-input"
+                placeholder="例如：LUXIAN-HOSPITAL"
+              >
+              <div class="text-[11px] leading-5 text-slate-500 mt-1">
+                源库没有 institute_id 时，用该值形成稳定病例身份；投入使用后不要随意修改。
+              </div>
+            </div>
+
+            <div class="col-span-2">
               <label class="text-[12px] text-slate-600 block mb-1">同步模式</label>
               <a-select
                 v-model:value="state.pgConnectionForm.sync_mode"

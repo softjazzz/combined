@@ -9,6 +9,8 @@ export interface PgConnectionConfig {
   remote_database?: string
   remote_username?: string
   remote_schema?: string
+  default_institute_id?: string
+  default_institute_configured?: boolean
   sync_mode?: 'table' | 'procedure' | string
   remote_password_set?: boolean
   remote_password_display?: string
@@ -205,6 +207,7 @@ export const syncApi = {
     remote_database: string
     remote_username: string
     remote_schema?: string
+    default_institute_id: string
     sync_mode?: 'table' | 'procedure'
     remote_password?: string
   }): Promise<{ config: PgConnectionConfig; connection: Record<string, any> }> {

@@ -41,6 +41,7 @@ export interface PgConnectionForm {
   remote_database: string
   remote_username: string
   remote_schema: string
+  default_institute_id: string
   sync_mode: 'table' | 'procedure'
   remote_password: string
   remote_password_set: boolean
@@ -127,6 +128,7 @@ function createInitialState() {
       remote_database: '',
       remote_username: '',
       remote_schema: 'public',
+      default_institute_id: '',
       sync_mode: 'table',
       remote_password: '',
       remote_password_set: false,
@@ -260,6 +262,7 @@ function patchPgForms(payload: PgConnectionConfig) {
   globalSyncState.pgConnectionForm.remote_database = payload.remote_database || ''
   globalSyncState.pgConnectionForm.remote_username = payload.remote_username || ''
   globalSyncState.pgConnectionForm.remote_schema = payload.remote_schema || 'public'
+  globalSyncState.pgConnectionForm.default_institute_id = payload.default_institute_id || ''
   globalSyncState.pgConnectionForm.sync_mode =
     payload.sync_mode === 'procedure' ? 'procedure' : 'table'
   globalSyncState.pgConnectionForm.remote_password = ''
@@ -495,12 +498,17 @@ async function testActiveConnection() {
 async function savePgConnection() {
   globalSyncState.isSavingPgConnection = true
   try {
+    const defaultInstituteId = globalSyncState.pgConnectionForm.default_institute_id.trim()
+    if (!defaultInstituteId || defaultInstituteId.toUpperCase() === 'LOCAL-HOSPITAL') {
+      throw new Error('请填写本院长期稳定的机构标识，不能使用系统占位值')
+    }
     const payload = {
       remote_host: globalSyncState.pgConnectionForm.remote_host,
       remote_port: Number(globalSyncState.pgConnectionForm.remote_port),
       remote_database: globalSyncState.pgConnectionForm.remote_database,
       remote_username: globalSyncState.pgConnectionForm.remote_username,
       remote_schema: globalSyncState.pgConnectionForm.remote_schema || 'public',
+      default_institute_id: defaultInstituteId,
       sync_mode: globalSyncState.pgConnectionForm.sync_mode,
       remote_password: globalSyncState.pgConnectionForm.remote_password,
     }

@@ -59,6 +59,28 @@ def test_estimate_pg_sync_impact_uses_running_case_refs_without_mr_no(monkeypatc
     ]
 
 
+def test_estimate_pg_sync_impact_rejects_placeholder_institute(monkeypatch):
+    class _ScopeService:
+        def resolve_hospitalization_scope(self, **_kwargs):
+            return HospitalizationScopeResult(
+                case_refs=(CaseRef("LOCAL-HOSPITAL", "P1", "V1"),),
+                selected=(),
+                all_selected=(),
+                sources_used=("inpat_registration",),
+                source_status="ready",
+                warnings=(),
+            )
+
+    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {})
+    monkeypatch.setattr(etl_sync, "_create_case_scope_service", lambda: _ScopeService())
+
+    with pytest.raises(ValueError, match="稳定机构标识"):
+        etl_sync.estimate_pg_sync_impact(
+            scene="running",
+            date_window={"start": "2026-07-01", "end": "2026-07-31"},
+        )
+
+
 def test_list_remote_departments_uses_discharge_department_field(monkeypatch):
     executed: list[tuple[str, tuple]] = []
 
@@ -263,7 +285,11 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
     monkeypatch.setattr(
         etl_sync,
         "load_db_config",
-        lambda: {"remote_schema": "public", "sync_mode": "table"},
+        lambda: {
+            "remote_schema": "public",
+            "sync_mode": "table",
+            "default_institute_id": "HOSPITAL-A",
+        },
     )
     monkeypatch.setattr(
         etl_sync,
@@ -538,8 +564,8 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
         target_departments=["重症医学科（ICU）"],
     )
 
-    assert result["success"] is True
-    assert result["status"] == "success"
+    assert result["success"] is False
+    assert result["status"] == "partial"
     assert result["date_window"] == {"start": "2026-08-01", "end": "2026-08-10"}
     assert result["target_departments"] == ["重症医学科（ICU）"]
     assert result["case_ref_count"] == result["eligible_visit_count"] == 1
@@ -557,11 +583,42 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
     assert any("pg_advisory_unlock" in item for item in calls["lock"])
     assert calls["state"][-1] == {
         "is_running": False,
-        "last_sync_status": "success",
+        "last_sync_status": "partial",
         "total_records_synced": 1,
     }
     assert any("出院来源按优先级合并" in item for item in result["warnings"])
     assert any("daily_course_record" in item for item in result["warnings"])
+
+
+def test_run_sync_rejects_placeholder_institute_before_scope_or_sync(monkeypatch):
+    case_refs = (CaseRef("LOCAL-HOSPITAL", "P1", "V1"),)
+    calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=_hospitalization_scope_result(case_refs),
+        sync_action=lambda _kwargs: _successful_case_set_result(case_refs),
+    )
+    monkeypatch.setattr(
+        etl_sync,
+        "load_db_config",
+        lambda: {
+            "remote_schema": "public",
+            "sync_mode": "table",
+            "default_institute_id": "LOCAL-HOSPITAL",
+        },
+    )
+
+    result = etl_sync.run_sync(
+        sync_date="2026-08-10",
+        tables=list(target_names),
+        scene="final",
+        date_window={"start": "2026-08-10", "end": "2026-08-10"},
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "rejected"
+    assert result["error"] == "请先配置本院稳定机构标识后再执行同步"
+    assert len(calls["scope"]) == 1
+    assert calls["sync"] == []
 
 
 def test_run_sync_missing_primary_fails_closed_by_full_case_ref(monkeypatch):

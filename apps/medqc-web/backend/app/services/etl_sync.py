@@ -2329,6 +2329,8 @@ def estimate_pg_sync_impact(
         discharge_end_date=discharge_end_date,
         departments=dept_filters,
     )
+    if any(_uses_unconfigured_institute(case_ref) for case_ref in scope_result.case_refs):
+        raise ValueError("请先配置本院稳定机构标识后再检查同步范围")
     effective_end_date = (
         as_of_date if resolved_scene == "running" else discharge_end_date
     )
@@ -2831,6 +2833,13 @@ def _scope_mode_for_scene(scene: str) -> str:
     return "discharged"
 
 
+def _uses_unconfigured_institute(case_ref: Any) -> bool:
+    """识别历史自动补入的占位机构号；该值不能作为生产三坐标。"""
+    return str(getattr(case_ref, "institute_id", "") or "").strip().upper() == (
+        "LOCAL-HOSPITAL"
+    )
+
+
 def _resolve_case_scope_window(
     *,
     scene: str,
@@ -3174,6 +3183,50 @@ def run_sync(
                 "warnings": list(dict.fromkeys(run_warnings)),
             }
 
+        placeholder_case_refs = tuple(
+            case_ref
+            for case_ref in case_refs
+            if _uses_unconfigured_institute(case_ref)
+        )
+        if placeholder_case_refs:
+            _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _sync_state.last_sync_status = "rejected"
+            _sync_state.total_records_synced = 0
+            _sync_state.logs = []
+            _emit_sync_progress(
+                progress_callback,
+                {
+                    "run_id": run_id,
+                    "status": "rejected",
+                    "stage": "institute_configuration",
+                    "current_table": "",
+                    "tables_total": len(target_tables),
+                    "tables_done": 0,
+                    "rows_pulled_total": 0,
+                    "rows_upserted_total": 0,
+                    "eligible_visit_count": len(case_refs),
+                    "case_ref_count": len(case_refs),
+                    "visit_progress": _build_case_ref_progress(
+                        eligible_case_refs,
+                        set(),
+                    ),
+                    "failed_tables": 0,
+                    "eta_seconds": 0,
+                },
+            )
+            return {
+                "success": False,
+                "status": "rejected",
+                "error": "请先配置本院稳定机构标识后再执行同步",
+                "mode": sync_mode,
+                "scene": resolved_scene,
+                "total_records": 0,
+                "case_ref_count": len(case_refs),
+                "eligible_visit_count": len(case_refs),
+                "tables": [],
+                "warnings": list(dict.fromkeys(run_warnings)),
+            }
+
         visible_case_count = 0
 
         def _forward_case_set_progress(payload: Dict[str, Any]) -> None:
@@ -3283,6 +3336,13 @@ def run_sync(
         visible_case_refs = set(sync_result.visible_case_refs)
         missing_primary_case_refs = set(sync_result.missing_primary_case_refs)
         table_results = [dict(item) for item in sync_result.synced_tables]
+        unavailable_detail_tables = [
+            item
+            for item in table_results
+            if str(item.get("table_name") or "")
+            not in {"mr", "inpat_registration", "admission_record"}
+            and item.get("sync_status") == "source_table_unavailable"
+        ]
         for table_result in table_results:
             if table_result.get("sync_status") != "source_table_unavailable":
                 continue
@@ -3299,7 +3359,7 @@ def run_sync(
 
         total_rows_pulled = int(sync_result.total_rows_pulled)
         total_rows_upserted = int(sync_result.total_rows_upserted)
-        final_success = not missing_primary_case_refs
+        final_success = not missing_primary_case_refs and not unavailable_detail_tables
         final_status = (
             "success"
             if final_success
@@ -3307,7 +3367,13 @@ def run_sync(
             if visible_case_refs
             else "failed"
         )
-        final_stage = "completed" if final_success else "primary_unavailable"
+        final_stage = (
+            "completed"
+            if final_success
+            else "details_incomplete"
+            if unavailable_detail_tables and visible_case_refs
+            else "primary_unavailable"
+        )
         _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _sync_state.last_sync_status = final_status
         _sync_state.total_records_synced = total_rows_upserted
@@ -3329,7 +3395,11 @@ def run_sync(
                     eligible_case_refs,
                     visible_case_refs,
                 ),
-                "failed_tables": 0 if final_success else 1,
+                "failed_tables": len(unavailable_detail_tables)
+                if unavailable_detail_tables
+                else 0
+                if final_success
+                else 1,
                 "eta_seconds": 0,
             },
         )

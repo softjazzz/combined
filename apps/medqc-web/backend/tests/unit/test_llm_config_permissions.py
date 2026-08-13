@@ -90,6 +90,83 @@ def test_doctor_cannot_trigger_llm_connection_test(client, monkeypatch):
     assert response.status_code == 403
 
 
+@pytest.mark.parametrize("role", ("doctor", "qc_manager", "coder"))
+@pytest.mark.parametrize(
+    "path",
+    (
+        "/api/v1/llm/configs",
+        "/api/v1/llm/configs/default",
+    ),
+)
+def test_non_system_config_roles_cannot_read_llm_configuration_rows(
+    client,
+    monkeypatch,
+    path,
+    role,
+):
+    _override_user(client, [role])
+
+    def _should_not_open_persistence():
+        raise AssertionError("unauthorized role must not read model configuration")
+
+    monkeypatch.setattr(
+        "app.routers.llm_configs.get_supabase",
+        _should_not_open_persistence,
+    )
+
+    response = client.get(path)
+
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("role", ("admin", "sync_admin", "super_admin"))
+def test_system_config_roles_can_read_llm_configuration_rows(
+    client,
+    monkeypatch,
+    role,
+):
+    _override_user(client, [role])
+    monkeypatch.setattr("app.routers.llm_configs.get_supabase", lambda: None)
+
+    response = client.get("/api/v1/llm/configs")
+
+    assert response.status_code == 200
+
+
+def test_llm_configuration_reads_project_known_fields_and_never_return_secret_rows(
+    client,
+    monkeypatch,
+):
+    _override_user(client, ["sync_admin"])
+    monkeypatch.setattr("app.routers.llm_configs.get_supabase", lambda: None)
+    llm_configs["sensitive"] = {
+        "id": "sensitive",
+        "user_id": None,
+        "config_name": "safe-view",
+        "provider_code": "alibaba",
+        "model_code": "qwen3.7-flash",
+        "api_key_encrypted": "SECRET-CIPHERTEXT",
+        "custom_endpoint": "https://internal.example.test/v1",
+        "custom_parameters": {"temperature": 0.2},
+        "is_active": True,
+        "created_at": "2026-08-13T00:00:00Z",
+        "updated_at": "2026-08-13T00:00:00Z",
+        "unexpected_database_column": "must-not-leak",
+    }
+
+    listed_items = client.get("/api/v1/llm/configs").json()["data"]["items"]
+    listed = next(
+        item for item in listed_items if item.get("config_name") == "safe-view"
+    )
+    detail = client.get("/api/v1/llm/configs/safe-view").json()["data"]
+
+    assert listed["api_key_configured"] is True
+    assert detail["api_key_configured"] is True
+    for item in (listed, detail):
+        assert "api_key_encrypted" not in item
+        assert "unexpected_database_column" not in item
+
+
 def test_doctor_cannot_reload_runtime_llm_config(client, monkeypatch):
     _override_user(client, ["doctor"])
 

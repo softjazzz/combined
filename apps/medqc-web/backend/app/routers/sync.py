@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal, Optional
 
@@ -93,9 +92,12 @@ def _mask_pg_config(raw: dict) -> dict:
     data["remote_password_display"] = "***" if password else ""
     data["remote_password_ref"] = str(data.get("remote_password_ref") or "")
     data["remote_schema"] = str(data.get("remote_schema") or "public")
-    data["default_institute_id"] = str(
-        data.get("default_institute_id") or "LOCAL-HOSPITAL"
+    raw_institute_id = str(data.get("default_institute_id") or "").strip()
+    institute_configured = bool(raw_institute_id) and (
+        raw_institute_id.upper() != "LOCAL-HOSPITAL"
     )
+    data["default_institute_id"] = raw_institute_id if institute_configured else ""
+    data["default_institute_configured"] = institute_configured
     data["sync_mode"] = str(data.get("sync_mode") or "table")
     return data
 
@@ -447,6 +449,10 @@ async def update_pg_config(
             remote_password = None
 
         merged = {**current, **incoming}
+        institute_id = str(merged.get("default_institute_id") or "").strip()
+        if not institute_id or institute_id.upper() == "LOCAL-HOSPITAL":
+            raise ValueError("请填写本院长期稳定的机构标识，不能使用系统占位值")
+        merged["default_institute_id"] = institute_id
         save_db_config(merged, runtime_password=remote_password)
         conn_result = test_remote_connection()
         audit_event(

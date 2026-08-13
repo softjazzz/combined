@@ -143,7 +143,7 @@ def test_case_set_sync_does_not_refresh_bundles_after_hard_detail_failure():
     assert refresh_calls == []
 
 
-def test_case_set_sync_refreshes_after_controlled_optional_table_missing():
+def test_case_set_sync_does_not_refresh_after_controlled_detail_table_missing():
     case_ref = CaseRef("HOSPITAL-A", "PATIENT-A", "VISIT-1")
     refresh_calls: list[dict[str, Any]] = []
     service = CaseSetSyncService(
@@ -174,7 +174,8 @@ def test_case_set_sync_refreshes_after_controlled_optional_table_missing():
     )
     assert optional_result["sync_status"] == "source_table_unavailable"
     assert optional_result["error_category"] == "source_config_missing"
-    assert len(refresh_calls) == 1
+    assert refresh_calls == []
+    assert result.bundle_refresh == {}
 
 
 @pytest.mark.parametrize(

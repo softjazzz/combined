@@ -199,6 +199,46 @@ class TestSyncRouter:
         assert data["config"]["remote_password_set"] is True
         assert any(call.get("action") == "sync.config.pg.update" for call in audit_calls)
 
+    def test_pg_config_exposes_placeholder_as_unconfigured(self, client, monkeypatch):
+        _override_user(client, ["sync_admin"])
+        monkeypatch.setattr(
+            "app.services.etl_sync.load_db_config",
+            lambda: {
+                "remote_schema": "public",
+                "default_institute_id": "LOCAL-HOSPITAL",
+            },
+        )
+
+        response = client.get("/api/v1/sync/config/pg")
+
+        assert response.status_code == 200
+        data = _assert_success_shell(response.json())
+        assert data["default_institute_id"] == ""
+        assert data["default_institute_configured"] is False
+
+    def test_update_pg_config_rejects_placeholder_institute(self, client, monkeypatch):
+        _override_user(client, ["sync_admin"])
+        save_calls: list[dict] = []
+        monkeypatch.setattr(
+            "app.services.etl_sync.load_db_config",
+            lambda: {
+                "remote_schema": "public",
+                "default_institute_id": "LOCAL-HOSPITAL",
+            },
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.save_db_config",
+            lambda cfg, runtime_password=None: save_calls.append(dict(cfg)),
+        )
+
+        response = client.put(
+            "/api/v1/sync/config/pg",
+            json={"default_institute_id": "LOCAL-HOSPITAL"},
+        )
+
+        assert response.status_code == 422
+        assert save_calls == []
+
     def test_sync_policy_get_and_update(self, client, monkeypatch):
         _override_user(client, ["admin"])
         monkeypatch.setattr(

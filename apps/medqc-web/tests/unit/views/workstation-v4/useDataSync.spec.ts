@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useDataSync } from '@/views/workstation-v4/composables/useDataSync'
 
 let mockUserRoles: string[] = []
-const { mockGetSyncPolicy, mockPreflight } = vi.hoisted(() => ({
+const { mockGetSyncPolicy, mockPreflight, mockUpdatePgConfig } = vi.hoisted(() => ({
   mockGetSyncPolicy: vi.fn(),
   mockPreflight: vi.fn(),
+  mockUpdatePgConfig: vi.fn(),
 }))
 
 vi.mock('@/api/sync', async (importOriginal) => {
@@ -16,6 +17,7 @@ vi.mock('@/api/sync', async (importOriginal) => {
       ...actual.syncApi,
       getSyncPolicy: mockGetSyncPolicy,
       preflight: mockPreflight,
+      updatePgConfig: mockUpdatePgConfig,
     },
   }
 })
@@ -33,6 +35,7 @@ describe('useDataSync 系统配置权限', () => {
     mockUserRoles = []
     mockGetSyncPolicy.mockReset()
     mockPreflight.mockReset()
+    mockUpdatePgConfig.mockReset()
     useDataSync().resetState()
   })
 
@@ -94,5 +97,32 @@ describe('useDataSync 系统配置权限', () => {
     expect(state.policyForm.scope).toBe('running')
     expect(state.policyForm.start_date).toBe('')
     expect(state.policyForm.end_date).toBe('2026-07-31')
+  })
+
+  it('保存源库配置时持久化本院稳定机构标识', async () => {
+    mockUserRoles = ['sync_admin']
+    mockUpdatePgConfig.mockImplementation(async (payload) => ({
+      config: payload,
+      connection: { connected: true },
+    }))
+    const { state, savePgConnection } = useDataSync()
+    state.pgConnectionForm.default_institute_id = ' HOSPITAL-A '
+
+    await savePgConnection()
+
+    expect(mockUpdatePgConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ default_institute_id: 'HOSPITAL-A' }),
+    )
+    expect(state.pgConnectionForm.default_institute_id).toBe('HOSPITAL-A')
+  })
+
+  it('系统占位机构号不能保存为正式同步配置', async () => {
+    mockUserRoles = ['sync_admin']
+    const { state, savePgConnection } = useDataSync()
+    state.pgConnectionForm.default_institute_id = 'LOCAL-HOSPITAL'
+
+    await expect(savePgConnection()).rejects.toThrow('稳定的机构标识')
+
+    expect(mockUpdatePgConfig).not.toHaveBeenCalled()
   })
 })

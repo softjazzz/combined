@@ -196,6 +196,36 @@ def _normalize_config_row(row: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+def _project_config_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """只返回配置工作台需要的字段，密钥及未知数据库列永不出接口。"""
+    normalized = _normalize_config_row(dict(row))
+    allowed_fields = (
+        "id",
+        "user_id",
+        "config_name",
+        "provider_id",
+        "model_id",
+        "provider_code",
+        "model_code",
+        "provider",
+        "model",
+        "custom_endpoint",
+        "custom_parameters",
+        "is_active",
+        "created_at",
+        "updated_at",
+    )
+    projected = {
+        field: normalized.get(field)
+        for field in allowed_fields
+        if field in normalized
+    }
+    projected["api_key_configured"] = bool(
+        normalized.get("api_key_encrypted") or normalized.get("api_key")
+    )
+    return projected
+
+
 async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
     supabase = get_supabase()
     provider_code, model_code = _extract_provider_and_model_codes(payload)
@@ -303,13 +333,19 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
 
 
 @router.get("/configs")
-async def list_configs(request: Request, user_id: Optional[str] = Query(default=None)):
+async def list_configs(
+    request: Request,
+    user_id: Optional[str] = Query(default=None),
+    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+):
+    del system_config_user
     supabase = get_supabase()
 
     def _fallback() -> Dict[str, Any]:
         items: List[Dict[str, Any]] = list(llm_configs.values())
         if user_id is not None:
             items = [c for c in items if c.get("user_id") == user_id]
+        items = [_project_config_row(item) for item in items]
         return success_response(
             data={"items": items, "total": len(items)},
             trace_id=get_trace_id(request)
@@ -327,7 +363,7 @@ async def list_configs(request: Request, user_id: Optional[str] = Query(default=
         resp = await async_execute(q)
         data = []
         for item in (resp.data or []):
-            data.append(_normalize_config_row(dict(item)))
+            data.append(_project_config_row(dict(item)))
         return success_response(
             data={"items": data, "total": len(data)},
             trace_id=get_trace_id(request)
@@ -338,13 +374,22 @@ async def list_configs(request: Request, user_id: Optional[str] = Query(default=
 
 
 @router.get("/configs/{config_name}")
-async def get_config_by_name(request: Request, config_name: str, user_id: Optional[str] = Query(default=None)):
+async def get_config_by_name(
+    request: Request,
+    config_name: str,
+    user_id: Optional[str] = Query(default=None),
+    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+):
+    del system_config_user
     supabase = get_supabase()
 
     def _fallback() -> Dict[str, Any]:
         for cfg in llm_configs.values():
             if cfg.get("config_name") == config_name and (user_id is None or cfg.get("user_id") == user_id):
-                return success_response(data=cfg, trace_id=get_trace_id(request))
+                return success_response(
+                    data=_project_config_row(cfg),
+                    trace_id=get_trace_id(request),
+                )
         return success_response(data=None, trace_id=get_trace_id(request))
 
     if supabase is None:
@@ -358,7 +403,7 @@ async def get_config_by_name(request: Request, config_name: str, user_id: Option
             q = q.is_("user_id", None)  # type: ignore[attr-defined]
         resp = await async_execute(q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1))
         if resp.data:
-            row = _normalize_config_row(dict(resp.data[0]))
+            row = _project_config_row(dict(resp.data[0]))
             return success_response(data=row, trace_id=get_trace_id(request))
         return success_response(data=None, trace_id=get_trace_id(request))
     except Exception:
