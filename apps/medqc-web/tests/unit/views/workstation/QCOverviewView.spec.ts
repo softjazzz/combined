@@ -134,7 +134,10 @@ describe('QCOverviewView', () => {
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('18')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
     expect(wrapper.get('[data-testid="priority-queue"]').text()).toContain('测试患者')
-    expect(wrapper.get('[data-testid="priority-queue"]').text()).toContain('确定问题 2 项')
+    const priorityMetric = wrapper.get('.qc-home-priority-row__metric')
+    expect(priorityMetric.get('span').text()).toBe('确定问题')
+    expect(priorityMetric.get('strong').text()).toBe('2')
+    expect(priorityMetric.get('small').text()).toBe('项')
     expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('资料待核实')
     expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('待判断')
     expect(wrapper.text()).not.toContain('较昨日')
@@ -146,8 +149,10 @@ describe('QCOverviewView', () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
-    const action = wrapper.get('.qc-home-priority-row .qc-home-text-action')
-    expect(action.text()).toBe('查看质控结果')
+    const action = wrapper.get('button.qc-home-priority-row')
+    expect(action.attributes('aria-label')).toBe('查看测试患者的质控结果')
+    expect(action.text()).toContain('01')
+    expect(action.text()).not.toContain('查看质控结果')
 
     await action.trigger('click')
 
@@ -188,10 +193,24 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
 
     const health = wrapper.get('[data-testid="data-health"]').text()
-    expect(health).toContain('技术异常 2 份')
-    expect(health).toContain('资料同步状态待核实')
+    expect(health).toContain('技术异常2 份')
+    expect(health).toContain('资料同步待核实')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('2')
+  })
+
+  it('将数据运行状态组织为可扫描的状态单元', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const healthItems = wrapper.findAll('[data-testid="health-status-item"]')
+    expect(healthItems).toHaveLength(4)
+    expect(healthItems[0].text()).toContain('资料同步')
+    expect(healthItems[0].text()).toContain('待核实')
+    expect(healthItems[1].text()).toContain('质控任务')
+    expect(healthItems[1].text()).toContain('待接入')
+    expect(healthItems[3].text()).toContain('最近成功质控')
+    expect(healthItems[3].text()).toContain('2026-08-08 09:20')
   })
 
   it('演示账号不展示内部技术异常，但保留客户需要的数据状态', async () => {
@@ -200,8 +219,8 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
 
     const health = wrapper.get('[data-testid="data-health"]').text()
-    expect(health).toContain('资料同步状态')
-    expect(health).toContain('运行中任务')
+    expect(health).toContain('资料同步')
+    expect(health).toContain('质控任务')
     expect(health).toContain('最近成功质控')
     expect(health).not.toContain('技术异常')
 

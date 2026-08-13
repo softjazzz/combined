@@ -91,45 +91,51 @@
               <header class="qc-home-panel__head">
                 <div>
                   <h2>优先复核</h2>
-                  <p>按确定问题数量排序，优先复核需要处理的病历。</p>
+                  <p>按确定问题数排序，点击病历直接查看质控结果。</p>
                 </div>
-                <a-button
-                  type="link"
+                <button
+                  type="button"
+                  class="qc-home-panel-link"
                   @click="openRecordPool"
                 >
-                  查看病历池
-                </a-button>
+                  全部病历
+                  <ArrowRight :size="15" />
+                </button>
               </header>
 
               <div
                 v-if="clinicalQc.priority_items.length"
                 class="qc-home-priority-list"
               >
-                <article
-                  v-for="item in clinicalQc.priority_items"
+                <button
+                  v-for="(item, index) in clinicalQc.priority_items"
                   :key="item.record_key"
+                  type="button"
                   class="qc-home-priority-row"
+                  :aria-label="`查看${item.patient_name || '该病历'}的质控结果`"
+                  @click="openQcResult(item)"
                 >
+                  <span class="qc-home-priority-row__rank">{{
+                    String(index + 1).padStart(2, '0')
+                  }}</span>
                   <div class="qc-home-priority-row__identity">
                     <strong>{{ item.patient_name || '未返回患者姓名' }}</strong>
                     <span>{{ item.department || '未分科室' }} · 住院号 {{ item.visit_id }}</span>
                   </div>
-                  <div class="qc-home-priority-row__counts">
-                    <span
-                      v-if="countOf(item, 'non_compliant')"
-                      class="is-danger"
-                    >
-                      确定问题 {{ countOf(item, 'non_compliant') }} 项
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    class="qc-home-text-action"
-                    @click="openQcResult(item)"
+                  <div
+                    v-if="countOf(item, 'non_compliant')"
+                    class="qc-home-priority-row__metric"
                   >
-                    查看质控结果
-                  </button>
-                </article>
+                    <span>确定问题</span>
+                    <strong>{{ countOf(item, 'non_compliant') }}</strong>
+                    <small>项</small>
+                  </div>
+                  <ChevronRight
+                    class="qc-home-priority-row__arrow"
+                    :size="18"
+                    aria-hidden="true"
+                  />
+                </button>
               </div>
               <a-empty
                 v-else
@@ -146,27 +152,56 @@
                 <header class="qc-home-panel__head">
                   <div>
                     <h2>数据运行状态</h2>
-                    <p>系统数据状态不等同于医疗质控结论。</p>
+                    <p>用于判断数据与任务是否可正常使用，不代表医疗结论。</p>
                   </div>
                 </header>
                 <dl class="qc-home-health-list">
-                  <div>
-                    <dt>资料同步状态</dt>
-                    <dd>{{ sourceStateText }}</dd>
+                  <div data-testid="health-status-item">
+                    <span class="qc-home-health-list__icon is-brand">
+                      <Database :size="18" />
+                    </span>
+                    <div>
+                      <dt>资料同步</dt>
+                      <dd>{{ sourceStateText }}</dd>
+                    </div>
+                    <small>当前尚无权威同步状态</small>
                   </div>
-                  <div>
-                    <dt>运行中任务</dt>
-                    <dd>{{ runningTaskText }}</dd>
+                  <div data-testid="health-status-item">
+                    <span class="qc-home-health-list__icon is-brand">
+                      <Activity :size="18" />
+                    </span>
+                    <div>
+                      <dt>质控任务</dt>
+                      <dd>{{ runningTaskText }}</dd>
+                    </div>
+                    <small>运行状态尚未接入首页</small>
                   </div>
-                  <div v-if="!isDemoPresentation">
-                    <dt>技术异常</dt>
-                    <dd :class="{ 'is-danger': clinicalQc.data_health.technical_error_total > 0 }">
-                      技术异常 {{ clinicalQc.data_health.technical_error_total }} 份
-                    </dd>
+                  <div
+                    v-if="!isDemoPresentation"
+                    data-testid="health-status-item"
+                  >
+                    <span class="qc-home-health-list__icon is-danger">
+                      <TriangleAlert :size="18" />
+                    </span>
+                    <div>
+                      <dt>技术异常</dt>
+                      <dd
+                        :class="{ 'is-danger': clinicalQc.data_health.technical_error_total > 0 }"
+                      >
+                        {{ clinicalQc.data_health.technical_error_total }} 份
+                      </dd>
+                    </div>
+                    <small>仅反映结果交付状态</small>
                   </div>
-                  <div>
-                    <dt>最近成功质控</dt>
-                    <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
+                  <div data-testid="health-status-item">
+                    <span class="qc-home-health-list__icon is-success">
+                      <CircleCheckBig :size="18" />
+                    </span>
+                    <div>
+                      <dt>最近成功质控</dt>
+                      <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
+                    </div>
+                    <small>最近一次可用结果生成时间</small>
                   </div>
                 </dl>
               </section>
@@ -376,6 +411,14 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs, { type Dayjs } from 'dayjs'
+import {
+  Activity,
+  ArrowRight,
+  ChevronRight,
+  CircleCheckBig,
+  Database,
+  TriangleAlert,
+} from 'lucide-vue-next'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import type {
@@ -556,14 +599,10 @@ const conclusionRingBackground = computed(() => {
 })
 
 const sourceStateText = computed(() =>
-  clinicalQc.value?.data_health.source_sync_status === 'unknown'
-    ? '资料同步状态待核实'
-    : '资料同步状态待核实',
+  clinicalQc.value?.data_health.source_sync_status === 'unknown' ? '待核实' : '待核实',
 )
 const runningTaskText = computed(() =>
-  clinicalQc.value?.data_health.running_task_state === 'unknown'
-    ? '运行状态待接入'
-    : '运行状态待接入',
+  clinicalQc.value?.data_health.running_task_state === 'unknown' ? '待接入' : '待接入',
 )
 const departmentChartItems = computed<ClinicalQcHomeDepartmentItem[]>(() => {
   const items = clinicalQc.value?.department_distribution || []
@@ -809,8 +848,9 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.85fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(330px, 0.85fr);
   gap: 18px;
+  align-items: start;
 }
 .qc-home-analysis {
   display: grid;
@@ -836,6 +876,28 @@ watch([departmentFilter, keyword], () => {
   padding-bottom: 15px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
+.qc-home-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+.qc-home-panel-link:hover {
+  color: #004f9e;
+}
+.qc-home-panel-link:focus-visible,
+.qc-home-priority-row:focus-visible {
+  outline: 2px solid rgba(0, 102, 204, 0.42);
+  outline-offset: 2px;
+}
 .qc-home-panel h2 {
   font-size: 17px;
   line-height: 22px;
@@ -845,14 +907,38 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-priority-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto 22px;
   align-items: center;
-  gap: 18px;
-  padding: 16px 0;
+  gap: 14px;
+  width: 100%;
+  min-height: 70px;
+  padding: 12px 4px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
 }
 .qc-home-priority-row:last-child {
   border-bottom: 0;
+}
+.qc-home-priority-row:hover {
+  background: rgba(0, 102, 204, 0.035);
+}
+.qc-home-priority-row__rank {
+  color: rgba(29, 29, 31, 0.32);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-align: center;
 }
 .qc-home-priority-row__identity {
   min-width: 0;
@@ -865,42 +951,44 @@ watch([departmentFilter, keyword], () => {
   white-space: nowrap;
 }
 .qc-home-priority-row__identity strong {
-  font-size: 14px;
+  color: #1d1d1f;
+  font-size: 15px;
+  line-height: 22px;
 }
 .qc-home-priority-row__identity span {
-  margin-top: 4px;
+  margin-top: 3px;
   color: rgba(29, 29, 31, 0.55);
   font-size: 12px;
+  line-height: 18px;
 }
-.qc-home-priority-row__counts {
-  display: flex;
-  flex-wrap: wrap;
+.qc-home-priority-row__metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 112px;
   justify-content: flex-end;
-  gap: 6px;
-}
-.qc-home-priority-row__counts span {
-  padding: 3px 7px;
-  border-radius: 7px;
-  background: rgba(0, 0, 0, 0.04);
-  color: rgba(29, 29, 31, 0.68);
-  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.12);
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.055);
+  color: #b42318;
   white-space: nowrap;
 }
-.qc-home-priority-row__counts .is-danger {
-  background: rgba(239, 68, 68, 0.09);
-  color: #c2410c;
+.qc-home-priority-row__metric span,
+.qc-home-priority-row__metric small {
+  font-size: 12px;
 }
-.qc-home-priority-row__counts .is-warning {
-  background: rgba(245, 158, 11, 0.11);
-  color: #a16207;
+.qc-home-priority-row__metric strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
 }
-.qc-home-text-action {
-  border: 0;
-  background: none;
-  color: #0066cc;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
+.qc-home-priority-row__arrow {
+  color: rgba(0, 102, 204, 0.58);
+  transition: transform 160ms ease;
+}
+.qc-home-priority-row:hover .qc-home-priority-row__arrow {
+  transform: translateX(2px);
 }
 .qc-home-health-list {
   display: grid;
@@ -908,26 +996,56 @@ watch([departmentFilter, keyword], () => {
   margin: 0;
 }
 .qc-home-health-list > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 0;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 2px 11px;
+  align-items: center;
+  padding: 13px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
 }
 .qc-home-health-list > div:last-child {
   border-bottom: 0;
 }
 .qc-home-health-list dt,
-.qc-home-health-list dd {
+.qc-home-health-list dd,
+.qc-home-health-list small {
   margin: 0;
-  font-size: 13px;
 }
 .qc-home-health-list dt {
-  color: rgba(29, 29, 31, 0.6);
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 12px;
+  line-height: 18px;
 }
 .qc-home-health-list dd {
-  text-align: right;
-  font-weight: 600;
+  margin-top: 1px;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+.qc-home-health-list small {
+  grid-column: 2;
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 11px;
+  line-height: 16px;
+}
+.qc-home-health-list__icon {
+  display: grid;
+  grid-row: 1 / span 2;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(0, 102, 204, 0.075);
+  color: #0066cc;
+}
+.qc-home-health-list__icon.is-danger {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+}
+.qc-home-health-list__icon.is-success {
+  background: rgba(16, 185, 129, 0.085);
+  color: #047857;
 }
 .qc-home-health-list .is-danger {
   color: #dc2626;
@@ -1226,8 +1344,8 @@ watch([departmentFilter, keyword], () => {
     border-bottom: 0;
   }
   .qc-home-priority-row {
-    grid-template-columns: 1fr;
-    gap: 9px;
+    grid-template-columns: 28px minmax(0, 1fr) 18px;
+    gap: 10px;
   }
   .qc-home-coverage__legend,
   .qc-home-conclusion__legend {
@@ -1237,11 +1355,14 @@ watch([departmentFilter, keyword], () => {
     grid-template-columns: 1fr;
     justify-items: center;
   }
-  .qc-home-priority-row__counts {
-    justify-content: flex-start;
-  }
-  .qc-home-text-action {
+  .qc-home-priority-row__metric {
+    grid-column: 2;
     justify-self: start;
+    min-width: 0;
+  }
+  .qc-home-priority-row__arrow {
+    grid-column: 3;
+    grid-row: 1 / span 2;
   }
   .qc-home-scope__time {
     width: 100%;
