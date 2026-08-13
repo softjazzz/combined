@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -168,6 +168,73 @@ def test_combined_scope_returns_active_and_period_discharge_case_refs():
     assert result.selected[1]["source_table"] == "discharge_record"
     assert result.sources_used == ("inpat_registration", "discharge_record")
     assert result.source_status == "ready"
+
+
+def test_combined_scope_normalizes_offset_aware_source_times_to_hospital_time():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {
+                "admission_datetime",
+                "discharge_datetime",
+                "current_dept_name",
+            },
+            "discharge_record": identity_columns
+            | {"discharge_datetime", "discharge_dept_name"},
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "ACTIVE-AWARE",
+                    "admission_time": datetime(
+                        2026,
+                        5,
+                        2,
+                        8,
+                        tzinfo=timezone(timedelta(hours=8)),
+                    ),
+                    "discharge_time": None,
+                    "current_department": "外一科",
+                }
+            ],
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P2",
+                    "visit_id": "DISCHARGED-AWARE",
+                    "admission_time": None,
+                    "discharge_time": "2026-05-05T10:30:00+08:00",
+                    "discharge_department": "中医科",
+                }
+            ],
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active_and_discharged",
+        as_of_date=date(2026, 5, 9),
+        admission_start_date=date(2026, 5, 1),
+        discharge_start_date=date(2026, 5, 1),
+        discharge_end_date=date(2026, 5, 9),
+        departments=("外一科", "中医科"),
+    )
+
+    assert result.case_refs == (
+        CaseRef("H1", "P1", "ACTIVE-AWARE"),
+        CaseRef("H1", "P2", "DISCHARGED-AWARE"),
+    )
+    assert [row["authoritative_time"].isoformat() for row in result.selected] == [
+        "2026-05-02T08:00:00",
+        "2026-05-05T10:30:00",
+    ]
 
 
 def test_active_scope_filters_by_admission_start_date():

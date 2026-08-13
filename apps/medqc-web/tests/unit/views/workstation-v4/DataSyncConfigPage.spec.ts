@@ -3,6 +3,11 @@ import { computed, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataSyncConfigPage from '@/views/workstation-v4/DataSyncConfigPage.vue'
 
+const { mockRunPreflight, mockMessageWarning } = vi.hoisted(() => ({
+  mockRunPreflight: vi.fn(),
+  mockMessageWarning: vi.fn(),
+}))
+
 const mockState = reactive({
   pgSyncState: {} as Record<string, any>,
   preflightResult: null as Record<string, any> | null,
@@ -50,7 +55,7 @@ vi.mock('ant-design-vue', () => ({
   message: {
     success: vi.fn(),
     error: vi.fn(),
-    warning: vi.fn(),
+    warning: mockMessageWarning,
     info: vi.fn(),
   },
   Modal: {
@@ -66,7 +71,7 @@ vi.mock('@/views/workstation-v4/composables/useDataSync', () => ({
     initialize: vi.fn().mockResolvedValue(undefined),
     resetState: vi.fn(),
     testAllConnections: vi.fn(),
-    runPreflight: vi.fn(),
+    runPreflight: mockRunPreflight,
     executeSync: vi.fn(),
     savePolicy: vi.fn(),
   }),
@@ -115,6 +120,8 @@ function mountPage() {
 
 describe('DataSyncConfigPage visit progress', () => {
   beforeEach(() => {
+    mockRunPreflight.mockReset()
+    mockMessageWarning.mockReset()
     mockUserRoles = ['admin', 'qc_manager']
     mockAuthStore.user.is_demo_account = false
     mockRoute.query = {}
@@ -363,5 +370,24 @@ describe('DataSyncConfigPage visit progress', () => {
 
     expect(wrapper.text()).toContain('没有找到符合条件的已出院病历，请检查科室名称或出院日期范围。')
     expect(wrapper.text()).not.toContain('预检通过')
+  })
+
+  it('范围解析失败时只提示阻断原因，不误报为零候选病历', async () => {
+    mockRunPreflight.mockResolvedValue({
+      estimated_impact: 0,
+      executable: false,
+      blockers: ['候选病历范围解析失败，请检查日期、科室和源库住院登记配置'],
+      warnings: [],
+    })
+
+    const wrapper = mountPage()
+    await wrapper.get('[data-testid="check-record-scope-action"]').trigger('click')
+
+    expect(mockMessageWarning).toHaveBeenCalledWith(
+      '检查未通过：候选病历范围解析失败，请检查日期、科室和源库住院登记配置',
+    )
+    expect(mockMessageWarning).not.toHaveBeenCalledWith(
+      '没有找到符合条件的已出院病历，请检查科室名称或出院日期范围。',
+    )
   })
 })

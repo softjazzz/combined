@@ -1017,7 +1017,14 @@ async function handleRunPreflight() {
   try {
     const result = await runPreflight('pg')
     const estimated = Number(result.estimated_impact || 0)
-    if (estimated === 0) {
+    const blockers = result.blockers || []
+    if (blockers.length > 0) {
+      message.warning(
+        isDemoSyncUser.value
+          ? `检查未通过：${blockers.join('；')}`
+          : `预检未通过：${blockers.join('；')}`,
+      )
+    } else if (estimated === 0) {
       message.warning(noCandidateMessage.value)
     } else if (result.executable) {
       message.success(
@@ -1063,12 +1070,17 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
   }
   if (!preflight.executable) {
     const estimated = Number(preflight.estimated_impact || 0)
+    const blockers = preflight.blockers || []
     message.warning(
-      estimated === 0
-        ? noCandidateMessage.value
-        : isDemoSyncUser.value
-          ? `检查未通过：${preflight.blockers?.join('；') || '请先处理提示项'}`
-          : `预检未通过：${preflight.blockers?.join('；') || '存在阻断项'}`,
+      blockers.length > 0
+        ? isDemoSyncUser.value
+          ? `检查未通过：${blockers.join('；')}`
+          : `预检未通过：${blockers.join('；')}`
+        : estimated === 0
+          ? noCandidateMessage.value
+          : isDemoSyncUser.value
+            ? '检查未通过：请先处理提示项'
+            : '预检未通过：存在阻断项',
     )
     return
   }

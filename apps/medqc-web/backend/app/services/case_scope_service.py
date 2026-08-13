@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import psycopg2
@@ -25,6 +25,7 @@ _DISCHARGE_TIME_COLUMNS = (
     "discharge_time",
     "discharge_date",
 )
+_HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
 
 
 @dataclass(frozen=True)
@@ -386,7 +387,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
-        return value
+        return _to_hospital_wall_time(value)
     if isinstance(value, date):
         return datetime.combine(value, datetime.min.time())
     text = _text(value)
@@ -394,12 +395,20 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
     normalized = text.replace("/", "-").replace("T", " ")
     try:
-        return datetime.fromisoformat(normalized)
+        return _to_hospital_wall_time(datetime.fromisoformat(normalized))
     except ValueError:
         try:
             return datetime.combine(date.fromisoformat(normalized[:10]), datetime.min.time())
         except ValueError:
             return None
+
+
+def _to_hospital_wall_time(value: datetime) -> datetime:
+    """统一源库 timestamptz 与无时区日期边界，按医院本地时间进行范围判断。"""
+
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=None)
+    return value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
 
 
 def _select_candidates(
