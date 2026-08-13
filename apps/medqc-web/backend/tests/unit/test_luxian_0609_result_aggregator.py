@@ -19,11 +19,42 @@ from app.services.luxian_0609.decision_reducer import (
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
     safe_luxian_0609_customer_display_facts,
 )
 
 CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
+
+
+def test_legacy_customer_display_guard_must_not_rejudge_executor_decision() -> None:
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[
+            {
+                "rule_id": "LX0609-020",
+                "name": "会诊记录：有会诊记录单无请会诊执行记录",
+                "mapped_rule_ids": ["CL-250"],
+            }
+        ],
+        execution_results=[
+            {
+                "rule_id": "CL-250",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "reason_code": "consultation_execution_missing",
+                "findings": "会诊记录已包含执行情况，未违反规则。",
+                "evidence": "执行证据：病程记录已写明按会诊意见调整治疗。",
+                "suggestion": "无需整改。",
+            }
+        ],
+        gate_decisions={},
+    )[0]
+
+    assert result["status"] == "non_compliant"
+    assert result["result_status"] == "non_compliant"
+    assert result["is_compliant"] is False
+    assert result["reason_code"] == "consultation_execution_missing"
+    assert "customer_display_guard" not in result.get("metadata", {})
 
 
 def test_046_preserves_controlled_per_record_missing_counts() -> None:
@@ -704,6 +735,7 @@ def test_surgery_document_missing_source_coverage_cannot_emit_defect(
         ],
         format_evidence=False,
         audit_context={"programmatic_timeline": {"source_table_coverage": {}}},
+        legacy_customer_display_rejudgment=True,
     )[0]
     assert result["status"] == "data_gap"
     assert result["metadata"]["customer_display_guard"] == "surgery_document_target_source_unproven"
@@ -727,6 +759,7 @@ def test_surgery_document_missing_source_coverage_cannot_emit_defect(
                 "source_table_coverage": {target_source: {"row_count": 0, "hit": False}}
             }
         },
+        legacy_customer_display_rejudgment=True,
     )[0]
     assert covered["status"] == "non_compliant"
     assert covered["is_compliant"] is False
@@ -759,6 +792,7 @@ def test_surgery_document_missing_source_coverage_cannot_emit_defect(
                 "source_table_coverage": {target_source: {"row_count": 0, "hit": False}}
             },
         },
+        legacy_customer_display_rejudgment=True,
     )[0]
     assert source_unproven["status"] == "data_gap"
 

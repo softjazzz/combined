@@ -6,7 +6,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.routers.qc_sichuan import _build_record_status_counts
-from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results, summarize_luxian_0609_results
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results as _aggregate_luxian_0609_results,
+    summarize_luxian_0609_results,
+)
 from app.services.luxian_0609_evidence_formatter import format_luxian_0609_evidence
 from app.services.luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
 from app.services.luxian_0609_result_schema import apply_luxian_0609_result_schema
@@ -54,6 +57,13 @@ from app.services.luxian_0609.native_package import Luxian0609PackagePlan
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+
+
+def aggregate_luxian_0609_results(**kwargs):
+    """冻结旧聚合展示测试；生产入口始终禁用二次业务判定。"""
+
+    kwargs.setdefault("legacy_customer_display_rejudgment", True)
+    return _aggregate_luxian_0609_results(**kwargs)
 
 
 @pytest.mark.asyncio
@@ -4307,7 +4317,7 @@ def test_trigger_gate_should_mark_structured_gap_and_data_gap_not_compliant():
         gate_decisions=decisions,
     )
     assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["is_compliant"] is False
+    assert aggregated[0]["is_compliant"] is None
     assert "缺失字段" in aggregated[0]["evidence"]
     assert aggregated[0]["metadata"]["mapped_rule_ids"] == ["SC-133"]
 
@@ -4390,7 +4400,7 @@ def test_aggregator_should_not_show_lx0609_003_positive_time_result_as_defect():
     )
 
     assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["is_compliant"] is False
+    assert aggregated[0]["is_compliant"] is None
     assert "未超过术后24小时" in aggregated[0]["findings"]
     assert "缺少麻醉记录" in aggregated[0]["findings"]
     assert aggregated[0]["metadata"]["customer_display_guard"] == "lx0609_003_positive_time_result"
@@ -5704,7 +5714,7 @@ def test_aggregator_should_prioritize_data_gap_over_compliant():
     )
 
     assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["is_compliant"] is False
+    assert aggregated[0]["is_compliant"] is None
     assert aggregated[0]["metadata"]["selected_execution_rule_id"] == "LXE-52"
     assert aggregated[0]["metadata"]["aggregation_source"] == "mapped_data_gap"
 

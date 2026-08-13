@@ -1151,7 +1151,7 @@ def _audit_context_text(audit_context: dict[str, Any] | None) -> str:
     return "\n".join(parts)
 
 
-def _guard_customer_display_result(
+def _legacy_guard_customer_display_result(
     *,
     wrapper_id: str,
     selected: dict[str, Any],
@@ -1688,6 +1688,24 @@ def _guard_customer_display_result(
         return guarded
 
     return selected
+
+
+def _guard_customer_display_result(
+    *,
+    wrapper_id: str,
+    selected: dict[str, Any],
+    audit_context: dict[str, Any] | None = None,
+    legacy_business_rejudgment: bool = False,
+) -> dict[str, Any]:
+    """生产链只装配执行器结论；旧重判仅供冻结历史测试显式调用。"""
+
+    if not legacy_business_rejudgment:
+        return selected
+    return _legacy_guard_customer_display_result(
+        wrapper_id=wrapper_id,
+        selected=selected,
+        audit_context=audit_context,
+    )
 
 
 def _select_best_result(
@@ -5160,6 +5178,7 @@ def aggregate_luxian_0609_results(
     reduced_decisions: tuple[ReducedRuleDecision, ...] = (),
     customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = (),
     decision_trace_sink: DecisionTraceSink | None = None,
+    legacy_customer_display_rejudgment: bool = False,
 ) -> list[dict[str, Any]]:
     # 延迟加载避免聚合器导入时触发 luxian_0609 包的公开 re-export，
     # 从而与 customer_rule_package 形成循环依赖。
@@ -5352,6 +5371,7 @@ def aggregate_luxian_0609_results(
                 wrapper_id=wrapper_id,
                 selected=selected,
                 audit_context=audit_context,
+                legacy_business_rejudgment=legacy_customer_display_rejudgment,
             )
             source = "customer_programmatic"
             result = _copy_customer_fields(
@@ -5365,6 +5385,7 @@ def aggregate_luxian_0609_results(
                 wrapper_id=wrapper_id,
                 selected=result,
                 audit_context=audit_context,
+                legacy_business_rejudgment=legacy_customer_display_rejudgment,
             )
             if format_evidence:
                 result = format_luxian_0609_evidence(
@@ -5429,6 +5450,7 @@ def aggregate_luxian_0609_results(
                     wrapper_id=wrapper_id,
                     selected=selected,
                     audit_context=audit_context,
+                    legacy_business_rejudgment=legacy_customer_display_rejudgment,
                 )
             result = _copy_customer_fields(
                 wrapper=wrapper,
@@ -5441,6 +5463,7 @@ def aggregate_luxian_0609_results(
                 wrapper_id=wrapper_id,
                 selected=result,
                 audit_context=audit_context,
+                legacy_business_rejudgment=legacy_customer_display_rejudgment,
             )
 
         if format_evidence:
