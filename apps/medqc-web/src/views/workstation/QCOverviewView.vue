@@ -850,12 +850,13 @@ watch([departmentFilter, keyword], () => {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(330px, 0.85fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 .qc-home-analysis {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr);
   gap: 18px;
+  align-items: stretch;
 }
 .qc-home-department-panel {
   grid-column: 1;
@@ -866,7 +867,13 @@ watch([departmentFilter, keyword], () => {
 .qc-home-side-stack {
   display: grid;
   gap: 18px;
-  align-content: start;
+  height: 100%;
+  align-content: stretch;
+}
+.qc-home-panel--health {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto 1fr;
 }
 .qc-home-panel__head {
   display: flex;
