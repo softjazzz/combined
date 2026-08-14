@@ -236,6 +236,8 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
     instituteId: record.instituteId as string,
     patientId: record.patientId as string,
     patientName: record.name,
+    patientSex: record.sex,
+    patientAge: record.age,
     visitId: record.visitId,
     department: record.department,
     bedNumber: record.bedNo,
@@ -537,13 +539,19 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__workbench {
   overflow: hidden;
-  border-radius: 20px;
+  border-color: rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 14px 32px rgba(148, 163, 184, 0.12);
 }
 
 .qc-record-result-list-view__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
@@ -552,6 +560,7 @@ function closeResultDrawer() {
 .qc-record-result-list-view__toolbar-actions {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
@@ -564,6 +573,7 @@ function closeResultDrawer() {
   color: #0066cc;
   font-size: 13px;
   font-weight: 650;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -575,6 +585,7 @@ function closeResultDrawer() {
 .qc-record-result-list-view__filters {
   display: flex;
   flex: 1;
+  min-width: 0;
   gap: 10px;
 }
 

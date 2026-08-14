@@ -45,18 +45,41 @@
             @keydown.space.prevent="openResult(row.recordKey)"
           >
             <td>
-              <strong>{{ row.patientName || '患者信息待接入' }}</strong>
-              <span>{{ row.visitId || '住院号待接入' }}</span>
-              <span
-                v-if="row.sourceLabel"
-                class="qc-record-result-table__source-state"
-              >{{
-                row.sourceLabel
-              }}</span>
+              <div class="qc-record-result-table__patient-cell">
+                <img
+                  class="qc-record-result-table__avatar"
+                  :src="patientAvatarSrc(row)"
+                  :alt="`${row.patientName || '患者'}头像`"
+                >
+                <span class="qc-record-result-table__patient-meta">
+                  <span class="qc-record-result-table__patient-name">
+                    {{ row.patientName || '患者信息待接入' }}
+                  </span>
+                  <span class="qc-record-result-table__visit-line">
+                    <span class="qc-record-result-table__visit-label">住院号：</span>
+                    <span class="qc-record-result-table__visit-id">{{
+                      row.visitId || '待接入'
+                    }}</span>
+                  </span>
+                  <span
+                    v-if="row.sourceLabel"
+                    class="qc-record-result-table__source-state"
+                  >{{
+                    row.sourceLabel
+                  }}</span>
+                </span>
+              </div>
             </td>
             <td>
-              <strong>{{ row.department || '未分科室' }}</strong>
-              <span v-if="row.bedNumber">{{ row.bedNumber }}</span>
+              <span class="qc-record-result-table__department">
+                {{ row.department || '未分科室' }}
+              </span>
+              <span
+                v-if="row.bedNumber"
+                class="qc-record-result-table__bed-number"
+              >{{
+                row.bedNumber
+              }}</span>
             </td>
             <td>{{ displayTime(row) }}</td>
             <td>
@@ -99,6 +122,13 @@
 </template>
 
 <script setup lang="ts">
+import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
+import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
+import patientIconElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
+import patientIconGirl from '@/assets/avatar-icons/patient-icon-girl.png'
+import patientIconMan from '@/assets/avatar-icons/patient-icon-man.png'
+import patientIconWoman from '@/assets/avatar-icons/patient-icon-woman.png'
+
 export type QcRecordCarePhase = 'inpatient' | 'discharged'
 
 export interface QcRecordResultRow {
@@ -106,6 +136,8 @@ export interface QcRecordResultRow {
   instituteId: string
   patientId: string
   patientName?: string
+  patientSex?: string
+  patientAge?: number
   visitId?: string
   department?: string
   bedNumber?: string
@@ -158,6 +190,22 @@ function openResult(recordKey: string) {
   emit('open-result', recordKey)
 }
 
+function isFemale(sex?: string): boolean {
+  return /女|female|^f$/i.test(String(sex || '').trim())
+}
+
+function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAge'>): string {
+  const age = Number(row.patientAge || 0)
+  const female = isFemale(row.patientSex)
+  if (Number.isFinite(age) && age > 0 && age < 14) {
+    return female ? patientIconGirl : patientIconBoy
+  }
+  if (Number.isFinite(age) && age >= 55) {
+    return female ? patientIconElderWoman : patientIconElderMan
+  }
+  return female ? patientIconWoman : patientIconMan
+}
+
 function resultClass(status: QcRecordResultRow['resultStatus']): string {
   if (status === 'priority') return 'qc-record-result-table__result-tag--priority'
   if (status === 'data-gap') return 'qc-record-result-table__result-tag--data-gap'
@@ -190,20 +238,22 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 }
 
 .qc-record-result-table__table th {
-  height: 42px;
+  height: 36px;
   padding: 0 16px;
-  background: rgba(245, 245, 247, 0.82);
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+  background: rgba(248, 250, 252, 0.92);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-align: left;
   white-space: nowrap;
 }
 
 .qc-record-result-table__table td {
   max-width: 230px;
-  padding: 14px 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.9);
   line-height: 20px;
   vertical-align: middle;
   white-space: nowrap;
@@ -212,27 +262,80 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 .qc-record-result-table__row {
   cursor: pointer;
   outline: none;
-  transition: background 220ms ease;
+  transition: background-color 220ms ease;
 }
 
 .qc-record-result-table__row:hover,
 .qc-record-result-table__row:focus-visible {
-  background: rgba(0, 102, 204, 0.035);
+  background: rgba(248, 250, 252, 0.88);
 }
 
-.qc-record-result-table__table td strong,
-.qc-record-result-table__table td span:not(.qc-record-result-table__result-tag) {
+.qc-record-result-table__patient-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qc-record-result-table__avatar {
   display: block;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eaf2ff;
+  object-fit: cover;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.96),
+    0 2px 6px rgba(0, 102, 204, 0.08);
 }
 
-.qc-record-result-table__table td strong {
+.qc-record-result-table__patient-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.qc-record-result-table__patient-name {
   color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.qc-record-result-table__visit-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.qc-record-result-table__visit-label {
+  color: #94a3b8;
+  font-size: 12px;
   font-weight: 600;
 }
 
-.qc-record-result-table__table td span:not(.qc-record-result-table__result-tag) {
-  color: rgba(29, 29, 31, 0.52);
+.qc-record-result-table__visit-id,
+.qc-record-result-table__department,
+.qc-record-result-table__bed-number {
+  color: #5b6b84;
   font-size: 12px;
+}
+
+.qc-record-result-table__department,
+.qc-record-result-table__bed-number {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qc-record-result-table__department {
+  font-weight: 600;
+}
+
+.qc-record-result-table__bed-number {
+  color: #94a3b8;
 }
 
 .qc-record-result-table__summary {
@@ -283,8 +386,10 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 }
 
 .qc-record-result-table__source-state {
+  display: block;
   margin-top: 2px;
-  color: rgba(29, 29, 31, 0.45) !important;
+  color: #94a3b8;
+  font-size: 11px;
 }
 
 .qc-record-result-table__result-tag--unknown {
@@ -298,18 +403,28 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 }
 
 .qc-record-result-table__result-button {
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #0066cc;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #5b6b84;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 8px 16px rgba(191, 207, 228, 0.12);
   cursor: pointer;
   font: inherit;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
 }
 
 .qc-record-result-table__result-button:hover {
-  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  transform: translateX(1px);
 }
 
 .qc-record-result-table__empty-row td {

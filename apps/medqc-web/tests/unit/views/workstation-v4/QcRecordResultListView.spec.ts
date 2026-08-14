@@ -55,6 +55,8 @@ function response() {
           patient_id: 'P',
           visit_id: 'V-priority',
           patient_name: '患者甲',
+          sex: '女',
+          age: 68,
           department: '重症医学科',
           admission_date: '2026-08-09 08:00',
           discharge_date: '2026-08-12 10:00',
@@ -173,6 +175,7 @@ describe('QcRecordResultListView', () => {
       wrapper.findAll('.qc-record-result-list-view__metric strong').map((item) => item.text()),
     ).toEqual(['20', '14', '4', '5'])
     expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
+    expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
     expect(wrapper.text()).not.toContain('不得展示')
     expect(wrapper.text()).not.toContain('来源未知')
     expect(wrapper.text()).not.toContain('资料完整')

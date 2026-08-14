@@ -9,6 +9,8 @@ const rows = [
     instituteId: 'H-1',
     patientId: 'P-1',
     patientName: '患者甲',
+    patientSex: '女',
+    patientAge: 68,
     visitId: 'V-1',
     department: '重症医学科',
     bedNumber: '12 床',
@@ -30,6 +32,17 @@ describe('QcRecordResultTable', () => {
     const renderedRows = wrapper.findAll('tbody tr[data-record-key]')
     expect(renderedRows).toHaveLength(1)
     expect(renderedRows[0].attributes('data-record-key')).toBe(rows[0].recordKey)
+  })
+
+  it('复用病历池的头像与患者主次信息层级', () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', rows },
+    })
+
+    expect(wrapper.find('.qc-record-result-table__patient-cell').exists()).toBe(true)
+    expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
+    expect(wrapper.get('.qc-record-result-table__patient-name').text()).toBe('患者甲')
+    expect(wrapper.get('.qc-record-result-table__visit-line').text()).toContain('住院号：V-1')
   })
 
   it('固定展示七列，并按病历阶段显示实际时间字段', () => {
