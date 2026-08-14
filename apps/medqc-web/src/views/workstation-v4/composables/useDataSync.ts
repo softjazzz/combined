@@ -569,8 +569,14 @@ async function savePolicy() {
     const saved = await syncApi.updateSyncPolicy({
       scope: globalSyncState.policyForm.scope,
       target_departments: safeDepartments,
-      start_date: globalSyncState.policyForm.start_date || undefined,
-      end_date: globalSyncState.policyForm.end_date || undefined,
+      start_date:
+        globalSyncState.policyForm.scope === 'running'
+          ? undefined
+          : globalSyncState.policyForm.start_date || undefined,
+      end_date:
+        globalSyncState.policyForm.scope === 'running'
+          ? undefined
+          : globalSyncState.policyForm.end_date || undefined,
       schedule: {
         mode: globalSyncState.policyForm.schedule_mode,
         minutes: Number(globalSyncState.policyForm.schedule_minutes || 30),
@@ -698,7 +704,7 @@ function buildSyncScopePayload(
     tier: globalSyncState.selectedTier,
     scene: source === 'pg' ? globalSyncState.policyForm.scope : undefined,
     date_window:
-      source === 'pg'
+      source === 'pg' && globalSyncState.policyForm.scope !== 'running'
         ? {
             start: globalSyncState.policyForm.start_date || undefined,
             end: globalSyncState.policyForm.end_date || undefined,

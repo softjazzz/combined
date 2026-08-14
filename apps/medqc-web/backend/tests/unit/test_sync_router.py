@@ -486,7 +486,6 @@ class TestSyncRouter:
                 "source": "pg",
                 "tables": ["mr"],
                 "scene": "running",
-                "date_window": {"end": "2026-07-31"},
                 "target_departments": ["重症医学科(ICU)"],
             },
         )
@@ -501,7 +500,7 @@ class TestSyncRouter:
         assert impact_calls == [
             {
                 "scene": "running",
-                "date_window": {"start": None, "end": "2026-07-31"},
+                "date_window": None,
                 "target_departments": ["重症医学科(ICU)"],
             }
         ]

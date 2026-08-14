@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useDataSync } from '@/views/workstation-v4/composables/useDataSync'
 
 let mockUserRoles: string[] = []
-const { mockGetSyncPolicy, mockPreflight, mockUpdatePgConfig } = vi.hoisted(() => ({
-  mockGetSyncPolicy: vi.fn(),
-  mockPreflight: vi.fn(),
-  mockUpdatePgConfig: vi.fn(),
-}))
+const { mockGetSyncPolicy, mockPreflight, mockUpdatePgConfig, mockUpdateSyncPolicy } = vi.hoisted(
+  () => ({
+    mockGetSyncPolicy: vi.fn(),
+    mockPreflight: vi.fn(),
+    mockUpdatePgConfig: vi.fn(),
+    mockUpdateSyncPolicy: vi.fn(),
+  }),
+)
 
 vi.mock('@/api/sync', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/sync')>()
@@ -18,6 +21,7 @@ vi.mock('@/api/sync', async (importOriginal) => {
       getSyncPolicy: mockGetSyncPolicy,
       preflight: mockPreflight,
       updatePgConfig: mockUpdatePgConfig,
+      updateSyncPolicy: mockUpdateSyncPolicy,
     },
   }
 })
@@ -36,6 +40,7 @@ describe('useDataSync 系统配置权限', () => {
     mockGetSyncPolicy.mockReset()
     mockPreflight.mockReset()
     mockUpdatePgConfig.mockReset()
+    mockUpdateSyncPolicy.mockReset()
     useDataSync().resetState()
   })
 
@@ -55,7 +60,7 @@ describe('useDataSync 系统配置权限', () => {
     expect(isReadonly.value).toBe(true)
   })
 
-  it('在院同步预检保留 running 场景和截止日期', async () => {
+  it('在院同步预检不发送历史日期范围', async () => {
     mockUserRoles = ['admin']
     mockPreflight.mockResolvedValue({
       source: 'pg',
@@ -75,7 +80,7 @@ describe('useDataSync 系统配置权限', () => {
     expect(mockPreflight).toHaveBeenCalledWith(
       expect.objectContaining({
         scene: 'running',
-        date_window: { start: undefined, end: '2026-07-31' },
+        date_window: undefined,
         target_departments: ['重症医学科(ICU)'],
       }),
     )
@@ -122,6 +127,20 @@ describe('useDataSync 系统配置权限', () => {
     expect(state.policyForm.scope).toBe('running')
     expect(state.policyForm.start_date).toBe('')
     expect(state.policyForm.end_date).toBe('2026-07-31')
+  })
+
+  it('保存当前在院策略时不持久化历史日期条件', async () => {
+    mockUpdateSyncPolicy.mockImplementation(async (payload) => payload)
+    const { state, savePolicy } = useDataSync()
+    state.policyForm.scope = 'running'
+    state.policyForm.start_date = '2026-07-01'
+    state.policyForm.end_date = '2026-07-31'
+
+    await savePolicy()
+
+    expect(mockUpdateSyncPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: 'running', start_date: undefined, end_date: undefined }),
+    )
   })
 
   it('保存源库配置时持久化本院稳定机构标识', async () => {

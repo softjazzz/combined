@@ -78,7 +78,17 @@
                       @change="handlePolicyDepartmentChange"
                     />
                   </label>
-                  <label class="system-config-scope-field sync-filter-row__date">
+                  <div
+                    v-if="state.policyForm.scope === 'running'"
+                    class="system-config-scope-field sync-current-time"
+                  >
+                    <span>当前在院统计时间</span>
+                    <strong>以执行检查时的医院当前时间为准</strong>
+                  </div>
+                  <label
+                    v-else
+                    class="system-config-scope-field sync-filter-row__date"
+                  >
                     <span>{{ syncStartDateLabel }}</span>
                     <a-date-picker
                       v-model:value="state.policyForm.start_date"
@@ -90,7 +100,10 @@
                       :placeholder="syncStartDatePlaceholder"
                     />
                   </label>
-                  <label class="system-config-scope-field sync-filter-row__date">
+                  <label
+                    v-if="state.policyForm.scope !== 'running'"
+                    class="system-config-scope-field sync-filter-row__date"
+                  >
                     <span>{{ syncEndDateLabel }}</span>
                     <a-date-picker
                       v-model:value="state.policyForm.end_date"
@@ -462,9 +475,9 @@ const canViewLlmObservability = computed(
     (authStore.user?.is_demo_account !== true || isObservabilityOperationalAdmin.value),
 )
 const syncSceneOptions = [
-  { label: '在院病历', value: 'running', description: '同步截止日期仍在院的病历' },
+  { label: '在院病历', value: 'running', description: '同步执行时仍在院的全部病历' },
   { label: '已出院病历', value: 'final', description: '按出院日期范围同步终末病历' },
-  { label: '在院及已出院', value: 'both', description: '一次同步两类病历' },
+  { label: '在院及已出院', value: 'both', description: '当前在院 + 期间出院病历' },
 ] as const
 
 function selectSyncScene(scene: 'running' | 'final' | 'both') {
@@ -480,40 +493,32 @@ const syncScopeDisplayLabel = computed(() => {
 
 const syncScopeDescription = computed(() => {
   if (state.policyForm.scope === 'running') {
-    return '按入院日期范围和当前科室筛选截止日仍在院的病历；不要求病案首页号。'
+    return '同步执行时仍在院的全部病历，不限制入院日期；不要求病案首页号。'
   }
   if (state.policyForm.scope === 'both') {
-    return '同时筛选截止日期仍在院的病历和出院日期区间内的病历；修改后需要重新预检。'
+    return '同步当前仍在院的病历，并按所选出院日期范围同步已出院病历。'
   }
   return '按出院日期和科室筛选已出院病历；修改后需要重新预检。'
 })
 
 const syncStartDateLabel = computed(() => {
-  if (state.policyForm.scope === 'running') return '入院开始日期'
-  if (state.policyForm.scope === 'both') return '日期范围开始'
   return '出院开始日期'
 })
 
 const syncStartDatePlaceholder = computed(() => `请选择${syncStartDateLabel.value}`)
 
-const syncEndDateLabel = computed(() =>
-  state.policyForm.scope === 'running'
-    ? '在院截止日期'
-    : state.policyForm.scope === 'both'
-      ? '日期范围结束'
-      : '出院结束日期',
-)
+const syncEndDateLabel = computed(() => '出院结束日期')
 const syncEndDatePlaceholder = computed(() => `请选择${syncEndDateLabel.value}`)
 
 const syncAnchorLabel = computed(() => {
-  if (state.policyForm.scope === 'running') return '住院登记 / 入院日期范围'
-  if (state.policyForm.scope === 'both') return '住院登记 + 出院记录 / 日期范围'
+  if (state.policyForm.scope === 'running') return '住院登记 / 当前在院状态'
+  if (state.policyForm.scope === 'both') return '当前在院 + 出院日期范围'
   return '出院记录 / 出院日期'
 })
 
 const noCandidateMessage = computed(() => {
   if (state.policyForm.scope === 'running') {
-    return '没有找到符合条件的在院病历，请检查科室、截止日期或住院登记数据。'
+    return '当前没有找到符合条件的在院病历，请检查科室或住院登记数据。'
   }
   if (state.policyForm.scope === 'both') {
     return '没有找到符合条件的在院或已出院病历，请检查科室、日期范围或住院登记数据。'
@@ -622,7 +627,7 @@ const policyDepartmentLabel = computed(() => {
 
 const policyDateRangeLabel = computed(() => {
   const end = state.policyForm.end_date || '未设'
-  if (state.policyForm.scope === 'running') return `截至 ${end}`
+  if (state.policyForm.scope === 'running') return '执行时刻'
   const start = state.policyForm.start_date || '未设'
   return `${start} ~ ${end}`
 })
@@ -1446,6 +1451,22 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.sync-current-time {
+  grid-column: span 2;
+  min-height: 40px;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 1px solid rgba(22, 119, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.04);
+}
+
+.sync-current-time strong {
+  color: rgba(29, 29, 31, 0.78);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .sync-check-action {
   min-height: 40px;
   white-space: nowrap;
@@ -1554,6 +1575,10 @@ onUnmounted(() => {
 @media (max-width: 980px) {
   .sync-filter-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sync-current-time {
+    grid-column: auto;
   }
 
   .sync-result-summary {

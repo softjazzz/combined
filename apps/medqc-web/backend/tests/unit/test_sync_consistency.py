@@ -37,10 +37,13 @@ def test_estimate_pg_sync_impact_uses_running_case_refs_without_mr_no(monkeypatc
 
     monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {})
     monkeypatch.setattr(etl_sync, "_create_case_scope_service", lambda: _ScopeService())
+    monkeypatch.setattr(
+        etl_sync, "_current_hospital_date", lambda: date(2026, 8, 14), raising=False
+    )
 
     result = etl_sync.estimate_pg_sync_impact(
         scene="running",
-        date_window={"start": "2026-07-01", "end": "2026-07-31"},
+        date_window=None,
         target_departments=["重症医学科(ICU)"],
     )
 
@@ -50,13 +53,14 @@ def test_estimate_pg_sync_impact_uses_running_case_refs_without_mr_no(monkeypatc
     assert calls == [
         {
             "scope_mode": "active",
-            "as_of_date": date(2026, 7, 31),
-            "admission_start_date": date(2026, 7, 1),
+            "as_of_date": date(2026, 8, 14),
+            "admission_start_date": None,
             "discharge_start_date": None,
             "discharge_end_date": None,
             "departments": ["重症医学科(ICU)"],
         }
     ]
+    assert result["date_window"] == {"start": "", "end": "2026-08-14"}
 
 
 def test_estimate_pg_sync_impact_explicit_all_hospital_ignores_saved_departments(
@@ -353,6 +357,9 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
         lambda: _SyncService(),
         raising=False,
     )
+    monkeypatch.setattr(
+        etl_sync, "_current_hospital_date", lambda: date(2026, 8, 14), raising=False
+    )
 
     def _legacy_path_used(*_args, **_kwargs):
         raise AssertionError("旧二坐标/逐表同步入口不得再被 run_sync 调用")
@@ -383,8 +390,8 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
     assert len(scope_calls) == 1
     assert scope_calls[0] == {
         "scope_mode": "active",
-        "as_of_date": date(2026, 8, 10),
-        "admission_start_date": date(2026, 8, 1),
+        "as_of_date": date(2026, 8, 14),
+        "admission_start_date": None,
         "discharge_start_date": None,
         "discharge_end_date": None,
         "departments": ["重症医学科（ICU）"],
@@ -589,6 +596,9 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
             synced_tables=synced_tables,
         ),
     )
+    monkeypatch.setattr(
+        etl_sync, "_current_hospital_date", lambda: date(2026, 8, 14), raising=False
+    )
 
     result = etl_sync.run_sync(
         sync_date="2026-08-10",
@@ -606,8 +616,8 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
     assert calls["scope"] == [
         {
             "scope_mode": "active_and_discharged",
-            "as_of_date": date(2026, 8, 10),
-            "admission_start_date": date(2026, 8, 1),
+            "as_of_date": date(2026, 8, 14),
+            "admission_start_date": None,
             "discharge_start_date": date(2026, 8, 1),
             "discharge_end_date": date(2026, 8, 10),
             "departments": ["重症医学科（ICU）"],

@@ -229,25 +229,37 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).not.toContain('安全说明')
   })
 
-  it('在院范围展示入院起止日期并使用中文日期选择器', async () => {
+  it('在院范围不展示历史日期选择器并说明按当前时刻判断', async () => {
     mockState.policyForm.scope = 'running'
 
     const wrapper = mountPage()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('入院开始日期')
-    expect(wrapper.text()).toContain('在院截止日期')
+    expect(wrapper.text()).toContain('当前在院统计时间')
+    expect(wrapper.text()).toContain('以执行检查时的医院当前时间为准')
+    expect(wrapper.text()).not.toContain('入院开始日期')
+    expect(wrapper.text()).not.toContain('在院截止日期')
     expect(wrapper.text()).not.toContain('出院开始日期')
     expect(wrapper.text()).not.toContain('出院结束日期')
+    const datePickers = wrapper.findAll('.date-picker-stub')
+    expect(datePickers).toHaveLength(0)
+    mockState.policyForm.scope = 'final'
+  })
+
+  it('合并范围只展示出院日期范围并保留中文日期选择器', async () => {
+    mockState.policyForm.scope = 'both'
+
+    const wrapper = mountPage()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('当前在院 + 期间出院病历')
+    expect(wrapper.text()).toContain('出院开始日期')
+    expect(wrapper.text()).toContain('出院结束日期')
     const datePickers = wrapper.findAll('.date-picker-stub')
     expect(datePickers).toHaveLength(2)
     expect(datePickers.every((picker) => picker.attributes('data-locale') === '请选择日期')).toBe(
       true,
     )
-    expect(datePickers.map((picker) => picker.attributes('placeholder'))).toEqual([
-      '请选择入院开始日期',
-      '请选择在院截止日期',
-    ])
     mockState.policyForm.scope = 'final'
   })
 
@@ -257,7 +269,7 @@ describe('DataSyncConfigPage visit progress', () => {
     await wrapper.get('[data-testid="sync-scene-running"]').trigger('click')
 
     expect(mockState.policyForm.scope).toBe('running')
-    expect(wrapper.text()).toContain('在院截止日期')
+    expect(wrapper.text()).toContain('当前在院统计时间')
     mockState.policyForm.scope = 'final'
   })
 
