@@ -54,6 +54,57 @@ def _err(request: Request, error: str, code: str, data: dict | None = None):
     return payload
 
 
+async def _enqueue_terminal_reevaluation_after_sync(
+    *,
+    request: Request,
+    current_user: dict,
+    record_refs: list[dict[str, str]],
+) -> dict[str, object]:
+    """复用正式质控入口，为运行期转出院的病历创建终末复评任务。"""
+
+    if not record_refs:
+        return {
+            "status": "not_applicable",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+    from . import qc_sichuan
+
+    workspace = qc_sichuan._sichuan_workspace_service()
+    eligible_refs = workspace.find_terminal_reevaluation_candidates(
+        record_refs=record_refs,
+    )
+    if not eligible_refs:
+        return {
+            "status": "not_needed",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=request,
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+            scope="final",
+            date_field="discharge",
+            record_refs=[ref.as_dict() for ref in eligible_refs],
+            run_mode="parallel",
+        ),
+        qc_service=await qc_sichuan.get_qc_service(),
+        current_user=current_user,
+    )
+    data = response.get("data") if isinstance(response, dict) else None
+    job_data = data if isinstance(data, dict) else {}
+    reused = bool(job_data.get("idempotency_reused"))
+    return {
+        "status": "reused" if reused else "queued",
+        "eligible_records": len(eligible_refs),
+        "queued_records": len(eligible_refs),
+        "job_id": str(job_data.get("id") or ""),
+    }
+
+
 def _extract_roles(current_user: dict) -> set[str]:
     roles = current_user.get("roles")
     if isinstance(roles, list):
@@ -881,6 +932,7 @@ async def trigger_sync(
             date_window=date_window_payload,
             target_departments=target_departments,
             run_id=run_id,
+            include_internal_case_refs=True,
         )
     except Exception as exc:
         complete_sync_trigger(
@@ -890,6 +942,42 @@ async def trigger_sync(
             error=str(exc),
         )
         _raise_mapped_service_error(exc)
+
+    internal_case_refs: list[dict[str, str]] = []
+    if isinstance(result, dict):
+        raw_internal_refs = result.pop("_internal_synced_case_refs", [])
+        if isinstance(raw_internal_refs, list):
+            internal_case_refs = [
+                dict(item) for item in raw_internal_refs if isinstance(item, dict)
+            ]
+    auto_terminal_qc: dict[str, object] | None = None
+    if (
+        isinstance(result, dict)
+        and str(result.get("status") or "").strip().lower() == "success"
+        and str(result.get("scene") or scene).strip().lower() in {"final", "both"}
+    ):
+        try:
+            auto_terminal_qc = await _enqueue_terminal_reevaluation_after_sync(
+                request=request,
+                current_user=current_user,
+                record_refs=internal_case_refs,
+            )
+        except Exception as exc:
+            logger.warning(
+                "auto_terminal_qc_enqueue_failed error_type=%s",
+                type(exc).__name__,
+            )
+            auto_terminal_qc = {
+                "status": "failed",
+                "eligible_records": 0,
+                "queued_records": 0,
+                "job_id": "",
+            }
+            warnings = result.setdefault("warnings", [])
+            if isinstance(warnings, list):
+                warnings.append("资料同步已完成，但终末质控自动复评未创建，请稍后重试同步")
+    if isinstance(result, dict) and auto_terminal_qc is not None:
+        result["auto_terminal_qc"] = auto_terminal_qc
 
     finished_at = datetime.now(timezone.utc)
     status_name = _infer_trigger_status(req.source, result)

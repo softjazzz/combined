@@ -27,7 +27,7 @@ from ..database.connection import DB_SCHEMA_MODE, engine
 from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
 from .config_registry import get_config, set_config
-from .case_identity import CaseRefInput, normalize_case_refs
+from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
 
 logger = logging.getLogger(__name__)
 
@@ -2908,6 +2908,7 @@ def run_sync(
     target_departments: Optional[List[str]] = None,
     run_id: str = "",
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    include_internal_case_refs: bool = False,
 ) -> Dict:
     """
     执行数据同步
@@ -3138,6 +3139,14 @@ def run_sync(
 
         case_refs = tuple(scope_result.case_refs)
         eligible_case_refs = set(case_refs)
+        discharged_case_refs = {
+            case_ref
+            for row in scope_result.selected
+            if str(row.get("hospitalization_status") or "").strip().lower()
+            == "discharged"
+            for case_ref in (CaseRef.from_mapping(row),)
+            if all(case_ref)
+        }
         run_warnings.extend(
             str(item)
             for item in scope_result.warnings
@@ -3430,7 +3439,7 @@ def run_sync(
                 if str(case_ref.visit_id or "").strip()
             }
         )
-        return {
+        result_payload = {
             "success": final_success,
             "status": final_status,
             "mode": sync_mode,
@@ -3468,6 +3477,12 @@ def run_sync(
                 dict.fromkeys(item for item in run_warnings if str(item).strip())
             ),
         }
+        if include_internal_case_refs:
+            result_payload["_internal_synced_case_refs"] = [
+                case_ref.as_dict()
+                for case_ref in sorted(visible_case_refs.intersection(discharged_case_refs))
+            ]
+        return result_payload
     finally:
         _sync_state.is_running = False
         try:

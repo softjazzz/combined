@@ -25,6 +25,7 @@ from sqlalchemy import (
     or_,
     select,
     text,
+    tuple_,
     update,
 )
 from sqlalchemy.orm import Session
@@ -4689,6 +4690,182 @@ class CustomQCWorkspaceService:
                 "missing_rule_ids": missing_rule_ids,
             }
         return results
+
+    def find_terminal_reevaluation_candidates(
+        self,
+        *,
+        record_refs: Sequence[CaseRefInput],
+        rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version: str = RULE_SET_VERSION,
+        session_factory: Optional[Callable[[], Session]] = None,
+    ) -> tuple[CaseRef, ...]:
+        """筛出已有运行期结果、且尚未启动终末复评的出院病历。"""
+
+        normalized_refs = normalize_case_refs(record_refs)
+        if not normalized_refs:
+            return ()
+        normalized_rule_set_key = _safe_text(rule_set_key)
+        normalized_rule_set_version = _safe_text(rule_set_version)
+        if not normalized_rule_set_key or not normalized_rule_set_version:
+            raise ValueError("终末复评候选读取缺少规则集参数")
+
+        identities = [
+            (ref.institute_id, ref.patient_id, ref.visit_id) for ref in normalized_refs
+        ]
+        session = (session_factory or _session)()
+        try:
+            completed_rows = (
+                session.execute(
+                    select(
+                        self._batch_job_table.c.id,
+                        self._batch_job_table.c.scope,
+                        self._batch_job_table.c.status,
+                        self._batch_job_table.c.created_at,
+                        self._batch_job_table.c.finished_at,
+                        self._batch_job_table.c.filters_json,
+                        self._record_result_envelope_table.c.institute_id,
+                        self._record_result_envelope_table.c.patient_id,
+                        self._record_result_envelope_table.c.visit_id,
+                    )
+                    .join(
+                        self._record_result_envelope_table,
+                        self._record_result_envelope_table.c.root_job_id
+                        == self._batch_job_table.c.id,
+                    )
+                    .where(
+                        and_(
+                            self._batch_job_table.c.status == "completed",
+                            or_(
+                                self._batch_job_table.c.parent_job_id.is_(None),
+                                self._batch_job_table.c.parent_job_id == "",
+                            ),
+                            self._record_result_envelope_table.c.rule_set_key
+                            == normalized_rule_set_key,
+                            self._record_result_envelope_table.c.rule_set_version
+                            == normalized_rule_set_version,
+                            tuple_(
+                                self._record_result_envelope_table.c.institute_id,
+                                self._record_result_envelope_table.c.patient_id,
+                                self._record_result_envelope_table.c.visit_id,
+                            ).in_(identities),
+                        )
+                    )
+                    .order_by(
+                        desc(self._batch_job_table.c.finished_at),
+                        desc(self._batch_job_table.c.created_at),
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            active_final_rows = (
+                session.execute(
+                    select(
+                        self._batch_job_table.c.scope,
+                        self._batch_job_table.c.status,
+                        self._batch_job_table.c.filters_json,
+                    ).where(
+                        and_(
+                            self._batch_job_table.c.status.in_(["queued", "running"]),
+                            self._batch_job_table.c.filters_json.ilike(
+                                f"%{normalized_rule_set_key}%"
+                            ),
+                            self._batch_job_table.c.filters_json.ilike(
+                                f"%{normalized_rule_set_version}%"
+                            ),
+                            or_(
+                                self._batch_job_table.c.parent_job_id.is_(None),
+                                self._batch_job_table.c.parent_job_id == "",
+                            ),
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+
+            active_final_identities: set[tuple[str, str, str]] = set()
+
+            def _record_scene(
+                filters: Mapping[str, Any],
+                identity: tuple[str, str, str],
+                fallback_scope: Any,
+            ) -> str:
+                for raw_snapshot in filters.get("record_scene_snapshot") or []:
+                    if not isinstance(raw_snapshot, Mapping):
+                        continue
+                    snapshot_identity = (
+                        _safe_text(raw_snapshot.get("institute_id")),
+                        _safe_text(raw_snapshot.get("patient_id")),
+                        _safe_text(raw_snapshot.get("visit_id")),
+                    )
+                    if snapshot_identity != identity:
+                        continue
+                    scene = _safe_text(
+                        raw_snapshot.get("resolved_scene")
+                        or raw_snapshot.get("record_scene")
+                    ).lower()
+                    if scene in {"running", "final"}:
+                        return scene
+                fallback = _safe_text(fallback_scope).lower()
+                return fallback if fallback in {"running", "final"} else "unknown"
+
+            for row in active_final_rows:
+                filters = _safe_json_loads(row.get("filters_json"), {})
+                if not isinstance(filters, dict):
+                    continue
+                if _safe_text(filters.get("rule_set_key")) != normalized_rule_set_key:
+                    continue
+                if _safe_text(filters.get("rule_set_version")) != normalized_rule_set_version:
+                    continue
+                try:
+                    active_refs = normalize_case_refs(filters.get("record_refs") or [])
+                except (TypeError, ValueError):
+                    continue
+                for ref in active_refs:
+                    identity = (ref.institute_id, ref.patient_id, ref.visit_id)
+                    if _record_scene(filters, identity, row.get("scope")) == "final":
+                        active_final_identities.add(identity)
+
+            rows_by_identity: Dict[tuple[str, str, str], List[Dict[str, Any]]] = {}
+            for raw_row in completed_rows:
+                row = dict(raw_row)
+                identity = (
+                    _safe_text(row.get("institute_id")),
+                    _safe_text(row.get("patient_id")),
+                    _safe_text(row.get("visit_id")),
+                )
+                if all(identity):
+                    rows_by_identity.setdefault(identity, []).append(row)
+
+            eligible: List[CaseRef] = []
+            for ref in normalized_refs:
+                identity = (ref.institute_id, ref.patient_id, ref.visit_id)
+                if identity in active_final_identities:
+                    continue
+                rows = rows_by_identity.get(identity) or []
+                if not rows:
+                    continue
+                latest_key = max(_generation_key(row) for row in rows)
+                latest_rows = [row for row in rows if _generation_key(row) == latest_key]
+                if len({_safe_text(row.get("id")) for row in latest_rows}) != 1:
+                    continue
+                latest_filters = _safe_json_loads(
+                    latest_rows[0].get("filters_json"),
+                    {},
+                )
+                if not isinstance(latest_filters, dict):
+                    continue
+                if _record_scene(
+                    latest_filters,
+                    identity,
+                    latest_rows[0].get("scope"),
+                ) != "running":
+                    continue
+                eligible.append(ref)
+            return tuple(eligible)
+        finally:
+            session.close()
 
     def get_latest_luxian_0609_record_result(
         self,

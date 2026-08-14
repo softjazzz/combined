@@ -591,6 +591,143 @@ class TestSyncRouter:
         assert calls[0]["func"].__name__ == "<lambda>"
         assert calls[0]["kwargs"]["run_id"] == "syncrun-worker-thread"
 
+    def test_trigger_enqueues_terminal_qc_after_discharge_without_leaking_case_refs(
+        self,
+        client,
+        monkeypatch,
+    ):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-discharge-transition",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        case_ref = {
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {
+                "success": True,
+                "status": "success",
+                "scene": "both",
+                "total_records": 3,
+                "_internal_synced_case_refs": [case_ref],
+            },
+        )
+        from app.routers import qc_sichuan
+        from app.services.case_identity import CaseRef
+
+        captured: list[dict] = []
+
+        class _Workspace:
+            def find_terminal_reevaluation_candidates(self, *, record_refs):
+                captured.extend(record_refs)
+                return (CaseRef(**case_ref),)
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(*, payload, **_kwargs):
+            assert payload.scope == "final"
+            assert payload.date_field == "discharge"
+            assert payload.record_refs == [case_ref]
+            return {
+                "success": True,
+                "data": {"id": "job-final-1", "idempotency_reused": False},
+            }
+
+        monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: _Workspace())
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={"source": "pg", "tier": "all", "scene": "both"},
+        )
+
+        assert response.status_code == 200
+        data = _assert_success_shell(response.json())
+        assert captured == [case_ref]
+        assert data["auto_terminal_qc"] == {
+            "status": "queued",
+            "eligible_records": 1,
+            "queued_records": 1,
+            "job_id": "job-final-1",
+        }
+        assert "_internal_synced_case_refs" not in data
+
+    def test_trigger_running_sync_never_enqueues_terminal_qc(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-running-only",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 1,
+                "_internal_synced_case_refs": [
+                    {
+                        "institute_id": "inst-1",
+                        "patient_id": "patient-1",
+                        "visit_id": "visit-1",
+                    }
+                ],
+            },
+        )
+
+        async def _unexpected_enqueue(**_kwargs):
+            raise AssertionError("在院同步不得创建终末质控任务")
+
+        monkeypatch.setattr(
+            sync_router_module,
+            "_enqueue_terminal_reevaluation_after_sync",
+            _unexpected_enqueue,
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={"source": "pg", "tier": "all", "scene": "running"},
+        )
+
+        assert response.status_code == 200
+        data = _assert_success_shell(response.json())
+        assert "auto_terminal_qc" not in data
+        assert "_internal_synced_case_refs" not in data
+
     def test_trigger_idempotency_reuse(self, client, monkeypatch):
         _override_user(client, ["admin"])
         calls = {"reserve": 0, "run": 0, "append": 0}
@@ -731,11 +868,27 @@ class TestSyncRouter:
                 "status": "partial",
                 "total_records": 7,
                 "warnings": warnings,
+                "_internal_synced_case_refs": [
+                    {
+                        "institute_id": "inst-1",
+                        "patient_id": "patient-1",
+                        "visit_id": "visit-1",
+                    }
+                ],
                 "tables": [
                     {"table_name": "mr", "status": "success"},
                     {"table_name": "daily_course_record", "status": "failed"},
                 ],
             },
+        )
+
+        async def _unexpected_enqueue(**_kwargs):
+            raise AssertionError("资料同步不完整时不得自动创建终末质控")
+
+        monkeypatch.setattr(
+            sync_router_module,
+            "_enqueue_terminal_reevaluation_after_sync",
+            _unexpected_enqueue,
         )
 
         response = client.post(
@@ -748,6 +901,8 @@ class TestSyncRouter:
         assert data["status"] == "partial"
         assert data["idempotent_reused"] is False
         assert data["warnings"] == warnings
+        assert "auto_terminal_qc" not in data
+        assert "_internal_synced_case_refs" not in data
         assert completion["status"] == "partial"
         assert completion["error"] == ""
         assert history[0]["status"] == "partial"

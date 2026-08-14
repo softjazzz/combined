@@ -66,6 +66,95 @@ def _selected_job(*, legacy_items: list[dict[str, Any]] | None = None) -> dict[s
     }
 
 
+def test_terminal_reevaluation_candidates_require_latest_running_result_without_active_final_job():
+    record_ref = {
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+    }
+    completed_running = {
+        "id": "job-running",
+        "scope": "all",
+        "status": "completed",
+        "created_at": datetime(2026, 8, 13, 8, 0, 0),
+        "finished_at": datetime(2026, 8, 13, 8, 10, 0),
+        "filters_json": json.dumps(
+            {
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+                "record_scene_snapshot": [
+                    {**record_ref, "record_scene": "running", "resolved_scene": "running"}
+                ],
+            }
+        ),
+        **record_ref,
+    }
+    session = _ReadSession([[completed_running], []])
+
+    result = CustomQCWorkspaceService().find_terminal_reevaluation_candidates(
+        record_refs=[record_ref],
+        session_factory=lambda: session,
+    )
+
+    assert [item.as_dict() for item in result] == [record_ref]
+
+
+def test_terminal_reevaluation_candidates_skip_completed_or_active_final_jobs():
+    record_refs = [
+        {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"},
+        {"institute_id": "inst-1", "patient_id": "patient-2", "visit_id": "visit-2"},
+    ]
+    completed_rows = [
+        {
+            "id": "job-final",
+            "scope": "final",
+            "status": "completed",
+            "created_at": datetime(2026, 8, 13, 9, 0, 0),
+            "finished_at": datetime(2026, 8, 13, 9, 10, 0),
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+            **record_refs[0],
+        },
+        {
+            "id": "job-running-2",
+            "scope": "running",
+            "status": "completed",
+            "created_at": datetime(2026, 8, 13, 8, 0, 0),
+            "finished_at": datetime(2026, 8, 13, 8, 10, 0),
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+            **record_refs[1],
+        },
+    ]
+    active_final = {
+        "scope": "final",
+        "status": "queued",
+        "filters_json": json.dumps(
+            {
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+                "record_refs": [record_refs[1]],
+            }
+        ),
+    }
+    session = _ReadSession([completed_rows, [active_final]])
+
+    result = CustomQCWorkspaceService().find_terminal_reevaluation_candidates(
+        record_refs=record_refs,
+        session_factory=lambda: session,
+    )
+
+    assert result == ()
+
+
 def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(monkeypatch):
     """全院投影只读取结果选择必需字段，不能为每份病历反复完整解析任务。"""
 

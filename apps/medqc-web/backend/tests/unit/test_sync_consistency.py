@@ -606,6 +606,7 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
         scene="both",
         date_window={"start": "2026-08-01", "end": "2026-08-10"},
         target_departments=["重症医学科（ICU）"],
+        include_internal_case_refs=True,
     )
 
     assert result["success"] is False
@@ -632,6 +633,49 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
     }
     assert any("出院来源按优先级合并" in item for item in result["warnings"])
     assert any("daily_course_record" in item for item in result["warnings"])
+    assert result["_internal_synced_case_refs"] == [case_refs[0].as_dict()]
+
+
+def test_run_sync_internal_transition_refs_exclude_patients_still_in_hospital(monkeypatch):
+    active_ref = CaseRef("H1", "P1", "V1")
+    discharged_ref = CaseRef("H1", "P2", "V2")
+    case_refs = (active_ref, discharged_ref)
+    selected = (
+        {
+            **active_ref.as_dict(),
+            "hospitalization_status": "active",
+            "authoritative_time": "2026-08-14 09:00:00",
+            "department": "重症医学科（ICU）",
+        },
+        {
+            **discharged_ref.as_dict(),
+            "hospitalization_status": "discharged",
+            "authoritative_time": "2026-08-13 09:00:00",
+            "department": "重症医学科（ICU）",
+        },
+    )
+    scope_result = HospitalizationScopeResult(
+        case_refs=case_refs,
+        selected=selected,
+        all_selected=selected,
+        sources_used=("inpat_registration", "discharge_record"),
+        source_status="ready",
+        warnings=(),
+    )
+    _calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=scope_result,
+        sync_action=lambda _kwargs: _successful_case_set_result(case_refs),
+    )
+
+    result = etl_sync.run_sync(
+        tables=list(target_names),
+        scene="both",
+        date_window={"start": "2026-08-13", "end": "2026-08-14"},
+        include_internal_case_refs=True,
+    )
+
+    assert result["_internal_synced_case_refs"] == [discharged_ref.as_dict()]
 
 
 def test_run_sync_explicit_all_hospital_ignores_saved_departments(monkeypatch):
