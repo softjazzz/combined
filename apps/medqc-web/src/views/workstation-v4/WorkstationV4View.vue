@@ -2321,8 +2321,8 @@ function handleJumpEvidenceFromQC(issue: QCIssueLike) {
   detailMainTab.value = 'records'
 }
 
-function handleEmrLoaded(payload: { content?: string }) {
-  emrRenderState.value = payload?.content ? 'ready' : 'fallback'
+function handleEmrLoaded() {
+  emrRenderState.value = 'ready'
 }
 
 function handleEmrError() {

@@ -177,4 +177,169 @@ describe('EMRViewer', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(String(fetchMock.mock.calls[0]?.[0] || '')).toContain('/render?')
   })
+
+  it('同一原始编号的不同文书按唯一键切换并重新加载正文', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          layout_version: 'bundle_struct_v1',
+          content: '第一份查房正文',
+          content_type: 'text',
+          metadata: { doc_type: 'daily_course_record', doc_name: '主治医师查房' },
+          defect_annotations: [],
+          render_blocks: [],
+          empty_reason: '',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          layout_version: 'bundle_struct_v1',
+          content: '第二份查房正文',
+          content_type: 'text',
+          metadata: { doc_type: 'senior_course_record', doc_name: '上级医师查房' },
+          defect_annotations: [],
+          render_blocks: [],
+          empty_reason: '',
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const documents = [
+      {
+        id: 'SHARED-DOC-ID',
+        doc_type: 'daily_course_record',
+        doc_name: '主治医师查房',
+        doc_key: 'daily_course_record::SHARED-DOC-ID',
+        execution_domain: 'course',
+        has_content: true,
+      },
+      {
+        id: 'SHARED-DOC-ID',
+        doc_type: 'senior_course_record',
+        doc_name: '上级医师查房',
+        doc_key: 'senior_course_record::SHARED-DOC-ID',
+        execution_domain: 'course',
+        has_content: true,
+      },
+    ]
+    const wrapper = mount(EMRViewer, {
+      props: {
+        visitId: 'V-CUSTOMER',
+        patientId: 'P-CUSTOMER',
+        instituteId: 'H-CUSTOMER',
+        documents,
+        documentsManaged: true,
+        activeDocKey: documents[0].doc_key,
+      },
+      global: { stubs: { 'a-spin': true, FileTextOutlined: true } },
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ activeDocKey: documents[1].doc_key })
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(String(fetchMock.mock.calls[1]?.[0] || '')).toContain(
+      'doc_type=senior_course_record',
+    )
+    expect(wrapper.text()).toContain('第二份查房正文')
+  })
+
+  it('后端返回未找到文书的空结构块时显示明确空态', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        layout_version: 'bundle_struct_v1',
+        content: '',
+        content_type: 'text',
+        metadata: {},
+        defect_annotations: [],
+        render_blocks: [
+          {
+            block_id: 'empty',
+            block_type: 'paragraph',
+            title: '文书内容',
+            text: '',
+            empty: true,
+            empty_text: '当前病历暂无可展示内容',
+          },
+        ],
+        empty_reason: 'document_not_found',
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(EMRViewer, {
+      props: {
+        visitId: 'V-CUSTOMER',
+        patientId: 'P-CUSTOMER',
+        instituteId: 'H-CUSTOMER',
+        documents: [
+          {
+            id: 'DOC-MISSING',
+            doc_type: 'daily_course_record',
+            doc_name: '查房记录',
+            doc_key: 'daily_course_record::DOC-MISSING',
+            execution_domain: 'course',
+            has_content: true,
+          },
+        ],
+        documentsManaged: true,
+      },
+      global: { stubs: { 'a-spin': true, FileTextOutlined: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('暂无文书内容')
+    expect(wrapper.emitted('loaded')).toBeUndefined()
+    expect(wrapper.emitted('error')?.at(-1)).toEqual(['document_not_found'])
+  })
+
+  it('纯结构化文书无拼接正文时仍视为加载成功', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        layout_version: 'bundle_struct_v1',
+        content: '',
+        content_type: 'text',
+        metadata: { doc_type: 'surgery_record', doc_name: '手术记录' },
+        defect_annotations: [],
+        render_blocks: [
+          {
+            block_id: 'surgery:kv',
+            block_type: 'kv_section',
+            title: '手术信息',
+            fields: [{ key: 'operation_name', label: '手术名称', value: '颅内血肿清除术' }],
+            empty: false,
+          },
+        ],
+        empty_reason: '',
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(EMRViewer, {
+      props: {
+        visitId: 'V-CUSTOMER',
+        patientId: 'P-CUSTOMER',
+        instituteId: 'H-CUSTOMER',
+        documents: [
+          {
+            id: 'SURGERY-1',
+            doc_type: 'surgery_record',
+            doc_name: '手术记录',
+            doc_key: 'surgery_record::SURGERY-1',
+            execution_domain: 'surgery',
+            has_content: true,
+          },
+        ],
+        documentsManaged: true,
+      },
+      global: { stubs: { 'a-spin': true, FileTextOutlined: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('颅内血肿清除术')
+    expect(wrapper.emitted('loaded')).toHaveLength(1)
+    expect(wrapper.emitted('error')).toBeUndefined()
+  })
 })

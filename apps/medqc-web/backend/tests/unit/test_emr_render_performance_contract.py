@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.core.security import get_current_user
 from app.routers import emr_render as emr_router_module
+from app.services.bundles import assembly as assembly_module
 from app.services.bundles import emr_view as emr_view_module
 
 
@@ -212,3 +213,70 @@ def test_direct_bundle_document_read_uses_one_domain_bundle(monkeypatch):
     assert calls == ["course"]
     assert document is not None
     assert document["content"] == "受控测试正文"
+
+
+def test_direct_bundle_document_read_locates_missing_document_id_by_summary_key(monkeypatch):
+    class _MappingsResult:
+        def __init__(self, row):
+            self._row = row
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return self._row
+
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, statement, params):
+            sql = str(statement)
+            locator_matches = (
+                params.get("has_fallback_doc_index") is True
+                and params.get("fallback_doc_index") == 1
+                and "ordinal - 1" in sql
+            )
+            return _MappingsResult(
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "execution_domain": "course",
+                    "bundle_schema_version": "domain_bundle_v4",
+                    "bundle_updated_at": None,
+                    "source_documents": [
+                        {
+                            "document_type": "daily_course_record",
+                            "document_id": "",
+                            "document_title": "查房记录",
+                            "content": "客户源数据未提供文书编号时的正文",
+                        }
+                    ]
+                    if locator_matches
+                    else [],
+                    "structured_context": {},
+                }
+            )
+
+    class _Engine:
+        def connect(self):
+            return _Connection()
+
+    monkeypatch.setattr(assembly_module, "engine", _Engine())
+
+    document = emr_view_module.load_bundle_document(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        execution_domain="course",
+        doc_type="daily_course_record",
+        doc_id="daily_course_record::1",
+        bundle_schema="public",
+    )
+
+    assert document is not None
+    assert document["content"] == "客户源数据未提供文书编号时的正文"

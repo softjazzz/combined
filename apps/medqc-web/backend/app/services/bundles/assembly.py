@@ -2760,6 +2760,12 @@ def load_domain_bundle_for_emr_render(
         "first_course_record": "first_course_record_diagnosis",
         "discharge_record": "discharge_record_diagnosis",
     }.get(doc_type, "")
+    fallback_doc_index: int | None = None
+    fallback_prefix = f"{doc_type}::"
+    if doc_id.startswith(fallback_prefix):
+        fallback_suffix = doc_id[len(fallback_prefix) :]
+        if fallback_suffix.isdigit():
+            fallback_doc_index = int(fallback_suffix)
     sql = text(
         f"""
         SELECT institute_id, patient_id, visit_id, execution_domain,
@@ -2775,6 +2781,11 @@ def load_domain_bundle_for_emr_render(
                    ) OR (
                      COALESCE(item ->> 'document_type', item ->> 'source_table', '') = :doc_type
                      AND item ->> 'document_id' = :doc_id
+                   ) OR (
+                     :has_fallback_doc_index
+                     AND COALESCE(item ->> 'document_type', item ->> 'source_table', '') = :doc_type
+                     AND BTRIM(COALESCE(item ->> 'document_id', '')) = ''
+                     AND ordinal - 1 = :fallback_doc_index
                    ) OR (
                      :diagnosis_type <> ''
                      AND COALESCE(item ->> 'document_type', item ->> 'source_table', '') = :diagnosis_type
@@ -2800,6 +2811,8 @@ def load_domain_bundle_for_emr_render(
                 "visit_id": visit_id,
                 "doc_type": doc_type,
                 "doc_id": doc_id,
+                "has_fallback_doc_index": fallback_doc_index is not None,
+                "fallback_doc_index": fallback_doc_index if fallback_doc_index is not None else -1,
                 "diagnosis_type": diagnosis_type,
                 "diagnosis_prefix": f"{doc_id}::diagnosis::",
                 "select_all_lab_applications": doc_id == "labtest-master-summary",

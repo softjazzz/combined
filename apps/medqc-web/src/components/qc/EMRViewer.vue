@@ -12,10 +12,10 @@
       >
         <button
           v-for="doc in documentItems"
-          :key="doc.id"
+          :key="docIdentityKey(doc)"
           :class="[
             'rounded-lg px-4 py-1.5 text-[13px] font-medium whitespace-nowrap transition-all duration-200',
-            activeDocId === doc.id
+            loadedDocKey === docIdentityKey(doc)
               ? 'bg-white text-blue-700 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
               : 'text-gray-500 hover:text-gray-700',
           ]"
@@ -332,7 +332,7 @@ const contentType = ref<'text' | 'html'>('text')
 const metadata = ref<EmrDocumentMetadata>({})
 const annotations = ref<DefectAnnotation[]>([])
 const documentItems = ref<EmrDocumentSummary[]>([])
-const activeDocId = ref<string | null>(null)
+const loadedDocKey = ref('')
 const showAnnotationPanel = ref(false)
 const layoutVersion = ref('')
 const renderBlocks = ref<EmrRenderBlock[]>([])
@@ -586,7 +586,7 @@ function resetViewerState() {
   metadata.value = {}
   annotations.value = []
   documentItems.value = []
-  activeDocId.value = null
+  loadedDocKey.value = ''
   layoutVersion.value = ''
   renderBlocks.value = []
 }
@@ -637,7 +637,7 @@ async function fetchDocuments() {
       if (!props.documentsLoading) emit('error', 'no-documents')
       return
     }
-    activeDocId.value = target.id || null
+    loadedDocKey.value = docIdentityKey(target)
     await loadDocument(target)
     return
   }
@@ -679,7 +679,7 @@ async function fetchDocuments() {
       emit('error', 'no-documents')
       return
     }
-    activeDocId.value = target.id || null
+    loadedDocKey.value = docIdentityKey(target)
     await loadDocument(target)
   } catch (err) {
     if (isAbortError(err)) return
@@ -696,11 +696,24 @@ function bindHighlightClicks() {
   boundClickContainer.value = container
 }
 
+function hasRenderableDocument(emptyReason: unknown): boolean {
+  if (String(emptyReason || '').trim()) return false
+  if (rawContent.value.trim()) return true
+  return renderBlocks.value.some((block) => {
+    if (block.empty === true) return false
+    if (String(block.text || '').trim()) return true
+    if ((block.fields || []).some((field) => String(field.value || '').trim())) return true
+    return (block.rows || []).some((row) =>
+      Object.values(row).some((value) => String(value || '').trim()),
+    )
+  })
+}
+
 async function loadDocument(doc?: EmrDocumentSummary) {
   if (!doc) return
   const controller = beginRequest()
   loading.value = true
-  activeDocId.value = doc.id || null
+  loadedDocKey.value = docIdentityKey(doc)
   try {
     const extraParams: Record<string, string> = {}
     if (doc.doc_type) extraParams.doc_type = doc.doc_type
@@ -734,10 +747,12 @@ async function loadDocument(doc?: EmrDocumentSummary) {
     layoutVersion.value = data.layout_version || ''
     renderBlocks.value = Array.isArray(data.render_blocks) ? data.render_blocks : []
 
-    if (rawContent.value || renderBlocks.value.length > 0) {
+    if (hasRenderableDocument(data.empty_reason)) {
       emit('loaded', data)
     } else {
-      emit('error', 'empty-content')
+      renderBlocks.value = []
+      layoutVersion.value = ''
+      emit('error', String(data.empty_reason || 'empty-content'))
     }
 
     nextTick(() => {
@@ -842,7 +857,7 @@ watch(
   (newKey) => {
     const doc = findDocByActiveKey(newKey)
     if (!doc) return
-    if (activeDocId.value && doc.id === activeDocId.value) return
+    if (loadedDocKey.value && docIdentityKey(doc) === loadedDocKey.value) return
     void loadDocument(doc)
   },
 )
