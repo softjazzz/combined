@@ -141,7 +141,8 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
         "customer_confirmed",
         "hospital_local_extension",
     )
-    assert "原文明确“阳性”" in entries["LX0609-012"].policy_summary
+    assert "明确异常病灶或异常征象" in entries["LX0609-012"].policy_summary
+    assert "不要求原文出现“阳性”" in entries["LX0609-012"].policy_summary
     assert "24小时" in entries["LX0609-012"].policy_summary
 
     assert entries["LX0609-017"].policy_sources == (

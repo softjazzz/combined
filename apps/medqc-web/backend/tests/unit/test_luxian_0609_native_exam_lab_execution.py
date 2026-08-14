@@ -281,6 +281,7 @@ def _fact_response(
     *,
     applicability: str = "applicable",
     semantic_state: str = "present",
+    positive_state: str | None = None,
 ) -> dict:
     facts = []
     for rule_id in rule_ids:
@@ -290,7 +291,9 @@ def _fact_response(
                 "applicability": applicability,
                 "semantic_state": semantic_state,
                 "positive_state": (
-                    "positive"
+                    positive_state
+                    if positive_state is not None
+                    else "positive"
                     if rule_id in {"LX0609-012", "LX0609-015"}
                     else "not_relevant"
                 ),
@@ -1070,20 +1073,25 @@ def test_fact_parser_python_owns_nonpositive_rule_applicability():
 
 
 @pytest.mark.parametrize(
-    ("imaging_conclusion", "expected_positive"),
     (
-        ("阳性占位。", "positive"),
-        ("右肺异常影。", "unknown"),
-        ("右肺结节病变。", "unknown"),
-        ("右肺占位，考虑恶性。", "unknown"),
-        ("基底节区出血。", "unknown"),
-        ("急性脑梗死。", "unknown"),
-        ("未见明确占位、出血或梗死。", "negative"),
-        ("待排急性脑梗死。", "unknown"),
+        "imaging_conclusion",
+        "model_applicability",
+        "model_positive",
+        "expected_applicability",
+        "expected_positive",
+    ),
+    (
+        ("阳性占位。", "not_applicable", "negative", "applicable", "positive"),
+        ("右肺结节病变。", "applicable", "positive", "applicable", "positive"),
+        ("未见明显异常。", "not_applicable", "negative", "not_applicable", "negative"),
+        ("待排急性脑梗死。", "unknown", "unknown", "unknown", "unknown"),
     ),
 )
-def test_fact_parser_python_owns_controlled_positive_imaging_gate(
+def test_fact_parser_uses_controlled_whole_report_imaging_classification(
     imaging_conclusion,
+    model_applicability,
+    model_positive,
+    expected_applicability,
     expected_positive,
 ):
     projection = build_exam_lab_text_projection(
@@ -1099,8 +1107,12 @@ def test_fact_parser_python_owns_controlled_positive_imaging_gate(
             },),
         }
     )
-    payload = _fact_response(("LX0609-012",))
-    payload["facts"][0]["applicability"] = "not_applicable"
+    payload = _fact_response(
+        ("LX0609-012",),
+        applicability=model_applicability,
+        semantic_state=("present" if model_applicability == "applicable" else "absent"),
+        positive_state=model_positive,
+    )
 
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
@@ -1108,13 +1120,7 @@ def test_fact_parser_python_owns_controlled_positive_imaging_gate(
         projection=projection,
     )
 
-    assert facts[0].applicability == (
-        "applicable"
-        if expected_positive == "positive"
-        else "not_applicable"
-        if expected_positive == "negative"
-        else "unknown"
-    )
+    assert facts[0].applicability == expected_applicability
     assert facts[0].positive_state == expected_positive
 
 
@@ -1782,7 +1788,9 @@ async def test_010_association_gap_delivers_counts_and_only_association_evidence
 
 
 @pytest.mark.asyncio
-async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
+async def test_complete_empty_course_only_uses_one_model_call_for_imaging_state(
+    monkeypatch,
+):
     snapshot, materials = _typed_session(
         monkeypatch,
         exam_rows=({
@@ -1805,7 +1813,16 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
             "horizon_date": "2026-04-30",
         },),
     )
-    client = _Client([])
+    client = _Client(
+        [
+            _fact_response(
+                ("LX0609-012",),
+                applicability="applicable",
+                semantic_state="absent",
+                positive_state="positive",
+            )
+        ]
+    )
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
@@ -1825,12 +1842,13 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
     assert [item.final_state.value for item in reduced] == [
         "non_compliant",
         "non_compliant",
-        "data_gap",
+        "non_compliant",
         "non_compliant",
         "non_compliant",
     ]
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
     facts = dict(result.customer_display_facts)
     assert facts["LX0609-010"] == {
         "failure_kind": "exam_lab_requirement_not_documented",
@@ -1840,7 +1858,7 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
         "checked_sources": ["exam_lab_order", "course_record"],
     }
     assert facts["LX0609-011"]["requirement"] == "result_recording_within_24h"
-    assert "LX0609-012" not in facts
+    assert facts["LX0609-012"]["requirement"] == "positive_result_analysis_within_24h"
     assert facts["LX0609-014"]["subject"] == "culture_susceptibility"
     assert facts["LX0609-015"]["requirement"] == "positive_result_analysis_within_24h"
 
@@ -1938,6 +1956,177 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     ]
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
+
+
+@pytest.mark.asyncio
+async def test_lx0609_012_definite_abnormal_finding_is_positive_without_literal_label(
+    monkeypatch,
+):
+    """影像报告检出明确异常即属阳性，不要求原文出现“阳性”二字。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "document_id": "ct-report-nodule",
+                "exam_id": "EXAM-NODULE",
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "右肺上叶见实性结节，建议结合临床随访。",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "course-nodule-analysis",
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": (
+                    "已阅胸部CT，右肺上叶实性结节，考虑炎性结节可能，"
+                    "安排三个月后复查。"
+                ),
+            },
+        ),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 12:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    client = _Client([_fact_response(("LX0609-012",))])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["compliant"]
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "明确异常病灶或异常征象" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_lx0609_012_definite_abnormal_without_course_is_defect_after_mature_window(
+    monkeypatch,
+):
+    """明确异常报告不能因没有病程而跳过阳性识别并降为资料不足。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "document_id": "mri-report-degeneration",
+                "exam_id": "EXAM-DEGENERATION",
+                "exam_name": "腰椎MRI",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "腰椎退行性改变，L4/5椎间盘突出。",
+            },
+        ),
+        course_rows=(),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 12:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    client = _Client(
+        [
+            _fact_response(
+                ("LX0609-012",),
+                applicability="applicable",
+                semantic_state="absent",
+                positive_state="positive",
+            )
+        ]
+    )
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert reduced[0].reason_code == "requirement_violated"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_lx0609_012_mixed_normal_and_chronic_abnormal_report_is_positive(
+    monkeypatch,
+):
+    """报告未见急性病变但检出陈旧灶时，仍属于检出异常的阳性事件。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "document_id": "ct-report-old-infarct",
+                "exam_id": "EXAM-OLD-INFARCT",
+                "exam_name": "头颅CT",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "未见明显异常；右侧基底节区见陈旧性脑梗死灶。",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "course-old-infarct-analysis",
+                "record_time": "2026-04-26 14:00:00",
+                "record_content": (
+                    "已阅头颅CT，未见急性改变，陈旧性脑梗死灶与既往病史相符，"
+                    "继续二级预防。"
+                ),
+            },
+        ),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 12:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    client = _Client([_fact_response(("LX0609-012",))])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["compliant"]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -2041,11 +2230,23 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "imaging_conclusion,course_content,expected_state,expected_reason,expected_llm_calls",
+    (
+        "imaging_conclusion",
+        "course_content",
+        "model_applicability",
+        "model_semantic",
+        "model_positive",
+        "expected_state",
+        "expected_reason",
+        "expected_llm_calls",
+    ),
     (
         (
             "阳性：右肺占位。",
             "胸部CT报告提示右肺占位，结合临床考虑肺部肿瘤，计划进一步检查。",
+            None,
+            None,
+            None,
             "compliant",
             "requirement_satisfied",
             0,
@@ -2054,22 +2255,31 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
             "未见明确阳性表现。",
             "",
             "not_applicable",
+            "absent",
+            "negative",
+            "not_applicable",
             "trigger_absent_complete",
-            0,
+            1,
         ),
         (
             "右肺占位，考虑恶性。",
             "胸部CT报告提示右肺占位。",
-            "data_gap",
-            "positive_assertion_not_explicit",
-            0,
+            "applicable",
+            "absent",
+            "positive",
+            "non_compliant",
+            "requirement_violated",
+            1,
         ),
         (
             "待排急性脑梗死。",
             "头颅CT报告提示待排急性脑梗死。",
+            "unknown",
+            "unknown",
+            "unknown",
             "data_gap",
-            "positive_assertion_not_explicit",
-            0,
+            "required_field_missing",
+            1,
         ),
     ),
 )
@@ -2077,11 +2287,14 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
     monkeypatch,
     imaging_conclusion,
     course_content,
+    model_applicability,
+    model_semantic,
+    model_positive,
     expected_state,
     expected_reason,
     expected_llm_calls,
 ):
-    """012仅接受原文明示“阳性”；非明确表述不得触发模型升级。"""
+    """012按报告整体异常三态分类，不再要求原文明示“阳性”。"""
 
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -2108,7 +2321,16 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
         ),
     )
     client = _Client(
-        [_fact_response(("LX0609-012",))] if expected_llm_calls else []
+        [
+            _fact_response(
+                ("LX0609-012",),
+                applicability=model_applicability,
+                semantic_state=model_semantic,
+                positive_state=model_positive,
+            )
+        ]
+        if expected_llm_calls
+        else []
     )
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -2142,10 +2364,6 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
     )
     assert canonical[0]["status"] == expected_state
     assert canonical[0]["reason_code"] == expected_reason
-    if expected_reason == "positive_assertion_not_explicit":
-        assert canonical[0]["findings"] == "检查报告未明确写明阳性，暂无法启动阳性结果分析核对"
-        assert "未明确标注“阳性”" in canonical[0]["evidence"]
-        assert "确认检查报告的阳性标志" in canonical[0]["suggestion"]
 
 
 @pytest.mark.asyncio

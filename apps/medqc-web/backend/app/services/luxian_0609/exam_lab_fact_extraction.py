@@ -50,8 +50,8 @@ _IMAGING_NEGATIVE_PATTERN = re.compile(
 _IMAGING_UNCERTAIN_PATTERN = re.compile(
     r"待排|不除外|不能除外|未排除|建议排除"
 )
-# 客户已确认：012 的阳性门控只接受报告原文明确“阳性”。否定和待排
-# 描述优先于此模式，避免将“未见阳性”或“待排阳性”误触发为阳性事件。
+# 原文明示且未被否定/待排的“阳性”可由 Python 快速确认；其余影像
+# 报告必须按整体异常语义由一次受控模型分类，不能靠关键词穷举病灶。
 _IMAGING_POSITIVE_PATTERN = re.compile(r"阳性")
 _CULTURE_NEGATIVE_PATTERN = re.compile(r"无生长|未检出|培养阴性|阴性")
 _CULTURE_POSITIVE_PATTERN = re.compile(r"培养阳性|检出.{0,12}菌|分离出.{0,12}菌|药敏结果")
@@ -170,43 +170,6 @@ class ExamLabFactParseError(ValueError):
             "evidence_ref": "evidence ref mismatch",
         }[failure_kind]
         super().__init__(f"exam lab fact response {legacy_message}")
-
-
-@dataclass(frozen=True)
-class ExamLabControlledTerminal:
-    """由资料事实直接决定、无需再调用模型的受控终止结果。"""
-
-    rule_id: str
-    status: str
-    reason_code: str
-    fact: ExamLabEventFact
-
-
-def resolve_exam_lab_controlled_terminal(
-    *, rule_id: str, projection: ExamLabTextProjection
-) -> ExamLabControlledTerminal | None:
-    """只处理已由客户口径明确、不能由后续语义升级的事实门控。"""
-
-    if (
-        rule_id != "LX0609-012"
-        or len(events_for_family(projection, "exam")) != 1
-        or events_for_family(projection, "exam")[0].positive_hint != "unknown"
-    ):
-        return None
-    event = events_for_family(projection, "exam")[0]
-    return ExamLabControlledTerminal(
-        rule_id=rule_id,
-        status="data_gap",
-        reason_code="positive_assertion_not_explicit",
-        fact=ExamLabEventFact(
-            rule_id=rule_id,
-            applicability="unknown",
-            semantic_state="unknown",
-            positive_state="unknown",
-            course_doc_refs=(),
-            evidence_refs=event.document_refs,
-        ),
-    )
 
 
 def _clean(value: Any) -> str:
@@ -420,6 +383,17 @@ def build_exam_lab_text_projection(
         )
         if not target_confirmed:
             positive_hint = "unknown"
+        elif family == "exam":
+            # 影像“阳性”是报告整体的临床语义，不能因局部“未见异常”就把同份
+            # 报告中的结节、退变或陈旧灶覆盖成阴性。这里只保留原文明示且未被
+            # 否定/待排的快速阳性；其余交给一次受控 LLM 做整体三态分类。
+            positive_hint = (
+                "positive"
+                if positive_pattern.search(material)
+                and not negative_pattern.search(material)
+                and not uncertain_pattern.search(material)
+                else "unknown"
+            )
         elif family == "culture" and (
             culture_indicator_positive or culture_indicator_negative
         ):
@@ -807,13 +781,13 @@ def build_exam_lab_fact_prompt(
     )
     return f"""你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。
 本次必须恰好覆盖这些规则ID，不得遗漏、重复、增加或改名：{json.dumps(selected, ensure_ascii=False)}。
-010=CT/MRI检查前原因；011=CT/MRI报告后记录结果；012=阳性CT/MRI结果分析；014=培养报告后记录结果；015=阳性菌/药敏分析处置。
+010=CT/MRI检查前原因；011=CT/MRI报告后记录结果；012=检出异常病灶或异常征象的CT/MRI结果分析；014=培养报告后记录结果；015=阳性菌/药敏分析处置。
 CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性；阳性但药敏待出时015为unknown。
 Python已按业务键拆分事件。影像事件目录={json.dumps(imaging_catalog, ensure_ascii=False, separators=(',', ':'))}；培养事件目录={json.dumps(culture_catalog, ensure_ascii=False, separators=(',', ':'))}。病程文书按COURSE_DOC字典序固定编号，全局位置为COURSE_DOC_POSITION={json.dumps(list(range(1, len(course_refs_in_position_order) + 1)), ensure_ascii=False)}。每条事实只能引用对应事件course_doc_positions列出的病程位置，不得跨事件引用。
 模型只能输出 {"event_position 和 " if multi_event_schema else ""}course_doc_positions（均为1开始的整数位置），不能输出 EVENT_DOC/COURSE_DOC ID、course_doc_refs、evidence_refs 或任何其他引用字段。EVENT_DOC由Python按事件目录自动绑定。
 semantic_state=present时，course_doc_positions必须非空；semantic_state=absent或unknown时course_doc_positions必须为空。
 若COURSE_DOC为空，所有规则都不得输出semantic_state=present；目标事件已实施但没有匹配病程时，010/011/014以及阳性的012/015应输出applicable+absent，不得虚构文书引用，也不得把“未记录”写成not_applicable。
-positive_state字段固定规则：010/011/014必须始终为not_relevant；只有012/015允许positive、negative或unknown。012的影像阳性门控仅由Python按报告原文明确“阳性”锁定；“异常、病变、占位、肿块、出血、梗死”以及“未见/无/阴性”、待排、不除外、未排除等描述均不算阳性。012/015事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
+positive_state字段固定规则：010/011/014必须始终为not_relevant；只有012/015允许positive、negative或unknown。012中，只要本次CT/MRI报告检出任一明确异常病灶或异常征象，即为positive；炎症、结节、退变、陈旧灶等均属于异常，不要求原文出现“阳性”，也不等同于癌症或确诊某病。仅当报告整体明确未检出异常征象时为negative；报告同时含“未见急性病变”和明确陈旧灶等异常时仍为positive；只有待排、不除外、不能除外等不确定描述且没有任何明确异常时为unknown。012/015事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
 011/014只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；012/015再独立判断阳性结果是否有分析或处置。
 同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。病程既复述阳性影像结论又给出考虑、计划或处理时，该事件的011和012都为present；既复述培养结果又据敏感性调整用药时，该事件的014和015都为present。
 unknown只用于材料自身含混或互相冲突；完整投影里单纯未找到匹配病程应为absent。
@@ -963,13 +937,6 @@ def parse_exam_lab_fact_response(
                 semantic = "absent"
                 normalized_course = ()
                 reference_invalid = False
-        elif rule_id == "LX0609-012" and event is not None and event.target_confirmed:
-            # 012 的阳性门控只能来自 Python 识别的原文明确“阳性”；模型无权
-            # 把其他临床描述提升为阳性，否则保持资料不足。
-            positive = "unknown"
-            applicability = "unknown"
-            semantic = "unknown"
-            normalized_course = ()
         elif positive == "positive":
             applicability = "applicable"
         elif positive == "negative":

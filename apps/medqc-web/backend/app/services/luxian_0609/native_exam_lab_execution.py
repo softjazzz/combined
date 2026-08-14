@@ -26,7 +26,6 @@ from .exam_lab_fact_extraction import (
     event_for_fact,
     events_for_family,
     parse_exam_lab_fact_response,
-    resolve_exam_lab_controlled_terminal,
 )
 from .exam_lab_result_mapping import (
     ExamLabOutcome as _ExamLabOutcome,
@@ -61,7 +60,7 @@ EXAM_RULE_IDS = frozenset({"LX0609-010", "LX0609-011", "LX0609-012"})
 CULTURE_RULE_IDS = frozenset({"LX0609-014", "LX0609-015"})
 EXECUTOR_KEY = "exam_lab"
 _TYPED_DECISION_RULE_IDS = frozenset(EXAM_LAB_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "exam-lab-ruledecision-shadow-v1"
+_TYPED_EVALUATOR_VERSION = "exam-lab-ruledecision-shadow-v2"
 
 
 _EXAM_SOURCE_KEYS = ("exam_master", "exam_item_report")
@@ -1573,36 +1572,6 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
                 for rule_id in tuple(eligible_rule_ids):
-                    terminal = resolve_exam_lab_controlled_terminal(
-                        rule_id=rule_id,
-                        projection=projection,
-                    )
-                    if terminal is not None:
-                        outcome = _ExamLabOutcome(
-                            rule_id,
-                            terminal.status,
-                            terminal.reason_code,
-                            tuple(
-                                projection.safe_refs[ref]
-                                for ref in terminal.fact.evidence_refs
-                                if ref in projection.safe_refs
-                            ),
-                        )
-                        emit_typed(
-                            rule_id,
-                            outcome.status,
-                            outcome.reason_code,
-                            outcome.fact_refs,
-                            display_facts=_text_outcome_display_facts(
-                                rule_id=rule_id,
-                                status=outcome.status,
-                                fact=terminal.fact,
-                                projection=projection,
-                            ),
-                        )
-                        typed_processed.add(rule_id)
-                        eligible_rule_ids.remove(rule_id)
-                        continue
                     fact = _strong_semantic_fact(
                         rule_id=rule_id,
                         projection=projection,
@@ -1646,9 +1615,15 @@ async def execute_luxian_0609_native_exam_lab_rules(
             ):
                 # 来源完整且确实没有任何相关病程时，010/011/014 的“未记录”
                 # 可由 Python 直接确定；012/015 仅接受事件结果中的强阳性/阴性
-                # 提示，含混结果保持 DG。避免模型在空 COURSE_DOC 上虚构引用。
+                # 提示。012 报告尚未完成异常/正常分类时仍需一次受控模型判断；
+                # 模型只分类报告，病程为空和最终缺陷仍由 Python 确定。
                 for rule_id in tuple(eligible_rule_ids):
                     family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+                    if rule_id == "LX0609-012" and any(
+                        event.positive_hint == "unknown"
+                        for event in events_for_family(projection, family)
+                    ):
+                        continue
                     facts = tuple(
                         ExamLabEventFact(
                             rule_id=rule_id,
@@ -1697,8 +1672,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         ),
                     )
                     typed_processed.add(rule_id)
-                eligible_rule_ids = []
-                projection = None
+                    eligible_rule_ids.remove(rule_id)
+                if not eligible_rule_ids:
+                    projection = None
             if eligible_rule_ids and (
                 projection is None or not projection.context or llm_client is None
             ):
