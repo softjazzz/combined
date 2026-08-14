@@ -81,6 +81,31 @@ describe('useDataSync 系统配置权限', () => {
     )
   })
 
+  it('全院同步预检显式发送全院范围而不是省略科室参数', async () => {
+    mockUserRoles = ['admin']
+    mockPreflight.mockResolvedValue({
+      source: 'pg',
+      executable: true,
+      blockers: [],
+      warnings: [],
+      estimated_impact: 42,
+    })
+    const { state, runPreflight } = useDataSync()
+    state.policyForm.scope = 'final'
+    state.policyForm.start_date = '2026-08-07'
+    state.policyForm.end_date = '2026-08-13'
+    state.policyForm.target_departments = ['*']
+
+    await runPreflight('pg')
+
+    expect(mockPreflight).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scene: 'final',
+        target_departments: ['*'],
+      }),
+    )
+  })
+
   it('重新加载已保存的在院同步策略时不降级为终末病历', async () => {
     mockGetSyncPolicy.mockResolvedValue({
       scope: 'running',

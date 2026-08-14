@@ -2122,13 +2122,14 @@ def _resolve_pg_extract_window(
     if (end_dt - start_dt).days > 180:
         return None, None, [], "出院日期范围过大（最多 180 天），请缩小后重试"
 
+    has_department_override = isinstance(target_departments, list)
     override_departments = (
         _normalize_target_departments(target_departments)
-        if isinstance(target_departments, list)
+        if has_department_override
         else []
     )
     policy_departments = _normalize_target_departments(policy.get("target_departments"))
-    dept_filters = override_departments if override_departments else policy_departments
+    dept_filters = override_departments if has_department_override else policy_departments
     return start_dt, end_dt, dept_filters, None
 
 
@@ -2909,13 +2910,14 @@ def _resolve_case_scope_window(
         return None, None, None, [], "入院日期范围非法：开始日期不能晚于截止日期"
     if (as_of_date - admission_start_date).days > 180:
         return None, None, None, [], "入院日期范围过大（最多 180 天），请缩小后重试"
+    has_department_override = isinstance(target_departments, list)
     override_departments = (
         _normalize_target_departments(target_departments)
-        if isinstance(target_departments, list)
+        if has_department_override
         else []
     )
     policy_departments = _normalize_target_departments(policy.get("target_departments"))
-    departments = override_departments if override_departments else policy_departments
+    departments = override_departments if has_department_override else policy_departments
     return as_of_date, admission_start_date, None, departments, None
 
 

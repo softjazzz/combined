@@ -652,7 +652,7 @@ function resolveTargetDepartments(): string[] | undefined {
     ),
   ]
   if (cleaned.length === 0 || (cleaned.length === 1 && cleaned[0] === '*')) {
-    return undefined
+    return ['*']
   }
   if (cleaned.includes('*')) {
     return cleaned.filter((item) => item !== '*')

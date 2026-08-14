@@ -348,7 +348,7 @@ def _normalize_target_departments(values: Optional[list[str]]) -> Optional[list[
         return None
     dedup = list(dict.fromkeys(cleaned))
     if len(dedup) == 1 and dedup[0] == "*":
-        return None
+        return ["*"]
     if "*" in dedup:
         dedup = [item for item in dedup if item != "*"]
     return dedup or None

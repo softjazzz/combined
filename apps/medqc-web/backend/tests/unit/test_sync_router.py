@@ -359,6 +359,56 @@ class TestSyncRouter:
         assert isinstance(data["preflight_fingerprint"], str)
         assert len(data["preflight_fingerprint"]) == 64
 
+    def test_preflight_pg_preserves_explicit_all_hospital_scope(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        captured = []
+        monkeypatch.setattr(
+            "app.services.etl_sync.test_remote_connection",
+            lambda: {"connected": True, "error": ""},
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.test_local_connection",
+            lambda: {"connected": True, "error": ""},
+        )
+
+        def _estimate(**kwargs):
+            captured.append(kwargs)
+            return {
+                "estimated_impact": 42,
+                "estimate_basis": "case_ref_count",
+                "date_window": {"start": "2026-08-07", "end": "2026-08-13"},
+                "target_departments": ["*"],
+            }
+
+        monkeypatch.setattr("app.services.etl_sync.estimate_pg_sync_impact", _estimate)
+        monkeypatch.setattr(
+            "app.services.etl_sync.validate_pg_sync_plan",
+            lambda tables=None, include_disabled=False: {
+                "mode": "table",
+                "remote_schema": "public",
+                "matrix_scope": "enabled" if not include_disabled else "all",
+                "blockers": [],
+                "warnings": [],
+                "table_validations": [{"table": "mr", "executable": True, "blockers": []}],
+                "target_tables": ["mr"],
+            },
+        )
+
+        resp = client.post(
+            "/api/v1/sync/preflight",
+            json={
+                "source": "pg",
+                "tables": ["mr"],
+                "date_window": {"start": "2026-08-07", "end": "2026-08-13"},
+                "target_departments": ["*"],
+            },
+        )
+
+        assert resp.status_code == 200
+        data = _assert_success_shell(resp.json())
+        assert data["target_departments"] == ["*"]
+        assert captured[0]["target_departments"] == ["*"]
+
     def test_preflight_pg_zero_candidates_should_block_sync(self, client, monkeypatch):
         _override_user(client, ["admin"])
         monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True, "error": ""})

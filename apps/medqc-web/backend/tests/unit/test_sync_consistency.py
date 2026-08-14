@@ -59,6 +59,40 @@ def test_estimate_pg_sync_impact_uses_running_case_refs_without_mr_no(monkeypatc
     ]
 
 
+def test_estimate_pg_sync_impact_explicit_all_hospital_ignores_saved_departments(
+    monkeypatch,
+):
+    calls = []
+
+    class _ScopeService:
+        def resolve_hospitalization_scope(self, **kwargs):
+            calls.append(kwargs)
+            return HospitalizationScopeResult(
+                case_refs=(CaseRef("H1", "P1", "V1"),),
+                selected=(),
+                all_selected=(),
+                sources_used=("discharge_record",),
+                source_status="ready",
+                warnings=(),
+            )
+
+    monkeypatch.setattr(
+        etl_sync,
+        "load_sync_policy",
+        lambda: {"target_departments": ["历史保存科室"]},
+    )
+    monkeypatch.setattr(etl_sync, "_create_case_scope_service", lambda: _ScopeService())
+
+    result = etl_sync.estimate_pg_sync_impact(
+        scene="final",
+        date_window={"start": "2026-08-07", "end": "2026-08-13"},
+        target_departments=["*"],
+    )
+
+    assert result["target_departments"] == ["*"]
+    assert calls[0]["departments"] == []
+
+
 def test_estimate_pg_sync_impact_rejects_placeholder_institute(monkeypatch):
     class _ScopeService:
         def resolve_hospitalization_scope(self, **_kwargs):
@@ -588,6 +622,32 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
     }
     assert any("出院来源按优先级合并" in item for item in result["warnings"])
     assert any("daily_course_record" in item for item in result["warnings"])
+
+
+def test_run_sync_explicit_all_hospital_ignores_saved_departments(monkeypatch):
+    case_refs = (CaseRef("H1", "P1", "V1"),)
+    calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=_hospitalization_scope_result(case_refs),
+        sync_action=lambda _kwargs: _successful_case_set_result(case_refs),
+    )
+    monkeypatch.setattr(
+        etl_sync,
+        "load_sync_policy",
+        lambda: {"target_departments": ["历史保存科室"]},
+    )
+
+    result = etl_sync.run_sync(
+        sync_date="2026-08-13",
+        tables=list(target_names),
+        scene="final",
+        date_window={"start": "2026-08-07", "end": "2026-08-13"},
+        target_departments=["*"],
+    )
+
+    assert result["status"] == "success"
+    assert result["target_departments"] == ["*"]
+    assert calls["scope"][0]["departments"] == []
 
 
 def test_run_sync_rejects_placeholder_institute_before_scope_or_sync(monkeypatch):
