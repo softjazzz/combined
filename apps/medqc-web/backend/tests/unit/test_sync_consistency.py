@@ -1803,6 +1803,13 @@ def test_sync_table_candidate_fields_do_not_enable_incremental_strategy():
     assert all("schema_version" in table for table in tables)
 
 
+def test_all_managed_sync_tables_are_enabled_by_default():
+    tables = etl_sync.list_sync_tables()
+
+    assert len(tables) > 8
+    assert all(table["enabled"] is True for table in tables)
+
+
 def test_upsert_to_local_external_session_does_not_commit(monkeypatch):
     class _ExternalSession:
         def __init__(self):

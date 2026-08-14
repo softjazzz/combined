@@ -526,7 +526,7 @@ async def update_sync_policy(
 
 @router.get("/config/pg/tables")
 async def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_read_access)):
-    """获取 PG 表直连同步配置（分阶段启用）"""
+    """获取 PG 表直连同步配置（默认启用全部已配置表）"""
     try:
         from ..services.etl_sync import list_sync_tables
 

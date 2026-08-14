@@ -1046,17 +1046,6 @@ def test_local_connection() -> Dict:
 
 # ==================== 同步表配置 ====================
 
-_CORE_ENABLED_TABLES = {
-    "mr",
-    "diagnosis",
-    "mr_surgery",
-    "mr_cost",
-    "admission_record",
-    "discharge_record",
-    "first_course_record",
-    "daily_course_record",
-}
-
 SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
     {
         "id": "core_8",
@@ -1649,7 +1638,7 @@ SYNC_TABLES = [
         "params": 1,
         "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
     },
-    # ---- 医保结算清单（Phase 2：待医院开放存储过程后启用）----
+    # ---- 医保结算清单（源库未提供时按资料不完整失败关闭）----
     {
         "name": "medical_insurance_settlement",
         "label": "医保结算清单",
@@ -1672,7 +1661,8 @@ for _item in SYNC_TABLES:
     _item.setdefault("source_table", _name)
     _item.setdefault("date_field", "update_time")
     _item.setdefault("fallback_date_field", None)
-    _item.setdefault("enabled", _name in _CORE_ENABLED_TABLES)
+    # 全系统同步默认纳管全部已配置资料表；管理员保存的显式开关会在下方覆盖。
+    _item.setdefault("enabled", True)
     # 增量能力必须由代码显式批准。date_field/候选时间列不能自动提升同步策略。
     _item.setdefault("incremental_strategy", "full_visit_reload")
     _item.setdefault("watermark_columns", [])
