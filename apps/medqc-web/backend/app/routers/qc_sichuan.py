@@ -514,6 +514,7 @@ class Luxian0609RecordResultExportRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     keyword: Optional[str] = None
+    record_refs: Optional[List[Dict[str, str]]] = None
 
 
 class SaveQCResultRequest(BaseModel):
@@ -5013,14 +5014,50 @@ async def export_filtered_workspace_record_results(
         "end_date": str(payload.end_date or "").strip() or None,
         "keyword": str(payload.keyword or "").strip() or None,
     }
-    record_count = workspace.count_records(**filters)
-    if record_count > 1000:
-        raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
-    records = workspace.collect_records(**filters)
-    if len(records) > 1000:
-        raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
+    requested_record_refs: tuple[CaseRef, ...] = ()
+    if payload.record_refs is not None:
+        try:
+            requested_record_refs = case_refs_from_records(payload.record_refs)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="所选病历身份不完整，请重新勾选") from exc
+        if len(requested_record_refs) != len(payload.record_refs):
+            raise HTTPException(status_code=422, detail="所选病历存在重复，请重新勾选")
+        if len(requested_record_refs) > 1000:
+            raise HTTPException(status_code=422, detail="所选病历超过1000份，请缩小范围后导出")
+
+    if requested_record_refs:
+        record_refs = [case_ref.as_dict() for case_ref in requested_record_refs]
+        records = workspace.collect_records(
+            scope=payload.scope,
+            department=None,
+            doctor=None,
+            date_field=payload.date_field,
+            start_date=None,
+            end_date=None,
+            keyword=None,
+            record_refs=record_refs,
+        )
+        try:
+            actual_record_refs = case_refs_from_records(records)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="所选病历无法完整读取，已停止导出") from exc
+        if (
+            len(actual_record_refs) != len(records)
+            or set(actual_record_refs) != set(requested_record_refs)
+        ):
+            raise HTTPException(status_code=422, detail="所选病历范围已变化，请重新勾选后导出")
+        export_filters = {**filters, "export_mode": "selected"}
+    else:
+        record_count = workspace.count_records(**filters)
+        if record_count > 1000:
+            raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
+        records = workspace.collect_records(**filters)
+        if len(records) > 1000:
+            raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
+        export_filters = filters
+
     identities: set[tuple[str, str, str]] = set()
-    record_refs: List[Dict[str, str]] = []
+    canonical_record_refs: List[Dict[str, str]] = []
     for record in records:
         identity = (
             str(record.get("institute_id") or "").strip(),
@@ -5030,7 +5067,7 @@ async def export_filtered_workspace_record_results(
         if not all(identity) or identity in identities:
             raise HTTPException(status_code=422, detail="当前筛选存在不完整或重复病历身份，已停止导出")
         identities.add(identity)
-        record_refs.append(
+        canonical_record_refs.append(
             {
                 "institute_id": identity[0],
                 "patient_id": identity[1],
@@ -5038,12 +5075,12 @@ async def export_filtered_workspace_record_results(
             }
         )
     results = workspace.build_latest_luxian_0609_record_result_dtos(
-        record_refs=record_refs,
+        record_refs=canonical_record_refs,
     )
     workbook = export_filtered_record_results_workbook(
         records=records,
         results=results,
-        filters=filters,
+        filters=export_filters,
     )
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     audit_event(
@@ -5051,7 +5088,11 @@ async def export_filtered_workspace_record_results(
         action="qc.record_results.export_xlsx",
         resource="/api/v1/qc/sichuan/workspace/records/export",
         outcome="success",
-        details={"record_count": len(records), "scope": payload.scope},
+        details={
+            "record_count": len(records),
+            "scope": payload.scope,
+            "mode": "selected" if requested_record_refs else "filtered",
+        },
         current_user=current_user,
     )
     return StreamingResponse(

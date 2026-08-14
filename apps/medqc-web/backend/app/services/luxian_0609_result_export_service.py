@@ -235,11 +235,21 @@ def export_filtered_record_results_workbook(
     intro = workbook.active
     intro.title = "导出说明"
     intro.append(["项目", "内容"])
-    intro.append(["导出口径", "当前服务器筛选范围内病历的最新 Canonical 质控结果"])
+    export_mode = _text(filters.get("export_mode"))
+    intro.append(
+        [
+            "导出口径",
+            (
+                "已勾选病历的最新 Canonical 质控结果"
+                if export_mode == "selected"
+                else "当前服务器筛选范围内病历的最新 Canonical 质控结果"
+            ),
+        ]
+    )
     intro.append(["导出时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
     intro.append(["病历数量", len(records)])
     for key, value in filters.items():
-        if _text(value):
+        if key != "export_mode" and _text(value):
             intro.append([f"筛选-{key}", _excel_text(value)])
 
     summary = workbook.create_sheet("病历汇总")

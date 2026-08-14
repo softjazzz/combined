@@ -13,6 +13,20 @@ class _Workspace:
 
     def collect_records(self, **kwargs):
         self.collect_kwargs = kwargs
+        record_refs = kwargs.get("record_refs")
+        if record_refs:
+            return [
+                {
+                    "institute_id": ref["institute_id"],
+                    "patient_id": ref["patient_id"],
+                    "visit_id": ref["visit_id"],
+                    "patient_name": f"患者{index}",
+                    "department": "重症医学科（ICU）",
+                    "doctor": "李医生",
+                    "scope": kwargs.get("scope"),
+                }
+                for index, ref in enumerate(record_refs)
+            ]
         return [
             {
                 "institute_id": "H-1",
@@ -147,6 +161,101 @@ def test_current_filter_excel_export_freezes_server_records_and_latest_canonical
         {"institute_id": "H-1", "patient_id": "P-0", "visit_id": "V-0"},
         {"institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1"},
     ]
+
+
+def test_selected_record_excel_export_uses_exact_coordinates_without_counting_filter_scope(client, monkeypatch):
+    _authorize(client)
+    workspace = _Workspace(record_count=99)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/records/export",
+        json={
+            "scope": "final",
+            "date_field": "discharge",
+            "record_refs": [
+                {"institute_id": "H-1", "patient_id": "P-7", "visit_id": "V-7"},
+                {"institute_id": "H-2", "patient_id": "P-8", "visit_id": "V-8"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"PK")
+    assert not hasattr(workspace, "count_kwargs")
+    assert workspace.collect_kwargs == {
+        "scope": "final",
+        "department": None,
+        "doctor": None,
+        "date_field": "discharge",
+        "start_date": None,
+        "end_date": None,
+        "keyword": None,
+        "record_refs": [
+            {"institute_id": "H-1", "patient_id": "P-7", "visit_id": "V-7"},
+            {"institute_id": "H-2", "patient_id": "P-8", "visit_id": "V-8"},
+        ],
+    }
+    assert workspace.bulk_calls == [
+        [
+            {"institute_id": "H-1", "patient_id": "P-7", "visit_id": "V-7"},
+            {"institute_id": "H-2", "patient_id": "P-8", "visit_id": "V-8"},
+        ]
+    ]
+
+
+@pytest.mark.parametrize(
+    "record_refs",
+    [
+        [{"institute_id": "H-1", "patient_id": "", "visit_id": "V-1"}],
+        [
+            {"institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1"},
+            {"institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1"},
+        ],
+    ],
+)
+def test_selected_record_excel_rejects_incomplete_or_duplicate_coordinates(
+    client, monkeypatch, record_refs
+):
+    _authorize(client)
+    workspace = _Workspace()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/records/export",
+        json={"scope": "final", "date_field": "discharge", "record_refs": record_refs},
+    )
+
+    assert response.status_code == 422
+    assert not hasattr(workspace, "collect_kwargs")
+    assert workspace.bulk_calls == []
+
+
+def test_selected_record_excel_rejects_when_loaded_records_do_not_match_selection(client, monkeypatch):
+    _authorize(client)
+    workspace = _Workspace()
+    workspace.collect_records = lambda **_kwargs: [
+        {
+            "institute_id": "H-1",
+            "patient_id": "P-other",
+            "visit_id": "V-other",
+        }
+    ]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/records/export",
+        json={
+            "scope": "final",
+            "date_field": "discharge",
+            "record_refs": [
+                {"institute_id": "H-1", "patient_id": "P-1", "visit_id": "V-1"}
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert workspace.bulk_calls == []
 
 
 def test_current_filter_excel_rejects_more_than_one_thousand_records(client, monkeypatch):

@@ -124,3 +124,16 @@ def test_filtered_workbook_escapes_formula_like_customer_text():
     assert workbook["病历汇总"]["A2"].value.startswith("'=")
     assert workbook["需处理明细"]["H2"].value == "'+1+1"
     assert workbook["导出说明"]["B6"].value == "'@危险公式"
+
+
+def test_selected_workbook_uses_selected_scope_description_without_technical_filter_row():
+    output = export_filtered_record_results_workbook(
+        records=[_record()],
+        results={("H-1", "P-1", "V-1"): _ready_result()},
+        filters={"scope": "final", "export_mode": "selected"},
+    )
+
+    workbook = load_workbook(BytesIO(output.getvalue()), read_only=True)
+    rows = list(workbook["导出说明"].iter_rows(values_only=True))
+    assert ("导出口径", "已勾选病历的最新 Canonical 质控结果") in rows
+    assert all(row[0] != "筛选-export_mode" for row in rows)

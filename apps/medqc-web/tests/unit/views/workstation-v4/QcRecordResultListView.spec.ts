@@ -241,6 +241,28 @@ describe('QcRecordResultListView', () => {
     expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '终末病历质控-当前筛选.xlsx')
   })
 
+  it('按勾选病历的三坐标精确导出Excel，不回退当前筛选或visitId单键', async () => {
+    const wrapper = mountView('discharged')
+    await flushPromises()
+
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+    await wrapper.get('.qc-record-result-list-view__export-selected-button').trigger('click')
+    await flushPromises()
+
+    expect(mocks.exportFilteredLuxian0609RecordResults).toHaveBeenCalledWith({
+      scope: 'final',
+      date_field: 'discharge',
+      record_refs: [
+        {
+          institute_id: 'H',
+          patient_id: 'P',
+          visit_id: 'V-priority',
+        },
+      ],
+    })
+    expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '终末病历质控-所选1份.xlsx')
+  })
+
   it('相同 visitId 的两份病历按 recordKey 定位，并向抽屉传入所选行的完整三坐标', async () => {
     mocks.getRaw.mockResolvedValue({
       data: {

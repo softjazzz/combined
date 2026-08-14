@@ -76,6 +76,18 @@
           </button>
         </div>
         <div class="qc-record-result-list-view__toolbar-actions">
+          <span
+            v-if="selectedCount > 0"
+            class="qc-record-result-list-view__selection-count"
+          >已选 {{ selectedCount }} 份</span>
+          <button
+            class="qc-record-result-list-view__export-selected-button"
+            type="button"
+            :disabled="loading || exporting || selectedCount === 0"
+            @click="exportSelectedRecords"
+          >
+            {{ exportingSelected ? '正在导出…' : '导出所选 Excel' }}
+          </button>
           <button
             class="qc-record-result-list-view__export-button"
             type="button"
@@ -98,8 +110,10 @@
       <QcRecordResultTable
         :care-phase="carePhase"
         :rows="rows"
+        :selected-record-keys="selectedRecordKeys"
         :empty-message="emptyMessage"
         @open-result="handleOpenResult"
+        @update:selected-record-keys="updateSelectedRecordKeys"
       />
 
       <footer
@@ -169,8 +183,13 @@ const route = useRoute()
 const detailNotice = ref('')
 const exportNotice = ref('')
 const exporting = ref(false)
+const exportingSelected = ref(false)
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
+const selectedRecordKeys = ref<string[]>([])
+const selectedRecordRefs = ref<
+  Record<string, { institute_id: string; patient_id: string; visit_id: string }>
+>({})
 const startDate = ref('')
 const endDate = ref('')
 
@@ -213,6 +232,7 @@ const metricItems = computed(() => [
 const rows = computed<QcRecordResultRow[]>(() =>
   allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow),
 )
+const selectedCount = computed(() => selectedRecordKeys.value.length)
 
 const emptyMessage = computed(() => {
   if (loading.value) return '正在加载质控结果…'
@@ -323,9 +343,79 @@ function formatQcTimestamp(value?: string | null): string {
 }
 
 function applyFilters() {
+  clearSelection()
   dateRange.value = startDate.value || endDate.value ? [startDate.value, endDate.value] : null
   currentPage.value = 1
   fetchData(1)
+}
+
+function updateSelectedRecordKeys(recordKeys: string[]) {
+  const nextKeys = [...new Set(recordKeys)]
+  const nextRefs = { ...selectedRecordRefs.value }
+  const currentRows = new Map(
+    allRecords.value
+      .filter(hasCompleteRecordIdentity)
+      .map((record) => [record.recordKey as string, record] as const),
+  )
+  const nextKeySet = new Set(nextKeys)
+  for (const key of currentRows.keys()) {
+    if (!nextKeySet.has(key)) delete nextRefs[key]
+  }
+  for (const key of nextKeys) {
+    const record = currentRows.get(key)
+    if (!record) continue
+    nextRefs[key] = {
+      institute_id: record.instituteId as string,
+      patient_id: record.patientId as string,
+      visit_id: record.visitId as string,
+    }
+  }
+  selectedRecordRefs.value = nextRefs
+  selectedRecordKeys.value = nextKeys.filter((key) => Boolean(nextRefs[key]))
+}
+
+function clearSelection() {
+  selectedRecordKeys.value = []
+  selectedRecordRefs.value = {}
+}
+
+async function exportSelectedRecords() {
+  if (exporting.value || selectedCount.value === 0) return
+  const recordRefs = selectedRecordKeys.value
+    .map((key) => selectedRecordRefs.value[key])
+    .filter((value): value is { institute_id: string; patient_id: string; visit_id: string } =>
+      Boolean(value),
+    )
+  if (recordRefs.length !== selectedCount.value) {
+    exportNotice.value = '所选病历身份已变化，请重新勾选后导出'
+    clearSelection()
+    return
+  }
+
+  exporting.value = true
+  exportingSelected.value = true
+  exportNotice.value = ''
+  try {
+    const response = await exportFilteredLuxian0609RecordResults({
+      scope: isInpatient.value ? 'running' : 'final',
+      date_field: isInpatient.value ? 'admission' : 'discharge',
+      record_refs: recordRefs,
+    })
+    if (!response.success || !response.data) {
+      exportNotice.value = response.message || '导出所选质控结果失败'
+      return
+    }
+    downloadBlob(
+      response.data,
+      `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-所选${recordRefs.length}份.xlsx`,
+    )
+    exportNotice.value = `已开始下载所选 ${recordRefs.length} 份病历的质控结果`
+  } catch {
+    exportNotice.value = '导出所选质控结果失败，请稍后重试'
+  } finally {
+    exporting.value = false
+    exportingSelected.value = false
+  }
 }
 
 async function exportCurrentFilter() {
@@ -380,6 +470,7 @@ watch(
   () => props.carePhase,
   (carePhase) => {
     closeResultDrawer()
+    clearSelection()
     dateField.value = carePhase === 'inpatient' ? 'admission' : 'discharge'
     selectHospFilter(carePhase)
   },
@@ -564,7 +655,8 @@ function closeResultDrawer() {
   gap: 8px;
 }
 
-.qc-record-result-list-view__export-button {
+.qc-record-result-list-view__export-button,
+.qc-record-result-list-view__export-selected-button {
   min-height: 38px;
   padding: 0 15px;
   border: 1px solid rgba(0, 102, 204, 0.2);
@@ -577,8 +669,23 @@ function closeResultDrawer() {
   cursor: pointer;
 }
 
-.qc-record-result-list-view__export-button:disabled {
-  cursor: wait;
+.qc-record-result-list-view__export-selected-button:not(:disabled) {
+  border-color: #0066cc;
+  background: #0066cc;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(0, 102, 204, 0.18);
+}
+
+.qc-record-result-list-view__selection-count {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.qc-record-result-list-view__export-button:disabled,
+.qc-record-result-list-view__export-selected-button:disabled {
+  cursor: not-allowed;
   opacity: 0.55;
 }
 

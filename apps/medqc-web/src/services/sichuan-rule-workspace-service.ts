@@ -157,6 +157,11 @@ export async function exportFilteredLuxian0609RecordResults(payload: {
   start_date?: string
   end_date?: string
   keyword?: string
+  record_refs?: Array<{
+    institute_id: string
+    patient_id: string
+    visit_id: string
+  }>
 }) {
   try {
     const response = await ApiService.requestRaw<Blob>({

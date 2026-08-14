@@ -7,6 +7,19 @@
       <table class="qc-record-result-table__table">
         <thead>
           <tr>
+            <th
+              scope="col"
+              class="qc-record-result-table__selection-heading"
+            >
+              <input
+                type="checkbox"
+                aria-label="选择当前页全部病历"
+                :checked="allPageRowsSelected"
+                :disabled="rows.length === 0"
+                @click.stop
+                @change="togglePageSelection"
+              >
+            </th>
             <th scope="col">
               患者 / 住院号
             </th>
@@ -38,12 +51,25 @@
             v-for="row in rows"
             :key="row.recordKey"
             class="qc-record-result-table__row"
+            :class="{
+              'qc-record-result-table__row--selected': selectedRecordKeys.includes(row.recordKey),
+            }"
             :data-record-key="row.recordKey"
+            :aria-selected="selectedRecordKeys.includes(row.recordKey)"
             tabindex="0"
             @click="openResult(row.recordKey)"
             @keydown.enter.prevent="openResult(row.recordKey)"
             @keydown.space.prevent="openResult(row.recordKey)"
           >
+            <td class="qc-record-result-table__selection-cell">
+              <input
+                type="checkbox"
+                :aria-label="`选择${row.patientName || row.visitId || '当前病历'}`"
+                :checked="selectedRecordKeys.includes(row.recordKey)"
+                @click.stop
+                @change="toggleRowSelection(row.recordKey, $event)"
+              >
+            </td>
             <td>
               <div class="qc-record-result-table__patient-cell">
                 <img
@@ -111,7 +137,7 @@
             v-if="rows.length === 0"
             class="qc-record-result-table__empty-row"
           >
-            <td colspan="7">
+            <td colspan="8">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -122,6 +148,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
 import patientIconElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
@@ -161,18 +189,26 @@ const props = withDefaults(
   defineProps<{
     carePhase: QcRecordCarePhase
     rows: QcRecordResultRow[]
+    selectedRecordKeys?: string[]
     emptyMessage?: string
   }>(),
   {
+    selectedRecordKeys: () => [],
     emptyMessage: '暂无符合当前范围的病历',
   },
 )
 
 const emit = defineEmits<{
   'open-result': [recordKey: string]
+  'update:selectedRecordKeys': [recordKeys: string[]]
 }>()
 
-const timeColumnLabel = props.carePhase === 'inpatient' ? '入院时间' : '出院时间'
+const timeColumnLabel = computed(() => (props.carePhase === 'inpatient' ? '入院时间' : '出院时间'))
+const allPageRowsSelected = computed(
+  () =>
+    props.rows.length > 0 &&
+    props.rows.every((row) => props.selectedRecordKeys.includes(row.recordKey)),
+)
 
 function displayTime(row: QcRecordResultRow): string {
   return formatDisplayTime(props.carePhase === 'inpatient' ? row.admissionTime : row.dischargeTime)
@@ -188,6 +224,24 @@ function formatDisplayTime(value?: string): string {
 
 function openResult(recordKey: string) {
   emit('open-result', recordKey)
+}
+
+function toggleRowSelection(recordKey: string, event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  const next = new Set(props.selectedRecordKeys)
+  if (checked) next.add(recordKey)
+  else next.delete(recordKey)
+  emit('update:selectedRecordKeys', [...next])
+}
+
+function togglePageSelection(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  const next = new Set(props.selectedRecordKeys)
+  for (const row of props.rows) {
+    if (checked) next.add(row.recordKey)
+    else next.delete(row.recordKey)
+  }
+  emit('update:selectedRecordKeys', [...next])
 }
 
 function isFemale(sex?: string): boolean {
@@ -250,6 +304,23 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
   white-space: nowrap;
 }
 
+.qc-record-result-table__selection-heading,
+.qc-record-result-table__selection-cell {
+  width: 44px;
+  max-width: 44px !important;
+  padding-right: 4px !important;
+  text-align: center !important;
+}
+
+.qc-record-result-table__selection-heading input,
+.qc-record-result-table__selection-cell input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #0066cc;
+  cursor: pointer;
+}
+
 .qc-record-result-table__table td {
   max-width: 230px;
   padding: 8px 16px;
@@ -268,6 +339,10 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 .qc-record-result-table__row:hover,
 .qc-record-result-table__row:focus-visible {
   background: rgba(248, 250, 252, 0.88);
+}
+
+.qc-record-result-table__row--selected {
+  background: rgba(0, 102, 204, 0.045);
 }
 
 .qc-record-result-table__patient-cell {
