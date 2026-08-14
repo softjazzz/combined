@@ -160,6 +160,7 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
                 discharge_summary.c.visit_id,
                 discharge_summary.c.discharge_time,
                 discharge_summary.c.dept_name,
+                discharge_summary.c.document_id,
             )
             .filter(discharge_summary.c.visit_id.in_(missing_visit_ids))
             .all()
@@ -208,6 +209,9 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
                 discharge_datetime=(
                     getattr(discharge, "discharge_time", None)
                     or value("discharge_datetime")
+                ),
+                _has_discharge_record=bool(
+                    str(getattr(discharge, "document_id", None) or "").strip()
                 ),
                 update_time=value("update_time"),
                 record_content=value("record_content"),
@@ -267,7 +271,10 @@ def _filter_indexed_registration_records(
                 )
             if not date_matches:
                 continue
-        discharged = _parse_datetime_value(record.discharge_datetime) is not None
+        discharged = (
+            _parse_datetime_value(record.discharge_datetime) is not None
+            or bool(getattr(record, "_has_discharge_record", False))
+        )
         if hospital_status == "inpatient" and discharged:
             continue
         if hospital_status == "discharged" and not discharged:
@@ -603,6 +610,10 @@ def _workstation_discharge_summary_subquery(session):
         return None
 
     discharge_time_expr = _workstation_discharge_time_expr(columns)
+    normalized_document_id = func.nullif(
+        func.trim(cast(DischargeRecord.document_id, String)),
+        "",
+    )
     ranked_discharge_records = (
         session.query(
             DischargeRecord.institute_id.label("institute_id"),
@@ -610,6 +621,7 @@ def _workstation_discharge_summary_subquery(session):
             DischargeRecord.visit_id.label("visit_id"),
             discharge_time_expr.label("discharge_time"),
             DischargeRecord.dept_name.label("dept_name"),
+            normalized_document_id.label("document_id"),
             func.row_number().over(
                 partition_by=(
                     DischargeRecord.institute_id,
@@ -623,6 +635,7 @@ def _workstation_discharge_summary_subquery(session):
                 ),
             ).label("row_number"),
         )
+        .filter(normalized_document_id.is_not(None))
         .subquery("ranked_discharge_records")
     )
     return (
@@ -632,6 +645,7 @@ def _workstation_discharge_summary_subquery(session):
             ranked_discharge_records.c.visit_id,
             ranked_discharge_records.c.discharge_time,
             ranked_discharge_records.c.dept_name,
+            ranked_discharge_records.c.document_id,
         )
         .filter(ranked_discharge_records.c.row_number == 1)
         .subquery("workstation_discharge_record_summary")
@@ -666,6 +680,16 @@ def _workstation_resolved_discharge_expr(discharge_summary=None):
     return func.coalesce(
         discharge_summary.c.discharge_time,
         MedicalRecordFrontpage.discharge_datetime,
+    )
+
+
+def _workstation_is_discharged_expr(discharge_summary=None):
+    resolved_discharge = _workstation_resolved_discharge_expr(discharge_summary)
+    if discharge_summary is None:
+        return resolved_discharge.is_not(None)
+    return or_(
+        resolved_discharge.is_not(None),
+        discharge_summary.c.document_id.is_not(None),
     )
 
 
@@ -750,9 +774,9 @@ def _apply_workstation_filters(
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
         raise ValueError("hospital_status must be one of: all, inpatient, discharged")
     if normalized_hospital_status == "discharged":
-        query = query.filter(_workstation_resolved_discharge_expr(discharge_summary).is_not(None))
+        query = query.filter(_workstation_is_discharged_expr(discharge_summary))
     elif normalized_hospital_status == "inpatient":
-        query = query.filter(_workstation_resolved_discharge_expr(discharge_summary).is_(None))
+        query = query.filter(~_workstation_is_discharged_expr(discharge_summary))
     return query
 
 
