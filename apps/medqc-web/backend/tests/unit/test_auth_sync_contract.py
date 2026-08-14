@@ -63,6 +63,7 @@ def test_sync_pg_config_contract_read_write(client, monkeypatch):
         "remote_username": "tester",
         "remote_password": "secret-pass",
         "remote_password_ref": "env:REMOTE_DB_PASSWORD",
+        "default_institute_id": "MEDQC-TEST-HOSPITAL",
     }
     captured: dict[str, object] = {}
 

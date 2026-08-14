@@ -446,7 +446,7 @@ async def list_rules(
         if hasattr(query, 'range'):
             query = query.range(offset, offset + limit - 1)
         if hasattr(query, 'order'):
-            query = query.order('primary_document_category').order('execution_order').order('name')
+            query = query.order('primary_document_category').order('name')
 
         resp = await async_execute(query)
         data = list(getattr(resp, 'data', None) or [])
@@ -478,9 +478,9 @@ async def list_rules(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"查询 qc_rules 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询规则失败: {str(e)}")
+    except Exception as exc:
+        logger.error("qc_rules_query_failed error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="查询规则失败") from exc
 
 
 @router.get("/rules/document-categories/stats")

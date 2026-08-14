@@ -299,9 +299,12 @@ class _Query:
         if where:
             sql += f" WHERE {where}"
 
-        for col, asc in self._orders:
-            direction = "ASC" if asc else "DESC"
-            sql += f' ORDER BY "{col}" {direction}'
+        if self._orders:
+            order_clauses = [
+                f'"{col}" {"ASC" if asc else "DESC"}'
+                for col, asc in self._orders
+            ]
+            sql += " ORDER BY " + ", ".join(order_clauses)
 
         if self._range_val:
             offset = self._range_val[0]

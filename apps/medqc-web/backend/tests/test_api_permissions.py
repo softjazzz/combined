@@ -7,7 +7,6 @@ API 权限测试
 import pytest
 from fastapi.testclient import TestClient
 from app.main import create_app
-from app.storage.memory import users_db
 
 # 创建测试客户端
 app = create_app()
@@ -57,26 +56,26 @@ class TestUnauthenticatedAccess:
     def test_unauthenticated_get_records(self):
         """测试未认证访问医疗记录列表"""
         response = client.get("/api/v1/records")
-        assert response.status_code == 403
-        assert "error" in response.json()
+        assert response.status_code == 401
+        assert response.json().get("code") == "HTTP_401"
 
     def test_unauthenticated_get_qc_rules(self):
         """测试未认证访问质控规则列表"""
         response = client.get("/api/v1/qc/rules")
-        assert response.status_code == 403
-        assert "error" in response.json()
+        assert response.status_code == 401
+        assert response.json().get("code") == "HTTP_401"
 
     def test_unauthenticated_get_qc_result(self):
         """测试未认证访问质控结果"""
         response = client.get("/api/v1/qc/result/test-id")
-        assert response.status_code == 403
-        assert "error" in response.json()
+        assert response.status_code == 401
+        assert response.json().get("code") == "HTTP_401"
 
     def test_unauthenticated_post_analyze(self):
         """测试未认证执行质控分析"""
         response = client.post("/api/v1/qc/analyze/test-record", json={})
-        assert response.status_code == 403
-        assert "error" in response.json()
+        assert response.status_code == 401
+        assert response.json().get("code") == "HTTP_401"
 
 
 # ============================================================================
@@ -304,4 +303,3 @@ class TestRolePermissionMatrix:
         
         # 不能执行质控分析
         assert client.post("/api/v1/qc/analyze/test", headers=doctor_headers, json={}).status_code == 403
-
