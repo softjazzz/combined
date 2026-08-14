@@ -112,6 +112,18 @@ describe('QCRecordResultComparisonDrawer', () => {
     workbenchProps = null
   })
 
+  it('以醒目的当前病历上下文栏展示患者与质控完成信息', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer()
+    await flushPromises()
+
+    expect(wrapper.get('.customer-record-result-title__context-label').text()).toBe('当前病历')
+    expect(wrapper.get('.customer-record-result-title__context-value').text()).toBe('测试病历')
+    expect(wrapper.get('.customer-record-result-title__context').attributes('aria-label')).toBe(
+      '当前病历：测试病历',
+    )
+  })
+
   it('ready结果可按当前三坐标导出单病历HTML', async () => {
     const blob = new Blob(['<!doctype html>'], { type: 'text/html' })
     getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })

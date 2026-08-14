@@ -10,7 +10,15 @@
     <template #title>
       <div class="customer-record-result-title">
         <strong>病历质控结果</strong>
-        <span>{{ focus?.label || '病历原文与质控结果对照' }}</span>
+        <div
+          class="customer-record-result-title__context"
+          :aria-label="`当前病历：${focus?.label || '病历原文与质控结果对照'}`"
+        >
+          <span class="customer-record-result-title__context-label">当前病历</span>
+          <span class="customer-record-result-title__context-value">
+            {{ focus?.label || '病历原文与质控结果对照' }}
+          </span>
+        </div>
         <button
           v-if="latestResult"
           type="button"
@@ -179,19 +187,48 @@ watch(
 <style scoped>
 .customer-record-result-title {
   width: 100%;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(280px, 1fr) auto;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 .customer-record-result-title strong {
-  font-size: 18px;
-  color: #17233d;
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
 }
-.customer-record-result-title span {
-  margin-left: auto;
-  color: #7a8699;
-  font-size: 13px;
-  text-align: right;
+.customer-record-result-title__context {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 10px;
+  border: 1px solid rgba(0, 102, 204, 0.12);
+  border-left: 3px solid #0066cc;
+  border-radius: 10px;
+  background: rgba(0, 102, 204, 0.055);
+}
+.customer-record-result-title__context-label {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(0, 102, 204, 0.11);
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 20px;
+}
+.customer-record-result-title__context-value {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(29, 29, 31, 0.8);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .customer-record-result-title__export {
   min-height: 34px;
@@ -207,5 +244,17 @@ watch(
 .customer-record-result-title__export:disabled {
   cursor: wait;
   opacity: 0.58;
+}
+
+@media (max-width: 900px) {
+  .customer-record-result-title {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .customer-record-result-title__context {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
 </style>
