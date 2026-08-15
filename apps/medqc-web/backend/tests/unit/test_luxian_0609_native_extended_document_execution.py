@@ -369,6 +369,190 @@ async def test_051_death_discussion_uses_seven_day_threshold(
 
 
 @pytest.mark.asyncio
+async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidence() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-051",),
+        {
+            "death_record": ({
+                "document_id": "death-record-051",
+                "death_datetime": "2026-07-01 12:00:00",
+                "record_time": "2026-07-01 13:00:00",
+            },),
+            # 输入顺序不能决定业务结论；死亡后第1天才是最早有效讨论。
+            "death_discussion": (
+                {
+                    "document_id": "late-discussion-051",
+                    "record_time": "2026-07-09 12:00:01",
+                },
+                {
+                    "document_id": "timely-discussion-051",
+                    "record_time": "2026-07-02 12:00:00",
+                },
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-051",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert canonical["status"] == "compliant"
+    assert canonical["customer_display_facts"]["discussion_time"] == (
+        "2026-07-02 12:00:00"
+    )
+    assert canonical["customer_evidence"] == [
+        {
+            "source_type": "death_record",
+            "source_document_id": "death-record-051",
+        },
+        {
+            "source_type": "death_discussion",
+            "source_document_id": "timely-discussion-051",
+        },
+    ]
+    assert "late-discussion-051" not in repr(canonical)
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_051_only_predated_discussion_is_missing_after_maturity_window() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-051",),
+        {
+            "death_record": ({
+                "document_id": "death-record-051",
+                "death_datetime": "2026-07-01 12:00:00",
+            },),
+            "death_discussion": ({
+                "document_id": "predated-discussion-051",
+                "record_time": "2026-06-30 12:00:00",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-051",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
+    assert canonical["status"] == "non_compliant"
+    assert canonical["customer_display_facts"]["failure_kind"] == (
+        "death_discussion_missing_after_deadline"
+    )
+    assert canonical["customer_evidence"] == [
+        {
+            "source_type": "death_record",
+            "source_document_id": "death-record-051",
+        }
+    ]
+    assert "predated-discussion-051" not in repr(canonical)
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_051_only_predated_discussion_waits_until_seven_day_window_matures() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-051",
+        {
+            "death_record": ({
+                "document_id": "death-record-051",
+                "death_datetime": "2026-07-30 12:00:00",
+            },),
+            "death_discussion": ({
+                "document_id": "predated-discussion-051",
+                "record_time": "2026-07-29 12:00:00",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_readiness_unproven"
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_051_without_real_document_ids_does_not_invent_customer_evidence() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-051",),
+        {
+            "death_record": ({
+                "death_datetime": "2026-07-01 12:00:00",
+            },),
+            "death_discussion": ({
+                "record_time": "2026-07-02 12:00:00",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-051",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "compliant"
+    assert "customer_evidence" not in canonical
+    assert "source_document_refs" not in canonical["customer_display_facts"]
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_051_does_not_fall_back_to_an_unselected_discussion_document_id() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-051",),
+        {
+            "death_record": ({
+                "document_id": "death-record-051",
+                "death_datetime": "2026-07-01 12:00:00",
+            },),
+            "death_discussion": (
+                {
+                    # 最早有效讨论缺少真实ID，不得借用另一份文书的ID。
+                    "record_time": "2026-07-02 12:00:00",
+                },
+                {
+                    "document_id": "unselected-discussion-051",
+                    "record_time": "2026-07-09 12:00:01",
+                },
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-051",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert canonical["customer_evidence"] == [
+        {
+            "source_type": "death_record",
+            "source_document_id": "death-record-051",
+        }
+    ]
+    assert "unselected-discussion-051" not in repr(canonical)
+
+
+@pytest.mark.asyncio
 async def test_051_alive_discharge_gate_binds_registration_evidence() -> None:
     _, reduced = await _evaluate(
         "LX0609-051",

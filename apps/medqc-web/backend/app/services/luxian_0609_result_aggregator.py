@@ -4676,6 +4676,35 @@ def _customer_evidence_from_display_facts(
     if source_type and source_document_id:
         return [{"source_type": source_type, "source_document_id": source_document_id}]
 
+    if rule_id == "LX0609-051":
+        allowed_source_types = {"death_record", "death_discussion"}
+        raw_refs = raw.get("source_document_refs")
+        if isinstance(raw_refs, list) and len(raw_refs) <= 2:
+            located: list[dict[str, str]] = []
+            seen_source_types: set[str] = set()
+            for item in raw_refs:
+                if not isinstance(item, Mapping):
+                    return []
+                located_source_type = str(item.get("source_type") or "").strip()
+                located_document_id = valid_document_id(
+                    item.get("source_document_id")
+                )
+                if (
+                    located_source_type not in allowed_source_types
+                    or located_source_type in seen_source_types
+                    or not located_document_id
+                ):
+                    return []
+                seen_source_types.add(located_source_type)
+                located.append(
+                    {
+                        "source_type": located_source_type,
+                        "source_document_id": located_document_id,
+                    }
+                )
+            if located:
+                return located
+
     if rule_id in {
         "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
     }:
@@ -5266,10 +5295,16 @@ def aggregate_luxian_0609_results(
                 )
                 if precise_findings:
                     result["findings"] = precise_findings
-            decision_evidence = _customer_evidence_from_reduced_decision(
-                decision=reduced,
-                evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
-                evidence_materials=(audit_context or {}).get("evidence_materials"),
+            # 051 的执行器已经精确绑定死亡锚点和实际采用的讨论文书；禁止再按
+            # 整个来源回退，否则选中文书缺 ID 时可能误借另一份讨论记录的 ID。
+            decision_evidence = (
+                []
+                if wrapper_id == "LX0609-051"
+                else _customer_evidence_from_reduced_decision(
+                    decision=reduced,
+                    evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
+                    evidence_materials=(audit_context or {}).get("evidence_materials"),
+                )
             )
             copy_pair_evidence = (
                 _customer_evidence_from_copy_pair_facts(

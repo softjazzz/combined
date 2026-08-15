@@ -624,6 +624,92 @@ def _reduced_decision(
     )
 
 
+def test_051_projects_only_strict_internal_death_and_selected_discussion_refs() -> None:
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    facts = {
+        "verification_kind": "death_discussion_timeliness_check",
+        "death_time": "2026-07-01 12:00:00",
+        "discussion_time": "2026-07-02 12:00:00",
+        "threshold_hours": 168,
+        "actual_interval_hours": 24.0,
+        "source_document_refs": [
+            {
+                "source_type": "death_record",
+                "source_document_id": "death-record-051",
+            },
+            {
+                "source_type": "death_discussion",
+                "source_document_id": "selected-discussion-051",
+            },
+        ],
+    }
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-051"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-051"),),
+        customer_display_facts=(("LX0609-051", facts),),
+    )[0]
+
+    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
+@pytest.mark.parametrize(
+    "source_document_refs",
+    [
+        [
+            {
+                "source_type": "death_record",
+                "source_document_id": "death-record-051",
+            },
+            {
+                "source_type": "daily_course_record",
+                "source_document_id": "unrelated-course-051",
+            },
+        ],
+        [
+            {
+                "source_type": "death_discussion",
+                "source_document_id": "selected-discussion-051",
+            },
+            {
+                "source_type": "death_discussion",
+                "source_document_id": "unselected-discussion-051",
+            },
+        ],
+    ],
+)
+def test_051_rejects_invalid_or_duplicate_internal_evidence_refs(
+    source_document_refs,
+) -> None:
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    facts = {
+        "verification_kind": "death_discussion_timeliness_check",
+        "death_time": "2026-07-01 12:00:00",
+        "discussion_time": "2026-07-02 12:00:00",
+        "threshold_hours": 168,
+        "actual_interval_hours": 24.0,
+        "source_document_refs": source_document_refs,
+    }
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-051"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-051"),),
+        customer_display_facts=(("LX0609-051", facts),),
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
 def _gate(kind):
     if kind is FindingKind.REQUIREMENT_SATISFIED: decision = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
     elif kind is FindingKind.REQUIRED_DOCUMENT_MISSING: decision = GateDecision("LX0609-030", "matched", "surgery_record", "empty", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
@@ -1042,7 +1128,7 @@ def test_extended_document_facts_are_whitelisted_and_rendered_in_backend():
 
     assert result["findings"] == (
         "出院时间 2026-07-01 12:00:00，出院记录时间 2026-07-02 14:00:00，"
-        "实际间隔 26.0 小时，规定时限 24 小时。"
+        "实际间隔 26小时（超时2小时），规定时限 24 小时。"
     )
     assert "PRIVATE_DISCHARGE_TEXT" not in repr(result)
     assert "raw_record_content" not in result["customer_display_facts"]
