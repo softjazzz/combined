@@ -118,6 +118,41 @@ _CUSTOMER_STATUSES = {
     "technical_error",
     "uncertain",
 }
+
+
+def _canonical_envelope_items_are_consistent(items: Any) -> bool:
+    """校验 Canonical 交付项的唯一身份与冻结状态语义。"""
+
+    if not isinstance(items, list):
+        return False
+    delivered_rule_ids: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            return False
+        rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+        status = _safe_text(item.get("status"))
+        result_status = _safe_text(item.get("result_status"))
+        display_status = _safe_text(item.get("display_status"))
+        expected_is_compliant = (
+            True
+            if status == "compliant"
+            else False
+            if status == "non_compliant"
+            else None
+        )
+        if (
+            not rule_id
+            or rule_id in delivered_rule_ids
+            or status not in CANONICAL_RESULT_STATUSES
+            or result_status != status
+            or (display_status and display_status != status)
+            or item.get("is_compliant") is not expected_is_compliant
+        ):
+            return False
+        delivered_rule_ids.add(rule_id)
+    return True
+
+
 _GENERIC_CUSTOMER_TEXT = {
     "compliant": ("未发现该质控点对应的明确问题。", "无需处理。"),
     "non_compliant": ("发现该质控点对应的明确问题。", "请按质控要求补充或修正。"),
@@ -4191,11 +4226,7 @@ class CustomQCWorkspaceService:
                     "result_rule_count": 0,
                     "is_complete": False,
                 }
-            items = [
-                dict(item)
-                for item in list(envelope.get("items") or [])
-                if isinstance(item, dict)
-            ]
+            raw_items = envelope.get("items")
             resolved_expected_rule_ids = list(
                 dict.fromkeys(
                     _safe_text(rule_id).upper()
@@ -4210,22 +4241,7 @@ class CustomQCWorkspaceService:
                     if _safe_text(item.get("rule_id") or item.get("rule_code"))
                 ]
             expected_rule_id_set = set(resolved_expected_rule_ids)
-            delivered_rule_ids = [
-                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                for item in items
-            ]
-            valid_rule_ids = [rule_id for rule_id in delivered_rule_ids if rule_id]
-            invalid_statuses = [
-                _safe_text(item.get("status"))
-                for item in items
-                if _safe_text(item.get("status")) not in _CUSTOMER_STATUSES
-            ]
-            conflicting_rule_ids = sorted(
-                rule_id
-                for rule_id in set(valid_rule_ids)
-                if valid_rule_ids.count(rule_id) > 1
-            )
-            if len(valid_rule_ids) != len(items) or conflicting_rule_ids or invalid_statuses:
+            if not _canonical_envelope_items_are_consistent(raw_items):
                 return {
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": "technical_error",
@@ -4238,7 +4254,17 @@ class CustomQCWorkspaceService:
                     "result_rule_count": 0,
                     "is_complete": False,
                 }
-
+            items = [dict(item) for item in raw_items]
+            delivered_rule_ids = [
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                for item in items
+            ]
+            valid_rule_ids = [rule_id for rule_id in delivered_rule_ids if rule_id]
+            conflicting_rule_ids = sorted(
+                rule_id
+                for rule_id in set(valid_rule_ids)
+                if valid_rule_ids.count(rule_id) > 1
+            )
             rule_master_by_id = {
                 entry.rule_id: entry for entry in load_luxian_0609_rule_master()
             }
@@ -4525,7 +4551,7 @@ class CustomQCWorkspaceService:
                     if len(selected_envelopes) != 1:
                         projections[identity] = {
                             "status": "technical_error",
-                            "reason_code": "canonical_envelope_invalid",
+                            "reason_code": "canonical_result_envelope_invalid",
                         }
                         continue
                     projections[identity] = self._summarize_completed_record_result_envelope(
@@ -4575,24 +4601,20 @@ class CustomQCWorkspaceService:
             or envelope.get("delivery_mode") != _CANONICAL_RESULT_DELIVERY_MODE
             or not isinstance(envelope.get("items"), list)
         ):
-            return {"status": "technical_error", "reason_code": "canonical_envelope_invalid"}
+            return {
+                "status": "technical_error",
+                "reason_code": "canonical_result_envelope_invalid",
+            }
+
+        if not _canonical_envelope_items_are_consistent(envelope["items"]):
+            return {
+                "status": "technical_error",
+                "reason_code": "canonical_result_envelope_invalid",
+            }
 
         status_counts: Dict[str, int] = {}
-        delivered_rule_ids: set[str] = set()
         for item in envelope["items"]:
-            status = _safe_text(item.get("status")) if isinstance(item, dict) else ""
-            rule_id = (
-                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
-                if isinstance(item, dict)
-                else ""
-            )
-            if (
-                status not in _CUSTOMER_STATUSES
-                or not rule_id
-                or rule_id in delivered_rule_ids
-            ):
-                return {"status": "technical_error", "reason_code": "canonical_envelope_invalid"}
-            delivered_rule_ids.add(rule_id)
+            status = _safe_text(item.get("status"))
             status_counts[status] = status_counts.get(status, 0) + 1
         if isinstance(completed_at, datetime):
             completed_at_value = completed_at.isoformat()
@@ -4656,6 +4678,7 @@ class CustomQCWorkspaceService:
                 results[identity] = {
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": "not_found" if status == "not_run" else "technical_error",
+                    "reason_code": _safe_text(projection.get("reason_code")),
                     "record_ref": "",
                     "items": [],
                     "expected_rule_count": len(expected_rule_ids),
@@ -5533,24 +5556,10 @@ class CustomQCWorkspaceService:
                 )
             ):
                 raise ValueError("Canonical Envelope 规则集合不完整，拒绝完成质控任务")
-            for item in record_items:
-                status = _safe_text(item.get("status")).lower()
-                result_status = _safe_text(item.get("result_status")).lower()
-                display_status = _safe_text(item.get("display_status")).lower()
-                expected_is_compliant = (
-                    True
-                    if status in {"compliant", "not_applicable"}
-                    else False
-                    if status == "non_compliant"
-                    else None
-                )
-                if (
-                    status not in CANONICAL_RESULT_STATUSES
-                    or result_status != status
-                    or (display_status and display_status != status)
-                    or item.get("is_compliant") is not expected_is_compliant
-                ):
-                    raise ValueError("Canonical Envelope 状态字段不一致，拒绝完成质控任务")
+            if not _canonical_envelope_items_are_consistent(record_items):
+                raise ValueError("Canonical Envelope 状态字段不一致，拒绝完成质控任务")
+
+        for record_ref, record_items in grouped.items():
             record_id = record_ref.visit_id
             envelope = {
                 "schema_version": _RECORD_RESULT_ENVELOPE_SCHEMA,
@@ -6035,15 +6044,9 @@ class CustomQCWorkspaceService:
             record_ref = _safe_text(envelope.get("record_ref"))
             if not re.fullmatch(r"rec_[0-9a-f]{24}", record_ref):
                 raise ValueError("批量质控 Canonical Envelope 病历引用无效")
-            delivered_rule_ids: set[str] = set()
+            if not _canonical_envelope_items_are_consistent(envelope["items"]):
+                raise ValueError("canonical_result_envelope_invalid")
             for raw_item in envelope["items"]:
-                if not isinstance(raw_item, dict):
-                    raise ValueError("批量质控 Canonical Envelope 结果无效")
-                rule_id = _safe_text(raw_item.get("rule_id") or raw_item.get("rule_code")).upper()
-                status = _safe_text(raw_item.get("status"))
-                if not rule_id or rule_id in delivered_rule_ids or status not in _CUSTOMER_STATUSES:
-                    raise ValueError("批量质控 Canonical Envelope 结果无效")
-                delivered_rule_ids.add(rule_id)
                 canonical_items.append({**raw_item, "record_ref": record_ref})
 
         actual_refs = set(rows_by_ref)

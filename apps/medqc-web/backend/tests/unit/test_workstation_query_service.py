@@ -236,6 +236,20 @@ def _qc_projection_loader_missing_envelope(record_refs):
     }
 
 
+def _qc_projection_loader_invalid_envelope(record_refs):
+    return {
+        (
+            str(ref["institute_id"]),
+            str(ref["patient_id"]),
+            str(ref["visit_id"]),
+        ): {
+            "status": "technical_error",
+            "reason_code": "canonical_result_envelope_invalid",
+        }
+        for ref in record_refs
+    }
+
+
 def test_get_workstation_data_excludes_demo_records_in_production_even_when_enabled(
     workstation_session_factory,
     monkeypatch,
@@ -833,6 +847,34 @@ def test_workstation_qc_projection_never_falls_back_when_canonical_envelope_is_m
         "reason_code": "canonical_envelope_missing",
     }
     assert result["qc_summary"]["status_counts"] == {}
+
+
+def test_workstation_qc_projection_preserves_canonical_result_envelope_invalid(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P1",
+            visit_id="V1",
+            name="Envelope状态不一致",
+            update_time=datetime(2026, 8, 8, 12, 0),
+        ),
+    )
+
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_qc_projection_loader_invalid_envelope,
+    )
+
+    assert result["records"][0]["latest_qc_summary"] == {
+        "status": "technical_error",
+        "reason_code": "canonical_result_envelope_invalid",
+    }
+    assert result["qc_summary"]["technical_error_records"] == 1
 
 
 def test_get_workstation_data_filters_department_by_coalesced_dept(workstation_session_factory):

@@ -231,7 +231,7 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
 
 
 def _is_compliant_for_status(status: str) -> bool | None:
-    if status in {"compliant", "not_applicable"}:
+    if status == "compliant":
         return True
     if status == "non_compliant":
         return False

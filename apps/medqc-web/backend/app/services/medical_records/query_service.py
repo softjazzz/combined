@@ -463,6 +463,7 @@ def _normalize_latest_qc_summary_map(
         "generation_conflict": "generation_conflict",
         "canonical_envelope_missing": "canonical_envelope_missing",
         "canonical_envelope_invalid": "canonical_envelope_invalid",
+        "canonical_result_envelope_invalid": "canonical_result_envelope_invalid",
     }
     for identity, raw_summary in value.items():
         if not isinstance(identity, tuple) or len(identity) != 3 or not isinstance(raw_summary, dict):

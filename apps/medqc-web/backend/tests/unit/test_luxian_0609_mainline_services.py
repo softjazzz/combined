@@ -4169,7 +4169,7 @@ def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
         gate_decisions=decisions,
     )
     assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["is_compliant"] is True
+    assert aggregated[0]["is_compliant"] is None
     assert aggregated[0]["metadata"]["trigger_gate_status"] == TRIGGER_ABSENT
     assert aggregated[0]["metadata"]["mapped_rule_ids"] == ["SC-146"]
     assert aggregated[0]["metadata"]["primary_execution_rule_id"] == "SC-146"
@@ -4901,7 +4901,7 @@ def test_aggregator_should_mark_consultation_without_strong_source_as_not_applic
     )
 
     assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["is_compliant"] is True
+    assert aggregated[0]["is_compliant"] is None
     assert "未发现会诊申请单" in aggregated[0]["findings"]
     assert aggregated[0]["metadata"]["customer_display_guard"] == "consultation_requires_strong_source_evidence"
 
@@ -5791,7 +5791,7 @@ def test_luxian_0609_summary_should_use_canonical_statuses_and_exclude_not_appli
     summary = summarize_luxian_0609_results(
         [
             {"status": "compliant", "is_compliant": True},
-            {"status": "not_applicable", "is_compliant": True},
+            {"status": "not_applicable", "is_compliant": None},
             {"status": "data_gap", "is_compliant": False},
             {"status": "uncertain", "is_compliant": False},
             {"status": "technical_error_internal", "is_compliant": False},
@@ -6904,7 +6904,7 @@ def test_lx0609_019_should_be_not_applicable_without_pathology_source_evidence()
     )
 
     assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["is_compliant"] is True
+    assert aggregated[0]["is_compliant"] is None
     assert aggregated[0]["metadata"]["customer_display_guard"] == "pathology_specimen_requires_source_fact"
     assert "病理报告、活检取材或手术送检" in aggregated[0]["findings"]
 
@@ -8178,7 +8178,7 @@ def test_lx0609_026_should_not_apply_to_generic_treatment_without_chemo_fact():
     )
 
     assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["is_compliant"] is True
+    assert aggregated[0]["is_compliant"] is None
     assert aggregated[0]["metadata"]["customer_display_guard"] == "chemo_rule_requires_chemo_fact"
 
 

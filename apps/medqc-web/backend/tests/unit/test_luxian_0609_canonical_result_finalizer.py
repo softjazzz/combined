@@ -77,7 +77,7 @@ def test_finalizer_accepts_every_canonical_status_and_preserves_non_defect_reaso
     assert result["reason_code"] == "original_reason"
     assert result["is_compliant"] is (
         True
-        if status in {"compliant", "not_applicable"}
+        if status == "compliant"
         else False
         if status == "non_compliant"
         else None

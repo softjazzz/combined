@@ -201,7 +201,14 @@ def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(m
                 {
                     "schema_version": "lx0609-record-result-envelope-v1",
                     "delivery_mode": "canonical_straight_through",
-                    "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+                    "items": [
+                        {
+                            "rule_id": "LX0609-001",
+                            "status": "compliant",
+                            "result_status": "compliant",
+                            "is_compliant": True,
+                        }
+                    ],
                 }
             ),
         }
@@ -280,6 +287,8 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
                     {
                         "rule_id": "LX0609-001",
                         "status": "non_compliant",
+                        "result_status": "non_compliant",
+                        "is_compliant": False,
                         "conclusion": "未在规定时限内完成。",
                     }
                 ],
@@ -301,6 +310,30 @@ def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monk
     assert dto["record_ref"] == "rec_0123456789abcdef01234567"
     assert dto["items"][0]["rule_id"] == "LX0609-001"
     assert dto["items"][0]["source_document"] == "入院记录"
+
+
+def test_bulk_record_result_dtos_preserve_canonical_projection_failure_reason(monkeypatch):
+    identity = ("inst-1", "patient-1", "visit-1")
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(
+        service,
+        "build_luxian_0609_completed_record_result_summaries",
+        lambda **_kwargs: {
+            identity: {
+                "status": "technical_error",
+                "reason_code": "canonical_result_envelope_invalid",
+            }
+        },
+    )
+
+    result = service.build_latest_luxian_0609_record_result_dtos(
+        record_refs=[
+            {"institute_id": identity[0], "patient_id": identity[1], "visit_id": identity[2]}
+        ]
+    )
+
+    assert result[identity]["state"] == "technical_error"
+    assert result[identity]["reason_code"] == "canonical_result_envelope_invalid"
 
 
 def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_is_missing(
@@ -385,7 +418,14 @@ def test_completed_projection_does_not_fall_back_when_newer_root_job_lacks_envel
             {
                 "schema_version": "lx0609-record-result-envelope-v1",
                 "delivery_mode": "canonical_straight_through",
-                "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+                "items": [
+                    {
+                        "rule_id": "LX0609-001",
+                        "status": "compliant",
+                        "result_status": "compliant",
+                        "is_compliant": True,
+                    }
+                ],
             }
         ),
     }
@@ -495,7 +535,14 @@ def test_completed_projection_keeps_current_ready_when_newer_job_only_has_old_ve
             {
                 "schema_version": "lx0609-record-result-envelope-v1",
                 "delivery_mode": "canonical_straight_through",
-                "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+                "items": [
+                    {
+                        "rule_id": "LX0609-001",
+                        "status": "compliant",
+                        "result_status": "compliant",
+                        "is_compliant": True,
+                    }
+                ],
             }
         ),
     }
@@ -561,10 +608,26 @@ def test_completed_projection_treats_current_job_with_only_old_version_envelope_
 @pytest.mark.parametrize(
     "items",
     [
-        [{"status": "compliant"}],
         [
-            {"rule_id": "LX0609-001", "status": "compliant"},
-            {"rule_code": "LX0609-001", "status": "non_compliant"},
+            {
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            }
+        ],
+        [
+            {
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            },
+            {
+                "rule_code": "LX0609-001",
+                "status": "non_compliant",
+                "result_status": "non_compliant",
+                "is_compliant": False,
+            },
         ],
     ],
 )
@@ -609,7 +672,7 @@ def test_completed_projection_rejects_canonical_items_without_unique_rule_id(
 
     assert result[("inst-1", "patient-1", "visit-1")] == {
         "status": "technical_error",
-        "reason_code": "canonical_envelope_invalid",
+        "reason_code": "canonical_result_envelope_invalid",
     }
 
 
@@ -693,6 +756,8 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
         {
             "rule_id": entry.rule_id,
             "status": "compliant",
+            "result_status": "compliant",
+            "is_compliant": True,
             "reason_code": "requirement_satisfied",
         }
         for entry in reversed(master_entries)
@@ -739,11 +804,34 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
 @pytest.mark.parametrize(
     "canonical_items",
     [
-        [{"status": "compliant"}],
-        [{"rule_id": "LX0609-025", "status": "invented_status"}],
         [
-            {"rule_id": "LX0609-025", "status": "compliant"},
-            {"rule_id": "LX0609-025", "status": "non_compliant"},
+            {
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            }
+        ],
+        [
+            {
+                "rule_id": "LX0609-025",
+                "status": "invented_status",
+                "result_status": "invented_status",
+                "is_compliant": None,
+            }
+        ],
+        [
+            {
+                "rule_id": "LX0609-025",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            },
+            {
+                "rule_id": "LX0609-025",
+                "status": "non_compliant",
+                "result_status": "non_compliant",
+                "is_compliant": False,
+            },
         ],
     ],
 )
@@ -788,6 +876,293 @@ def test_single_record_result_rejects_invalid_rule_identity_before_metadata_proj
     assert result["state"] == "technical_error"
     assert result["reason_code"] == "canonical_result_envelope_invalid"
     assert result["items"] == []
+
+
+def test_single_record_result_rejects_malformed_item_mixed_with_valid_item(monkeypatch):
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": [
+            {
+                "rule_id": "LX0609-025",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            },
+            "malformed",
+        ],
+    }
+    session = _ReadSession(
+        [
+            [_selected_job()],
+            [{"envelope_json": json.dumps(envelope, ensure_ascii=False)}],
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService,
+        "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+
+    result = CustomQCWorkspaceService().build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        expected_rule_ids=["LX0609-025"],
+    )
+
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "canonical_result_envelope_invalid"
+    assert result["items"] == []
+
+
+@pytest.mark.parametrize(
+    "canonical_item",
+    [
+        {
+            "rule_id": "LX0609-025",
+            "status": "compliant",
+            "result_status": "compliant",
+            "is_compliant": False,
+        },
+        {
+            "rule_id": "LX0609-025",
+            "status": "non_compliant",
+            "result_status": "non_compliant",
+            "is_compliant": True,
+        },
+        {
+            "rule_id": "LX0609-025",
+            "status": "data_gap",
+            "result_status": "data_gap",
+            "is_compliant": False,
+        },
+        *[
+            {
+                "rule_id": "LX0609-025",
+                "status": status,
+                "result_status": status,
+                "is_compliant": True,
+            }
+            for status in (
+                "uncertain",
+                "not_applicable",
+                "technical_error",
+                "not_executed",
+                "ai_suggested_compliant",
+                "ai_suggested_non_compliant",
+            )
+        ],
+        {
+            "rule_id": "LX0609-025",
+            "status": "non_compliant",
+            "result_status": "uncertain",
+            "is_compliant": False,
+        },
+        {
+            "rule_id": "LX0609-025",
+            "status": "non_compliant",
+            "result_status": "non_compliant",
+            "display_status": "uncertain",
+            "is_compliant": False,
+        },
+        {
+            "rule_id": "LX0609-025",
+            "status": "COMPLIANT",
+            "result_status": "COMPLIANT",
+            "is_compliant": True,
+        },
+    ],
+)
+def test_single_record_result_rejects_historical_canonical_status_inconsistency(
+    monkeypatch,
+    canonical_item,
+):
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": [canonical_item],
+    }
+    session = _ReadSession(
+        [
+            [_selected_job(legacy_items=[{"status": "compliant"}])],
+            [{"envelope_json": json.dumps(envelope, ensure_ascii=False)}],
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService,
+        "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+
+    result = CustomQCWorkspaceService().build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        expected_rule_ids=["LX0609-025"],
+    )
+
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "canonical_result_envelope_invalid"
+    assert result["items"] == []
+
+
+def test_completed_projection_with_items_rejects_historical_status_inconsistency():
+    job = {
+        **_selected_job(),
+        "record_ids_json": json.dumps(["visit-1"]),
+        "filters_json": json.dumps(_selected_job()["filters"]),
+        "summary_json": "{}",
+    }
+    envelope = {
+        "root_job_id": "job-current",
+        "job_id": "job-current",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(
+            {
+                "schema_version": "lx0609-record-result-envelope-v1",
+                "delivery_mode": "canonical_straight_through",
+                "record_ref": "rec_1234567890abcdef12345678",
+                "items": [
+                    {
+                        "rule_id": "LX0609-001",
+                        "status": "compliant",
+                        "result_status": "compliant",
+                        "is_compliant": False,
+                    }
+                ],
+            }
+        ),
+    }
+    session = _ReadSession([[job], [envelope]])
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+        ],
+        include_items=True,
+        session_factory=lambda: session,
+    )
+
+    assert result[("inst-1", "patient-1", "visit-1")] == {
+        "status": "technical_error",
+        "reason_code": "canonical_result_envelope_invalid",
+    }
+
+
+def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy_fallback(
+    monkeypatch,
+):
+    service = object.__new__(CustomQCWorkspaceService)
+    service._record_result_envelope_table = workspace_module._record_result_envelopes_table()
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "job_id": "job-current",
+        "root_job_id": "job-current",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": [
+            {
+                "rule_id": "LX0609-001",
+                "status": "non_compliant",
+                "result_status": "non_compliant",
+                "is_compliant": True,
+            }
+        ],
+    }
+    session = _ReadSession(
+        [
+            [
+                {
+                    "job_id": "job-current",
+                    "root_job_id": "job-current",
+                    "created_by": "reviewer-a",
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                    "envelope_json": json.dumps(envelope),
+                }
+            ]
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    job = {
+        "id": "job-current",
+        "created_by": "reviewer-a",
+        "status": "completed",
+        "total_records": 1,
+        "filters": {
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+            "record_refs": [
+                {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+            ],
+        },
+        "items": [{"rule_id": "LX0609-999", "status": "compliant"}],
+    }
+
+    with pytest.raises(ValueError, match="canonical_result_envelope_invalid"):
+        service.export_batch_job_html(job=job)
+
+
+@pytest.mark.parametrize(
+    ("status", "is_compliant"),
+    [
+        ("compliant", True),
+        ("non_compliant", False),
+        ("data_gap", None),
+        ("uncertain", None),
+        ("not_applicable", None),
+        ("technical_error", None),
+        ("not_executed", None),
+        ("ai_suggested_compliant", None),
+        ("ai_suggested_non_compliant", None),
+    ],
+)
+def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
+    session = _WriteSession()
+
+    CustomQCWorkspaceService()._write_record_result_envelopes(
+        session,
+        job_row={
+            "id": "job-current",
+            "created_by": "reviewer-a",
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+        },
+        items=[
+            {
+                "record_id": "visit-1",
+                "visit_id": "visit-1",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "rule_id": "LX0609-001",
+                "status": status,
+                "result_status": status,
+                "display_status": status,
+                "is_compliant": is_compliant,
+            }
+        ],
+        now=datetime(2026, 8, 15, 10, 0, 0),
+    )
+
+    assert len(session.statements) == 2
 
 
 def test_writer_marks_envelope_as_canonical_straight_through():
@@ -981,6 +1356,64 @@ def test_writer_rejects_invalid_or_conflicting_canonical_status_fields(
                     "reason_code": "requirement_violated",
                     **invalid_fields,
                 }
+            ],
+            now=datetime(2026, 7, 30, 10, 0, 0),
+        )
+
+    assert session.statements == []
+
+
+def test_writer_validates_all_records_before_mutating_any_envelope():
+    session = _WriteSession()
+    service = CustomQCWorkspaceService()
+
+    with pytest.raises(ValueError, match="Canonical Envelope 状态字段"):
+        service._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps(
+                    {
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                        "record_refs": [
+                            {
+                                "institute_id": "inst-1",
+                                "patient_id": "patient-1",
+                                "visit_id": "visit-1",
+                            },
+                            {
+                                "institute_id": "inst-1",
+                                "patient_id": "patient-2",
+                                "visit_id": "visit-2",
+                            },
+                        ],
+                        "scoped_customer_rule_ids": ["LX0609-001"],
+                    }
+                ),
+            },
+            items=[
+                {
+                    "record_id": "visit-1",
+                    "visit_id": "visit-1",
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "rule_id": "LX0609-001",
+                    "status": "compliant",
+                    "result_status": "compliant",
+                    "is_compliant": True,
+                },
+                {
+                    "record_id": "visit-2",
+                    "visit_id": "visit-2",
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-2",
+                    "rule_id": "LX0609-001",
+                    "status": "compliant",
+                    "result_status": "compliant",
+                    "is_compliant": False,
+                },
             ],
             now=datetime(2026, 7, 30, 10, 0, 0),
         )

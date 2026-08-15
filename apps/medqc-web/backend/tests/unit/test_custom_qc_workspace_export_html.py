@@ -101,6 +101,8 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
             "rule_version": "1.0",
             "rule_name": "Canonical 质控点",
             "status": "compliant",
+            "result_status": "compliant",
+            "is_compliant": True,
             "reason_code": "internal_reason_must_not_render",
             "evidence": [{
                 "source_type": "daily_course_record",
