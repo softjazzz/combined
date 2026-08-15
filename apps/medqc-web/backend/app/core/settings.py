@@ -131,35 +131,36 @@ class Settings(BaseSettings):
     LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED: bool = True
     LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED: bool = True
     LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED: bool = True
-    # 029/030/032 使用原生确定性执行；关闭后完整回退旧映射链。
+    # 029/030/032 使用原生确定性执行；正式 LX0609 任务关闭时失败关闭，
+    # 不会回退旧映射链。旧入口兼容行为仅供隔离测试和非正式历史入口使用。
     LUXIAN_0609_NATIVE_EXECUTION_ENABLED: bool = True
-    # 001/002/004/005/006 使用基础时限族原生确定性执行；关闭后回退旧映射链。
+    # 001/002/004/005/006 使用基础时限族原生确定性执行；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED: bool = True
-    # 会诊原生入口总开关：默认启用第一阶段021/022；关闭时020-023全回退兼容映射链。
+    # 会诊原生入口总开关：默认启用第一阶段021/022；正式任务关闭时失败关闭。
     # 多专科会诊意见可能被同步在同一文书中；episode 分段完成真实验收前保持
     # compatibility 路径，避免把多个实际会诊压缩为单一对象。
     LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = True
     # 第二阶段“会诊意见—后续执行”关联开关；关闭时仅 021/022 使用原生 episode。
     LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED: bool = True
-    # 检查检验族原生入口；关闭时回滚到旧映射执行链。
+    # 检查检验族原生入口；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED: bool = True
-    # 输血族041-049独立包开关；关闭时精确回退现有映射执行链。
+    # 输血族041-049独立包开关；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED: bool = True
-    # 肿瘤病理族013/019/026/027独立包开关；关闭时精确回退现有映射执行链。
+    # 肿瘤病理族013/019/026/027独立包开关；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED: bool = True
-    # 病程质量族007/008/009/016/017/018独立包开关；关闭时精确回退旧映射链。
+    # 病程质量族007/008/009/016/017/018独立包开关；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED: bool = True
-    # 手术高风险门控003/024/025/028/031/033独立包开关；关闭时精确回退旧映射链。
+    # 手术高风险门控003/024/025/028/031/033独立包开关；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED: bool = True
-    # 麻醉及手术文书034-039独立包开关；关闭时精确回退旧映射链。
+    # 麻醉及手术文书034-039独立包开关；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED: bool = True
-    # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生执行；关闭时精确回退旧映射链。
+    # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生执行；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = True
     # 正式客户主链默认直接使用统一证据快照，不依赖运行时覆盖层。
     LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = True
-    # 正式客户主链默认使用统一执行信封；关闭总开关时受控回滚到兼容链。
+    # 正式客户主链默认使用统一执行信封；关闭总开关时正式任务失败关闭。
     LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = True
-    # LX0609 RuleDecision 主链总开关；关闭后受控回滚到兼容链。
+    # LX0609 RuleDecision 主链总开关；关闭后正式任务失败关闭。
     LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED: bool = True
     # 以下规则族默认进入正式 Typed Decision 主链；每个开关仍可独立回滚。
     LUXIAN_0609_RULE_DECISION_007_ENABLED: bool = True

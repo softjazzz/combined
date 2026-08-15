@@ -54,6 +54,9 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 )
 from app.services.luxian_0609.native_mdt_execution import NativeMdtExecutionResult
 from app.services.luxian_0609.native_package import Luxian0609PackagePlan
+from app.services.luxian_0609.surgery_text_fact_contract import (
+    LX0609_025_REQUIRED_FIELDS,
+)
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
@@ -7846,33 +7849,15 @@ def test_lx0609_025_rejects_legacy_barcode_defect_without_required_facts():
         )
 
 
-def test_lx0609_025_should_be_data_gap_when_implant_exists_but_barcode_source_missing():
-    rules = [
-        _wrapper(
-            "LX0609-025",
-            name="手术记录中未记录植入物名称、种类、规格型号、材质及数量",
-            mapped_rule_ids=["SC-100", "SC-101"],
-            trigger_condition="存在植入物时核对条码和植入物信息。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-100",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "手术记录提及双J管置入，但缺少条码或追溯码来源，无法判定条码是否齐全。",
-                "evidence": "执行证据：【手术记录】留置双J管；未见条码记录。",
-                "suggestion": "补齐条码来源。",
-            }
-        ],
-        gate_decisions={},
+def test_lx0609_025_excludes_barcode_from_required_implant_fields():
+    assert LX0609_025_REQUIRED_FIELDS == (
+        "implant_name",
+        "implant_type",
+        "implant_specification",
+        "implant_material",
+        "implant_quantity",
     )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "implant_rule_missing_barcode_source"
+    assert all("barcode" not in field_name for field_name in LX0609_025_REQUIRED_FIELDS)
 
 
 def test_lx0609_033_should_be_data_gap_when_consent_source_is_not_covered():
