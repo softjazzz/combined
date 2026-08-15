@@ -3312,15 +3312,25 @@ async def execute_luxian_0609_native_course_quality_rules(
                 continue
             if llm_client is None:
                 customer_display_facts.extend(base_display_facts)
-                decisions.append(base_decision)
+                decisions.append(
+                    _rule_009_semantic_decision(
+                        base_decision=base_decision,
+                        error_reason="model_transport_error",
+                    )
+                )
                 continue
             llm_call_count += 1
             try:
                 response = await llm_client.generate(_rule_009_semantic_prompt(context=context))
             except Exception:
-                # 模型不可用不是病情变化事实，保持已经通过的每日覆盖主判定。
+                # 每日覆盖不能替代病情变化语义核对；模型不可用时不能交付“合规”。
                 customer_display_facts.extend(base_display_facts)
-                decisions.append(base_decision)
+                decisions.append(
+                    _rule_009_semantic_decision(
+                        base_decision=base_decision,
+                        error_reason="model_transport_error",
+                    )
+                )
                 continue
             prompt, completion, total, elapsed = _usage(response)
             prompt_tokens += prompt
@@ -3330,18 +3340,27 @@ async def execute_luxian_0609_native_course_quality_rules(
             events = _parse_rule_009_change_events(response)
             if events is None:
                 customer_display_facts.extend(base_display_facts)
-                decisions.append(base_decision)
+                decisions.append(
+                    _rule_009_semantic_decision(
+                        base_decision=base_decision,
+                        error_reason="model_invalid_output",
+                    )
+                )
                 continue
             if not events:
                 customer_display_facts.extend(base_display_facts)
                 decisions.append(base_decision)
                 continue
             # 模型只能引用当前安全投影中实际存在的事件。不存在的 event_ref
-            # 属于模型合同失败，不能伪装成病历“权威时间缺失”。与解析失败、
-            # 模型不可用保持同一 fail-open 语义，保留 Python 已证明的每日覆盖结论。
+            # 属于模型合同失败，不能伪装成病历“权威时间缺失”或每日覆盖合规。
             if any(str(event["event_ref"]) not in event_times for event in events):
                 customer_display_facts.extend(base_display_facts)
-                decisions.append(base_decision)
+                decisions.append(
+                    _rule_009_semantic_decision(
+                        base_decision=base_decision,
+                        error_reason="model_invalid_output",
+                    )
+                )
                 continue
             semantic_decision, change_facts = _rule_009_change_event_decision(
                 base_decision=base_decision,

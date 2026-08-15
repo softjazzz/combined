@@ -962,8 +962,8 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         ),
         (
             "critical_daily_complete",
-            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.COMPLIANT),
-            ("trigger_absent_complete", "requirement_satisfied"),
+            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.TECHNICAL_ERROR),
+            ("trigger_absent_complete", "model_transport_error"),
         ),
         (
             "critical_missing_day",
@@ -1007,7 +1007,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         ),
     ],
 )
-async def test_course_008_009_typed_natural_day_truth_table_is_python_only(
+async def test_course_008_009_typed_natural_day_truth_table_requires_009_semantic_client(
     scenario: str,
     expected_states: tuple[CustomerFinalState, CustomerFinalState],
     expected_reasons: tuple[str, str],
@@ -1331,8 +1331,8 @@ async def test_course_008_discharge_query_error_is_technical_error_even_with_as_
                 "2026-01-02 08:00:00",
                 "2026-01-03 08:00:00",
             ],
-            CustomerFinalState.COMPLIANT,
-            "requirement_satisfied",
+            CustomerFinalState.TECHNICAL_ERROR,
+            "model_transport_error",
         ),
         (
             None,
@@ -1348,7 +1348,7 @@ async def test_course_008_discharge_query_error_is_technical_error_even_with_as_
         ),
     ],
 )
-async def test_course_009_checks_every_day_through_horizon_then_keeps_semantic_unknown(
+async def test_course_009_checks_every_day_through_horizon_and_fails_without_semantic_client(
     horizon: str | None,
     record_times: list[str],
     expected_state: CustomerFinalState,
@@ -1437,7 +1437,7 @@ async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_without_llm_client_keeps_frequency_pass() -> None:
+async def test_course_009_daily_complete_without_llm_client_fails_closed() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1472,8 +1472,8 @@ async def test_course_009_daily_complete_without_llm_client_keeps_frequency_pass
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_transport_error"
     assert result.llm_call_count == 0
 
 
@@ -1486,7 +1486,7 @@ async def test_course_009_daily_complete_without_llm_client_keeps_frequency_pass
         "unknown",
     ],
 )
-async def test_course_009_daily_complete_ignores_legacy_semantic_state(
+async def test_course_009_rejects_legacy_semantic_state_payload(
     semantic_state: str,
 ) -> None:
     session = _severity_session(
@@ -1508,7 +1508,8 @@ async def test_course_009_daily_complete_ignores_legacy_semantic_state(
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_invalid_output"
     assert result.llm_call_count == 1
     assert result.total_tokens == 45
     assert len(client.prompts) == 1
@@ -1542,7 +1543,7 @@ async def test_course_009_semantic_call_binds_same_snapshot_external_event() -> 
         },
         evaluation_as_of_date="2026-01-02",
     )
-    client = _Client([{"semantic_state": "defect"}])
+    client = _Client([{"events": []}])
 
     result, reduced = await _run_typed_009(session, client)
 
@@ -1767,7 +1768,7 @@ async def test_course_009_course_record_can_be_change_event_and_its_own_timely_r
 
 
 @pytest.mark.asyncio
-async def test_course_009_unknown_model_event_ref_does_not_become_authoritative_time_gap() -> None:
+async def test_course_009_unknown_model_event_ref_fails_closed() -> None:
     """模型编造事件引用是输出无效，不是客户病历缺少权威时间。"""
 
     session = _severity_session(
@@ -1790,8 +1791,8 @@ async def test_course_009_unknown_model_event_ref_does_not_become_authoritative_
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_invalid_output"
     assert result.llm_call_count == 1
     assert dict(result.customer_display_facts)["LX0609-009"]["failure_kind"] == (
         "critical_daily_record_coverage_satisfied"
@@ -1799,7 +1800,7 @@ async def test_course_009_unknown_model_event_ref_does_not_become_authoritative_
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_model_failure_keeps_frequency_pass() -> None:
+async def test_course_009_daily_complete_model_failure_fails_closed() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1818,14 +1819,14 @@ async def test_course_009_daily_complete_model_failure_keeps_frequency_pass() ->
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_transport_error"
     assert result.llm_call_count == 1
     assert "MODEL_ERROR_MUST_NOT_LEAK" not in repr(result)
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_invalid_json_keeps_frequency_pass() -> None:
+async def test_course_009_daily_complete_invalid_json_fails_closed() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1842,8 +1843,8 @@ async def test_course_009_daily_complete_invalid_json_keeps_frequency_pass() -> 
     )
     result, reduced = await _run_typed_009(session, _Client(["not-json"]))
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_invalid_output"
     assert result.llm_call_count == 1
 
 
@@ -1864,7 +1865,7 @@ async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None
         ],
         evaluation_as_of_date="2026-01-03",
     )
-    client = _Client([{"semantic_state": "satisfied"}])
+    client = _Client([{"events": []}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-009",),
