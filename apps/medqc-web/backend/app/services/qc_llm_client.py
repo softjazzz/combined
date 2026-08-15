@@ -141,7 +141,24 @@ class SichuanQCLLMClient:
             observability_recorder or get_llm_observability_recorder()
         )
 
-    async def generate(self, prompt: str) -> Dict[str, Any]:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> Dict[str, Any]:
+        if max_completion_tokens is not None and (
+            isinstance(max_completion_tokens, bool)
+            or not isinstance(max_completion_tokens, int)
+            or max_completion_tokens <= 0
+            or max_completion_tokens > self.MAX_TOKENS_HARD_CAP
+        ):
+            raise ValueError(
+                "max_completion_tokens must be a positive integer no greater than "
+                f"{self.MAX_TOKENS_HARD_CAP}"
+            )
+
         self.call_count += 1
         api_start = time.time()
         logical_call_id = str(uuid4())
@@ -174,6 +191,8 @@ class SichuanQCLLMClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         max_tokens = self._resolve_max_tokens(prompt)
+        if max_completion_tokens is not None:
+            max_tokens = min(max_tokens, max_completion_tokens)
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -206,11 +225,21 @@ class SichuanQCLLMClient:
                     max_tokens,
                     len(prompt),
                 )
+                retry_cap = (
+                    self.MAX_TOKENS_HARD_CAP
+                    if max_completion_tokens is None
+                    else max_completion_tokens
+                )
                 retry_tokens = min(
                     max(max_tokens * 2, self.THINKING_MIN_MAX_TOKENS),
                     self.MAX_TOKENS_HARD_CAP,
+                    retry_cap,
                 )
-                if self._is_thinking_model() and retry_tokens > max_tokens:
+                if (
+                    allow_length_retry
+                    and self._is_thinking_model()
+                    and retry_tokens > max_tokens
+                ):
                     retry_payload = dict(payload)
                     retry_payload["max_tokens"] = retry_tokens
                     logger.warning(

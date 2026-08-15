@@ -210,3 +210,192 @@ async def test_generate_should_raise_clear_error_when_upstream_http_error(monkey
     assert "InvalidParameter" in message
     assert "model not found" in message
     assert "sk-test-secret" not in message
+
+
+@pytest.mark.asyncio
+async def test_generate_default_keeps_existing_length_retry_limits(monkeypatch):
+    sent_max_tokens = []
+    responses = [
+        {
+            "choices": [
+                {"message": {"content": "partial"}, "finish_reason": "length"}
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 10,
+                "total_tokens": 110,
+            },
+        },
+        {
+            "choices": [
+                {"message": {"content": "complete"}, "finish_reason": "stop"}
+            ],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 20,
+                "total_tokens": 140,
+            },
+        },
+    ]
+
+    async def fake_safe_post_json(**kwargs):
+        sent_max_tokens.append(kwargs["payload"]["max_tokens"])
+        return responses.pop(0)
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-reasoner",
+            "provider_code": "deepseek",
+            "custom_parameters": {"max_tokens": 16384},
+        }
+    )
+
+    result = await client.generate("prompt")
+
+    assert sent_max_tokens == [16384, 32768]
+    assert result["_usage_breakdown"]["total_tokens"] == 250
+
+
+@pytest.mark.asyncio
+async def test_generate_explicit_completion_cap_reaches_http_payload(monkeypatch):
+    sent_max_tokens = []
+
+    async def fake_safe_post_json(**kwargs):
+        sent_max_tokens.append(kwargs["payload"]["max_tokens"])
+        return {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+            },
+        }
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-reasoner",
+            "provider_code": "deepseek",
+            "custom_parameters": {"max_tokens": 16384},
+        }
+    )
+
+    await client.generate("prompt", max_completion_tokens=512)
+
+    assert sent_max_tokens == [512]
+
+
+@pytest.mark.asyncio
+async def test_generate_can_disable_length_retry(monkeypatch):
+    sent_max_tokens = []
+
+    async def fake_safe_post_json(**kwargs):
+        sent_max_tokens.append(kwargs["payload"]["max_tokens"])
+        return {
+            "choices": [
+                {"message": {"content": "partial"}, "finish_reason": "length"}
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+            },
+        }
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-reasoner",
+            "provider_code": "deepseek",
+            "custom_parameters": {"max_tokens": 16384},
+        }
+    )
+
+    await client.generate("prompt", allow_length_retry=False)
+
+    assert sent_max_tokens == [16384]
+
+
+@pytest.mark.asyncio
+async def test_generate_length_retry_never_exceeds_explicit_cap(monkeypatch):
+    sent_max_tokens = []
+    responses = [
+        {
+            "choices": [
+                {"message": {"content": "partial"}, "finish_reason": "length"}
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 10,
+                "total_tokens": 110,
+            },
+        },
+        {
+            "choices": [
+                {"message": {"content": "complete"}, "finish_reason": "stop"}
+            ],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 20,
+                "total_tokens": 140,
+            },
+        },
+    ]
+
+    async def fake_safe_post_json(**kwargs):
+        sent_max_tokens.append(kwargs["payload"]["max_tokens"])
+        return responses.pop(0)
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-reasoner",
+            "provider_code": "deepseek",
+            "custom_parameters": {"max_tokens": 16384},
+        }
+    )
+
+    result = await client.generate("prompt", max_completion_tokens=24576)
+
+    assert sent_max_tokens == [16384, 24576]
+    assert result["_usage_breakdown"]["total_tokens"] == 250
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_cap",
+    [0, True, SichuanQCLLMClient.MAX_TOKENS_HARD_CAP + 1],
+)
+async def test_generate_rejects_invalid_completion_cap_before_http(
+    monkeypatch, invalid_cap
+):
+    http_call_count = 0
+
+    async def fake_safe_post_json(**_kwargs):
+        nonlocal http_call_count
+        http_call_count += 1
+        return {}
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-reasoner",
+            "provider_code": "deepseek",
+        }
+    )
+
+    with pytest.raises(ValueError, match="max_completion_tokens"):
+        await client.generate("prompt", max_completion_tokens=invalid_cap)
+
+    assert http_call_count == 0
