@@ -33,6 +33,7 @@ from .source_evidence_reader import (
 )
 from .surgery_applicability import resolve_surgery_applicability
 from .surgery_text_fact_contract import (
+    LX0609_025_REQUIRED_FIELDS,
     SurgeryEventFact,
     SurgeryTextProjection,
     build_surgery_text_fact_prompt,
@@ -124,7 +125,13 @@ _CONTROLLED_MESSAGES = {
 
 
 class SurgeryGateLLMClient(Protocol):
-    async def generate(self, prompt: str) -> dict[str, Any]:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> dict[str, Any]:
         ...
 
 
@@ -327,10 +334,11 @@ def _prompt(wrapper: Mapping[str, Any], context: str) -> str:
     )
     rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
     if rule_id == "LX0609-025":
+        allowed_fields = "、".join(LX0609_025_REQUIRED_FIELDS)
         prompt += (
             "\n补充输出要求：若判定不合规，必须同时返回 missing_fields 数组；仅可使用"
-            "implant_barcode、implant_type、implant_quantity。数组只列本次手术记录"
-            "或病程记录中明确缺失的省标主项；"
+            f"{allowed_fields}。数组只列本次手术记录中明确缺失的必填项；"
+            "implant_barcode 不属于本规则，禁止返回；病程记录不能补足手术记录字段；"
             "无法确定时返回空数组。"
         )
     return prompt
@@ -372,9 +380,7 @@ def _parse_implant_missing_fields(response: Mapping[str, Any]) -> tuple[str, ...
     values = payload.get("missing_fields") if payload is not None else None
     if not isinstance(values, list):
         return ()
-    allowed = {
-        "implant_barcode", "implant_type", "implant_quantity",
-    }
+    allowed = set(LX0609_025_REQUIRED_FIELDS)
     return tuple(value for value in values if value in allowed)
 
 
@@ -1068,10 +1074,10 @@ def _surgery_text_outcome(
 
     event_states: list[str] = []
     missing_implant_fields: set[str] = set()
-    missing_implant_extension_fields: set[str] = set()
     identified_implants: list[str] = []
     implant_source_document_id = ""
-    implant_source_key = ""
+    implant_failure_source_document_id = ""
+    implant_event_details: list[dict[str, Any]] = []
     missing_consent_signatures: set[str] = set()
     lymph_node_checked_sources: tuple[str, ...] = ()
     prophylaxis_display_facts: Mapping[str, Any] | None = None
@@ -1110,58 +1116,68 @@ def _surgery_text_outcome(
             # 取出旧物与沉默均不能被偷换成“未植入”。
             # 025 的事实结论只能针对模型同时确认的“已实施本次手术”。手术
             # 发生事实不清时，不能把一段文书的沉默写成“未使用植入物”。
-            if fact.surgery_occurrence != "performed":
+            surgery_evidence_refs = tuple(
+                evidence_ref
+                for evidence_ref in fact.evidence_refs
+                if projection.document_source_keys.get(evidence_ref) == "surgery_record"
+            )
+            # 没有引用本次投影中的正式手术记录时，模型即使返回present或
+            # missing也不能形成C/NC/NA；病程只能辅助确认使用事实。
+            if len(surgery_evidence_refs) != 1:
+                event_states.append("data_gap")
+            elif fact.surgery_occurrence != "performed":
                 event_states.append("data_gap")
             elif fact.implant_use == "explicit_no_implant":
                 event_states.append("not_applicable")
             elif fact.implant_use != "actual_permanent_implant":
                 event_states.append("data_gap")
             else:
+                event_implant_names: list[str] = []
                 for implant_name, use_kind, evidence_ref in fact.implant_items:
                     if use_kind != "permanent_implant":
                         continue
+                    if implant_name not in event_implant_names:
+                        event_implant_names.append(implant_name)
                     if implant_name not in identified_implants:
                         identified_implants.append(implant_name)
-                    if implant_source_document_id:
-                        continue
-                    source_key = projection.document_source_keys.get(evidence_ref)
+                required_field_states = tuple(
+                    (field_name, getattr(fact, field_name))
+                    for field_name in LX0609_025_REQUIRED_FIELDS
+                )
+                event_missing_fields = tuple(
+                    field_name
+                    for field_name, field_state in required_field_states
+                    if field_state == "missing"
+                )
+                missing_implant_fields.update(event_missing_fields)
+                current_surgery_document_id = ""
+                for evidence_ref in surgery_evidence_refs:
                     candidate = _clean(projection.document_source_ids.get(evidence_ref))
-                    if source_key in {"surgery_record", "daily_course_record"} and candidate:
-                        implant_source_document_id = candidate
-                        implant_source_key = source_key
-                primary_field_states = (
-                    ("implant_barcode", fact.implant_barcode),
-                    ("implant_type", fact.implant_type),
-                    ("implant_quantity", fact.implant_quantity),
-                )
-                extension_field_states = (
-                    ("implant_name", fact.implant_name),
-                    ("implant_specification", fact.implant_specification),
-                    ("implant_material", fact.implant_material),
-                )
-                missing_implant_fields.update(
-                    field_name
-                    for field_name, field_state in primary_field_states
-                    if field_state == "missing"
-                )
-                missing_implant_extension_fields.update(
-                    field_name
-                    for field_name, field_state in extension_field_states
-                    if field_state == "missing"
-                )
-                if not implant_source_document_id:
-                    for evidence_ref in fact.evidence_refs:
-                        source_key = projection.document_source_keys.get(evidence_ref)
-                        if source_key not in {"surgery_record", "daily_course_record"}:
-                            continue
-                        candidate = _clean(projection.document_source_ids.get(evidence_ref))
-                        if candidate:
-                            implant_source_document_id = candidate
-                            implant_source_key = source_key
-                            break
-                if any(field_state == "missing" for _, field_state in primary_field_states):
+                    if candidate:
+                        current_surgery_document_id = candidate
+                        break
+                if not implant_source_document_id and current_surgery_document_id:
+                    implant_source_document_id = current_surgery_document_id
+                event_has_missing_field = bool(event_missing_fields)
+                if (
+                    event_has_missing_field
+                    and not implant_failure_source_document_id
+                    and current_surgery_document_id
+                ):
+                    implant_failure_source_document_id = current_surgery_document_id
+                if event_has_missing_field:
+                    implant_event_detail: dict[str, Any] = {
+                        "event_ref": fact.event_ref,
+                        "missing_fields": list(event_missing_fields),
+                        "implant_names": event_implant_names,
+                    }
+                    if current_surgery_document_id:
+                        implant_event_detail["source_document_id"] = (
+                            current_surgery_document_id
+                        )
+                    implant_event_details.append(implant_event_detail)
                     event_states.append("non_compliant")
-                elif any(field_state == "unknown" for _, field_state in primary_field_states):
+                elif any(field_state == "unknown" for _, field_state in required_field_states):
                     event_states.append("data_gap")
                 else:
                     event_states.append("compliant")
@@ -1292,6 +1308,15 @@ def _surgery_text_outcome(
             "extension_reason_missing",
             prophylaxis_display_facts,
         )
+    # 025 尚未完成真实病例金标验收，必须保守失败关闭。多手术中只要
+    # 任一事件无法唯一绑定一份正式手术记录或字段事实仍未知，整体即DG；
+    # 不能用另一已确认事件的缺项覆盖未知事件并交付确定问题。
+    if rule_id == "LX0609-025" and "data_gap" in event_states:
+        return _SurgeryTextOutcome(
+            rule_id,
+            "data_gap",
+            "surgery_text_fact_unknown",
+        )
     for state, reason in (
         ("non_compliant", "surgery_text_fact_defect"),
         ("data_gap", "surgery_text_fact_unknown"),
@@ -1302,19 +1327,27 @@ def _surgery_text_outcome(
             display_facts = (
                 {
                     "failure_kind": "implant_information_incomplete",
-                    "missing_fields": sorted(missing_implant_fields),
+                    "missing_fields": [
+                        field_name
+                        for field_name in LX0609_025_REQUIRED_FIELDS
+                        if field_name in missing_implant_fields
+                    ],
+                    "implant_event_details": list(implant_event_details),
                     **(
                         {"identified_implants": list(identified_implants)}
                         if identified_implants
                         else {}
                     ),
-                    "source_label": (
-                        "病程记录" if implant_source_key == "daily_course_record" else "手术记录"
-                    ),
-                    "source_document_type": implant_source_key or "surgery_record",
+                    "source_label": "手术记录",
+                    "source_document_type": "surgery_record",
                     **(
-                        {"source_document_id": implant_source_document_id}
-                        if implant_source_document_id
+                        {
+                            "source_document_id": (
+                                implant_failure_source_document_id
+                                or implant_source_document_id
+                            )
+                        }
+                        if implant_failure_source_document_id or implant_source_document_id
                         else {}
                     ),
                 }
@@ -1327,25 +1360,14 @@ def _surgery_text_outcome(
                 display_facts = {
                     "verification_kind": "implant_information_complete",
                     "performed_surgery_confirmed": True,
-                    "checked_fields": [
-                        "implant_barcode",
-                        "implant_type",
-                        "implant_quantity",
-                    ],
+                    "checked_fields": list(LX0609_025_REQUIRED_FIELDS),
                     **(
                         {"identified_implants": list(identified_implants)}
                         if identified_implants
                         else {}
                     ),
-                    "source_label": (
-                        "病程记录" if implant_source_key == "daily_course_record" else "手术记录"
-                    ),
-                    "source_document_type": implant_source_key or "surgery_record",
-                    **(
-                        {"local_extension_missing_fields": sorted(missing_implant_extension_fields)}
-                        if missing_implant_extension_fields
-                        else {}
-                    ),
+                    "source_label": "手术记录",
+                    "source_document_type": "surgery_record",
                     **(
                         {"source_document_id": implant_source_document_id}
                         if implant_source_document_id
@@ -1662,12 +1684,6 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             and item.completeness.value != "truncated"
             for item in evidence_snapshot.observations
         )
-        daily_course_record_available = any(
-            item.source_key == "daily_course_record"
-            and item.query_state.value == "available"
-            and item.completeness.value != "truncated"
-            for item in evidence_snapshot.observations
-        )
         if (
             rule_id in _TEXT_FACT_RULE_IDS
             and (
@@ -1680,9 +1696,6 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 # 因严格时间/字段缺失未形成 performed 事实，也不能提前跳过
                 # “明确未植入 / 已植入且字段缺失”的既有三分支。
                 or (rule_id == "LX0609-025" and surgery_record_available)
-                # 025 已声明病程记录可作为永久植入事实的唯一证据；正式手术
-                # 记录不可读时，仍允许沿同一MaterialStore做一次受控抽取。
-                or (rule_id == "LX0609-025" and daily_course_record_available)
                 or (
                     rule_id == "LX0609-028"
                     and performed_state == "unknown"
@@ -1745,6 +1758,21 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     )
                 )
             )
+            if rule_id == "LX0609-025":
+                # 025 的五项必填字段只能由正式手术记录核对。病程可辅助证明
+                # 实际使用永久植入物，但手术记录不可读时不能替代其字段。
+                surgery_state = states_by_source.get("surgery_record")
+                if surgery_state == "error":
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id, "technical_error", "source_query_error"
+                    )
+                elif surgery_state != "available":
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id, "data_gap", "surgery_projection_unavailable"
+                    )
+                else:
+                    active_rule_ids.append(rule_id)
+                continue
             if "error" in states:
                 source_labels = [
                     _TYPED_SOURCE_CUSTOMER_LABELS[source_key]
@@ -1855,12 +1883,6 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             ):
                 partial_source_rule_ids.add(rule_id)
                 active_rule_ids.append(rule_id)
-            elif (
-                rule_id == "LX0609-025"
-                and states_by_source.get("surgery_record") != "available"
-                and states_by_source.get("daily_course_record") == "available"
-            ):
-                active_rule_ids.append(rule_id)
             elif states.intersection({"unavailable", "truncated", "missing"}):
                 pending_outcomes[rule_id] = _SurgeryTextOutcome(
                     rule_id, "data_gap", "surgery_projection_unavailable"
@@ -1871,13 +1893,18 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         if active_rule_ids:
             def projection_sources_for(rule_id: str) -> tuple[str, ...]:
                 if rule_id == "LX0609-025":
-                    # 025 的两个来源是替代关系，不是必须同时送模。正式手术记录
-                    # 完整可用时优先使用它；仅在其不可用时回退病程，避免无关
-                    # 病程数量把本来足够的手术记录误判为投影截断。
-                    if source_states.get("surgery_record") == "available":
-                        return ("surgery_record",)
-                    if source_states.get("daily_course_record") == "available":
-                        return ("daily_course_record",)
+                    # 手术记录是五字段唯一事实源；病程若可用，只作为实际使用
+                    # 永久植入物的辅助语义证据，与手术记录一并送入一次抽取。
+                    # 病程是可选辅助源，数量超出受控上限时不让它挤掉唯一必查
+                    # 的手术记录；此时模型只能按手术记录作保守三态判断。
+                    sources = ["surgery_record"]
+                    if (
+                        source_states.get("daily_course_record") == "available"
+                        and len(rows_by_source["daily_course_record"])
+                        <= _JOINT_TEXT_FACT_MAX_ROWS_PER_SOURCE
+                    ):
+                        sources.append("daily_course_record")
+                    return tuple(sources)
                 return _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
 
             # 先按规则各自来源检查行上限；相关来源过多只能让该规则资料不足，
@@ -1936,7 +1963,9 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                                     selected_rule_ids=tuple(model_rule_ids),
                                     projection=projection,
                                     max_completion_tokens=_JOINT_TEXT_FACT_MAX_COMPLETION_TOKENS,
-                                )
+                                ),
+                                max_completion_tokens=_JOINT_TEXT_FACT_MAX_COMPLETION_TOKENS,
+                                allow_length_retry=False,
                             )
                         except Exception:
                             response = None

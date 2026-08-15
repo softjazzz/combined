@@ -142,7 +142,13 @@ class _Client:
         self.outputs = list(outputs)
         self.prompts: list[str] = []
 
-    async def generate(self, prompt: str) -> dict:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> dict:
         self.prompts.append(prompt)
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
@@ -168,10 +174,23 @@ class _JointSurgeryFactClient:
 
     def __init__(self, *, consent_evidence: bool = True) -> None:
         self.prompts: list[str] = []
+        self.request_options: list[dict[str, object]] = []
         self.consent_evidence = consent_evidence
 
-    async def generate(self, prompt: str) -> dict:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> dict:
         self.prompts.append(prompt)
+        self.request_options.append(
+            {
+                "max_completion_tokens": max_completion_tokens,
+                "allow_length_retry": allow_length_retry,
+            }
+        )
         selected = tuple(
             rule_id
             for rule_id in ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
@@ -209,7 +228,6 @@ class _JointSurgeryFactClient:
                 implant_specification="present",
                 implant_material="present",
                 implant_quantity="present",
-                implant_barcode="present",
             )
         if "LX0609-028" in selected:
             event.update(
@@ -1645,12 +1663,13 @@ async def test_025_legacy_llm_requires_field_level_implant_evidence_for_non_comp
     assert result.results[0]["status"] == "non_compliant"
     assert result.results[0]["metadata"]["customer_display_facts"] == {
         "failure_kind": "implant_information_incomplete",
-        "missing_fields": ["implant_quantity"],
+        "missing_fields": ["implant_material", "implant_quantity"],
         "source_label": "手术记录",
         "source_document_id": "surgery-document-025",
     }
     assert "PRIVATE_FIELD" not in repr(result.results[0])
     assert "missing_fields" in client.prompts[0]
+    assert "implant_barcode 不属于本规则" in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -1833,7 +1852,10 @@ def test_025_nonactual_or_ambiguous_implant_use_is_data_gap(implant_use: str) ->
         rule_id="LX0609-025",
         facts=(_surgery_text_fact(implant_use=implant_use),),
         projection=surgery.SurgeryTextProjection(
-            context="<redacted>", time_candidates={}, document_refs=frozenset({"S01-01"})
+            context="<redacted>",
+            time_candidates={},
+            document_refs=frozenset({"S01-01"}),
+            document_source_keys={"S01-01": "surgery_record"},
         ),
     )
 
@@ -1843,11 +1865,29 @@ def test_025_nonactual_or_ambiguous_implant_use_is_data_gap(implant_use: str) ->
 @pytest.mark.parametrize(
     ("field", "value", "expected"),
     (
-    ("implant_barcode", "missing", "non_compliant"),
-    ("implant_type", "missing", "non_compliant"),
-    ("implant_quantity", "missing", "non_compliant"),
-    ("implant_type", "unknown", "data_gap"),
-    ("implant_type", "present", "compliant"),
+        *(
+            (field, "missing", "non_compliant")
+            for field in (
+                "implant_name",
+                "implant_type",
+                "implant_specification",
+                "implant_material",
+                "implant_quantity",
+            )
+        ),
+        *(
+            (field, "unknown", "data_gap")
+            for field in (
+                "implant_name",
+                "implant_type",
+                "implant_specification",
+                "implant_material",
+                "implant_quantity",
+            )
+        ),
+        ("implant_barcode", "missing", "compliant"),
+        ("implant_barcode", "unknown", "compliant"),
+        ("implant_barcode", "present", "compliant"),
     ),
 )
 def test_025_actual_implant_field_contract_is_python_owned(
@@ -1859,7 +1899,10 @@ def test_025_actual_implant_field_contract_is_python_owned(
         rule_id="LX0609-025",
         facts=(_surgery_text_fact(**{field: value}),),
         projection=surgery.SurgeryTextProjection(
-            context="<redacted>", time_candidates={}, document_refs=frozenset({"S01-01"})
+            context="<redacted>",
+            time_candidates={},
+            document_refs=frozenset({"S01-01"}),
+            document_source_keys={"S01-01": "surgery_record"},
         ),
     )
 
@@ -1868,12 +1911,19 @@ def test_025_actual_implant_field_contract_is_python_owned(
         assert outcome.customer_display_facts == {
             "failure_kind": "implant_information_incomplete",
             "missing_fields": [field],
+            "implant_event_details": [
+                {
+                    "event_ref": "EV1",
+                    "missing_fields": [field],
+                    "implant_names": [],
+                }
+            ],
             "source_label": "手术记录",
             "source_document_type": "surgery_record",
         }
 
 
-def test_025_keeps_local_extension_fields_without_changing_provincial_result() -> None:
+def test_025_all_five_customer_fields_are_required_and_barcode_is_not_checked() -> None:
     outcome = surgery._surgery_text_outcome(
         rule_id="LX0609-025",
         facts=(_surgery_text_fact(implant_material="missing"),),
@@ -1889,16 +1939,256 @@ def test_025_keeps_local_extension_fields_without_changing_provincial_result() -
         ),
     )
 
-    assert outcome.status == "compliant"
+    assert outcome.status == "non_compliant"
     assert outcome.customer_display_facts == {
-        "verification_kind": "implant_information_complete",
-        "performed_surgery_confirmed": True,
-        "checked_fields": ["implant_barcode", "implant_type", "implant_quantity"],
+        "failure_kind": "implant_information_incomplete",
+        "missing_fields": ["implant_material"],
+        "implant_event_details": [
+            {
+                "event_ref": "EV1",
+                "missing_fields": ["implant_material"],
+                "implant_names": [],
+                "source_document_id": "surgery-document-1",
+            }
+        ],
         "source_label": "手术记录",
         "source_document_type": "surgery_record",
-        "local_extension_missing_fields": ["implant_material"],
         "source_document_id": "surgery-document-1",
     }
+
+
+def test_025_multiple_events_use_data_gap_then_non_compliant_then_compliant_priority() -> None:
+    projection = surgery.SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01"}),
+        document_source_keys={"S01-01": "surgery_record"},
+    )
+
+    unknown_and_missing = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(
+            _surgery_text_fact(implant_name="unknown"),
+            _surgery_text_fact(event_ref="EV2", implant_quantity="missing"),
+        ),
+        projection=projection,
+    )
+    data_gap = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(
+            _surgery_text_fact(implant_name="unknown"),
+            _surgery_text_fact(event_ref="EV2"),
+        ),
+        projection=projection,
+    )
+    compliant = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(_surgery_text_fact(), _surgery_text_fact(event_ref="EV2")),
+        projection=projection,
+    )
+
+    assert unknown_and_missing.status == "data_gap"
+    assert unknown_and_missing.customer_display_facts is None
+    assert data_gap.status == "data_gap"
+    assert compliant.status == "compliant"
+    assert compliant.customer_display_facts["checked_fields"] == [
+        "implant_name",
+        "implant_type",
+        "implant_specification",
+        "implant_material",
+        "implant_quantity",
+    ]
+
+
+def test_025_course_implant_reference_never_replaces_surgery_field_source() -> None:
+    projection = surgery.SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01", "S07-01"}),
+        document_source_keys={
+            "S01-01": "surgery_record",
+            "S07-01": "daily_course_record",
+        },
+        document_source_ids={
+            "S01-01": "surgery-document-025",
+            "S07-01": "course-document-025",
+        },
+    )
+    fact = _surgery_text_fact(
+        evidence_refs=("S07-01", "S01-01"),
+        implant_items=(("人工硬脑膜", "permanent_implant", "S07-01"),),
+        implant_material="missing",
+    )
+
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(fact,),
+        projection=projection,
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.customer_display_facts["source_label"] == "手术记录"
+    assert outcome.customer_display_facts["source_document_type"] == "surgery_record"
+    assert outcome.customer_display_facts["source_document_id"] == "surgery-document-025"
+    assert "course-document-025" not in repr(outcome.customer_display_facts)
+
+
+@pytest.mark.parametrize("implant_material", ("present", "missing"))
+def test_025_course_only_reference_never_forges_surgery_document_id(
+    implant_material: str,
+) -> None:
+    projection = surgery.SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S07-01"}),
+        document_source_keys={"S07-01": "daily_course_record"},
+        document_source_ids={"S07-01": "course-document-025"},
+    )
+    fact = _surgery_text_fact(
+        evidence_refs=("S07-01",),
+        implant_items=(("人工硬脑膜", "permanent_implant", "S07-01"),),
+        implant_material=implant_material,
+    )
+
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(fact,),
+        projection=projection,
+    )
+
+    # 旧断言曾把“仅病程引用+明确缺项”判为不合规；当前权威合同规定
+    # 五字段只以正式手术记录为事实源，因此必须失败关闭为资料不足。
+    assert outcome.status == "data_gap"
+    assert outcome.customer_display_facts is None
+    assert "course-document-025" not in repr(outcome)
+
+
+def test_025_multiple_events_point_to_the_surgery_record_with_missing_fields() -> None:
+    projection = surgery.SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01", "S01-02"}),
+        document_source_keys={
+            "S01-01": "surgery_record",
+            "S01-02": "surgery_record",
+        },
+        document_source_ids={
+            "S01-01": "complete-surgery-document",
+            "S01-02": "incomplete-surgery-document",
+        },
+    )
+
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(
+            _surgery_text_fact(
+                evidence_refs=("S01-01",),
+                implant_material="missing",
+                implant_items=(("人工硬脑膜", "permanent_implant", "S01-01"),),
+            ),
+            _surgery_text_fact(
+                event_ref="EV2",
+                evidence_refs=("S01-02",),
+                implant_quantity="missing",
+                implant_items=(("人工关节", "permanent_implant", "S01-02"),),
+            ),
+        ),
+        projection=projection,
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.customer_display_facts["missing_fields"] == [
+        "implant_material",
+        "implant_quantity",
+    ]
+    assert outcome.customer_display_facts["source_document_id"] == (
+        "complete-surgery-document"
+    )
+    assert outcome.customer_display_facts["implant_event_details"] == [
+        {
+            "event_ref": "EV1",
+            "missing_fields": ["implant_material"],
+            "implant_names": ["人工硬脑膜"],
+            "source_document_id": "complete-surgery-document",
+        },
+        {
+            "event_ref": "EV2",
+            "missing_fields": ["implant_quantity"],
+            "implant_names": ["人工关节"],
+            "source_document_id": "incomplete-surgery-document",
+        },
+    ]
+
+
+def test_025_ambiguous_two_surgery_refs_fail_closed_without_forged_evidence() -> None:
+    projection = surgery.SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01", "S01-02"}),
+        document_source_keys={
+            "S01-01": "surgery_record",
+            "S01-02": "surgery_record",
+        },
+        document_source_ids={
+            "S01-01": "surgery-A",
+            "S01-02": "surgery-B",
+        },
+    )
+    fact = _surgery_text_fact(
+        evidence_refs=("S01-01", "S01-02"),
+        implant_items=(("人工关节", "permanent_implant", "S01-02"),),
+        implant_quantity="missing",
+    )
+
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(fact,),
+        projection=projection,
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgery_text_fact_unknown"
+    assert outcome.customer_display_facts is None
+    assert "surgery-A" not in repr(outcome)
+    assert "surgery-B" not in repr(outcome)
+
+
+def test_025_unknown_event_has_priority_over_other_event_missing_fields() -> None:
+    projection = surgery.SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01", "S07-01"}),
+        document_source_keys={
+            "S01-01": "surgery_record",
+            "S07-01": "daily_course_record",
+        },
+        document_source_ids={
+            "S01-01": "surgery-A",
+            "S07-01": "course-A",
+        },
+    )
+
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(
+            _surgery_text_fact(
+                evidence_refs=("S07-01",),
+                implant_items=(("人工硬脑膜", "permanent_implant", "S07-01"),),
+            ),
+            _surgery_text_fact(
+                event_ref="EV2",
+                evidence_refs=("S01-01",),
+                implant_quantity="missing",
+                implant_items=(("人工关节", "permanent_implant", "S01-01"),),
+            ),
+        ),
+        projection=projection,
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgery_text_fact_unknown"
+    assert outcome.customer_display_facts is None
+    assert "implant_quantity" not in repr(outcome)
 
 
 @pytest.mark.asyncio

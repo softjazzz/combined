@@ -34,6 +34,7 @@ from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
 )
 from app.services.luxian_0609.surgery_text_fact_contract import (
+    LX0609_025_REQUIRED_FIELDS,
     SCHEMA_VERSION,
     SurgeryEventFact,
     SurgeryTextProjection,
@@ -45,6 +46,37 @@ from app.services.luxian_0609.surgery_text_fact_contract import (
 
 
 RULE_IDS = ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
+
+_TEST_RULE_FIELDS = {
+    "LX0609-024": {
+        "surgery_occurrence",
+        "malignant_relation",
+        "lymph_node_documentation",
+    },
+    "LX0609-025": {
+        "surgery_occurrence",
+        "implant_use",
+        *LX0609_025_REQUIRED_FIELDS,
+        "implant_items",
+    },
+    "LX0609-028": {
+        "surgery_occurrence",
+        "incision_class",
+        "antimicrobial_intent",
+        "start_time_ref",
+        "start_time_role",
+        "end_time_ref",
+        "end_time_role",
+        "interval_scope",
+        "special_extension_reason",
+    },
+    "LX0609-033": {
+        "consent_role",
+        "consent_linkage",
+        "patient_signature",
+        "surgeon_signature",
+    },
+}
 
 
 def _event(**overrides: object) -> dict[str, object]:
@@ -98,19 +130,54 @@ def _event(**overrides: object) -> dict[str, object]:
     return item
 
 
+def _event_for_rules(
+    event: dict[str, object], selected_rule_ids: tuple[str, ...]
+) -> dict[str, object]:
+    """模拟模型严格遵循当前提示词，只返回本次所选规则字段。"""
+
+    allowed_fields = {"event_ref", "evidence_refs"}
+    for rule_id in selected_rule_ids:
+        allowed_fields.update(_TEST_RULE_FIELDS[rule_id])
+    return {key: value for key, value in event.items() if key in allowed_fields}
+
+
 class _Client:
     def __init__(self, payload: object, *, consent_payload: object | None = None) -> None:
         self.payload = payload
         self.consent_payload = consent_payload
         self.prompts: list[str] = []
+        self.request_options: list[dict[str, object]] = []
 
-    async def generate(self, prompt: str) -> dict[str, object]:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> dict[str, object]:
         self.prompts.append(prompt)
+        self.request_options.append(
+            {
+                "max_completion_tokens": max_completion_tokens,
+                "allow_length_retry": allow_length_retry,
+            }
+        )
+        selected = tuple(rule_id for rule_id in RULE_IDS if rule_id in prompt)
         payload = (
             self.consent_payload
             if self.consent_payload is not None and "本次规则：LX0609-033" in prompt
             else self.payload
         )
+        if isinstance(payload, dict) and isinstance(payload.get("events"), list):
+            payload = {
+                **payload,
+                "events": [
+                    _event_for_rules(event, selected)
+                    if isinstance(event, dict)
+                    else event
+                    for event in payload["events"]
+                ],
+            }
         return {
             "choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}],
             "usage": {"prompt_tokens": 90, "completion_tokens": 10, "total_tokens": 100},
@@ -285,10 +352,13 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
     )
 
     assert [item.final_state.value for item in reduced] == [
-        "compliant", "non_compliant", "not_applicable", "compliant"
+        "compliant", "compliant", "not_applicable", "compliant"
     ]
     # 四条规则合并为一次联合事实提取；033 必须校验同意书与本次手术的语义关联。
     assert result.llm_call_count == 1
+    assert client.request_options == [
+        {"max_completion_tokens": 512, "allow_length_retry": False}
+    ]
     assert result.total_tokens == 100
     assert len(client.prompts) == 1
     assert "正文标记-A" in client.prompts[0]
@@ -340,7 +410,7 @@ async def test_025_uses_implant_fact_contract_for_na_and_missing_field(
 
 
 @pytest.mark.asyncio
-async def test_025_missing_barcode_delivers_identified_implant_name() -> None:
+async def test_025_ignores_barcode_and_delivers_identified_implant_name() -> None:
     session = _session(surgery_rows=({
         "document_id": "surgery-025-identification",
         "surgery_begin_time": "2026-01-01 08:00:00+08",
@@ -395,13 +465,11 @@ async def test_025_missing_barcode_delivers_identified_implant_name() -> None:
 
     assert native.llm_call_count == 1
     assert native.total_tokens == 100
-    assert canonical[0]["status"] == "non_compliant"
+    assert canonical[0]["status"] == "compliant"
     assert canonical[0]["customer_display_facts"]["identified_implants"] == [
         "人工硬脑膜"
     ]
-    assert canonical[0]["findings"] == (
-        "已确认实际使用永久性植入物：人工硬脑膜；手术记录缺少：植入物条码。"
-    )
+    assert "implant_barcode" not in native.customer_display_facts[0][1]["checked_fields"]
 
 
 def test_025_rejects_implant_name_not_present_in_cited_document() -> None:
@@ -414,14 +482,17 @@ def test_025_rejects_implant_name_not_present_in_cited_document() -> None:
     response = {
         "choices": [{"message": {"content": json.dumps({
             "schema_version": SCHEMA_VERSION,
-            "events": [_event(
-                implant_items=[
-                    {
-                        "name": "心脏支架",
-                        "use_kind": "permanent_implant",
-                        "evidence_ref": "S01-01",
-                    },
-                ],
+            "events": [_event_for_rules(
+                _event(
+                    implant_items=[
+                        {
+                            "name": "心脏支架",
+                            "use_kind": "permanent_implant",
+                            "evidence_ref": "S01-01",
+                        },
+                    ],
+                ),
+                ("LX0609-025",),
             )],
         }, ensure_ascii=False)}}],
     }
@@ -434,9 +505,96 @@ def test_025_rejects_implant_name_not_present_in_cited_document() -> None:
         )
 
 
+@pytest.mark.parametrize("forbidden_field", ("implant_barcode", "patient_signature"))
+def test_025_response_rejects_every_field_outside_selected_rule_scope(
+    forbidden_field: str,
+) -> None:
+    projection = SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01"}),
+        document_source_keys={"S01-01": "surgery_record"},
+        document_texts={"S01-01": "术中使用人工硬脑膜修补。"},
+    )
+    exact_025_fields = {
+        "event_ref",
+        "evidence_refs",
+        "surgery_occurrence",
+        "implant_use",
+        "implant_name",
+        "implant_type",
+        "implant_specification",
+        "implant_material",
+        "implant_quantity",
+        "implant_items",
+    }
+    event = {key: value for key, value in _event().items() if key in exact_025_fields}
+    event[forbidden_field] = "present"
+    response = {
+        "choices": [{"message": {"content": json.dumps({
+            "schema_version": SCHEMA_VERSION,
+            "events": [event],
+        }, ensure_ascii=False)}}],
+    }
+
+    with pytest.raises(ValueError, match="surgery event schema mismatch"):
+        parse_surgery_text_fact_response(
+            response=response,
+            projection=projection,
+            selected_rule_ids=("LX0609-025",),
+        )
+
+
+def test_joint_025_and_028_response_accepts_exact_selected_field_union() -> None:
+    projection = SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01"}),
+        document_source_keys={"S01-01": "surgery_record"},
+        document_texts={"S01-01": "术中使用人工硬脑膜修补。"},
+    )
+    exact_joint_fields = {
+        "event_ref",
+        "evidence_refs",
+        "surgery_occurrence",
+        "implant_use",
+        "implant_name",
+        "implant_type",
+        "implant_specification",
+        "implant_material",
+        "implant_quantity",
+        "implant_items",
+        "incision_class",
+        "antimicrobial_intent",
+        "start_time_ref",
+        "start_time_role",
+        "end_time_ref",
+        "end_time_role",
+        "interval_scope",
+        "special_extension_reason",
+    }
+    event = {key: value for key, value in _event().items() if key in exact_joint_fields}
+    response = {
+        "choices": [{"message": {"content": json.dumps({
+            "schema_version": SCHEMA_VERSION,
+            "events": [event],
+        }, ensure_ascii=False)}}],
+    }
+
+    facts = parse_surgery_text_fact_response(
+        response=response,
+        projection=projection,
+        selected_rule_ids=("LX0609-025", "LX0609-028"),
+    )
+
+    assert len(facts) == 1
+    assert facts[0].implant_use == "actual_permanent_implant"
+    assert facts[0].incision_class == "I"
+
+
 @pytest.mark.asyncio
-async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extensions_nonblocking() -> None:
-    """025主项只核对条码、种类、数量；本院扩展字段不改变主结论。"""
+async def test_025_requires_all_five_surgery_record_fields_and_ignores_barcode() -> None:
+    """名称、种类、规格、材质、数量均是025必查项，条码不参与。"""
     session = _session(
         surgery_rows=(
             {
@@ -519,33 +677,34 @@ async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extens
     assert len(client.prompts) == 1
     assert "人工硬脑膜一张覆盖" in client.prompts[0]
     assert "UNRELATED_DAILY_COURSE" not in client.prompts[0]
-    assert "implant_barcode" in client.prompts[0]
-    assert reduced[0].final_state.value == "compliant"
-    assert reduced[0].reason_code == "requirement_satisfied"
-    assert canonical[0]["status"] == "compliant"
-    assert canonical[0]["reason_code"] == "requirement_satisfied"
-    assert canonical[0]["customer_display_facts"] == {
-        "verification_kind": "implant_information_complete",
-        "performed_surgery_confirmed": True,
+    assert "implant_barcode 完全不属于本规则" in client.prompts[0]
+    assert "病程记录只能帮助确认本次是否实际使用永久性植入物" in client.prompts[0]
+    assert "所有永久植入物均有记录时才可输出present" in client.prompts[0]
+    assert "任一永久植入物明确缺少该字段即输出missing" in client.prompts[0]
+    assert reduced[0].final_state.value == "non_compliant"
+    assert native.customer_display_facts[0][1] == {
+        "failure_kind": "implant_information_incomplete",
+        "missing_fields": ["implant_specification", "implant_material"],
+        "implant_event_details": [
+            {
+                "event_ref": "EV1",
+                "missing_fields": ["implant_specification", "implant_material"],
+                "implant_names": ["人工硬脑膜"],
+                "source_document_id": "5039223||1",
+            }
+        ],
         "identified_implants": ["人工硬脑膜"],
         "source_label": "手术记录",
         "source_document_type": "surgery_record",
-        "checked_fields": [
-            "implant_barcode",
-            "implant_type",
-            "implant_quantity",
-        ],
-        "local_extension_missing_fields": [
-            "implant_material",
-            "implant_specification",
-        ],
+        "source_document_id": "5039223||1",
     }
-    assert "人工硬脑膜" in canonical[0]["findings"]
+    # 聚合/文案仍由后续投影闭环统一更新，本测试只冻结直接执行器合同。
+    assert canonical[0]["status"] == "non_compliant"
 
 
 @pytest.mark.asyncio
-async def test_025_accepts_course_record_as_evidence_and_delivers_its_real_source() -> None:
-    """病程中的永久植入事实也可满足025省标主项，且交付层必须如实保留来源类型。"""
+async def test_025_course_record_cannot_replace_unavailable_surgery_record() -> None:
+    """病程可证明使用事实，但不能替代手术记录完成五字段核对。"""
     session = _session(
         surgery_source_unavailable=True,
         daily_course_rows=(
@@ -594,15 +753,10 @@ async def test_025_accepts_course_record_as_evidence_and_delivers_its_real_sourc
         },
     )
 
-    assert native.llm_call_count == 1
-    assert native.total_tokens == 100
-    assert reduced[0].final_state.value == "compliant"
-    assert canonical[0]["status"] == "compliant"
-    assert canonical[0]["customer_display_facts"]["source_label"] == "病程记录"
-    assert {
-        "source_type": "daily_course_record",
-        "source_document_id": "daily-025-implant",
-    } in canonical[0]["customer_evidence"]
+    assert native.llm_call_count == 0
+    assert native.total_tokens == 0
+    assert reduced[0].final_state.value == "data_gap"
+    assert canonical[0]["status"] == "data_gap"
 
 
 @pytest.mark.asyncio
@@ -1570,10 +1724,13 @@ def test_028_cross_document_time_reference_is_dropped_to_unknown() -> None:
     response = {
         "choices": [{"message": {"content": json.dumps({
             "schema_version": SCHEMA_VERSION,
-            "events": [_event(
-                evidence_refs=["S01-01"],
-                start_time_ref="T001",
-                start_time_role="actual_administration",
+            "events": [_event_for_rules(
+                _event(
+                    evidence_refs=["S01-01"],
+                    start_time_ref="T001",
+                    start_time_role="actual_administration",
+                ),
+                ("LX0609-028",),
             )],
         })}}]
     }

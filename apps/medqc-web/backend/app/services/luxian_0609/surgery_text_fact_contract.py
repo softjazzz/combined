@@ -10,6 +10,13 @@ from typing import Any, Mapping, Sequence
 
 
 SCHEMA_VERSION = "lx0609-surgery-text-facts-v2"
+LX0609_025_REQUIRED_FIELDS = (
+    "implant_name",
+    "implant_type",
+    "implant_specification",
+    "implant_material",
+    "implant_quantity",
+)
 _DATETIME_PATTERN = re.compile(
     r"(?<!\d)(\d{4}[-年/]\d{1,2}[-月/]\d{1,2}(?:日)?"
     r"(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?)(?!\d)"
@@ -117,9 +124,8 @@ _RULE_FACT_FIELDS = {
         "lymph_node_documentation",
     ),
     "LX0609-025": (
-        "surgery_occurrence", "implant_use", "implant_name", "implant_type",
-        "implant_specification", "implant_material", "implant_quantity",
-        "implant_barcode", "implant_items",
+        "surgery_occurrence", "implant_use", *LX0609_025_REQUIRED_FIELDS,
+        "implant_items",
     ),
     "LX0609-028": (
         "surgery_occurrence", "incision_class", "antimicrobial_intent",
@@ -206,11 +212,11 @@ def _row_text(row: Mapping[str, Any]) -> str:
         "surgial_incision_level", "surgical_incision_level",
     )
     parts: list[str] = []
-    for field in fields:
-        value = _clean(row.get(field))
+    for field_name in fields:
+        value = _clean(row.get(field_name))
         if not value:
             continue
-        if field in {"surgial_incision_level", "surgical_incision_level"}:
+        if field_name in {"surgial_incision_level", "surgical_incision_level"}:
             parts.append(f"切口等级:{value}")
         else:
             parts.append(value)
@@ -382,17 +388,23 @@ def build_surgery_text_fact_prompt(
     )
     implant_025_instruction = ""
     if "LX0609-025" in selected:
+        required_implant_fields = "、".join(LX0609_025_REQUIRED_FIELDS)
         implant_025_instruction = (
             "材料名称本身不能证明植入，"
             "必须结合同一份手术记录或病程记录中本次实际使用、置入、覆盖或修补等明确动作与语境判断。"
-            "025 的省标主项仅为 implant_barcode、implant_type、implant_quantity；"
+            f"025 只核对手术记录中的 {required_implant_fields} 五项；"
+            "implant_barcode 完全不属于本规则，禁止输出或据此判定。"
+            "病程记录只能帮助确认本次是否实际使用永久性植入物，不能补足手术记录中的五项字段。"
+            "五项字段的 present/missing/unknown 必须只依据本次手术记录正文；"
+            "同一手术事件存在多个永久植入物时，每一项字段只有在所有永久植入物均有记录时才可输出present；"
+            "任一永久植入物明确缺少该字段即输出missing；没有明确缺失但至少一项无法确认时输出unknown。"
             "implant_items必须逐项输出本次有名称的植入/置入候选、使用性质及其S引用；"
             "name必须是对应S文书中的连续原文，不能归纳、改写或猜测。"
             "use_kind只能是permanent_implant、temporary_device、removed_item或unknown；"
             "仅明确预期永久留在体内的材料可标permanent_implant。"
             "颅内压监测探头、引流管等用于临时监测或引流且后续需移除的器械属于temporary_device，"
             "不能作为永久植入物。"
-            "implant_name、implant_specification、implant_material 仅作本院扩展，不得据此输出不合规。"
+            "任一五项字段在手术记录中明确缺失时输出missing；没有明确缺失但无法确认时输出unknown。"
         )
     return f"""你是泸县0609手术事实抽取器。只抽取事实，不直接输出质控状态。本次规则：{','.join(selected)}。
 每个本次手术事件单独输出。只有已实施的本次手术才是performed，拟行、计划、申请均为planned。024只在本次已实施手术与恶性原发治疗、淋巴结清扫或术中冰冻恶性有直接关联时，malignant_relation才可输出qualifying；既往恶性史、普通送病理、当前良性手术、术后并发症/造口/救治均必须输出explicit_nonqualifying，不能借此认定本次恶性手术。{shared_implant_instruction}{implant_025_instruction}治疗性抗菌药不能当预防用药；时间只能选择给定T候选。麻醉、输血、其他治疗同意书及空模板不能当手术知情同意书，且必须关联本次手术。
@@ -400,7 +412,7 @@ def build_surgery_text_fact_prompt(
 只能引用给定S/T；无法确定必须unknown，禁止猜测。028引用start_time_ref或end_time_ref时，每个T所在文书的S引用都必须加入evidence_refs，不能只引用手术文书。
 材料：
 {projection.context}
-025除字段状态外，还必须输出implant_items；每项只含name、use_kind和evidence_ref，name必须逐字来自该S文书。实际使用的永久植入物、临时器械、取出物均可列为候选，但只有use_kind=permanent_implant的项目属于025核对对象；无法确定使用性质时必须unknown。implant_use=actual_permanent_implant且implant_name=present时必须至少有一项permanent_implant，否则不得有permanent_implant项目。025不判断“整体完整”；028起止时间角色只有正文明确表示实际给药/实际停止时才输出actual_administration/actual_stop，否则输出planned_order、document_time或unknown。若预防用药后来转为治疗，只能选择预防阶段的起止并输出interval_scope=prophylactic_segment；选择了整个治疗疗程或无法区分时输出whole_course或unknown。
+025除字段状态外，还必须输出implant_items；每项只含name、use_kind和evidence_ref，name必须逐字来自该S文书。实际使用的永久植入物、临时器械、取出物均可列为候选，但只有use_kind=permanent_implant的项目属于025核对对象；无法确定使用性质时必须unknown。implant_use=actual_permanent_implant且implant_name=present时必须至少有一项permanent_implant，否则不得有permanent_implant项目。025不判断“整体完整”，也不输出implant_barcode；028起止时间角色只有正文明确表示实际给药/实际停止时才输出actual_administration/actual_stop，否则输出planned_order、document_time或unknown。若预防用药后来转为治疗，只能选择预防阶段的起止并输出interval_scope=prophylactic_segment；选择了整个治疗疗程或无法区分时输出whole_course或unknown。
 028实际用药正例：仅当材料已经明确实际给药/实际停止，且下列S/T正是其对应证据时，必须按此结构输出；材料已经明确实际给药/实际停止时，不得填unknown或null。没有明示时仍必须unknown，不得猜测。{actual_028_example or "本次投影没有可成对的同文书T候选，不提供正例。"}
 028的special_extension_reason必须独立从正文抽取：明确特殊延长理由=>documented；明确未记录理由=>not_documented；其余unknown。不得仅根据用药时长、起止时间或正例示例猜测该字段。
 只输出示例中的字段，不要增加无关规则字段。start_time_ref/end_time_ref没有依据时必须为JSON null。{("输出不得超过" + str(max_completion_tokens) + "个token。") if max_completion_tokens is not None else ""}：{response_example}"""
@@ -441,18 +453,13 @@ def parse_surgery_text_fact_response(
     selected_fields = {
         field for rule_id in selected for field in _RULE_FACT_FIELDS[rule_id]
     }
-    required = {"event_ref", "evidence_refs", *selected_fields}
-    allowed_fields = {
-        "event_ref", "evidence_refs", *_ENUMS, "start_time_ref", "end_time_ref",
-        "implant_items",
-    }
+    expected_fields = {"event_ref", "evidence_refs", *selected_fields}
     result: list[SurgeryEventFact] = []
     seen_refs: set[str] = set()
     for raw in payload["events"]:
         if (
             not isinstance(raw, Mapping)
-            or not required.issubset(raw)
-            or not set(raw).issubset(allowed_fields)
+            or set(raw) != expected_fields
         ):
             raise ValueError("surgery event schema mismatch")
         event_ref = str(raw.get("event_ref") or "").strip()
