@@ -59,7 +59,7 @@ def test_unknown_synthetic_visit_requires_explicit_institute() -> None:
         module.resolve_synthetic_institute_id("UNKNOWN_SYN_001")
 
 
-def test_defined_only_matrix_excludes_nine_pending_rules(tmp_path: Path) -> None:
+def test_defined_only_matrix_excludes_current_pending_rules(tmp_path: Path) -> None:
     module = _load_script()
     matrix_path = tmp_path / "validation-matrix.csv"
     with matrix_path.open("w", encoding="utf-8", newline="") as handle:
@@ -81,13 +81,11 @@ def test_defined_only_matrix_excludes_nine_pending_rules(tmp_path: Path) -> None
         rule_id for visit_rules in grouped.values() for rule_id in visit_rules
     }
 
-    assert len(selected_rule_ids) == 66
+    assert len(selected_rule_ids) == 68
     assert selected_rule_ids.isdisjoint(
         {
-            "LX0609-010",
-            "LX0609-017",
-            "LX0609-023",
             "LX0609-024",
+            "LX0609-025",
             "LX0609-028",
             "LX0609-049",
             "LX0609-056",

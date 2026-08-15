@@ -890,7 +890,8 @@ async def test_course_008_009_typed_decisions_use_natural_days_and_zero_model(
         "not_applicable",
     ]
     assert "RAW-LX0609" not in repr(orchestrated["results"])
-    assert "2026-01" not in repr(orchestrated["results"])
+    assert "2026-01-01" in repr(orchestrated["results"])
+    assert "2026-01-03" in repr(orchestrated["results"])
 
 
 @pytest.mark.asyncio
@@ -3050,13 +3051,13 @@ async def test_native_tumor_pathology_public_entry_bypasses_legacy_rules_and_kee
     )
 
     assert dispatched == []
-    assert len(client.prompts) == 4, [
+    assert len(client.prompts) == 3, [
         (item.get("rule_id"), item.get("status"), (item.get("metadata") or {}).get("reason_code"))
         for item in result["evaluation_results"]
     ]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [item["status"] for item in result["evaluation_results"]] == ["compliant"] * 4
-    assert result["token_usage"]["total_tokens"] == 440
+    assert result["token_usage"]["total_tokens"] == 330
     assert all(raw_id not in repr(result["evaluation_results"]) for ids in mappings.values() for raw_id in ids)
     assert marker not in repr(result)
 
@@ -3801,7 +3802,7 @@ async def test_lx0609_033_live_source_guard_handles_only_controlled_reader_outco
         if reader_mode == "error":
             raise RuntimeError("Authorization_sensitive_marker")
         if reader_mode == "nonexact_rows":
-            return [{"surgery_begin_time": "2026-01-01 08:00:00+08:00"}]
+            return [{"surgery_begin_time": "unsupported-local-time"}]
         return []
 
     async def _generic_gate(**kwargs):
@@ -4081,7 +4082,7 @@ async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_
     customer_metadata = dict(customer_results[0].get("metadata") or {})
     assert reader_calls == []
     assert dispatch_calls == [["SC-087", "LXE-31"]]
-    expected_status = "compliant" if raw_status == "compliant" else "uncertain"
+    expected_status = raw_status
     assert [(item["rule_id"], item["status"]) for item in customer_results] == [("LX0609-033", expected_status)]
     assert customer_metadata["live_source_state"] == "consent_document_present"
     assert raw_body_marker not in repr(customer_metadata)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import inspect
 import json
-import re
 from types import SimpleNamespace
 
 import pytest
@@ -277,34 +276,23 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
 
         async def generate(self, prompt):
             captured["llm_calls"] = int(captured["llm_calls"]) + 1
-            course_refs_match = re.search(r"COURSE_DOC=(\[[^\]]*\])", prompt)
-            assert course_refs_match is not None
-            course_refs = json.loads(course_refs_match.group(1))
-            assert len(course_refs) == 2
-            pre_exam_ref, post_report_ref = course_refs
-            facts = []
-            for rule_id in selected:
-                facts.append(
-                    {
-                        "rule_id": rule_id,
-                        "applicability": "applicable",
-                        "semantic_state": "present",
-                        "positive_state": (
-                            "positive"
-                            if rule_id in {"LX0609-012", "LX0609-015"}
-                            else "not_relevant"
-                        ),
-                        "course_doc_refs": (
-                            [pre_exam_ref]
-                            if rule_id == "LX0609-010"
-                            else [post_report_ref]
-                        ),
-                    }
+            response_payload = json.loads(prompt.strip().splitlines()[-1])
+            for fact in response_payload["facts"]:
+                rule_id = fact["rule_id"]
+                fact["applicability"] = "applicable"
+                fact["semantic_state"] = "present"
+                fact["positive_state"] = (
+                    "positive"
+                    if rule_id in {"LX0609-012", "LX0609-015"}
+                    else "not_relevant"
                 )
+                fact["course_doc_positions"] = [
+                    1 if rule_id == "LX0609-010" else 2
+                ]
             return {
                 "choices": [{"message": {"content": json.dumps({
-                    "schema_version": "lx0609-exam-lab-text-facts-v3",
-                    "facts": facts,
+                    "schema_version": response_payload["schema_version"],
+                    "facts": response_payload["facts"],
                 }, ensure_ascii=False)}}],
                 "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
                 "_api_time": 0.1,
@@ -415,7 +403,14 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
     assert response.status_code == 200
     payload = response.json()
     assert tuple(item["rule_id"] for item in payload["results"]) == selected
-    assert {item["status"] for item in payload["results"]} == {"compliant"}
+    assert {item["status"] for item in payload["results"]} == {"compliant"}, [
+        (
+            item.get("rule_id"),
+            item.get("status"),
+            (item.get("metadata") or {}).get("reason_code"),
+        )
+        for item in payload["results"]
+    ]
     assert payload["metrics"]["customer_rule_count"] == 5
     assert payload["metrics"]["legacy_projection_count"] == 0
     assert payload["metrics"]["llm_call_count"] == 1

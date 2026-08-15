@@ -261,7 +261,7 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         }
     ]
     assert result["metrics"]["rule_decision_count"] == 49
-    assert result["metrics"]["typed_shadow_adapter_count"] == 14
+    assert result["metrics"]["typed_shadow_adapter_count"] == 26
     assert result["metrics"]["legacy_projection_count"] == 0
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0
@@ -594,7 +594,7 @@ def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
     [
         ("LX0609-001", "LX0609-001"),
         ("LX0609-002", "LX0609-001"),
-        ("LX0609-050",),
+        ("LX0609-076",),
         ("SC-001",),
         (),
     ],

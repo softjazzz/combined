@@ -111,8 +111,12 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
             == wrapper_by_id[rule_id]["primary_execution_rule_id"]
         )
 
-    assert "条码、种类、数量" in projected_by_id["LX0609-025"]["customer_policy"]["summary"]
-    assert "本院扩展" in projected_by_id["LX0609-025"]["customer_policy"]["summary"]
+    implant_summary = projected_by_id["LX0609-025"]["customer_policy"]["summary"]
+    assert all(
+        field in implant_summary
+        for field in ("名称", "种类", "规格或型号", "材质", "数量")
+    )
+    assert "尚未完成最终冻结" in implant_summary
     assert not wrapper_by_id["LX0609-066"].get("customer_text")
     assert projected_by_id["LX0609-066"]["customer_policy"]["summary"]
     assert not wrapper_by_id["LX0609-070"].get("customer_text")

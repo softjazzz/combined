@@ -30,8 +30,8 @@ def _settings(**overrides: object) -> SimpleNamespace:
         "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED": True,
         "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
-        "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": False,
-        "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED": False,
+        "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": True,
+        "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED": True,
         "LLM_MODEL": "safe-model-name",
         "LLM_ADJUDICATOR_MODEL": "safe-adjudicator-name",
@@ -69,10 +69,8 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert by_rule["LX0609-029"]["active_path"] == "native"
     assert by_rule["LX0609-030"]["active_path"] == "native"
     assert by_rule["LX0609-032"]["active_path"] == "native"
-    assert by_rule["LX0609-009"]["phase_status"] == "phase_1_partial"
-    assert by_rule["LX0609-009"]["active_criteria"] == [
-        "critical_daily_course_coverage"
-    ]
+    assert by_rule["LX0609-009"]["phase_status"] == "phase_1_target"
+    assert by_rule["LX0609-009"]["active_criteria"] == []
     assert by_rule["LX0609-018"]["phase_status"] == "phase_1_target"
     assert by_rule["LX0609-018"]["active_criteria"] == [
         "chief_complaint_length",
@@ -82,11 +80,8 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert by_rule["LX0609-018"]["pending_reason_code"] == ""
     assert by_rule["LX0609-018"]["decision_authority"] == "program_then_optional_llm"
     assert by_rule["LX0609-018"]["max_llm_calls_per_rule"] == 1
-    assert by_rule["LX0609-010"]["phase_status"] == "pending_definition"
-    assert (
-        by_rule["LX0609-010"]["pending_reason_code"]
-        == "exam_course_linkage_window_undefined"
-    )
+    assert by_rule["LX0609-010"]["phase_status"] == "phase_1_target"
+    assert by_rule["LX0609-010"]["pending_reason_code"] == ""
     assert all(item["contract_version"] for item in manifest["rules"])
     assert all(item["definition_version"] for item in manifest["rules"])
     assert (
@@ -109,6 +104,25 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert "secret-endpoint" not in encoded
     assert "api_key" not in encoded.lower()
     assert "endpoint" not in encoded.lower()
+
+
+def test_runtime_manifest_honors_explicit_mainline_rollback_flags() -> None:
+    catalog = load_luxian_0609_rules()
+    manifest = build_runtime_manifest(
+        git_head="d" * 40,
+        settings=_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+            LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED=False,
+        ),
+        rule_catalog=catalog,
+        inventory=load_luxian_0609_dependency_inventory(),
+        generated_at="2026-07-23T18:00:00Z",
+    )
+
+    by_rule = {item["rule_id"]: item for item in manifest["rules"]}
+    assert by_rule["LX0609-029"]["active_path"] == "compatibility"
+    assert manifest["flags"]["unified_engine"] is False
+    assert manifest["flags"]["rule_decision_surgery_document"] is False
 
 
 def test_runtime_manifest_identity_ignores_secret_configuration() -> None:

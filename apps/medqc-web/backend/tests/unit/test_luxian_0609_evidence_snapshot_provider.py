@@ -766,7 +766,7 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
         if mode == "nonexact":
             return _rows(
                 source_key,
-                [{"surgery_begin_time": "2026-01-01 08:00:00+08:00"}],
+                [{"surgery_begin_time": "unsupported-local-time"}],
             )
         if mode == "unavailable":
             raise SourceEvidenceUnavailable("private source marker")
