@@ -57,6 +57,194 @@ def test_legacy_customer_display_guard_must_not_rejudge_executor_decision() -> N
     assert "customer_display_guard" not in result.get("metadata", {})
 
 
+def test_default_legacy_aggregation_preserves_executor_status_without_display_rejudgment() -> None:
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    copied_course = "患者病情稳定，继续既定治疗方案，密切观察生命体征变化。" * 4
+    copy_context = {
+        "programmatic_timeline": {
+            "documents": {
+                "first_course_record": [],
+                "daily_course_record": [
+                    {"document_id": "first", "content": copied_course},
+                    {"document_id": "second", "content": copied_course},
+                ],
+            }
+        }
+    }
+
+    first_course_missing = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-016"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-016",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "执行器已判定首次病程复制。",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        audit_context=copy_context,
+        format_evidence=False,
+    )[0]
+    assert first_course_missing["status"] == "non_compliant"
+    assert "copy_rule_priority_guard" not in first_course_missing.get("metadata", {})
+
+    uncertain_copy = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-017"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-017",
+                "status": "uncertain",
+                "is_compliant": None,
+                "findings": "需要人工复核。",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        audit_context=copy_context,
+        format_evidence=False,
+    )[0]
+    assert uncertain_copy["status"] == "uncertain"
+    assert "copy_compare_evidence" not in uncertain_copy.get("metadata", {}).get(
+        "customer_display_guard", ""
+    )
+
+    uncertain_data = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-999"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-999",
+                "status": "uncertain",
+                "is_compliant": None,
+                "findings": "会诊执行记录缺失，需人工复核。",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        format_evidence=False,
+    )[0]
+    assert uncertain_data["status"] == "uncertain"
+    assert "customer_display_status" not in uncertain_data.get("metadata", {})
+
+
+def test_explicit_legacy_display_rejudgment_keeps_historical_branches() -> None:
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    copied_course = "患者病情稳定，继续既定治疗方案，密切观察生命体征变化。" * 4
+    copy_context = {
+        "programmatic_timeline": {
+            "documents": {
+                "first_course_record": [],
+                "daily_course_record": [
+                    {"document_id": "first", "content": copied_course},
+                    {"document_id": "second", "content": copied_course},
+                ],
+            }
+        }
+    }
+
+    first_course_missing = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-016"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-016",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "执行器已判定首次病程复制。",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        audit_context=copy_context,
+        format_evidence=False,
+        legacy_customer_display_rejudgment=True,
+    )[0]
+    assert first_course_missing["status"] == "data_gap"
+    assert first_course_missing["metadata"]["copy_rule_priority_guard"] == "first_course_missing"
+
+    uncertain_copy = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-017"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-017",
+                "status": "uncertain",
+                "is_compliant": None,
+                "findings": "需要人工复核。",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        audit_context=copy_context,
+        format_evidence=False,
+        legacy_customer_display_rejudgment=True,
+    )[0]
+    assert uncertain_copy["status"] == "non_compliant"
+    assert uncertain_copy["metadata"]["customer_display_guard"] == "copy_compare_evidence"
+
+    uncertain_data = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-999"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-999",
+                "status": "uncertain",
+                "is_compliant": None,
+                "findings": "会诊执行记录缺失，需人工复核。",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        format_evidence=False,
+        legacy_customer_display_rejudgment=True,
+    )[0]
+    assert uncertain_data["status"] == "data_gap"
+    assert uncertain_data["metadata"]["customer_display_status"] == "data_gap"
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "status", "is_compliant"),
+    (
+        ("LX0609-016", "non_compliant", False),
+        ("LX0609-025", "not_executed", None),
+        ("LX0609-059", "not_executed", None),
+    ),
+)
+def test_native_and_phase_results_never_enter_legacy_display_rejudgment(
+    rule_id: str,
+    status: str,
+    is_compliant: bool | None,
+) -> None:
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[
+            {
+                "rule_id": rule_id,
+                "status": status,
+                "is_compliant": is_compliant,
+                "findings": "执行器原始结论。",
+                "metadata": {
+                    "execution_source": (
+                        "lx0609_native"
+                        if rule_id == "LX0609-016"
+                        else "lx0609_phase_gate"
+                    ),
+                    "reason_code": (
+                        "policy_definition_pending"
+                        if status == "not_executed"
+                        else "requirement_violated"
+                    ),
+                },
+            }
+        ],
+        audit_context={"programmatic_timeline": {"documents": {"first_course_record": []}}},
+        format_evidence=False,
+        legacy_customer_display_rejudgment=True,
+    )[0]
+
+    assert result["status"] == status
+    assert result["is_compliant"] is is_compliant
+    assert "customer_display_guard" not in result.get("metadata", {})
+
+
 def test_046_preserves_controlled_per_record_missing_counts() -> None:
     facts = {
         "failure_kind": "transfusion_course_record_incomplete",
