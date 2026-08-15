@@ -298,7 +298,10 @@ export function createIssueEvidencePresentation(options: IssueEvidencePresentati
     const sourceMap: Record<string, string> = {
       consultation_record: '会诊记录',
       daily_course_record: '日常病程记录',
+      senior_course_record: '上级医师查房记录',
       superior_round_record: '上级医师查房记录',
+      handoff_record: '交班记录',
+      handover_record: '接班记录',
       surgery_record: '手术记录',
       presurg_summary: '术前小结',
       consent_form: '手术知情同意书',

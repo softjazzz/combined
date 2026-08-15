@@ -1145,6 +1145,18 @@ describe('SemanticRulesBatchResultDrawer', () => {
               source_type: 'death_discussion',
               source_ref: 'doc-discussion-051',
             },
+            {
+              source_type: 'senior_course_record',
+              source_ref: 'doc-senior-067',
+            },
+            {
+              source_type: 'handoff_record',
+              source_ref: 'doc-handoff-071',
+            },
+            {
+              source_type: 'handover_record',
+              source_ref: 'doc-handover-071',
+            },
           ],
         },
         {
@@ -1250,6 +1262,9 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('会诊记录 · doc-3fa891')
     expect(wrapper.text()).toContain('死亡记录 · doc-death-051')
     expect(wrapper.text()).toContain('死亡病历讨论记录 · doc-discussion-051')
+    expect(wrapper.text()).toContain('上级医师查房记录 · doc-senior-067')
+    expect(wrapper.text()).toContain('交班记录 · doc-handoff-071')
+    expect(wrapper.text()).toContain('接班记录 · doc-handover-071')
     expect(wrapper.text()).not.toContain('未返回结论')
     expect(wrapper.text()).not.toContain('RAW-INTERNAL-FINDINGS-021')
   })

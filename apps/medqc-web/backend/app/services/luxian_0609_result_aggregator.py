@@ -2116,7 +2116,11 @@ def safe_luxian_0609_customer_display_facts(
             "senior_discharge_approval_missing",
         },
         "LX0609-069": {"consultation_timeliness_check"},
-        "LX0609-071": {"physician_handoff_timeliness_check"},
+        "LX0609-071": {
+            "physician_handoff_timeliness_check",
+            "physician_handoff_association_failed",
+            "physician_change_time_missing",
+        },
         "LX0609-072": {"transfer_record_timeliness_check", "transfer_records_missing"},
         "LX0609-073": {"transfer_record_presence_check", "transfer_records_missing"},
         "LX0609-074": {"diagnosis_change_documentation_check"},
@@ -2198,6 +2202,15 @@ def safe_luxian_0609_customer_display_facts(
         "physician_handoff_timeliness_check": {
             "change_time", "handoff_times", "handover_times", "handover_threshold_hours",
         },
+        "physician_handoff_association_failed": {
+            "change_event_count", "change_times", "handoff_record_count", "handoff_times",
+            "handover_record_count", "handover_times", "handover_threshold_hours",
+        },
+        "physician_change_time_missing": {
+            "change_event_count", "timed_change_event_count", "missing_change_time_count",
+            "change_times", "handoff_record_count", "handoff_times",
+            "handover_record_count", "handover_times", "handover_threshold_hours",
+        },
         "transfer_record_timeliness_check": {
             "transfer_order_time", "threshold_hours", "record_times", "actual_interval_hours",
         },
@@ -2269,6 +2282,52 @@ def safe_luxian_0609_customer_display_facts(
                 return None
             safe["performed_surgery_count"] = performed_surgery_count
             safe["surgery_events"] = surgery_events
+        if kind in {
+            "physician_handoff_association_failed",
+            "physician_change_time_missing",
+        }:
+            change_event_count = raw.get("change_event_count")
+            change_times = raw.get("change_times")
+            handoff_record_count = raw.get("handoff_record_count")
+            handoff_times = raw.get("handoff_times")
+            handover_record_count = raw.get("handover_record_count")
+            handover_times = raw.get("handover_times")
+            if (
+                not isinstance(change_event_count, int)
+                or isinstance(change_event_count, bool)
+                or change_event_count <= 0
+                or not isinstance(change_times, (list, tuple))
+                or not isinstance(handoff_record_count, int)
+                or isinstance(handoff_record_count, bool)
+                or handoff_record_count < 0
+                or not isinstance(handoff_times, (list, tuple))
+                or len(handoff_times) > handoff_record_count
+                or not isinstance(handover_record_count, int)
+                or isinstance(handover_record_count, bool)
+                or handover_record_count < 0
+                or not isinstance(handover_times, (list, tuple))
+                or len(handover_times) > handover_record_count
+                or raw.get("handover_threshold_hours") != 24
+            ):
+                return None
+            if kind == "physician_handoff_association_failed" and (
+                change_event_count <= 1 or len(change_times) != change_event_count
+            ):
+                return None
+            if kind == "physician_change_time_missing":
+                timed_count = raw.get("timed_change_event_count")
+                missing_count = raw.get("missing_change_time_count")
+                if (
+                    not isinstance(timed_count, int)
+                    or isinstance(timed_count, bool)
+                    or timed_count < 0
+                    or not isinstance(missing_count, int)
+                    or isinstance(missing_count, bool)
+                    or missing_count <= 0
+                    or timed_count != len(change_times)
+                    or timed_count + missing_count != change_event_count
+                ):
+                    return None
         return safe
 
     if rule_id == "LX0609-041":
@@ -4705,6 +4764,92 @@ def _customer_evidence_from_display_facts(
             if located:
                 return located
 
+    if rule_id == "LX0609-067":
+        if raw.get("course_present") is not True:
+            return []
+        allowed_source_types = {"daily_course_record", "senior_course_record"}
+        raw_refs = raw.get("source_document_refs")
+        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
+            located: list[dict[str, str]] = []
+            seen: set[tuple[str, str]] = set()
+            for item in raw_refs:
+                if not isinstance(item, Mapping) or set(item) != {
+                    "source_type",
+                    "source_document_id",
+                }:
+                    return []
+                located_source_type = str(item.get("source_type") or "").strip()
+                located_document_id = valid_document_id(
+                    item.get("source_document_id")
+                )
+                key = (located_source_type, located_document_id)
+                if (
+                    located_source_type not in allowed_source_types
+                    or not located_document_id
+                    or key in seen
+                ):
+                    return []
+                seen.add(key)
+                located.append(
+                    {
+                        "source_type": located_source_type,
+                        "source_document_id": located_document_id,
+                    }
+                )
+            if located:
+                return located
+
+    if rule_id == "LX0609-071":
+        allowed_source_types = {"handoff_record", "handover_record"}
+        raw_refs = raw.get("source_document_refs")
+        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
+            located: list[dict[str, str]] = []
+            seen: set[tuple[str, str]] = set()
+            source_ref_counts = {source_type: 0 for source_type in allowed_source_types}
+            for item in raw_refs:
+                if not isinstance(item, Mapping) or set(item) != {
+                    "source_type",
+                    "source_document_id",
+                }:
+                    return []
+                located_source_type = str(item.get("source_type") or "").strip()
+                located_document_id = valid_document_id(
+                    item.get("source_document_id")
+                )
+                key = (located_source_type, located_document_id)
+                if (
+                    located_source_type not in allowed_source_types
+                    or not located_document_id
+                    or key in seen
+                ):
+                    return []
+                seen.add(key)
+                source_ref_counts[located_source_type] += 1
+                located.append(
+                    {
+                        "source_type": located_source_type,
+                        "source_document_id": located_document_id,
+                    }
+                )
+            kind = raw.get("verification_kind") or raw.get("failure_kind")
+            if kind == "physician_handoff_timeliness_check":
+                if any(count > 1 for count in source_ref_counts.values()):
+                    return []
+            else:
+                handoff_record_count = raw.get("handoff_record_count")
+                handover_record_count = raw.get("handover_record_count")
+                if (
+                    not isinstance(handoff_record_count, int)
+                    or isinstance(handoff_record_count, bool)
+                    or not isinstance(handover_record_count, int)
+                    or isinstance(handover_record_count, bool)
+                    or source_ref_counts["handoff_record"] > handoff_record_count
+                    or source_ref_counts["handover_record"] > handover_record_count
+                ):
+                    return []
+            if located:
+                return located
+
     if rule_id in {
         "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
     }:
@@ -5295,11 +5440,11 @@ def aggregate_luxian_0609_results(
                 )
                 if precise_findings:
                     result["findings"] = precise_findings
-            # 051 的执行器已经精确绑定死亡锚点和实际采用的讨论文书；禁止再按
-            # 整个来源回退，否则选中文书缺 ID 时可能误借另一份讨论记录的 ID。
+            # 051/067/071 的执行器已经精确绑定实际采用的文书；禁止再按整个来源
+            # 回退，否则命中文书缺 ID 时可能误借同来源另一份记录的 ID。
             decision_evidence = (
                 []
-                if wrapper_id == "LX0609-051"
+                if wrapper_id in {"LX0609-051", "LX0609-067", "LX0609-071"}
                 else _customer_evidence_from_reduced_decision(
                     decision=reduced,
                     evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
@@ -5516,7 +5661,6 @@ def aggregate_luxian_0609_results(
                 audit_context=audit_context,
                 legacy_business_rejudgment=legacy_customer_display_rejudgment,
             )
-
         if format_evidence:
             result = format_luxian_0609_evidence(
                 result=result,

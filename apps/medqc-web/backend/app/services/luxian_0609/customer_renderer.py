@@ -442,6 +442,16 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         "当前报告虽有影像描述，但未明确标注“阳性”；按本规则口径，不能据此判断是否需要在24小时内完成分析。",
         "请确认检查报告的阳性标志或补充明确阳性结论后重新评估。",
     ),
+    ("LX0609-071", "association_failed"): (
+        "检测到多次经治医师变更，现有交接班资料无法逐次唯一对应",
+        "已读取经治医师变更事件及交接班数据来源；当前问题是事件与文书无法逐次唯一关联，并非未读取到资料。",
+        "请核对每次医师变更与交班、接班记录的业务关联标识及权威时间后重新评估。",
+    ),
+    ("LX0609-071", "authoritative_time_missing"): (
+        "经治医师变更事件缺少权威时间，暂无法核对交接班时限",
+        "已读取经治医师变更事件及交接班数据来源，但至少一次变更缺少可用于计算的权威时间。",
+        "请补充或核对经治医师变更的权威时间后重新评估。",
+    ),
 }
 
 _EVALUATION_WINDOW_RULE_LABELS = {
@@ -2060,6 +2070,24 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-071" and kind == "physician_handoff_timeliness_check":
         return f"经治医师变更时间 {facts.get('change_time')}；交班记录时间：{joined('handoff_times') or '未找到'}；接班记录时间：{joined('handover_times') or '未找到'}，接班时限 24 小时。"
+
+    if rule_id == "LX0609-071" and kind == "physician_handoff_association_failed":
+        return (
+            f"检测到 {facts.get('change_event_count')} 次经治医师变更，"
+            f"已找到交班记录 {facts.get('handoff_record_count')} 份、"
+            f"接班记录 {facts.get('handover_record_count')} 份；"
+            "现有资料无法将交班、接班记录逐次唯一对应到每次变更，"
+            "暂不判定是否在 24 小时内完成。"
+        )
+
+    if rule_id == "LX0609-071" and kind == "physician_change_time_missing":
+        return (
+            f"检测到 {facts.get('change_event_count')} 次经治医师变更，"
+            f"其中 {facts.get('missing_change_time_count')} 次缺少权威变更时间；"
+            f"已找到交班记录 {facts.get('handoff_record_count')} 份、"
+            f"接班记录 {facts.get('handover_record_count')} 份，"
+            "暂无法核对交接班完成时限。"
+        )
 
     if rule_id == "LX0609-072" and kind == "transfer_record_timeliness_check":
         return f"转科医嘱时间 {facts.get('transfer_order_time')}；转入、转出记录时间：{joined('record_times')}；实际间隔 {joined('actual_interval_hours')} 小时，规定时限 24 小时。"

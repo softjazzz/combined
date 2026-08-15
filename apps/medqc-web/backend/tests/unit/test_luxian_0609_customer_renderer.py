@@ -90,6 +90,106 @@ def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() ->
     assert "书面签署" in finding
 
 
+@pytest.mark.parametrize(
+    ("facts", "expected"),
+    [
+        (
+            {
+                "failure_kind": "physician_handoff_association_failed",
+                "change_event_count": 2,
+                "handoff_record_count": 1,
+                "handover_record_count": 1,
+            },
+            "检测到 2 次经治医师变更，已找到交班记录 1 份、接班记录 1 份",
+        ),
+        (
+            {
+                "failure_kind": "physician_change_time_missing",
+                "change_event_count": 2,
+                "missing_change_time_count": 1,
+                "handoff_record_count": 1,
+                "handover_record_count": 1,
+            },
+            "其中 1 次缺少权威变更时间",
+        ),
+    ],
+)
+def test_071_data_gap_facts_explain_existing_records_without_claiming_absence(
+    facts,
+    expected,
+) -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-071",
+        facts=facts,
+    )
+
+    assert expected in finding
+    assert "未读取到" not in finding
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "expected_finding", "expected_evidence"),
+    [
+        (
+            "association_failed",
+            "检测到多次经治医师变更",
+            "并非未读取到资料",
+        ),
+        (
+            "authoritative_time_missing",
+            "缺少权威时间",
+            "至少一次变更缺少可用于计算的权威时间",
+        ),
+    ],
+)
+def test_071_reason_specific_data_gap_copy_is_factual(
+    reason_code,
+    expected_finding,
+    expected_evidence,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-071",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-extended-document-v1",
+        )
+    )
+
+    rendered = render_luxian_0609_customer_result(decision=decision)
+
+    assert expected_finding in rendered["findings"]
+    assert expected_evidence in rendered["evidence"]
+    assert "当前未读取到经治医师变更事件" not in rendered["evidence"]
+
+
+@pytest.mark.parametrize("reason_code", ["association_failed", "authoritative_time_missing"])
+def test_071_reason_copy_does_not_claim_that_handoff_records_exist(
+    reason_code,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-071",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-extended-document-v1",
+        )
+    )
+
+    rendered = render_luxian_0609_customer_result(decision=decision)
+
+    assert "已读取经治医师变更事件及交班、接班记录" not in rendered["evidence"]
+    assert "已读取经治医师变更事件及交接班数据来源" in rendered["evidence"]
+
+
 def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course_record() -> None:
     assert customer_finding_from_controlled_facts(
         rule_id="LX0609-046",

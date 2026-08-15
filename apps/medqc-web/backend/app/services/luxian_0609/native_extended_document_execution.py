@@ -2099,11 +2099,35 @@ async def execute_luxian_0609_native_extended_document_rules(
                     (discharge_time - timedelta(days=1)).date(),
                 }
                 if rule_id == "LX0609-067":
-                    present = bool(
-                        valid_dates.intersection(
-                            _course_dates((*daily_rows, *senior_rows))
+                    matched_course_rows = tuple(
+                        (source_key, row)
+                        for source_key, rows in (
+                            ("daily_course_record", daily_rows),
+                            ("senior_course_record", senior_rows),
                         )
+                        for row in rows
+                        if _row_time(row) is not None
+                        and _row_time(row).date() in valid_dates
                     )
+                    present = bool(matched_course_rows)
+                    source_document_refs: list[dict[str, str]] = []
+                    seen_document_refs: set[tuple[str, str]] = set()
+                    for source_key, row in matched_course_rows:
+                        document_id = _clean(
+                            row.get("document_id") or row.get("id")
+                        )
+                        reference_key = (source_key, document_id)
+                        if not document_id or reference_key in seen_document_refs:
+                            continue
+                        seen_document_refs.add(reference_key)
+                        source_document_refs.append(
+                            {
+                                "source_type": source_key,
+                                "source_document_id": document_id,
+                            }
+                        )
+                        if len(source_document_refs) >= 8:
+                            break
                 else:
                     approval_match = next(
                         (
@@ -2178,6 +2202,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "discharge_date": discharge_time.date().isoformat(),
                         "checked_dates": sorted(item.isoformat() for item in valid_dates),
                         "course_present": present,
+                        "source_document_refs": source_document_refs,
                     }))
             decisions.append(
                 _decision(
@@ -2287,7 +2312,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             row.get("change_datetime")
                             or row.get("handoff_datetime")
                             or row.get("prescribed_datetime")
-                            or row.get("order_datetime")
+                            or row.get("order_time")
                         )
                     )
                     is not None
@@ -2302,22 +2327,121 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for row in handover_rows
                     if (parsed := _row_time(row)) is not None
                 )
+                source_document_refs: list[dict[str, str]] = []
+                seen_document_refs: set[tuple[str, str]] = set()
+                for source_key, rows in (
+                    ("handoff_record", handoff_rows),
+                    ("handover_record", handover_rows),
+                ):
+                    for row in rows:
+                        document_id = _clean(
+                            row.get("document_id") or row.get("id")
+                        )
+                        reference_key = (source_key, document_id)
+                        if not document_id or reference_key in seen_document_refs:
+                            continue
+                        seen_document_refs.add(reference_key)
+                        source_document_refs.append(
+                            {
+                                "source_type": source_key,
+                                "source_document_id": document_id,
+                            }
+                        )
+                        if len(source_document_refs) >= 8:
+                            break
+                    if len(source_document_refs) >= 8:
+                        break
                 if len(change_times) != len(effective_change_rows):
                     final_state, reason_code = (
                         "data_gap",
                         "authoritative_time_missing",
                     )
+                    display.append((rule_id, {
+                        "failure_kind": "physician_change_time_missing",
+                        "change_event_count": len(effective_change_rows),
+                        "timed_change_event_count": len(change_times),
+                        "missing_change_time_count": (
+                            len(effective_change_rows) - len(change_times)
+                        ),
+                        "change_times": [
+                            value.isoformat(sep=" ") for value in change_times
+                        ],
+                        "handoff_record_count": len(handoff_rows),
+                        "handoff_times": [
+                            value.isoformat(sep=" ") for value in handoff_times
+                        ],
+                        "handover_record_count": len(handover_rows),
+                        "handover_times": [
+                            value.isoformat(sep=" ") for value in handover_times
+                        ],
+                        "handover_threshold_hours": 24,
+                        "source_document_refs": source_document_refs,
+                    }))
                 elif len(change_times) > 1:
                     final_state, reason_code = "data_gap", "association_failed"
+                    display.append((rule_id, {
+                        "failure_kind": "physician_handoff_association_failed",
+                        "change_event_count": len(effective_change_rows),
+                        "change_times": [
+                            value.isoformat(sep=" ") for value in change_times
+                        ],
+                        "handoff_record_count": len(handoff_rows),
+                        "handoff_times": [
+                            value.isoformat(sep=" ") for value in handoff_times
+                        ],
+                        "handover_record_count": len(handover_rows),
+                        "handover_times": [
+                            value.isoformat(sep=" ") for value in handover_times
+                        ],
+                        "handover_threshold_hours": 24,
+                        "source_document_refs": source_document_refs,
+                    }))
                 else:
-                    compliant = all(
-                        any(item <= change_time for item in handoff_times)
-                        and any(
-                            change_time <= item <= change_time + timedelta(hours=24)
-                            for item in handover_times
-                        )
-                        for change_time in change_times
+                    change_time = change_times[0]
+                    selected_handoff = max(
+                        (
+                            (row_time, row)
+                            for row in handoff_rows
+                            if (row_time := _row_time(row)) is not None
+                            and row_time <= change_time
+                        ),
+                        key=lambda item: item[0],
+                        default=None,
                     )
+                    selected_handover = min(
+                        (
+                            (row_time, row)
+                            for row in handover_rows
+                            if (row_time := _row_time(row)) is not None
+                            and row_time >= change_time
+                        ),
+                        key=lambda item: item[0],
+                        default=None,
+                    )
+                    compliant = (
+                        selected_handoff is not None
+                        and selected_handover is not None
+                        and selected_handover[0]
+                        <= change_time + timedelta(hours=24)
+                    )
+                    source_document_refs = []
+                    for source_key, selected in (
+                        ("handoff_record", selected_handoff),
+                        ("handover_record", selected_handover),
+                    ):
+                        if selected is None:
+                            continue
+                        selected_document_id = _clean(
+                            selected[1].get("document_id")
+                            or selected[1].get("id")
+                        )
+                        if selected_document_id:
+                            source_document_refs.append(
+                                {
+                                    "source_type": source_key,
+                                    "source_document_id": selected_document_id,
+                                }
+                            )
                     final_state = "compliant" if compliant else "non_compliant"
                     reason_code = (
                         "requirement_satisfied"
@@ -2326,10 +2450,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     display.append((rule_id, {
                         "verification_kind": "physician_handoff_timeliness_check",
-                        "change_time": change_times[0].isoformat(sep=" "),
+                        "change_time": change_time.isoformat(sep=" "),
                         "handoff_times": [value.isoformat(sep=" ") for value in handoff_times],
                         "handover_times": [value.isoformat(sep=" ") for value in handover_times],
                         "handover_threshold_hours": 24,
+                        "source_document_refs": source_document_refs,
                     }))
             decisions.append(
                 _decision(

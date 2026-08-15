@@ -1009,18 +1009,130 @@ async def test_069_multiple_unlinked_consultations_fail_closed() -> None:
 
 @pytest.mark.asyncio
 async def test_071_physician_change_requires_handoff_and_handover() -> None:
-    _, reduced = await _evaluate(
-        "LX0609-071",
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
         {
             "physician_change_event": (
                 {"change_datetime": "2026-07-01 08:00:00"},
             ),
-            "handoff_record": ({"record_time": "2026-07-01 07:50:00"},),
-            "handover_record": ({"record_time": "2026-07-02 07:59:00"},),
+            "handoff_record": (
+                {
+                    "document_id": "HANDOFF-OLD-071",
+                    "record_time": "2026-06-01 07:50:00",
+                },
+                {
+                    "document_id": "HANDOFF-071",
+                    "record_time": "2026-07-01 07:50:00",
+                },
+            ),
+            "handover_record": (
+                {
+                    "document_id": "HANDOVER-OLD-071",
+                    "record_time": "2026-06-01 14:00:00",
+                },
+                {
+                    "document_id": "HANDOVER-071",
+                    "record_time": "2026-07-02 07:59:00",
+                },
+            ),
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert canonical["customer_evidence"] == [
+        {"source_type": "handoff_record", "source_document_id": "HANDOFF-071"},
+        {"source_type": "handover_record", "source_document_id": "HANDOVER-071"},
+    ]
+    assert "source_document_refs" not in canonical["customer_display_facts"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_change_events_report_association_gap_with_existing_records() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": (
+                {"change_datetime": "2026-07-01 08:00:00"},
+                {"change_datetime": "2026-07-03 08:00:00"},
+            ),
+            "handoff_record": ({
+                "document_id": "HANDOFF-MULTI-071",
+                "record_time": "2026-07-01 07:50:00",
+            },),
+            "handover_record": ({
+                "document_id": "HANDOVER-MULTI-071",
+                "record_time": "2026-07-01 14:00:00",
+            },),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "association_failed"
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert canonical["customer_display_facts"] == {
+        "failure_kind": "physician_handoff_association_failed",
+        "change_event_count": 2,
+        "change_times": ["2026-07-01 08:00:00", "2026-07-03 08:00:00"],
+        "handoff_record_count": 1,
+        "handoff_times": ["2026-07-01 07:50:00"],
+        "handover_record_count": 1,
+        "handover_times": ["2026-07-01 14:00:00"],
+        "handover_threshold_hours": 24,
+    }
+    assert "检测到 2 次经治医师变更" in canonical["findings"]
+    assert "无法将交班、接班记录逐次唯一对应" in canonical["findings"]
+    assert "未读取到" not in canonical["findings"]
+    assert canonical["customer_evidence"] == [
+        {"source_type": "handoff_record", "source_document_id": "HANDOFF-MULTI-071"},
+        {"source_type": "handover_record", "source_document_id": "HANDOVER-MULTI-071"},
+    ]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_missing_change_time_reports_exact_gap_without_hiding_records() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": ({"event_id": "CHANGE-NO-TIME"},),
+            "handoff_record": ({
+                "document_id": "HANDOFF-TIME-GAP-071",
+                "record_time": "2026-07-01 07:50:00",
+            },),
+            "handover_record": ({
+                "document_id": "HANDOVER-TIME-GAP-071",
+                "record_time": "2026-07-01 14:00:00",
+            },),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert canonical["customer_display_facts"]["failure_kind"] == "physician_change_time_missing"
+    assert canonical["customer_display_facts"]["missing_change_time_count"] == 1
+    assert "其中 1 次缺少权威变更时间" in canonical["findings"]
+    assert len(canonical["customer_evidence"]) == 2
 
 
 @pytest.mark.asyncio
@@ -1031,7 +1143,7 @@ async def test_071_uses_explicit_physician_change_order_when_event_table_is_empt
             "inpat_nondrug_order": (
                 {
                     "order_name": "经治医师变更",
-                    "prescribed_datetime": "2026-07-01 08:00:00",
+                    "order_time": "2026-07-01 08:00:00",
                 },
             ),
             "handoff_record": ({"record_time": "2026-07-01 07:50:00"},),
@@ -3117,25 +3229,136 @@ async def test_066_requires_authoritative_postoperative_course_time_for_per_even
 
 @pytest.mark.asyncio
 async def test_067_missing_predischarge_course_is_non_compliant() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-067",
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-067",),
         {
             "inpat_registration": ({
                 "patient_status": "出院",
                 "discharge_datetime": "2026-07-03 12:00:00",
             },),
             "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
-            "daily_course_record": ({"record_time": "2026-07-01 09:00:00"},),
+            "daily_course_record": ({
+                "document_id": "DAILY-OLD",
+                "record_time": "2026-06-03 09:00:00",
+            },),
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    reduced_decision = reduced[0]
+    assert reduced_decision.final_state is CustomerFinalState.NON_COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-067"] == {
         "verification_kind": "predischarge_course_presence_check",
         "discharge_date": "2026-07-03",
         "checked_dates": ["2026-07-02", "2026-07-03"],
         "course_present": False,
+        "source_document_refs": [],
     }
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-067",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert canonical["status"] == "non_compliant"
+    assert "customer_evidence" not in canonical
+    assert "source_document_refs" not in canonical["customer_display_facts"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "daily_course_record": ({
+                "document_id": "DAILY-WINDOW",
+                "record_time": "2026-07-02 09:00:00",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-067",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert canonical["customer_evidence"] == [{
+        "source_type": "daily_course_record",
+        "source_document_id": "DAILY-WINDOW",
+    }]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "daily_course_record": ({
+                "document_id": "DAILY-OLD",
+                "record_time": "2026-06-03 09:00:00",
+            },),
+            "senior_course_record": ({
+                "document_id": "SENIOR-WINDOW",
+                "record_time": "2026-07-03 08:00:00",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-067",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert canonical["customer_evidence"] == [{
+        "source_type": "senior_course_record",
+        "source_document_id": "SENIOR-WINDOW",
+    }]
+
+
+@pytest.mark.asyncio
+async def test_067_window_course_without_id_never_borrows_old_course_id() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "daily_course_record": ({
+                "document_id": "DAILY-OLD",
+                "record_time": "2026-06-03 09:00:00",
+            },),
+            "senior_course_record": ({
+                "record_time": "2026-07-03 08:00:00",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-067",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert "customer_evidence" not in canonical
 
 
 @pytest.mark.asyncio

@@ -710,6 +710,230 @@ def test_051_rejects_invalid_or_duplicate_internal_evidence_refs(
     assert "source_document_refs" not in result["customer_display_facts"]
 
 
+def _067_presence_facts(source_document_refs) -> dict[str, object]:
+    return {
+        "verification_kind": "predischarge_course_presence_check",
+        "discharge_date": "2026-07-03",
+        "checked_dates": ["2026-07-02", "2026-07-03"],
+        "course_present": True,
+        "source_document_refs": source_document_refs,
+    }
+
+
+def test_067_projects_only_strict_window_matched_course_refs() -> None:
+    facts = _067_presence_facts([
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "daily-window-067",
+        },
+        {
+            "source_type": "senior_course_record",
+            "source_document_id": "senior-window-067",
+        },
+    ])
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-067"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-067"),),
+        customer_display_facts=(("LX0609-067", facts),),
+    )[0]
+
+    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
+@pytest.mark.parametrize(
+    "source_document_refs",
+    [
+        [{
+            "source_type": "discharge_record",
+            "source_document_id": "not-a-course-067",
+        }],
+        [
+            {
+                "source_type": "daily_course_record",
+                "source_document_id": "duplicate-067",
+            },
+            {
+                "source_type": "daily_course_record",
+                "source_document_id": "duplicate-067",
+            },
+        ],
+        [
+            {
+                "source_type": "daily_course_record",
+                "source_document_id": f"course-{index}",
+            }
+            for index in range(9)
+        ],
+    ],
+)
+def test_067_rejects_invalid_duplicate_or_oversized_internal_refs(
+    source_document_refs,
+) -> None:
+    facts = _067_presence_facts(source_document_refs)
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-067"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-067"),),
+        customer_display_facts=(("LX0609-067", facts),),
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
+def test_067_invalid_precise_refs_cannot_fall_back_to_legacy_document_ids() -> None:
+    facts = _067_presence_facts("invalid-refs")
+    facts["source_document_ids"] = ["legacy-course-067"]
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-067"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-067"),),
+        customer_display_facts=(("LX0609-067", facts),),
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
+def test_067_absent_window_course_cannot_attach_unmatched_course_evidence() -> None:
+    facts = _067_presence_facts([{
+        "source_type": "daily_course_record",
+        "source_document_id": "old-course-outside-window-067",
+    }])
+    facts["course_present"] = False
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-067"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-067"),),
+        customer_display_facts=(("LX0609-067", facts),),
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
+def _071_association_facts(source_document_refs) -> dict[str, object]:
+    return {
+        "failure_kind": "physician_handoff_association_failed",
+        "change_event_count": 2,
+        "change_times": ["2026-07-01 08:00:00", "2026-07-03 08:00:00"],
+        "handoff_record_count": 1,
+        "handoff_times": ["2026-07-01 07:50:00"],
+        "handover_record_count": 1,
+        "handover_times": ["2026-07-01 14:00:00"],
+        "handover_threshold_hours": 24,
+        "source_document_refs": source_document_refs,
+    }
+
+
+def test_071_projects_only_strict_handoff_and_handover_refs() -> None:
+    facts = _071_association_facts([
+        {
+            "source_type": "handoff_record",
+            "source_document_id": "handoff-071",
+        },
+        {
+            "source_type": "handover_record",
+            "source_document_id": "handover-071",
+        },
+    ])
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-071"),),
+        customer_display_facts=(("LX0609-071", facts),),
+    )[0]
+
+    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
+@pytest.mark.parametrize(
+    "source_document_refs",
+    [
+        [{"source_type": "physician_change_event", "source_document_id": "event-071"}],
+        [{"source_type": "handoff_record", "source_document_id": ""}],
+        [
+            {"source_type": "handoff_record", "source_document_id": "duplicate-071"},
+            {"source_type": "handoff_record", "source_document_id": "duplicate-071"},
+        ],
+        [{"source_type": "handoff_record", "source_document_id": "bad\nid"}],
+        [{
+            "source_type": "handoff_record",
+            "source_document_id": "handoff-071",
+            "extra": "forbidden",
+        }],
+    ],
+)
+def test_071_rejects_invalid_internal_refs_without_legacy_fallback(
+    source_document_refs,
+) -> None:
+    facts = _071_association_facts(source_document_refs)
+    facts["source_document_ids"] = ["legacy-071"]
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-071"),),
+        customer_display_facts=(("LX0609-071", facts),),
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
+@pytest.mark.parametrize(
+    "facts",
+    [
+        {**_071_association_facts([]), "change_event_count": 1},
+        {**_071_association_facts([]), "change_times": ["2026-07-01 08:00:00"]},
+        {**_071_association_facts([]), "handoff_record_count": 0},
+        {
+            "failure_kind": "physician_change_time_missing",
+            "change_event_count": 2,
+            "timed_change_event_count": 1,
+            "missing_change_time_count": 2,
+            "change_times": ["2026-07-01 08:00:00"],
+            "handoff_record_count": 0,
+            "handoff_times": [],
+            "handover_record_count": 0,
+            "handover_times": [],
+            "handover_threshold_hours": 24,
+        },
+    ],
+)
+def test_071_rejects_inconsistent_controlled_counts(facts) -> None:
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-071",
+        raw=facts,
+    ) is None
+
+
+def test_071_refs_cannot_exceed_the_declared_source_record_counts() -> None:
+    facts = _071_association_facts([
+        {"source_type": "handoff_record", "source_document_id": "handoff-071-a"},
+        {"source_type": "handoff_record", "source_document_id": "handoff-071-b"},
+        {"source_type": "handover_record", "source_document_id": "handover-071"},
+    ])
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-071"),),
+        customer_display_facts=(("LX0609-071", facts),),
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "source_document_refs" not in result["customer_display_facts"]
+
+
 def _gate(kind):
     if kind is FindingKind.REQUIREMENT_SATISFIED: decision = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
     elif kind is FindingKind.REQUIRED_DOCUMENT_MISSING: decision = GateDecision("LX0609-030", "matched", "surgery_record", "empty", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
