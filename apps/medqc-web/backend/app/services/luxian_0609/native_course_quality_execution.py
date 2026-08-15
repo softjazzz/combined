@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from functools import lru_cache
@@ -117,6 +117,13 @@ _COPY_SIMILARITY_THRESHOLD = 0.70
 _COPY_FAST_SHINGLE_CHARS = 5
 _COPY_PRECISE_CANDIDATE_LIMIT = 20
 _COPY_DISPLAY_PAIR_LIMIT = 4
+_COPY_REVIEW_SCHEMA_VERSION = "lx0609_017_v1"
+_COPY_REVIEW_MAX_PROMPT_TOKENS = 4096
+_COPY_REVIEW_MAX_COMPLETION_TOKENS = 512
+_COPY_REVIEW_DOCUMENT_CHARS = 1200
+_COPY_REVIEW_VERDICTS = frozenset(
+    {"substantial_copy", "template_only", "uncertain"}
+)
 # 017 仅允许排除这一组人工确认的通用模板壳。归一后仍有任何字符，
 # 都必须保留为病历特异内容，不能豁免复制判定。
 _COPY_TEMPLATE_SHELL_PHRASES = (
@@ -197,7 +204,13 @@ _CONTROLLED_MESSAGES = {
 
 
 class CourseQualityLLMClient(Protocol):
-    async def generate(self, prompt: str) -> dict[str, Any]:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> dict[str, Any]:
         ...
 
 
@@ -2384,6 +2397,22 @@ def _material_for_copy_coverage(normalized_content: str) -> str:
 
 
 @dataclass(frozen=True)
+class _CopyReviewCandidate:
+    pair_ref: str
+    left_ref: str
+    right_ref: str
+    similarity: float
+    left_source: str
+    right_source: str
+    left_time: str
+    right_time: str
+    left_content: str = field(repr=False)
+    right_content: str = field(repr=False)
+    document_fingerprints: tuple[str, str] = ("", "")
+    redaction_terms: tuple[str, ...] = field(default=(), repr=False)
+
+
+@dataclass(frozen=True)
 class _CopyRuleOutcome:
     status: str
     reason_code: str
@@ -2398,6 +2427,7 @@ class _CopyRuleOutcome:
     suggestion: str = ""
     confidence: float | None = None
     copy_match_document_fingerprints: tuple[tuple[str, str], ...] = ()
+    review_candidates: tuple[_CopyReviewCandidate, ...] = field(default=(), repr=False)
 
 
 @dataclass(frozen=True)
@@ -2736,12 +2766,313 @@ def _assess_copy(
             safe_metadata=safe_metadata,
             copy_match_document_fingerprints=copy_match_document_fingerprints,
         )
+    threshold_pairs = [
+        (similarity, left, right)
+        for similarity, left, right in precise_pairs
+        if similarity >= _COPY_SIMILARITY_THRESHOLD
+    ]
+    if threshold_pairs and all(left[3] and right[3] for _, left, right in threshold_pairs):
+        return _CopyRuleOutcome(
+            status="compliant",
+            reason_code="copy_similarity_within_threshold",
+            executor_type="program",
+            safe_metadata=safe_metadata,
+        )
+
+    assert best_pair is not None
+    left_material = _material_for_copy_coverage(best_pair[0][2])
+    right_material = _material_for_copy_coverage(best_pair[1][2])
+    if (
+        maximum == 1.0
+        and len(left_material) >= _MIN_COMPARABLE_CHARS
+        and left_material == right_material
+    ):
+        return _CopyRuleOutcome(
+            status="non_compliant",
+            reason_code="copy_similarity_threshold_exceeded",
+            executor_type="program",
+            safe_metadata=safe_metadata,
+            copy_match_document_fingerprints=copy_match_document_fingerprints,
+        )
+
+    review_pairs = [
+        (similarity, left, right)
+        for similarity, left, right in threshold_pairs
+        if not (left[3] and right[3])
+    ][:_COPY_DISPLAY_PAIR_LIMIT]
+    document_refs: dict[tuple[str, datetime, str, str], str] = {}
+    review_candidates: list[_CopyReviewCandidate] = []
+    for pair_index, (similarity, left, right) in enumerate(review_pairs, start=1):
+        pair_refs: list[str] = []
+        fingerprints: list[str] = []
+        for item in (left, right):
+            identity = (item[1], item[0], item[2], item[5])
+            if identity not in document_refs:
+                document_refs[identity] = f"D{len(document_refs) + 1:02d}"
+            pair_refs.append(document_refs[identity])
+            fingerprints.append(
+                "sha256:"
+                + hashlib.sha256(f"{item[1]}\0{item[5]}".encode("utf-8")).hexdigest()
+                if item[5]
+                else ""
+            )
+        review_candidates.append(
+            _CopyReviewCandidate(
+                pair_ref=f"P{pair_index:02d}",
+                left_ref=pair_refs[0],
+                right_ref=pair_refs[1],
+                similarity=round(similarity, 4),
+                left_source=left[1],
+                right_source=right[1],
+                left_time=left[0].strftime("%Y-%m-%d %H:%M:%S"),
+                right_time=right[0].strftime("%Y-%m-%d %H:%M:%S"),
+                left_content=left[4][:_COPY_REVIEW_DOCUMENT_CHARS],
+                right_content=right[4][:_COPY_REVIEW_DOCUMENT_CHARS],
+                document_fingerprints=(fingerprints[0], fingerprints[1]),
+                redaction_terms=tuple(
+                    value for value in (left[5], right[5]) if value
+                ),
+            )
+        )
     return _CopyRuleOutcome(
-        status="non_compliant",
-        reason_code="copy_similarity_threshold_exceeded",
+        status="evaluation_unknown",
+        reason_code="semantic_low_confidence",
         executor_type="program",
         safe_metadata=safe_metadata,
-        copy_match_document_fingerprints=copy_match_document_fingerprints,
+        review_candidates=tuple(review_candidates),
+    )
+
+
+def _redact_copy_review_text(text: str, terms: Sequence[str]) -> str:
+    redacted = text
+    for term in sorted(
+        {str(value).strip() for value in terms if len(str(value).strip()) >= 4},
+        key=len,
+        reverse=True,
+    ):
+        redacted = redacted.replace(term, "[已脱敏]")
+    return redacted
+
+
+def _copy_review_prompt(
+    candidates: Sequence[_CopyReviewCandidate],
+    redaction_terms: Sequence[str] = (),
+) -> str:
+    documents: dict[str, dict[str, Any]] = {}
+    pairs: list[dict[str, Any]] = []
+    for candidate in candidates:
+        documents.setdefault(
+            candidate.left_ref,
+            {
+                "document_ref": candidate.left_ref,
+                "source_type": candidate.left_source,
+                "record_time": candidate.left_time,
+                "content": _redact_copy_review_text(
+                    candidate.left_content,
+                    (*candidate.redaction_terms, *redaction_terms),
+                ),
+            },
+        )
+        documents.setdefault(
+            candidate.right_ref,
+            {
+                "document_ref": candidate.right_ref,
+                "source_type": candidate.right_source,
+                "record_time": candidate.right_time,
+                "content": _redact_copy_review_text(
+                    candidate.right_content,
+                    (*candidate.redaction_terms, *redaction_terms),
+                ),
+            },
+        )
+        pairs.append(
+            {
+                "pair_ref": candidate.pair_ref,
+                "left_ref": candidate.left_ref,
+                "right_ref": candidate.right_ref,
+                "similarity": candidate.similarity,
+            }
+        )
+    payload = {
+        "schema_version": _COPY_REVIEW_SCHEMA_VERSION,
+        "documents": list(documents.values()),
+        "candidate_pairs": pairs,
+    }
+    return (
+        "你只核对候选病程对是否属于实质内容复制，不输出质控状态。"
+        "逐个pair_ref返回substantial_copy、template_only或uncertain；"
+        "document_refs必须原样返回该候选的两个临时文书引用。\n"
+        + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+def _strict_copy_review_usage(
+    response: Mapping[str, Any],
+) -> tuple[int, int, int, float] | None:
+    usage = response.get("usage")
+    if not isinstance(usage, Mapping):
+        return None
+    values = tuple(
+        usage.get(key)
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+    )
+    if any(type(value) is not int or value < 0 for value in values):
+        return None
+    prompt_tokens, completion_tokens, total_tokens = values
+    if (
+        total_tokens != prompt_tokens + completion_tokens
+        or prompt_tokens > _COPY_REVIEW_MAX_PROMPT_TOKENS
+        or completion_tokens > _COPY_REVIEW_MAX_COMPLETION_TOKENS
+    ):
+        return None
+    api_time = response.get("_api_time", 0.0)
+    if (
+        isinstance(api_time, bool)
+        or not isinstance(api_time, (int, float))
+        or api_time < 0
+    ):
+        return None
+    return prompt_tokens, completion_tokens, total_tokens, float(api_time)
+
+
+def _technical_copy_review_outcome(
+    outcome: _CopyRuleOutcome,
+    reason_code: str,
+    *,
+    usage: tuple[int, int, int, float] = (0, 0, 0, 0.0),
+) -> _CopyRuleOutcome:
+    return replace(
+        outcome,
+        status="technical_error",
+        reason_code=reason_code,
+        executor_type="llm",
+        prompt_tokens=usage[0],
+        completion_tokens=usage[1],
+        total_tokens=usage[2],
+        api_time=usage[3],
+        copy_match_document_fingerprints=(),
+        review_candidates=(),
+    )
+
+
+async def _review_copy_candidates(
+    outcome: _CopyRuleOutcome,
+    llm_client: CourseQualityLLMClient | None,
+    *,
+    redaction_terms: Sequence[str] = (),
+) -> _CopyRuleOutcome:
+    candidates = outcome.review_candidates
+    if not candidates:
+        return outcome
+    if llm_client is None:
+        return _technical_copy_review_outcome(outcome, "model_transport_error")
+    try:
+        response = await llm_client.generate(
+            _copy_review_prompt(candidates, redaction_terms),
+            max_completion_tokens=_COPY_REVIEW_MAX_COMPLETION_TOKENS,
+            allow_length_retry=False,
+        )
+    except Exception:
+        return _technical_copy_review_outcome(outcome, "model_transport_error")
+    if not isinstance(response, Mapping):
+        return _technical_copy_review_outcome(outcome, "model_invalid_output")
+
+    usage = _strict_copy_review_usage(response)
+    if usage is None:
+        return _technical_copy_review_outcome(outcome, "model_invalid_output")
+    payload = _response_json_payload(response)
+    if (
+        not isinstance(payload, Mapping)
+        or set(payload) != {"schema_version", "pair_results"}
+        or payload.get("schema_version") != _COPY_REVIEW_SCHEMA_VERSION
+        or not isinstance(payload.get("pair_results"), list)
+    ):
+        return _technical_copy_review_outcome(
+            outcome, "model_invalid_output", usage=usage
+        )
+    expected = {candidate.pair_ref: candidate for candidate in candidates}
+    parsed: dict[str, str] = {}
+    for item in payload["pair_results"]:
+        if not isinstance(item, Mapping) or set(item) != {
+            "pair_ref",
+            "verdict",
+            "document_refs",
+        }:
+            return _technical_copy_review_outcome(
+                outcome, "model_invalid_output", usage=usage
+            )
+        pair_ref = item.get("pair_ref")
+        verdict = item.get("verdict")
+        document_refs = item.get("document_refs")
+        candidate = expected.get(pair_ref) if isinstance(pair_ref, str) else None
+        if (
+            candidate is None
+            or pair_ref in parsed
+            or verdict not in _COPY_REVIEW_VERDICTS
+            or document_refs != [candidate.left_ref, candidate.right_ref]
+        ):
+            return _technical_copy_review_outcome(
+                outcome, "model_invalid_output", usage=usage
+            )
+        parsed[pair_ref] = verdict
+    if set(parsed) != set(expected):
+        return _technical_copy_review_outcome(
+            outcome, "model_invalid_output", usage=usage
+        )
+
+    if "uncertain" in parsed.values():
+        final_status = "evaluation_unknown"
+        final_reason = "semantic_low_confidence"
+        selected: tuple[_CopyReviewCandidate, ...] = ()
+    elif "substantial_copy" in parsed.values():
+        final_status = "non_compliant"
+        final_reason = "copy_similarity_threshold_exceeded"
+        selected = tuple(
+            expected[pair_ref]
+            for pair_ref, verdict in parsed.items()
+            if verdict == "substantial_copy"
+        )
+    else:
+        final_status = "compliant"
+        final_reason = "copy_similarity_within_threshold"
+        selected = ()
+
+    safe_metadata = dict(outcome.safe_metadata)
+    if selected:
+        first = selected[0]
+        safe_metadata.update(
+            {
+                "maximum_similarity": first.similarity,
+                "best_match_source_types": [first.left_source, first.right_source],
+                "best_match_record_times": [first.left_time, first.right_time],
+                "best_match_pairs": [
+                    {
+                        "source_types": [item.left_source, item.right_source],
+                        "record_times": [item.left_time, item.right_time],
+                        "similarity": item.similarity,
+                    }
+                    for item in selected
+                ],
+            }
+        )
+    elif final_status == "compliant":
+        safe_metadata["best_match_pairs"] = []
+    return replace(
+        outcome,
+        status=final_status,
+        reason_code=final_reason,
+        executor_type="llm",
+        safe_metadata=safe_metadata,
+        prompt_tokens=usage[0],
+        completion_tokens=usage[1],
+        total_tokens=usage[2],
+        api_time=usage[3],
+        copy_match_document_fingerprints=tuple(
+            item.document_fingerprints
+            for item in selected
+            if all(item.document_fingerprints)
+        ),
+        review_candidates=(),
     )
 
 
@@ -2875,6 +3206,13 @@ def _rule_017_decision(
             EvidenceState.CONFLICT,
             QcDirection.UNKNOWN,
             "semantic_low_confidence",
+        )
+    elif outcome.status == "technical_error":
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            outcome.reason_code,
         )
     else:
         dimensions = (
@@ -3663,6 +4001,18 @@ async def execute_luxian_0609_native_course_quality_rules(
                 copy_documents,
                 source_complete=copy_documents is not documents,
             )
+            if copy_outcome.review_candidates:
+                if llm_client is not None:
+                    llm_call_count += 1
+                copy_outcome = await _review_copy_candidates(
+                    copy_outcome,
+                    llm_client,
+                    redaction_terms=(institute_id or "", patient_id or "", visit_id or ""),
+                )
+                prompt_tokens += copy_outcome.prompt_tokens
+                completion_tokens += copy_outcome.completion_tokens
+                total_tokens += copy_outcome.total_tokens
+                api_time += copy_outcome.api_time
             emit_copy(copy_outcome)
             continue
 
