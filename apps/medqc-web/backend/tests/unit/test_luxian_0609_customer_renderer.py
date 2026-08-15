@@ -1243,6 +1243,37 @@ def test_each_defined_rule_data_gap_names_customer_visible_missing_material(rule
     assert result["evidence"] != "已读取到相关记录，但其中缺少本项判断所需的字段。"
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "expected_material"),
+    (
+        ("LX0609-010", "CT/MRI"),
+        ("LX0609-017", "病程记录"),
+        ("LX0609-023", "会诊意见"),
+    ),
+)
+def test_data_gap_for_event_rules_names_the_missing_customer_material(
+    rule_id, expected_material
+):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="required_field_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-gap-acceptance-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert expected_material in result["findings"]
+    assert expected_material in result["evidence"]
+    assert expected_material in result["suggestion"]
+
+
 @pytest.mark.parametrize(("rule_id", "reason_code"), NOT_APPLICABLE_CASES)
 def test_each_gated_rule_not_applicable_names_the_excluding_fact(
     rule_id, reason_code
