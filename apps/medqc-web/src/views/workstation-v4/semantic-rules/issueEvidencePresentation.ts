@@ -305,6 +305,8 @@ export function createIssueEvidencePresentation(options: IssueEvidencePresentati
       surgery_inform_consent: '手术知情同意书',
       inpat_order: '住院医嘱',
       medical_order: '医嘱',
+      death_record: '死亡记录',
+      death_discussion: '死亡病历讨论记录',
       exam_report: '检查报告',
       lab_report: '检验报告',
     }

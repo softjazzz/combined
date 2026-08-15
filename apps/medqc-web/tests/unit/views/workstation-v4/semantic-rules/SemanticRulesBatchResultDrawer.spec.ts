@@ -1137,6 +1137,14 @@ describe('SemanticRulesBatchResultDrawer', () => {
               source_type: 'consultation_record',
               source_ref: 'doc-3fa891',
             },
+            {
+              source_type: 'death_record',
+              source_ref: 'doc-death-051',
+            },
+            {
+              source_type: 'death_discussion',
+              source_ref: 'doc-discussion-051',
+            },
           ],
         },
         {
@@ -1240,6 +1248,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('会诊申请目的需质控员确认。')
     expect(wrapper.text()).toContain('判定依据：会诊申请目的需复核')
     expect(wrapper.text()).toContain('会诊记录 · doc-3fa891')
+    expect(wrapper.text()).toContain('死亡记录 · doc-death-051')
+    expect(wrapper.text()).toContain('死亡病历讨论记录 · doc-discussion-051')
     expect(wrapper.text()).not.toContain('未返回结论')
     expect(wrapper.text()).not.toContain('RAW-INTERNAL-FINDINGS-021')
   })
