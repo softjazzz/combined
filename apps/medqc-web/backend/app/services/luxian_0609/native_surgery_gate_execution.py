@@ -84,6 +84,10 @@ _TYPED_TEXT_PROJECTION_SOURCES = {
     **_TYPED_TEXT_SOURCES,
     "LX0609-033": ("surgery_inform_consent",),
 }
+_TYPED_SOURCE_CUSTOMER_LABELS = {
+    "surgery_record": "手术记录",
+    "surgery_inform_consent": "手术知情同意书",
+}
 # typed RuleDecision 旁路将同一就诊仍需语义判断的高风险手术规则合并为
 # 一次事实抽取。任何上限触发都 fail-closed 为 data_gap，禁止静默截断后
 # 继续调用模型。
@@ -260,46 +264,6 @@ def _deterministic_024_outcome(
     ):
         return _SurgeryTextOutcome(
             "LX0609-024", "not_applicable", "surgery_text_fact_absent"
-        )
-    return None
-
-
-def _deterministic_033_outcome(
-    consent_rows: Sequence[Mapping[str, Any]],
-) -> _SurgeryTextOutcome | None:
-    """033：结构化手术同意书及患者、术者签名齐全时无需调用模型。"""
-
-    for row in consent_rows:
-        patient_sign = _clean(row.get("patient_sign"))
-        surgeon_sign = _clean(row.get("surgeon_sign"))
-        if not patient_sign and not surgeon_sign:
-            continue
-        missing_roles = [
-            role
-            for role, value in (("patient", patient_sign), ("surgeon", surgeon_sign))
-            if not value
-        ]
-        if missing_roles:
-            return _SurgeryTextOutcome(
-                "LX0609-033",
-                "non_compliant",
-                "surgery_text_fact_defect",
-                {
-                    "failure_kind": "surgery_consent_signature_missing",
-                    "consent_state": "signature_missing",
-                    "performed_surgery_confirmed": True,
-                    "missing_signature_roles": missing_roles,
-                },
-            )
-        return _SurgeryTextOutcome(
-            "LX0609-033",
-            "compliant",
-            "surgery_text_fact_satisfied",
-            {
-                "verification_kind": "surgery_consent_complete",
-                "performed_surgery_confirmed": True,
-                "checked_signature_roles": ["patient", "surgeon"],
-            },
         )
     return None
 
@@ -1421,6 +1385,11 @@ def _decision_from_surgery_outcome(
     outcome: _SurgeryTextOutcome,
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> RuleDecision:
+    technical_reason_code = {
+        "source_query_error": "source_query_error",
+        "surgery_llm_invalid_output": "model_invalid_output",
+        "surgery_llm_failure": "model_transport_error",
+    }.get(outcome.reason_code, "model_transport_error")
     mapping = {
         "compliant": (
             ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT,
@@ -1440,10 +1409,7 @@ def _decision_from_surgery_outcome(
         ),
         "technical_error": (
             ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR,
-            QcDirection.UNKNOWN,
-            "model_invalid_output"
-            if outcome.reason_code == "surgery_llm_invalid_output"
-            else "model_transport_error",
+            QcDirection.UNKNOWN, technical_reason_code,
         ),
     }
     applicability, evidence_state, qc_direction, reason_code = mapping[outcome.status]
@@ -1759,11 +1725,6 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 )
                 if rule_id == "LX0609-024"
                 and states_by_source.get("surgery_record") == "available"
-                else _deterministic_033_outcome(
-                    rows_by_source["surgery_inform_consent"]
-                )
-                if rule_id == "LX0609-033"
-                and states_by_source.get("surgery_inform_consent") == "available"
                 else None
             )
             structured_not_applicable = (
@@ -1785,8 +1746,23 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 )
             )
             if "error" in states:
+                source_labels = [
+                    _TYPED_SOURCE_CUSTOMER_LABELS[source_key]
+                    for source_key, state in states_by_source.items()
+                    if state == "error"
+                    and source_key in _TYPED_SOURCE_CUSTOMER_LABELS
+                ]
                 pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                    rule_id, "technical_error", "source_query_error"
+                    rule_id,
+                    "technical_error",
+                    "source_query_error",
+                    {
+                        "failure_kind": "source_query_error",
+                        "source_labels": source_labels,
+                        "performed_surgery_confirmed": True,
+                    }
+                    if rule_id == "LX0609-033"
+                    else None,
                 )
             elif structured_not_applicable:
                 pending_outcomes[rule_id] = _SurgeryTextOutcome(
@@ -1863,6 +1839,9 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                         },
                     )
                 else:
+                    # 同一住院可存在多次手术及多份同意书。当前结构化来源
+                    # 没有稳定的手术事件键，不能仅凭任意一行双签直接判定。
+                    # 保留单次受控语义关联，由 Python 校验 current_surgery 引用。
                     active_rule_ids.append(rule_id)
             elif (
                 rule_id == "LX0609-028"

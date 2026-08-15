@@ -837,8 +837,8 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
 
 
 @pytest.mark.asyncio
-async def test_typed_024_025_028_share_one_call_and_033_structured_signatures_short_circuit() -> None:
-    """033签名强事实直接收口，其余语义规则仍只发起一次联合提取。"""
+async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> None:
+    """033结构化签名无事件键时，与其余规则共用一次受控联合提取。"""
 
     selected = ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
 
@@ -901,10 +901,10 @@ async def test_typed_024_025_028_share_one_call_and_033_structured_signatures_sh
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
     prompt = client.prompts[0]
-    assert all(rule_id in prompt for rule_id in selected[:3])
-    assert "LX0609-033" not in prompt
+    assert all(rule_id in prompt for rule_id in selected)
     assert "SAFE_SURGERY_MARKER" in prompt
-    assert "SAFE_CONSENT_MARKER" not in prompt
+    assert "SAFE_CONSENT_MARKER" in prompt
+    assert "current_surgery|other_or_unclear|unknown" in prompt
     assert "SHOULD_NOT_LEAK" not in prompt
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,

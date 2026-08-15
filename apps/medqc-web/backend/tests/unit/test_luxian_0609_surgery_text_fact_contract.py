@@ -17,7 +17,6 @@ from app.services.luxian_0609.evidence_snapshot import (
     SourceCompleteness,
     SourceObservation,
 )
-from app.services.luxian_0609.fact_schema import FACT_SCHEMA_VERSION, FactV2
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -229,7 +228,15 @@ def _unproven_empty_consent_session():
         snapshot_schema_version=session.snapshot.snapshot_schema_version,
         source_registry_version=session.snapshot.source_registry_version,
         observations=observations,
-        facts=session.snapshot.facts,
+        facts=tuple(
+            fact
+            for fact in session.snapshot.facts
+            if not (
+                fact.source_key == "surgery_inform_consent"
+                and fact.fact_type
+                == "current_visit_surgery_consent_source_readiness"
+            )
+        ),
         document_refs=session.snapshot.document_refs,
         created_at=session.snapshot.created_at,
     )
@@ -246,61 +253,7 @@ def _unproven_empty_consent_session():
 def _complete_empty_consent_session():
     """构造已由同一快照显式证明完整性的空同意书来源。"""
     session = _session(consent_rows=())
-    observation = next(
-        item
-        for item in session.snapshot.observations
-        if item.source_key == "surgery_inform_consent"
-    )
-    readiness_fact = FactV2.create(
-        visit_ref=session.snapshot.visit_ref,
-        family="surgery_anesthesia",
-        fact_type="current_visit_surgery_consent_source_readiness",
-        normalized_value={"complete": True},
-        trigger_scope="current_visit",
-        current_visit_relevance="relevant",
-        assertion="affirmed",
-        assertion_context="other",
-        event_status="performed",
-        source_key="surgery_inform_consent",
-        source_document_id="",
-        source_document_type="surgery_inform_consent",
-        record_time=None,
-        submit_time=None,
-        update_time=None,
-        quote="",
-        redaction_terms=(),
-        confidence=1.0,
-        extractor="readiness_fixture",
-        extractor_version="readiness-fixture-v1",
-        fact_schema_version=FACT_SCHEMA_VERSION,
-        source_snapshot_hash=observation.snapshot_ref.removeprefix("sha256:"),
-        created_at=session.snapshot.created_at,
-        extensions={},
-        known_upstream_fact_ids=(),
-    )
-    snapshot = Luxian0609EvidenceSnapshot.create(
-        institute_id="I",
-        patient_id="P",
-        visit_id="V",
-        snapshot_schema_version=session.snapshot.snapshot_schema_version,
-        source_registry_version=session.snapshot.source_registry_version,
-        observations=session.snapshot.observations,
-        facts=(*session.snapshot.facts, readiness_fact),
-        document_refs=session.snapshot.document_refs,
-        created_at=session.snapshot.created_at,
-    )
-    materials = Luxian0609EvidenceMaterialStore.create(
-        snapshot=snapshot,
-        sources={
-            source_key: session.materials.source(source_key)
-            for source_key in (
-                "surgery_record",
-                "mr_surgery",
-                "surgery_inform_consent",
-            )
-        },
-    )
-    return snapshot, materials
+    return session.snapshot, session.materials
 
 
 @pytest.mark.asyncio
@@ -334,7 +287,7 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
     assert [item.final_state.value for item in reduced] == [
         "compliant", "non_compliant", "not_applicable", "compliant"
     ]
-    # typed 旁路合并为一次联合事实提取；033 仍须引用同意书安全文书标识。
+    # 四条规则合并为一次联合事实提取；033 必须校验同意书与本次手术的语义关联。
     assert result.llm_call_count == 1
     assert result.total_tokens == 100
     assert len(client.prompts) == 1
@@ -730,9 +683,155 @@ async def test_033_empty_shell_rows_are_non_compliant_without_llm_or_body_leak()
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert dict(result.customer_display_facts)["LX0609-033"]["failure_kind"] == (
+        "surgery_consent_body_missing"
+    )
     assert result.llm_call_count == 0
     assert client.prompts == []
     assert "患者签名占位" not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("patient_sign", "surgeon_sign", "expected_state"),
+    (
+        ("患者已签", "医师已签", "compliant"),
+        ("", "医师已签", "non_compliant"),
+        ("患者已签", "", "non_compliant"),
+    ),
+)
+async def test_033_substantive_consent_uses_one_llm_to_link_current_surgery(
+    patient_sign: str,
+    surgeon_sign: str,
+    expected_state: str,
+) -> None:
+    """结构化签名不带手术事件键时，仍需一次受控语义关联。"""
+    session = _session(consent_rows=({
+        "record_content": "本次手术知情同意正文",
+        "patient_sign": patient_sign,
+        "surgeon_sign": surgeon_sign,
+    },))
+    client = _Client(
+        {"schema_version": SCHEMA_VERSION, "events": [_event()]},
+        consent_payload={
+            "schema_version": SCHEMA_VERSION,
+            "events": [
+                _consent_event(
+                    patient_signature="present" if patient_sign else "missing",
+                    surgeon_signature="present" if surgeon_sign else "missing",
+                )
+            ],
+        },
+    )
+
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-033",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == [expected_state]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "current_surgery|other_or_unclear|unknown" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_033_substantive_consent_without_structured_signatures_uses_one_llm_call() -> None:
+    """有正文但无结构化签名时，只允许一次受控语义事实提取。"""
+    session = _session(consent_rows=({
+        "record_content": "本次手术知情同意正文",
+    },))
+    client = _Client(
+        {"schema_version": SCHEMA_VERSION, "events": [_event()]},
+        consent_payload={"schema_version": SCHEMA_VERSION, "events": [_consent_event()]},
+    )
+
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-033",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["compliant"]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("consent_rows", "linkage"),
+    (
+        (
+            ({
+                "record_content": "另一台手术知情同意正文",
+                "planned_operation_name": "其他手术",
+                "patient_sign": "患者已签",
+                "surgeon_sign": "医师已签",
+            },),
+            "other_or_unclear",
+        ),
+        (
+            (
+                {
+                    "record_content": "甲手术知情同意正文",
+                    "planned_operation_name": "甲手术",
+                    "patient_sign": "患者已签",
+                    "surgeon_sign": "医师已签",
+                },
+                {
+                    "record_content": "乙手术知情同意正文",
+                    "planned_operation_name": "乙手术",
+                    "patient_sign": "患者已签",
+                    "surgeon_sign": "医师已签",
+                },
+            ),
+            "unknown",
+        ),
+    ),
+)
+async def test_033_signed_consents_without_unique_current_surgery_link_fail_closed(
+    consent_rows: tuple[dict[str, object], ...],
+    linkage: str,
+) -> None:
+    """他次手术双签或多份混合双签不能直接满足本次手术。"""
+    session = _session(consent_rows=consent_rows)
+    client = _Client(
+        {"schema_version": SCHEMA_VERSION, "events": [_event()]},
+        consent_payload={
+            "schema_version": SCHEMA_VERSION,
+            "events": [_consent_event(consent_linkage=linkage)],
+        },
+    )
+
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-033",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["data_gap"]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "current_surgery|other_or_unclear|unknown" in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -799,6 +898,12 @@ async def test_033_consent_source_error_is_technical_error_without_leak_or_llm()
     )
 
     assert [item.final_state.value for item in reduced] == ["technical_error"]
+    assert [item.reason_code for item in reduced] == ["source_query_error"]
+    assert dict(result.customer_display_facts)["LX0609-033"] == {
+        "failure_kind": "source_query_error",
+        "source_labels": ["手术知情同意书"],
+        "performed_surgery_confirmed": True,
+    }
     assert result.llm_call_count == 0
     assert client.prompts == []
     assert "RAW_CONSENT_QUERY_MARKER" not in repr(result)
@@ -810,7 +915,9 @@ async def test_033_substantive_consent_missing_required_signature_is_non_complia
     signature_field: str,
 ) -> None:
     """已关联本次手术的同意书缺任一必签字段，应由事实映射为确定缺陷。"""
-    session = _session()
+    session = _session(consent_rows=({
+        "record_content": "本次手术知情同意正文",
+    },))
     client = _Client({
         "schema_version": SCHEMA_VERSION,
         "events": [_consent_event(**{signature_field: "missing"})],
@@ -1126,7 +1233,9 @@ async def test_028_uses_one_cropped_llm_call_when_structured_trigger_is_unknown(
 
 @pytest.mark.asyncio
 async def test_invalid_surgery_fact_response_is_bounded_calls_technical_error() -> None:
-    session = _session()
+    session = _session(consent_rows=({
+        "record_content": "本次手术知情同意正文",
+    },))
     client = _Client({"bad": "shape"})
     result = await execute_luxian_0609_native_surgery_gate_rules(
         rule_ids=RULE_IDS,

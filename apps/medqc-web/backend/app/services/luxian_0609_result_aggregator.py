@@ -3630,6 +3630,22 @@ def safe_luxian_0609_customer_display_facts(
             }
         failure_kind = raw.get("failure_kind")
         consent_state = raw.get("consent_state")
+        if failure_kind == "source_query_error":
+            source_labels = raw.get("source_labels")
+            allowed_source_labels = {"手术记录", "手术知情同意书"}
+            if (
+                raw.get("performed_surgery_confirmed") is not True
+                or not isinstance(source_labels, list)
+                or not source_labels
+                or len(source_labels) != len(set(source_labels))
+                or any(label not in allowed_source_labels for label in source_labels)
+            ):
+                return None
+            return {
+                "failure_kind": "source_query_error",
+                "source_labels": list(source_labels),
+                "performed_surgery_confirmed": True,
+            }
         valid_pairs = {
             ("surgery_consent_document_missing", "missing"),
             ("surgery_consent_body_missing", "blank"),

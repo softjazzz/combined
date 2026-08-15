@@ -138,6 +138,22 @@ def test_010_invalid_new_contract_never_falls_back_to_uncontrolled_display_facts
     assert "must-not-pass" not in repr(result)
 
 
+def test_033_source_query_error_preserves_only_controlled_source_labels() -> None:
+    facts = {
+        "failure_kind": "source_query_error",
+        "source_labels": ["手术记录", "手术知情同意书"],
+        "performed_surgery_confirmed": True,
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-033", raw=facts
+    ) == facts
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-033",
+        raw={**facts, "source_labels": ["手术知情同意书", "内部SQL"]},
+    ) is None
+
+
 @pytest.mark.parametrize(
     ("rule_id", "facts"),
     [
@@ -647,7 +663,7 @@ def test_only_gate_attested_report_can_reach_final_mapping():
     [
         ("compliant", True, "compliant"),
         ("non_compliant", False, "non_compliant"),
-        ("not_applicable", True, "not_applicable"),
+        ("not_applicable", None, "not_applicable"),
         ("data_gap", None, "data_gap"),
         ("technical_error", None, "technical_error"),
         ("uncertain", None, "uncertain"),
