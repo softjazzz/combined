@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-phase-scope-v1",
-  "definition_version": "lx0609-defined-scope-2026-08-15",
+  "definition_version": "lx0609-defined-scope-2026-08-15-r2",
   "rules": [
     { "rule_id": "LX0609-001", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-002", "phase_status": "phase_1_target", "catalog_registered": true },
@@ -40,7 +40,7 @@
       "rule_id": "LX0609-025",
       "phase_status": "pending_definition",
       "catalog_registered": true,
-      "pending_reason_code": "implant_field_contract_refreeze_required"
+      "pending_reason_code": "implant_five_field_real_gold_pending"
     },
     { "rule_id": "LX0609-026", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-027", "phase_status": "phase_1_target", "catalog_registered": true },
@@ -94,7 +94,7 @@
       "rule_id": "LX0609-059",
       "phase_status": "pending_definition",
       "catalog_registered": true,
-      "pending_reason_code": "diagnostic_order_course_contract_repair_required"
+      "pending_reason_code": "treatment_event_order_course_real_gold_pending"
     },
     { "rule_id": "LX0609-060", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-061", "phase_status": "phase_1_target", "catalog_registered": true },

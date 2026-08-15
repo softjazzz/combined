@@ -116,11 +116,89 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
         field in implant_summary
         for field in ("名称", "种类", "规格或型号", "材质", "数量")
     )
-    assert "尚未完成最终冻结" in implant_summary
+    assert "条码不属于本规则必填字段" in implant_summary
+    assert "真实病例金标" in implant_summary
     assert not wrapper_by_id["LX0609-066"].get("customer_text")
     assert projected_by_id["LX0609-066"]["customer_policy"]["summary"]
     assert not wrapper_by_id["LX0609-070"].get("customer_text")
     assert projected_by_id["LX0609-070"]["customer_policy"]["summary"]
+
+
+@pytest.mark.unit
+def test_025_and_059_catalogs_expose_the_frozen_pending_business_contracts():
+    rules = {rule["rule_id"]: rule for rule in load_luxian_0609_rules()}
+
+    implant = rules["LX0609-025"]
+    assert implant["applicable_documents"] == ["surgery_record"]
+    assert implant["data_dependencies"] == [
+        "永久性植入物实际使用",
+        "implant_name",
+        "implant_type",
+        "implant_specification",
+        "implant_material",
+        "implant_quantity",
+        "病程记录仅辅助确认实际使用，不得替代正式手术记录五字段",
+    ]
+    assert tuple(item["criterion_id"] for item in implant["criteria"]) == (
+        "implant_name",
+        "implant_type",
+        "implant_specification",
+        "implant_material",
+        "implant_quantity",
+    )
+    assert "条码不参与本规则判定" in implant["description"]
+    assert "病程记录中有相应记录" not in implant["description"]
+    implant_prompt = implant["custom_prompt"]
+    assert all(
+        field in implant_prompt
+        for field in (
+            "implant_name",
+            "implant_type",
+            "implant_specification",
+            "implant_material",
+            "implant_quantity",
+        )
+    )
+    assert "条码不参与 LX0609-025 判定" in implant_prompt
+    assert "病程记录仅用于辅助确认是否实际使用永久性植入物" in implant_prompt
+    assert "不得替代正式手术记录中的五字段" in implant_prompt
+    assert "植入物条形码不齐全" not in implant_prompt
+    assert "手术记录或病程记录中有相应记录" not in implant_prompt
+
+    treatment_order = rules["LX0609-059"]
+    expected_treatment_sources = [
+        "exam_master",
+        "exam_item_report",
+        "surgery_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "daily_course_record",
+        "senior_course_record",
+    ]
+    assert treatment_order["applicable_documents"] == expected_treatment_sources
+    assert treatment_order["applicable_document_labels"] == [
+        "检查主记录",
+        "检查报告",
+        "手术记录",
+        "药品医嘱",
+        "非药品医嘱",
+        "日常病程记录",
+        "上级医师查房记录",
+    ]
+    assert treatment_order["data_dependencies"][:7] == expected_treatment_sources
+    assert "抗菌药物名称" not in treatment_order["description"]
+    assert all(
+        text in treatment_order["description"]
+        for text in (
+            "order_id",
+            "application_id",
+            "event_code",
+            "禁止药名共现",
+            "最近时间猜测",
+        )
+    )
+    assert treatment_order["executor_type"] == "llm"
+    assert treatment_order["prompt_version"] == "lx0609-059-event-order-course-shadow-v1"
 
 
 @pytest.mark.unit

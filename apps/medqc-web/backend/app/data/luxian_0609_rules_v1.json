@@ -1715,7 +1715,7 @@
     "rule_id": "LX0609-025",
     "rule_code": "LX0609-025",
     "name": "手术记录：手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息",
-    "description": "植入物条形码不齐全 / 植入物种类和数量等情况未在手术记录或病程记录中有相应记录",
+    "description": "确认本次手术实际使用永久性植入物时，仅核对本次正式手术记录是否完整记录名称、种类、规格/型号、材质及数量；条码不参与本规则判定，病程记录不得替代五字段。",
     "category": "手术记录",
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
@@ -1728,26 +1728,86 @@
     "executor_type": "llm",
     "execution_domain": "luxian_0609",
     "doc_scope": "单文书加语义判断",
-    "rule_version": "2026-06-09",
-    "prompt_version": "luxian-0609-synthetic-v1",
+    "rule_version": "2026-08-15-golden-pending",
+    "prompt_version": "lx0609-025-five-field-pending-v1",
     "mapped_rule_ids": ["SC-100", "SC-101"],
     "primary_execution_rule_id": "SC-100",
     "implementation_status": "needs_evidence_hardening",
     "dependency_type": "单文书加语义判断",
     "data_status": "基本满足",
-    "trigger_condition": "当存在或应存在 手术记录，需要读取 植入物标志可选，且出现“手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息”所描述的不合规情形时触发。",
-    "non_trigger_condition": "手术记录齐全且内容符合规则口径；植入物标志可选可取得且比对结果一致时不触发；缺少必要文书或结构化数据时返回 data_quality_gap，不得误判为合格或不合格。",
+    "trigger_condition": "确认本次手术实际使用永久性植入物，且本次唯一正式手术记录明确缺少名称、种类、规格/型号、材质、数量中的至少一项；真实病例金标验收前保持 not_executed。",
+    "non_trigger_condition": "未实际使用永久性植入物时不适用；本次正式手术记录五字段齐全时不触发。病程记录仅辅助确认实际使用，不能补足五字段；资料不完整或多台手术无法唯一关联时返回 data_gap。",
     "rule_basis": "泸县0609客户质控点：手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息；适用文书：手术记录；依据病历书写规范和客户专项验收口径执行。",
     "customer_text": "手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息",
-    "standardized_rule": "植入物条形码不齐全 / 植入物种类和数量等情况未在手术记录或病程记录中有相应记录",
+    "standardized_rule": "永久性植入物实际使用后，本次正式手术记录缺少名称、种类、规格/型号、材质或数量中的任一字段",
     "required_documents_label": "手术记录",
-    "data_dependencies": ["植入物标志可选"],
+    "data_dependencies": [
+      "永久性植入物实际使用",
+      "implant_name",
+      "implant_type",
+      "implant_specification",
+      "implant_material",
+      "implant_quantity",
+      "病程记录仅辅助确认实际使用，不得替代正式手术记录五字段"
+    ],
+    "criteria": [
+      {
+        "criterion_id": "implant_name",
+        "label": "植入物名称",
+        "kind": "completeness",
+        "failure_reason_code": "implant_name_missing",
+        "source_fact": "surgery_record.implant_name",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      },
+      {
+        "criterion_id": "implant_type",
+        "label": "植入物种类",
+        "kind": "completeness",
+        "failure_reason_code": "implant_type_missing",
+        "source_fact": "surgery_record.implant_type",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      },
+      {
+        "criterion_id": "implant_specification",
+        "label": "植入物规格型号",
+        "kind": "completeness",
+        "failure_reason_code": "implant_specification_missing",
+        "source_fact": "surgery_record.implant_specification",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      },
+      {
+        "criterion_id": "implant_material",
+        "label": "植入物材质",
+        "kind": "completeness",
+        "failure_reason_code": "implant_material_missing",
+        "source_fact": "surgery_record.implant_material",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      },
+      {
+        "criterion_id": "implant_quantity",
+        "label": "植入物数量",
+        "kind": "completeness",
+        "failure_reason_code": "implant_quantity_missing",
+        "source_fact": "surgery_record.implant_quantity",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      }
+    ],
     "coverage_level": "近似覆盖",
     "included_in_v1": "近似纳入",
     "example_source": "synthetic_medical_record",
     "positive_example": {
       "title": "LX0609-025 正例：手术记录完整记录植入物信息",
-      "summary": "模拟植入物手术中手术记录包含名称、种类、规格型号、材质、数量和条码，不应触发缺陷。",
+      "summary": "模拟植入物手术中手术记录包含名称、种类、规格型号、材质和数量，不应触发缺陷；条码只作额外追溯，不参与本规则判定。",
       "raw_text": "文书标题：住院病历综合文本\n记录时间：2026-06-11 12:40\n患者信息：姓名 脱敏患者A025，性别 男，年龄 67岁，住院号 LXMN20260609025P，科室 骨科，入院时间 2026-06-09 11:00。\n入院诊断：左股骨粗隆间骨折。\n\n文书标题：手术医嘱\n开立时间：2026-06-10 15:00\n医嘱内容：明日行左股骨粗隆间骨折闭合复位内固定术。\n\n文书标题：手术记录\n记录时间：2026-06-11 12:40\n手术开始时间：2026-06-11 09:10\n手术结束时间：2026-06-11 11:20\n手术名称：左股骨粗隆间骨折闭合复位PFNA内固定术\n手术经过：透视下复位满意，经股骨大粗隆顶点置入导针，扩髓后置入髓内钉，锁定近端螺旋刀片及远端锁钉，透视见内固定位置良好。\n植入物记录：名称：PFNA股骨近端防旋髓内钉系统；种类：骨科金属内固定植入物；规格/型号：主钉 10mm x 200mm，螺旋刀片 95mm，远端锁钉 5.0mm x 36mm；材质：钛合金；数量：主钉1枚、螺旋刀片1枚、远端锁钉1枚；生产批号：MN-PFNA-20260611；植入物条码：SIM-IMPLANT-025-001、SIM-IMPLANT-025-002、SIM-IMPLANT-025-003。\n术后处理：患肢抬高，预防感染及血栓，复查X线。",
       "sections": [
         {
@@ -1758,7 +1818,7 @@
       "focusPoints": [
         "手术记录说明存在植入物",
         "名称、种类、规格型号、材质、数量完整",
-        "包含批号或条码等可追溯信息"
+        "条码仅作额外追溯，不参与本规则判定"
       ]
     },
     "negative_example": {
@@ -1777,7 +1837,7 @@
         "缺少名称、规格型号、材质和数量"
       ]
     },
-    "custom_prompt": "你是一名经验丰富的病历质控专家，负责按泸县0609客户专项质控点审核病历。\n\n请检查以下病历是否符合质控规则。\n\n**质控规则：**\n- 规则ID: LX0609-025\n- 规则名称: 手术记录：手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息\n- 规则描述: 植入物条形码不齐全 / 植入物种类和数量等情况未在手术记录或病程记录中有相应记录\n- 适用文书: surgery_record\n- 缺陷级别: {defect_level}\n- 主执行规则: SC-100\n- 映射执行规则: SC-100、SC-101\n\n**客户质控点口径：**\n- 触发条件: 当存在或应存在 手术记录，需要读取 植入物标志可选，并出现“手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息”所描述的不合规情形时触发。\n- 不触发条件: 手术记录齐全且内容符合规则口径；植入物标志可选可取得且比对结果一致时不触发。\n\n**重要判定约束：**\n1. 只依据本次传入的病历文本判断，不要把规则管理字段、数据状态、执行依赖、覆盖等级、样本池说明当成临床证据。\n2. 如果病历文本已经明确给出所需文书、时间、签名、医嘱、费用或其他关键字段，应直接使用这些文本事实完成判断。\n3. 正例中只要关键字段齐全且满足规则口径，应输出 is_compliant=true；不要因为“可能需要结构化数据”“需要人工复核”等管理性理由判为不合规。\n4. 反例中只要出现规则定义的不合规事实，应输出 is_compliant=false，并引用具体原文。\n5. findings、issues、evidence、suggestion 必须与 is_compliant 保持一致：如果 findings 表述“符合规定、未发现问题、未超时、记录齐全”，is_compliant 必须为 true；如果 is_compliant=false，必须说明具体缺陷。\n6. 不要扩大为其他无关质控问题；只判断当前规则。\n\n**病历文本：**\n{medical_text}\n\n**输出格式（JSON）：**\n{\n  \"is_compliant\": true/false,\n  \"findings\": \"详细描述发现的问题或合规情况\",\n  \"issues\": [\n    {\n      \"description\": \"问题短标题\",\n      \"evidence\": \"证据位置和关键原文\"\n    }\n  ],\n  \"evidence\": \"从病历中提取的相关文本片段\",\n  \"suggestion\": \"改进建议，如果合规可以为空\",\n  \"confidence\": 0.85\n}\n\n请直接输出JSON，不要包含其他文字。\n"
+    "custom_prompt": "你是一名病历质控专家，仅按 LX0609-025 核对永久性植入物信息。\n\n仅当已确认本次手术实际使用永久性植入物时，核对本次唯一正式手术记录（surgery_record）中的五个字段：implant_name（名称）、implant_type（种类）、implant_specification（规格/型号）、implant_material（材质）、implant_quantity（数量）。条码不参与 LX0609-025 判定。病程记录仅用于辅助确认是否实际使用永久性植入物，不得替代正式手术记录中的五字段，也不得从其他文书补足五字段。\n\n只能引用本次正式手术记录中的字段值和可定位原文；如果无法唯一确定本次正式手术记录、来源不完整或字段含义无法确认，应按合同失败关闭，不得猜测。不得扩大为其他植入物或手术质控问题。\n\n**病历文本：**\n{medical_text}\n\n请按受控合同输出结构化结果。\n"
   },
   {
     "rule_id": "LX0609-026",

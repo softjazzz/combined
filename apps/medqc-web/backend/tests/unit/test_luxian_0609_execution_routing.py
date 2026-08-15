@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.luxian_0609.customer_rule_package import LUXIAN_0609_RULE_SET_KEY
 from app.services.luxian_0609.execution import (
     aggregate_luxian_0609_orchestrated_results,
@@ -164,13 +166,16 @@ def test_disabled_rollout_flag_only_removes_its_group() -> None:
     assert resolved == ("LX0609-008", "LX0609-018")
 
 
-def test_public_execution_returns_controlled_not_executed_for_pending_rule() -> None:
+@pytest.mark.parametrize("rule_id", ("LX0609-025", "LX0609-059"))
+def test_public_execution_returns_controlled_not_executed_for_pending_rule(
+    rule_id: str,
+) -> None:
     inventory = load_luxian_0609_dependency_inventory()
     prepared_rules = [
         {"rule_id": rule_id}
         for rule_id in resolve_package_entry_execution_rule_ids(
             inventory=inventory,
-            selected_rule_ids=("LX0609-049",),
+            selected_rule_ids=(rule_id,),
         )
     ]
     settings = _settings(
@@ -189,13 +194,13 @@ def test_public_execution_returns_controlled_not_executed_for_pending_rule() -> 
             evidence_payload=None,
             llm_client=object(),
             settings=settings,
-            selected_customer_rule_ids=("LX0609-049",),
+            selected_customer_rule_ids=(rule_id,),
         )
     )
 
     assert executable_rules == []
     assert context.package_plan is not None
-    assert context.package_plan.not_executed_rule_ids == ("LX0609-049",)
+    assert context.package_plan.not_executed_rule_ids == (rule_id,)
     assert context.native_llm_call_count == 0
 
     aggregated = aggregate_luxian_0609_orchestrated_results(
@@ -208,7 +213,7 @@ def test_public_execution_returns_controlled_not_executed_for_pending_rule() -> 
 
     assert len(aggregated["results"]) == 1
     result = aggregated["results"][0]
-    assert result["rule_id"] == "LX0609-049"
+    assert result["rule_id"] == rule_id
     assert result["status"] == "not_executed"
     assert result["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
     assert result["suggestion"] == "待院方确认并发布业务口径后再启用本质控点。"

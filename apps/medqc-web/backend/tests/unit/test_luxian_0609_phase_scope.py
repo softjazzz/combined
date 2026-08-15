@@ -14,7 +14,7 @@ def test_phase_scope_freezes_all_75_customer_rules() -> None:
         f"LX0609-{index:03d}" for index in range(1, 76)
     )
     assert {entry.definition_version for entry in entries} == {
-        "lx0609-defined-scope-2026-08-15"
+        "lx0609-defined-scope-2026-08-15-r2"
     }
     assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 68
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
@@ -32,7 +32,12 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
     assert entries["LX0609-025"].phase_status == "pending_definition"
     assert (
         entries["LX0609-025"].pending_reason_code
-        == "implant_field_contract_refreeze_required"
+        == "implant_five_field_real_gold_pending"
+    )
+    assert entries["LX0609-059"].phase_status == "pending_definition"
+    assert (
+        entries["LX0609-059"].pending_reason_code
+        == "treatment_event_order_course_real_gold_pending"
     )
     assert entries["LX0609-018"].phase_status == "phase_1_target"
     assert entries["LX0609-018"].active_criteria == (

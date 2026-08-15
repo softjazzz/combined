@@ -379,6 +379,26 @@ def test_exam_lab_rules_bind_current_visit_nondrug_orders() -> None:
     assert "inpat_nondrug_order" not in resolved
 
 
+def test_059_binds_only_event_order_and_course_decision_support_sources() -> None:
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v21"
+    expected_sources = (
+        "exam_master",
+        "exam_item_report",
+        "surgery_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "daily_course_record",
+        "senior_course_record",
+    )
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-059",))) == set(
+        expected_sources
+    )
+    contracts = {
+        item.rule_id: item for item in load_luxian_0609_rule_contracts()
+    }
+    assert contracts["LX0609-059"].applicable_documents == expected_sources
+
+
 def test_consultation_execution_rules_bind_evaluation_horizon() -> None:
     resolved = resolve_luxian_0609_decision_support_source_keys(
         ("LX0609-020", "LX0609-023")

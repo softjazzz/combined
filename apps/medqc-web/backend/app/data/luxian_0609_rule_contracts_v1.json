@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-rule-contracts-v1",
-  "definition_version": "lx0609-defined-scope-2026-08-15",
+  "definition_version": "lx0609-defined-scope-2026-08-15-r2",
   "defaults": {
     "allowed_final_states": [
       "compliant",
@@ -281,7 +281,7 @@
     },
     {
       "rule_id": "LX0609-025",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
       "execution_mode": "native_async",

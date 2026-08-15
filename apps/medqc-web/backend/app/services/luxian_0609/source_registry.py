@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v20"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v21"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -187,6 +187,7 @@ _REGISTRY_ENTRIES = (
         access_mode=_DERIVED,
         derived_from_source_keys=("exam_master", "exam_item_report"),
     ),
+    _entry("exam_master", access_mode=_BOUNDED),
     _entry("exam_item_report", access_mode=_BOUNDED),
     _entry("first_course_record", access_mode=_BOUNDED),
     _entry("handoff_record", access_mode=_BOUNDED),
@@ -248,7 +249,6 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
     _entry("admission_record_diagnosis", access_mode=_BOUNDED),
-    _entry("exam_master", access_mode=_BOUNDED),
     _entry("surgery_application", access_mode=_BOUNDED),
     _entry("preane_surveil_record", access_mode=_BOUNDED),
     _entry("postane_surveil_record", access_mode=_BOUNDED),
@@ -498,8 +498,13 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-059": (
-        "senior_course_record", "consultation_record", "labtest_master",
-        "labtest_item_report",
+        "exam_master",
+        "exam_item_report",
+        "surgery_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "daily_course_record",
+        "senior_course_record",
     ),
     "LX0609-063": ("discharge_record",),
     "LX0609-064": ("mr_surgery",),

@@ -27,8 +27,8 @@ def test_rule_master_is_the_complete_ordered_75_rule_scope():
         "contract_ready": 0,
         "pending_definition": 0,
     }
-    assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-08-15"
-    assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-08-15"
+    assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-08-15-r2"
+    assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-08-15-r2"
 
 
 @pytest.mark.unit
@@ -172,8 +172,25 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
     assert "会诊意见及执行情况" in entries["LX0609-020"].policy_summary
     assert "仅“遵嘱执行”" in entries["LX0609-023"].policy_summary
 
-    assert "不参与正式结论" in entries["LX0609-025"].policy_summary
-    assert "正式必填字段" in entries["LX0609-025"].pending_definition_note
+    implant = entries["LX0609-025"]
+    assert all(
+        field in implant.policy_summary
+        for field in ("名称", "种类", "规格或型号", "材质", "数量")
+    )
+    assert "条码不属于本规则必填字段" in implant.policy_summary
+    assert "病程仅辅助确认实际使用" in implant.policy_summary
+    assert "正式手术记录" in implant.policy_summary
+    assert "真实病例金标" in implant.pending_definition_note
+
+    treatment_order = entries["LX0609-059"]
+    assert all(
+        key in treatment_order.policy_summary
+        for key in ("order_id", "application_id", "event_code")
+    )
+    assert "禁止药名共现" in treatment_order.policy_summary
+    assert "最近时间猜测" in treatment_order.policy_summary
+    assert "影子核心已实现但尚未接入影子入口" in treatment_order.policy_summary
+    assert "真实病例金标" in treatment_order.pending_definition_note
     assert "院内绩效优先国家目录" in entries["LX0609-040"].policy_summary
     assert "未同时齐备" in entries["LX0609-044"].policy_summary
     assert "暂不执行" in entries["LX0609-049"].policy_summary

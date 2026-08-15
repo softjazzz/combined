@@ -1,7 +1,7 @@
 {
   "schema_version": "lx0609-rule-master-v1",
-  "master_version": "2026-08-15",
-  "definition_version": "lx0609-defined-scope-2026-08-15",
+  "master_version": "2026-08-15-r2",
+  "definition_version": "lx0609-defined-scope-2026-08-15-r2",
   "rule_set_key": "luxian_0609_qc_v1",
   "description": "泸县0609客户质控点唯一业务总表。active 表示规则已纳入客户工作台；是否参与当前正式结论由同版本 phase_scope 唯一决定。",
   "rules": [
@@ -203,8 +203,8 @@
       "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "永久性植入物继续由单次受控LLM提取事实；条码、名称、种类、规格或型号、材质、数量中哪些字段属于正式必填尚未完成最终冻结，本质控点在冻结前不参与正式结论。",
-      "pending_definition_note": "需院方确认永久性植入物正式必填字段、允许记录文书及条码例外。"
+      "policy_summary": "永久性植入物的正式必填字段冻结为名称、种类、规格或型号、材质、数量；条码不属于本规则必填字段。病程仅辅助确认实际使用，五字段只能核对本次正式手术记录。五字段核心已实现，真实病例金标验收前不参与正式结论。",
+      "pending_definition_note": "五字段口径已冻结；仍需完成多台手术、文书缺失及字段冲突的真实病例金标验收。"
     },
     {
       "rule_id": "LX0609-026",
@@ -476,7 +476,8 @@
       "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《医嘱》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "按实际诊疗事件逐项核对医嘱及病程，以order_id、application_id、event_code严格关联；禁止药名共现或最近时间猜测。影子核心已实现但尚未接入影子入口，真实病例金标验收前不参与正式结论。",
+      "pending_definition_note": "需完成多事件、多业务键冲突、医嘱动作与病程语义关联的真实病例金标验收。"
     },
     {
       "rule_id": "LX0609-060",
