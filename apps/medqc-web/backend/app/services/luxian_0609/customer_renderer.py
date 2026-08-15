@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from math import ceil
 import re
 from typing import Any, Callable, Mapping
 
@@ -1252,6 +1254,48 @@ _ANESTHESIA_VISIT_FIELD_LABELS = {
 }
 
 
+def _format_exact_elapsed_duration(
+    *,
+    started_at: Any,
+    finished_at: Any,
+    threshold_hours: Any,
+) -> str:
+    """按权威时间展示精确间隔，避免边界超时被小时小数四舍五入掩盖。"""
+
+    if not isinstance(started_at, str) or not isinstance(finished_at, str):
+        return ""
+    try:
+        elapsed_seconds = ceil(
+            (datetime.fromisoformat(finished_at) - datetime.fromisoformat(started_at))
+            .total_seconds()
+        )
+    except (TypeError, ValueError):
+        return ""
+    if elapsed_seconds < 0:
+        return ""
+    def duration_text(total_seconds: int) -> str:
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours:
+            if seconds:
+                return f"{hours}小时{minutes}分{seconds}秒"
+            return f"{hours}小时{minutes}分" if minutes else f"{hours}小时"
+        if minutes:
+            return f"{minutes}分{seconds}秒" if seconds else f"{minutes}分"
+        return f"{seconds}秒"
+
+    duration = duration_text(elapsed_seconds)
+    if (
+        isinstance(threshold_hours, (int, float))
+        and not isinstance(threshold_hours, bool)
+    ):
+        threshold_seconds = round(float(threshold_hours) * 3600)
+        if elapsed_seconds > threshold_seconds:
+            overdue = duration_text(elapsed_seconds - threshold_seconds)
+            duration = f"{duration}（超时{overdue}）"
+    return duration
+
+
 def customer_finding_from_controlled_facts(
     *, rule_id: str, facts: Mapping[str, Any] | None
 ) -> str:
@@ -1908,9 +1952,14 @@ def customer_finding_from_controlled_facts(
                 f"（记录时间 {facts.get('record_time')}；出院时间 {facts.get('discharge_time')}），"
                 "符合出院后 24 小时内完成要求。"
             )
+        exact_duration = _format_exact_elapsed_duration(
+            started_at=facts.get("discharge_time"),
+            finished_at=facts.get("record_time"),
+            threshold_hours=facts.get("threshold_hours", 24),
+        )
         return (
             f"出院时间 {facts.get('discharge_time')}，出院记录时间 {facts.get('record_time')}，"
-            f"实际间隔 {interval} 小时，规定时限 24 小时。"
+            f"实际间隔 {exact_duration or f'{interval} 小时'}，规定时限 24 小时。"
         )
 
     if rule_id == "LX0609-062" and kind == "discharge_medication_completeness_check":

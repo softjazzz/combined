@@ -481,6 +481,24 @@ def test_transfusion_controlled_facts_render_customer_readable_finding(
     assert customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts) == expected
 
 
+def test_061_boundary_overdue_duration_does_not_round_to_threshold() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-061",
+        facts={
+            "verification_kind": "discharge_record_timeliness_check",
+            "discharge_time": "2026-06-09 10:00:00",
+            "record_time": "2026-06-10 10:00:01",
+            "threshold_hours": 24,
+            "actual_interval_hours": 24.0,
+        },
+    )
+
+    assert finding == (
+        "出院时间 2026-06-09 10:00:00，出院记录时间 2026-06-10 10:00:01，"
+        "实际间隔 24小时0分1秒（超时1秒），规定时限 24 小时。"
+    )
+
+
 def test_020_customer_finding_lists_missing_recommendations_by_episode_and_action_type():
     facts = {
         "verification_kind": "consultation_execution_relation_check",
