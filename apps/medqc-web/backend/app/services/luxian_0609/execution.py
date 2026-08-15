@@ -41,6 +41,7 @@ from .executor_registry import (
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .rule_decision_settings import resolve_typed_decision_rule_ids
 from .treatment_order_consistency_shadow import run_luxian_0609_059_shadow
+from .implant_information_shadow import run_luxian_0609_025_shadow
 from .native_execution import (
     build_luxian_0609_native_technical_results,
     execute_luxian_0609_native_rules,
@@ -127,6 +128,7 @@ class Luxian0609ExecutionContext:
     reduced_decisions: tuple[ReducedRuleDecision, ...] = ()
     customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     treatment_order_consistency_shadow: Mapping[str, Any] | None = None
+    implant_information_shadow: Mapping[str, Any] | None = None
 
 
 def _build_execution_usage_attribution(
@@ -895,6 +897,16 @@ async def prepare_luxian_0609_execution(
         evidence_materials=evidence_materials,
         llm_client=llm_client,
     )
+    implant_information_shadow = await run_luxian_0609_025_shadow(
+        enabled=bool(getattr(settings, "LUXIAN_0609_025_SHADOW_ENABLED", False)),
+        selected_rule_ids=package_plan.selected_rule_ids,
+        institute_id=str(institute_id or ""),
+        patient_id=str(patient_id or ""),
+        visit_id=str(visit_id or ""),
+        evidence_snapshot=evidence_snapshot,
+        evidence_materials=evidence_materials,
+        llm_client=llm_client,
+    )
 
     return executable_rules, Luxian0609ExecutionContext(
         enabled=True,
@@ -921,6 +933,7 @@ async def prepare_luxian_0609_execution(
         reduced_decisions=reduced_decisions,
         customer_display_facts=tuple(native_customer_display_facts),
         treatment_order_consistency_shadow=treatment_order_consistency_shadow,
+        implant_information_shadow=implant_information_shadow,
     )
 
 
@@ -945,6 +958,10 @@ def attach_luxian_0609_execution_metadata(
     if context.treatment_order_consistency_shadow is not None:
         orchestrated["luxian_0609_059_shadow"] = dict(
             context.treatment_order_consistency_shadow
+        )
+    if context.implant_information_shadow is not None:
+        orchestrated["luxian_0609_025_shadow"] = dict(
+            context.implant_information_shadow
         )
 
 

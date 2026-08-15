@@ -179,6 +179,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
     # 059事件—医嘱—病程专项影子验证；不进入正式结果与计费汇总。
     LUXIAN_0609_059_SHADOW_ENABLED: bool = False
+    # 025植入物五字段专项影子验证；不进入正式结果与计费汇总。
+    LUXIAN_0609_025_SHADOW_ENABLED: bool = False
     # LX0609 独立准生产 API；默认关闭，人工验收后才允许显式开启。
     LUXIAN_0609_PREPRODUCTION_API_ENABLED: bool = False
 
