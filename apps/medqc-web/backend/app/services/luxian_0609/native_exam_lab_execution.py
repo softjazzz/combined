@@ -503,13 +503,16 @@ def _order_based_exam_reason_outcome(
         # 路径；不能仅因缺少订单行便认定“病程有检查、无医嘱”。
         return None
 
-    # 字段尚未投影到历史任务时维持既有行为：不能因为升级后第一次读取到
-    # 旧快照就凭空制造关联失败。只有两端均有新合同业务键时才进入本闭环。
-    if not exam_rows or not all(
-        _clean(row.get("order_id")) and _clean(row.get("exam_id"))
-        for row in exam_rows
-    ) or not all(_clean(row.get("order_id")) for _time, row in orders):
-        return _legacy_order_based_exam_reason_outcome(orders=orders, course_rows=course_rows)
+    # 已识别到目标医嘱或检查主表，但其正式业务键缺失时，不能回退到仅按
+    # “检查前原因”判定的旧路径。此时无法核实同一次诊疗事件，只能资料待核实。
+    if any(not _clean(row.get("order_id")) for _time, row in orders) or (
+        exam_rows
+        and any(
+            not _clean(row.get("order_id")) or not _clean(row.get("exam_id"))
+            for row in exam_rows
+        )
+    ):
+        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
 
     orders_by_id: dict[str, tuple[datetime | None, Mapping[str, Any]]] = {}
     for order_time, order in orders:
@@ -628,34 +631,6 @@ def _order_based_exam_reason_outcome(
         ):
             return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_reason_missing")
     return _ExamLabOutcome("LX0609-010", "compliant", "exam_order_reason_recorded")
-
-
-def _legacy_order_based_exam_reason_outcome(
-    *,
-    orders: Sequence[tuple[datetime | None, Mapping[str, Any]]],
-    course_rows: Sequence[Mapping[str, Any]],
-) -> _ExamLabOutcome | None:
-    """保留缺少新业务键的历史快照行为，只核对原有“检查前原因”事实。"""
-
-    if not orders:
-        return None
-    order_time = min((time for time, _row in orders if time is not None), default=None)
-    if order_time is None:
-        return _ExamLabOutcome(
-            "LX0609-010", "data_gap", "authoritative_order_time_missing"
-        )
-    reason_recorded = any(
-        (record_time := _parse_current_visit_time(authoritative_document_time_value(row)))
-        is not None
-        and record_time <= order_time
-        and _REASON_COURSE_PATTERN.search(_row_text(row))
-        for row in course_rows
-    )
-    return _ExamLabOutcome(
-        "LX0609-010",
-        "compliant" if reason_recorded else "non_compliant",
-        "exam_order_reason_recorded" if reason_recorded else "exam_order_reason_missing",
-    )
 
 
 def _order_exam_association_summary(

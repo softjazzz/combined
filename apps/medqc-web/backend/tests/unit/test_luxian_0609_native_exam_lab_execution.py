@@ -1313,6 +1313,7 @@ def test_010_accepts_pre_order_reason_from_first_course_record_datetime():
         {
             CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
                 {
+                    "order_id": "ORD-1",
                     "order_name": "颅脑螺旋CT平扫",
                     "order_status": "新开",
                     "prescribed_datetime": "2026-07-08 09:05:49",
@@ -1540,6 +1541,68 @@ async def test_010_public_native_uses_order_exam_report_contract(
     assert facts["verification_kind" if expected_state == "compliant" else "failure_kind"] == expected_failure_kind
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("exam_rows", "order_rows"),
+    (
+        (
+            (),
+            (
+                {
+                    "order_id": "",
+                    "order_name": "头颅CT平扫",
+                    "order_status": "新开",
+                    "prescribed_datetime": "2026-07-07 08:00:00",
+                },
+            ),
+        ),
+        (
+            (
+                {
+                    "exam_id": "",
+                    "order_id": "ORD-1",
+                    "exam_name": "头颅CT平扫",
+                    "exam_time": "2026-07-07 09:00:00",
+                },
+            ),
+            (
+                {
+                    "order_id": "ORD-1",
+                    "order_name": "头颅CT平扫",
+                    "order_status": "新开",
+                    "prescribed_datetime": "2026-07-07 08:00:00",
+                },
+            ),
+        ),
+    ),
+)
+async def test_010_missing_required_business_key_fails_closed_without_legacy_reason_fallback(
+    monkeypatch,
+    exam_rows,
+    order_rows,
+):
+    """010 的医嘱或检查业务键缺失时，不能借旧“检查前原因”路径判合规。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=exam_rows,
+        order_rows=order_rows,
+        course_rows=(
+            {
+                "record_time": "2026-07-07 07:30:00",
+                "record_content": "因头部外伤拟行头颅CT明确颅脑损伤。",
+            },
+        ),
+    )
+
+    assert decision.final_state.value == "data_gap"
+    assert decision.reason_code == "association_failed"
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "association_failed"
+    assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
 
