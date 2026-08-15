@@ -25,6 +25,7 @@ from app.services.luxian_0609.preproduction_bundle_reader import (
 from app.services.luxian_0609.preproduction_runner import (
     run_luxian_0609_preproduction,
 )
+from app.services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
 from scripts.build_luxian_0609_golden_ledger import (
     API_BATCH_SCHEMA_VERSION,
@@ -74,26 +75,26 @@ class BenchmarkContractError(ValueError):
 
 def _rule_attestations() -> tuple[tuple[str, ...], dict[str, str]]:
     all_contracts = tuple(load_luxian_0609_rule_contracts())
-    expected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
-    expected_set = set(expected)
-    contracts = tuple(
-        item
-        for item in all_contracts
-        if str(getattr(item, "rule_id", "") or "") in expected_set
+    all_rule_ids = tuple(
+        str(getattr(item, "rule_id", "") or "") for item in all_contracts
     )
-    rule_ids = tuple(str(getattr(item, "rule_id", "") or "") for item in contracts)
-    if rule_ids != expected:
-        raise BenchmarkContractError(
-            "LX0609 benchmark catalog is missing the ordered base 49 rules"
-        )
+    rule_ids, _withheld_rule_ids = partition_luxian_0609_rule_scope(all_rule_ids)
+    contracts_by_rule_id = {str(item.rule_id): item for item in all_contracts}
+    if (
+        not rule_ids
+        or len(rule_ids) != len(set(rule_ids))
+        or any(rule_id not in contracts_by_rule_id for rule_id in rule_ids)
+    ):
+        raise BenchmarkContractError("invalid LX0609 executable rule scope")
     executor_types: dict[str, str] = {}
-    for contract in contracts:
+    for rule_id in rule_ids:
+        contract = contracts_by_rule_id[rule_id]
         authority = str(getattr(contract, "decision_authority", "") or "").strip()
         executor_type = _AUTHORITY_EXECUTOR_TYPES.get(authority)
         if executor_type is None:
             raise BenchmarkContractError("invalid LX0609 decision authority")
-        executor_types[str(contract.rule_id)] = executor_type
-    if len(executor_types) != 49:
+        executor_types[rule_id] = executor_type
+    if len(executor_types) != len(rule_ids):
         raise BenchmarkContractError("invalid LX0609 decision authority attestation")
     return rule_ids, executor_types
 
@@ -103,7 +104,7 @@ def _select_rule_attestations(
 ) -> tuple[tuple[str, ...], dict[str, str]]:
     """校验显式子集并按目录规范顺序返回。
 
-    ``None`` 是唯一的全49规则语义；空集或非规范规则均在读取病例前
+    ``None`` 是唯一的全量可执行规则语义；空集或非规范规则均在读取病例前
     fail-closed。这样小范围 Golden 候选不会伪装成全量复跑。
     """
 
@@ -171,7 +172,10 @@ def _runtime_identity(
         raise BenchmarkContractError("stale or invalid runtime manifest")
     policy_version = str(rule_set.get("version") or "").strip()
     rule_ids = tuple(str(item or "").strip() for item in rule_set.get("rule_ids") or ())
-    expected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    expected = tuple(
+        str(getattr(item, "rule_id", "") or "")
+        for item in load_luxian_0609_rule_contracts()
+    )
     if (
         not _SAFE_CODE_RE.fullmatch(policy_version)
         or rule_ids != expected
@@ -553,8 +557,9 @@ async def build_benchmark_batch(
         runtime_manifest,
         observed_git_head=observed_git_head,
     )
+    full_rule_ids, _ = _rule_attestations()
     selected_rule_ids, executor_types = _select_rule_attestations(selected_rule_ids)
-    is_selected_subset = len(selected_rule_ids) != 49
+    is_selected_subset = selected_rule_ids != full_rule_ids
     rule_set_digest = canonical_digest(
         [
             {
@@ -735,7 +740,7 @@ async def build_benchmark_batch(
     batch.update(runtime_identity)
     batch["sample_type"] = "real"
     if is_selected_subset:
-        # 子集必须在输出中显式标明，禁止作为49点全量基准引用。
+        # 子集必须在输出中显式标明，禁止作为全量可执行规则基准引用。
         batch["rule_scope"] = {
             "mode": "selected_subset",
             "selected_rule_ids": list(selected_rule_ids),
@@ -805,7 +810,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--rule-id",
         action="append",
         default=None,
-        help="可重复：仅运行指定规范LX0609规则；未指定时严格运行全49条",
+        help="可重复：仅运行指定规范LX0609规则；未指定时运行全部可执行规则",
     )
     return parser.parse_args(argv)
 
