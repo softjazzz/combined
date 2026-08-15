@@ -1755,7 +1755,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
 
 
 @pytest.mark.asyncio
-async def test_public_entry_keeps_020_023_compatibility_and_runs_021_022_natively(monkeypatch):
+async def test_public_entry_rejects_020_023_compatibility_before_legacy_lookup(monkeypatch):
     selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
     captured: dict[str, object] = {}
 
@@ -1811,7 +1811,8 @@ async def test_public_entry_keeps_020_023_compatibility_and_runs_021_022_nativel
 
     monkeypatch.setattr(service, "get_rule_by_id", _legacy_lookup)
 
-    result = await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={
             "scene": "running",
             "visit_id": "safe-visit",
@@ -1823,12 +1824,8 @@ async def test_public_entry_keeps_020_023_compatibility_and_runs_021_022_nativel
         use_execution_cache=False,
     )
 
-    assert captured == {
-        "prepared_rule_ids": ["LX-017", "CL-250", "CL-248", "CL-071", "CL-181", "SC-081"],
-        "selected_customer_rule_ids": tuple(selected),
-    }
-    assert legacy_lookups == ["LX-017", "CL-250", "CL-248", "CL-071", "CL-181", "SC-081"]
-    assert [item["rule_id"] for item in result["evaluation_results"]] == selected
+    assert captured == {}
+    assert legacy_lookups == []
 
 
 @pytest.mark.asyncio
@@ -2109,7 +2106,7 @@ async def test_snapshot_sidecar_requires_three_coordinates_before_provider(
 
 
 @pytest.mark.asyncio
-async def test_public_entry_loads_only_disabled_family_rollback_mappings(monkeypatch):
+async def test_public_entry_rejects_disabled_family_before_legacy_lookup(monkeypatch):
     selected = ["LX0609-001", "LX0609-041", "LX0609-042"]
     lookups: list[str] = []
     captured: dict[str, object] = {}
@@ -2159,7 +2156,8 @@ async def test_public_entry_loads_only_disabled_family_rollback_mappings(monkeyp
         ),
     )
 
-    await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={
             "scene": "running",
             "visit_id": "safe-visit",
@@ -2171,8 +2169,8 @@ async def test_public_entry_loads_only_disabled_family_rollback_mappings(monkeyp
         use_execution_cache=False,
     )
 
-    assert lookups == ["SC-133", "LXE-52", "SC-134"]
-    assert captured["prepared_rule_ids"] == lookups
+    assert lookups == []
+    assert captured == {}
 
 
 @pytest.mark.asyncio
@@ -2396,7 +2394,7 @@ async def test_native_029_triple_flags_bypass_legacy_raw_rules_at_service_entry(
         ),
     ],
 )
-async def test_native_consultation_public_entry_flag_controls_native_batch_and_legacy_fallback(
+async def test_native_consultation_public_entry_rejects_compatibility_for_both_flag_states(
     monkeypatch, enabled, expected_dispatch, expected_calls, expected_tokens,
     expected_legacy_lookups,
 ):
@@ -2507,7 +2505,8 @@ async def test_native_consultation_public_entry_flag_controls_native_batch_and_l
     monkeypatch.setattr(service, "get_rule_by_id", _legacy_lookup)
     monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
 
-    result = await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={
             "scene": "running",
             "institute_id": "safe-inst",
@@ -2521,17 +2520,9 @@ async def test_native_consultation_public_entry_flag_controls_native_batch_and_l
         use_execution_cache=False,
     )
 
-    assert dispatched == expected_dispatch
-    assert consultation_calls == expected_calls
-    assert legacy_lookups == expected_legacy_lookups
-    assert [item["rule_id"] for item in result["evaluation_results"]] == [
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-023",
-    ]
-    assert result["token_usage"]["total_tokens"] == expected_tokens
-    assert result["executor_breakdown"].get("llm", 0) == (1 if enabled else 0)
+    assert dispatched == []
+    assert consultation_calls == []
+    assert legacy_lookups == []
 
 
 @pytest.mark.asyncio
@@ -2643,7 +2634,7 @@ async def test_native_exam_lab_public_entry_bypasses_four_legacy_rules_and_keeps
 
 
 @pytest.mark.asyncio
-async def test_native_exam_lab_flag_off_preserves_exact_legacy_dispatch(monkeypatch):
+async def test_native_exam_lab_flag_off_rejects_legacy_dispatch(monkeypatch):
     selected = ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"]
     mappings = {
         "LX0609-010": ["LXE-23"],
@@ -2691,7 +2682,8 @@ async def test_native_exam_lab_flag_off_preserves_exact_legacy_dispatch(monkeypa
     )
     monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
 
-    await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={
             "scene": "running",
             "visit_id": "safe-visit",
@@ -2703,7 +2695,7 @@ async def test_native_exam_lab_flag_off_preserves_exact_legacy_dispatch(monkeypa
         use_execution_cache=False,
     )
 
-    assert dispatched == [["LXE-23", "SC-114", "LXE-24", "LX-031"]]
+    assert dispatched == []
 
 
 @pytest.mark.asyncio
@@ -2885,7 +2877,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
 
 
 @pytest.mark.asyncio
-async def test_native_transfusion_flag_off_preserves_exact_legacy_dispatch(monkeypatch):
+async def test_native_transfusion_flag_off_rejects_legacy_dispatch(monkeypatch):
     selected = [f"LX0609-{number:03d}" for number in range(41, 50)]
     mappings = {
         "LX0609-041": ["SC-133", "LXE-52"],
@@ -2937,7 +2929,8 @@ async def test_native_transfusion_flag_off_preserves_exact_legacy_dispatch(monke
     )
     monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
 
-    await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={
             "scene": "running",
             "visit_id": "safe-visit",
@@ -2949,18 +2942,7 @@ async def test_native_transfusion_flag_off_preserves_exact_legacy_dispatch(monke
         use_execution_cache=False,
     )
 
-    assert dispatched == [[
-        "SC-133",
-        "LXE-52",
-        "SC-134",
-        "SC-073",
-        "SC-138",
-        "SC-074",
-        "LX-018",
-        "CL-255",
-        "CL-256",
-        "CL-208",
-    ]]
+    assert dispatched == []
 
 
 @pytest.mark.asyncio
@@ -3086,7 +3068,7 @@ async def test_native_tumor_pathology_public_entry_bypasses_legacy_rules_and_kee
 
 
 @pytest.mark.asyncio
-async def test_native_tumor_pathology_flag_off_preserves_exact_legacy_dispatch(monkeypatch):
+async def test_native_tumor_pathology_flag_off_rejects_legacy_dispatch(monkeypatch):
     selected = ["LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"]
     mappings = {
         "LX0609-013": ["SC-037", "SC-099", "SC-114"],
@@ -3139,7 +3121,8 @@ async def test_native_tumor_pathology_flag_off_preserves_exact_legacy_dispatch(m
     )
     monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
 
-    await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={
             "scene": "running",
             "visit_id": "safe-visit",
@@ -3151,15 +3134,7 @@ async def test_native_tumor_pathology_flag_off_preserves_exact_legacy_dispatch(m
         use_execution_cache=False,
     )
 
-    assert dispatched == [[
-        "SC-037",
-        "SC-099",
-        "SC-114",
-        "SC-034",
-        "SC-146",
-        "SC-116",
-        "SC-124",
-    ]]
+    assert dispatched == []
 
 
 @pytest.mark.asyncio
@@ -3290,7 +3265,7 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
 
 
 @pytest.mark.asyncio
-async def test_remaining_native_family_flags_off_preserve_exact_legacy_dispatch(monkeypatch):
+async def test_remaining_native_family_flags_off_reject_legacy_dispatch(monkeypatch):
     selected = [
         "LX0609-003", "LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016",
         "LX0609-017", "LX0609-018", "LX0609-024", "LX0609-025", "LX0609-028",
@@ -3344,27 +3319,20 @@ async def test_remaining_native_family_flags_off_preserve_exact_legacy_dispatch(
     monkeypatch.setattr(service, "get_rule_by_id", lambda rule_id: {"rule_id": rule_id})
     monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
 
-    await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={"scene": "running", "visit_id": "safe-visit", "structured_context": {"documents": {}}},
         rule_ids=selected,
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         use_execution_cache=False,
     )
 
-    expected: list[str] = []
-    pending_rule_ids = {"LX0609-024", "LX0609-025", "LX0609-028"}
-    for rule_id in selected:
-        if rule_id in pending_rule_ids:
-            continue
-        for raw_id in mappings[rule_id]:
-            if raw_id not in expected:
-                expected.append(raw_id)
-    assert dispatched == [expected]
+    assert dispatched == []
 
 
 @pytest.mark.asyncio
-async def test_public_bundle_entry_accepts_exact_lx0609_ids_and_hides_shared_legacy_scope(monkeypatch):
-    """公共入口只收客户 ID；共享 SC-099 不得额外带出 019/024。"""
+async def test_public_bundle_entry_rejects_customer_id_when_its_family_is_not_native(monkeypatch):
+    """正式客户入口不得因关闭规则族而转入共享旧规则。"""
 
     settings = SimpleNamespace(
         LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
@@ -3413,7 +3381,8 @@ async def test_public_bundle_entry_accepts_exact_lx0609_ids_and_hides_shared_leg
     monkeypatch.setattr(service, "get_rule_by_id", _get_rule)
     monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
 
-    result = await service.evaluate_running_final_bundle_input(
+    with pytest.raises(ValueError, match="LX0609"):
+        await service.evaluate_running_final_bundle_input(
         bundle={
             "scene": "running",
             "institute_id": "safe-inst",
@@ -3427,9 +3396,8 @@ async def test_public_bundle_entry_accepts_exact_lx0609_ids_and_hides_shared_leg
         use_execution_cache=False,
     )
 
-    assert looked_up == ["SC-037", "SC-099", "SC-114"]
-    assert dispatched == [["SC-037", "SC-099", "SC-114"]]
-    assert [item["rule_id"] for item in result["evaluation_results"]] == ["LX0609-013"]
+    assert looked_up == []
+    assert dispatched == []
 
 
 @pytest.mark.asyncio
