@@ -2856,7 +2856,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-049"
     )
     assert rule_049["status"] == "not_executed"
-    assert rule_049["findings"] == ["本质控点当前不参与正式结论，未生成合规或问题判定。"]
+    assert rule_049["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
     assert raw_body_marker not in repr(result)
 
 

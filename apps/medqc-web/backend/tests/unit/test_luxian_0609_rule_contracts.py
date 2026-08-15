@@ -43,6 +43,9 @@ def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> 
     assert json.loads(_CONTRACT_PATH.read_text(encoding="utf-8"))["definition_version"] == (
         "lx0609-defined-scope-2026-08-15"
     )
+    assert all(
+        "not_executed" in contract.allowed_final_states for contract in contracts
+    )
 
 
 @pytest.mark.unit

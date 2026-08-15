@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -9,6 +11,18 @@ from sqlalchemy.exc import OperationalError
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.luxian_0609.customer_rule_package import LUXIAN_0609_RULE_SET_KEY
+from app.services.luxian_0609.execution import (
+    aggregate_luxian_0609_orchestrated_results,
+    prepare_luxian_0609_execution,
+)
+from app.services.luxian_0609.native_package import (
+    load_luxian_0609_dependency_inventory,
+    resolve_package_entry_execution_rule_ids,
+)
+from app.services.luxian_0609.rule_decision_settings import (
+    RULE_DECISION_ROLLOUT_GROUPS,
+)
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 
 
@@ -816,6 +830,112 @@ def test_writer_marks_envelope_as_canonical_straight_through():
     assert envelope["items"][0]["reason_code"] == "customer_explanation_incomplete"
     assert envelope["items"][0]["is_compliant"] is None
     assert envelope["items"][0]["conclusion"] == "引擎结论原文"
+
+
+def test_pending_rule_conclusion_remains_customer_text_through_canonical_delivery(
+    monkeypatch,
+):
+    settings_values = {
+        flag_name: True
+        for flag_name, _ in RULE_DECISION_ROLLOUT_GROUPS
+        if flag_name is not None
+    }
+    settings_values.update(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+    )
+    inventory = load_luxian_0609_dependency_inventory()
+    prepared_rules = [
+        {"rule_id": rule_id}
+        for rule_id in resolve_package_entry_execution_rule_ids(
+            inventory=inventory,
+            selected_rule_ids=("LX0609-049",),
+        )
+    ]
+    executable_rules, context = asyncio.run(
+        prepare_luxian_0609_execution(
+            rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+            prepared_rules=prepared_rules,
+            visit_id="visit-1",
+            medical_text="",
+            evidence_payload=None,
+            llm_client=object(),
+            settings=SimpleNamespace(**settings_values),
+            selected_customer_rule_ids=("LX0609-049",),
+        )
+    )
+    assert executable_rules == []
+    aggregated = aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []},
+        context=context,
+        visit_id="visit-1",
+        model_name="unused",
+        evidence_payload=None,
+    )
+    delivered_item = {
+        **aggregated["results"][0],
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+    }
+
+    write_session = _WriteSession()
+    service = CustomQCWorkspaceService()
+    service._write_record_result_envelopes(
+        write_session,
+        job_row={
+            "id": "job-current",
+            "created_by": "reviewer-a",
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                    "record_refs": [
+                        {
+                            "institute_id": "inst-1",
+                            "patient_id": "patient-1",
+                            "visit_id": "visit-1",
+                        }
+                    ],
+                    "scoped_customer_rule_ids": ["LX0609-049"],
+                }
+            ),
+        },
+        items=[delivered_item],
+        now=datetime(2026, 8, 15, 10, 0, 0),
+    )
+    envelope_json = write_session.statements[-1].compile().params["envelope_json"]
+    read_session = _ReadSession(
+        [
+            [_selected_job()],
+            [{"envelope_json": envelope_json}],
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: read_session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService,
+        "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+
+    dto = service.build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        expected_rule_ids=["LX0609-049"],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert dto["state"] == "ready"
+    assert dto["items"][0]["status"] == "not_executed"
+    assert dto["items"][0]["conclusion"] == (
+        "本质控点当前不参与正式结论，未生成合规或问题判定。"
+    )
+    assert isinstance(dto["items"][0]["conclusion"], str)
 
 
 @pytest.mark.parametrize(

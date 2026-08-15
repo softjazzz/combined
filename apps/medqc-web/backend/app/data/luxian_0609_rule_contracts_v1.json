@@ -8,7 +8,8 @@
       "not_applicable",
       "data_gap",
       "technical_error",
-      "evaluation_unknown"
+      "evaluation_unknown",
+      "not_executed"
     ],
     "result_contract_version": "lx0609-native-result-v1",
     "privacy_contract_version": "lx0609-customer-safe-v1"

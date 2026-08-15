@@ -32,6 +32,7 @@ ALLOWED_FINAL_STATES = (
     "data_gap",
     "technical_error",
     "evaluation_unknown",
+    "not_executed",
 )
 _DECISION_AUTHORITIES = frozenset({"program_only", "program_then_optional_llm"})
 _SOURCE_CONTRACT_STATES = frozenset({"legacy_projection_v1", "typed_shadow_v1"})

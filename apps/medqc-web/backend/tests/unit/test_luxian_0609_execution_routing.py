@@ -210,5 +210,5 @@ def test_public_execution_returns_controlled_not_executed_for_pending_rule() -> 
     result = aggregated["results"][0]
     assert result["rule_id"] == "LX0609-049"
     assert result["status"] == "not_executed"
-    assert result["findings"] == ["本质控点当前不参与正式结论，未生成合规或问题判定。"]
+    assert result["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
     assert result["suggestion"] == "待院方确认并发布业务口径后再启用本质控点。"

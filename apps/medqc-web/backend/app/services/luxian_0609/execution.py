@@ -189,7 +189,7 @@ def _build_phase_not_executed_results(
             "rule_id": str(rule_id).strip().upper(),
             "status": "not_executed",
             "is_compliant": None,
-            "findings": ["本质控点当前不参与正式结论，未生成合规或问题判定。"],
+            "findings": "本质控点当前不参与正式结论，未生成合规或问题判定。",
             "evidence": [],
             "suggestion": "待院方确认并发布业务口径后再启用本质控点。",
             "confidence": 0.0,
