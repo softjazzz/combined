@@ -1136,6 +1136,61 @@ async def test_071_missing_change_time_reports_exact_gap_without_hiding_records(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("missing_time_source", ["handoff_record", "handover_record"])
+async def test_071_existing_handoff_source_without_authoritative_time_is_data_gap(
+    missing_time_source: str,
+) -> None:
+    source_rows = {
+        "handoff_record": ({
+            "document_id": "HANDOFF-071",
+            "record_time": "2026-07-01 07:50:00",
+        },),
+        "handover_record": ({
+            "document_id": "HANDOVER-071",
+            "record_time": "2026-07-01 14:00:00",
+        },),
+    }
+    source_rows[missing_time_source] = ({
+        "document_id": f"{missing_time_source.upper()}-NO-TIME-071",
+    },)
+
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": ({
+                "change_datetime": "2026-07-01 08:00:00",
+            },),
+            **source_rows,
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_truly_empty_handoff_source_is_non_compliant() -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": ({
+                "change_datetime": "2026-07-01 08:00:00",
+            },),
+            "handoff_record": (),
+            "handover_record": ({
+                "document_id": "HANDOVER-071",
+                "record_time": "2026-07-01 14:00:00",
+            },),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_071_uses_explicit_physician_change_order_when_event_table_is_empty() -> None:
     result, reduced = await _evaluate(
         "LX0609-071",
@@ -3263,6 +3318,64 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
     assert canonical["status"] == "non_compliant"
     assert "customer_evidence" not in canonical
     assert "source_document_refs" not in canonical["customer_display_facts"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_067_existing_course_without_authoritative_time_is_data_gap() -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "daily_course_record": ({
+                "document_id": "DAILY-NO-TIME-067",
+                "record_content": "出院前病程记录",
+            },),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_067_valid_window_course_wins_over_another_course_without_time() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "daily_course_record": (
+                {
+                    "document_id": "DAILY-NO-TIME-067",
+                    "record_content": "缺少权威记录时间",
+                },
+                {
+                    "document_id": "DAILY-WINDOW-067",
+                    "record_time": "2026-07-02 09:00:00",
+                },
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-067",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert canonical["customer_evidence"] == [{
+        "source_type": "daily_course_record",
+        "source_document_id": "DAILY-WINDOW-067",
+    }]
     assert result.llm_call_count == result.total_tokens == 0
 
 

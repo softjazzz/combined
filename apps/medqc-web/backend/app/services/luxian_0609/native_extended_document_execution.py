@@ -2099,6 +2099,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     (discharge_time - timedelta(days=1)).date(),
                 }
                 if rule_id == "LX0609-067":
+                    course_rows = (*daily_rows, *senior_rows)
                     matched_course_rows = tuple(
                         (source_key, row)
                         for source_key, rows in (
@@ -2110,6 +2111,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                         and _row_time(row).date() in valid_dates
                     )
                     present = bool(matched_course_rows)
+                    course_time_missing = any(
+                        _row_time(row) is None for row in course_rows
+                    )
                     source_document_refs: list[dict[str, str]] = []
                     seen_document_refs: set[tuple[str, str]] = set()
                     for source_key, row in matched_course_rows:
@@ -2155,6 +2159,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     final_state, reason_code = (
                         "data_gap",
                         daily_error or senior_error,
+                    )
+                elif (
+                    rule_id == "LX0609-067"
+                    and not present
+                    and course_time_missing
+                ):
+                    final_state, reason_code = (
+                        "data_gap",
+                        "authoritative_time_missing",
                     )
                 else:
                     final_state = "compliant" if present else "non_compliant"
@@ -2418,44 +2431,59 @@ async def execute_luxian_0609_native_extended_document_rules(
                         key=lambda item: item[0],
                         default=None,
                     )
-                    compliant = (
-                        selected_handoff is not None
-                        and selected_handover is not None
-                        and selected_handover[0]
-                        <= change_time + timedelta(hours=24)
+                    selected_source_time_missing = (
+                        selected_handoff is None
+                        and bool(handoff_rows)
+                        and any(_row_time(row) is None for row in handoff_rows)
+                    ) or (
+                        selected_handover is None
+                        and bool(handover_rows)
+                        and any(_row_time(row) is None for row in handover_rows)
                     )
-                    source_document_refs = []
-                    for source_key, selected in (
-                        ("handoff_record", selected_handoff),
-                        ("handover_record", selected_handover),
-                    ):
-                        if selected is None:
-                            continue
-                        selected_document_id = _clean(
-                            selected[1].get("document_id")
-                            or selected[1].get("id")
+                    if selected_source_time_missing:
+                        final_state, reason_code = (
+                            "data_gap",
+                            "authoritative_time_missing",
                         )
-                        if selected_document_id:
-                            source_document_refs.append(
-                                {
-                                    "source_type": source_key,
-                                    "source_document_id": selected_document_id,
-                                }
+                    else:
+                        compliant = (
+                            selected_handoff is not None
+                            and selected_handover is not None
+                            and selected_handover[0]
+                            <= change_time + timedelta(hours=24)
+                        )
+                        source_document_refs = []
+                        for source_key, selected in (
+                            ("handoff_record", selected_handoff),
+                            ("handover_record", selected_handover),
+                        ):
+                            if selected is None:
+                                continue
+                            selected_document_id = _clean(
+                                selected[1].get("document_id")
+                                or selected[1].get("id")
                             )
-                    final_state = "compliant" if compliant else "non_compliant"
-                    reason_code = (
-                        "requirement_satisfied"
-                        if compliant
-                        else "requirement_violated"
-                    )
-                    display.append((rule_id, {
-                        "verification_kind": "physician_handoff_timeliness_check",
-                        "change_time": change_time.isoformat(sep=" "),
-                        "handoff_times": [value.isoformat(sep=" ") for value in handoff_times],
-                        "handover_times": [value.isoformat(sep=" ") for value in handover_times],
-                        "handover_threshold_hours": 24,
-                        "source_document_refs": source_document_refs,
-                    }))
+                            if selected_document_id:
+                                source_document_refs.append(
+                                    {
+                                        "source_type": source_key,
+                                        "source_document_id": selected_document_id,
+                                    }
+                                )
+                        final_state = "compliant" if compliant else "non_compliant"
+                        reason_code = (
+                            "requirement_satisfied"
+                            if compliant
+                            else "requirement_violated"
+                        )
+                        display.append((rule_id, {
+                            "verification_kind": "physician_handoff_timeliness_check",
+                            "change_time": change_time.isoformat(sep=" "),
+                            "handoff_times": [value.isoformat(sep=" ") for value in handoff_times],
+                            "handover_times": [value.isoformat(sep=" ") for value in handover_times],
+                            "handover_threshold_hours": 24,
+                            "source_document_refs": source_document_refs,
+                        }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
