@@ -1,4 +1,9 @@
-from app.services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
+from app.services.luxian_0609 import phase_scope as phase_scope_module
+from app.services.luxian_0609.phase_scope import (
+    Luxian0609PhaseScopeEntry,
+    load_luxian_0609_phase_scope,
+    partition_luxian_0609_rule_scope,
+)
 
 
 def test_phase_scope_freezes_all_75_customer_rules() -> None:
@@ -8,20 +13,26 @@ def test_phase_scope_freezes_all_75_customer_rules() -> None:
     assert tuple(entry.rule_id for entry in entries) == tuple(
         f"LX0609-{index:03d}" for index in range(1, 76)
     )
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 65
-    assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 1
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 9
+    assert {entry.definition_version for entry in entries} == {
+        "lx0609-defined-scope-2026-08-15"
+    }
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 68
+    assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 7
     assert sum(entry.catalog_registered for entry in entries) == 75
 
 
-def test_phase_scope_keeps_confirmed_partial_criteria_and_freezes_pending_rules() -> None:
+def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_rules() -> None:
     entries = {entry.rule_id: entry for entry in load_luxian_0609_phase_scope()}
 
-    assert entries["LX0609-009"].active_criteria == (
-        "critical_daily_course_coverage",
-    )
-    assert entries["LX0609-009"].pending_criteria == (
-        "condition_change_course_timeliness",
+    for rule_id in ("LX0609-009", "LX0609-010", "LX0609-017", "LX0609-023"):
+        assert entries[rule_id].phase_status == "phase_1_target"
+        assert entries[rule_id].pending_reason_code == ""
+
+    assert entries["LX0609-025"].phase_status == "pending_definition"
+    assert (
+        entries["LX0609-025"].pending_reason_code
+        == "implant_field_contract_refreeze_required"
     )
     assert entries["LX0609-018"].phase_status == "phase_1_target"
     assert entries["LX0609-018"].active_criteria == (
@@ -35,13 +46,60 @@ def test_phase_scope_keeps_confirmed_partial_criteria_and_freezes_pending_rules(
         for rule_id, entry in entries.items()
         if entry.phase_status == "pending_definition"
     } == {
-        "LX0609-010",
-        "LX0609-017",
-        "LX0609-023",
         "LX0609-024",
+        "LX0609-025",
         "LX0609-028",
         "LX0609-049",
         "LX0609-056",
         "LX0609-059",
         "LX0609-075",
     }
+
+
+def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
+    executable, pending = partition_luxian_0609_rule_scope(
+        ("LX0609-059", "LX0609-017", "LX0609-049", "LX0609-001")
+    )
+
+    assert executable == ("LX0609-001", "LX0609-017")
+    assert pending == ("LX0609-049", "LX0609-059")
+
+
+def test_phase_scope_fails_closed_for_partial_rule_until_criterion_projection_exists(
+    monkeypatch,
+) -> None:
+    entries = (
+        Luxian0609PhaseScopeEntry(
+            rule_id="LX0609-001",
+            phase_status="phase_1_target",
+            catalog_registered=True,
+            definition_version="v-test",
+        ),
+        Luxian0609PhaseScopeEntry(
+            rule_id="LX0609-002",
+            phase_status="phase_1_partial",
+            catalog_registered=True,
+            definition_version="v-test",
+            active_criteria=("criterion_ready",),
+            pending_criteria=("criterion_pending",),
+        ),
+        Luxian0609PhaseScopeEntry(
+            rule_id="LX0609-003",
+            phase_status="pending_definition",
+            catalog_registered=True,
+            definition_version="v-test",
+            pending_reason_code="pending_contract",
+        ),
+    )
+    monkeypatch.setattr(
+        phase_scope_module,
+        "load_luxian_0609_phase_scope",
+        lambda: entries,
+    )
+
+    executable, withheld = partition_luxian_0609_rule_scope(
+        ("LX0609-003", "LX0609-002", "LX0609-001")
+    )
+
+    assert executable == ("LX0609-001",)
+    assert withheld == ("LX0609-002", "LX0609-003")

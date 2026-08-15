@@ -1,7 +1,8 @@
 """泸县 0609 客户质控点的唯一业务总表。
 
-总表描述客户确认的完整规则范围；执行目录只能是其中 ``active`` 规则的实现投影，
-不得通过执行包装器反向推断完整业务范围。
+总表描述客户确认的完整规则范围；``active`` 表示规则已纳入客户工作台，
+是否参与当前正式结论由同版本 ``phase_scope`` 唯一决定，
+不得通过执行包装器反向推断完整业务范围或发布阶段。
 """
 
 from __future__ import annotations
@@ -14,7 +15,8 @@ from typing import Any, Mapping
 
 
 LUXIAN_0609_RULE_MASTER_SCHEMA_VERSION = "lx0609-rule-master-v1"
-LUXIAN_0609_RULE_MASTER_VERSION = "2026-08-02"
+LUXIAN_0609_RULE_MASTER_VERSION = "2026-08-15"
+LUXIAN_0609_RULE_DEFINITION_VERSION = "lx0609-defined-scope-2026-08-15"
 
 _MASTER_PATH = (
     Path(__file__).resolve().parent.parent
@@ -105,6 +107,8 @@ def compile_luxian_0609_rule_master(
         raise ValueError("unsupported LX0609 rule master schema")
     if _clean(payload.get("master_version")) != LUXIAN_0609_RULE_MASTER_VERSION:
         raise ValueError("unsupported LX0609 rule master version")
+    if _clean(payload.get("definition_version")) != LUXIAN_0609_RULE_DEFINITION_VERSION:
+        raise ValueError("unsupported LX0609 rule definition version")
 
     raw_rules = payload.get("rules")
     if not isinstance(raw_rules, list):

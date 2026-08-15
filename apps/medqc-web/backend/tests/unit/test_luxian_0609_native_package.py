@@ -186,11 +186,14 @@ def test_transfusion_family_flag_partitions_only_nine_customer_rules():
         native_transfusion_enabled=False,
     )
 
-    assert enabled.native_async_rule_ids == tuple(selected)
+    expected_executable = tuple(selected[:-1])
+    assert enabled.native_async_rule_ids == expected_executable
     assert enabled.compatibility_rule_ids == ()
-    assert enabled.native_executor_batches == (("transfusion", tuple(selected)),)
+    assert enabled.native_executor_batches == (("transfusion", expected_executable),)
+    assert enabled.not_executed_rule_ids == ("LX0609-049",)
     assert disabled.native_async_rule_ids == ()
-    assert disabled.compatibility_rule_ids == tuple(selected)
+    assert disabled.compatibility_rule_ids == expected_executable
+    assert disabled.not_executed_rule_ids == ("LX0609-049",)
 
 
 @pytest.mark.unit
@@ -261,11 +264,17 @@ def test_remaining_family_flags_partition_only_their_customer_rules(
     enabled = build_luxian_0609_package_plan(**common, **{flag_name: True})
     disabled = build_luxian_0609_package_plan(**common, **{flag_name: False})
 
-    assert enabled.native_async_rule_ids == tuple(selected)
+    expected_executable = enabled.executable_rule_ids
+    expected_pending = tuple(
+        rule_id for rule_id in selected if rule_id not in expected_executable
+    )
+    assert enabled.native_async_rule_ids == expected_executable
     assert enabled.compatibility_rule_ids == ()
-    assert enabled.native_executor_batches == ((executor_key, tuple(selected)),)
+    assert enabled.native_executor_batches == ((executor_key, expected_executable),)
+    assert enabled.not_executed_rule_ids == expected_pending
     assert disabled.native_async_rule_ids == ()
-    assert disabled.compatibility_rule_ids == tuple(selected)
+    assert disabled.compatibility_rule_ids == expected_executable
+    assert disabled.not_executed_rule_ids == expected_pending
 
 
 @pytest.mark.unit
@@ -292,7 +301,8 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
         native_surgery_document_029_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 73
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 66
+    assert len(plan.not_executed_rule_ids) == 7
     assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
     assert plan.compatibility_execution_rule_ids == (
         "LX-017",
@@ -326,7 +336,8 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
         native_surgery_document_029_enabled=False,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 74
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 67
+    assert len(plan.not_executed_rule_ids) == 7
     assert plan.compatibility_rule_ids == ("LX0609-029",)
     assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
 
@@ -393,6 +404,34 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
             native_sync_enabled=True,
             native_async_enabled=False,
         )
+
+
+@pytest.mark.unit
+def test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+
+    plan = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=["LX0609-059", "LX0609-017", "LX0609-049"],
+        native_sync_enabled=True,
+        native_async_enabled=True,
+        native_course_quality_enabled=True,
+        native_transfusion_enabled=True,
+    )
+
+    assert plan.selected_rule_ids == (
+        "LX0609-017",
+        "LX0609-049",
+        "LX0609-059",
+    )
+    assert plan.executable_rule_ids == ("LX0609-017",)
+    assert plan.not_executed_rule_ids == ("LX0609-049", "LX0609-059")
+    assert plan.native_async_rule_ids == ("LX0609-017",)
+    assert "LX0609-049" not in plan.compatibility_rule_ids
+    assert "LX0609-059" not in plan.compatibility_rule_ids
 
 
 @pytest.mark.unit

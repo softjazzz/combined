@@ -6,9 +6,12 @@ import json
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
-from ..luxian_0609_rule_master import load_luxian_0609_rule_master
+from ..luxian_0609_rule_master import (
+    LUXIAN_0609_RULE_DEFINITION_VERSION,
+    load_luxian_0609_rule_master,
+)
 
 
 _SCOPE_PATH = (
@@ -64,7 +67,10 @@ def compile_luxian_0609_phase_scope(
         raise ValueError("unsupported LX0609 phase scope schema")
     definition_version = _clean(payload.get("definition_version"))
     raw_rules = payload.get("rules")
-    if not definition_version or not isinstance(raw_rules, list):
+    if (
+        definition_version != LUXIAN_0609_RULE_DEFINITION_VERSION
+        or not isinstance(raw_rules, list)
+    ):
         raise ValueError("invalid LX0609 phase scope payload")
 
     entries: list[Luxian0609PhaseScopeEntry] = []
@@ -123,3 +129,28 @@ def get_luxian_0609_phase_scope(rule_id: str) -> Luxian0609PhaseScopeEntry | Non
         (entry for entry in load_luxian_0609_phase_scope() if entry.rule_id == normalized),
         None,
     )
+
+
+def partition_luxian_0609_rule_scope(
+    selected_rule_ids: Iterable[str],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """按权威目录顺序拆分正式可执行规则与其余失败关闭规则。"""
+
+    requested = {
+        _clean(rule_id).upper() for rule_id in selected_rule_ids if _clean(rule_id)
+    }
+    entries = load_luxian_0609_phase_scope()
+    known_rule_ids = {entry.rule_id for entry in entries}
+    if requested.difference(known_rule_ids):
+        raise ValueError("invalid LX0609 customer rule id")
+    executable = tuple(
+        entry.rule_id
+        for entry in entries
+        if entry.rule_id in requested and entry.phase_status == "phase_1_target"
+    )
+    withheld = tuple(
+        entry.rule_id
+        for entry in entries
+        if entry.rule_id in requested and entry.phase_status != "phase_1_target"
+    )
+    return executable, withheld

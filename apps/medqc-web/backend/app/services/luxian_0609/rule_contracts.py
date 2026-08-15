@@ -296,6 +296,12 @@ def compile_luxian_0609_rule_contracts(
         raise ValueError("LX0609 phase scope does not match dependency inventory")
     if _clean(payload.get("schema_version")) != RULE_CONTRACT_SCHEMA_VERSION:
         raise ValueError("unsupported LX0609 rule contract schema")
+    definition_versions = {item.definition_version for item in phase_scope}
+    if (
+        len(definition_versions) != 1
+        or _clean(payload.get("definition_version")) != next(iter(definition_versions))
+    ):
+        raise ValueError("LX0609 rule contract definition version drift")
     defaults = payload.get("defaults")
     entries = payload.get("rules")
     if not isinstance(defaults, Mapping) or not isinstance(entries, list):

@@ -1,5 +1,6 @@
 {
   "schema_version": "lx0609-rule-contracts-v1",
+  "definition_version": "lx0609-defined-scope-2026-08-15",
   "defaults": {
     "allowed_final_states": [
       "compliant",
@@ -191,12 +192,12 @@
     },
     {
       "rule_id": "LX0609-017",
-      "contract_version": "v6",
+      "contract_version": "v7",
       "family_key": "course_quality",
       "executor_key": "course_quality",
       "execution_mode": "native_async",
-      "decision_authority": "program_only",
-      "max_llm_calls_per_rule": 0,
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
       "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },

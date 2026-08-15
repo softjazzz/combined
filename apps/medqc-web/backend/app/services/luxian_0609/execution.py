@@ -181,6 +181,28 @@ def is_luxian_0609_customer_package_enabled(*, rule_set_key: str, settings: Any)
     )
 
 
+def _build_phase_not_executed_results(
+    rule_ids: Iterable[str],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "rule_id": str(rule_id).strip().upper(),
+            "status": "not_executed",
+            "is_compliant": None,
+            "findings": ["本质控点当前不参与正式结论，未生成合规或问题判定。"],
+            "evidence": [],
+            "suggestion": "待院方确认并发布业务口径后再启用本质控点。",
+            "confidence": 0.0,
+            "metadata": {
+                "execution_source": "lx0609_phase_gate",
+                "executor_type": "programmatic",
+                "reason_code": "policy_definition_pending",
+            },
+        }
+        for rule_id in rule_ids
+    ]
+
+
 async def prepare_luxian_0609_execution(
     *,
     rule_set_key: str,
@@ -241,20 +263,21 @@ async def prepare_luxian_0609_execution(
         getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
     )
     surgery_document_source_guard_required = bool(
-        {"LX0609-029", "LX0609-032"}.intersection(package_plan.selected_rule_ids)
+        {"LX0609-029", "LX0609-032"}.intersection(package_plan.executable_rule_ids)
     )
     extended_document_required = bool(
-        set(EXTENDED_DOCUMENT_RULE_IDS).intersection(package_plan.selected_rule_ids)
+        set(EXTENDED_DOCUMENT_RULE_IDS).intersection(package_plan.executable_rule_ids)
     )
     typed_decision_rule_ids = resolve_typed_decision_rule_ids(
-        selected_rule_ids=package_plan.selected_rule_ids,
+        selected_rule_ids=package_plan.executable_rule_ids,
         settings=settings,
         unified_engine_enabled=unified_engine_enabled,
         always_typed_rule_ids=tuple(EXTENDED_DOCUMENT_RULE_IDS),
         native_async_rule_ids=package_plan.native_async_rule_ids,
     )
     if (
-        bool(
+        package_plan.executable_rule_ids
+        and bool(
             getattr(
                 settings,
                 "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
@@ -272,7 +295,7 @@ async def prepare_luxian_0609_execution(
         try:
             if unified_engine_enabled or extended_document_required:
                 evidence_session = build_luxian_0609_evidence_read_session(
-                    selected_rule_ids=package_plan.selected_rule_ids,
+                    selected_rule_ids=package_plan.executable_rule_ids,
                     institute_id=str(institute_id),
                     patient_id=str(patient_id),
                     visit_id=str(visit_id),
@@ -288,7 +311,7 @@ async def prepare_luxian_0609_execution(
                                 for executor_key, _
                                 in package_plan.native_executor_batches
                             ),
-                            selected_rule_ids=package_plan.selected_rule_ids,
+                            selected_rule_ids=package_plan.executable_rule_ids,
                         )
                     ),
                 )
@@ -296,7 +319,7 @@ async def prepare_luxian_0609_execution(
                 evidence_materials = evidence_session.materials
             else:
                 evidence_snapshot = build_luxian_0609_evidence_snapshot(
-                    selected_rule_ids=package_plan.selected_rule_ids,
+                    selected_rule_ids=package_plan.executable_rule_ids,
                     institute_id=str(institute_id),
                     patient_id=str(patient_id),
                     visit_id=str(visit_id),
@@ -309,7 +332,7 @@ async def prepare_luxian_0609_execution(
             evidence_snapshot_rule_refs = (
                 build_luxian_0609_evidence_snapshot_rule_refs(
                     snapshot=evidence_snapshot,
-                    selected_rule_ids=package_plan.selected_rule_ids,
+                    selected_rule_ids=package_plan.executable_rule_ids,
                 )
             )
         except Exception:
@@ -327,6 +350,9 @@ async def prepare_luxian_0609_execution(
         in selected_customer_rule_id_set
     ]
     native_results: list[dict[str, Any]] = []
+    phase_not_executed_results = _build_phase_not_executed_results(
+        package_plan.not_executed_rule_ids
+    )
     native_llm_call_count = 0
     native_prompt_tokens = 0
     native_completion_tokens = 0
@@ -336,6 +362,10 @@ async def prepare_luxian_0609_execution(
     native_customer_rule_ids = {
         *package_plan.native_sync_rule_ids,
         *package_plan.native_async_rule_ids,
+    }
+    handled_customer_rule_ids = {
+        *native_customer_rule_ids,
+        *package_plan.not_executed_rule_ids,
     }
     unified_engine_used = False
     native_rule_decisions: list[RuleDecision] = []
@@ -788,19 +818,15 @@ async def prepare_luxian_0609_execution(
                 execution=extended_document_execution,
             )
         )
+    native_results.extend(phase_not_executed_results)
     if native_results:
         native_result_by_rule_id = {
             str(item.get("rule_id") or "").strip().upper(): item
             for item in native_results
         }
-        ordered_native_rule_ids = tuple(
-            rule_id
-            for rule_id in package_plan.selected_rule_ids
-            if rule_id in native_customer_rule_ids
-        )
         native_results = [
             native_result_by_rule_id[rule_id]
-            for rule_id in ordered_native_rule_ids
+            for rule_id in package_plan.selected_rule_ids
             if rule_id in native_result_by_rule_id
         ]
     if package_plan.prepared_rule_ids_to_remove:
@@ -813,7 +839,7 @@ async def prepare_luxian_0609_execution(
     legacy_wrapper_rules = [
         wrapper for wrapper in wrapper_rules
         if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
-        not in native_customer_rule_ids
+        not in handled_customer_rule_ids
     ]
     input_profile = build_luxian_0609_input_profile(
         visit_id=visit_id,

@@ -4,6 +4,8 @@ import pytest
 
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609_rule_master import (
+    LUXIAN_0609_RULE_DEFINITION_VERSION,
+    LUXIAN_0609_RULE_MASTER_VERSION,
     Luxian0609RuleMasterEntry,
     get_luxian_0609_rule_master_entry,
     get_luxian_0609_rule_master_summary,
@@ -25,6 +27,8 @@ def test_rule_master_is_the_complete_ordered_75_rule_scope():
         "contract_ready": 0,
         "pending_definition": 0,
     }
+    assert LUXIAN_0609_RULE_MASTER_VERSION == "2026-08-15"
+    assert LUXIAN_0609_RULE_DEFINITION_VERSION == "lx0609-defined-scope-2026-08-15"
 
 
 @pytest.mark.unit
@@ -125,16 +129,18 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
         "sichuan_2023_standard",
         "customer_confirmed",
     )
-    assert "病情变化" in entries["LX0609-009"].policy_summary
-    assert "受控事件来源、阈值、时限" in entries["LX0609-009"].pending_definition_note
+    assert "动态改变" in entries["LX0609-009"].policy_summary
+    assert "24小时" in entries["LX0609-009"].policy_summary
+    assert entries["LX0609-009"].pending_definition_note == ""
 
     assert entries["LX0609-010"].policy_sources == (
         "sichuan_2026_handbook",
         "customer_confirmed",
         "hospital_local_extension",
     )
-    assert "病程-医嘱一致" in entries["LX0609-010"].policy_summary
-    assert "结构化关联键、名称编码和时间容差" in entries["LX0609-010"].pending_definition_note
+    assert "order_id" in entries["LX0609-010"].policy_summary
+    assert "exam_id" in entries["LX0609-010"].policy_summary
+    assert entries["LX0609-010"].pending_definition_note == ""
 
     assert entries["LX0609-012"].policy_sources == (
         "sichuan_2026_handbook",
@@ -151,8 +157,8 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
         "hospital_local_extension",
     )
     assert "相似度≥70%" in entries["LX0609-017"].policy_summary
-    assert "已按" in entries["LX0609-017"].policy_summary
-    assert "不改变现有行为" not in entries["LX0609-017"].policy_summary
+    assert "3至5组" in entries["LX0609-017"].policy_summary
+    assert "一次LLM" in entries["LX0609-017"].policy_summary
     assert entries["LX0609-018"].policy_sources == (
         "customer_confirmed",
         "hospital_local_extension",
@@ -166,9 +172,11 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
     assert "会诊意见及执行情况" in entries["LX0609-020"].policy_summary
     assert "仅“遵嘱执行”" in entries["LX0609-023"].policy_summary
 
-    assert "条码、种类、数量" in entries["LX0609-025"].policy_summary
+    assert "不参与正式结论" in entries["LX0609-025"].policy_summary
+    assert "正式必填字段" in entries["LX0609-025"].pending_definition_note
     assert "院内绩效优先国家目录" in entries["LX0609-040"].policy_summary
     assert "未同时齐备" in entries["LX0609-044"].policy_summary
-    assert "医嘱-输血记录一致" in entries["LX0609-049"].policy_summary
+    assert "暂不执行" in entries["LX0609-049"].policy_summary
+    assert "不得因收费资料缺失" in entries["LX0609-049"].policy_summary
     assert "乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶" in entries["LX0609-070"].policy_summary
     assert "急诊补检" in entries["LX0609-070"].pending_definition_note

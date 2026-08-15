@@ -34,12 +34,15 @@ def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> 
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 65
-    assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 1
-    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 9
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 68
+    assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 0
+    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 7
     assert {contract.definition_version for contract in contracts} == {
-        "lx0609-defined-scope-2026-08-02"
+        "lx0609-defined-scope-2026-08-15"
     }
+    assert json.loads(_CONTRACT_PATH.read_text(encoding="utf-8"))["definition_version"] == (
+        "lx0609-defined-scope-2026-08-15"
+    )
 
 
 @pytest.mark.unit
@@ -47,11 +50,8 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     contracts = {item.rule_id: item for item in load_luxian_0609_rule_contracts()}
 
     critical_course = contracts["LX0609-009"]
-    assert critical_course.phase_status == "phase_1_partial"
-    assert critical_course.active_criteria == ("critical_daily_course_coverage",)
-    assert critical_course.pending_criteria == (
-        "condition_change_course_timeliness",
-    )
+    assert critical_course.phase_status == "phase_1_target"
+    assert critical_course.pending_criteria == ()
 
     complaint_rule = contracts["LX0609-018"]
     assert complaint_rule.phase_status == "phase_1_target"
@@ -68,9 +68,18 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert copy_rule.decision_authority == "program_only"
     assert copy_rule.max_llm_calls_per_rule == 0
 
+    repeated_course = contracts["LX0609-017"]
+    assert repeated_course.contract_version == "v7"
+    assert repeated_course.decision_authority == "program_then_optional_llm"
+    assert repeated_course.max_llm_calls_per_rule == 1
+
     exam_course = contracts["LX0609-010"]
-    assert exam_course.phase_status == "pending_definition"
-    assert exam_course.pending_reason_code == "exam_course_linkage_window_undefined"
+    assert exam_course.phase_status == "phase_1_target"
+    assert exam_course.pending_reason_code == ""
+
+    implant = contracts["LX0609-025"]
+    assert implant.phase_status == "pending_definition"
+    assert implant.pending_reason_code == "implant_field_contract_refreeze_required"
 
 
 @pytest.mark.unit
@@ -120,7 +129,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-007",
         "LX0609-008",
         "LX0609-016",
-        "LX0609-017",
         "LX0609-026",
         "LX0609-027",
         "LX0609-031",
@@ -267,6 +275,19 @@ def test_rule_contract_compiler_rejects_executor_registry_drift() -> None:
     ):
         compile_luxian_0609_rule_contracts(
             payload=drifted,
+            rules=load_luxian_0609_rules(),
+            family_definitions=RULE_FAMILY_DEFINITIONS,
+        )
+
+
+@pytest.mark.unit
+def test_rule_contract_compiler_rejects_authority_version_drift() -> None:
+    payload = json.loads(_CONTRACT_PATH.read_text(encoding="utf-8"))
+    payload["definition_version"] = "lx0609-defined-scope-stale"
+
+    with pytest.raises(ValueError, match="definition version drift"):
+        compile_luxian_0609_rule_contracts(
+            payload=payload,
             rules=load_luxian_0609_rules(),
             family_definitions=RULE_FAMILY_DEFINITIONS,
         )

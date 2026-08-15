@@ -1,8 +1,9 @@
 {
   "schema_version": "lx0609-rule-master-v1",
-  "master_version": "2026-08-02",
+  "master_version": "2026-08-15",
+  "definition_version": "lx0609-defined-scope-2026-08-15",
   "rule_set_key": "luxian_0609_qc_v1",
-  "description": "泸县0609客户质控点唯一业务总表。active 才进入当前执行目录；其余规则不得生成占位结果。",
+  "description": "泸县0609客户质控点唯一业务总表。active 表示规则已纳入客户工作台；是否参与当前正式结论由同版本 phase_scope 唯一决定。",
   "rules": [
     {
       "rule_id": "LX0609-001",
@@ -74,8 +75,7 @@
       "qc_point": "病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "病危期间每日病程记录按当前规则执行；病情变化包括症状、体征或生命体征、精神或脏器功能、检验检查、并发症及特殊状态的动态改变。",
-      "pending_definition_note": "自动判定仍缺受控事件来源、阈值、时限，需单独确认后接入。"
+      "policy_summary": "病危期间每日记录病程；症状、体征或生命体征、精神或脏器功能、检验检查、并发症及特殊状态发生动态改变时，应在变化事件后24小时内形成对应病程记录。"
     },
     {
       "rule_id": "LX0609-010",
@@ -83,8 +83,7 @@
       "qc_point": "CT/MRI检查前无说明检查原因的病程记录",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "保留CT/MRI检查前病程说明原因；后续目标同时核对病程-医嘱一致及影像报告完整。",
-      "pending_definition_note": "需确定检查与报告的结构化关联键、名称编码和时间容差，未确认前不得假定已实现。"
+      "policy_summary": "每次CT/MRI检查按医嘱order_id关联检查主记录，再按exam_id关联报告；检查前病程须说明本次检查原因。关联不唯一或资料不完整时返回数据不足，不按相邻时间强行串联。"
     },
     {
       "rule_id": "LX0609-011",
@@ -140,7 +139,7 @@
       "qc_point": "2次以上病程记录完全相同（相似度大于70%）",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "当前本院扩展已按病程相似度≥70%即不合规执行；省手册的完全相同要点作为参考。"
+      "policy_summary": "对同次住院病程先做归一化与快速相似度筛选，再精确比较候选组合；相似度≥70%时进入问题候选，最终展示最高的3至5组可定位证据；模板与实质内容难以区分时仅对候选统一调用一次LLM复核。"
     },
     {
       "rule_id": "LX0609-018",
@@ -204,7 +203,8 @@
       "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "省标主项为条码、种类、数量，手术记录或病程均可记录；名称、型号、材质保留为本院扩展，不影响本规则主状态。永久植入物由单次受控LLM事实提取确认。"
+      "policy_summary": "永久性植入物继续由单次受控LLM提取事实；条码、名称、种类、规格或型号、材质、数量中哪些字段属于正式必填尚未完成最终冻结，本质控点在冻结前不参与正式结论。",
+      "pending_definition_note": "需院方确认永久性植入物正式必填字段、允许记录文书及条码例外。"
     },
     {
       "rule_id": "LX0609-026",

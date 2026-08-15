@@ -2842,7 +2842,21 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         "completion_tokens": 10,
     }
     assert result["executor_breakdown"]["llm"] == 1
-    assert all(raw_id not in repr(result["evaluation_results"]) for ids in mappings.values() for raw_id in ids)
+    executable_mappings = {
+        rule_id: raw_ids
+        for rule_id, raw_ids in mappings.items()
+        if rule_id != "LX0609-049"
+    }
+    assert all(
+        raw_id not in repr(result["evaluation_results"])
+        for ids in executable_mappings.values()
+        for raw_id in ids
+    )
+    rule_049 = next(
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-049"
+    )
+    assert rule_049["status"] == "not_executed"
+    assert rule_049["findings"] == ["本质控点当前不参与正式结论，未生成合规或问题判定。"]
     assert raw_body_marker not in repr(result)
 
 
@@ -2922,7 +2936,6 @@ async def test_native_transfusion_flag_off_preserves_exact_legacy_dispatch(monke
         "CL-255",
         "CL-256",
         "CL-208",
-        "SC-146",
     ]]
 
 
@@ -3230,13 +3243,25 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
     assert dispatched == []
     assert calls == [
         ("course_quality", ("LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018")),
-        ("surgery_gate", ("LX0609-003", "LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031", "LX0609-033")),
+        ("surgery_gate", ("LX0609-003", "LX0609-031", "LX0609-033")),
         ("surgery_document", ("LX0609-034", "LX0609-035", "LX0609-036", "LX0609-037", "LX0609-038", "LX0609-039")),
     ]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
-    assert [item["status"] for item in result["evaluation_results"]] == ["data_gap"] * 18
+    assert [
+        item["status"] for item in result["evaluation_results"]
+        if item["rule_id"] in {"LX0609-024", "LX0609-025", "LX0609-028"}
+    ] == ["not_executed"] * 3
+    assert [
+        item["status"] for item in result["evaluation_results"]
+        if item["rule_id"] not in {"LX0609-024", "LX0609-025", "LX0609-028"}
+    ] == ["data_gap"] * 15
     assert result["token_usage"]["total_tokens"] == 0
-    legacy_ids = {raw_id for values in mappings.values() for raw_id in values}
+    legacy_ids = {
+        raw_id
+        for rule_id, values in mappings.items()
+        if rule_id not in {"LX0609-024", "LX0609-025", "LX0609-028"}
+        for raw_id in values
+    }
     assert all(raw_id not in repr(result["evaluation_results"]) for raw_id in legacy_ids)
 
 
@@ -3303,7 +3328,10 @@ async def test_remaining_native_family_flags_off_preserve_exact_legacy_dispatch(
     )
 
     expected: list[str] = []
+    pending_rule_ids = {"LX0609-024", "LX0609-025", "LX0609-028"}
     for rule_id in selected:
+        if rule_id in pending_rule_ids:
+            continue
         for raw_id in mappings[rule_id]:
             if raw_id not in expected:
                 expected.append(raw_id)

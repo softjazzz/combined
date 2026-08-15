@@ -49,6 +49,7 @@ from .native_extended_document_execution import (
     EXECUTOR_KEY as EXTENDED_DOCUMENT_EXECUTOR_KEY,
     EXTENDED_DOCUMENT_RULE_IDS,
 )
+from .phase_scope import partition_luxian_0609_rule_scope
 
 
 EXECUTION_MODE_NATIVE_SYNC = "native_sync"
@@ -123,6 +124,7 @@ class Luxian0609PackagePlan:
     compatibility_execution_rule_ids: tuple[str, ...]
     bypassed_execution_rule_ids: tuple[str, ...]
     native_executor_batches: tuple[tuple[str, tuple[str, ...]], ...]
+    not_executed_rule_ids: tuple[str, ...] = ()
 
     def native_rule_ids_for_executor(self, executor_key: str) -> tuple[str, ...]:
         for key, rule_ids in self.native_executor_batches:
@@ -138,6 +140,13 @@ class Luxian0609PackagePlan:
                 *self.native_async_rule_ids,
                 *self.bypassed_execution_rule_ids,
             }
+        )
+
+    @property
+    def executable_rule_ids(self) -> tuple[str, ...]:
+        not_executed = set(self.not_executed_rule_ids)
+        return tuple(
+            rule_id for rule_id in self.selected_rule_ids if rule_id not in not_executed
         )
 
 
@@ -285,9 +294,20 @@ def build_luxian_0609_package_plan(
         raise ValueError("invalid LX0609 customer rule id")
 
     selected = tuple(item for item in inventory if item.rule_id in requested)
+    executable_rule_ids, not_executed_rule_ids = partition_luxian_0609_rule_scope(
+        item.rule_id for item in selected
+    )
+    executable_rule_id_set = set(executable_rule_ids)
+    executable_selected = tuple(
+        item for item in selected if item.rule_id in executable_rule_id_set
+    )
+    not_executed_rule_id_set = set(not_executed_rule_ids)
+    not_executed = tuple(
+        item for item in selected if item.rule_id in not_executed_rule_id_set
+    )
     native_sync_rule_ids = tuple(
         item.rule_id
-        for item in selected
+        for item in executable_selected
         if item.execution_mode == EXECUTION_MODE_NATIVE_SYNC
         and (
             (item.executor_key == BASIC_TIMELINESS_EXECUTOR_KEY and native_basic_timeliness_enabled)
@@ -296,7 +316,7 @@ def build_luxian_0609_package_plan(
     )
     native_async_rule_ids = tuple(
         item.rule_id
-        for item in selected
+        for item in executable_selected
         if item.execution_mode == EXECUTION_MODE_NATIVE_ASYNC
         and (
             (item.executor_key == EXAM_LAB_EXECUTOR_KEY and native_exam_lab_enabled)
@@ -345,8 +365,10 @@ def build_luxian_0609_package_plan(
         )
     )
     native_ids = {*native_sync_rule_ids, *native_async_rule_ids}
-    compatibility = tuple(item for item in selected if item.rule_id not in native_ids)
-    native = tuple(item for item in selected if item.rule_id in native_ids)
+    compatibility = tuple(
+        item for item in executable_selected if item.rule_id not in native_ids
+    )
+    native = tuple(item for item in executable_selected if item.rule_id in native_ids)
     native_executor_batches: list[tuple[str, tuple[str, ...]]] = []
     for executor_key in dict.fromkeys(item.executor_key for item in native):
         native_executor_batches.append(
@@ -363,7 +385,7 @@ def build_luxian_0609_package_plan(
     compatibility_execution_rule_id_set = set(compatibility_execution_rule_ids)
     bypassed_execution_rule_ids = _ordered_unique(
         execution_rule_id
-        for item in native
+        for item in (*native, *not_executed)
         for execution_rule_id in item.compatibility_rule_ids
         if execution_rule_id not in compatibility_execution_rule_id_set
     )
@@ -375,6 +397,7 @@ def build_luxian_0609_package_plan(
         compatibility_execution_rule_ids=compatibility_execution_rule_ids,
         bypassed_execution_rule_ids=bypassed_execution_rule_ids,
         native_executor_batches=tuple(native_executor_batches),
+        not_executed_rule_ids=not_executed_rule_ids,
     )
 
 

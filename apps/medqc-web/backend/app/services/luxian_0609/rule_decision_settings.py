@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .phase_scope import partition_luxian_0609_rule_scope
+
 
 RULE_DECISION_ROLLOUT_GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
     ("LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED", (
@@ -71,6 +73,7 @@ def resolve_typed_decision_rule_ids(
 ) -> tuple[str, ...]:
     """从唯一发布组解析Typed Decision范围，并保持客户规则目录顺序。"""
 
+    executable_rule_ids, _ = partition_luxian_0609_rule_scope(selected_rule_ids)
     always_typed = frozenset(always_typed_rule_ids)
     native_async = frozenset(native_async_rule_ids)
     enabled_rollout: set[str] = set()
@@ -80,7 +83,7 @@ def resolve_typed_decision_rule_ids(
                 enabled_rollout.update(rule_ids)
     return tuple(
         rule_id
-        for rule_id in selected_rule_ids
+        for rule_id in executable_rule_ids
         if rule_id in always_typed
         or (
             rule_id in enabled_rollout
