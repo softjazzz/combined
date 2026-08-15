@@ -58,6 +58,9 @@ from ..services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from ..services.case_identity import CaseRef, case_refs_from_records
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
+from ..services.luxian_0609.shadow_audit_summary import (
+    merge_luxian_0609_shadow_summaries,
+)
 from ..services.luxian_0609.evaluation_horizon import (
     build_record_evaluation_horizon_snapshot,
     resolve_record_evaluation_horizon_policy,
@@ -2640,6 +2643,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "refine_failed_count": 0,
             "refine_reasons": {},
         }
+        shadow_evaluation_summary: Dict[str, Dict[str, Any]] = {}
 
         # 预加载规则，后续按病历一次性评估全部规则，再回填到每条规则结果。
         # 这样可触发 orchestrator 的分桶并发，避免规则级外层串行瓶颈。
@@ -3199,6 +3203,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_cot_summary: Dict[str, Any] = {}
                 record_refine_summary: Dict[str, Any] = {}
                 record_luxian_0609_input_profile: Dict[str, Any] = {}
+                record_luxian_0609_shadow_evaluations: Dict[str, Any] = {}
                 bundle_scene = ""
                 bundle_payload: Optional[Dict[str, Any]] = None
                 attempted_bundle_scenes: List[str] = []
@@ -3431,6 +3436,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     record_cot_summary = dict(result.get("cot_summary") or {})
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
+                    record_luxian_0609_shadow_evaluations = dict(
+                        result.get("luxian_0609_shadow_evaluations") or {}
+                    )
                     eval_items = list(result.get("evaluation_results") or [])
                     if runtime_shadow_summary is not None:
                         for eval_item in eval_items:
@@ -3589,6 +3597,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     record_cot_summary = dict(result.get("cot_summary") or {})
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
+                    record_luxian_0609_shadow_evaluations = dict(
+                        result.get("luxian_0609_shadow_evaluations") or {}
+                    )
                     eval_items = list(result.get("evaluation_results") or [])
 
                 eval_map: Dict[str, Dict[str, Any]] = {}
@@ -4040,6 +4051,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "pack_metrics": record_pack_metrics,
                     "cot_summary": record_cot_summary,
                     "refine_summary": record_refine_summary,
+                    "luxian_0609_shadow_evaluations": record_luxian_0609_shadow_evaluations,
                 }
             except QCJobCancelled:
                 raise
@@ -4083,6 +4095,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "pack_metrics": {},
                     "cot_summary": {},
                     "refine_summary": {},
+                    "luxian_0609_shadow_evaluations": {},
                 }
 
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -4186,6 +4199,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
             total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
             total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
+
+            merge_luxian_0609_shadow_summaries(
+                shadow_evaluation_summary,
+                record_result.get("luxian_0609_shadow_evaluations") or {},
+            )
 
             items_by_rule = dict(record_result.get("items_by_rule") or {})
             failed_by_rule = dict(record_result.get("failed_by_rule") or {})
@@ -4469,6 +4487,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "cot_summary": cot_summary_total,
             "result_aggregation": _build_result_aggregation(all_items),
             "performance_profile": performance_profile,
+            "luxian_0609_shadow_evaluations": shadow_evaluation_summary,
             "rule_results": rule_results,
             "stream_state": {
                 "enabled": enable_incremental_results,

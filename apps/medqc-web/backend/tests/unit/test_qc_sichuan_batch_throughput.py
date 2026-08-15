@@ -3172,6 +3172,26 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
                 for rule_id in native_rule_ids
             ],
             "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+            "luxian_0609_shadow_evaluations": {
+                "luxian_0609_025_shadow": {
+                    "shadow_only": True,
+                    "release_eligible": False,
+                    "status": "data_gap",
+                    "reason_code": "surgery_text_fact_unknown",
+                    "operation_count": 1,
+                    "status_counts": {"data_gap": 1},
+                    "missing_field_counts": {"implant_material": 1},
+                    "llm_calls": 1,
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                    "elapsed_ms": 12,
+                    "contract_version": "lx0609-025-shadow-v1",
+                    "operations": [
+                        {"source_document_id": "PRIVATE-SURGERY-DOCUMENT"}
+                    ],
+                }
+            },
         }
 
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
@@ -3196,6 +3216,24 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
         native_rule_ids
     )
     assert int((workspace.summary or {}).get("total_tokens") or 0) == 0
+    shadow_summary = (workspace.summary or {}).get("luxian_0609_shadow_evaluations")
+    assert shadow_summary == {
+        "luxian_0609_025_shadow": {
+            "shadow_only": True,
+            "release_eligible": False,
+            "contract_version": "lx0609-025-shadow-v1",
+            "records_evaluated": 2,
+            "status_counts": {"data_gap": 2},
+            "reason_counts": {"surgery_text_fact_unknown": 2},
+            "operation_count": 2,
+            "llm_calls": 2,
+            "prompt_tokens": 20,
+            "completion_tokens": 10,
+            "total_tokens": 30,
+            "elapsed_ms": 24,
+            "missing_field_counts": {"implant_material": 2},
+        }
+    }
     hidden_native_fields = {
         "prompt_version",
         "model_name",
@@ -3213,6 +3251,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
         assert hidden_native_fields.isdisjoint(item)
         assert hidden_native_fields.isdisjoint(dict(item.get("metadata") or {}))
         assert hidden_native_fields.isdisjoint(dict(item.get("audit") or {}))
+        assert "luxian_0609_shadow_evaluations" not in dict(item.get("metadata") or {})
 
 
 @pytest.mark.asyncio

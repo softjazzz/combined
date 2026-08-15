@@ -73,6 +73,7 @@ from .luxian_0609.execution import (
     attach_luxian_0609_execution_metadata,
     prepare_luxian_0609_execution,
 )
+from .luxian_0609.shadow_audit_summary import project_luxian_0609_shadow_summaries
 from .luxian_0609 import source_evidence_reader
 from .luxian_0609.rule_decision_settings import (
     assert_luxian_0609_customer_native_delivery_ready,
@@ -1630,6 +1631,11 @@ class SichuanQCService:
             "trace": orchestrated.get("trace") or [],
             "luxian_0609_summary": orchestrated.get("luxian_0609_summary") or {},
         }
+        shadow_summaries = project_luxian_0609_shadow_summaries(orchestrated)
+        if shadow_summaries:
+            # 专项影子仅用于任务审计；不得混入 evaluation_results、正式 Token
+            # 或 Canonical Envelope。
+            result["luxian_0609_shadow_evaluations"] = shadow_summaries
         luxian_input_profile = orchestrated.get("luxian_0609_input_profile")
         if isinstance(luxian_input_profile, dict) and luxian_input_profile:
             result["luxian_0609_input_profile"] = luxian_input_profile
