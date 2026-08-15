@@ -283,7 +283,7 @@ def test_customer_finding_uses_existing_controlled_facts_instead_of_generic_copy
         ),
         (
             "LX0609-025",
-            "请在手术记录中补全结果列出的植入物名称、种类、规格/型号、材质、条码及数量等缺项。",
+            "请在手术记录中补全结果列出的植入物名称、种类、规格/型号、材质及数量等缺项。",
         ),
         (
             "LX0609-029",
@@ -1016,6 +1016,60 @@ def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation(
     assert result["reason_code"] == "positive_assertion_not_explicit"
     assert result["findings"] == "检查报告未明确写明阳性，暂无法启动阳性结果分析核对"
     assert "未明确标注“阳性”" in result["evidence"]
+
+
+def test_lx0609_025_renders_each_surgery_missing_fields_without_barcode() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-025",
+        facts={
+            "failure_kind": "implant_information_incomplete",
+            "missing_fields": ["implant_material", "implant_quantity"],
+            "implant_event_details": [
+                {
+                    "event_position": 1,
+                    "missing_fields": ["implant_material"],
+                    "implant_names": ["人工硬脑膜"],
+                },
+                {
+                    "event_position": 2,
+                    "missing_fields": ["implant_quantity"],
+                    "implant_names": ["钛网"],
+                },
+            ],
+            "source_label": "手术记录",
+            "source_document_type": "surgery_record",
+        },
+    )
+
+    assert finding == (
+        "已确认实际使用永久性植入物；"
+        "第1台手术（人工硬脑膜）手术记录缺少：材质；"
+        "第2台手术（钛网）手术记录缺少：植入物数量。"
+    )
+    assert "条码" not in finding
+
+
+def test_lx0609_025_complete_contract_lists_only_five_frozen_fields() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-025",
+        facts={
+            "verification_kind": "implant_information_complete",
+            "performed_surgery_confirmed": True,
+            "checked_fields": [
+                "implant_name",
+                "implant_type",
+                "implant_specification",
+                "implant_material",
+                "implant_quantity",
+            ],
+            "identified_implants": ["人工硬脑膜"],
+            "source_label": "手术记录",
+            "source_document_type": "surgery_record",
+        },
+    )
+
+    assert "名称、植入物种类、规格/型号、材质、植入物数量均有记录" in finding
+    assert "条码" not in finding
 
 
 @pytest.mark.parametrize(

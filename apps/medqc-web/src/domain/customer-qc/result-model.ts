@@ -97,8 +97,18 @@ export interface CustomerDisplayFacts {
     | 'implant_specification'
     | 'implant_material'
     | 'implant_quantity'
-    | 'implant_barcode'
   >
+  implantEvents?: Array<{
+    eventPosition: number
+    missingFields: Array<
+      | 'implant_name'
+      | 'implant_type'
+      | 'implant_specification'
+      | 'implant_material'
+      | 'implant_quantity'
+    >
+    implantNames: string[]
+  }>
   implantVerification?: {
     state: 'complete' | 'not_used'
     checkedFields?: Array<
@@ -107,7 +117,6 @@ export interface CustomerDisplayFacts {
       | 'implant_specification'
       | 'implant_material'
       | 'implant_quantity'
-      | 'implant_barcode'
     >
   }
   copySimilarity?: number

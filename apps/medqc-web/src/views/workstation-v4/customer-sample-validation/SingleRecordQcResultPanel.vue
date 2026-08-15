@@ -425,6 +425,27 @@
           >
             <div class="detail-column detail-column-main">
               <section
+                v-if="implantEventFacts(item).length"
+                class="detail-block implant-event-block"
+                data-testid="implant-event-facts"
+              >
+                <header class="fact-block-header">
+                  <h4>逐台手术核对</h4>
+                  <span>分别展示每台手术缺少的植入物字段</span>
+                </header>
+                <div class="implant-event-list">
+                  <article
+                    v-for="event in implantEventFacts(item)"
+                    :key="event.eventPosition"
+                    class="implant-event-row"
+                    data-testid="implant-event-fact"
+                  >
+                    <strong>{{ implantEventTitle(event) }}</strong>
+                    <span>手术记录缺少：{{ event.missingLabels.join('、') }}</span>
+                  </article>
+                </div>
+              </section>
+              <section
                 v-if="remainingDisplayFactRows(item).length"
                 class="detail-block fact-block decision-fact-block"
                 :data-testid="
@@ -709,10 +730,9 @@ const factValueLabels: Record<string, string> = {
   admission_first_course_copy_detected: '入院记录现病史与首次病程记录病例特点高度重复',
   copy_similarity_threshold_exceeded: '病程记录相似度达到判定阈值',
   implant_name: '名称',
-  implant_category: '种类',
+  implant_type: '种类',
   implant_specification: '规格/型号',
   implant_material: '材质',
-  implant_barcode: '条码/批号',
   implant_quantity: '数量',
   surgery_record: '手术记录',
   admission_record: '入院记录',
@@ -808,6 +828,55 @@ function displayFactRows(item: SingleRecordQcResultItem) {
       }
     })
     .filter((row) => Boolean(row.value))
+}
+
+const implantFieldLabels: Record<string, string> = {
+  implant_name: '名称',
+  implant_type: '种类',
+  implant_specification: '规格/型号',
+  implant_material: '材质',
+  implant_quantity: '数量',
+}
+
+function implantEventFacts(item: SingleRecordQcResultItem) {
+  if (item.rule_id !== 'LX0609-025') return []
+  if (
+    item.customer_display_facts?.performed_surgery_confirmed !== true ||
+    item.customer_display_facts?.source_label !== '手术记录' ||
+    item.customer_display_facts?.source_document_type !== 'surgery_record'
+  )
+    return []
+  const rawEvents = item.customer_display_facts?.implant_event_details
+  if (!Array.isArray(rawEvents) || !rawEvents.length || rawEvents.length > 12) return []
+  const events: Array<{
+    eventPosition: number
+    missingLabels: string[]
+    implantNames: string[]
+  }> = []
+  for (const [index, candidate] of rawEvents.entries()) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
+    const row = candidate as Record<string, unknown>
+    if (row.event_position !== index + 1) return []
+    if (!Array.isArray(row.missing_fields) || !row.missing_fields.length) return []
+    const missingLabels = row.missing_fields.flatMap((field) => {
+      const label = typeof field === 'string' ? implantFieldLabels[field] : undefined
+      return label ? [label] : []
+    })
+    if (missingLabels.length !== row.missing_fields.length) return []
+    if (!Array.isArray(row.implant_names) || row.implant_names.length > 12) return []
+    const implantNames = row.implant_names.flatMap((value) => {
+      const name = typeof value === 'string' ? value.trim() : ''
+      return name && name.length <= 80 ? [name] : []
+    })
+    if (implantNames.length !== row.implant_names.length) return []
+    events.push({ eventPosition: index + 1, missingLabels, implantNames })
+  }
+  return events
+}
+
+function implantEventTitle(event: ReturnType<typeof implantEventFacts>[number]) {
+  const names = event.implantNames.length ? ` · ${event.implantNames.join('、')}` : ''
+  return `第 ${event.eventPosition} 台手术${names}`
 }
 
 type DisplayFactRow = ReturnType<typeof displayFactRows>[number]
@@ -1938,6 +2007,44 @@ watch(
 .decision-fact-block .fact-list dd {
   color: rgba(20, 42, 68, 0.9);
   font-weight: 550;
+}
+
+.implant-event-block {
+  overflow: hidden;
+  padding: 0 !important;
+  border: 1px solid rgba(217, 45, 32, 0.14);
+  border-radius: 9px;
+  background: rgba(255, 251, 250, 0.78);
+}
+
+.implant-event-list {
+  display: grid;
+  gap: 0;
+}
+
+.implant-event-row {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-top: 1px solid rgba(217, 45, 32, 0.08);
+}
+
+.implant-event-row:first-child {
+  border-top: 0;
+}
+
+.implant-event-row strong {
+  color: rgba(29, 29, 31, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 19px;
+}
+
+.implant-event-row span {
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 19px;
 }
 
 .fact-list dt {

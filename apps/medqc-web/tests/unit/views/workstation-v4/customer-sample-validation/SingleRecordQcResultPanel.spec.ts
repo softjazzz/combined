@@ -54,8 +54,22 @@ const items = [
     conclusion: '发现该质控点对应的明确问题。',
     customer_display_facts: {
       failure_kind: 'implant_information_incomplete',
+      performed_surgery_confirmed: true,
       source_label: '手术记录',
-      missing_fields: ['implant_barcode', 'implant_quantity'],
+      source_document_type: 'surgery_record',
+      missing_fields: ['implant_material', 'implant_quantity'],
+      implant_event_details: [
+        {
+          event_position: 1,
+          missing_fields: ['implant_material'],
+          implant_names: ['人工硬脑膜'],
+        },
+        {
+          event_position: 2,
+          missing_fields: ['implant_quantity'],
+          implant_names: ['钛网'],
+        },
+      ],
     },
     evidence: [
       {
@@ -805,9 +819,36 @@ describe('SingleRecordQcResultPanel', () => {
 
     expect(wrapper.text()).toContain('判定事实')
     expect(wrapper.text()).toContain('植入物信息填写不完整')
+    const events = wrapper.findAll('[data-testid="implant-event-fact"]')
+    expect(events).toHaveLength(2)
+    expect(events[0]!.text()).toContain('第 1 台手术 · 人工硬脑膜')
+    expect(events[0]!.text()).toContain('手术记录缺少：材质')
+    expect(events[1]!.text()).toContain('第 2 台手术 · 钛网')
+    expect(events[1]!.text()).toContain('手术记录缺少：数量')
     expect(wrapper.text()).not.toContain('缺失字段')
-    expect(wrapper.text()).not.toContain('条码/批号、数量')
+    expect(wrapper.text()).not.toContain('条码')
+    expect(wrapper.text()).not.toContain('event_ref')
+    expect(wrapper.text()).not.toContain('source_document_id')
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain('手术记录')
+  })
+
+  it.each([
+    { performed_surgery_confirmed: false, source_label: '手术记录', source_document_type: 'surgery_record' },
+    { performed_surgery_confirmed: true, source_label: '病程记录', source_document_type: 'surgery_record' },
+    { performed_surgery_confirmed: true, source_label: '手术记录', source_document_type: 'daily_course_record' },
+  ])('025来源或手术事实不合法时不展示逐台手术核对', async (overrides) => {
+    const malformed = {
+      ...items[2]!,
+      customer_display_facts: {
+        ...items[2]!.customer_display_facts,
+        ...overrides,
+      },
+    }
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [malformed] } })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    expect(wrapper.find('[data-testid="implant-event-facts"]').exists()).toBe(false)
   })
 
   it.each([

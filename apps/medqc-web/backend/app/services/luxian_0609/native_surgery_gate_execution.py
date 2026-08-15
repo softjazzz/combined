@@ -1327,6 +1327,7 @@ def _surgery_text_outcome(
             display_facts = (
                 {
                     "failure_kind": "implant_information_incomplete",
+                    "performed_surgery_confirmed": True,
                     "missing_fields": [
                         field_name
                         for field_name in LX0609_025_REQUIRED_FIELDS

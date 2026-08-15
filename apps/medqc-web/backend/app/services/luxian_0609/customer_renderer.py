@@ -14,6 +14,7 @@ from ..luxian_0609_rule_catalog import (
 from .decision_reducer import CustomerFinalState, ReducedRuleDecision
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .source_gap_contract import customer_gap_message
+from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 
 
 CUSTOMER_SCHEMA_VERSION = "lx0609-customer-result-v2"
@@ -521,7 +522,7 @@ _RULE_NON_COMPLIANT_MESSAGES = {
     "LX0609-025": (
         "手术记录中的植入物信息不完整",
         "已核对手术记录中的永久性植入物及必填信息。",
-        "请在手术记录中补全结果列出的植入物名称、种类、规格/型号、材质、条码及数量等缺项。",
+        "请在手术记录中补全结果列出的植入物名称、种类、规格/型号、材质及数量等缺项。",
     ),
     "LX0609-029": (
         "已实施手术，但未找到对应的术前小结",
@@ -1495,12 +1496,16 @@ def customer_finding_from_controlled_facts(
         return ""
 
     if rule_id == "LX0609-025":
-        primary_labels = {
-            "implant_barcode": "植入物条码",
+        field_labels = {
+            "implant_name": "名称",
             "implant_type": "植入物种类",
+            "implant_specification": "规格/型号",
+            "implant_material": "材质",
             "implant_quantity": "植入物数量",
         }
-        source = str(facts.get("source_label") or "手术记录或病程记录")
+        if tuple(field_labels) != LX0609_025_REQUIRED_FIELDS:
+            return ""
+        source = str(facts.get("source_label") or "手术记录")
         identified = facts.get("identified_implants")
         implant_names = (
             "、".join(str(item) for item in identified)
@@ -1508,28 +1513,36 @@ def customer_finding_from_controlled_facts(
             else ""
         )
         if kind == "implant_information_incomplete":
-            missing = labels("missing_fields", primary_labels)
-            if not missing:
+            event_details = facts.get("implant_event_details")
+            if not isinstance(event_details, list) or not event_details:
                 return ""
-            implant_fact = (
-                f"已确认实际使用永久性植入物：{implant_names}；"
-                if implant_names
-                else "已确认实际使用永久性植入物，但"
-            )
-            return f"{implant_fact}{source}缺少：{missing}。"
+            rendered_events: list[str] = []
+            for event in event_details:
+                if not isinstance(event, Mapping):
+                    return ""
+                position = event.get("event_position")
+                missing_fields = event.get("missing_fields")
+                event_names = event.get("implant_names")
+                if (
+                    not isinstance(position, int)
+                    or isinstance(position, bool)
+                    or position <= 0
+                    or not isinstance(missing_fields, list)
+                    or any(field not in field_labels for field in missing_fields)
+                    or not isinstance(event_names, list)
+                ):
+                    return ""
+                missing = "、".join(field_labels[field] for field in missing_fields)
+                names = "、".join(str(item) for item in event_names if str(item).strip())
+                subject = f"第{position}台手术"
+                if names:
+                    subject += f"（{names}）"
+                rendered_events.append(f"{subject}{source}缺少：{missing}")
+            return "已确认实际使用永久性植入物；" + "；".join(rendered_events) + "。"
         if kind == "implant_information_complete":
-            checked = labels("checked_fields", primary_labels)
-            extension = labels(
-                "local_extension_missing_fields",
-                {
-                    "implant_name": "名称",
-                    "implant_specification": "规格/型号",
-                    "implant_material": "材质",
-                },
-            )
-            suffix = f"本院扩展字段待补：{extension}。" if extension else ""
+            checked = labels("checked_fields", field_labels)
             implant_fact = f"已识别永久性植入物：{implant_names}；" if implant_names else ""
-            return f"{implant_fact}已核对{source}，{checked}均有记录。{suffix}"
+            return f"{implant_fact}已核对{source}，{checked}均有记录。"
 
     if rule_id == "LX0609-009":
         change_events = facts.get("change_events")

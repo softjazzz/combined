@@ -224,8 +224,22 @@ describe('normalizeCustomerQcResult', () => {
       reason_code: 'requirement_violated',
       customer_display_facts: {
         failure_kind: 'implant_information_incomplete',
-        missing_fields: ['implant_specification', 'implant_material', 'implant_quantity'],
+        performed_surgery_confirmed: true,
+        missing_fields: ['implant_material', 'implant_quantity'],
+        implant_event_details: [
+          {
+            event_position: 1,
+            missing_fields: ['implant_material'],
+            implant_names: ['人工硬脑膜'],
+          },
+          {
+            event_position: 2,
+            missing_fields: ['implant_quantity'],
+            implant_names: ['钛网'],
+          },
+        ],
         source_label: '手术记录',
+        source_document_type: 'surgery_record',
       },
       findings: 'PRIVATE_SURGERY_TEXT',
     }
@@ -233,13 +247,15 @@ describe('normalizeCustomerQcResult', () => {
 
     expect(hasActionableCustomerExplanation(raw)).toBe(true)
     expect(result.display).toMatchObject({
-      summary: '已确认本次手术使用植入物；手术记录未记录：规格/型号、材质、数量（共3项）。',
+      summary: '已确认使用永久性植入物；第1台手术（人工硬脑膜）缺少材质；第2台手术（钛网）缺少数量。',
       detail:
-        '本次不合规的直接原因：手术记录未记录规格/型号、材质、数量。已按必填字段逐项核对；未列为缺失的字段不等于已完整记录，仍应结合原文复核。',
-      actualValue: '缺失字段：规格/型号、材质、数量。',
+        '逐台核对结果：第1台手术（人工硬脑膜）缺少材质；第2台手术（钛网）缺少数量。本次共缺少材质、数量。',
+      actualValue: '第1台手术（人工硬脑膜）缺失：材质；第2台手术（钛网）缺失：数量。',
       evidenceSources: [{ kind: 'surgery_record', label: '手术记录' }],
     })
     expect(JSON.stringify(result)).not.toContain('PRIVATE_SURGERY_TEXT')
+    expect(JSON.stringify(result)).not.toContain('barcode')
+    expect(JSON.stringify(result)).not.toContain('条码')
   })
 
   it('规则专属事实优先于通用受控解释，避免明确缺项被泛化文案覆盖', () => {
@@ -254,13 +270,122 @@ describe('normalizeCustomerQcResult', () => {
       suggestion: '请按质控要求补充或修正。',
       customer_display_facts: {
         failure_kind: 'implant_information_incomplete',
+        performed_surgery_confirmed: true,
         missing_fields: ['implant_material'],
+        implant_event_details: [
+          {
+            event_position: 1,
+            missing_fields: ['implant_material'],
+            implant_names: ['人工硬脑膜'],
+          },
+        ],
         source_label: '手术记录',
+        source_document_type: 'surgery_record',
       },
     })
 
-    expect(result.display.summary).toBe('已确认本次手术使用植入物；手术记录未记录：材质（共1项）。')
-    expect(result.display.detail).toContain('本次不合规的直接原因')
+    expect(result.display.summary).toBe('已确认使用永久性植入物；第1台手术（人工硬脑膜）缺少材质。')
+    expect(result.display.detail).toContain('逐台核对结果')
+  })
+
+  it('025拒绝混入条码的旧字段清单，不对其余字段做部分交付', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-025',
+      status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'implant_information_incomplete',
+        performed_surgery_confirmed: true,
+        missing_fields: ['implant_material', 'implant_barcode'],
+        implant_event_details: [
+          {
+            event_position: 1,
+            missing_fields: ['implant_material'],
+            implant_names: ['人工硬脑膜'],
+          },
+        ],
+        source_label: '手术记录',
+        source_document_type: 'surgery_record',
+      },
+    })
+
+    expect(result.decisionStatus).toBe('evaluation_unknown')
+    expect(JSON.stringify(result)).not.toContain('条码')
+  })
+
+  it.each([
+    {
+      status: 'non_compliant',
+      facts: {
+        failure_kind: 'implant_information_incomplete',
+        performed_surgery_confirmed: true,
+        missing_fields: ['implant_material'],
+        implant_event_details: [
+          { event_position: 1, missing_fields: ['implant_material'], implant_names: ['人工硬脑膜'] },
+        ],
+        source_label: '病程记录',
+        source_document_type: 'surgery_record',
+      },
+      forbidden: '第1台手术',
+    },
+    {
+      status: 'non_compliant',
+      facts: {
+        failure_kind: 'implant_information_incomplete',
+        performed_surgery_confirmed: true,
+        missing_fields: ['implant_material'],
+        implant_event_details: [
+          { event_position: 1, missing_fields: ['implant_material'], implant_names: ['人工硬脑膜'] },
+        ],
+        source_label: '手术记录',
+      },
+      forbidden: '第1台手术',
+    },
+    {
+      status: 'compliant',
+      facts: {
+        verification_kind: 'implant_information_complete',
+        performed_surgery_confirmed: false,
+        checked_fields: ['implant_name', 'implant_type', 'implant_specification', 'implant_material', 'implant_quantity'],
+        source_label: '手术记录',
+        source_document_type: 'surgery_record',
+      },
+      forbidden: '名称、种类、规格/型号、材质、数量均已记录',
+    },
+    {
+      status: 'compliant',
+      facts: {
+        verification_kind: 'implant_information_complete',
+        checked_fields: ['implant_name', 'implant_type', 'implant_specification', 'implant_material', 'implant_quantity'],
+        source_label: '手术记录',
+        source_document_type: 'surgery_record',
+      },
+      forbidden: '名称、种类、规格/型号、材质、数量均已记录',
+    },
+    {
+      status: 'not_applicable',
+      facts: {
+        verification_kind: 'implant_not_used',
+        performed_surgery_confirmed: true,
+        source_label: '病程记录',
+      },
+      forbidden: '本次手术未使用植入物',
+    },
+    {
+      status: 'not_applicable',
+      facts: {
+        verification_kind: 'implant_not_used',
+        source_label: '手术记录',
+      },
+      forbidden: '本次手术未使用植入物',
+    },
+  ])('025不从不可信来源或未确认手术事实生成专属描述', ({ status, facts, forbidden }) => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-025',
+      status,
+      customer_display_facts: facts,
+    })
+
+    expect(JSON.stringify(result.display)).not.toContain(forbidden)
   })
 
   it('为已实施手术缺失目标文书展示确定性原因，不把来源不可用伪装为缺文书', () => {

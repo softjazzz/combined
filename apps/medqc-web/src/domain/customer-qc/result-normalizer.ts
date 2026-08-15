@@ -597,17 +597,8 @@ function extractCustomerDisplayFacts(raw: RawCustomerQcResult): CustomerDisplayF
     : undefined
   const lengthState = asString(facts.length_state)
   const diagnosticRationaleCode = asString(facts.diagnostic_rationale_code)
-  const missingFields = Array.isArray(facts.missing_fields)
-    ? facts.missing_fields.filter(
-        (value): value is NonNullable<CustomerDisplayFacts['missingFields']>[number] =>
-          value === 'implant_name' ||
-          value === 'implant_type' ||
-          value === 'implant_specification' ||
-          value === 'implant_material' ||
-          value === 'implant_quantity' ||
-          value === 'implant_barcode',
-      )
-    : undefined
+  const missingFields = extractImplantMissingFields(facts)
+  const implantEvents = extractImplantEvents(facts, missingFields)
   const targetDocument = asString(facts.target_document)
   const surgeryDocument =
     (failureKind === 'surgery_document_missing' ||
@@ -659,22 +650,21 @@ function extractCustomerDisplayFacts(raw: RawCustomerQcResult): CustomerDisplayF
         ? lengthState
         : undefined,
     missingFields,
+    implantEvents,
     implantVerification:
       facts.verification_kind === 'implant_information_complete'
+        && hasImplantSourceContract(facts, 'implant_information_complete')
+        && Array.isArray(facts.checked_fields)
+        && facts.checked_fields.length === IMPLANT_REQUIRED_FIELDS.length
+        && facts.checked_fields.every(
+          (value, index) => value === IMPLANT_REQUIRED_FIELDS[index],
+        )
         ? {
             state: 'complete',
-            checkedFields: Array.isArray(facts.checked_fields)
-              ? facts.checked_fields.filter(
-                  (
-                    value,
-                  ): value is NonNullable<
-                    CustomerDisplayFacts['implantVerification']
-                  >['checkedFields'][number] =>
-                    typeof value === 'string' && value in IMPLANT_FIELD_LABELS,
-                )
-              : [],
+            checkedFields: [...IMPLANT_REQUIRED_FIELDS],
           }
         : facts.verification_kind === 'implant_not_used'
+          && hasImplantSourceContract(facts, 'implant_not_used')
           ? { state: 'not_used' }
           : undefined,
     copySimilarity:
@@ -763,8 +753,99 @@ const IMPLANT_FIELD_LABELS = {
   implant_specification: '规格/型号',
   implant_material: '材质',
   implant_quantity: '数量',
-  implant_barcode: '条码/批号',
 } as const
+
+const IMPLANT_REQUIRED_FIELDS = [
+  'implant_name',
+  'implant_type',
+  'implant_specification',
+  'implant_material',
+  'implant_quantity',
+] as const
+
+type ImplantField = (typeof IMPLANT_REQUIRED_FIELDS)[number]
+
+function hasImplantSourceContract(
+  facts: Record<string, unknown>,
+  kind: 'implant_information_incomplete' | 'implant_information_complete' | 'implant_not_used',
+) {
+  if (facts.performed_surgery_confirmed !== true || facts.source_label !== '手术记录') return false
+  if (kind === 'implant_not_used') return facts.source_document_type === undefined
+  return facts.source_document_type === 'surgery_record'
+}
+
+function extractImplantMissingFields(
+  facts: Record<string, unknown>,
+): CustomerDisplayFacts['missingFields'] {
+  if (
+    facts.failure_kind !== 'implant_information_incomplete' ||
+    !hasImplantSourceContract(facts, 'implant_information_incomplete')
+  )
+    return undefined
+  const rawFields = facts.missing_fields
+  if (!Array.isArray(rawFields) || !rawFields.length) return undefined
+  const expected = IMPLANT_REQUIRED_FIELDS.filter((field) => rawFields.includes(field))
+  if (
+    rawFields.length !== expected.length ||
+    rawFields.some((field, index) => field !== expected[index])
+  )
+    return undefined
+  return [...expected]
+}
+
+function extractImplantEvents(
+  facts: Record<string, unknown>,
+  topLevelMissingFields: CustomerDisplayFacts['missingFields'],
+): CustomerDisplayFacts['implantEvents'] {
+  if (
+    facts.failure_kind !== 'implant_information_incomplete' ||
+    !hasImplantSourceContract(facts, 'implant_information_incomplete')
+  )
+    return undefined
+  const rows = facts.implant_event_details
+  if (!Array.isArray(rows) || !rows.length || rows.length > 12) return undefined
+  const events: NonNullable<CustomerDisplayFacts['implantEvents']> = []
+  const unionMissing = new Set<ImplantField>()
+  for (const [index, candidate] of rows.entries()) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return undefined
+    const row = candidate as Record<string, unknown>
+    if (
+      Object.keys(row).sort().join('|') !==
+      ['event_position', 'implant_names', 'missing_fields'].sort().join('|')
+    )
+      return undefined
+    if (row.event_position !== index + 1) return undefined
+    if (!Array.isArray(row.missing_fields) || !row.missing_fields.length) return undefined
+    const eventMissing: ImplantField[] = []
+    for (const field of row.missing_fields) {
+      if (
+        typeof field !== 'string' ||
+        !IMPLANT_REQUIRED_FIELDS.includes(field as ImplantField) ||
+        eventMissing.includes(field as ImplantField)
+      )
+        return undefined
+      eventMissing.push(field as ImplantField)
+      unionMissing.add(field as ImplantField)
+    }
+    if (!Array.isArray(row.implant_names) || row.implant_names.length > 12) return undefined
+    const implantNames: string[] = []
+    for (const value of row.implant_names) {
+      if (typeof value !== 'string') return undefined
+      const name = value.trim()
+      if (!name || name.length > 80 || implantNames.includes(name)) return undefined
+      implantNames.push(name)
+    }
+    events.push({ eventPosition: index + 1, missingFields: eventMissing, implantNames })
+  }
+  const expectedUnion = IMPLANT_REQUIRED_FIELDS.filter((field) => unionMissing.has(field))
+  if (
+    !topLevelMissingFields ||
+    topLevelMissingFields.length !== expectedUnion.length ||
+    topLevelMissingFields.some((field, index) => field !== expectedUnion[index])
+  )
+    return undefined
+  return events
+}
 
 interface SafeCriterionResult {
   criterionId: string
@@ -1006,9 +1087,9 @@ function criterionDescriptor(
 function lx025Descriptor(facts: CustomerDisplayFacts): CustomerReasonDescriptor | undefined {
   if (facts.implantVerification?.state === 'complete') {
     return {
-      summary: '已确认本次手术使用植入物；名称、种类、规格/型号、材质、数量及条码/批号均已记录。',
+      summary: '已确认本次手术使用植入物；名称、种类、规格/型号、材质、数量均已记录。',
       detail: '本项已按植入物必填字段逐项核对手术记录，未发现缺项。',
-      requirement: '手术记录应完整记录植入物名称、种类、规格/型号、材质、数量及条码/批号。',
+      requirement: '手术记录应完整记录植入物名称、种类、规格/型号、材质和数量。',
       suggestion: '继续保持。',
     }
   }
@@ -1016,16 +1097,21 @@ function lx025Descriptor(facts: CustomerDisplayFacts): CustomerReasonDescriptor 
     return {
       summary: '手术记录明确记载本次手术未使用植入物，本项不适用。',
       detail: '本项仅在本次手术实际使用植入物时核对植入物字段完整性。',
-      requirement: '使用植入物时，应完整记录名称、种类、规格/型号、材质、数量及条码/批号。',
+      requirement: '使用植入物时，应完整记录名称、种类、规格/型号、材质和数量。',
       suggestion: '无需按本质控点处理。',
     }
   }
-  if (!facts.missingFields?.length) return undefined
+  if (!facts.missingFields?.length || !facts.implantEvents?.length) return undefined
+  const eventDetails = facts.implantEvents.map((event) => {
+    const missingText = event.missingFields.map((value) => IMPLANT_FIELD_LABELS[value]).join('、')
+    const names = event.implantNames.length ? `（${event.implantNames.join('、')}）` : ''
+    return `第${event.eventPosition}台手术${names}缺少${missingText}`
+  })
   const missingLabels = facts.missingFields.map((value) => IMPLANT_FIELD_LABELS[value])
   const missingText = missingLabels.join('、')
   return {
-    summary: `已确认本次手术使用植入物；手术记录未记录：${missingText}（共${missingLabels.length}项）。`,
-    detail: `本次不合规的直接原因：手术记录未记录${missingText}。已按必填字段逐项核对；未列为缺失的字段不等于已完整记录，仍应结合原文复核。`,
+    summary: `已确认使用永久性植入物；${eventDetails.join('；')}。`,
+    detail: `逐台核对结果：${eventDetails.join('；')}。本次共缺少${missingText}。`,
     requirement: '手术记录应完整记录植入物名称、种类、规格/型号、材质及数量等信息。',
     suggestion: `请在本次手术记录中补录植入物${missingText}。`,
   }
@@ -1703,8 +1789,12 @@ export function normalizeCustomerQcResult(raw: RawCustomerQcResult): CustomerQcR
     facts.copySimilarity !== undefined &&
     facts.copySimilarityThreshold !== undefined
       ? `相似度：${formatPercentage(facts.copySimilarity)}；判定阈值：${formatPercentage(facts.copySimilarityThreshold)}；超出阈值：${formatPercentage(Math.max(0, facts.copySimilarity - facts.copySimilarityThreshold)).replace('%', '个百分点')}。`
-      : ruleId === 'LX0609-025' && facts.missingFields?.length
-        ? `缺失字段：${facts.missingFields.map((value) => IMPLANT_FIELD_LABELS[value]).join('、')}。`
+      : ruleId === 'LX0609-025' && facts.missingFields?.length && facts.implantEvents?.length
+        ? facts.implantEvents.map((event) => {
+            const names = event.implantNames.length ? `（${event.implantNames.join('、')}）` : ''
+            const fields = event.missingFields.map((value) => IMPLANT_FIELD_LABELS[value]).join('、')
+            return `第${event.eventPosition}台手术${names}缺失：${fields}`
+          }).join('；') + '。'
         : ruleId === 'LX0609-024' && facts.lymphNodeDocumentation?.checkedSources.length
           ? `已确认：本次手术已实施且属于恶性肿瘤手术；已核对来源：${facts.lymphNodeDocumentation.checkedSources.map((source) => PATHOLOGY_SOURCE_LABELS[source]).join('、')}。`
           : ruleId === 'LX0609-028' && facts.prophylaxisDuration

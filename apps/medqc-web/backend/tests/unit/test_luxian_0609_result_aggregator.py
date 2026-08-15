@@ -1851,17 +1851,33 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             "LX0609-025",
             {
                 "failure_kind": "implant_information_incomplete",
-                "missing_fields": ["implant_material", "implant_quantity", "PRIVATE_FIELD"],
+                "performed_surgery_confirmed": True,
+                "missing_fields": ["implant_material", "implant_quantity"],
                 "identified_implants": ["人工硬脑膜"],
+                "implant_event_details": [
+                    {
+                        "event_ref": "EVT-1",
+                        "missing_fields": ["implant_material", "implant_quantity"],
+                        "implant_names": ["人工硬脑膜"],
+                        "source_document_id": "private-surgery-document-id",
+                    }
+                ],
                 "source_label": "手术记录",
                 "source_document_type": "surgery_record",
                 "source_document_id": "private-surgery-document-id",
-                "raw_surgery_text": "PRIVATE_SURGERY_TEXT",
             },
             {
                 "failure_kind": "implant_information_incomplete",
-                "missing_fields": ["implant_quantity"],
+                "performed_surgery_confirmed": True,
+                "missing_fields": ["implant_material", "implant_quantity"],
                 "identified_implants": ["人工硬脑膜"],
+                "implant_event_details": [
+                    {
+                        "event_position": 1,
+                        "missing_fields": ["implant_material", "implant_quantity"],
+                        "implant_names": ["人工硬脑膜"],
+                    }
+                ],
                 "source_label": "手术记录",
                 "source_document_type": "surgery_record",
             },
@@ -2229,6 +2245,321 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
             "source_document_id": "private-rescue-document-id",
         }]
     assert "PRIVATE_" not in repr(result)
+
+
+def test_025_multi_surgery_projection_keeps_event_facts_and_all_real_evidence() -> None:
+    raw_facts = {
+        "failure_kind": "implant_information_incomplete",
+        "performed_surgery_confirmed": True,
+        "missing_fields": ["implant_material", "implant_quantity"],
+        "identified_implants": ["人工硬脑膜", "钛网"],
+        "implant_event_details": [
+            {
+                "event_ref": "EVT-A",
+                "missing_fields": ["implant_material"],
+                "implant_names": ["人工硬脑膜"],
+                "source_document_id": "surgery-document-a",
+            },
+            {
+                "event_ref": "EVT-B",
+                "missing_fields": ["implant_quantity"],
+                "implant_names": ["钛网"],
+                "source_document_id": "surgery-document-b",
+            },
+        ],
+        "source_label": "手术记录",
+        "source_document_type": "surgery_record",
+        "source_document_id": "surgery-document-a",
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-025", "name": "植入物信息"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-025", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-025", raw_facts),),
+        format_evidence=False,
+        audit_context={
+            "evidence_snapshot": SimpleNamespace(
+                facts=(
+                    SimpleNamespace(
+                        fact_id="daily-course-fact",
+                        source_snapshot_hash="b" * 64,
+                        source_key="daily_course_record",
+                        source_document_type="daily_course_record",
+                        source_document_id="daily-course-document-must-not-merge",
+                    ),
+                )
+            )
+        },
+    )[0]
+
+    assert result["findings"] == (
+        "已确认实际使用永久性植入物；"
+        "第1台手术（人工硬脑膜）手术记录缺少：材质；"
+        "第2台手术（钛网）手术记录缺少：植入物数量。"
+    )
+    assert result["customer_display_facts"]["implant_event_details"] == [
+        {
+            "event_position": 1,
+            "missing_fields": ["implant_material"],
+            "implant_names": ["人工硬脑膜"],
+        },
+        {
+            "event_position": 2,
+            "missing_fields": ["implant_quantity"],
+            "implant_names": ["钛网"],
+        },
+    ]
+    assert result["customer_evidence"] == [
+        {"source_type": "surgery_record", "source_document_id": "surgery-document-a"},
+        {"source_type": "surgery_record", "source_document_id": "surgery-document-b"},
+    ]
+    assert "event_ref" not in repr(result["customer_display_facts"])
+    assert "source_document_id" not in repr(result["customer_display_facts"])
+    assert "barcode" not in repr(result).lower()
+    assert "条码" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda facts: facts.update({"source_document_id": ""}),
+        lambda facts: facts.update({"source_document_id": "wrong-surgery-document"}),
+        lambda facts: facts["implant_event_details"][0].update(
+            {"source_document_id": ""}
+        ),
+        lambda facts: facts["implant_event_details"][0].update(
+            {"missing_fields": ["implant_barcode"]}
+        ),
+        lambda facts: facts["implant_event_details"].append(
+            dict(facts["implant_event_details"][0])
+        ),
+    ],
+)
+def test_025_invalid_event_projection_fails_closed(mutate) -> None:
+    facts = {
+        "failure_kind": "implant_information_incomplete",
+        "performed_surgery_confirmed": True,
+        "missing_fields": ["implant_material"],
+        "implant_event_details": [
+            {
+                "event_ref": "EVT-A",
+                "missing_fields": ["implant_material"],
+                "implant_names": ["人工硬脑膜"],
+                "source_document_id": "surgery-document-a",
+            }
+        ],
+        "source_label": "手术记录",
+        "source_document_type": "surgery_record",
+        "source_document_id": "surgery-document-a",
+    }
+    mutate(facts)
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-025", raw=facts
+    ) is None
+
+
+@pytest.mark.parametrize(
+    "invalid_facts",
+    [
+        {
+            "failure_kind": "implant_information_incomplete",
+            "performed_surgery_confirmed": True,
+            "missing_fields": ["implant_material"],
+            "implant_event_details": [
+                {
+                    "event_ref": "EVT-A",
+                    "missing_fields": ["implant_material"],
+                    "implant_names": ["人工硬脑膜"],
+                    "source_document_id": "private-surgery-document",
+                }
+            ],
+            "source_label": "病程记录",
+            "source_document_type": "daily_course_record",
+            "source_document_id": "private-surgery-document",
+        },
+        {
+            "failure_kind": "implant_information_incomplete",
+            "performed_surgery_confirmed": True,
+            "missing_fields": ["implant_material"],
+            "implant_event_details": [
+                {
+                    "event_ref": "PRIVATE-EVENT-REF",
+                    "missing_fields": ["implant_material"],
+                    "implant_names": ["人工硬脑膜"],
+                    "source_document_id": "private-surgery-document",
+                }
+            ],
+            "source_label": "手术记录",
+            "source_document_type": "surgery_record",
+            "source_document_id": "private-surgery-document",
+            "PRIVATE_RAW_TEXT": "PRIVATE-DOCUMENT-ID",
+        },
+    ],
+)
+def test_025_public_aggregation_fails_closed_for_invalid_display_facts(
+    invalid_facts,
+) -> None:
+    with pytest.raises(
+        ValueError, match="lx0609_025_display_fact_status_mismatch"
+    ):
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": "LX0609-025", "name": "植入物信息"}],
+            execution_results=[],
+            reduced_decisions=(
+                _reduced_decision("LX0609-025", direction=QcDirection.DEFECT),
+            ),
+            customer_display_facts=(("LX0609-025", invalid_facts),),
+            format_evidence=False,
+        )
+
+
+def _025_facts_for_kind(kind: str) -> dict:
+    if kind == "implant_information_incomplete":
+        return {
+            "failure_kind": kind,
+            "performed_surgery_confirmed": True,
+            "missing_fields": ["implant_material"],
+            "implant_event_details": [
+                {
+                    "event_ref": "EVT-A",
+                    "missing_fields": ["implant_material"],
+                    "implant_names": ["人工硬脑膜"],
+                    "source_document_id": "surgery-document-a",
+                }
+            ],
+            "source_label": "手术记录",
+            "source_document_type": "surgery_record",
+            "source_document_id": "surgery-document-a",
+        }
+    if kind == "implant_information_complete":
+        return {
+            "verification_kind": kind,
+            "performed_surgery_confirmed": True,
+            "checked_fields": [
+                "implant_name",
+                "implant_type",
+                "implant_specification",
+                "implant_material",
+                "implant_quantity",
+            ],
+            "identified_implants": ["人工硬脑膜"],
+            "source_label": "手术记录",
+            "source_document_type": "surgery_record",
+            "source_document_id": "surgery-document-a",
+        }
+    return {
+        "verification_kind": "implant_not_used",
+        "performed_surgery_confirmed": True,
+        "source_label": "手术记录",
+    }
+
+
+def _025_reduced_for_status(status: str) -> ReducedRuleDecision:
+    if status == "not_applicable":
+        return reduce_luxian_0609_rule_decision(
+            RuleDecision(
+                rule_id="LX0609-025",
+                snapshot_hash="a" * 64,
+                applicability=ApplicabilityState.NOT_APPLICABLE,
+                evidence_state=EvidenceState.SUFFICIENT,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="performed_event_absent",
+                fact_refs=("b" * 64,),
+                evaluator_version="aggregator-test-v1",
+            )
+        )
+    return _reduced_decision(
+        "LX0609-025",
+        direction=(
+            QcDirection.DEFECT if status == "non_compliant" else QcDirection.SATISFIED
+        ),
+    )
+
+
+def _aggregate_025_public_path(path: str, status: str, facts: dict | None) -> None:
+    kwargs = {
+        "wrapper_rules": [{"rule_id": "LX0609-025", "name": "植入物信息"}],
+        "format_evidence": False,
+    }
+    if path == "reduced":
+        kwargs.update(
+            execution_results=[],
+            reduced_decisions=(_025_reduced_for_status(status),),
+            customer_display_facts=(
+                (("LX0609-025", facts),) if facts is not None else ()
+            ),
+        )
+    else:
+        result = {
+            "rule_id": "LX0609-025",
+            "status": status,
+        }
+        if path == "native":
+            result["metadata"] = {
+                "execution_source": "lx0609_native",
+                **(
+                    {"customer_display_facts": facts}
+                    if facts is not None
+                    else {}
+                ),
+            }
+        elif facts is not None:
+            result["customer_display_facts"] = facts
+        kwargs["execution_results"] = [result]
+    aggregate_luxian_0609_results(**kwargs)
+
+
+_025_WRONG_SOURCE_FACTS = {
+    **_025_facts_for_kind("implant_information_incomplete"),
+    "source_label": "病程记录",
+    "source_document_type": "daily_course_record",
+}
+_025_PRIVATE_FACTS = {
+    **_025_facts_for_kind("implant_information_incomplete"),
+    "PRIVATE_UNKNOWN": "不得静默丢弃",
+}
+
+
+@pytest.mark.parametrize("path", ["compat", "native", "reduced"])
+@pytest.mark.parametrize(
+    ("status", "facts"),
+    [
+        ("non_compliant", _025_facts_for_kind("implant_information_complete")),
+        ("compliant", _025_facts_for_kind("implant_not_used")),
+        ("not_applicable", _025_facts_for_kind("implant_information_incomplete")),
+        ("non_compliant", None),
+        ("compliant", None),
+        ("not_applicable", None),
+        ("non_compliant", _025_WRONG_SOURCE_FACTS),
+        ("non_compliant", _025_PRIVATE_FACTS),
+    ],
+)
+def test_025_all_public_paths_fail_closed_for_missing_or_invalid_protected_facts(
+    path, status, facts
+) -> None:
+    with pytest.raises(
+        ValueError, match="lx0609_025_display_fact_status_mismatch"
+    ):
+        _aggregate_025_public_path(path, status, facts)
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["data_gap", "uncertain", "technical_error", "not_executed"],
+)
+def test_025_non_decision_statuses_may_omit_customer_display_facts(status) -> None:
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-025", "name": "植入物信息"}],
+        execution_results=[{"rule_id": "LX0609-025", "status": status}],
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] not in {"compliant", "non_compliant", "not_applicable"}
+    assert "customer_display_facts" not in result
 
 
 def test_011_multi_event_details_reach_canonical_customer_finding():

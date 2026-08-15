@@ -1910,6 +1910,7 @@ def test_025_actual_implant_field_contract_is_python_owned(
     if expected == "non_compliant":
         assert outcome.customer_display_facts == {
             "failure_kind": "implant_information_incomplete",
+            "performed_surgery_confirmed": True,
             "missing_fields": [field],
             "implant_event_details": [
                 {
@@ -1942,6 +1943,7 @@ def test_025_all_five_customer_fields_are_required_and_barcode_is_not_checked() 
     assert outcome.status == "non_compliant"
     assert outcome.customer_display_facts == {
         "failure_kind": "implant_information_incomplete",
+        "performed_surgery_confirmed": True,
         "missing_fields": ["implant_material"],
         "implant_event_details": [
             {
