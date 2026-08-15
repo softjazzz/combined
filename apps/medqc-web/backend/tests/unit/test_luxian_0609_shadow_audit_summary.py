@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.luxian_0609.shadow_audit_summary import (
     merge_luxian_0609_shadow_summaries,
     project_luxian_0609_shadow_summaries,
@@ -96,6 +98,73 @@ def test_invalid_shadow_summary_fails_closed_without_preserving_payload() -> Non
         "operation_count": 0,
         "missing_field_counts": {},
     }
+
+
+@pytest.mark.parametrize(
+    ("key", "factory", "required_fields"),
+    [
+        (
+            "luxian_0609_025_shadow",
+            _shadow_025,
+            (
+                "operation_count",
+                "llm_calls",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "elapsed_ms",
+                "missing_field_counts",
+            ),
+        ),
+        (
+            "luxian_0609_059_shadow",
+            _shadow_059,
+            (
+                "event_count",
+                "matched_order_count",
+                "missing_order_count",
+                "conflict_order_count",
+                "llm_calls",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "elapsed_ms",
+            ),
+        ),
+    ],
+)
+def test_shadow_summary_rejects_each_missing_required_counter(
+    key: str,
+    factory: object,
+    required_fields: tuple[str, ...],
+) -> None:
+    assert callable(factory)
+    for field_name in required_fields:
+        raw = factory()
+        raw.pop(field_name)
+
+        projected = project_luxian_0609_shadow_summaries({key: raw})[key]
+
+        assert projected["status"] == "shadow_error", field_name
+        assert projected["reason_code"] == "result_contract_invalid", field_name
+
+
+@pytest.mark.parametrize(
+    ("key", "factory"),
+    [
+        ("luxian_0609_025_shadow", _shadow_025),
+        ("luxian_0609_059_shadow", _shadow_059),
+    ],
+)
+def test_shadow_summary_rejects_inconsistent_total_tokens(key: str, factory: object) -> None:
+    assert callable(factory)
+    raw = factory()
+    raw["total_tokens"] = int(raw["total_tokens"]) + 1
+
+    projected = project_luxian_0609_shadow_summaries({key: raw})[key]
+
+    assert projected["status"] == "shadow_error"
+    assert projected["reason_code"] == "result_contract_invalid"
 
 
 def test_merge_shadow_summaries_persists_only_batch_aggregate() -> None:

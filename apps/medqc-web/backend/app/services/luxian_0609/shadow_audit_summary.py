@@ -159,7 +159,13 @@ def _project_one(raw: object, *, spec: Mapping[str, Any]) -> dict[str, Any]:
             "contract_version": contract_version,
         }
         for field_name in tuple(spec["count_fields"]):
-            projected[field_name] = _nonnegative_int(raw.get(field_name, 0))
+            if field_name not in raw:
+                raise ValueError("missing shadow counter")
+            projected[field_name] = _nonnegative_int(raw[field_name])
+        if projected["total_tokens"] != (
+            projected["prompt_tokens"] + projected["completion_tokens"]
+        ):
+            raise ValueError("inconsistent shadow token totals")
         status_counts = raw.get("status_counts", {})
         if not isinstance(status_counts, Mapping):
             raise ValueError("invalid status counts")
@@ -171,7 +177,9 @@ def _project_one(raw: object, *, spec: Mapping[str, Any]) -> dict[str, Any]:
         if len(projected["status_counts"]) != len(status_counts):
             raise ValueError("invalid status counts")
         for field_name, allowed_keys in dict(spec["counter_fields"]).items():
-            counters = raw.get(field_name, {})
+            if field_name not in raw:
+                raise ValueError("missing shadow counters")
+            counters = raw[field_name]
             if not isinstance(counters, Mapping):
                 raise ValueError("invalid shadow counters")
             projected[field_name] = {
