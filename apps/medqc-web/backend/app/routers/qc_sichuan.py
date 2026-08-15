@@ -73,6 +73,9 @@ from ..services.luxian_0609.rule_decision_settings import (
     assert_luxian_0609_customer_native_delivery_ready,
     resolve_mainline_rule_decision_settings,
 )
+from ..services.luxian_0609.native_package import (
+    assert_luxian_0609_formal_package_plan_native_only,
+)
 from ..services.sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
@@ -218,6 +221,31 @@ def _ordered_luxian_0609_customer_rule_ids(
     if any(rule_id not in by_id for rule_id in requested):
         return ()
     return tuple(item.rule_id for item in inventory if item.rule_id in requested)
+
+
+def _assert_luxian_0609_formal_customer_rule_ids(
+    *,
+    rule_set_key: str,
+    rule_ids: List[str] | tuple[str, ...],
+    context: str,
+) -> tuple[str, ...]:
+    """正式LX0609任务只允许独立包目录内的客户规则ID。"""
+
+    if str(rule_set_key or "").strip() != LUXIAN_0609_RULE_SET_KEY:
+        return ()
+    normalized = {
+        str(rule_id or "").strip().upper()
+        for rule_id in rule_ids
+        if str(rule_id or "").strip()
+    }
+    ordered = _ordered_luxian_0609_customer_rule_ids(tuple(normalized))
+    rejected = sorted(normalized.difference(ordered))
+    if rejected:
+        raise ValueError(
+            "LX0609正式规则集只接受LX0609客户质控点ID，"
+            f"禁止旧或未知规则ID：{','.join(rejected)}（入口：{context}）。"
+        )
+    return ordered
 
 
 def _luxian_0609_rollback_rule_ids(
@@ -2462,6 +2490,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
         rule_set_version = str(filters.get("rule_set_version") or "").strip()
+        _assert_luxian_0609_formal_customer_rule_ids(
+            rule_set_key=rule_set_key,
+            rule_ids=tuple(
+                requested_rule_ids
+                + gate_only_customer_rule_ids_for_validation
+                + paused_customer_rule_ids_for_validation
+            ),
+            context=f"workspace_batch_job:{job_id}",
+        )
         validation_mode = str(filters.get("validation_mode") or "").strip().lower() or "sc"
         programmatic_rule_set = get_sample_programmatic_rule_set()
         is_programmatic_mode = (
@@ -2481,15 +2518,23 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             and requested_rule_ids
             and len(native_requested_rule_ids) == len(set(requested_rule_ids))
         )
+        formal_package_plan = None
+        if is_direct_native_selection:
+            formal_package_plan = build_luxian_0609_package_plan_from_settings(
+                inventory=load_luxian_0609_dependency_inventory(),
+                selected_rule_ids=native_requested_rule_ids,
+                settings=settings,
+            )
+            assert_luxian_0609_formal_package_plan_native_only(
+                formal_package_plan,
+                context=f"workspace_batch_job:{job_id}",
+            )
         native_direct_enabled = bool(
             is_direct_native_selection
             and getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False)
         )
         compatibility_rule_ids = (
-            _luxian_0609_compatibility_rule_ids(
-                native_requested_rule_ids,
-                settings=settings,
-            )
+            formal_package_plan.compatibility_execution_rule_ids
             if is_direct_native_selection
             else ()
         )
@@ -4482,22 +4527,20 @@ async def create_workspace_batch_job(
         requested_payload_rule_ids
         or (requested_rule_set.rule_ids if requested_rule_set else ())
     )
-    direct_native_rule_ids = _ordered_luxian_0609_customer_rule_ids(
-        requested_rule_set_rule_ids
-    )
+    try:
+        direct_native_rule_ids = _assert_luxian_0609_formal_customer_rule_ids(
+            rule_set_key=(requested_rule_set.key if requested_rule_set else ""),
+            rule_ids=tuple(requested_rule_set_rule_ids),
+            context="workspace_batch_create",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     is_direct_native_selection = bool(
         requested_rule_set
         and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY
         and requested_rule_set_rule_ids
         and len(direct_native_rule_ids) == len(set(requested_rule_set_rule_ids))
     )
-    if (
-        requested_rule_set
-        and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY
-        and requested_payload_rule_ids
-        and not is_direct_native_selection
-    ):
-        raise HTTPException(status_code=422, detail="LX0609规则集只接受客户质控点ID")
 
     if requested_rule_set:
         rule_ids = (
@@ -4551,13 +4594,19 @@ async def create_workspace_batch_job(
                 effective_settings,
                 context="workspace_batch_create",
             )
+            formal_package_plan = build_luxian_0609_package_plan_from_settings(
+                inventory=load_luxian_0609_dependency_inventory(),
+                selected_rule_ids=direct_native_rule_ids,
+                settings=effective_settings,
+            )
+            assert_luxian_0609_formal_package_plan_native_only(
+                formal_package_plan,
+                context="workspace_batch_create",
+            )
         except ValueError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     compatibility_rule_ids = (
-        _luxian_0609_compatibility_rule_ids(
-            direct_native_rule_ids,
-            settings=get_settings(),
-        )
+        formal_package_plan.compatibility_execution_rule_ids
         if is_direct_native_selection
         else tuple(rule_ids)
     )

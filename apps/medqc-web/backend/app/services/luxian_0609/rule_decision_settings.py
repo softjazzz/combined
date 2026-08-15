@@ -226,6 +226,9 @@ def assert_luxian_0609_customer_native_delivery_ready(
     if not hasattr(settings, "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED"):
         return
 
+    mainline_enabled = bool(
+        getattr(settings, "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", False)
+    )
     aggregation_enabled = bool(
         getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False)
     )
@@ -233,8 +236,23 @@ def assert_luxian_0609_customer_native_delivery_ready(
         # Settings 始终声明该字段；缺字段仅兼容历史测试/适配对象，不能把它当成显式关闭。
         getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", True)
     )
-    if aggregation_enabled and not unified_engine_enabled:
+    if not (mainline_enabled and aggregation_enabled and unified_engine_enabled):
+        disabled = ",".join(
+            name
+            for name, enabled in (
+                ("MAINLINE", mainline_enabled),
+                ("CUSTOMER_AGGREGATION", aggregation_enabled),
+                ("UNIFIED", unified_engine_enabled),
+            )
+            if not enabled
+        )
+        legacy_detail = (
+            "；客户结果聚合已开启，但统一Native引擎未启用"
+            if aggregation_enabled and not unified_engine_enabled
+            else ""
+        )
         raise ValueError(
-            "LX0609客户质控配置不一致：客户结果聚合已开启，但统一Native引擎未启用"
-            f"（入口：{context}）。请启用主链，或关闭客户结果聚合后再执行受控回滚。"
+            "LX0609正式Native主链未就绪：必须同时启用MAINLINE、"
+            f"CUSTOMER_AGGREGATION、UNIFIED；当前关闭={disabled}{legacy_detail}"
+            f"（入口：{context}）。"
         )

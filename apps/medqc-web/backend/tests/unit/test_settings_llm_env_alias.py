@@ -93,6 +93,44 @@ def test_luxian_customer_native_delivery_rejects_aggregation_without_unified_eng
         )
 
 
+@pytest.mark.parametrize(
+    "disabled_setting",
+    (
+        "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED",
+        "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED",
+        "LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
+    ),
+)
+def test_luxian_customer_native_delivery_requires_all_formal_mainline_switches(
+    disabled_setting,
+):
+    values = {
+        "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED": True,
+        "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
+        "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": True,
+    }
+    values[disabled_setting] = False
+
+    with pytest.raises(ValueError, match="正式Native主链未就绪"):
+        assert_luxian_0609_customer_native_delivery_ready(
+            type("FormalSettingsMismatch", (), values)(),
+            context="test",
+        )
+
+    assert_luxian_0609_customer_native_delivery_ready(
+        type(
+            "FormalSettingsReady",
+            (),
+            {
+                "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED": True,
+                "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
+                "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": True,
+            },
+        )(),
+        context="test",
+    ) is None
+
+
 def _clear_env(monkeypatch):
     for k in LLM_ENV_KEYS:
         monkeypatch.delenv(k, raising=False)

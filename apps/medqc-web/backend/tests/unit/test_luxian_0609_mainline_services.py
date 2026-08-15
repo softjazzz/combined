@@ -90,6 +90,28 @@ async def test_luxian_direct_service_rejects_customer_aggregation_without_unifie
         )
 
 
+@pytest.mark.asyncio
+async def test_formal_direct_service_rejects_exam_lab_compatibility_before_legacy_prepare(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        sichuan_qc_service_module,
+        "get_settings",
+        lambda: _all_native_settings(
+            LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=False,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="正式质控禁止兼容执行.*LX0609-010.*LXE-23"):
+        await SichuanQCService().evaluate_running_final_bundle_input(
+            bundle={"scene": "running", "structured_context": {"documents": {}}},
+            rule_ids=["LX0609-010"],
+            rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        )
+
+
 def _wrapper(
     rule_id: str,
     *,
@@ -1817,6 +1839,7 @@ async def test_mainline_master_switch_enables_all_rule_decisions_and_freezes_as_
     captured: dict[str, object] = {}
     base_settings = _all_native_settings(
         LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
+        LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED=True,
         **FULL_RULE_DECISION_OVERRIDES,
     )
 

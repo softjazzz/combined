@@ -7,6 +7,7 @@ from app.services.luxian_0609.native_package import (
     EXECUTION_MODE_COMPATIBILITY,
     EXECUTION_MODE_NATIVE_ASYNC,
     EXECUTION_MODE_NATIVE_SYNC,
+    assert_luxian_0609_formal_package_plan_native_only,
     build_luxian_0609_dependency_inventory,
     build_luxian_0609_package_plan,
     resolve_package_entry_execution_rule_ids,
@@ -161,6 +162,51 @@ def test_exam_lab_family_flag_partitions_only_five_customer_rules():
     assert enabled.native_executor_batches == (("exam_lab", tuple(selected)),)
     assert disabled.native_async_rule_ids == ()
     assert disabled.compatibility_rule_ids == tuple(selected)
+
+
+@pytest.mark.unit
+def test_formal_plan_rejects_exam_lab_compatibility_and_accepts_fully_native_plan():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+    common = {
+        "inventory": inventory,
+        "selected_rule_ids": ["LX0609-010"],
+        "native_sync_enabled": True,
+        "native_async_enabled": False,
+    }
+    compatibility = build_luxian_0609_package_plan(
+        **common,
+        native_exam_lab_enabled=False,
+    )
+    fully_native = build_luxian_0609_package_plan(
+        **common,
+        native_exam_lab_enabled=True,
+    )
+
+    with pytest.raises(ValueError, match="正式质控禁止兼容执行.*LX0609-010.*LXE-23"):
+        assert_luxian_0609_formal_package_plan_native_only(
+            compatibility,
+            context="test",
+        )
+    assert_luxian_0609_formal_package_plan_native_only(
+        fully_native,
+        context="test",
+    ) is fully_native
+
+    pending = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=["LX0609-025"],
+        native_sync_enabled=True,
+        native_async_enabled=False,
+        native_surgery_gate_enabled=True,
+    )
+    assert pending.not_executed_rule_ids == ("LX0609-025",)
+    assert_luxian_0609_formal_package_plan_native_only(
+        pending,
+        context="test",
+    ) is pending
 
 
 @pytest.mark.unit

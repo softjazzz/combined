@@ -65,6 +65,9 @@ from .luxian_0609 import (
     load_luxian_0609_rules,
     resolve_package_rollback_execution_rule_ids,
 )
+from .luxian_0609.native_package import (
+    assert_luxian_0609_formal_package_plan_native_only,
+)
 from .luxian_0609.execution import (
     aggregate_luxian_0609_orchestrated_results,
     attach_luxian_0609_execution_metadata,
@@ -4563,6 +4566,10 @@ class SichuanQCService:
                         inventory=dependency_inventory,
                         selected_rule_ids=selected_customer_rule_ids,
                         settings=settings,
+                    )
+                    assert_luxian_0609_formal_package_plan_native_only(
+                        package_plan,
+                        context="evaluate_running_final_bundle_input",
                     )
                     resolved_rule_ids = list(
                         package_plan.compatibility_execution_rule_ids

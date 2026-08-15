@@ -150,6 +150,24 @@ class Luxian0609PackagePlan:
         )
 
 
+def assert_luxian_0609_formal_package_plan_native_only(
+    plan: Luxian0609PackagePlan,
+    *,
+    context: str,
+) -> Luxian0609PackagePlan:
+    """正式客户任务不得把可执行规则静默派发到旧兼容链。"""
+
+    if plan.compatibility_rule_ids or plan.compatibility_execution_rule_ids:
+        customer_ids = ",".join(plan.compatibility_rule_ids) or "<none>"
+        execution_ids = ",".join(plan.compatibility_execution_rule_ids) or "<none>"
+        raise ValueError(
+            "LX0609正式质控禁止兼容执行："
+            f"客户规则={customer_ids}，旧执行规则={execution_ids}"
+            f"（入口：{context}）。请恢复对应Native规则族后重试。"
+        )
+    return plan
+
+
 def _family_index(
     family_definitions: Sequence[Mapping[str, Any]],
 ) -> dict[str, tuple[str, str]]:
