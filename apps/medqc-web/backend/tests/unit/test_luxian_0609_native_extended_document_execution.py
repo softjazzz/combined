@@ -2407,7 +2407,7 @@ def test_discharge_medication_labels_form_a_structured_contract() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "rule_id",
-    ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-057", "LX0609-058", "LX0609-059"],
+    ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-057", "LX0609-058"],
 )
 async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> None:
     result, reduced = await _evaluate(
@@ -2476,7 +2476,7 @@ async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> No
 
 
 @pytest.mark.asyncio
-async def test_059_antimicrobial_without_course_record_delivers_defect_facts() -> None:
+async def test_059_legacy_antimicrobial_branch_does_not_deliver_a_formal_defect() -> None:
     result, reduced = await _evaluate(
         "LX0609-059",
         {
@@ -2485,12 +2485,10 @@ async def test_059_antimicrobial_without_course_record_delivers_defect_facts() -
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-059"] == {
-        "failure_kind": "antimicrobial_course_documentation_missing",
-        "antimicrobials": ["美罗培南"],
-        "course_documented": False,
-    }
+    # 059 已移出抗菌药共现分支；正式链由 phase gate 交付 not_executed，
+    # 因此低层兼容执行器即使保留历史诊断事实，也不能交付正式确定问题。
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

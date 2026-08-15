@@ -7824,7 +7824,7 @@ def test_lx0609_039_should_not_show_missing_discussion_when_discussion_time_exis
     assert "术前讨论记录线索" in aggregated[0]["findings"]
 
 
-def test_lx0609_025_should_be_not_applicable_without_implant_fact():
+def test_lx0609_025_rejects_legacy_result_without_required_facts():
     rules = [
         _wrapper(
             "LX0609-025",
@@ -7834,26 +7834,24 @@ def test_lx0609_025_should_be_not_applicable_without_implant_fact():
         )
     ]
 
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-100",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "未提及植入物，无法判定植入物条码是否齐全。",
-                "evidence": "执行证据：手术记录未提及植入物。",
-                "suggestion": "请补充植入物信息。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "implant_rule_requires_implant_fact"
+    with pytest.raises(ValueError, match="lx0609_025_display_fact_status_mismatch"):
+        aggregate_luxian_0609_results(
+            wrapper_rules=rules,
+            execution_results=[
+                {
+                    "rule_id": "SC-100",
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": "未提及植入物，无法判定植入物条码是否齐全。",
+                    "evidence": "执行证据：手术记录未提及植入物。",
+                    "suggestion": "请补充植入物信息。",
+                }
+            ],
+            gate_decisions={},
+        )
 
 
-def test_lx0609_025_should_ignore_generic_barcode_defect_without_specific_implant_fact():
+def test_lx0609_025_rejects_legacy_barcode_defect_without_required_facts():
     rules = [
         _wrapper(
             "LX0609-025",
@@ -7863,23 +7861,21 @@ def test_lx0609_025_should_ignore_generic_barcode_defect_without_specific_implan
         )
     ]
 
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-100",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "手术记录中植入物条码信息缺失。",
-                "evidence": "执行证据：【手术记录】记录时间: 2025-10-15 18:21:28",
-                "suggestion": "补充植入物条码信息。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "implant_rule_requires_implant_fact"
+    with pytest.raises(ValueError, match="lx0609_025_display_fact_status_mismatch"):
+        aggregate_luxian_0609_results(
+            wrapper_rules=rules,
+            execution_results=[
+                {
+                    "rule_id": "SC-100",
+                    "status": "non_compliant",
+                    "is_compliant": False,
+                    "findings": "手术记录中植入物条码信息缺失。",
+                    "evidence": "执行证据：【手术记录】记录时间: 2025-10-15 18:21:28",
+                    "suggestion": "补充植入物条码信息。",
+                }
+            ],
+            gate_decisions={},
+        )
 
 
 def test_lx0609_025_should_be_data_gap_when_implant_exists_but_barcode_source_missing():
