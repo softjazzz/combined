@@ -219,15 +219,51 @@ def _strong_fact(fact_type: str, *, state: str = "present") -> dict:
 
 
 class _Client:
-    def __init__(self, outputs: list[object]) -> None:
+    def __init__(
+        self,
+        outputs: list[object],
+        *,
+        complete_009_candidates: bool = True,
+    ) -> None:
         self.outputs = list(outputs)
         self.prompts: list[str] = []
+        self.complete_009_candidates = complete_009_candidates
 
     async def generate(self, prompt: str, **_: Any) -> dict:
         self.prompts.append(prompt)
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
             raise output
+        if (
+            self.complete_009_candidates
+            and isinstance(output, dict)
+            and isinstance(output.get("events"), list)
+            and (expected_refs := re.findall(r"\[external_event_ref=(E\d+)\]", prompt))
+        ):
+            supplied = list(output["events"])
+            supplied_refs = [str(item.get("event_ref") or "") for item in supplied]
+            if (
+                len(supplied_refs) == len(set(supplied_refs))
+                and set(supplied_refs).issubset(set(expected_refs))
+            ):
+                supplied_by_ref = {
+                    str(item["event_ref"]): item for item in supplied
+                }
+                output = {
+                    **output,
+                    "events": [
+                        supplied_by_ref.get(
+                            ref,
+                            {
+                                "event_ref": ref,
+                                "change_category": "exam_lab",
+                                "is_explicit_change": False,
+                                "corresponding_course_ref": "",
+                            },
+                        )
+                        for ref in expected_refs
+                    ],
+                }
         content = (
             output
             if isinstance(output, str)
@@ -1019,8 +1055,8 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         ),
         (
             "critical_daily_complete",
-            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.TECHNICAL_ERROR),
-            ("trigger_absent_complete", "model_transport_error"),
+            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.COMPLIANT),
+            ("trigger_absent_complete", "requirement_satisfied"),
         ),
         (
             "critical_missing_day",
@@ -1187,7 +1223,7 @@ async def test_2496813_009_daily_frequency_and_semantics_are_both_compliant():
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 0
     assert dict(result.customer_display_facts)["LX0609-009"] == {
         "failure_kind": "critical_daily_record_coverage_satisfied",
         "severity": "critical",
@@ -1215,8 +1251,8 @@ async def test_2496813_009_daily_frequency_and_semantics_are_both_compliant():
         ],
         "missing_count": 0,
     }
-    assert result.total_tokens == 45
-    assert len(client.prompts) == 1
+    assert result.total_tokens == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio
@@ -1388,8 +1424,8 @@ async def test_course_008_discharge_query_error_is_technical_error_even_with_as_
                 "2026-01-02 08:00:00",
                 "2026-01-03 08:00:00",
             ],
-            CustomerFinalState.TECHNICAL_ERROR,
-            "model_transport_error",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
         ),
         (
             None,
@@ -1494,7 +1530,7 @@ async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_without_llm_client_fails_closed() -> None:
+async def test_course_009_daily_complete_without_external_candidates_needs_no_model() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1529,8 +1565,8 @@ async def test_course_009_daily_complete_without_llm_client_fails_closed() -> No
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
-    assert reduced[0].reason_code == "model_transport_error"
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
 
 
@@ -1559,6 +1595,10 @@ async def test_course_009_rejects_legacy_semantic_state_payload(
             _row("病情变化已记录并及时处理。", "2026-01-02 08:00:00"),
             _row("病情平稳，继续观察。", "2026-01-03 08:00:00"),
         ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "外部检查候选。",
+        }]},
         evaluation_as_of_date="2026-01-03",
     )
     client = _Client([{"semantic_state": semantic_state}])
@@ -1753,8 +1793,8 @@ async def test_course_009_208790_shape_fits_one_event_window_call() -> None:
 
 
 @pytest.mark.asyncio
-async def test_course_009_208790_full_projection_does_not_repeat_candidate_lists() -> None:
-    """冻结真实重建后的29份病程规模，候选引用不得造成二次膨胀。"""
+async def test_course_009_208790_course_only_projection_needs_no_model() -> None:
+    """冻结真实重建后的29份病程规模；没有外部事件时不得无意义调用模型。"""
 
     daily_rows = [
         _row(
@@ -1786,15 +1826,12 @@ async def test_course_009_208790_full_projection_does_not_repeat_candidate_lists
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
-    assert client.prompts[0].count("[course_event_ref=") == 29
-    assert "candidate_course_refs=" not in client.prompts[0]
-    assert len(client.prompts[0]) < 32000
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio
-async def test_course_009_course_record_can_be_change_event_and_its_own_timely_record() -> None:
+async def test_course_009_course_record_is_documentation_not_a_model_candidate() -> None:
     session = _severity_session(
         rows=[{
             "severity": "critical",
@@ -1818,13 +1855,10 @@ async def test_course_009_course_record_can_be_change_event_and_its_own_timely_r
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 1
-    assert '本次允许event_ref=["C01","C02"]' in client.prompts[0]
-    assert '本次允许corresponding_course_ref=["C01","C02"]' in client.prompts[0]
-    assert "本次没有E开头的外部事件引用" in client.prompts[0]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
     facts = dict(result.customer_display_facts)["LX0609-009"]
-    assert facts["failure_kind"] == "critical_change_course_timely"
-    assert facts["change_events"][0]["timely"] is True
+    assert facts["failure_kind"] == "critical_daily_record_coverage_satisfied"
 
 
 @pytest.mark.asyncio
@@ -1840,6 +1874,10 @@ async def test_course_009_unknown_model_event_ref_fails_closed() -> None:
             _row("首日病危记录。", "2026-01-01 08:00:00"),
             _row("次日病危记录。", "2026-01-02 09:00:00"),
         ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "外部检查候选。",
+        }]},
         evaluation_as_of_date="2026-01-02",
     )
     client = _Client([{"events": [{
@@ -1860,6 +1898,132 @@ async def test_course_009_unknown_model_event_ref_fails_closed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_course_009_model_must_classify_every_external_candidate_once() -> None:
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+        }],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("次日病危记录。", "2026-01-02 12:00:00"),
+        ],
+        external_rows={
+            "exam_item_report": [
+                {
+                    "exam_id": "EXAM-1",
+                    "report_time": "2026-01-01 10:00:00",
+                    "exam_impression": "检查事件一。",
+                },
+                {
+                    "exam_id": "EXAM-2",
+                    "report_time": "2026-01-02 10:00:00",
+                    "exam_impression": "检查事件二。",
+                },
+            ]
+        },
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "E01",
+        "change_category": "exam_lab",
+        "is_explicit_change": False,
+        "corresponding_course_ref": "",
+    }]}], complete_009_candidates=False)
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_invalid_output"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_course_009_course_rows_are_documentation_not_model_change_candidates() -> None:
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+        }],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("次日新发胸痛，已评估处理。", "2026-01-02 09:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": []}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_course_009_model_cannot_bind_event_to_course_before_event() -> None:
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+        }],
+        daily_rows=[
+            _row("事件前病程。", "2026-01-01 08:00:00"),
+            _row("事件后病程。", "2026-01-02 12:00:00"),
+        ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "新发异常改变。",
+        }]},
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "E01",
+        "change_category": "exam_lab",
+        "is_explicit_change": True,
+        "corresponding_course_ref": "C01",
+    }]}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_invalid_output"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_course_009_external_candidate_category_is_strictly_exam_lab() -> None:
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+        }],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("次日病危记录。", "2026-01-02 12:00:00"),
+        ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "新发异常改变。",
+        }]},
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "E01",
+        "change_category": "objective",
+        "is_explicit_change": True,
+        "corresponding_course_ref": "C02",
+    }]}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_invalid_output"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_course_009_negative_candidates_are_ignored_but_duplicate_positive_refs_fail() -> None:
     session = _severity_session(
         rows=[{
@@ -1870,14 +2034,18 @@ async def test_course_009_negative_candidates_are_ignored_but_duplicate_positive
             _row("首日病危记录。", "2026-01-01 08:00:00"),
             _row("次日病危记录。", "2026-01-02 09:00:00"),
         ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "外部检查候选。",
+        }]},
         evaluation_as_of_date="2026-01-02",
     )
     negative_result, negative_reduced = await _run_typed_009(
         session,
         _Client([{
             "events": [{
-                "event_ref": "C02",
-                "change_category": "objective",
+                "event_ref": "E01",
+                "change_category": "exam_lab",
                 "is_explicit_change": False,
                 "corresponding_course_ref": "",
             }],
@@ -1888,14 +2056,14 @@ async def test_course_009_negative_candidates_are_ignored_but_duplicate_positive
         _Client([{
             "events": [
                 {
-                    "event_ref": "C02",
-                    "change_category": "objective",
+                    "event_ref": "E01",
+                    "change_category": "exam_lab",
                     "is_explicit_change": True,
                     "corresponding_course_ref": "C02",
                 },
                 {
-                    "event_ref": "C02",
-                    "change_category": "subjective",
+                    "event_ref": "E01",
+                    "change_category": "exam_lab",
                     "is_explicit_change": True,
                     "corresponding_course_ref": "C02",
                 },
@@ -1925,13 +2093,20 @@ async def test_course_009_more_than_twenty_change_events_fails_closed_without_tr
             "prescribed_datetime": "2026-01-01 08:00:00",
         }],
         daily_rows=daily_rows,
+        external_rows={"exam_item_report": [
+            {
+                "report_time": f"2026-01-{index:02d} 08:00:00",
+                "exam_impression": f"第{index}个外部明确改变。",
+            }
+            for index in range(1, 22)
+        ]},
         evaluation_as_of_date="2026-01-21",
     )
     client = _Client([{
         "events": [
             {
-                "event_ref": f"C{index:02d}",
-                "change_category": "objective",
+                "event_ref": f"E{index:02d}",
+                "change_category": "exam_lab",
                 "is_explicit_change": True,
                 "corresponding_course_ref": f"C{index:02d}",
             }
@@ -1962,6 +2137,10 @@ async def test_course_009_daily_complete_model_failure_fails_closed() -> None:
             _row("第一日病情稳定。", "2026-01-01 08:00:00"),
             _row("第二日病情稳定。", "2026-01-02 08:00:00"),
         ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "外部检查候选。",
+        }]},
         evaluation_as_of_date="2026-01-02",
     )
     client = _Client([RuntimeError("MODEL_ERROR_MUST_NOT_LEAK")])
@@ -1988,6 +2167,10 @@ async def test_course_009_daily_complete_invalid_json_fails_closed() -> None:
             _row("第一日病情稳定。", "2026-01-01 08:00:00"),
             _row("第二日病情稳定。", "2026-01-02 08:00:00"),
         ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "外部检查候选。",
+        }]},
         evaluation_as_of_date="2026-01-02",
     )
     result, reduced = await _run_typed_009(session, _Client(["not-json"]))
@@ -2012,6 +2195,10 @@ async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None
             _row("病情记录二。", "2026-01-02 08:00:00"),
             _row("病情记录三。", "2026-01-03 08:00:00"),
         ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "外部检查候选。",
+        }]},
         evaluation_as_of_date="2026-01-03",
     )
     client = _Client([{"events": []}])
@@ -2323,6 +2510,10 @@ async def test_course_009_previous_row_caps_now_use_one_bounded_semantic_call(
         ],
         daily_rows=daily_rows,
         senior_rows=senior_rows,
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-01 10:00:00",
+            "exam_impression": "外部检查候选。",
+        }]},
         evaluation_as_of_date="2026-01-01",
     )
     client = _Client([{"events": []}])
@@ -2614,15 +2805,12 @@ async def test_course_009_missing_change_time_and_unresolved_course_are_delivere
         "corresponding_course_ref": "C99",
     }]}]))
     canonical = canonical_for()
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "association_failed"
-    assert canonical["customer_display_facts"] == {
-        "failure_kind": "critical_change_course_association_failed",
-        "event_ref": "E01",
-        "corresponding_course_ref": "C99",
-        "threshold_hours": 24,
-    }
-    assert "无法确认其与对应病程记录的关联关系" in canonical["findings"]
+    assert canonical["status"] == "technical_error"
+    assert canonical["reason_code"] == "model_invalid_output"
+    assert canonical["customer_display_facts"]["failure_kind"] == (
+        "critical_daily_record_coverage_satisfied"
+    )
+    assert "C99" not in repr(canonical)
 
 
 @pytest.mark.asyncio

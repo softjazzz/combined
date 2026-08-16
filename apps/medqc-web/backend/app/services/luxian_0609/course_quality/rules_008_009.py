@@ -859,7 +859,6 @@ def _rule_009_semantic_context(
     ]
     for record_time, ref, _content in course_rows:
         course_times[ref] = record_time
-        event_times[ref] = record_time
     for record_time, ref, content in course_rows:
         if record_time is not None:
             baseline_ref = _rule_009_baseline_course_ref(
@@ -966,12 +965,11 @@ def _rule_009_semantic_prompt(
     return f"""你是 LX0609-009 病危病程语义核对器。
 
 Python 已确认病危期间每日病程覆盖。不要判定整条规则状态、不要重判每日频次。
-只抽取“相对既往基线发生明确改变”的事件：主观症状(subjective)、客观体征(objective)、检查检验(exam_lab)、并发症/合并症(complication)、特殊状态(special_state)。
-"病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。只能引用材料中给出的 event_ref 和 course_ref，不得编造引用；事件发生时间由 Python 根据受控 event_ref 唯一确定。
-若同一病程已经明确记录变化及处置，可把该病程作为对应病程。
+只判断每个受控外部检查/检验候选是否显示“相对既往基线发生明确改变”。“病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。
+只能引用材料中给出的 event_ref 和 course_ref，不得编造引用；事件发生时间由 Python 根据受控 event_ref 唯一确定。
+病程记录只作为变化后的对应记录候选，不是待分类事件；病程内已经记录的变化视为已由该病程同期记录，无需模型重复抽取为事件。
 
-只能使用以下当前就诊、评价区间内的病程事件和临床事件。external_event_ref 仅用于检查检验变化；
-course_event_ref 可用于主观症状、客观体征、并发症/合并症和特殊状态变化，也可作为对应病程。
+只能使用以下当前就诊、评价区间内的外部检查/检验候选与病程记录。event_ref 只能引用 external_event_ref，change_category 只能返回 exam_lab。
 对应病程只能引用下列 course_event_ref；Python 会按权威时间严格校验它是否位于事件发生后 24 小时内：
 {context}
 
@@ -979,10 +977,10 @@ course_event_ref 可用于主观症状、客观体征、并发症/合并症和�
 本次允许corresponding_course_ref={allowed_course_refs}，也可以返回空字符串。
 {external_ref_constraint}
 不得创建、改写或猜测列表以外的引用。
-只返回is_explicit_change=true的事件；不要返回false候选。每个event_ref最多返回一次；
+必须对允许event_ref列表中的每个候选恰好返回一次，顺序与允许列表一致；明确变化返回is_explicit_change=true，非明确变化也必须返回is_explicit_change=false且corresponding_course_ref为空。不得遗漏候选。
 若同一事件涉及多个类别，只选择最主要的一个类别，禁止重复event_ref。
 若明确变化事件超过{_MAX_RULE_009_CHANGE_EVENTS}个，仍须全部返回，由Python失败关闭，禁止静默省略。
-只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","is_explicit_change":true,"corresponding_course_ref":"...或空字符串"}}]}}。没有明确变化时events为空数组。"""
+只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","is_explicit_change":true或false,"corresponding_course_ref":"...或空字符串"}}]}}。"""
 
 
 def _parse_rule_009_change_events(response: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...] | None:
@@ -1004,11 +1002,10 @@ def _parse_rule_009_change_events(response: Mapping[str, Any]) -> tuple[Mapping[
         event_ref = _clean(item.get("event_ref"))
         if not event_ref:
             return None
-        if not is_explicit_change:
-            continue
         parsed.append({
             "event_ref": event_ref,
             "change_category": category,
+            "is_explicit_change": is_explicit_change,
             "corresponding_course_ref": _clean(item.get("corresponding_course_ref")),
         })
     return tuple(parsed)
@@ -1298,7 +1295,19 @@ async def evaluate_rules_008_009_typed(
             customer_display_facts=tuple(base_display_facts),
             **usage,
         )
-    if len({str(event["event_ref"]) for event in events}) != len(events):
+    returned_event_refs = tuple(str(event["event_ref"]) for event in events)
+    if (
+        len(set(returned_event_refs)) != len(events)
+        or returned_event_refs != tuple(event_times)
+        or any(
+            str(event.get("change_category") or "") != "exam_lab"
+            or (
+                not event["is_explicit_change"]
+                and str(event.get("corresponding_course_ref") or "")
+            )
+            for event in events
+        )
+    ):
         return Rule008009TypedExecution(
             decision=_rule_009_semantic_decision(
                 base_decision=base_decision,
@@ -1307,7 +1316,8 @@ async def evaluate_rules_008_009_typed(
             customer_display_facts=tuple(base_display_facts),
             **usage,
         )
-    if len(events) > _MAX_RULE_009_CHANGE_EVENTS:
+    explicit_events = tuple(event for event in events if event["is_explicit_change"])
+    if len(explicit_events) > _MAX_RULE_009_CHANGE_EVENTS:
         return Rule008009TypedExecution(
             decision=_rule_009_semantic_decision(
                 base_decision=base_decision,
@@ -1316,13 +1326,28 @@ async def evaluate_rules_008_009_typed(
             customer_display_facts=(),
             **usage,
         )
-    if not events:
+    if not explicit_events:
         return Rule008009TypedExecution(
             decision=base_decision,
             customer_display_facts=tuple(base_display_facts),
             **usage,
         )
-    if any(str(event["event_ref"]) not in event_times for event in events):
+    if any(
+        str(event["event_ref"]) not in event_times
+        or (
+            (course_ref := str(event.get("corresponding_course_ref") or ""))
+            and (
+                course_ref not in course_times
+                or (
+                    course_times[course_ref] is not None
+                    and event_times[str(event["event_ref"])] is not None
+                    and course_times[course_ref]
+                    < event_times[str(event["event_ref"])]
+                )
+            )
+        )
+        for event in explicit_events
+    ):
         return Rule008009TypedExecution(
             decision=_rule_009_semantic_decision(
                 base_decision=base_decision,
@@ -1334,7 +1359,7 @@ async def evaluate_rules_008_009_typed(
 
     semantic_decision, change_facts = _rule_009_change_event_decision(
         base_decision=base_decision,
-        events=events,
+        events=explicit_events,
         event_times=event_times,
         course_times=course_times,
         evaluation_horizon=evaluation_horizon,
