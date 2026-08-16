@@ -24,6 +24,10 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .extended_document.death_discussion import (
+    evaluate_death_discussion_timeliness,
+)
+from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
     CRITICAL_VALUE_SOURCE_KEYS,
@@ -32,7 +36,6 @@ from .extended_document_critical_value import (
     evaluate_critical_value_rules,
 )
 from .source_evidence_reader import (
-    authoritative_document_time_value,
     parse_strict_performed_time,
     trusted_performed_surgery_times,
 )
@@ -153,10 +156,6 @@ _AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN = re.compile(
 )
 
 
-def _clean(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _discharge_approval_path(
     row: Mapping[str, Any],
     *,
@@ -188,29 +187,6 @@ def _discharge_approval_path(
     ):
         return "senior_approval"
     return None
-
-
-def _parse_datetime(value: Any) -> datetime | None:
-    text = _clean(value)
-    if not text:
-        return None
-    normalized = text.replace("T", " ").replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    return parsed.replace(tzinfo=None)
-
-
-def _row_time(row: Mapping[str, Any]) -> datetime | None:
-    value = authoritative_document_time_value(row)
-    return _parse_datetime(
-        value
-        or row.get("death_datetime")
-        or row.get("death_time")
-        or row.get("discharge_datetime")
-        or row.get("discharge_time")
-    )
 
 
 def _consultation_timeliness_facts(
@@ -1639,127 +1615,22 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-051":
-            if discussion_error:
-                decisions.append(
-                    _decision(
-                        rule_id=rule_id,
-                        snapshot=evidence_snapshot,
-                        source_keys=("death_record", "death_discussion"),
-                        final_state="data_gap",
-                        reason_code=discussion_error,
-                    )
-                )
-                continue
-            if death_time is None:
-                decisions.append(
-                    _decision(
-                        rule_id=rule_id,
-                        snapshot=evidence_snapshot,
-                        source_keys=("death_record", "death_discussion"),
-                        final_state="data_gap",
-                        reason_code="authoritative_time_missing",
-                    )
-                )
-                continue
-            timed_discussions = tuple(
-                (candidate, index, row)
-                for index, row in enumerate(discussion_rows)
-                if (candidate := _row_time(row)) is not None
+            outcome = evaluate_death_discussion_timeliness(
+                death_time=death_time,
+                death_rows=death_rows,
+                discussion_rows=discussion_rows,
+                discussion_error=discussion_error,
+                snapshot_created_at=evidence_snapshot.created_at,
             )
-            postdeath_discussions = tuple(
-                candidate
-                for candidate in timed_discussions
-                if candidate[0] >= death_time
-            )
-            selected_discussion = min(
-                postdeath_discussions,
-                key=lambda candidate: (candidate[0], candidate[1]),
-                default=None,
-            )
-            death_row = next(
-                (
-                    row
-                    for row in death_rows
-                    if _parse_datetime(
-                        row.get("death_datetime") or row.get("death_time")
-                    )
-                    == death_time
-                ),
-                next(
-                    (row for row in death_rows if _row_time(row) == death_time),
-                    None,
-                ),
-            )
-            source_document_refs = []
-            if death_row is not None:
-                death_document_id = _clean(
-                    death_row.get("document_id") or death_row.get("id")
-                )
-                if death_document_id:
-                    source_document_refs.append(
-                        {
-                            "source_type": "death_record",
-                            "source_document_id": death_document_id,
-                        }
-                    )
-            if discussion_rows and not timed_discussions:
-                final_state, reason_code = "data_gap", "authoritative_time_missing"
-            elif selected_discussion is not None:
-                discussion_time, _, discussion_row = selected_discussion
-                hours = (discussion_time - death_time).total_seconds() / 3600
-                final_state = "compliant" if hours <= 168 else "non_compliant"
-                reason_code = (
-                    "requirement_within_threshold"
-                    if hours <= 168
-                    else "threshold_exceeded"
-                )
-                discussion_document_id = _clean(
-                    discussion_row.get("document_id") or discussion_row.get("id")
-                )
-                if discussion_document_id:
-                    source_document_refs.append(
-                        {
-                            "source_type": "death_discussion",
-                            "source_document_id": discussion_document_id,
-                        }
-                    )
-                display.append(
-                    (
-                        rule_id,
-                        {
-                            "verification_kind": "death_discussion_timeliness_check",
-                            "death_time": death_time.isoformat(sep=" "),
-                            "discussion_time": discussion_time.isoformat(sep=" "),
-                            "threshold_hours": 168,
-                            "actual_interval_hours": round(hours, 2),
-                            "source_document_refs": source_document_refs,
-                        },
-                    )
-                )
-            elif _parse_datetime(evidence_snapshot.created_at) is not None and (
-                _parse_datetime(evidence_snapshot.created_at) - death_time
-                >= timedelta(days=7)
-            ):
-                final_state, reason_code = (
-                    "non_compliant",
-                    "required_document_missing",
-                )
-                display.append((rule_id, {
-                    "failure_kind": "death_discussion_missing_after_deadline",
-                    "death_time": death_time.isoformat(sep=" "),
-                    "threshold_hours": 168,
-                    "discussion_count": 0,
-                    "source_document_refs": source_document_refs,
-                }))
-            else:
-                final_state, reason_code = "data_gap", "source_readiness_unproven"
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=("death_record", "death_discussion"),
-                    final_state=final_state,
-                    reason_code=reason_code,
+                    final_state=outcome.final_state,
+                    reason_code=outcome.reason_code,
                 )
             )
             continue
