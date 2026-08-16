@@ -27,6 +27,9 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .extended_document.death_discussion import (
     evaluate_death_discussion_timeliness,
 )
+from .extended_document.discharge_documentation import (
+    evaluate_discharge_documentation_timeliness,
+)
 from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
@@ -1636,91 +1639,28 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-061":
-            if death_state == "present":
-                decisions.append(
-                    _decision(
-                        rule_id=rule_id,
-                        snapshot=evidence_snapshot,
-                        source_keys=("inpat_registration", "death_record"),
-                        final_state="not_applicable",
-                        reason_code="trigger_absent_complete",
-                    )
-                )
-                continue
-            if death_state == "unknown" and death_error:
-                decisions.append(
-                    _decision(
-                        rule_id=rule_id,
-                        snapshot=evidence_snapshot,
-                        source_keys=("inpat_registration", "death_record"),
-                        final_state="data_gap",
-                        reason_code=death_error,
-                    )
-                )
-                continue
-            if registration_error or discharge_error:
-                decisions.append(
-                    _decision(
-                        rule_id=rule_id,
-                        snapshot=evidence_snapshot,
-                        source_keys=("inpat_registration", "discharge_record"),
-                        final_state="data_gap",
-                        reason_code=registration_error or discharge_error,
-                    )
-                )
-                continue
-            discharge_time = _discharge_time(registration_rows, discharge_rows)
-            if discharge_time is None:
-                decisions.append(
-                    _decision(
-                        rule_id=rule_id,
-                        snapshot=evidence_snapshot,
-                        source_keys=("inpat_registration", "discharge_record"),
-                        final_state="not_applicable",
-                        reason_code="trigger_absent_complete",
-                    )
-                )
-                continue
-            record_time = next(
-                (
-                    candidate
-                    for row in discharge_rows
-                    if (candidate := _row_time(row)) is not None
-                ),
-                None,
+            outcome = evaluate_discharge_documentation_timeliness(
+                death_state=death_state,
+                death_error=death_error,
+                registration_error=registration_error,
+                discharge_error=discharge_error,
+                discharge_time=_discharge_time(registration_rows, discharge_rows),
+                discharge_rows=discharge_rows,
             )
-            if not discharge_rows:
-                final_state, reason_code = (
-                    "non_compliant",
-                    "required_document_missing",
-                )
-            elif record_time is None:
-                final_state, reason_code = "data_gap", "authoritative_time_missing"
-            else:
-                hours = (record_time - discharge_time).total_seconds() / 3600
-                final_state = "compliant" if hours <= 24 else "non_compliant"
-                reason_code = (
-                    "requirement_within_threshold"
-                    if hours <= 24
-                    else "threshold_exceeded"
-                )
-            display.append((rule_id, {
-                "verification_kind": "discharge_record_timeliness_check",
-                "discharge_time": discharge_time.isoformat(sep=" "),
-                "record_time": record_time.isoformat(sep=" ") if record_time else None,
-                "threshold_hours": 24,
-                "actual_interval_hours": (
-                    round((record_time - discharge_time).total_seconds() / 3600, 2)
-                    if record_time else None
-                ),
-            }))
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
+            source_keys = (
+                ("inpat_registration", "death_record")
+                if death_state == "present" or (death_state == "unknown" and death_error)
+                else ("inpat_registration", "discharge_record")
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
-                    source_keys=("inpat_registration", "discharge_record"),
-                    final_state=final_state,
-                    reason_code=reason_code,
+                    source_keys=source_keys,
+                    final_state=outcome.final_state,
+                    reason_code=outcome.reason_code,
                 )
             )
             continue

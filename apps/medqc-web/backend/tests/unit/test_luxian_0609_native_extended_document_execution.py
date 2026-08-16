@@ -602,6 +602,7 @@ async def test_051_alive_discharge_gate_binds_registration_evidence() -> None:
     ("record_time", "expected_state"),
     [
         ("2026-07-02 11:59:59", CustomerFinalState.COMPLIANT),
+        ("2026-07-02 12:00:00", CustomerFinalState.COMPLIANT),
         ("2026-07-02 12:00:01", CustomerFinalState.NON_COMPLIANT),
     ],
 )

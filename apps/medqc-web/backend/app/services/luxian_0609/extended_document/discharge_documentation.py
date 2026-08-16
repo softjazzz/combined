@@ -1,0 +1,86 @@
+"""LX0609-061 出院记录完成时限的确定性判定。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Mapping, Sequence
+
+from .shared import _row_time
+
+
+@dataclass(frozen=True)
+class DischargeDocumentationOutcome:
+    final_state: str
+    reason_code: str
+    display_facts: Mapping[str, Any] | None = None
+
+
+def evaluate_discharge_documentation_timeliness(
+    *,
+    death_state: str,
+    death_error: str,
+    registration_error: str,
+    discharge_error: str,
+    discharge_time: datetime | None,
+    discharge_rows: Sequence[Mapping[str, Any]],
+) -> DischargeDocumentationOutcome:
+    """按权威出院时间核对出院记录是否在24小时内完成。"""
+
+    if death_state == "present":
+        return DischargeDocumentationOutcome(
+            "not_applicable",
+            "trigger_absent_complete",
+        )
+    if death_state == "unknown" and death_error:
+        return DischargeDocumentationOutcome("data_gap", death_error)
+    if registration_error or discharge_error:
+        return DischargeDocumentationOutcome(
+            "data_gap",
+            registration_error or discharge_error,
+        )
+    if discharge_time is None:
+        return DischargeDocumentationOutcome(
+            "not_applicable",
+            "trigger_absent_complete",
+        )
+
+    record_time = next(
+        (
+            candidate
+            for row in discharge_rows
+            if (candidate := _row_time(row)) is not None
+        ),
+        None,
+    )
+    if not discharge_rows:
+        final_state, reason_code = (
+            "non_compliant",
+            "required_document_missing",
+        )
+    elif record_time is None:
+        final_state, reason_code = "data_gap", "authoritative_time_missing"
+    else:
+        hours = (record_time - discharge_time).total_seconds() / 3600
+        final_state = "compliant" if hours <= 24 else "non_compliant"
+        reason_code = (
+            "requirement_within_threshold"
+            if hours <= 24
+            else "threshold_exceeded"
+        )
+
+    return DischargeDocumentationOutcome(
+        final_state,
+        reason_code,
+        {
+            "verification_kind": "discharge_record_timeliness_check",
+            "discharge_time": discharge_time.isoformat(sep=" "),
+            "record_time": record_time.isoformat(sep=" ") if record_time else None,
+            "threshold_hours": 24,
+            "actual_interval_hours": (
+                round((record_time - discharge_time).total_seconds() / 3600, 2)
+                if record_time
+                else None
+            ),
+        },
+    )
