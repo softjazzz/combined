@@ -10,14 +10,32 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 try:
+    from app.services.luxian_0609.phase_scope import (
+        partition_luxian_0609_rule_scope,
+    )
+    from app.services.luxian_0609.rule_contracts import (
+        Luxian0609RuleContract,
+        load_luxian_0609_rule_contracts,
+    )
+except ModuleNotFoundError:  # 从仓库根目录直接执行 backend/scripts/*.py。
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from app.services.luxian_0609.phase_scope import (  # type: ignore[no-redef]
+        partition_luxian_0609_rule_scope,
+    )
+    from app.services.luxian_0609.rule_contracts import (  # type: ignore[no-redef]
+        Luxian0609RuleContract,
+        load_luxian_0609_rule_contracts,
+    )
+
+try:
     from scripts.build_luxian_0609_runtime_manifest import (
-        current_git_head,
+        current_git_head as current_git_head,
         runtime_manifest_hash,
         validate_runtime_manifest_current,
     )
 except ModuleNotFoundError:  # 直接执行 scripts/*.py 时使用同目录导入。
     from build_luxian_0609_runtime_manifest import (  # type: ignore[no-redef]
-        current_git_head,
+        current_git_head as current_git_head,
         runtime_manifest_hash,
         validate_runtime_manifest_current,
     )
@@ -47,9 +65,6 @@ EXIT_PASSED = 0
 EXIT_QUALITY_FAILURE = 1
 EXIT_CONFIGURATION_ERROR = 2
 EXIT_BLOCKED = 3
-_CANONICAL_RULE_IDS = frozenset(
-    f"LX0609-{number:03d}" for number in range(1, 50)
-)
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 _SAFE_CODE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$")
 _CASE_LABEL_RE = re.compile(r"^case-[0-9]{2,4}$")
@@ -129,6 +144,73 @@ DEFAULT_RUNS = tuple(
     / f"accepted20-v2-run-{index}.json"
     for index in range(1, 4)
 )
+
+
+def _authoritative_rule_scope() -> tuple[
+    tuple[Luxian0609RuleContract, ...], tuple[str, ...], tuple[str, ...]
+]:
+    """读取唯一规则合同，并按 phase_scope 拆分可执行与冻结范围。"""
+
+    contracts = load_luxian_0609_rule_contracts()
+    contract_rule_ids = tuple(contract.rule_id for contract in contracts)
+    executable, withheld = partition_luxian_0609_rule_scope(contract_rule_ids)
+    return contracts, executable, withheld
+
+
+def _validate_runtime_contract_identity(
+    runtime_manifest: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """运行清单必须逐项绑定完整 75 条合同；Golden 默认只验可执行规则。"""
+
+    contracts, executable, _withheld = _authoritative_rule_scope()
+    contract_rule_ids = tuple(contract.rule_id for contract in contracts)
+    rule_set = runtime_manifest.get("rule_set")
+    manifest_rules = runtime_manifest.get("rules")
+    if (
+        not isinstance(rule_set, Mapping)
+        or type(runtime_manifest.get("customer_rule_count")) is not int
+        or runtime_manifest.get("customer_rule_count") != len(contract_rule_ids)
+        or type(rule_set.get("rule_count")) is not int
+        or rule_set.get("rule_count") != len(contract_rule_ids)
+        or tuple(rule_set.get("rule_ids") or ()) != contract_rule_ids
+        or not isinstance(manifest_rules, list)
+        or len(manifest_rules) != len(contracts)
+    ):
+        raise ValueError("runtime manifest rule contract identity drift")
+    for contract, manifest_rule in zip(contracts, manifest_rules, strict=True):
+        if not isinstance(manifest_rule, Mapping) or any(
+            str(manifest_rule.get(field) or "") != str(expected)
+            for field, expected in (
+                ("rule_id", contract.rule_id),
+                ("contract_version", contract.contract_version),
+                ("phase_status", contract.phase_status),
+                ("definition_version", contract.definition_version),
+            )
+        ):
+            raise ValueError("runtime manifest rule contract identity drift")
+    return executable
+
+
+def _resolve_golden_rule_ids(
+    selected_rule_ids: Sequence[str] | None,
+    *,
+    executable_rule_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    """解析显式窄范围；不允许重复、未知或冻结规则。"""
+
+    if selected_rule_ids is None:
+        return executable_rule_ids
+    normalized = tuple(str(rule_id or "").strip().upper() for rule_id in selected_rule_ids)
+    executable_set = set(executable_rule_ids)
+    if (
+        not normalized
+        or any(not rule_id for rule_id in normalized)
+        or len(normalized) != len(set(normalized))
+        or any(rule_id not in executable_set for rule_id in normalized)
+    ):
+        raise ValueError("invalid Golden rule scope")
+    requested = set(normalized)
+    return tuple(rule_id for rule_id in executable_rule_ids if rule_id in requested)
 
 
 def _default_candidate_path(ledger_path: Path) -> Path:
@@ -398,6 +480,7 @@ def _run_luxian_0609_golden_gate_diagnostic(
     semantic_min_negative: int = 1,
     expected_sample_count: int | None = None,
     expected_rule_count: int | None = None,
+    expected_rule_ids: Sequence[str] | None = None,
     definite_agreement_min: float = 0.95,
     technical_error_rate_max: float = 0.01,
     high_risk_nc_precision_min: float = 0.95,
@@ -447,12 +530,26 @@ def _run_luxian_0609_golden_gate_diagnostic(
         for row in candidate_rows_list
         if isinstance(row, Mapping)
     }
-    if expected_sample_count is not None or expected_rule_count is not None:
+    if expected_sample_count is not None or expected_rule_ids is not None:
+        normalized_expected_rule_ids = tuple(expected_rule_ids or ())
+        resolved_sample_count = (
+            expected_sample_count
+            if expected_sample_count is not None
+            else ledger.get("sample_count")
+        )
         if (
-            not isinstance(expected_sample_count, int)
-            or not isinstance(expected_rule_count, int)
-            or expected_sample_count < 1
-            or expected_rule_count < 1
+            type(resolved_sample_count) is not int
+            or resolved_sample_count < 1
+            or not normalized_expected_rule_ids
+            or len(normalized_expected_rule_ids)
+            != len(set(normalized_expected_rule_ids))
+            or (
+                expected_rule_count is not None
+                and (
+                    type(expected_rule_count) is not int
+                    or expected_rule_count != len(normalized_expected_rule_ids)
+                )
+            )
         ):
             return _configuration_failure("invalid_expected_matrix")
         by_case: dict[str, set[str]] = {}
@@ -460,16 +557,12 @@ def _run_luxian_0609_golden_gate_diagnostic(
             by_case.setdefault(str(entry.get("case_label") or ""), set()).add(
                 str(entry.get("rule_id") or "")
             )
-        expected_rule_ids = (
-            _CANONICAL_RULE_IDS
-            if expected_rule_count == len(_CANONICAL_RULE_IDS)
-            else next(iter(by_case.values()), set())
-        )
+        expected_rule_id_set = set(normalized_expected_rule_ids)
         matrix_complete = (
-            len(by_case) == expected_sample_count
-            and len(entries) == expected_sample_count * expected_rule_count
-            and len(expected_rule_ids) == expected_rule_count
-            and all(rule_ids == expected_rule_ids for rule_ids in by_case.values())
+            len(by_case) == resolved_sample_count
+            and len(entries)
+            == resolved_sample_count * len(normalized_expected_rule_ids)
+            and all(rule_ids == expected_rule_id_set for rule_ids in by_case.values())
         )
         if not matrix_complete:
             return (
@@ -1018,6 +1111,7 @@ def run_luxian_0609_golden_gate(
     semantic_min_negative: int = 1,
     expected_sample_count: int | None = None,
     expected_rule_count: int | None = None,
+    selected_rule_ids: Sequence[str] | None = None,
     definite_agreement_min: float = 0.95,
     technical_error_rate_max: float = 0.01,
     high_risk_nc_precision_min: float = 0.95,
@@ -1044,12 +1138,25 @@ def run_luxian_0609_golden_gate(
             runtime_manifest,
         )
         current_manifest_hash = runtime_manifest_hash(runtime_manifest)
+        executable_rule_ids = _validate_runtime_contract_identity(runtime_manifest)
         rule_set = runtime_manifest.get("rule_set")
         if not isinstance(rule_set, Mapping):
             raise ValueError("missing rule set")
         current_policy_version = str(rule_set.get("version") or "").strip()
     except (TypeError, ValueError):
         return _configuration_failure("invalid_current_runtime_manifest")
+    try:
+        golden_rule_ids = _resolve_golden_rule_ids(
+            selected_rule_ids,
+            executable_rule_ids=executable_rule_ids,
+        )
+    except (TypeError, ValueError):
+        return _configuration_failure("invalid_expected_rule_scope")
+    if expected_rule_count is not None and (
+        type(expected_rule_count) is not int
+        or expected_rule_count != len(golden_rule_ids)
+    ):
+        return _configuration_failure("invalid_expected_matrix")
     if (
         observed_current_git_head != str(ledger.get("git_head") or "")
         or current_manifest_hash != str(ledger.get("runtime_manifest_hash") or "")
@@ -1066,6 +1173,7 @@ def run_luxian_0609_golden_gate(
         semantic_min_negative=semantic_min_negative,
         expected_sample_count=expected_sample_count,
         expected_rule_count=expected_rule_count,
+        expected_rule_ids=golden_rule_ids,
         definite_agreement_min=definite_agreement_min,
         technical_error_rate_max=technical_error_rate_max,
         high_risk_nc_precision_min=high_risk_nc_precision_min,
@@ -1097,7 +1205,14 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=8192,
     )
     parser.add_argument("--expected-sample-count", type=int, default=20)
-    parser.add_argument("--expected-rule-count", type=int, default=49)
+    parser.add_argument("--expected-rule-count", type=int, default=None)
+    parser.add_argument(
+        "--rule-id",
+        dest="selected_rule_ids",
+        action="append",
+        default=None,
+        help="显式窄范围规则编号；仅允许当前可执行规则，每条只能传入一次",
+    )
     return parser.parse_args(argv)
 
 
@@ -1140,6 +1255,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             semantic_token_budget_per_rule=args.semantic_token_budget_per_rule,
             expected_sample_count=args.expected_sample_count,
             expected_rule_count=args.expected_rule_count,
+            selected_rule_ids=args.selected_rule_ids,
             runtime_manifest=runtime_manifest,
         )
     print(json.dumps(summary, ensure_ascii=False, separators=(",", ":")))

@@ -84,26 +84,37 @@ def _api_batch(*, state: str = "non_compliant") -> dict[str, object]:
 
 def _runtime_manifest(*, git_head: str | None = None) -> dict[str, object]:
     resolved_git_head = git_head or golden_gate.current_git_head()
+    contracts = golden_gate.load_luxian_0609_rule_contracts()
+    rule_ids = [contract.rule_id for contract in contracts]
     return {
         "schema_version": "lx0609-runtime-manifest-v1",
         "generated_at": "2026-07-24T00:00:00Z",
         "git_head": resolved_git_head,
-        "customer_rule_count": 49,
+        "customer_rule_count": len(rule_ids),
         "flags": {},
         "rule_set": {
             "key": "luxian_0609_qc_v1",
             "version": "2026-06-09",
-            "rule_count": 49,
-            "rule_ids": [f"LX0609-{index:03d}" for index in range(1, 50)],
+            "rule_count": len(rule_ids),
+            "rule_ids": rule_ids,
         },
         "runtime": {},
-        "rules": [],
+        "rules": [
+            {
+                "rule_id": contract.rule_id,
+                "contract_version": contract.contract_version,
+                "phase_status": contract.phase_status,
+                "definition_version": contract.definition_version,
+            }
+            for contract in contracts
+        ],
     }
 
 
 def _run_v2_gate(**kwargs):
     manifest = _runtime_manifest()
     kwargs.setdefault("runtime_manifest", manifest)
+    kwargs.setdefault("selected_rule_ids", ("LX0609-001",))
     return golden_gate.run_luxian_0609_golden_gate(**kwargs)
 
 
@@ -181,6 +192,7 @@ def _v2_batch(
     *,
     state: str = "non_compliant",
     total_tokens: int = 0,
+    rule_ids: tuple[str, ...] = ("LX0609-001",),
 ) -> dict[str, object]:
     batch = _api_batch(state=state)
     batch.update(
@@ -227,37 +239,47 @@ def _v2_batch(
         }
     )
     result["evidence_source_types"] = ["daily_course_record"]
+    case["response"]["results"] = [
+        {**copy.deepcopy(result), "rule_id": rule_id}
+        for rule_id in rule_ids
+    ]
+    case["response"]["metrics"]["usage_attributions"][0][
+        "covered_customer_rule_ids"
+    ] = list(rule_ids)
     return batch
 
 
 def _v2_candidate_and_ledger(
     *,
     total_tokens: int = 0,
+    rule_ids: tuple[str, ...] = ("LX0609-001",),
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
-    batch = _v2_batch(total_tokens=total_tokens)
+    batch = _v2_batch(total_tokens=total_tokens, rule_ids=rule_ids)
     candidate = build_candidate_ledger(
         batch,
         candidate_version="candidate20-v2",
         generated_at="2026-07-24T00:00:00Z",
     )
-    row = candidate["rows"][0]
-    review = {
-        "candidate_digest": candidate["candidate_digest"],
-        "case_label": row["case_label"],
-        "selector_digest": row["selector_digest"],
-        "rule_id": row["rule_id"],
-        "decision_kind": row["decision_kind"],
-        "expected_state": row["observed_state"],
-        "expected_reason_code": row["observed_reason_code"],
-        "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
-        "reviewer_code": "REVIEWER-01",
-        "accepted_at": "2026-07-24T00:05:00Z",
-        "review_revision": "1",
-        "review_status": "accepted",
-    }
+    reviews = [
+        {
+            "candidate_digest": candidate["candidate_digest"],
+            "case_label": row["case_label"],
+            "selector_digest": row["selector_digest"],
+            "rule_id": row["rule_id"],
+            "decision_kind": row["decision_kind"],
+            "expected_state": row["observed_state"],
+            "expected_reason_code": row["observed_reason_code"],
+            "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
+            "reviewer_code": "REVIEWER-01",
+            "accepted_at": "2026-07-24T00:05:00Z",
+            "review_revision": "1",
+            "review_status": "accepted",
+        }
+        for row in candidate["rows"]
+    ]
     ledger = promote_candidate_ledger(
         candidate,
-        [review],
+        reviews,
         ledger_version="accepted20-v2",
         generated_at="2026-07-24T00:06:00Z",
     )
@@ -350,6 +372,218 @@ def test_v2_release_gate_requires_current_runtime_identity() -> None:
     )
     assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
     assert summary["failures"][0]["failure_kind"] == "stale_release_artifacts"
+
+
+def _current_rule_scope() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    contracts = golden_gate.load_luxian_0609_rule_contracts()
+    return golden_gate.partition_luxian_0609_rule_scope(
+        contract.rule_id for contract in contracts
+    )
+
+
+def test_v2_default_gate_requires_exact_current_68_rule_matrix() -> None:
+    executable, pending = _current_rule_scope()
+    assert len(executable) == 68
+    assert len(pending) == 7
+    batch, candidate, ledger = _v2_candidate_and_ledger(rule_ids=executable)
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=_runtime_manifest(),
+    )
+
+    assert exit_code == golden_gate.EXIT_PASSED
+    assert summary["accepted_count"] == 68
+
+
+def test_v2_default_gate_rejects_legacy_49_even_when_count_matches() -> None:
+    legacy_rule_ids = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    batch, candidate, ledger = _v2_candidate_and_ledger(rule_ids=legacy_rule_ids)
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=_runtime_manifest(),
+        expected_rule_count=49,
+    )
+
+    assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
+    assert summary["failures"] == [
+        {"gate": "accepted_ledger", "failure_kind": "invalid_expected_matrix"}
+    ]
+
+
+def test_v2_default_gate_rejects_same_count_with_pending_rule_substitution() -> None:
+    executable, pending = _current_rule_scope()
+    substituted = (*executable[:-1], pending[0])
+    batch, candidate, ledger = _v2_candidate_and_ledger(rule_ids=substituted)
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=_runtime_manifest(),
+    )
+
+    assert exit_code == golden_gate.EXIT_BLOCKED
+    assert summary["failures"] == [
+        {"gate": "accepted_ledger", "failure_kind": "incomplete_accepted_matrix"}
+    ]
+
+
+@pytest.mark.parametrize("mutation", ("missing", "extra", "cross_case"))
+def test_v2_default_gate_rejects_incomplete_or_inconsistent_matrix(
+    mutation: str,
+) -> None:
+    executable, _pending = _current_rule_scope()
+    batch = _v2_batch(rule_ids=executable)
+    if mutation == "missing":
+        batch["cases"][0]["response"]["results"].pop()
+    elif mutation == "extra":
+        extra = copy.deepcopy(batch["cases"][0]["response"]["results"][0])
+        extra["rule_id"] = "LX0609-075"
+        batch["cases"][0]["response"]["results"].append(extra)
+    else:
+        second_case = copy.deepcopy(batch["cases"][0])
+        second_case["case_label"] = "case-02"
+        second_case["coordinate_hash"] = "9" * 64
+        second_case["response"]["results"].pop()
+        batch["cases"].append(second_case)
+    for case in batch["cases"]:
+        case["response"]["metrics"]["usage_attributions"][0][
+            "covered_customer_rule_ids"
+        ] = [result["rule_id"] for result in case["response"]["results"]]
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="candidate20-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    reviews = [
+        {
+            "candidate_digest": candidate["candidate_digest"],
+            "case_label": row["case_label"],
+            "selector_digest": row["selector_digest"],
+            "rule_id": row["rule_id"],
+            "decision_kind": row["decision_kind"],
+            "expected_state": row["observed_state"],
+            "expected_reason_code": row["observed_reason_code"],
+            "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
+            "reviewer_code": "REVIEWER-01",
+            "accepted_at": "2026-07-24T00:05:00Z",
+            "review_revision": "1",
+            "review_status": "accepted",
+        }
+        for row in candidate["rows"]
+    ]
+    ledger = promote_candidate_ledger(
+        candidate,
+        reviews,
+        ledger_version="accepted20-v2",
+        generated_at="2026-07-24T00:06:00Z",
+    )
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=_runtime_manifest(),
+    )
+
+    assert exit_code == golden_gate.EXIT_BLOCKED
+    assert summary["failures"][0]["failure_kind"] == "incomplete_accepted_matrix"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("rule_set_order", "contract_version", "missing_rule"),
+)
+def test_v2_gate_rejects_runtime_manifest_contract_drift(mutation: str) -> None:
+    manifest = _runtime_manifest()
+    if mutation == "rule_set_order":
+        manifest["rule_set"]["rule_ids"][0:2] = reversed(
+            manifest["rule_set"]["rule_ids"][0:2]
+        )
+    elif mutation == "contract_version":
+        manifest["rules"][0]["contract_version"] = "forged-v1"
+    else:
+        manifest["rules"].pop()
+    batch, candidate, ledger = _v2_candidate_and_ledger()
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=manifest,
+        selected_rule_ids=("LX0609-001",),
+    )
+
+    assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
+    assert summary["failures"][0]["failure_kind"] == "invalid_current_runtime_manifest"
+
+
+def test_v2_gate_accepts_authoritatively_ordered_narrow_subset() -> None:
+    executable, _pending = _current_rule_scope()
+    selected = (executable[2], executable[0])
+    authoritative_subset = (executable[0], executable[2])
+    batch, candidate, ledger = _v2_candidate_and_ledger(
+        rule_ids=authoritative_subset
+    )
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=_runtime_manifest(),
+        selected_rule_ids=selected,
+        expected_rule_count=2,
+    )
+
+    assert exit_code == golden_gate.EXIT_PASSED
+    assert summary["accepted_count"] == 2
+
+
+@pytest.mark.parametrize(
+    "selected",
+    (
+        ("LX0609-001", "LX0609-001"),
+        ("LX0609-999",),
+        ("LX0609-025",),
+    ),
+)
+def test_v2_gate_rejects_duplicate_unknown_or_pending_narrow_scope(
+    selected: tuple[str, ...],
+) -> None:
+    batch, candidate, ledger = _v2_candidate_and_ledger()
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=_runtime_manifest(),
+        selected_rule_ids=selected,
+    )
+
+    assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
+    assert summary["failures"][0]["failure_kind"] == "invalid_expected_rule_scope"
+
+
+def test_v2_gate_treats_expected_rule_count_as_cross_check_only() -> None:
+    batch, candidate, ledger = _v2_candidate_and_ledger()
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+        runtime_manifest=_runtime_manifest(),
+        selected_rule_ids=("LX0609-001",),
+        expected_rule_count=68,
+    )
+
+    assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
+    assert summary["failures"][0]["failure_kind"] == "invalid_expected_matrix"
 
 
 def test_v2_accepted_classification_must_match_candidate() -> None:
@@ -789,12 +1023,14 @@ def test_semantic_gate_fails_when_baseline_matches_candidate_but_third_run_is_un
 
 
 def test_release_gate_blocks_an_incomplete_accepted_matrix() -> None:
+    legacy_rule_ids = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
     summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_ledger(),
         candidate=_candidate(),
         run_batches=[_api_batch()],
         expected_sample_count=20,
         expected_rule_count=49,
+        expected_rule_ids=legacy_rule_ids,
     )
 
     assert exit_code == 3
@@ -806,6 +1042,7 @@ def test_release_gate_blocks_an_incomplete_accepted_matrix() -> None:
 
 
 def test_release_gate_requires_exact_canonical_rule_set_not_only_rule_count() -> None:
+    legacy_rule_ids = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
     batch = _api_batch()
     template = copy.deepcopy(batch["cases"][0]["response"]["results"][0])
     batch["cases"][0]["response"]["results"] = [
@@ -847,6 +1084,7 @@ def test_release_gate_requires_exact_canonical_rule_set_not_only_rule_count() ->
         run_batches=[batch],
         expected_sample_count=1,
         expected_rule_count=49,
+        expected_rule_ids=legacy_rule_ids,
     )
 
     assert exit_code == 3
@@ -857,6 +1095,7 @@ def test_release_gate_requires_exact_canonical_rule_set_not_only_rule_count() ->
 
 
 def test_each_run_requires_the_same_case_rule_matrix_as_the_ledger() -> None:
+    legacy_rule_ids = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
     accepted = _api_batch()
     template = copy.deepcopy(accepted["cases"][0]["response"]["results"][0])
     accepted["cases"][0]["response"]["results"] = [
@@ -874,6 +1113,7 @@ def test_each_run_requires_the_same_case_rule_matrix_as_the_ledger() -> None:
         run_batches=[mismatched_run],
         expected_sample_count=1,
         expected_rule_count=49,
+        expected_rule_ids=legacy_rule_ids,
     )
 
     assert exit_code == 2
