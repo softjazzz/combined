@@ -482,7 +482,13 @@ async def test_document_identity_separates_real_rows_without_application_id(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    assert [item["status"] for item in result.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "model_invalid_output"
+    }
     assert "DOC-REAL-1" not in client.prompts[0]
     assert "DOC-REAL-2" not in client.prompts[0]
 
@@ -615,7 +621,13 @@ async def test_distinct_consultation_business_keys_cannot_merge_into_one_episode
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    assert [item["status"] for item in result.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "model_invalid_output"
+    }
 
 
 @pytest.mark.asyncio
@@ -1418,7 +1430,13 @@ async def test_opinion_only_episode_with_absent_application_cannot_carry_an_appl
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    assert [item["status"] for item in result.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "model_invalid_output"
+    }
     assert result.llm_call_count == 1
 
 
@@ -1565,12 +1583,33 @@ async def test_medium_or_low_confidence_is_evaluation_unknown(monkeypatch, confi
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"], confidence="low")]),
     ],
 )
-async def test_invalid_or_low_confidence_episode_is_evaluation_unknown(monkeypatch, payload):
+async def test_invalid_episode_payload_is_technical_error(monkeypatch, payload):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("一", "二"))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=_Client(payload),
     )
-    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert {item["status"] for item in result.results} == {"technical_error"}
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "model_invalid_output"
+    }
+
+
+def test_consultation_prompt_freezes_episode_ref_to_actual_member_ref() -> None:
+    prompt = episode._prompt(
+        [
+            {
+                "ref": "consultation_record-1",
+                "time": "2026-01-01 09:00:00",
+                "text": "申请心内科会诊。",
+                "event_group_ref": "",
+            }
+        ]
+    )
+
+    assert '"episode_ref":"consultation_record-1"' in prompt
+    assert '"member_refs":["consultation_record-1"]' in prompt
+    assert "episode_ref必须原样等于member_refs中的第一个引用" in prompt
+    assert "禁止把下划线改为连字符" in prompt
 
 
 @pytest.mark.asyncio
@@ -1681,13 +1720,14 @@ async def test_typed_low_confidence_episode_is_conflict_not_source_gap(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_parse_failure_is_evaluation_unknown_and_model_failure_is_technical(monkeypatch):
+async def test_parse_failure_and_model_failure_are_technical(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     parsed = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client("not-json"),
     )
-    assert parsed.results[0]["status"] == "uncertain"
+    assert parsed.results[0]["status"] == "technical_error"
+    assert parsed.results[0]["metadata"]["reason_code"] == "model_invalid_output"
 
     class _BrokenClient:
         async def generate(self, _prompt):
@@ -1698,6 +1738,7 @@ async def test_parse_failure_is_evaluation_unknown_and_model_failure_is_technica
         llm_client=_BrokenClient(),
     )
     assert broken.results[0]["status"] == "technical_error"
+    assert broken.results[0]["metadata"]["reason_code"] == "model_transport_error"
     assert "MODEL_SECRET" not in repr(broken)
 
 
@@ -1733,7 +1774,10 @@ async def test_wrapped_or_multiple_or_forged_json_stays_fail_closed(monkeypatch,
         rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client(raw()),
     )
-    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert {item["status"] for item in result.results} == {"technical_error"}
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "model_invalid_output"
+    }
     assert result.llm_call_count == 1
 
 
@@ -2693,7 +2737,10 @@ async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert {item["status"] for item in result.results} == {"technical_error"}
+    assert {item["metadata"]["reason_code"] for item in result.results} == {
+        "model_invalid_output"
+    }
     assert result.llm_call_count == 2
 
 
@@ -3241,7 +3288,7 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
             "technical_error",
             "model_transport_error",
         ),
-        ("not-json", "uncertain", "semantic_output_unknown"),
+        ("not-json", "technical_error", "model_invalid_output"),
     ):
         client = _PlannedStageClient(
             _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
@@ -3271,7 +3318,7 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
         ("structured_action_refs", ["daily_course_record-1"]),
     ),
 )
-async def test_020_023_rejects_nested_stage_two_reference_values_as_semantic_unknown(
+async def test_020_023_rejects_nested_stage_two_reference_values_as_technical_error(
     field_name,
     invalid_ref,
 ):
@@ -3303,10 +3350,10 @@ async def test_020_023_rejects_nested_stage_two_reference_values_as_semantic_unk
     )
 
     assert [item["status"] for item in result.results] == [
-        "uncertain", "compliant", "compliant", "uncertain",
+        "technical_error", "compliant", "compliant", "technical_error",
     ]
     assert [item["metadata"]["reason_code"] for item in result.results] == [
-        "semantic_output_unknown", "requirement_satisfied", "requirement_satisfied", "semantic_output_unknown",
+        "model_invalid_output", "requirement_satisfied", "requirement_satisfied", "model_invalid_output",
     ]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2

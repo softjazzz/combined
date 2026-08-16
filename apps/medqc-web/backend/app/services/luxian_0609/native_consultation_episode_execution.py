@@ -1113,6 +1113,27 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
     payload = json.dumps({"consultation_documents": prompt_documents}, ensure_ascii=False)
     if len(payload) > _MAX_PROMPT_CHARS:
         raise _SourceGap()
+    first_ref = _clean(prompt_documents[0].get("ref"))
+    output_example = json.dumps(
+        {
+            "episodes": [
+                {
+                    "episode_ref": first_ref,
+                    "member_refs": [first_ref],
+                    "application_refs": [first_ref],
+                    "opinion_refs": [],
+                    "application_state": "clear",
+                    "opinion_state": "absent",
+                    "confidence": "high",
+                    "recommendations": [],
+                }
+            ],
+            "non_target_refs": [],
+            "unresolved_refs": [],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     return (
         "你只识别本次住院的普通专科会诊，并从明确会诊意见中抽取建议清单；不做任何质控结论。"
         "可把申请、会诊意见、重复同步或分行文书合并为同一episode；非目标文书放入non_target_refs，"
@@ -1139,7 +1160,8 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "event_group_ref非空表示Python已用CDM业务键或稳定文书身份确认事件边界：同一event_group_ref的全部文书必须进入同一个归属，"
         "不同event_group_ref的文书绝不能合并为同一个episode。event_group_ref为空时才允许按语义谨慎聚类。"
         "同一输入ref不得被拆入多个episode。"
-        "episode_ref必须是member_refs之一。禁止创造、改写或遗漏ref。"
+        "episode_ref必须原样等于member_refs中的第一个引用。禁止创造、改写或遗漏ref；"
+        "禁止把下划线改为连字符，也禁止把consultation_record改写为consultation-event。"
         "每个episode还必须给出application_refs、opinion_refs和recommendations，三者只能引用本episode.member_refs；"
         "申请或意见为clear时对应refs不得为空。"
         "recommendations仅用于普通会诊中意见明确且高置信的可执行建议；每项必须是意见原文中的具体行动，"
@@ -1151,7 +1173,10 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "允许source_quote和normalized_action作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
         "意见不明确、无可执行建议或非普通会诊时recommendations必须为空数组。"
         "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,source_quote,normalized_action,action_type}]}],"
-        "non_target_refs:[],unresolved_refs:[]}。输入：" + payload
+        "non_target_refs:[],unresolved_refs:[]}。格式示例（只说明引用和字段结构，不代表实际语义）："
+        + output_example
+        + "。输入："
+        + payload
     )
 
 
@@ -2460,7 +2485,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     except _SemanticUnresolved:
         return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticInvalid:
-        return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+        return _finish(selected=selected, status="technical_error", reason_code="model_invalid_output", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except Exception:
         return _finish(selected=selected, status="technical_error", reason_code="model_transport_error", calls=calls, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     statuses: dict[str, tuple[str, str]] = {
@@ -2493,7 +2518,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             except _SemanticInvalid:
                 completed_recommendations = ()
                 for rule_id in stage_two_rule_ids:
-                    statuses[rule_id] = ("evaluation_unknown", "semantic_output_unknown")
+                    statuses[rule_id] = ("technical_error", "model_invalid_output")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
             preliminary = _execution_outcome(
                 "LX0609-020",
@@ -2679,10 +2704,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     # 不得覆盖首轮可交付的其他建议。
                                     pass
                         except _SemanticInvalid:
-                            status = "technical_error" if execution_source_technical else "evaluation_unknown"
-                            reason = "source_query_error" if execution_source_technical else "semantic_output_unknown"
                             for rule_id in stage_two_rule_ids:
-                                statuses[rule_id] = (status, reason)
+                                statuses[rule_id] = (
+                                    "technical_error",
+                                    "model_invalid_output",
+                                )
                         except Exception as error:
                             logger.warning(
                                 "consultation_stage_two_failed "
