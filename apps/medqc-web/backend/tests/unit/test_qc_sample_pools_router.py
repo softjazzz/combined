@@ -7,6 +7,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException
 
 from app.routers import qc_sample_pools, qc_sichuan
+from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.services.case_identity import CaseRef
 from app.services.qc_rule_sets import get_sichuan_rule_set
 from app.services import sample_validation_rule_sets
@@ -1294,7 +1295,7 @@ async def test_sample_pool_worker_reads_persisted_record_refs_instead_of_legacy_
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _qc_service_stub)
-    monkeypatch.setattr(qc_sichuan.logger, "exception", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(batch_worker.logger, "exception", lambda *_args, **_kwargs: None)
 
     await qc_sample_pools._run_sichuan_workspace_batch_job("job-sample-worker")
 
@@ -1326,7 +1327,7 @@ async def test_sample_pool_worker_rejects_missing_record_refs_without_collecting
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _qc_service_stub)
-    monkeypatch.setattr(qc_sichuan.logger, "exception", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(batch_worker.logger, "exception", lambda *_args, **_kwargs: None)
 
     await qc_sample_pools._run_sichuan_workspace_batch_job("job-sample-worker")
 
@@ -1345,7 +1346,7 @@ async def test_non_sample_historical_worker_keeps_record_id_compatibility(monkey
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _qc_service_stub)
-    monkeypatch.setattr(qc_sichuan.logger, "exception", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(batch_worker.logger, "exception", lambda *_args, **_kwargs: None)
 
     await qc_sample_pools._run_sichuan_workspace_batch_job("job-sample-worker")
 

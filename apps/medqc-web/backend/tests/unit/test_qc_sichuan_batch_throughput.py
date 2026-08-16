@@ -11,6 +11,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.routers import qc_sichuan
+from app.services import sichuan_workspace_batch_worker as batch_worker
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.case_identity import CaseRef
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -65,7 +66,7 @@ async def test_luxian_batch_worker_rejects_customer_aggregation_without_unified_
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False),
     )
@@ -98,7 +99,7 @@ async def test_luxian_batch_worker_rejects_gate_only_customer_job_without_unifie
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False),
     )
@@ -230,7 +231,7 @@ async def test_luxian_batch_worker_runtime_family_drift_fails_before_result_or_c
     service = _ServiceStub()
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=False),
     )
@@ -264,7 +265,7 @@ async def test_luxian_batch_worker_rejects_persisted_legacy_rule_id_before_evalu
     }
     service = _ServiceStub()
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
-    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
 
     async def _get_qc_service():
         return service
@@ -283,7 +284,7 @@ async def test_luxian_batch_worker_rejects_persisted_legacy_rule_id_before_evalu
 
 
 def test_luxian_target_document_type_uses_catalog_document_not_final_scene_fallback():
-    assert qc_sichuan._resolve_luxian_target_document_type(
+    assert batch_worker._resolve_luxian_target_document_type(
         {
             "rule_id": "LX0609-018",
             "applicable_documents": ["admission_record"],
@@ -291,7 +292,7 @@ def test_luxian_target_document_type_uses_catalog_document_not_final_scene_fallb
         }
     ) == "入院记录"
 
-    assert qc_sichuan._resolve_luxian_target_document_type(
+    assert batch_worker._resolve_luxian_target_document_type(
         {
             "rule_id": "LX0609-010",
             "applicable_document_labels": ["检查检验报告", "日常病程记录"],
@@ -728,21 +729,21 @@ class _FormalPostprocessServiceStub(_ServiceStub):
 
 
 def test_workspace_bundle_scene_should_prioritize_each_record_over_query_scope():
-    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="all", record_scope="final") == "final"
-    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="all", record_scope="running") == "running"
-    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="final", record_scope="running") == "running"
-    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="running", record_scope="final") == "final"
-    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="all", record_scope="") == ""
+    assert batch_worker._resolve_workspace_bundle_scene(query_scope="all", record_scope="final") == "final"
+    assert batch_worker._resolve_workspace_bundle_scene(query_scope="all", record_scope="running") == "running"
+    assert batch_worker._resolve_workspace_bundle_scene(query_scope="final", record_scope="running") == "running"
+    assert batch_worker._resolve_workspace_bundle_scene(query_scope="running", record_scope="final") == "final"
+    assert batch_worker._resolve_workspace_bundle_scene(query_scope="all", record_scope="") == ""
 
-    assert qc_sichuan._workspace_bundle_scene_candidates(
+    assert batch_worker._workspace_bundle_scene_candidates(
         query_scope="running",
         record_scope="final",
     ) == ["final", "running"]
-    assert qc_sichuan._workspace_bundle_scene_candidates(
+    assert batch_worker._workspace_bundle_scene_candidates(
         query_scope="final",
         record_scope="",
     ) == ["final", "running"]
-    assert qc_sichuan._workspace_bundle_scene_candidates(
+    assert batch_worker._workspace_bundle_scene_candidates(
         query_scope="all",
         record_scope="",
     ) == ["running", "final"]
@@ -880,7 +881,7 @@ async def test_workspace_parallel_batch_default_and_explicit_record_limits(
             concurrency["active"] -= 1
 
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "evaluate_running_final_bundle",
         _fake_evaluate_running_final_bundle,
     )
@@ -907,6 +908,75 @@ async def test_workspace_parallel_batch_default_and_explicit_record_limits(
         for item in runtime_updates
     )
     assert workspace.job["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_workspace_parallel_batch_cancel_during_execution_does_not_complete_or_write_canonical(
+    monkeypatch,
+):
+    class _CancelDuringExecutionWorkspace(_WorkspaceStub):
+        def __init__(self) -> None:
+            super().__init__()
+            self.complete_calls = 0
+            self.canonical_writes = 0
+
+        def complete_batch_job(self, **kwargs: Any) -> None:
+            self.complete_calls += 1
+            self.canonical_writes += 1
+            super().complete_batch_job(**kwargs)
+
+    workspace = _CancelDuringExecutionWorkspace()
+    workspace.job["run_mode"] = "parallel"
+    workspace.job["record_ids"] = [f"visit-{index:03d}" for index in range(1, 5)]
+    service = _ServiceStub()
+    evaluation_started = asyncio.Event()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    async def _fake_evaluate_running_final_bundle(
+        *, rule_ids: List[str], **_: Any
+    ) -> Dict[str, Any]:
+        if not evaluation_started.is_set():
+            evaluation_started.set()
+            workspace.job["status"] = "canceled"
+        await asyncio.sleep(0)
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": rule_id,
+                    "rule_name": f"规则-{rule_id}",
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0.9,
+                    "metadata": {"executor_type": "program", "tokens_used": 0},
+                }
+                for rule_id in rule_ids
+            ],
+            "token_usage": {"total_tokens": 0},
+            "api_time": 0.0,
+            "pack_metrics": {"total_packs": 1, "avg_pack_size": len(rule_ids)},
+        }
+
+    monkeypatch.setattr(
+        batch_worker,
+        "evaluate_running_final_bundle",
+        _fake_evaluate_running_final_bundle,
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert evaluation_started.is_set()
+    assert workspace.job["status"] == "canceled"
+    assert workspace.complete_calls == 0
+    assert workspace.canonical_writes == 0
 
 
 @pytest.mark.asyncio
@@ -1022,7 +1092,7 @@ def test_batch_performance_profile_includes_deduplicated_luxian_input_profile():
         },
     ]
 
-    profile = qc_sichuan._build_batch_performance_profile(
+    profile = batch_worker._build_batch_performance_profile(
         job_id="job-input-profile",
         items=items,
         total_records=1,
@@ -1222,7 +1292,7 @@ async def test_workspace_batch_summary_status_breakdown_uses_result_level_counts
 
 
 def test_result_aggregation_should_hide_internal_evidence_phrases():
-    aggregation = qc_sichuan._build_result_aggregation(
+    aggregation = batch_worker._build_result_aggregation(
         [
             {
                 "rule_id": "LX0609-007",
@@ -1306,7 +1376,7 @@ async def test_workspace_batch_formal_full_should_persist_postprocess_fields(mon
             next_rows.append(item)
         return next_rows
 
-    monkeypatch.setattr(qc_sichuan, "adjudicate_postprocessed_qc_results", _fake_adjudicate)
+    monkeypatch.setattr(batch_worker, "adjudicate_postprocessed_qc_results", _fake_adjudicate)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -1404,7 +1474,7 @@ async def test_workspace_batch_final_should_prefer_bundle_path(monkeypatch):
             },
         }
 
-    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
+    monkeypatch.setattr(batch_worker, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -1512,7 +1582,7 @@ async def test_workspace_batch_all_should_use_final_bundle_when_record_scope_is_
             },
         }
 
-    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
+    monkeypatch.setattr(batch_worker, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -1591,7 +1661,7 @@ async def test_sample_pool_single_rule_records_should_prefer_rule_level_visit_ev
     async def _should_not_call_bundle_eval(**kwargs: Any) -> Dict[str, Any]:
         raise AssertionError("单病历单规则样本验证应优先走 evaluate_rule_for_visit")
 
-    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _should_not_call_bundle_eval)
+    monkeypatch.setattr(batch_worker, "evaluate_running_final_bundle", _should_not_call_bundle_eval)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -1696,7 +1766,7 @@ async def test_workspace_batch_final_fast_screen_should_use_fast_screen_path(mon
             "refine_summary": {"enabled": False},
         }
 
-    monkeypatch.setattr(qc_sichuan, "run_final_fast_screen", _fake_run_final_fast_screen)
+    monkeypatch.setattr(batch_worker, "run_final_fast_screen", _fake_run_final_fast_screen)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -1808,8 +1878,8 @@ async def test_workspace_batch_customer_final_fast_screen_should_bypass_sc_fixed
             "refine_summary": {"enabled": False},
         }
 
-    monkeypatch.setattr(qc_sichuan, "run_final_fast_screen", _should_not_call_fast_screen)
-    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
+    monkeypatch.setattr(batch_worker, "run_final_fast_screen", _should_not_call_fast_screen)
+    monkeypatch.setattr(batch_worker, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -2370,7 +2440,7 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         _luxian_native_settings,
     )
@@ -2501,8 +2571,8 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
             }
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
-    monkeypatch.setattr(qc_sichuan, "load_running_final_bundle", _load_bundle)
-    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "load_running_final_bundle", _load_bundle)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
 
     async def _get_service():
         return _SceneService()
@@ -2725,11 +2795,11 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "load_running_final_bundle",
         lambda **_: {"medical_text": "bundle text"},
     )
-    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
 
     async def _get_service():
         return _ProviderBackedService()
@@ -2807,7 +2877,7 @@ async def test_luxian_batch_single_family_off_fails_before_sc_source_or_evaluati
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(
             LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=False
@@ -3119,19 +3189,19 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
         return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
     )
-    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
-    original_hook = qc_sichuan.run_luxian_0609_runtime_shadow
+    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
+    original_hook = batch_worker.run_luxian_0609_runtime_shadow
 
     def _hook(**kwargs: Any) -> Dict[str, Any]:
         sequence.append("hook")
         assert kwargs["source_query_observations"] is None and kwargs["extraction_inputs"] is None
         return original_hook(**kwargs)
 
-    monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", _hook)
+    monkeypatch.setattr(batch_worker, "run_luxian_0609_runtime_shadow", _hook)
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
     assert sequence == ["hook", "evaluate", "hook", "evaluate"]
@@ -3222,7 +3292,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         _luxian_native_settings,
     )
@@ -3378,7 +3448,7 @@ async def test_native_luxian_worker_persists_executor_phase_before_canonical_res
         return service
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -3470,8 +3540,8 @@ async def test_native_criterion_result_persists_canonical_contract_fields_for_si
         return service
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
-    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [rule])
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [rule])
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -3532,9 +3602,9 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
         return service
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "load_luxian_0609_rules",
         lambda: [active_rule, paused_rule],
     )
@@ -3605,8 +3675,8 @@ async def test_native_copy_result_is_not_reinterpreted_by_legacy_batch_guard(
         return service
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
-    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [rule])
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [rule])
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -3679,7 +3749,7 @@ async def test_luxian_batch_aggregation_off_fails_without_legacy_rollback(monkey
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(
             LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False
@@ -3716,15 +3786,17 @@ async def test_luxian_runtime_shadow_preserves_explicit_empty_selected_scope(mon
     async def _get_qc_service(): return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
     )
-    original = qc_sichuan.run_luxian_0609_runtime_shadow
+    original = batch_worker.run_luxian_0609_runtime_shadow
     def _hook(**kwargs: Any) -> Dict[str, Any]:
         assert kwargs["selected_rule_ids"] == []
-        result = original(**kwargs); summaries.append(result); return result
-    monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", _hook)
+        result = original(**kwargs)
+        summaries.append(result)
+        return result
+    monkeypatch.setattr(batch_worker, "run_luxian_0609_runtime_shadow", _hook)
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
     assert summaries and {item["disposition"] for item in summaries} == {"skipped_no_effective_rules"}
 
@@ -3740,11 +3812,11 @@ async def test_luxian_runtime_shadow_flag_off_does_not_call_hook(monkeypatch):
     async def _get_qc_service(): return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False),
     )
-    monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", lambda **_: (_ for _ in ()).throw(AssertionError("hook should remain off")))
+    monkeypatch.setattr(batch_worker, "run_luxian_0609_runtime_shadow", lambda **_: (_ for _ in ()).throw(AssertionError("hook should remain off")))
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
     assert workspace.job["status"] == "completed"
 
@@ -3764,11 +3836,11 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
     async def _get_qc_service(): return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
     )
-    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
+    monkeypatch.setattr(batch_worker, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
     def _reader(**kwargs: Any):
         assert kwargs["source_schema"] is None
         return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}] if kwargs["source_key"] == "surgery_record" else [{}]
@@ -3812,9 +3884,9 @@ async def test_workspace_batch_long_text_fallback_preserves_native_source_coordi
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fail_bundle)
+    monkeypatch.setattr(batch_worker, "evaluate_running_final_bundle", _fail_bundle)
     monkeypatch.setattr(
-        qc_sichuan,
+        batch_worker,
         "get_settings",
         lambda: SimpleNamespace(
             LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False,
