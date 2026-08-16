@@ -25,6 +25,17 @@ def _service() -> CustomQCWorkspaceService:
     return service
 
 
+def _failed_criterion() -> list[dict[str, str]]:
+    return [
+        {
+            "criterion_id": "requirement_check",
+            "kind": "semantic_relation",
+            "status": "failed",
+            "reason_code": "requirement_violated",
+        }
+    ]
+
+
 class _Rows:
     def __init__(self, rows: list[dict[str, Any]]):
         self.rows = rows
@@ -226,6 +237,7 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
                 "rule_name": "入院记录：入院后24小时内是否完成",
                 "status": "non_compliant",
                 "is_compliant": False,
+                "criterion_results": _failed_criterion(),
                 "document_type": "入院记录",
                 "defect_level": "严重缺陷",
                 "findings": "入院记录未在入院后24小时内完成。",
@@ -255,12 +267,12 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
     assert html.count("data-record-group") == 2
     assert "病历数：2" in html
     assert "结果总数：2" in html
-    assert "确定问题病历数：0" in html
-    assert "AI判断 1" in html
+    assert "确定问题病历数：1" in html
+    assert "不合规 1" in html
     assert "数据不足 1" in html
     assert "LX0609-001" in html
     assert "LX0609-002" in html
-    assert "发现该质控点对应的明确问题" not in html
+    assert "发现该质控点对应的明确问题" in html
     assert "当前受控数据不足以形成确定结论" in html
     assert "V001" not in html
     assert "V002" not in html
@@ -301,6 +313,7 @@ def test_export_batch_job_html_flattens_parent_child_jobs():
                         "rule_code": "LX0609-001",
                         "rule_name": "入院记录：入院后24小时内是否完成",
                         "status": "non_compliant",
+                        "criterion_results": _failed_criterion(),
                         "findings": "入院记录超时。",
                     }
                 ],
@@ -371,6 +384,7 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
                 "rule_id": "LX0609-001",
                 "status": "non_compliant",
                 "reason_code": "deadline_exceeded",
+                "criterion_results": _failed_criterion(),
                 "customer_conclusion": "记录完成时间超过规定时限。",
             },
             {
@@ -453,7 +467,7 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
         assert csv_text.find(rule_id) >= 0
 
     summary_rows = dict(workbook["管理摘要"].iter_rows(min_row=2, values_only=True))
-    assert summary_rows["确定问题病历数"] == 0
+    assert summary_rows["确定问题病历数"] == 1
 
     combined = html + csv_text
     for sheet in workbook.worksheets:
@@ -492,6 +506,7 @@ def test_customer_safe_batch_projection_is_idempotent_and_remains_safe_export():
                 "rule_id": "LX0609-001",
                 "status": "non_compliant",
                 "reason_code": "deadline_exceeded",
+                "criterion_results": _failed_criterion(),
             }
         ],
     }
