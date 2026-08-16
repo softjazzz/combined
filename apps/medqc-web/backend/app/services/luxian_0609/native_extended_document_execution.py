@@ -30,6 +30,9 @@ from .extended_document.death_discussion import (
 from .extended_document.discharge_documentation import (
     evaluate_discharge_documentation_timeliness,
 )
+from .extended_document.discharge_course import (
+    evaluate_predischarge_course_presence,
+)
 from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
@@ -2033,8 +2036,36 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             continue
 
-        if rule_id in {"LX0609-067", "LX0609-068"}:
-            if rule_id == "LX0609-068" and death_state == "present":
+        if rule_id == "LX0609-067":
+            outcome = evaluate_predischarge_course_presence(
+                registration_error=registration_error,
+                discharge_error=discharge_error,
+                discharge_time=_discharge_time(registration_rows, discharge_rows),
+                daily_error=daily_error,
+                senior_error=senior_error,
+                daily_rows=daily_rows,
+                senior_rows=senior_rows,
+            )
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        "inpat_registration",
+                        "discharge_record",
+                        "daily_course_record",
+                        "senior_course_record",
+                    ),
+                    final_state=outcome.final_state,
+                    reason_code=outcome.reason_code,
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-068":
+            if death_state == "present":
                 decisions.append(
                     _decision(
                         rule_id=rule_id,
@@ -2046,9 +2077,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 )
                 continue
             if (
-                rule_id == "LX0609-068"
-                and death_state == "unknown"
-                and death_error
+                death_state == "unknown" and death_error
             ):
                 decisions.append(
                     _decision(
@@ -2068,20 +2097,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = "data_gap", source_error
             elif discharge_time is None:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif rule_id == "LX0609-067" and (daily_error or senior_error):
-                final_state, reason_code = (
-                    "data_gap",
-                    daily_error or senior_error,
-                )
             else:
                 valid_dates = {
                     discharge_time.date(),
                     (discharge_time - timedelta(days=1)).date(),
                 }
-                if rule_id == "LX0609-067":
-                    course_rows = (*daily_rows, *senior_rows)
-                    matched_course_rows = tuple(
-                        (source_key, row)
+                approval_match = next(
+                    (
+                        (source_key, approval_path)
                         for source_key, rows in (
                             ("daily_course_record", daily_rows),
                             ("senior_course_record", senior_rows),
@@ -2089,65 +2112,20 @@ async def execute_luxian_0609_native_extended_document_rules(
                         for row in rows
                         if _row_time(row) is not None
                         and _row_time(row).date() in valid_dates
-                    )
-                    present = bool(matched_course_rows)
-                    course_time_missing = any(
-                        _row_time(row) is None for row in course_rows
-                    )
-                    source_document_refs: list[dict[str, str]] = []
-                    seen_document_refs: set[tuple[str, str]] = set()
-                    for source_key, row in matched_course_rows:
-                        document_id = _clean(
-                            row.get("document_id") or row.get("id")
-                        )
-                        reference_key = (source_key, document_id)
-                        if not document_id or reference_key in seen_document_refs:
-                            continue
-                        seen_document_refs.add(reference_key)
-                        source_document_refs.append(
-                            {
-                                "source_type": source_key,
-                                "source_document_id": document_id,
-                            }
-                        )
-                        if len(source_document_refs) >= 8:
-                            break
-                else:
-                    approval_match = next(
-                        (
-                            (source_key, approval_path)
-                            for source_key, rows in (
-                                ("daily_course_record", daily_rows),
-                                ("senior_course_record", senior_rows),
+                        if (
+                            approval_path := _discharge_approval_path(
+                                row,
+                                source_key=source_key,
                             )
-                            for row in rows
-                            if _row_time(row) is not None
-                            and _row_time(row).date() in valid_dates
-                            if (
-                                approval_path := _discharge_approval_path(
-                                    row,
-                                    source_key=source_key,
-                                )
-                            )
-                        ),
-                        None,
-                    )
-                    present = approval_match is not None
-                if rule_id == "LX0609-068" and approval_match is None and (
-                    daily_error or senior_error
-                ):
+                        )
+                    ),
+                    None,
+                )
+                present = approval_match is not None
+                if approval_match is None and (daily_error or senior_error):
                     final_state, reason_code = (
                         "data_gap",
                         daily_error or senior_error,
-                    )
-                elif (
-                    rule_id == "LX0609-067"
-                    and not present
-                    and course_time_missing
-                ):
-                    final_state, reason_code = (
-                        "data_gap",
-                        "authoritative_time_missing",
                     )
                 else:
                     final_state = "compliant" if present else "non_compliant"
@@ -2157,7 +2135,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         else "required_document_missing"
                     )
                     render_display = True
-                if render_display and rule_id == "LX0609-068":
+                if render_display:
                     display.append(
                         (
                             rule_id,
@@ -2189,32 +2167,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                             },
                         )
                     )
-                elif render_display:
-                    display.append((rule_id, {
-                        "verification_kind": "predischarge_course_presence_check",
-                        "discharge_date": discharge_time.date().isoformat(),
-                        "checked_dates": sorted(item.isoformat() for item in valid_dates),
-                        "course_present": present,
-                        "source_document_refs": source_document_refs,
-                    }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        (
-                            "inpat_registration",
-                            "discharge_record",
-                            "daily_course_record",
-                            "senior_course_record",
-                        )
-                        if rule_id == "LX0609-068"
-                        else (
-                            "inpat_registration",
-                            "discharge_record",
-                            "daily_course_record",
-                            "senior_course_record",
-                        )
+                        "inpat_registration",
+                        "discharge_record",
+                        "daily_course_record",
+                        "senior_course_record",
                     ),
                     final_state=final_state,
                     reason_code=reason_code,
