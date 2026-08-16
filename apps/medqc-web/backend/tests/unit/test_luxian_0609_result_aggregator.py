@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 from dataclasses import asdict, replace
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -4144,6 +4145,35 @@ def test_017_native_fingerprints_bind_iso_timezone_rows_at_exact_second():
             "source_type": "senior_course_record",
             "source_document_id": "copy-right",
         },
+    ]
+
+
+def test_017_native_fingerprints_bind_naive_datetime_rows_like_executor():
+    class _Materials:
+        @staticmethod
+        def rows(source_type):
+            if source_type == "daily_course_record":
+                return (
+                    {
+                        "document_id": "copy-left",
+                        "record_time": datetime(2026, 6, 1, 9, 0, 0, 123456),
+                    },
+                )
+            return (
+                {
+                    "document_id": "copy-right",
+                    "record_time": datetime(2026, 6, 2, 10, 30, 0, 654321),
+                },
+            )
+
+    result = _017_native_result(
+        facts=_017_fingerprint_facts(),
+        audit_context={"evidence_materials": _Materials()},
+    )
+
+    assert [item["source_document_id"] for item in result["customer_evidence"]] == [
+        "copy-left",
+        "copy-right",
     ]
 
 

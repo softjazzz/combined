@@ -3793,6 +3793,10 @@ def _strict_copy_fact_record_time(value: Any) -> str:
 def _normalized_copy_material_record_time(value: Any) -> str:
     """将MaterialStore标准时间或ISO时区时间规范到本地秒，禁止前缀命中。"""
 
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone(_HOSPITAL_TIMEZONE)
+        return value.strftime("%Y-%m-%d %H:%M:%S")
     if not isinstance(value, str):
         return ""
     candidate = value.strip()
