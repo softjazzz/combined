@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 import json
 import re
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 MAX_ROWS_PER_SOURCE = 8
+DATE_PATTERN = re.compile(r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?")
+TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}(?::\d{2})?")
 
 
 def authoritative_course_time(value: Any) -> datetime | None:
@@ -55,6 +57,21 @@ def row_text(row: Mapping[str, Any]) -> str:
         or row.get("diagnosis_name")
         or row.get("diagnosis_code")
     )
+
+
+def substantive_rows(
+    documents: Mapping[str, Any],
+    source_keys: Sequence[str],
+    *,
+    limit_per_source: int | None = MAX_ROWS_PER_SOURCE,
+) -> tuple[tuple[str, Mapping[str, Any], str], ...]:
+    rows: list[tuple[str, Mapping[str, Any], str]] = []
+    for source_key in source_keys:
+        for row in source_rows(documents, source_key, limit=limit_per_source):
+            content = row_text(row)
+            if content:
+                rows.append((source_key, row, content))
+    return tuple(rows)
 
 
 def response_text(response: Mapping[str, Any]) -> str:

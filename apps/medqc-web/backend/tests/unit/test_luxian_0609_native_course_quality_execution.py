@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from app.services.luxian_0609 import native_course_quality_execution as course
+from app.services.luxian_0609.course_quality import rules_016_017
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -4909,7 +4910,7 @@ async def test_typed_017_similarity_threshold_is_inclusive_without_model(
             limit_rows=50,
         )
 
-    monkeypatch.setattr(course, "SequenceMatcher", _FixedSimilarityMatcher)
+    monkeypatch.setattr(rules_016_017, "SequenceMatcher", _FixedSimilarityMatcher)
     session = build_luxian_0609_evidence_read_session(
         selected_rule_ids=("LX0609-017",),
         institute_id="I",
