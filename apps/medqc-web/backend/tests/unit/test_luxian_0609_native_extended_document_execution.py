@@ -369,6 +369,37 @@ async def test_051_death_discussion_uses_seven_day_threshold(
 
 
 @pytest.mark.asyncio
+async def test_051_boundary_overdue_result_keeps_second_precision_in_customer_finding() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-051",),
+        {
+            "death_record": ({
+                "document_id": "death-record-051-boundary",
+                "death_datetime": "2026-07-01 12:00:00",
+            },),
+            "death_discussion": ({
+                "document_id": "death-discussion-051-boundary",
+                "record_time": "2026-07-08 12:00:01",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-051",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "non_compliant"
+    assert "实际间隔 168小时0分1秒" in canonical["findings"]
+    assert "超时1秒" in canonical["findings"]
+    assert "168.0 小时" not in canonical["findings"]
+    assert execution.llm_call_count == execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidence() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-051",),

@@ -1905,9 +1905,15 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-051":
         if kind == "death_discussion_timeliness_check":
+            exact_duration = _format_exact_elapsed_duration(
+                started_at=facts.get("death_time"),
+                finished_at=facts.get("discussion_time"),
+                threshold_hours=facts.get("threshold_hours"),
+            )
             return (
                 f"死亡时间 {facts.get('death_time')}，死亡病历讨论时间 {facts.get('discussion_time')}，"
-                f"实际间隔 {facts.get('actual_interval_hours')} 小时，规定时限 168 小时。"
+                f"实际间隔 {exact_duration or str(facts.get('actual_interval_hours')) + '小时'}，"
+                "规定时限 168 小时。"
             )
         if kind == "death_discussion_missing_after_deadline":
             return f"患者于 {facts.get('death_time')} 死亡，超过 7 天仍未找到死亡病历讨论记录。"
