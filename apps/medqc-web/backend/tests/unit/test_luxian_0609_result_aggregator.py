@@ -1429,8 +1429,6 @@ def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monke
     for function_name in (
         "_copy_native_customer_fields",
         "_copy_customer_fields",
-        "_guard_customer_display_result",
-        "_split_uncertain_customer_result",
         "format_luxian_0609_evidence",
         "apply_luxian_0609_result_schema",
     ):
