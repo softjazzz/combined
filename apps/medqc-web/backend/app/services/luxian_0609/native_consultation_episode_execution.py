@@ -183,6 +183,17 @@ _GENERIC_APPLICATION_PURPOSE_PATTERN = re.compile(
     r"^(?:申请)?请?[\u4e00-\u9fff]{0,8}科?"
     r"(?:会诊|协诊|协助诊治|协助处理|指导治疗|进一步诊治)$"
 )
+_GENERIC_LABELLED_APPLICATION_PURPOSE_PATTERN = re.compile(
+    r"^(?:会诊申请单(?:\([^)]*\)|（[^）]*）)?[；;])?"
+    r"(?:会诊目的[:：])?请(?:相关)?(?:专科|科室)?"
+    r"(?:协助)?(?:评估|诊治|处理)(?:并提出(?:诊疗)?(?:建议|意见))?[。.]?$"
+)
+_GENERIC_OPINION_PATTERN = re.compile(
+    r"^(?:会诊记录单(?:\([^)]*\)|（[^）]*）)?[；;])?"
+    r"(?:会诊意见[:：])?建议(?:继续)?(?:监测|观察)病情(?:变化)?"
+    r"[，,；;]?(?:结合|根据)(?:相关)?检查结果(?:酌情|视情况)?"
+    r"(?:调整|继续)(?:诊疗|治疗)方案[。.]?$"
+)
 _SAFE_EXCEPTION_ORIGIN_PART = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -457,9 +468,27 @@ def _has_specific_application_purpose(
         for ref in application_refs
     ]
     text = _evidence_text("；".join(item for item in texts if item))
-    if not text or _GENERIC_APPLICATION_PURPOSE_PATTERN.fullmatch(text):
+    if not text or (
+        _GENERIC_APPLICATION_PURPOSE_PATTERN.fullmatch(text)
+        or _GENERIC_LABELLED_APPLICATION_PURPOSE_PATTERN.fullmatch(text)
+    ):
         return False
     return bool(_SPECIFIC_APPLICATION_PURPOSE_PATTERN.search(text))
+
+
+def _opinion_is_only_generic(
+    *,
+    opinion_refs: Sequence[str],
+    documents_by_ref: Mapping[str, Mapping[str, str]],
+) -> bool:
+    """锁定只有泛化监测/调整措辞的意见，避免模型把它升级为明确意见。"""
+
+    texts = [
+        _clean((documents_by_ref.get(ref) or {}).get("text"))
+        for ref in opinion_refs
+    ]
+    text = _evidence_text("；".join(item for item in texts if item))
+    return bool(text and _GENERIC_OPINION_PATTERN.fullmatch(text))
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -1261,6 +1290,15 @@ def _parse_compact_document_facts(
             documents_by_ref=documents_by_ref,
         ):
             application = "clear"
+        if (
+            opinion == "clear"
+            and not recommendations
+            and _opinion_is_only_generic(
+                opinion_refs=(ref,),
+                documents_by_ref=documents_by_ref,
+            )
+        ):
+            opinion = "vague"
         episodes.append(
             _Episode(
                 ref,
@@ -1361,6 +1399,15 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             documents_by_ref=documents_by_ref,
         ):
             application = "clear"
+        if (
+            opinion == "clear"
+            and not recommendations
+            and _opinion_is_only_generic(
+                opinion_refs=opinion_refs,
+                documents_by_ref=documents_by_ref,
+            )
+        ):
+            opinion = "vague"
         assigned.extend(member_refs)
         assignment_bucket_by_ref.update(
             (ref, f"episode:{episode_ref}") for ref in member_refs

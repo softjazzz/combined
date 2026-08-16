@@ -79,6 +79,41 @@ def test_stage_two_exception_origin_without_traceback_is_unknown():
     assert episode._stage_two_exception_origin(ValueError("ORIGIN_SECRET")) == "unknown"
 
 
+def test_generic_monitor_and_adjust_wording_cannot_be_upgraded_to_clear_opinion():
+    documents = (
+        {
+            "ref": "consultation_record-1",
+            "time": "2026-07-08 17:55:17",
+            "text": "会诊申请单；会诊目的：请相关专科协助评估并提出诊疗建议。",
+            "event_group_ref": "consultation-event-1",
+        },
+        {
+            "ref": "consultation_record-2",
+            "time": "2026-07-08 21:55:17",
+            "text": (
+                "会诊记录单；会诊意见：建议继续监测病情，"
+                "结合检查结果调整治疗方案。"
+            ),
+            "event_group_ref": "consultation-event-1",
+        },
+    )
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1", "consultation_record-2"],
+        application="vague",
+        opinion="clear",
+        application_refs=["consultation_record-1"],
+        opinion_refs=["consultation_record-2"],
+        recommendations=[],
+    )])
+
+    parsed = episode._parse(payload, documents)
+
+    assert parsed[0].application_state == "vague"
+    assert parsed[0].opinion_state == "vague"
+    assert parsed[0].recommendations == ()
+
+
 def _rows(*contents: str, day: int = 20, hour_start: int = 1, action_suffix: bool = True):
     return [
         {
