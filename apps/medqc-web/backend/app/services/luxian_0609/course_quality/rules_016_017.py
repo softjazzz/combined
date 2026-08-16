@@ -661,10 +661,27 @@ def _copy_review_prompt(
         "documents": list(documents.values()),
         "candidate_pairs": pairs,
     }
+    output_example = {
+        "schema_version": _COPY_REVIEW_SCHEMA_VERSION,
+        "pair_results": [
+            {
+                "pair_ref": candidate.pair_ref,
+                "verdict": "uncertain",
+                "document_refs": [candidate.left_ref, candidate.right_ref],
+            }
+            for candidate in candidates
+        ],
+    }
     return (
         "你只核对候选病程对是否属于实质内容复制，不输出质控状态。"
         "逐个pair_ref返回substantial_copy、template_only或uncertain；"
-        "document_refs必须原样返回该候选的两个临时文书引用。\n"
+        "document_refs必须原样返回该候选的两个临时文书引用。"
+        "只输出严格JSON，不要输出Markdown或解释；顶层只能包含schema_version和pair_results；"
+        "pair_results必须是数组且恰好覆盖每个候选一次；"
+        "禁止使用pair_ref作为JSON对象的键，也禁止返回substantial_copy布尔字段。"
+        "输出格式示例："
+        + json.dumps(output_example, ensure_ascii=False, separators=(",", ":"))
+        + "\n待核对输入："
         + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     )
 

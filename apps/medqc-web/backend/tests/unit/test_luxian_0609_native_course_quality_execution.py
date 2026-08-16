@@ -4156,6 +4156,12 @@ async def test_017_long_template_with_material_change_uses_one_review(monkeypatc
     assert "PRIVATE-" not in client.calls[0]["prompt"]
     assert '"pair_ref":"P01"' in client.calls[0]["prompt"]
     assert '"left_ref":"D01"' in client.calls[0]["prompt"]
+    assert (
+        '"schema_version":"lx0609_017_v1","pair_results":['
+        '{"pair_ref":"P01","verdict":"uncertain",'
+        '"document_refs":["D01","D02"]}]'
+    ) in client.calls[0]["prompt"]
+    assert "禁止使用pair_ref作为JSON对象的键" in client.calls[0]["prompt"]
     assert left not in repr(result)
     assert right not in repr(result)
 
