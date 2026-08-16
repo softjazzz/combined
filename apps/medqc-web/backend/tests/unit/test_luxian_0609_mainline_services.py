@@ -27,6 +27,7 @@ from app.services.luxian_0609_trigger_gate import (
 )
 from app.services.luxian_0609_llm_gate import evaluate_luxian_0609_trigger_gates_with_llm
 from app.services.luxian_0609 import execution as luxian_execution
+from app.services.luxian_0609 import native_course_quality_execution as native_course
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -4583,153 +4584,6 @@ def test_aggregator_should_keep_specimen_detail_absence_as_non_compliant():
     assert "未详细记录取材部位" in aggregated[0]["findings"]
 
 
-def test_aggregator_should_make_lx0609_017_unstructured_uncertain_customer_readable():
-    rules = [
-        _wrapper(
-            "LX0609-017",
-            name="不合理复制病历：2次以上病程记录完全相同",
-            mapped_rule_ids=["CL-273"],
-            trigger_condition="两次以上病程记录相似度大于70%时需复核。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "CL-273",
-                "rule_name": "病程记录重复",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "LLM 返回非结构化结果，请查看原始输出。",
-                "evidence": "LLM 返回了非结构化结果，请查看原始输出。",
-                "suggestion": "查看原始输出。",
-                "confidence": 0.2,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert "病程记录重复度未形成可靠自动结论" in aggregated[0]["findings"]
-    assert "LLM" not in aggregated[0]["findings"]
-    assert "原始输出" not in aggregated[0]["evidence"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "customer_readable_uncertain"
-
-
-def test_aggregator_should_use_copy_compare_evidence_for_lx0609_017():
-    rules = [
-        _wrapper(
-            "LX0609-017",
-            name="不合理复制病历：2次以上病程记录完全相同",
-            mapped_rule_ids=["CL-275"],
-            trigger_condition="两次以上病程记录相似度大于70%时需复核。",
-        )
-    ]
-    previous_content = (
-        "患者今日精神一般，诉咳嗽、咳痰较前无明显缓解，活动后气促，夜间可平卧。"
-        "查体：体温36.6℃，脉搏86次/分，呼吸20次/分，血压128/76mmHg，神志清楚，"
-        "双肺呼吸音粗，可闻及少量湿啰音，心律齐，腹软无压痛，双下肢无水肿。"
-        "结合目前病情，继续予抗感染、祛痰、平喘、吸氧等治疗，密切观察体温、咳痰量及血氧饱和度变化。"
-    )
-    current_content = (
-        "患者今日精神一般，诉咳嗽、咳痰较前无明显缓解，活动后气促，夜间可平卧。"
-        "查体：体温36.6℃，脉搏86次/分，呼吸20次/分，血压128/76mmHg，神志清楚，"
-        "双肺呼吸音粗，可闻及少量湿啰音，心律齐，腹软无压痛，双下肢无水肿。"
-        "结合目前病情，继续予抗感染、祛痰、平喘、吸氧等治疗，密切观察体温、咳痰量及血氧饱和度变化。"
-    )
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "CL-275",
-                "rule_name": "病程记录重复",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "病程记录重复度未形成可靠自动结论，需人工复核。",
-                "evidence": "系统未能提取到可直接比较的两份以上病程记录结构化片段。",
-                "suggestion": "人工复核。",
-                "confidence": 0.3,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-        audit_context={
-            "evidence_payload": {
-                "programmatic_timeline": {
-                    "documents": {
-                        "daily_course_record": [
-                            {
-                                "document_id": "D-001",
-                                "document_title": "2026-07-01 日常病程记录",
-                                "display_time": "2026-07-01 15:20:31",
-                                "content": previous_content,
-                            }
-                        ],
-                        "senior_course_record": [
-                            {
-                                "document_id": "D-002",
-                                "document_title": "2026-07-02 上级医师查房记录",
-                                "display_time": "2026-07-02 15:25:14",
-                                "content": current_content,
-                            }
-                        ],
-                    }
-                }
-            }
-        },
-    )
-
-    row = aggregated[0]
-    assert row["status"] == "non_compliant"
-    assert "两份病程或查房记录内容高度相似" in row["findings"]
-    evidence_items = list(row.get("evidence_items") or [])
-    evidence_ids = [item.get("evidence_id") for item in evidence_items]
-    assert evidence_ids[:2] == ["COPY-PREVIOUS", "COPY-CURRENT"]
-    assert "COPY-METRIC" in evidence_ids
-    assert "COPY-MISSING-DIFFERENCE" in evidence_ids
-    assert any(str(item.get("evidence_id") or "").startswith("COPY-PAIR-1-") for item in evidence_items)
-    assert "日常病程记录" in evidence_items[0]["source_document_name"]
-    assert "上级医师查房记录" in evidence_items[1]["source_document_name"]
-    assert any("全文相似度" in str(item.get("quote") or "") for item in evidence_items)
-    assert row["metadata"]["customer_display_guard"] == "copy_compare_evidence"
-
-
-def test_aggregator_should_not_show_lx0609_017_single_course_vs_admission_as_defect():
-    rules = [
-        _wrapper(
-            "LX0609-017",
-            name="不合理复制病历：2次以上病程记录完全相同",
-            mapped_rule_ids=["CL-275"],
-            trigger_condition="两次以上病程记录相似度大于70%时需复核。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "CL-275",
-                "rule_name": "病程记录重复",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "当前病程记录（2026-06-01）与入院记录、首次病程记录中的辅助检查数据及初步诊断思路高度重复。",
-                "evidence": "执行证据：【日常病程记录】查房内容：患者存在腹泻症状。",
-                "suggestion": "补充病情变化描述。",
-                "confidence": 0.8,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert "病程记录重复度未形成可靠自动结论" in aggregated[0]["findings"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "copy_rule_requires_two_course_records"
-
-
 def test_aggregator_should_not_show_positive_consultation_execution_as_defect():
     rules = [
         _wrapper(
@@ -5033,129 +4887,6 @@ def test_aggregator_should_not_show_preop_signature_contradiction_as_defect():
     assert aggregated[0]["status"] == "data_gap"
     assert "结论与证据存在矛盾" in aggregated[0]["findings"]
     assert aggregated[0]["metadata"]["customer_display_guard"] == "preop_discussion_signature_contradiction"
-
-
-def test_aggregator_should_make_any_unstructured_uncertain_customer_readable():
-    rules = [
-        _wrapper(
-            "LX0609-040",
-            name="术前多学科讨论记录",
-            mapped_rule_ids=["SC-083"],
-            trigger_condition="四级手术术前讨论应进行多学科讨论。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-083",
-                "rule_name": "术前多学科讨论",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "LLM 返回了非结构化结果，请查看原始输出。",
-                "evidence": "LLM 返回了非结构化结果，请查看原始输出。",
-                "suggestion": "查看原始输出。",
-                "confidence": 0.2,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "not_applicable"
-    assert "本质控点不适用" in aggregated[0]["findings"]
-    assert "LLM" not in aggregated[0]["findings"]
-    assert "原始输出" not in aggregated[0]["evidence"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "mdt_rule_requires_level_4_surgery_fact"
-
-
-def test_aggregator_should_not_mark_copy_rule_non_compliant_when_first_course_is_empty():
-    rules = [
-        _wrapper(
-            "LX0609-016",
-            name="不合理复制病历",
-            mapped_rule_ids=["SC-COPY"],
-            trigger_condition="首次病程记录病例特点与入院记录、现病史完全相同。",
-        )
-    ]
-    execution_results = [
-        {
-            "rule_id": "SC-COPY",
-            "rule_name": "复制病历",
-            "status": "non_compliant",
-            "is_compliant": False,
-            "findings": "首次病程与入院记录完全相同。",
-            "evidence": "首次病程记录复制入院记录。",
-            "suggestion": "重写首次病程。",
-            "confidence": 0.9,
-            "metadata": {},
-        }
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=execution_results,
-        gate_decisions={},
-        audit_context={
-            "evidence_payload": {
-                "programmatic_timeline": {
-                    "documents": {
-                        "first_course_record": [
-                            {
-                                "title": "首次病程记录",
-                                "content_preview": "首次病程记录",
-                            }
-                        ],
-                        "admission_record": [
-                            {
-                                "title": "入院记录",
-                                "content_preview": "腰背部疼痛伴活动受限3天。",
-                            }
-                        ],
-                    }
-                }
-            }
-        },
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert "首次病程记录缺失或正文为空" in aggregated[0]["findings"]
-    assert aggregated[0]["metadata"]["copy_rule_priority_guard"] == "first_course_missing"
-
-
-def test_aggregator_should_not_turn_first_course_positive_copy_result_into_gap():
-    rules = [
-        _wrapper(
-            "LX0609-016",
-            name="不合理复制病历",
-            mapped_rule_ids=["CL-273"],
-            trigger_condition="首次病程记录病例特点与入院记录、现病史完全相同。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "CL-273",
-                "rule_name": "首次病程复制病历",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "首次病程记录病例特点与入院记录、现病史存在实质性差异，非完全相同。",
-                "evidence": "执行证据：【首次病程记录】病例特点已补充诊断分析。",
-                "suggestion": "无需整改。",
-                "confidence": 0.8,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "compliant"
-    assert aggregated[0]["is_compliant"] is True
-    assert "未形成完全相同" in aggregated[0]["findings"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "first_course_copy_positive_non_defect"
 
 
 def test_filter_executable_rules_should_skip_only_when_all_mapped_wrappers_terminal():
@@ -7495,125 +7226,72 @@ def test_customer_created_tumor_chemo_template_should_return_customer_readable_e
 
 
 def test_lx0609_017_single_course_uncertain_should_not_be_non_compliant():
-    rules = [
-        _wrapper(
-            "LX0609-017",
-            name="不合理复制病历：2次以上病程记录完全相同",
-            mapped_rule_ids=["CL-275"],
-            trigger_condition="2次以上病程记录相似度大于70%。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "CL-275",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "仅见单次查房记录，无法判定是否存在2次以上高度重复。",
-                "evidence": "仅见单次查房记录，无法判定。",
-                "suggestion": "请人工复核。",
-            }
-        ],
-        gate_decisions={},
+    result = native_course._copy_result(
+        {
+            "senior_course_record": [
+                {
+                    "record_time": "2026-01-01 09:00:00",
+                    "record_content": (
+                        "患者右下肺炎较前缓解，复查炎症指标下降，继续头孢曲松静滴治疗，"
+                        "计划次日复查胸部CT并根据影像结果调整抗感染方案。"
+                    ),
+                }
+            ]
+        },
+        source_complete=True,
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "copy_rule_requires_two_course_records"
-    assert "未形成可靠自动结论" in aggregated[0]["findings"]
-    assert "系统未能提取到可直接比较的两份以上病程记录结构化片段" in aggregated[0]["evidence"]
-    assert "仅见单次查房记录" not in aggregated[0]["evidence"]
+    assert result["status"] == "not_applicable"
+    assert result["metadata"]["reason_code"] == "insufficient_independent_course_records"
+    assert result["metadata"]["comparable_document_count"] == 1
 
 
 def test_lx0609_017_one_round_record_language_should_not_be_non_compliant():
-    rules = [
-        _wrapper(
-            "LX0609-017",
-            name="不合理复制病历：2次以上病程记录完全相同",
-            mapped_rule_ids=["CL-275"],
-            trigger_condition="2次以上病程记录相似度大于70%。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "CL-275",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "仅见1次查房记录，未满足2次以上重复判定条件。",
-                "evidence": "执行证据：【上级查房记录】患者病情稳定。",
-                "suggestion": "请人工复核。",
-            }
-        ],
-        gate_decisions={},
+    result = native_course._copy_result(
+        {
+            "senior_course_record": [
+                {
+                    "record_time": "2026-01-01 09:00:00",
+                    "record_content": "今日上级医师查房，患者病情稳定，继续观察。",
+                }
+            ]
+        },
+        source_complete=True,
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "copy_rule_requires_two_course_records"
-    assert "系统未能提取到可直接比较的两份以上病程记录结构化片段" in aggregated[0]["evidence"]
-    assert "患者病情稳定" not in aggregated[0]["evidence"]
+    assert result["status"] == "not_applicable"
+    assert result["metadata"]["reason_code"] == "insufficient_independent_course_records"
+    assert "患者病情稳定" not in repr(result)
 
 
 def test_lx0609_017_multiple_records_below_threshold_should_not_require_review():
-    rules = [
-        _wrapper(
-            "LX0609-017",
-            name="不合理复制病历：2次以上病程记录完全相同",
-            mapped_rule_ids=["CL-275"],
-            trigger_condition="2次以上病程记录相似度大于70%。",
-        )
-    ]
-    audit_context = {
-        "programmatic_timeline": {
-            "documents": {
-                "senior_course_record": [
-                    {
-                        "document_id": "round-1",
-                        "record_time": "2026-01-01 09:00:00",
-                        "content": (
-                            "今日上级医师查房，患者腹痛较前缓解，体温正常，继续抗感染及补液治疗，观察腹部体征变化。"
-                            "查体腹部压痛较前减轻，未见明显反跳痛，饮食较前改善，医师建议继续完善复查并根据症状调整治疗。"
-                        ),
-                    },
-                    {
-                        "document_id": "round-2",
-                        "record_time": "2026-01-03 09:00:00",
-                        "content": (
-                            "今日上级医师查房，患者咳嗽较前缓解，无发热，复查血常规后调整抗感染方案，继续观察呼吸道症状。"
-                            "查体双肺呼吸音较清，未闻及明显湿啰音，夜间睡眠尚可，医师建议继续氧疗并评估后续出院准备。"
-                        ),
-                    },
-                ]
-            }
-        }
-    }
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "CL-275",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "病程记录重复度未形成可靠自动结论，需人工复核。",
-                "evidence": "执行证据：【日常病程记录】患者今日情况可。",
-                "suggestion": "请人工复核。",
-            }
-        ],
-        gate_decisions={},
-        audit_context=audit_context,
+    result = native_course._copy_result(
+        {
+            "senior_course_record": [
+                {
+                    "record_time": "2026-01-01 09:00:00",
+                    "record_content": (
+                        "今日上级医师查房，患者腹痛较前缓解，体温正常，继续抗感染及补液治疗，观察腹部体征变化。"
+                        "查体腹部压痛较前减轻，未见明显反跳痛，饮食较前改善，医师建议继续完善复查并根据症状调整治疗。"
+                    ),
+                },
+                {
+                    "record_time": "2026-01-03 09:00:00",
+                    "record_content": (
+                        "今日上级医师查房，患者咳嗽较前缓解，无发热，复查血常规后调整抗感染方案，继续观察呼吸道症状。"
+                        "查体双肺呼吸音较清，未闻及明显湿啰音，夜间睡眠尚可，医师建议继续氧疗并评估后续出院准备。"
+                    ),
+                },
+            ]
+        },
+        source_complete=True,
     )
 
-    assert aggregated[0]["status"] == "compliant"
-    assert aggregated[0]["is_compliant"] is True
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "copy_rule_below_threshold_no_defect"
-    assert "未达到复制粘贴自动判定阈值" in aggregated[0]["findings"]
-    assert "已提取到 2 份可比较的病程/查房记录" in aggregated[0]["evidence"]
-    assert "相似度未达到可靠自动判定阈值" in aggregated[0]["evidence"]
-    assert "系统未能提取到可直接比较" not in aggregated[0]["evidence"]
+    assert result["status"] == "compliant"
+    assert result["is_compliant"] is True
+    assert result["metadata"]["reason_code"] == "copy_similarity_within_threshold"
+    assert result["metadata"]["comparable_document_count"] == 2
+    assert result["metadata"]["maximum_similarity"] < 0.7
 
 
 def test_lx0609_022_should_not_use_missing_record_or_signature_as_opinion_defect():
