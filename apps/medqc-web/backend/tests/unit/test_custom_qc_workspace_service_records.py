@@ -570,6 +570,14 @@ def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
             "result_status": "non_compliant",
             "display_status": "non_compliant",
             "is_compliant": False,
+            "criterion_results": [
+                {
+                    "criterion_id": "requirement_check",
+                    "kind": "semantic_relation",
+                    "status": "failed",
+                    "reason_code": "requirement_violated",
+                }
+            ],
         },
     ]
 
