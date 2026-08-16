@@ -3228,6 +3228,122 @@ def test_multi_event_parser_localizes_course_outside_the_event_window():
     assert len(facts[1].course_doc_refs) == 1
 
 
+def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysis():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_name": "胸部CT",
+                    "report_time": "2026-04-01 12:00:00",
+                    "exam_conclusion": "右肺结节。",
+                },
+                {
+                    "exam_id": "EXAM-2",
+                    "exam_name": "腰椎MRI",
+                    "report_time": "2026-04-02 12:00:00",
+                    "exam_conclusion": "L4/5椎间盘突出，右侧神经根受压。",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-04-01 13:00:00",
+                    "record_content": "查看胸部CT报告，记录提示右肺结节。",
+                },
+                {
+                    "record_time": "2026-04-02 13:00:00",
+                    "record_content": (
+                        "查看腰椎MRI报告，记录提示L4/5椎间盘突出，"
+                        "右侧神经根受压。"
+                    ),
+                },
+            ),
+        }
+    )
+    response = {
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-012",
+                "event_position": position,
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "positive",
+                "course_doc_positions": [position],
+            }
+            for position in (1, 2)
+        ],
+    }
+
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(response, ensure_ascii=False)},
+        selected_rule_ids=("LX0609-012",),
+        projection=projection,
+    )
+
+    assert [fact.semantic_state for fact in facts] == ["absent", "absent"]
+    assert [fact.course_doc_refs for fact in facts] == [(), ()]
+
+
+def test_multi_event_parser_keeps_explicit_clinical_analysis_of_imaging_result():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_name": "胸部CT",
+                    "report_time": "2026-04-01 12:00:00",
+                    "exam_conclusion": "右肺结节。",
+                },
+                {
+                    "exam_id": "EXAM-2",
+                    "exam_name": "腰椎MRI",
+                    "report_time": "2026-04-02 12:00:00",
+                    "exam_conclusion": "L4/5椎间盘突出，右侧神经根受压。",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-04-01 13:00:00",
+                    "record_content": "查看胸部CT报告，记录提示右肺结节。",
+                },
+                {
+                    "record_time": "2026-04-02 13:00:00",
+                    "record_content": (
+                        "结合腰椎MRI所示神经根受压，考虑与右下肢麻木相关，"
+                        "拟请骨科会诊并调整治疗。"
+                    ),
+                },
+            ),
+        }
+    )
+    response = {
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-012",
+                "event_position": position,
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "positive",
+                "course_doc_positions": [position],
+            }
+            for position in (1, 2)
+        ],
+    }
+
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(response, ensure_ascii=False)},
+        selected_rule_ids=("LX0609-012",),
+        projection=projection,
+    )
+
+    assert facts[0].semantic_state == "absent"
+    assert facts[0].course_doc_refs == ()
+    assert facts[1].semantic_state == "present"
+    assert len(facts[1].course_doc_refs) == 1
+
+
 @pytest.mark.asyncio
 async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
     monkeypatch,

@@ -53,6 +53,18 @@ _IMAGING_UNCERTAIN_PATTERN = re.compile(
 # 原文明示且未被否定/待排的“阳性”可由 Python 快速确认；其余影像
 # 报告必须按整体异常语义由一次受控模型分类，不能靠关键词穷举病灶。
 _IMAGING_POSITIVE_PATTERN = re.compile(r"阳性")
+_IMAGING_RESULT_RESTATEMENT_PATTERN = re.compile(
+    r"(?:CT|MRI|计算机断层|磁共振|影像|报告|记录提示).{0,80}"
+    r"(?:异常|病变|结节|肿块|占位|突出|受压|梗死|出血|炎症|积液)",
+    re.IGNORECASE,
+)
+_IMAGING_CLINICAL_ANALYSIS_PATTERN = re.compile(
+    r"(?:分析|结合.{0,32}(?:考虑|判断|提示)|"
+    r"考虑.{0,40}(?:相关|诊断|原因|病因|可能|倾向)|"
+    r"与.{0,32}(?:相关|相符|一致)|临床判断|评估|处置|处理|"
+    r"调整治疗|会诊|安排.{0,24}(?:复查|随访))",
+    re.IGNORECASE,
+)
 _CULTURE_NEGATIVE_PATTERN = re.compile(r"无生长|未检出|培养阴性|阴性")
 _CULTURE_POSITIVE_PATTERN = re.compile(r"培养阳性|检出.{0,12}菌|分离出.{0,12}菌|药敏结果")
 
@@ -788,7 +800,7 @@ Python已按业务键拆分事件。影像事件目录={json.dumps(imaging_catal
 semantic_state=present时，course_doc_positions必须非空；semantic_state=absent或unknown时course_doc_positions必须为空。
 若COURSE_DOC为空，所有规则都不得输出semantic_state=present；目标事件已实施但没有匹配病程时，010/011/014以及阳性的012/015应输出applicable+absent，不得虚构文书引用，也不得把“未记录”写成not_applicable。
 positive_state字段固定规则：010/011/014必须始终为not_relevant；只有012/015允许positive、negative或unknown。012中，只要本次CT/MRI报告检出任一明确异常病灶或异常征象，即为positive；炎症、结节、退变、陈旧灶等均属于异常，不要求原文出现“阳性”，也不等同于癌症或确诊某病。仅当报告整体明确未检出异常征象时为negative；报告同时含“未见急性病变”和明确陈旧灶等异常时仍为positive；只有待排、不除外、不能除外等不确定描述且没有任何明确异常时为unknown。012/015事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
-011/014只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；012/015再独立判断阳性结果是否有分析或处置。
+011/014只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；012/015再独立判断阳性结果是否有分析或处置。仅复述、摘抄或写明“查看/记录”报告结论，只能证明011结果已记录，不能证明012已分析；012=present必须出现针对该异常结果的临床意义、病因判断、与症状的关系、诊疗计划、处置或会诊等实质内容。
 同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。病程既复述阳性影像结论又给出考虑、计划或处理时，该事件的011和012都为present；既复述培养结果又据敏感性调整用药时，该事件的014和015都为present。
 unknown只用于材料自身含混或互相冲突；完整投影里单纯未找到匹配病程应为absent。
 逐规则决策表（每条都必须独立作答）：010只看检查前原因；011只看报告结果是否记录；012只看阳性影像是否分析；014只看培养结果是否记录；015只看阳性菌或药敏是否被分析/处置。若同一 COURSE_DOC 同时满足多条，可为多条重复引用；不得因某一条不适用而省略其他条。
@@ -993,6 +1005,25 @@ def parse_exam_lab_fact_response(
             else:
                 applicability = "unknown"
                 positive = "unknown"
+        if (
+            rule_id == "LX0609-012"
+            and semantic == "present"
+            and normalized_course
+            and all(
+                _IMAGING_RESULT_RESTATEMENT_PATTERN.search(
+                    (projection.course_texts or {}).get(ref, "")
+                )
+                and not _IMAGING_CLINICAL_ANALYSIS_PATTERN.search(
+                    (projection.course_texts or {}).get(ref, "")
+                )
+                for ref in normalized_course
+            )
+        ):
+            # 多事件必须交给一次模型完成事件关联，但模型不能把“查看报告并
+            # 复述异常结论”升级为阳性结果分析。这里仅收口可确定的结果复述；
+            # 含临床意义、病因判断或处置等内容的灰区仍保留模型事实。
+            semantic = "absent"
+            normalized_course = ()
         normalized_evidence = tuple(sorted((*event_refs, *normalized_course)))
         if (
             not normalized_evidence
