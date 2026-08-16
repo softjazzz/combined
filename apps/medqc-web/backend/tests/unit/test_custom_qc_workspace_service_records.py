@@ -3,12 +3,14 @@ from datetime import datetime
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+import app.services.qc_workspace.record_repository as record_repository_module
+from app.services.qc_workspace.record_repository import RecordRepository
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
 def test_serialize_record_row_should_include_programmatic_execution_keys():
-    service = CustomQCWorkspaceService()
+    repository = RecordRepository(session_factory=lambda: None)
     row = SimpleNamespace(
         institute_id="H1",
         patient_id="P1",
@@ -25,7 +27,7 @@ def test_serialize_record_row_should_include_programmatic_execution_keys():
         update_time=None,
     )
 
-    item = service._serialize_record_row(row)
+    item = repository._serialize_record_row(row)
 
     assert item["institute_id"] == "H1"
     assert item["patient_id"] == "P1"
@@ -35,7 +37,7 @@ def test_serialize_record_row_should_include_programmatic_execution_keys():
 
 
 def test_serialize_record_row_should_not_treat_update_time_as_discharge_time():
-    service = CustomQCWorkspaceService()
+    repository = RecordRepository(session_factory=lambda: None)
     row = SimpleNamespace(
         institute_id="H1",
         patient_id="P1",
@@ -52,7 +54,7 @@ def test_serialize_record_row_should_not_treat_update_time_as_discharge_time():
         update_time="2026-07-30 10:00:00",
     )
 
-    item = service._serialize_record_row(row)
+    item = repository._serialize_record_row(row)
 
     assert item["scope"] == "running"
     assert item["status"] == "running"
@@ -150,6 +152,7 @@ def test_collect_records_should_use_inpat_registration_for_active_record_without
     monkeypatch,
 ):
     service = CustomQCWorkspaceService()
+    closed_sessions = []
     active_registration = SimpleNamespace(
         institute_id="H1",
         patient_id="P1",
@@ -179,16 +182,16 @@ def test_collect_records_should_use_inpat_registration_for_active_record_without
 
     class _Session:
         def query(self, model, *_args, **_kwargs):
-            if model is workspace_module.InpatRegistration:
+            if model is record_repository_module.InpatRegistration:
                 return _Query([active_registration])
             return _Query([])
 
         def close(self):
-            return None
+            closed_sessions.append(self)
 
     monkeypatch.setattr(workspace_module, "_session", lambda: _Session())
     monkeypatch.setattr(
-        service,
+        RecordRepository,
         "_build_records_query",
         lambda *_args, **_kwargs: _Query([]),
     )
@@ -235,6 +238,7 @@ def test_collect_records_should_use_inpat_registration_for_active_record_without
         keyword=None,
         record_ids=["ACTIVE-1"],
     ) == 1
+    assert len(closed_sessions) == 2
 
 
 def test_count_records_should_count_distinct_full_case_coordinates(monkeypatch):
@@ -269,7 +273,7 @@ def test_count_records_should_count_distinct_full_case_coordinates(monkeypatch):
 
     monkeypatch.setattr(workspace_module, "_session", lambda: _Session())
     monkeypatch.setattr(
-        service,
+        RecordRepository,
         "_build_records_query",
         lambda *_args, **_kwargs: _IdentityQuery(),
     )
@@ -289,30 +293,30 @@ def test_count_records_should_count_distinct_full_case_coordinates(monkeypatch):
 def test_collect_records_visit_date_matches_admission_or_discharge_date() -> None:
     engine = create_engine("sqlite:///:memory:")
     for model in (
-        workspace_module.MedicalRecordFrontpage,
-        workspace_module.AdmissionRecord,
-        workspace_module.DischargeRecord,
+        record_repository_module.MedicalRecordFrontpage,
+        record_repository_module.AdmissionRecord,
+        record_repository_module.DischargeRecord,
     ):
         model.__table__.create(bind=engine)
 
     with Session(engine) as session:
         session.add_all(
             [
-                workspace_module.MedicalRecordFrontpage(
+                record_repository_module.MedicalRecordFrontpage(
                     institute_id="H1",
                     patient_id="P1",
                     visit_id="ADMISSION-HIT",
                     admission_datetime=datetime(2026, 5, 10, 8, 0),
                     discharge_datetime=datetime(2026, 6, 2, 10, 0),
                 ),
-                workspace_module.MedicalRecordFrontpage(
+                record_repository_module.MedicalRecordFrontpage(
                     institute_id="H1",
                     patient_id="P2",
                     visit_id="DISCHARGE-HIT",
                     admission_datetime=datetime(2026, 4, 10, 8, 0),
                     discharge_datetime=datetime(2026, 5, 20, 10, 0),
                 ),
-                workspace_module.MedicalRecordFrontpage(
+                record_repository_module.MedicalRecordFrontpage(
                     institute_id="H1",
                     patient_id="P3",
                     visit_id="OUTSIDE",
@@ -323,7 +327,7 @@ def test_collect_records_visit_date_matches_admission_or_discharge_date() -> Non
         )
         session.commit()
 
-        rows = CustomQCWorkspaceService()._build_records_query(
+        rows = RecordRepository(session_factory=lambda: session)._build_records_query(
             session,
             scope="all",
             department=None,
