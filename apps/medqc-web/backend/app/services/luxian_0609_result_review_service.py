@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 from .custom_qc_workspace_service import (
     _canonical_customer_status,
+    _keyed_ref,
     customer_safe_projection_key,
     iter_unique_customer_result_source_items,
     project_customer_safe_result_item,
@@ -345,15 +346,13 @@ def _finding(
     finding_key_material = (
         f"{projected['record_ref']}:{rule_id}:{risk_type}"
     )
-    finding_key = project_customer_safe_result_item(
-        {
-            "record_id": finding_key_material,
-            "rule_id": rule_id,
-            "status": suggested_status,
-            "reason_code": risk_type,
-        },
+    # finding_key 只是审核项的匿名稳定标识，不是规则结果，不能借用正式
+    # 客户结果投影器伪造一个缺少解释事实的 non_compliant 结果。
+    finding_key = _keyed_ref(
+        "rec",
+        finding_key_material,
         hmac_key=customer_safe_projection_key(),
-    )["record_ref"]
+    )
     return {
         "finding_key": finding_key,
         "finding_ref": finding_key,

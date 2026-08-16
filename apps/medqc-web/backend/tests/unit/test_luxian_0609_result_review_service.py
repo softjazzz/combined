@@ -182,6 +182,7 @@ def test_review_service_flags_non_compliant_positive_conclusion() -> None:
         _job(
             items=[
                 {
+                    "schema_version": "customer-qc-result-v1",
                     "rule_id": "LX0609-003",
                     "rule_code": "LX0609-003",
                     "rule_name": "手术记录：术后24小时内是否完成",
@@ -189,6 +190,14 @@ def test_review_service_flags_non_compliant_positive_conclusion() -> None:
                     "status": "non_compliant",
                     "findings": "手术记录已在术后43分钟完成，未超过24小时。",
                     "evidence": "手术结束时间：10:00；记录时间：10:43。",
+                    "criterion_results": [
+                        {
+                            "criterion_id": "timeliness_explanation",
+                            "kind": "semantic_relation",
+                            "status": "failed",
+                            "reason_code": "threshold_exceeded",
+                        }
+                    ],
                 }
             ],
         )
@@ -265,11 +274,20 @@ def test_review_service_flags_chemo_without_order_or_record() -> None:
         _job(
             items=[
                 {
+                    "schema_version": "customer-qc-result-v1",
                     "rule_id": "LX0609-026",
                     "rule_code": "LX0609-026",
                     "status": "non_compliant",
                     "findings": "恶性肿瘤患者病程未记录化疗。",
                     "evidence": "病理报告：胃腺癌。",
+                    "criterion_results": [
+                        {
+                            "criterion_id": "applicability_explanation",
+                            "kind": "semantic_relation",
+                            "status": "failed",
+                            "reason_code": "applicability_not_proven",
+                        }
+                    ],
                 }
             ],
         )
@@ -284,11 +302,20 @@ def test_review_service_flags_mdt_without_level_4_surgery() -> None:
         _job(
             items=[
                 {
+                    "schema_version": "customer-qc-result-v1",
                     "rule_id": "LX0609-040",
                     "rule_code": "LX0609-040",
                     "status": "non_compliant",
                     "findings": "术前讨论未体现MDT讨论意见。",
                     "evidence": "手术记录：腹腔镜胆囊切除术。",
+                    "criterion_results": [
+                        {
+                            "criterion_id": "applicability_explanation",
+                            "kind": "semantic_relation",
+                            "status": "failed",
+                            "reason_code": "applicability_not_proven",
+                        }
+                    ],
                 }
             ],
         )
@@ -424,25 +451,17 @@ def test_customer_projector_keeps_ai_suggestion_separate_from_confirmed_issue() 
 
 
 def test_customer_projector_never_trusts_unprojected_customer_text() -> None:
-    projected = project_customer_safe_result_item(
-        {
-            "record_id": "R-RAW-TEXT",
-            "rule_id": "LX0609-001",
-            "status": "non_compliant",
-            "customer_conclusion": "患者张三于某日出现高热咳嗽，肺部啰音明显。",
-            "customer_suggestion": "请针对张三原始病历立即整改。",
-        },
-        hmac_key="unit-test-key",
-    )
-
-    assert projected["status"] == "uncertain"
-    assert projected["is_confirmed_issue"] is False
-    assert projected["reason_code"] == "customer_explanation_incomplete"
-    assert projected["conclusion"] == "现有证据无法形成确定结论。"
-    assert projected["suggestion"] == "建议结合病历资料进一步确认。"
-    dumped = json.dumps(projected, ensure_ascii=False)
-    assert "张三" not in dumped
-    assert "高热咳嗽" not in dumped
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        project_customer_safe_result_item(
+            {
+                "record_id": "R-RAW-TEXT",
+                "rule_id": "LX0609-001",
+                "status": "non_compliant",
+                "customer_conclusion": "患者张三于某日出现高热咳嗽，肺部啰音明显。",
+                "customer_suggestion": "请针对张三原始病历立即整改。",
+            },
+            hmac_key="unit-test-key",
+        )
 
 
 def test_customer_projector_preserves_shared_lx004_timeliness_facts() -> None:
@@ -576,21 +595,54 @@ def test_old_018_result_is_logically_invalidated_without_deleting_storage() -> N
 
 
 def test_incomplete_historical_safe_dto_cannot_reuse_generic_confirmed_issue_text() -> None:
-    projected = project_customer_safe_result_item(
-        {
-            "schema_version": "customer-qc-result-v1",
-            "record_id": "R-OLD",
-            "rule_id": "LX0609-025",
-            "status": "non_compliant",
-            "conclusion": "发现该质控点对应的明确问题。",
-            "suggestion": "请按质控要求补充或修正记录。",
-        },
-        hmac_key="unit-test-key",
-    )
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        project_customer_safe_result_item(
+            {
+                "schema_version": "customer-qc-result-v1",
+                "record_id": "R-OLD",
+                "rule_id": "LX0609-025",
+                "status": "non_compliant",
+                "conclusion": "发现该质控点对应的明确问题。",
+                "suggestion": "请按质控要求补充或修正记录。",
+            },
+            hmac_key="unit-test-key",
+        )
 
-    assert projected["status"] == "uncertain"
-    assert projected["reason_code"] == "customer_explanation_incomplete"
-    assert projected["conclusion"] != "发现该质控点对应的明确问题。"
+
+def test_non_compliant_result_rejects_passed_only_criteria() -> None:
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        project_customer_safe_result_item(
+            {
+                "record_id": "R-PASSED-ONLY",
+                "rule_id": "LX0609-018",
+                "status": "non_compliant",
+                "criterion_results": [
+                    {
+                        "criterion_id": "diagnostic_direction",
+                        "kind": "semantic_relation",
+                        "status": "passed",
+                        "reason_code": "requirement_satisfied",
+                    }
+                ],
+            },
+            hmac_key="unit-test-key",
+        )
+
+
+def test_lx025_non_compliant_result_rejects_empty_missing_fields() -> None:
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        project_customer_safe_result_item(
+            {
+                "record_id": "R-025-EMPTY",
+                "rule_id": "LX0609-025",
+                "status": "non_compliant",
+                "customer_display_facts": {
+                    "missing_fields": [],
+                    "source_label": "手术记录",
+                },
+            },
+            hmac_key="unit-test-key",
+        )
 
 
 def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
@@ -602,6 +654,14 @@ def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
                 "reason_code": "implant_information_incomplete",
+                "criterion_results": [
+                    {
+                        "criterion_id": "implant_explanation",
+                        "kind": "semantic_relation",
+                        "status": "failed",
+                        "reason_code": "implant_information_incomplete",
+                    }
+                ],
             },
             {
                 "record_id": "R-ONE",

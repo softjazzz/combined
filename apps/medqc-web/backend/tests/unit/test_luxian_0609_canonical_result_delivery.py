@@ -1419,3 +1419,85 @@ def test_writer_validates_all_records_before_mutating_any_envelope():
         )
 
     assert session.statements == []
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        ["invalid-result-item"],
+        [
+            {
+                "record_id": "visit-1",
+                "visit_id": "visit-1",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            },
+            "invalid-result-item",
+        ],
+    ],
+)
+def test_writer_rejects_non_mapping_items_before_mutating_any_envelope(items):
+    session = _WriteSession()
+
+    with pytest.raises(ValueError, match="Canonical Envelope 结果项格式非法"):
+        CustomQCWorkspaceService()._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps(
+                    {
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }
+                ),
+            },
+            items=items,
+            now=datetime(2026, 8, 16, 10, 0, 0),
+        )
+
+    assert session.statements == []
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ["institute_id", "patient_id", "visit_id"],
+)
+def test_writer_rejects_incomplete_case_coordinate_before_mutating_any_envelope(
+    missing_key,
+):
+    session = _WriteSession()
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": "LX0609-001",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": True,
+    }
+    item.pop(missing_key)
+
+    with pytest.raises(ValueError, match="Canonical Envelope 病例三坐标不完整"):
+        CustomQCWorkspaceService()._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps(
+                    {
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }
+                ),
+            },
+            items=[item],
+            now=datetime(2026, 8, 16, 10, 0, 0),
+        )
+
+    assert session.statements == []

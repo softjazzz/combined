@@ -58,6 +58,53 @@ def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
     assert response["items"][0]["record_ref"] == "rec_" + "a" * 24
 
 
+@pytest.mark.parametrize("compact", [False, True], ids=["detail", "list"])
+def test_workspace_response_rejects_historical_malformed_result_with_safe_409(
+    compact: bool,
+) -> None:
+    private_text = "患者张三原始病历不得出现在响应中"
+
+    with pytest.raises(HTTPException) as exc_info:
+        qc_sichuan._workspace_batch_response_item(
+            {
+                "id": "job-malformed",
+                "rule_set_key": "luxian_0609_qc_v1",
+                "status": "completed",
+                "items": [
+                    {
+                        "record_id": "private-record-id",
+                        "rule_id": "LX0609-001",
+                        "status": "non_compliant",
+                        "customer_conclusion": private_text,
+                    }
+                ],
+            },
+            compact=compact,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "历史质控结果交付合同不完整，无法安全展示"
+    assert private_text not in str(exc_info.value.detail)
+
+
+def test_workspace_response_does_not_swallow_unrelated_projection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        qc_sichuan,
+        "project_customer_safe_batch_job",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("unrelated-error")),
+    )
+
+    with pytest.raises(ValueError, match="^unrelated-error$"):
+        qc_sichuan._workspace_batch_response_item(
+            {
+                "id": "job-other-error",
+                "rule_set_key": "luxian_0609_qc_v1",
+            }
+        )
+
+
 def _request() -> Any:
     return SimpleNamespace(headers={}, state=SimpleNamespace(trace_id="test-trace-id"))
 
@@ -153,6 +200,14 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
                     "status": "non_compliant",
                     "reason_code": "signature_missing",
                     "customer_conclusion": "手术知情同意书签署要素不完整。",
+                    "criterion_results": [
+                        {
+                            "criterion_id": "signature_explanation",
+                            "kind": "semantic_relation",
+                            "status": "failed",
+                            "reason_code": "signature_missing",
+                        }
+                    ],
                 },
                 {
                     "record_id": "R-103",

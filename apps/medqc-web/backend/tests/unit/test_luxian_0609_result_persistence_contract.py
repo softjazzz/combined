@@ -132,6 +132,42 @@ def test_complete_batch_job_does_not_commit_completed_when_canonical_envelope_wr
     assert session.rollback_count == 1
 
 
+def test_complete_batch_job_rejects_malformed_result_without_completing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """畸形结果混入合法结果时，公开完成入口必须整体回滚。"""
+
+    session = _CompletionSession(
+        {
+            "id": "job-1",
+            "parent_job_id": None,
+            "created_by": "reviewer-1",
+            "filters_json": "{}",
+        }
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    with pytest.raises(ValueError, match="Canonical Envelope 结果项格式非法"):
+        CustomQCWorkspaceService().complete_batch_job(
+            job_id="job-1",
+            summary={"total_records": 1, "success_count": 1},
+            items=[
+                {
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                    "rule_id": "LX0609-001",
+                    "status": "compliant",
+                },
+                "invalid-result-item",
+            ],
+            failed_records=[],
+        )
+
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
+
+
 def test_complete_batch_job_commits_task_and_canonical_envelope_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -193,7 +229,7 @@ def test_complete_batch_job_rejects_luxian_result_without_frozen_case_envelope(
     )
     monkeypatch.setattr(workspace_module, "_session", lambda: session)
 
-    with pytest.raises(ValueError, match="Canonical Envelope 病例集合不完整"):
+    with pytest.raises(ValueError, match="Canonical Envelope 病例三坐标不完整"):
         CustomQCWorkspaceService().complete_batch_job(
             job_id="job-1",
             summary={"total_records": 1, "success_count": 1},

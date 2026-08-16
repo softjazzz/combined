@@ -47,6 +47,7 @@ from ..core.settings import get_settings
 from ..core.security import require_admin, require_roles, get_current_user
 from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
+    LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
     customer_safe_projection_key,
     project_customer_safe_batch_job,
 )
@@ -630,6 +631,21 @@ def _compact_workspace_summary(summary: Dict[str, Any], rule_results: List[Dict[
     return compact_summary
 
 
+def _project_customer_safe_batch_job_or_409(job: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return project_customer_safe_batch_job(
+            job,
+            hmac_key=customer_safe_projection_key(),
+        )
+    except ValueError as exc:
+        if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR:
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail="历史质控结果交付合同不完整，无法安全展示",
+        ) from exc
+
+
 def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
@@ -643,10 +659,7 @@ def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False
         str(job.get("rule_code") or "").strip(),
     }
     if LUXIAN_0609_RULE_SET_KEY in rule_set_candidates:
-        safe_job = project_customer_safe_batch_job(
-            job,
-            hmac_key=customer_safe_projection_key(),
-        )
+        safe_job = _project_customer_safe_batch_job_or_409(job)
         if compact:
             safe_job = dict(safe_job)
             safe_job["items"] = []
@@ -4956,10 +4969,7 @@ async def get_workspace_batch_job(
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     response_data = (
         {
-            **project_customer_safe_batch_job(
-                job,
-                hmac_key=customer_safe_projection_key(),
-            ),
+            **_project_customer_safe_batch_job_or_409(job),
             "read_only": True,
         }
         if shared_read

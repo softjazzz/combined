@@ -555,6 +555,9 @@ def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
             "rule_id": "LX0609-001",
             "rule_code": "LX0609-001",
             "status": "compliant",
+            "result_status": "compliant",
+            "display_status": "compliant",
+            "is_compliant": True,
         },
         {
             "institute_id": "H2",
@@ -564,6 +567,9 @@ def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
             "rule_id": "LX0609-001",
             "rule_code": "LX0609-001",
             "status": "non_compliant",
+            "result_status": "non_compliant",
+            "display_status": "non_compliant",
+            "is_compliant": False,
         },
     ]
 

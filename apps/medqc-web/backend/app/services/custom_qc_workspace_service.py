@@ -82,6 +82,9 @@ DEFECT_LEVEL_TO_SEVERITY = {
 _CUSTOMER_RESULT_SCHEMA = "customer-qc-result-v1"
 _RECORD_RESULT_ENVELOPE_SCHEMA = "lx0609-record-result-envelope-v1"
 _CANONICAL_RESULT_DELIVERY_MODE = "canonical_straight_through"
+LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = (
+    "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
+)
 _LX025_MISSING_FIELDS = {
     "implant_name",
     "implant_type",
@@ -479,19 +482,25 @@ def _safe_customer_display_facts(
     # 第二份子集，导致聚合层已经生成的时限、检查检验等解释在保存后被丢弃。
     shared = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw)
     if shared is not None:
+        if rule_id == "LX0609-025" and not shared.get("missing_fields"):
+            return {}
         return shared
     if rule_id == "LX0609-025":
         missing_fields = raw.get("missing_fields")
+        if not isinstance(missing_fields, list):
+            return {}
+        safe_missing_fields = [
+            value
+            for value in dict.fromkeys(missing_fields)
+            if isinstance(value, str) and value in _LX025_MISSING_FIELDS
+        ]
+        if not safe_missing_fields:
+            return {}
         result = {
             "failure_kind": "implant_information_incomplete",
             "source_label": "手术记录",
+            "missing_fields": safe_missing_fields,
         }
-        if isinstance(missing_fields, list):
-            result["missing_fields"] = [
-                value
-                for value in dict.fromkeys(missing_fields)
-                if isinstance(value, str) and value in _LX025_MISSING_FIELDS
-            ]
         return result
     if rule_id == "LX0609-024":
         checked_sources = raw.get("checked_sources")
@@ -732,21 +741,23 @@ def project_customer_safe_result_item(
     ).upper()
     customer_display_facts = _safe_customer_display_facts(raw, rule_id=rule_id)
     criterion_results = _safe_criterion_results(raw)
-    # 不允许无规则专属事实或子结论的结果，以通用“发现问题”文案作为客户确定缺陷。
-    # 这只收紧客户投影；原始执行状态仍留在持久化记录中，供内部追溯。
-    explanation_incomplete = (
-        status == "non_compliant"
-        and not customer_display_facts
-        and not criterion_results
+    has_failed_criterion = any(
+        row.get("status") == "failed" for row in criterion_results
     )
-    if explanation_incomplete:
-        status = "uncertain"
+    # 投影层不得改变执行器状态。正式 LX0609 的确定问题如果缺少经过白名单
+    # 校验的事实或子结论，说明上游交付合同不完整，必须失败关闭；不能降级为
+    # uncertain，也不能回退到可能掩盖真实问题的通用文案。
+    if (
+        status == "non_compliant"
+        and rule_id.startswith("LX0609-")
+        and not customer_display_facts
+        and not has_failed_criterion
+    ):
+        raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
     generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     # 原始执行结果中的 customer_* 字段仍可能混入病历句子。只有已经通过本投影器
     # 生成的 DTO 才允许复用客户文案；首次投影一律按状态生成固定安全表述。
-    # 一旦确定性结论因缺少规则事实被降级，就绝不能继续复用历史 DTO 的
-    # “发现问题”类文案；否则状态和客户可见结论会彼此矛盾。
-    reuse_saved_customer_text = is_safe_dto and not explanation_incomplete
+    reuse_saved_customer_text = is_safe_dto
     conclusion = _explicit_customer_text(
         raw,
         (
@@ -795,11 +806,7 @@ def project_customer_safe_result_item(
         "display_status": status,
         "is_compliant": True if status == "compliant" else False if status == "non_compliant" else None,
         "is_confirmed_issue": status == "non_compliant",
-        "reason_code": (
-            "customer_explanation_incomplete"
-            if explanation_incomplete
-            else _canonical_reason_code(raw)
-        ),
+        "reason_code": _canonical_reason_code(raw),
         "rule_version": _safe_text(raw.get("rule_version")),
         "conclusion": conclusion,
         "findings": conclusion,
@@ -933,20 +940,33 @@ def _safe_review_report(value: Any, *, hmac_key: str) -> Optional[Dict[str, Any]
     for raw_finding in list(value.get("findings") or []):
         if not isinstance(raw_finding, dict):
             continue
-        projected = project_customer_safe_result_item(
+        # 复核 finding 是审核元数据，不是规则执行结果。直接投影其受控身份和
+        # 状态字段，避免为了生成引用而伪造一条缺少解释事实的规则结果。
+        rule_id = _safe_text(raw_finding.get("rule_id")).upper()
+        rule = get_luxian_0609_rule(rule_id) or {}
+        canonical_status = _canonical_customer_status(
             {
-                **raw_finding,
-                "result_status": raw_finding.get("original_status")
+                "status": raw_finding.get("original_status")
                 or raw_finding.get("canonical_status")
-                or raw_finding.get("status"),
-                "reason_code": raw_finding.get("original_reason_code")
-                or raw_finding.get("reason_code"),
-            },
-            hmac_key=hmac_key,
+                or raw_finding.get("status")
+            }
         )
         existing_ref = _safe_text(raw_finding.get("record_ref"))
-        if re.fullmatch(r"rec_[0-9a-f]{24}", existing_ref):
-            projected["record_ref"] = existing_ref
+        record_ref = (
+            existing_ref
+            if re.fullmatch(r"rec_[0-9a-f]{24}", existing_ref)
+            else _keyed_ref(
+                "rec",
+                raw_finding.get("finding_key") or rule_id,
+                hmac_key=hmac_key,
+            )
+        )
+        reason_code = _canonical_reason_code(
+            {
+                "reason_code": raw_finding.get("original_reason_code")
+                or raw_finding.get("reason_code")
+            }
+        )
         severity = _safe_text(raw_finding.get("severity")).upper()
         risk_type = _safe_text(raw_finding.get("risk_type")).lower()
         suggested = _canonical_customer_status(
@@ -957,14 +977,17 @@ def _safe_review_report(value: Any, *, hmac_key: str) -> Optional[Dict[str, Any]
                 "finding_ref": _keyed_ref(
                     "finding",
                     raw_finding.get("finding_key")
-                    or f"{projected['record_ref']}:{projected['rule_id']}:{risk_type}",
+                    or f"{record_ref}:{rule_id}:{risk_type}",
                     hmac_key=hmac_key,
                 ),
-                "record_ref": projected["record_ref"],
-                "rule_id": projected["rule_id"],
-                "rule_name": projected["rule_name"],
-                "canonical_status": projected["status"],
-                "reason_code": projected["reason_code"],
+                "record_ref": record_ref,
+                "rule_id": rule_id,
+                "rule_name": _safe_text(
+                    rule.get("rule_name") or rule.get("name"),
+                    rule_id,
+                ),
+                "canonical_status": canonical_status,
+                "reason_code": reason_code,
                 "suggested_status": suggested,
                 "severity": severity if severity in {"P0", "P1", "P2"} else "P2",
                 "risk_type": (
@@ -5509,13 +5532,21 @@ class CustomQCWorkspaceService:
         job_id = _safe_text(job_row.get("id"))
         root_job_id = _safe_text(job_row.get("parent_job_id")) or job_id
         created_by = _safe_text(job_row.get("created_by"))
-        grouped: Dict[CaseRef, List[Dict[str, Any]]] = {}
+        normalized_items: List[Dict[str, Any]] = []
         for raw_item in items:
-            if not isinstance(raw_item, dict):
-                continue
+            if not isinstance(raw_item, Mapping):
+                raise ValueError("Canonical Envelope 结果项格式非法，拒绝完成质控任务")
+            normalized_items.append(dict(raw_item))
+
+        grouped: Dict[CaseRef, List[Dict[str, Any]]] = {}
+        for raw_item in normalized_items:
+            if not all(
+                _safe_text(raw_item.get(key))
+                for key in ("institute_id", "patient_id", "visit_id")
+            ):
+                raise ValueError("Canonical Envelope 病例三坐标不完整，拒绝完成质控任务")
             record_ref = CaseRef.from_mapping(raw_item)
-            if all(record_ref):
-                grouped.setdefault(record_ref, []).append(raw_item)
+            grouped.setdefault(record_ref, []).append(raw_item)
 
         expected_record_refs: set[CaseRef] = set()
         for raw_ref in list(filters.get("record_refs") or []):
@@ -5559,6 +5590,7 @@ class CustomQCWorkspaceService:
             if not _canonical_envelope_items_are_consistent(record_items):
                 raise ValueError("Canonical Envelope 状态字段不一致，拒绝完成质控任务")
 
+        prepared_envelopes: List[tuple[CaseRef, Dict[str, Any]]] = []
         for record_ref, record_items in grouped.items():
             record_id = record_ref.visit_id
             envelope = {
@@ -5576,6 +5608,12 @@ class CustomQCWorkspaceService:
                 "rule_set_version": rule_set_version,
                 "items": [self._envelope_item_from_rule_result(item) for item in record_items],
             }
+            prepared_envelopes.append((record_ref, envelope))
+
+        # 所有病例和交付项均已完成校验、投影与序列化准备后，才允许产生任何
+        # DELETE/INSERT。这样后续病例中的畸形项不会留下部分 Envelope 写入。
+        for record_ref, envelope in prepared_envelopes:
+            record_id = record_ref.visit_id
             session.execute(
                 self._record_result_envelope_table.delete().where(
                     and_(
@@ -5599,7 +5637,7 @@ class CustomQCWorkspaceService:
                     rule_set_key=rule_set_key,
                     rule_set_version=rule_set_version,
                     envelope_json=_safe_json_dumps(envelope),
-                    result_count=len(record_items),
+                    result_count=len(envelope["items"]),
                     created_at=now,
                     updated_at=now,
                 )
