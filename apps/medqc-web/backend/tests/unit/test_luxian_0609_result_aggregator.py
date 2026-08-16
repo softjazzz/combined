@@ -2312,7 +2312,6 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                     "2026-06-01 09:20:00",
                     "2026-06-02 10:30:00",
                 ],
-                "raw_course_text": "PRIVATE_COURSE_TEXT",
             },
             {
                 "failure_kind": "copy_similarity_threshold_exceeded",
@@ -3686,6 +3685,104 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
             "日常病程记录（2026-06-01 09:00:00）与日常病程记录"
             f"（2026-06-02 09:00:00）全文相似度 {similarity_percent}，"
             "达到判定阈值 70%。"
+        )
+
+
+@pytest.mark.parametrize(
+    "invalid_patch",
+    [
+        {"internal_candidate_ref": "P99"},
+        {
+            "copy_match_pairs": [
+                {
+                    "source_types": ["daily_course_record", "daily_course_record"],
+                    "record_times": [
+                        "2026-06-03 09:00:00",
+                        "2026-06-04 09:00:00",
+                    ],
+                    "similarity": 0.799,
+                }
+            ]
+        },
+        {"copy_document_sources": ["daily_course_record", "surgery_record"]},
+    ],
+)
+def test_017_canonical_aggregation_rejects_invalid_customer_display_facts(
+    invalid_patch,
+):
+    facts = {
+        "failure_kind": "copy_similarity_threshold_exceeded",
+        "copy_similarity": 0.799,
+        "copy_similarity_threshold": 0.7,
+        "copy_document_sources": ["daily_course_record", "daily_course_record"],
+        "copy_document_record_times": [
+            "2026-06-01 09:00:00",
+            "2026-06-02 09:00:00",
+        ],
+        **invalid_patch,
+    }
+
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+
+    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+        aggregate(
+            wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+            execution_results=[],
+            reduced_decisions=(
+                _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            ),
+            customer_display_facts=(("LX0609-017", facts),),
+            format_evidence=False,
+        )
+
+
+def test_017_canonical_aggregation_rejects_unbound_candidate_fingerprints():
+    pair = {
+        "source_types": ["daily_course_record", "daily_course_record"],
+        "record_times": [
+            "2026-06-01 09:00:00",
+            "2026-06-02 09:00:00",
+        ],
+        "similarity": 0.799,
+    }
+    facts = {
+        "failure_kind": "copy_similarity_threshold_exceeded",
+        "copy_similarity": 0.799,
+        "copy_similarity_threshold": 0.7,
+        "copy_document_sources": pair["source_types"],
+        "copy_document_record_times": pair["record_times"],
+        "copy_match_pairs": [pair],
+        "copy_match_document_fingerprints": [
+            ["sha256:" + "0" * 64, "sha256:" + "1" * 64]
+        ],
+    }
+
+    class _Materials:
+        @staticmethod
+        def rows(_source_type):
+            return (
+                {"document_id": "copy-left", "record_time": pair["record_times"][0]},
+                {"document_id": "copy-right", "record_time": pair["record_times"][1]},
+            )
+
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+
+    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+        aggregate(
+            wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+            execution_results=[],
+            reduced_decisions=(
+                _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+            ),
+            customer_display_facts=(("LX0609-017", facts),),
+            audit_context={"evidence_materials": _Materials()},
+            format_evidence=False,
         )
 
 

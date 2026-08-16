@@ -4457,6 +4457,15 @@ def safe_luxian_0609_customer_display_facts(
             }
         return None
     if rule_id == "LX0609-017":
+        allowed_keys = {
+            "failure_kind",
+            "copy_similarity",
+            "copy_similarity_threshold",
+            "copy_document_sources",
+            "copy_document_record_times",
+            "copy_match_pairs",
+            "copy_match_document_fingerprints",
+        }
         failure_kind = raw.get("failure_kind")
         source_types = raw.get("copy_document_sources")
         record_times = raw.get("copy_document_record_times")
@@ -4464,7 +4473,8 @@ def safe_luxian_0609_customer_display_facts(
         threshold = raw.get("copy_similarity_threshold")
         raw_pairs = raw.get("copy_match_pairs")
         if (
-            failure_kind
+            not set(raw).issubset(allowed_keys)
+            or failure_kind
             not in {
                 "copy_similarity_threshold_exceeded",
                 "copy_similarity_within_threshold",
@@ -4530,6 +4540,23 @@ def safe_luxian_0609_customer_display_facts(
                 or safe_pairs[0]["similarity"] != round(float(similarity), 4)
             ):
                 return None
+        raw_fingerprints = raw.get("copy_match_document_fingerprints")
+        if raw_fingerprints is not None and (
+            not safe_pairs
+            or not isinstance(raw_fingerprints, list)
+            or len(raw_fingerprints) != len(safe_pairs)
+            or any(
+                not isinstance(pair_fingerprints, list)
+                or len(pair_fingerprints) != 2
+                or any(
+                    not isinstance(value, str)
+                    or re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None
+                    for value in pair_fingerprints
+                )
+                for pair_fingerprints in raw_fingerprints
+            )
+        ):
+            return None
         safe = {
             "failure_kind": failure_kind,
             "copy_similarity": round(float(similarity), 4),
@@ -5603,6 +5630,12 @@ def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str,
         rule_id=wrapper_id,
         raw=raw_display_facts,
     )
+    if (
+        wrapper_id == "LX0609-017"
+        and raw_display_facts is not None
+        and safe_display_facts is None
+    ):
+        raise ValueError("invalid copy customer display facts")
     _validate_lx0609_025_fact_status(
         rule_id=wrapper_id,
         status=status,
@@ -5727,6 +5760,17 @@ def aggregate_luxian_0609_results(
             rule_id=rule_id,
             raw=facts,
         )
+        if safe_facts is None and rule_id == "LX0609-017":
+            raise ValueError("invalid copy customer display facts")
+        if (
+            rule_id == "LX0609-017"
+            and facts.get("copy_match_document_fingerprints") is not None
+            and not _customer_evidence_from_copy_pair_facts(
+                facts=facts,
+                evidence_materials=(audit_context or {}).get("evidence_materials"),
+            )
+        ):
+            raise ValueError("invalid copy customer display facts")
         if safe_facts is None and rule_id in {
             "LX0609-020",
             "LX0609-021",
