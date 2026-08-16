@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import json
 import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
@@ -52,6 +53,7 @@ _RULE_009_CHANGE_CATEGORIES = frozenset(
     {"subjective", "objective", "exam_lab", "complication", "special_state"}
 )
 _RULE_009_CHANGE_WINDOW = timedelta(hours=24)
+_MAX_RULE_009_CHANGE_EVENTS = 20
 _RULE_009_TEMPLATE_VALUES = frozenset(
     {"", "模板", "空模板", "待补充", "暂无内容", "无内容", "未填写", "待完善", "null", "none"}
 )
@@ -824,7 +826,7 @@ def _rule_009_semantic_context(
     # 校验，不能因无关外部行缺时间而提前降级整条规则。
     event_times: dict[str, datetime | None] = {}
     substantive_dates: set[date] = set()
-    course_rows: list[tuple[datetime | None, str, str]] = []
+    raw_course_rows: list[tuple[datetime | None, str, str]] = []
     for source_key in _RULE_007_RECORD_SOURCES:
         try:
             rows = materials.rows(source_key)
@@ -839,13 +841,25 @@ def _rule_009_semantic_context(
                 and not anchor_date <= record_date <= horizon_date
             ):
                 continue
-            ref = _rule_009_row_ref(source_key, index, row)
+            internal_ref = _rule_009_row_ref(source_key, index, row)
             if record_date is not None:
                 substantive_dates.add(record_date)
-            course_times[ref] = record_time
-            event_times[ref] = record_time
-            course_rows.append((record_time, ref, content))
-    course_rows.sort(key=lambda item: (item[0] is None, item[0] or datetime.max, item[1]))
+            raw_course_rows.append((record_time, internal_ref, content))
+    raw_course_rows.sort(
+        key=lambda item: (item[0] is None, item[0] or datetime.max, item[1])
+    )
+    # 模型只看到本次请求内的临时引用。真实文书/检验标识仅用于上述稳定排序，
+    # 不进入提示词，也不允许模型把内部标识带回客户事实。
+    course_rows = [
+        (record_time, f"C{index:02d}", content)
+        for index, (record_time, _internal_ref, content) in enumerate(
+            raw_course_rows,
+            start=1,
+        )
+    ]
+    for record_time, ref, _content in course_rows:
+        course_times[ref] = record_time
+        event_times[ref] = record_time
     for record_time, ref, content in course_rows:
         if record_time is not None:
             baseline_ref = _rule_009_baseline_course_ref(
@@ -860,7 +874,11 @@ def _rule_009_semantic_context(
             f"baseline_course_ref={baseline_ref or '无'}；"
             f"内容={content}"
         )
-    for event_time, ref, content in external_events:
+    for index, (event_time, _internal_ref, content) in enumerate(
+        external_events,
+        start=1,
+    ):
+        ref = f"E{index:02d}"
         event_times[ref] = event_time
         if event_time is not None:
             baseline_ref = _rule_009_baseline_course_ref(
@@ -924,7 +942,27 @@ def _rule_009_external_source_terminal_decision(
     return None
 
 
-def _rule_009_semantic_prompt(*, context: str) -> str:
+def _rule_009_semantic_prompt(
+    *,
+    context: str,
+    event_refs: Sequence[str],
+    course_refs: Sequence[str],
+) -> str:
+    allowed_event_refs = json.dumps(
+        list(event_refs),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    allowed_course_refs = json.dumps(
+        list(course_refs),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    external_ref_constraint = (
+        "本次没有E开头的外部事件引用，禁止创建或返回任何E引用。"
+        if not any(ref.startswith("E") for ref in event_refs)
+        else "E开头引用只能从允许event_ref列表中原样选择。"
+    )
     return f"""你是 LX0609-009 病危病程语义核对器。
 
 Python 已确认病危期间每日病程覆盖。不要判定整条规则状态、不要重判每日频次。
@@ -937,6 +975,13 @@ course_event_ref 可用于主观症状、客观体征、并发症/合并症和�
 对应病程只能引用下列 course_event_ref；Python 会按权威时间严格校验它是否位于事件发生后 24 小时内：
 {context}
 
+本次允许event_ref={allowed_event_refs}。
+本次允许corresponding_course_ref={allowed_course_refs}，也可以返回空字符串。
+{external_ref_constraint}
+不得创建、改写或猜测列表以外的引用。
+只返回is_explicit_change=true的事件；不要返回false候选。每个event_ref最多返回一次；
+若同一事件涉及多个类别，只选择最主要的一个类别，禁止重复event_ref。
+若明确变化事件超过{_MAX_RULE_009_CHANGE_EVENTS}个，仍须全部返回，由Python失败关闭，禁止静默省略。
 只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","is_explicit_change":true,"corresponding_course_ref":"...或空字符串"}}]}}。没有明确变化时events为空数组。"""
 
 
@@ -950,11 +995,17 @@ def _parse_rule_009_change_events(response: Mapping[str, Any]) -> tuple[Mapping[
         if not isinstance(item, Mapping):
             return None
         category = _clean(item.get("change_category"))
-        if category not in _RULE_009_CHANGE_CATEGORIES or item.get("is_explicit_change") is not True:
+        is_explicit_change = item.get("is_explicit_change")
+        if (
+            category not in _RULE_009_CHANGE_CATEGORIES
+            or type(is_explicit_change) is not bool
+        ):
             return None
         event_ref = _clean(item.get("event_ref"))
         if not event_ref:
             return None
+        if not is_explicit_change:
+            continue
         parsed.append({
             "event_ref": event_ref,
             "change_category": category,
@@ -1212,7 +1263,13 @@ async def evaluate_rules_008_009_typed(
         )
 
     try:
-        response = await llm_client.generate(_rule_009_semantic_prompt(context=context))
+        response = await llm_client.generate(
+            _rule_009_semantic_prompt(
+                context=context,
+                event_refs=tuple(event_times),
+                course_refs=tuple(course_times),
+            )
+        )
     except Exception:
         return Rule008009TypedExecution(
             decision=_rule_009_semantic_decision(
@@ -1239,6 +1296,24 @@ async def evaluate_rules_008_009_typed(
                 error_reason="model_invalid_output",
             ),
             customer_display_facts=tuple(base_display_facts),
+            **usage,
+        )
+    if len({str(event["event_ref"]) for event in events}) != len(events):
+        return Rule008009TypedExecution(
+            decision=_rule_009_semantic_decision(
+                base_decision=base_decision,
+                error_reason="model_invalid_output",
+            ),
+            customer_display_facts=tuple(base_display_facts),
+            **usage,
+        )
+    if len(events) > _MAX_RULE_009_CHANGE_EVENTS:
+        return Rule008009TypedExecution(
+            decision=_rule_009_semantic_decision(
+                base_decision=base_decision,
+                data_gap_reason="candidate_scope_incomplete",
+            ),
+            customer_display_facts=(),
             **usage,
         )
     if not events:

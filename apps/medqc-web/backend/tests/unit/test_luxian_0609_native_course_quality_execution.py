@@ -1807,11 +1807,11 @@ async def test_course_009_course_record_can_be_change_event_and_its_own_timely_r
         evaluation_as_of_date="2026-01-02",
     )
     client = _Client([{"events": [{
-        "event_ref": "daily_course_record:row-2",
+        "event_ref": "C02",
         "change_category": "subjective",
         "change_time": "2026-01-02 10:00:00",
         "is_explicit_change": True,
-        "corresponding_course_ref": "daily_course_record:row-2",
+        "corresponding_course_ref": "C02",
     }]}])
 
     result, reduced = await _run_typed_009(session, client)
@@ -1819,6 +1819,9 @@ async def test_course_009_course_record_can_be_change_event_and_its_own_timely_r
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 1
+    assert '本次允许event_ref=["C01","C02"]' in client.prompts[0]
+    assert '本次允许corresponding_course_ref=["C01","C02"]' in client.prompts[0]
+    assert "本次没有E开头的外部事件引用" in client.prompts[0]
     facts = dict(result.customer_display_facts)["LX0609-009"]
     assert facts["failure_kind"] == "critical_change_course_timely"
     assert facts["change_events"][0]["timely"] is True
@@ -1840,7 +1843,7 @@ async def test_course_009_unknown_model_event_ref_fails_closed() -> None:
         evaluation_as_of_date="2026-01-02",
     )
     client = _Client([{"events": [{
-        "event_ref": "daily_course_record:not-in-projection",
+        "event_ref": "Z99",
         "change_category": "objective",
         "is_explicit_change": True,
         "corresponding_course_ref": "",
@@ -1854,6 +1857,95 @@ async def test_course_009_unknown_model_event_ref_fails_closed() -> None:
     assert dict(result.customer_display_facts)["LX0609-009"]["failure_kind"] == (
         "critical_daily_record_coverage_satisfied"
     )
+
+
+@pytest.mark.asyncio
+async def test_course_009_negative_candidates_are_ignored_but_duplicate_positive_refs_fail() -> None:
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+        }],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("次日病危记录。", "2026-01-02 09:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-02",
+    )
+    negative_result, negative_reduced = await _run_typed_009(
+        session,
+        _Client([{
+            "events": [{
+                "event_ref": "C02",
+                "change_category": "objective",
+                "is_explicit_change": False,
+                "corresponding_course_ref": "",
+            }],
+        }]),
+    )
+    duplicate_result, duplicate_reduced = await _run_typed_009(
+        session,
+        _Client([{
+            "events": [
+                {
+                    "event_ref": "C02",
+                    "change_category": "objective",
+                    "is_explicit_change": True,
+                    "corresponding_course_ref": "C02",
+                },
+                {
+                    "event_ref": "C02",
+                    "change_category": "subjective",
+                    "is_explicit_change": True,
+                    "corresponding_course_ref": "C02",
+                },
+            ],
+        }]),
+    )
+
+    assert negative_reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert negative_result.llm_call_count == 1
+    assert duplicate_reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert duplicate_reduced[0].reason_code == "model_invalid_output"
+    assert duplicate_result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_course_009_more_than_twenty_change_events_fails_closed_without_truncation() -> None:
+    daily_rows = [
+        _row(
+            f"第{index}日病危记录，出现明确病情变化并已处理。",
+            f"2026-01-{index:02d} 09:00:00",
+        )
+        for index in range(1, 22)
+    ]
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+        }],
+        daily_rows=daily_rows,
+        evaluation_as_of_date="2026-01-21",
+    )
+    client = _Client([{
+        "events": [
+            {
+                "event_ref": f"C{index:02d}",
+                "change_category": "objective",
+                "is_explicit_change": True,
+                "corresponding_course_ref": f"C{index:02d}",
+            }
+            for index in range(1, 22)
+        ]
+    }])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "candidate_scope_incomplete"
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 1
+    assert "超过20个" in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -2284,20 +2376,28 @@ async def test_course_009_explicit_external_change_within_24h_is_compliant() -> 
     session = _severity_session(
         rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
         daily_rows=[
-            _row("首日病危记录。", "2026-01-01 08:00:00"),
-            _row("患者突发胸痛，已评估并处理。", "2026-01-02 14:00:00"),
+            {
+                **_row("首日病危记录。", "2026-01-01 08:00:00"),
+                "document_id": "PRIVATE-COURSE-001",
+            },
+            {
+                **_row("患者突发胸痛，已评估并处理。", "2026-01-02 14:00:00"),
+                "document_id": "PRIVATE-COURSE-002",
+            },
             _row("第三日病危记录。", "2026-01-03 08:00:00"),
             _row("第四日病危记录。", "2026-01-04 08:00:00"),
         ],
         external_rows={"exam_item_report": [{
-            "report_time": "2026-01-02 10:00:00", "exam_impression": "新发异常改变",
+            "report_id": "PRIVATE-EXAM-001",
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "新发异常改变",
         }]},
         evaluation_as_of_date="2026-01-04",
     )
     client = _Client([{"events": [{
-        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
-        "corresponding_course_ref": "daily_course_record:row-2",
+        "corresponding_course_ref": "C02",
     }]}])
 
     result, reduced = await _run_typed_009(session, client)
@@ -2306,6 +2406,9 @@ async def test_course_009_explicit_external_change_within_24h_is_compliant() -> 
     assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 1
     assert result.total_tokens == 45
+    assert "PRIVATE-" not in client.prompts[0]
+    assert "[external_event_ref=E01]" in client.prompts[0]
+    assert "[course_event_ref=C02]" in client.prompts[0]
     facts = dict(result.customer_display_facts)["LX0609-009"]
     assert facts["failure_kind"] == "critical_change_course_timely"
     assert facts["change_events"][0]["threshold_hours"] == 24
@@ -2328,10 +2431,10 @@ async def test_course_009_uses_authoritative_event_time_without_model_echo() -> 
         evaluation_as_of_date="2026-01-04",
     )
     client = _Client([{"events": [{
-        "event_ref": "exam_item_report:row-1",
+        "event_ref": "E01",
         "change_category": "exam_lab",
         "is_explicit_change": True,
-        "corresponding_course_ref": "daily_course_record:row-2",
+        "corresponding_course_ref": "C02",
     }]}])
 
     result, reduced = await _run_typed_009(session, client)
@@ -2362,9 +2465,9 @@ async def test_course_009_unreferenced_external_row_without_time_does_not_downgr
         evaluation_as_of_date="2026-01-04",
     )
     client = _Client([{"events": [{
-        "event_ref": "exam_item_report:row-2", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
-        "corresponding_course_ref": "daily_course_record:row-2",
+        "corresponding_course_ref": "C02",
     }]}])
 
     result, reduced = await _run_typed_009(session, client)
@@ -2389,7 +2492,7 @@ async def test_course_009_explicit_change_without_course_within_24h_is_non_compl
         evaluation_as_of_date="2026-01-04",
     )
     client = _Client([{"events": [{
-        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
         "corresponding_course_ref": "",
     }]}])
@@ -2397,7 +2500,7 @@ async def test_course_009_explicit_change_without_course_within_24h_is_non_compl
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "requirement_violated"
     assert result.llm_call_count == 1
-    assert dict(result.customer_display_facts)["LX0609-009"]["unmet_events"][0]["event_ref"] == "exam_item_report:row-1"
+    assert dict(result.customer_display_facts)["LX0609-009"]["unmet_events"][0]["event_ref"] == "E01"
 
 
 @pytest.mark.asyncio
@@ -2417,7 +2520,7 @@ async def test_course_009_change_deadline_is_delivered_through_production_canoni
         evaluation_as_of_date="2026-01-04",
     )
     client = _Client([{"events": [{
-        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
         "corresponding_course_ref": "",
     }]}])
@@ -2440,7 +2543,7 @@ async def test_course_009_change_deadline_is_delivered_through_production_canoni
     assert facts["failure_kind"] == "critical_change_course_not_timely"
     assert facts["threshold_hours"] == 24
     assert facts["unmet_events"] == [{
-        "event_ref": "exam_item_report:row-1",
+        "event_ref": "E01",
         "change_category": "exam_lab",
         "event_time": "2026-01-02 10:00:00",
         "corresponding_course_ref": "",
@@ -2480,7 +2583,7 @@ async def test_course_009_missing_change_time_and_unresolved_course_are_delivere
         evaluation_as_of_date="2026-01-03",
     )
     result, reduced = await _run_typed_009(session, _Client([{"events": [{
-        "event_ref": "labtest_item_report:row-1", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "", "is_explicit_change": True,
         "corresponding_course_ref": "",
     }]}]))
@@ -2506,17 +2609,17 @@ async def test_course_009_missing_change_time_and_unresolved_course_are_delivere
         evaluation_as_of_date="2026-01-04",
     )
     result, reduced = await _run_typed_009(session, _Client([{"events": [{
-        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
-        "corresponding_course_ref": "daily_course_record:missing",
+        "corresponding_course_ref": "C99",
     }]}]))
     canonical = canonical_for()
     assert canonical["status"] == "data_gap"
     assert canonical["reason_code"] == "association_failed"
     assert canonical["customer_display_facts"] == {
         "failure_kind": "critical_change_course_association_failed",
-        "event_ref": "exam_item_report:row-1",
-        "corresponding_course_ref": "daily_course_record:missing",
+        "event_ref": "E01",
+        "corresponding_course_ref": "C99",
         "threshold_hours": 24,
     }
     assert "无法确认其与对应病程记录的关联关系" in canonical["findings"]
@@ -2541,7 +2644,7 @@ async def test_course_009_precise_horizon_before_change_24h_deadline_is_not_matu
         evaluation_horizon_policy="authoritative_discharge",
     )
     result, reduced = await _run_typed_009(session, _Client([{"events": [{
-        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
         "corresponding_course_ref": "",
     }]}]))
@@ -2560,7 +2663,7 @@ async def test_course_009_precise_horizon_before_change_24h_deadline_is_not_matu
     assert canonical["reason_code"] == "evaluation_window_not_mature"
     assert canonical["customer_display_facts"] == {
         "failure_kind": "critical_change_window_not_mature",
-        "event_ref": "exam_item_report:row-1",
+        "event_ref": "E01",
         "event_time": "2026-01-02 10:00:00",
         "deadline_time": "2026-01-03 10:00:00",
         "threshold_hours": 24,
@@ -2584,7 +2687,7 @@ async def test_course_009_ignores_model_echoed_time_and_uses_event_reference() -
         evaluation_as_of_date="2026-01-04",
     )
     client = _Client([{"events": [{
-        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "event_ref": "E01", "change_category": "exam_lab",
         "change_time": "2026-01-02 10:01:00", "is_explicit_change": True,
         "corresponding_course_ref": "",
     }]}])
