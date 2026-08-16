@@ -53,12 +53,27 @@ def test_serialized_batch_result_roundtrip_keeps_rule_facts_and_one_record_bindi
                 "visit_id": "VISIT-ONE",
                 "record_id": "VISIT-ONE",
                 "rule_id": "LX0609-025",
+                "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
+                "raw_surgery_text": "PRIVATE_SURGERY_TEXT_MUST_NOT_LEAK",
                 "customer_display_facts": {
                     "failure_kind": "implant_information_incomplete",
+                    "performed_surgery_confirmed": True,
                     "missing_fields": ["implant_specification", "implant_material"],
+                    "implant_event_details": [
+                        {
+                            "event_ref": "surgery-event-one",
+                            "missing_fields": [
+                                "implant_specification",
+                                "implant_material",
+                            ],
+                            "implant_names": ["人工硬脑膜"],
+                            "source_document_id": "surgery-document-one",
+                        }
+                    ],
+                    "source_label": "手术记录",
+                    "source_document_type": "surgery_record",
                     "source_document_id": "surgery-document-one",
-                    "raw_surgery_text": "PRIVATE_SURGERY_TEXT_MUST_NOT_LEAK",
                 },
                 "customer_evidence": [
                     {"source_type": "surgery_record", "source_document_id": "surgery-document-one"}
@@ -97,8 +112,20 @@ def test_serialized_batch_result_roundtrip_keeps_rule_facts_and_one_record_bindi
     assert item["status"] == "non_compliant"
     assert item["customer_display_facts"] == {
         "failure_kind": "implant_information_incomplete",
+        "performed_surgery_confirmed": True,
         "source_label": "手术记录",
+        "source_document_type": "surgery_record",
         "missing_fields": ["implant_specification", "implant_material"],
+        "implant_event_details": [
+            {
+                "event_position": 1,
+                "missing_fields": [
+                    "implant_specification",
+                    "implant_material",
+                ],
+                "implant_names": ["人工硬脑膜"],
+            }
+        ],
     }
     assert item["evidence"] == [{
         "source_type": "surgery_record",
@@ -572,17 +599,31 @@ def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
             {
                 "record_id": "R-ONE",
                 "rule_id": "LX0609-025",
+                "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
                 "reason_code": "implant_information_incomplete",
             },
             {
                 "record_id": "R-ONE",
                 "rule_id": "LX0609-025",
+                "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
                 "reason_code": "implant_information_incomplete",
                 "customer_display_facts": {
                     "failure_kind": "implant_information_incomplete",
+                    "performed_surgery_confirmed": True,
                     "missing_fields": ["implant_quantity"],
+                    "implant_event_details": [
+                        {
+                            "event_ref": "surgery-event-one",
+                            "missing_fields": ["implant_quantity"],
+                            "implant_names": ["人工硬脑膜"],
+                            "source_document_id": "surgery-document-one",
+                        }
+                    ],
+                    "source_label": "手术记录",
+                    "source_document_type": "surgery_record",
+                    "source_document_id": "surgery-document-one",
                 },
             },
         ]
@@ -595,6 +636,13 @@ def test_duplicate_record_rule_keeps_explained_latest_candidate_only() -> None:
     assert len(projected) == 1
     assert projected[0]["status"] == "non_compliant"
     assert projected[0]["customer_display_facts"]["missing_fields"] == ["implant_quantity"]
+    assert projected[0]["customer_display_facts"]["implant_event_details"] == [
+        {
+            "event_position": 1,
+            "missing_fields": ["implant_quantity"],
+            "implant_names": ["人工硬脑膜"],
+        }
+    ]
 
 
 def test_old_018_result_is_also_hidden_from_grouped_rule_results() -> None:

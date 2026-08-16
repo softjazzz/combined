@@ -260,8 +260,10 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
             "latency_ms": 250.0,
         }
     ]
-    assert result["metrics"]["rule_decision_count"] == 49
-    assert result["metrics"]["typed_shadow_adapter_count"] == 26
+    # 025/059 合同升级后，当前已有 50 条规则使用非 v1 决策合同；
+    # 这里验证合同成熟度，不等同于 68 条正式可执行规则数量。
+    assert result["metrics"]["rule_decision_count"] == 50
+    assert result["metrics"]["typed_shadow_adapter_count"] == 25
     assert result["metrics"]["legacy_projection_count"] == 0
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0

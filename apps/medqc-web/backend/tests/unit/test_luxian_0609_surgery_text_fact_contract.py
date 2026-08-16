@@ -684,6 +684,7 @@ async def test_025_requires_all_five_surgery_record_fields_and_ignores_barcode()
     assert reduced[0].final_state.value == "non_compliant"
     assert native.customer_display_facts[0][1] == {
         "failure_kind": "implant_information_incomplete",
+        "performed_surgery_confirmed": True,
         "missing_fields": ["implant_specification", "implant_material"],
         "implant_event_details": [
             {
