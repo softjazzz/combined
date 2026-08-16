@@ -173,7 +173,7 @@ def test_llm_http_max_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
         Settings(_env_file=None)
 
 
-def test_formal_qc_default_llm_model_should_use_aliyun_dual_model(monkeypatch):
+def test_formal_qc_default_llm_model_should_use_current_aliyun_model(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
@@ -181,8 +181,8 @@ def test_formal_qc_default_llm_model_should_use_aliyun_dual_model(monkeypatch):
 
     assert str(settings.LLM_API_ENDPOINT).rstrip("/") == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     assert settings.LLM_DEFAULT_PROVIDER == "alibaba"
-    assert settings.LLM_MODEL == "qwen3.5-35b-a3b"
-    assert settings.LLM_ADJUDICATOR_MODEL == "qwen3.6-35b-a3b"
+    assert settings.LLM_MODEL == "qwen3.7-flash"
+    assert settings.LLM_ADJUDICATOR_MODEL == "qwen3.7-flash"
     assert settings.LLM_MODEL != "deepseek-v4-flash"
 
 
