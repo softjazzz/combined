@@ -166,7 +166,10 @@ def test_disabled_rollout_flag_only_removes_its_group() -> None:
     assert resolved == ("LX0609-008", "LX0609-018")
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-025", "LX0609-059"))
+@pytest.mark.parametrize(
+    "rule_id",
+    ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-059"),
+)
 def test_public_execution_returns_controlled_not_executed_for_pending_rule(
     rule_id: str,
 ) -> None:

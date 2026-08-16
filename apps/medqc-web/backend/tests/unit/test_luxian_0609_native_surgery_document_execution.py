@@ -955,6 +955,77 @@ def test_typed_039_is_non_compliant_when_known_surgeon_is_not_in_discussion(monk
     }
 
 
+@pytest.mark.parametrize(
+    ("surgery_rows", "discussion_rows", "expected_status", "expected_reason"),
+    (
+        (
+            ({"surgeon": "韩平"},),
+            ({"record_content": "未见麻醉科风险评估。"},),
+            "data_gap",
+            "surgeon_participation_unresolved",
+        ),
+        (
+            ({},),
+            ({"record_content": "缺少麻醉科医师签名。", "host_name": "李杰"},),
+            "data_gap",
+            "surgeon_participation_unresolved",
+        ),
+        (
+            ({"surgeon": "韩平"},),
+            ({
+                "record_content": "缺少主持人及记录医师签名。",
+                "host_name": "李杰",
+                "submitter": "徐应福",
+                "discuss_staff": "韩平、李杰、徐应福",
+            },),
+            "compliant",
+            "surgeon_participation_confirmed",
+        ),
+        (
+            ({"surgeon": "韩平"},),
+            ({"record_time": "2025-07-06 09:52:44"},),
+            "data_gap",
+            "surgeon_participation_unresolved",
+        ),
+        (
+            ({"surgeon": "韩平"},),
+            ({"discuss_staff": "韩平、李杰", "record_time": "2025-10-15 09:00:00"},),
+            "compliant",
+            "surgeon_participation_confirmed",
+        ),
+        (
+            ({},),
+            ({"discuss_staff": "唐远君", "record_time": "2025-10-15 09:00:00"},),
+            "data_gap",
+            "surgeon_participation_unresolved",
+        ),
+    ),
+)
+def test_typed_039_uses_only_preop_discussion_and_surgeon_participation_facts(
+    monkeypatch,
+    surgery_rows,
+    discussion_rows,
+    expected_status,
+    expected_reason,
+):
+    """麻醉、签名措辞或讨论存在性不得被下游重新解释成039缺陷。"""
+
+    _patch_typed_039_present_sources(monkeypatch)
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials(
+            {
+                "surgery_record": surgery_rows,
+                "presurg_discussion": discussion_rows,
+            }
+        ),
+    )
+
+    assert outcome.status == expected_status
+    assert outcome.reason_code == expected_reason
+
+
 def test_035_structured_consent_completeness_lists_exact_missing_fields():
     state, missing = surgery_doc._anesthesia_consent_completeness(
         (

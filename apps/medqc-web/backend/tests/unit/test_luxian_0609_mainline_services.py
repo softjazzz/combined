@@ -13,7 +13,10 @@ from app.services.luxian_0609_result_aggregator import (
 from app.services.luxian_0609_evidence_formatter import format_luxian_0609_evidence
 from app.services.luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
 from app.services.luxian_0609_result_schema import apply_luxian_0609_result_schema
-from app.services.luxian_0609.rule_decision_settings import FULL_RULE_DECISION_OVERRIDES
+from app.services.luxian_0609.rule_decision_settings import (
+    FULL_RULE_DECISION_OVERRIDES,
+    RULE_DECISION_ROLLOUT_GROUPS,
+)
 from app.services.sichuan_qc_service import SichuanQCService
 import app.services.sichuan_qc_service as sichuan_qc_service_module
 from app.services.luxian_0609_trigger_gate import (
@@ -28,6 +31,8 @@ from app.services.luxian_0609_trigger_gate import (
 from app.services.luxian_0609_llm_gate import evaluate_luxian_0609_trigger_gates_with_llm
 from app.services.luxian_0609 import execution as luxian_execution
 from app.services.luxian_0609 import native_course_quality_execution as native_course
+from app.services.luxian_0609 import native_surgery_document_execution as surgery_doc
+from app.services.luxian_0609 import native_surgery_gate_execution as surgery_gate
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -54,7 +59,11 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
 )
 from app.services.luxian_0609.native_mdt_execution import NativeMdtExecutionResult
-from app.services.luxian_0609.native_package import Luxian0609PackagePlan
+from app.services.luxian_0609.native_package import (
+    Luxian0609PackagePlan,
+    load_luxian_0609_dependency_inventory,
+    resolve_package_entry_execution_rule_ids,
+)
 from app.services.luxian_0609.surgery_text_fact_contract import (
     LX0609_025_REQUIRED_FIELDS,
 )
@@ -6398,35 +6407,48 @@ def test_lx0609_019_should_be_not_applicable_without_pathology_source_evidence()
     assert "病理报告、活检取材或手术送检" in aggregated[0]["findings"]
 
 
-def test_lx0609_028_uncertain_should_be_not_applicable_without_class_i_ii_incision():
-    rules = [
-        _wrapper(
-            "LX0609-028",
-            name="抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物时间超过24小时",
-            mapped_rule_ids=["SC-ANTIBIOTIC"],
-            trigger_condition="I类、II类切口手术预防使用抗菌药物需核对医嘱起止时间。",
+async def _assert_pending_rule_uses_public_not_executed(rule_id: str) -> None:
+    inventory = load_luxian_0609_dependency_inventory()
+    prepared_rules = [
+        {"rule_id": item}
+        for item in resolve_package_entry_execution_rule_ids(
+            inventory=inventory,
+            selected_rule_ids=(rule_id,),
         )
     ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "LX0609-028",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "当前自动判定未形成可靠结论，需人工复核。",
-                "evidence": "医嘱：术前30分钟给予头孢呋辛预防感染，术后24小时停用。",
-                "suggestion": "请人工复核。",
-            }
-        ],
-        gate_decisions={},
+    values = {
+        flag_name: True
+        for flag_name, _ in RULE_DECISION_ROLLOUT_GROUPS
+        if flag_name is not None
+    }
+    values.update(
+        {
+            "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
+            "LUXIAN_0609_TRIGGER_GATE_ENABLED": False,
+            "LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED": False,
+            "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": False,
+        }
+    )
+    executable_rules, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=prepared_rules,
+        visit_id="V-PENDING",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=object(),
+        settings=SimpleNamespace(**values),
+        selected_customer_rule_ids=(rule_id,),
     )
 
-    assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "antibiotic_rule_requires_class_i_ii_incision"
-    assert "I类/II类切口" in aggregated[0]["findings"]
+    assert executable_rules == []
+    assert context.package_plan is not None
+    assert context.package_plan.not_executed_rule_ids == (rule_id,)
+    assert context.native_llm_call_count == 0
 
+
+@pytest.mark.asyncio
+async def test_lx0609_028_uncertain_should_be_not_applicable_without_class_i_ii_incision():
+    await _assert_pending_rule_uses_public_not_executed("LX0609-028")
 
 def test_lx0609_028_uncertain_should_show_missing_antibiotic_stop_time():
     rules = [
@@ -7057,125 +7079,97 @@ def test_lx0609_017_multiple_records_below_threshold_should_not_require_review()
     assert result["metadata"]["maximum_similarity"] < 0.7
 
 
-def test_lx0609_039_should_not_use_anesthesia_risk_as_preop_discussion_defect():
-    rules = [
-        _wrapper(
-            "LX0609-039",
-            name="术前讨论记录：急诊抢救手术无术前讨论",
-            mapped_rule_ids=["SC-105"],
-            trigger_condition="需核对术前讨论记录及术者参与情况。",
-        )
-    ]
+class _Typed039Materials:
+    def __init__(self, rows_by_source: dict[str, tuple[dict, ...]]):
+        self._rows_by_source = rows_by_source
 
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
+    def rows(self, source_key: str) -> tuple[dict, ...]:
+        return self._rows_by_source.get(source_key, ())
+
+
+def _native_039_outcome(monkeypatch, *, surgery_rows, discussion_rows):
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda _rule_id: frozenset(
+            {"surgery_record", "mr_surgery", "rescue_record", "presurg_discussion"}
+        ),
+    )
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "") if source_key == "surgery_record" else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: "available",
+    )
+    return surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=_Typed039Materials(
             {
-                "rule_id": "SC-105",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "未见麻醉科风险评估。",
-                "evidence": "麻醉科风险评估缺失。",
-                "suggestion": "补齐麻醉风险评估。",
+                "surgery_record": tuple(surgery_rows),
+                "presurg_discussion": tuple(discussion_rows),
             }
-        ],
-        gate_decisions={},
+        ),
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "preop_discussion_mismatch_anesthesia_risk"
-    assert "不能直接判定为术前讨论记录" in aggregated[0]["findings"]
 
-
-def test_lx0609_039_should_not_use_anesthesia_signature_as_preop_discussion_defect():
-    rules = [
-        _wrapper(
-            "LX0609-039",
-            name="术前讨论记录：除急诊抢救手术外无术前讨论或术者未参加",
-            mapped_rule_ids=["SC-105"],
-            trigger_condition="需核对术前讨论记录及术者参与情况。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-105",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "患者接受手术治疗，但术前讨论记录中缺少麻醉科医师签名。",
-                "evidence": "执行证据：【术前讨论】主持人签名：李杰 记录医师：徐应福。",
-                "suggestion": "补齐麻醉科医师签名。",
-            }
-        ],
-        gate_decisions={},
+def test_lx0609_039_should_not_use_anesthesia_risk_as_preop_discussion_defect(
+    monkeypatch,
+):
+    outcome = _native_039_outcome(
+        monkeypatch,
+        surgery_rows=({"surgeon": "韩平"},),
+        discussion_rows=({"record_content": "未见麻醉科风险评估。"},),
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "preop_discussion_mismatch_anesthesia_risk"
-    assert "不能直接判定为术前讨论记录" in aggregated[0]["findings"]
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
 
 
-def test_lx0609_039_should_not_show_missing_signature_when_signature_evidence_exists():
-    rules = [
-        _wrapper(
-            "LX0609-039",
-            name="术前讨论记录：除急诊抢救手术外无术前讨论或术者未参加",
-            mapped_rule_ids=["SC-105"],
-            trigger_condition="需核对术前讨论记录及术者参与情况。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-105",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "患者接受手术治疗，但术前讨论记录中缺少主持人及记录医师签名。",
-                "evidence": "执行证据：主持人签名：李杰 记录医师：徐应福",
-                "suggestion": "补全主持人及记录医师手写签名。",
-            }
-        ],
-        gate_decisions={},
+def test_lx0609_039_should_not_use_anesthesia_signature_as_preop_discussion_defect(
+    monkeypatch,
+):
+    outcome = _native_039_outcome(
+        monkeypatch,
+        surgery_rows=({},),
+        discussion_rows=({"record_content": "缺少麻醉科医师签名。", "host_name": "李杰"},),
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "preop_discussion_signature_contradiction"
-    assert "结论与证据存在矛盾" in aggregated[0]["findings"]
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
 
 
-def test_lx0609_039_should_not_show_missing_discussion_when_discussion_time_exists():
-    rules = [
-        _wrapper(
-            "LX0609-039",
-            name="术前讨论记录：除急诊抢救手术外无术前讨论或术者未参加",
-            mapped_rule_ids=["SC-105"],
-            trigger_condition="需核对术前讨论记录及术者参与情况。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-105",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "患者接受手术治疗，但病历中缺少术前讨论记录。",
-                "evidence": "执行证据：【术前讨论】讨论时间: 2025-07-06 09:52:44",
-                "suggestion": "补录规范的术前讨论记录。",
-            }
-        ],
-        gate_decisions={},
+def test_lx0609_039_should_not_show_missing_signature_when_signature_evidence_exists(monkeypatch):
+    outcome = _native_039_outcome(
+        monkeypatch,
+        surgery_rows=({"surgeon": "韩平"},),
+        discussion_rows=({
+            "record_content": "缺少主持人及记录医师签名。",
+            "host_name": "李杰",
+            "submitter": "徐应福",
+            "discuss_staff": "韩平、李杰、徐应福",
+        },),
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "preop_discussion_presence_contradiction"
-    assert "术前讨论记录线索" in aggregated[0]["findings"]
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "surgeon_participation_confirmed"
 
+def test_lx0609_039_should_not_show_missing_discussion_when_discussion_time_exists(monkeypatch):
+    outcome = _native_039_outcome(
+        monkeypatch,
+        surgery_rows=({"surgeon": "韩平"},),
+        discussion_rows=({"record_time": "2025-07-06 09:52:44"},),
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
 
 def test_lx0609_025_rejects_legacy_result_without_required_facts():
     rules = [
@@ -7329,42 +7323,54 @@ def test_lx0609_033_should_convert_ai_missing_consent_to_data_gap_without_source
     assert aggregated[0]["metadata"]["customer_display_guard"] == "surgery_consent_source_gap"
 
 
-def test_lx0609_033_should_not_treat_operation_text_consent_phrase_as_source_coverage():
-    rules = [
-        _wrapper(
-            "LX0609-033",
-            name="手术知情同意书：无手术知情同意书",
-            mapped_rule_ids=["LXE-31"],
-            trigger_condition="手术患者应有手术知情同意书。",
+@pytest.mark.asyncio
+async def test_lx0609_033_should_not_treat_operation_text_consent_phrase_as_source_coverage():
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            ({
+                "surgery_begin_time": "2026-01-01 08:00:00+08",
+                "surgery_name": "本次手术",
+                "surgery_process": "术前已告知风险，患者家属同意手术。",
+            },)
+            if source_key == "surgery_record"
+            else ()
         )
-    ]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
 
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "LXE-31",
-                "status": "ai_suggested_non_compliant",
-                "is_compliant": False,
-                "findings": "术前讨论提及签署同意书，但病历中未检出手术知情同意书原文。",
-                "evidence": "执行证据：【术前小结】已告知手术风险，患者家属同意手术。",
-                "evidence_items": [
-                    {
-                        "source_table": "preop_summary",
-                        "source_document_name": "术前小结",
-                        "field_path": "record_content",
-                        "quote": "已告知手术风险，患者家属同意手术。",
-                    }
-                ],
-                "suggestion": "补充手术知情同意书。",
-            }
-        ],
-        gate_decisions={},
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-033",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-19T10:00:00+08:00",
+        row_reader=reader,
+    )
+    result = await surgery_gate.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=object(),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "surgery_consent_source_gap"
-
+    assert result.decisions[0].reason_code == "requirement_violated"
+    assert dict(result.customer_display_facts)["LX0609-033"]["failure_kind"] == (
+        "surgery_consent_document_missing"
+    )
+    assert result.llm_call_count == 0
 
 def test_lx0609_024_should_require_current_malignant_tumor_surgery_fact():
     rules = [
@@ -7562,66 +7568,31 @@ def test_lx0609_040_gate_should_require_level_4_surgery_before_mdt_rule():
     assert present["LX0609-040"].status == TRIGGER_PRESENT
 
 
-def test_lx0609_039_should_be_compliant_when_preop_discussion_is_recorded_as_complete():
-    rules = [
-        _wrapper(
-            "LX0609-039",
-            name="术前讨论记录：除急诊抢救手术外无术前讨论或术者未参加",
-            mapped_rule_ids=["SC-105"],
-            trigger_condition="需核对术前讨论记录及术者参与情况。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-105",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "病历中明确存在术前讨论记录，且内容完整，符合规则要求。",
-                "evidence": "执行证据：【术前讨论】讨论摘要: 科主任李杰副主任医师总结分析，手术方案明确。",
-                "suggestion": "请按规则补充或修正相关记录。",
-            }
-        ],
-        gate_decisions={},
+def test_lx0609_039_should_be_compliant_when_preop_discussion_is_recorded_as_complete(monkeypatch):
+    outcome = _native_039_outcome(
+        monkeypatch,
+        surgery_rows=({"surgeon": "韩平"},),
+        discussion_rows=({
+            "discuss_staff": "韩平、李杰",
+            "record_time": "2025-10-15 09:00:00",
+        },),
     )
 
-    assert aggregated[0]["status"] == "compliant"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "preop_discussion_positive_result_not_defect"
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "surgeon_participation_confirmed"
 
-
-def test_lx0609_039_should_not_mark_missing_discussion_when_preop_discussion_exists_but_participation_unclear():
-    rules = [
-        _wrapper(
-            "LX0609-039",
-            name="术前讨论记录：除急诊抢救手术外无术前讨论或术者未参加",
-            mapped_rule_ids=["SC-105"],
-            trigger_condition="需核对术前讨论记录及术者参与情况。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-105",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "患者接受手术治疗，但病历中缺少术前讨论记录。",
-                "evidence": "执行证据：【术前讨论】参会人员: 唐远君副主任医师;讨论时间: 2025-10-15 09:00。",
-                "suggestion": "补录规范的术前讨论记录。",
-            }
-        ],
-        gate_decisions={},
+def test_lx0609_039_should_not_mark_missing_discussion_when_preop_discussion_exists_but_participation_unclear(monkeypatch):
+    outcome = _native_039_outcome(
+        monkeypatch,
+        surgery_rows=({},),
+        discussion_rows=({
+            "discuss_staff": "唐远君",
+            "record_time": "2025-10-15 09:00:00",
+        },),
     )
 
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] in {
-        "preop_discussion_presence_contradiction",
-        "preop_discussion_exists_need_participation_check",
-    }
-
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
 
 def test_lx0609_040_should_require_level_4_surgery_before_customer_defect():
     rules = [

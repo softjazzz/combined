@@ -847,6 +847,41 @@ async def test_033_empty_shell_rows_are_non_compliant_without_llm_or_body_leak()
 
 
 @pytest.mark.asyncio
+async def test_033_surgery_record_consent_phrase_cannot_replace_independent_consent_source() -> None:
+    """手术记录中的告知/同意措辞不能冒充独立手术知情同意书。"""
+
+    session = _session(
+        consent_rows=(),
+        surgery_rows=({
+            "surgery_begin_time": "2026-01-01 08:00:00+08",
+            "surgery_name": "本次手术",
+            "surgery_process": "术前已告知风险，患者家属同意手术。",
+        },),
+    )
+    client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
+
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-033",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert dict(result.customer_display_facts)["LX0609-033"]["failure_kind"] == (
+        "surgery_consent_document_missing"
+    )
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("patient_sign", "surgeon_sign", "expected_state"),
     (
