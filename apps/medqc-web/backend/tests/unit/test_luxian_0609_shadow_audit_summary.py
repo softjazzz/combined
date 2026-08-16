@@ -167,6 +167,75 @@ def test_shadow_summary_rejects_inconsistent_total_tokens(key: str, factory: obj
     assert projected["reason_code"] == "result_contract_invalid"
 
 
+@pytest.mark.parametrize(
+    ("key", "factory", "count_fields"),
+    [
+        (
+            "luxian_0609_025_shadow",
+            _shadow_025,
+            (
+                "operation_count",
+                "llm_calls",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "elapsed_ms",
+            ),
+        ),
+        (
+            "luxian_0609_059_shadow",
+            _shadow_059,
+            (
+                "event_count",
+                "matched_order_count",
+                "missing_order_count",
+                "conflict_order_count",
+                "llm_calls",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "elapsed_ms",
+            ),
+        ),
+    ],
+)
+@pytest.mark.parametrize("invalid_value", (True, "1", -1))
+def test_shadow_summary_rejects_invalid_required_count_types(
+    key: str,
+    factory: object,
+    count_fields: tuple[str, ...],
+    invalid_value: object,
+) -> None:
+    assert callable(factory)
+    for field_name in count_fields:
+        raw = factory()
+        raw[field_name] = invalid_value
+
+        projected = project_luxian_0609_shadow_summaries({key: raw})[key]
+
+        assert projected["status"] == "shadow_error", field_name
+        assert projected["reason_code"] == "result_contract_invalid", field_name
+
+
+@pytest.mark.parametrize("invalid_value", (True, "1", -1))
+def test_shadow_summary_rejects_invalid_nested_counter_types(
+    invalid_value: object,
+) -> None:
+    for counter_field, counter_key in (
+        ("status_counts", "non_compliant"),
+        ("missing_field_counts", "implant_material"),
+    ):
+        raw = _shadow_025()
+        raw[counter_field] = {counter_key: invalid_value}
+
+        projected = project_luxian_0609_shadow_summaries(
+            {"luxian_0609_025_shadow": raw}
+        )["luxian_0609_025_shadow"]
+
+        assert projected["status"] == "shadow_error", counter_field
+        assert projected["reason_code"] == "result_contract_invalid", counter_field
+
+
 def test_merge_shadow_summaries_persists_only_batch_aggregate() -> None:
     aggregate: dict[str, dict] = {}
     summaries = project_luxian_0609_shadow_summaries(
