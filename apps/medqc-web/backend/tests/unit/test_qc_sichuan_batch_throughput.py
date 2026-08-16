@@ -2171,13 +2171,25 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
 
 
 @pytest.mark.asyncio
-async def test_create_workspace_batch_job_full_luxian_set_uses_49_customer_ids(
+async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_scope(
     monkeypatch,
 ):
     workspace = _WorkspaceStub()
     service = _ServiceStub()
     submitted_tasks: List[Dict[str, Any]] = []
-    customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 76)]
+    pending_rule_ids = [
+        "LX0609-024",
+        "LX0609-025",
+        "LX0609-028",
+        "LX0609-049",
+        "LX0609-056",
+        "LX0609-059",
+        "LX0609-075",
+    ]
+    executable_rule_ids = [
+        rule_id for rule_id in customer_rule_ids if rule_id not in pending_rule_ids
+    ]
 
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(
@@ -2222,7 +2234,15 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_49_customer_ids(
     assert filters["rule_ids"] == customer_rule_ids
     assert filters["selected_rule_ids"] == customer_rule_ids
     assert filters["scoped_customer_rule_ids"] == customer_rule_ids
-    assert filters["customer_rule_count"] == filters["execution_rule_count"] == 49
+    assert filters["active_customer_rule_ids"] == executable_rule_ids
+    assert filters["pending_customer_rule_ids"] == pending_rule_ids
+    assert filters["customer_rule_count"] == 75
+    assert filters["execution_rule_count"] == 68
+    assert filters["pending_rule_count"] == 7
+    assert {"LX0609-051", "LX0609-061", "LX0609-067", "LX0609-071"}.issubset(
+        filters["active_customer_rule_ids"]
+    )
+    assert "LX0609-059" in filters["pending_customer_rule_ids"]
     assert all(
         selected == customer_rule_ids
         for selected in dict(filters["record_rule_map"]).values()

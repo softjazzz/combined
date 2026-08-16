@@ -23,7 +23,7 @@ def test_luxian_0609_rule_set_should_persist_exact_customer_ids():
 
     assert rule_set is not None
     assert tuple(rule_set.rule_ids) == tuple(
-        f"LX0609-{index:03d}" for index in range(1, 50)
+        f"LX0609-{index:03d}" for index in range(1, 76)
     )
     assert all(rule_id.startswith("LX0609-") for rule_id in rule_set.rule_ids)
 

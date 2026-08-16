@@ -16,6 +16,7 @@ from .fast_screen_qc import (
     get_fast_screen_full_rule_ids,
 )
 from .sc_rule_launch_tier import list_sc_intrinsic_rule_ids_by_launch_tier
+from .luxian_0609.phase_scope import load_luxian_0609_phase_scope
 
 
 SC_CONTENT_V1_RULE_IDS: tuple[str, ...] = (
@@ -56,7 +57,7 @@ SC_CONTENT_LAUNCH_A_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by
 SC_CONTENT_LAUNCH_B_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by_launch_tier("B")
 SC_CONTENT_LAUNCH_C_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by_launch_tier("C")
 LUXIAN_0609_QC_V1_RULE_IDS: tuple[str, ...] = tuple(
-    f"LX0609-{index:03d}" for index in range(1, 50)
+    entry.rule_id for entry in load_luxian_0609_phase_scope()
 )
 
 
@@ -109,7 +110,7 @@ SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
         refine_confidence_threshold=0.45,
         batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
         max_refine_candidates=0,
-        description="泸县0609客户第一批质控点验证规则包，仅纳入当前已有可执行规则；待补规则和需数据联查规则不伪装为已完成。",
+        description="泸县0609客户质控点正式规则包，完整纳入75条权威范围；待定义规则统一失败关闭为未执行。",
     ),
     "sc_content_launch_a_v1": QCRuleSet(
         key="sc_content_launch_a_v1",

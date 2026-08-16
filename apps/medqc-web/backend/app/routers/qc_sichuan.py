@@ -79,6 +79,7 @@ from ..services.luxian_0609.rule_decision_settings import (
 from ..services.luxian_0609.native_package import (
     assert_luxian_0609_formal_package_plan_native_only,
 )
+from ..services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from ..services.sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
@@ -4560,6 +4561,11 @@ async def create_workspace_batch_job(
         and requested_rule_set_rule_ids
         and len(direct_native_rule_ids) == len(set(requested_rule_set_rule_ids))
     )
+    active_customer_rule_ids, pending_customer_rule_ids = (
+        partition_luxian_0609_rule_scope(direct_native_rule_ids)
+        if is_direct_native_selection
+        else ((), ())
+    )
 
     if requested_rule_set:
         rule_ids = (
@@ -4806,13 +4812,16 @@ async def create_workspace_batch_job(
                 {
                     "selected_rule_ids": list(direct_native_rule_ids),
                     "scoped_customer_rule_ids": list(direct_native_rule_ids),
+                    "active_customer_rule_ids": list(active_customer_rule_ids),
+                    "pending_customer_rule_ids": list(pending_customer_rule_ids),
                     "record_rule_map": {
                         ref.as_key(): list(direct_native_rule_ids)
                         for ref in effective_record_refs
                     },
                     "validation_mode": "programmatic",
                     "customer_rule_count": len(direct_native_rule_ids),
-                    "execution_rule_count": len(direct_native_rule_ids),
+                    "execution_rule_count": len(active_customer_rule_ids),
+                    "pending_rule_count": len(pending_customer_rule_ids),
                 }
                 if is_direct_native_selection
                 else {}
