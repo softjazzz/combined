@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import re
+from datetime import datetime
 from difflib import SequenceMatcher
+from math import isfinite
 from typing import TYPE_CHECKING, Any, Mapping
+from zoneinfo import ZoneInfo
 
 from .copy_content_similarity import compare_text_segments, split_sentences
 from .luxian_0609_evidence_formatter import format_luxian_0609_evidence
@@ -15,6 +18,7 @@ from .luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_canonical_result,
 )
 from .luxian_0609.decision_reducer import ReducedRuleDecision
+from .luxian_0609.source_evidence_reader import authoritative_document_time_value
 from .luxian_0609.surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
@@ -43,6 +47,7 @@ _STATUS_PRIORITY = {
     "not_executed": 5,
     "technical_error": 60,
 }
+_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 _SENSITIVE_KEYS = {
     "raw_response",
@@ -1966,6 +1971,38 @@ def _validate_lx0609_025_fact_status(
         raise ValueError("lx0609_025_display_fact_status_mismatch")
     if expected_kind is not None and kind != expected_kind:
         raise ValueError("lx0609_025_display_fact_status_mismatch")
+
+
+def _validate_lx0609_017_fact_status(
+    *,
+    rule_id: str,
+    status: str,
+    raw_facts: Any,
+    safe_facts: Mapping[str, Any] | None,
+) -> None:
+    """017终态只能携带方向一致、已通过受控投影的事实。"""
+
+    if rule_id != "LX0609-017":
+        return
+    expected_kind = {
+        "non_compliant": "copy_similarity_threshold_exceeded",
+        "compliant": "copy_similarity_within_threshold",
+    }.get(status)
+    kind = (
+        raw_facts.get("failure_kind")
+        if isinstance(raw_facts, Mapping)
+        else None
+    )
+    terminal_kinds = {
+        "copy_similarity_threshold_exceeded",
+        "copy_similarity_within_threshold",
+    }
+    if expected_kind is not None:
+        if safe_facts is None or kind != expected_kind:
+            raise ValueError("invalid copy customer display facts")
+        return
+    if kind in terminal_kinds:
+        raise ValueError("invalid copy customer display facts")
 
 
 def _copy_customer_fields(
@@ -4484,9 +4521,15 @@ def safe_luxian_0609_customer_display_facts(
             or any(value not in {"daily_course_record", "senior_course_record"} for value in source_types)
             or not isinstance(record_times, list)
             or len(record_times) != 2
-            or not all(isinstance(value, str) and value for value in record_times)
+            or not all(_strict_copy_fact_record_time(value) for value in record_times)
+            or isinstance(similarity, bool)
             or not isinstance(similarity, (int, float))
+            or not isfinite(float(similarity))
+            or not 0.0 <= float(similarity) <= 1.0
+            or isinstance(threshold, bool)
             or not isinstance(threshold, (int, float))
+            or not isfinite(float(threshold))
+            or float(threshold) != 0.7
             or (
                 failure_kind == "copy_similarity_threshold_exceeded"
                 and float(similarity) < float(threshold)
@@ -4520,7 +4563,9 @@ def safe_luxian_0609_customer_display_facts(
                     )
                     or not isinstance(pair_times, list)
                     or len(pair_times) != 2
-                    or not all(isinstance(value, str) and value for value in pair_times)
+                    or not all(
+                        _strict_copy_fact_record_time(value) for value in pair_times
+                    )
                     or isinstance(pair_similarity, bool)
                     or not isinstance(pair_similarity, (int, float))
                     or not 0.0 <= float(pair_similarity) <= 1.0
@@ -5316,6 +5361,43 @@ def _valid_customer_evidence_document_id(value: Any) -> str:
     )
 
 
+def _strict_copy_fact_record_time(value: Any) -> str:
+    """017事实只接受无时区、精确到秒的医院本地时间。"""
+
+    if not isinstance(value, str) or re.fullmatch(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
+    ) is None:
+        return ""
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return ""
+    return parsed.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _normalized_copy_material_record_time(value: Any) -> str:
+    """将MaterialStore标准时间或ISO时区时间规范到本地秒，禁止前缀命中。"""
+
+    if not isinstance(value, str):
+        return ""
+    candidate = value.strip()
+    if re.fullmatch(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
+        r"|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})",
+        candidate,
+    ) is None:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.microsecond:
+        return ""
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(_HOSPITAL_TIMEZONE)
+    return parsed.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _customer_evidence_from_copy_pair_facts(
     *, facts: Mapping[str, Any] | None, evidence_materials: Any
 ) -> list[dict[str, str]]:
@@ -5381,18 +5463,10 @@ def _customer_evidence_from_copy_pair_facts(
                         document_id
                         for row in rows
                         if isinstance(row, Mapping)
-                        and any(
-                            str(row.get(field) or "")
-                            .strip()
-                            .replace("T", " ")
-                            .startswith(record_time)
-                            for field in (
-                                "record_time",
-                                "record_datetime",
-                                "submit_time",
-                                "submit_datetime",
-                            )
+                        and _normalized_copy_material_record_time(
+                            authoritative_document_time_value(row)
                         )
+                        == record_time
                         for document_id in (
                             _valid_customer_evidence_document_id(
                                 row.get("document_id") or row.get("id")
@@ -5451,18 +5525,10 @@ def _customer_evidence_from_copy_pair_facts(
                     document_id
                     for row in rows
                     if isinstance(row, Mapping)
-                    and any(
-                        str(row.get(field) or "")
-                        .strip()
-                        .replace("T", " ")
-                        .startswith(record_time)
-                        for field in (
-                            "record_time",
-                            "record_datetime",
-                            "submit_time",
-                            "submit_datetime",
-                        )
+                    and _normalized_copy_material_record_time(
+                        authoritative_document_time_value(row)
                     )
+                    == record_time
                     for document_id in (
                         _valid_customer_evidence_document_id(
                             row.get("document_id") or row.get("id")
@@ -5615,7 +5681,9 @@ def _merge_customer_evidence(
     return merged
 
 
-def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str, Any]) -> dict[str, Any]:
+def _copy_native_customer_fields(
+    *, wrapper: dict[str, Any], selected: dict[str, Any], evidence_materials: Any = None
+) -> dict[str, Any]:
     """原生结果不携带旧映射诊断，并保留程序/模型执行类型。"""
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
     status = _status(selected)
@@ -5636,6 +5704,31 @@ def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str,
         and safe_display_facts is None
     ):
         raise ValueError("invalid copy customer display facts")
+    _validate_lx0609_017_fact_status(
+        rule_id=wrapper_id,
+        status=status,
+        raw_facts=raw_display_facts,
+        safe_facts=safe_display_facts,
+    )
+    if (
+        wrapper_id == "LX0609-017"
+        and status == "non_compliant"
+        and isinstance(raw_display_facts, Mapping)
+        and raw_display_facts.get("copy_match_document_fingerprints") is None
+    ):
+        raise ValueError("invalid copy customer display facts")
+    copy_pair_evidence: list[dict[str, str]] = []
+    if (
+        wrapper_id == "LX0609-017"
+        and isinstance(raw_display_facts, Mapping)
+        and raw_display_facts.get("copy_match_document_fingerprints") is not None
+    ):
+        copy_pair_evidence = _customer_evidence_from_copy_pair_facts(
+            facts=raw_display_facts,
+            evidence_materials=evidence_materials,
+        )
+        if not copy_pair_evidence:
+            raise ValueError("invalid copy customer display facts")
     _validate_lx0609_025_fact_status(
         rule_id=wrapper_id,
         status=status,
@@ -5684,9 +5777,12 @@ def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str,
     }
     if safe_display_facts:
         result["customer_display_facts"] = safe_display_facts
-    customer_evidence = _customer_evidence_from_display_facts(
-        rule_id=wrapper_id,
-        raw=raw_display_facts,
+    customer_evidence = _merge_customer_evidence(
+        _customer_evidence_from_display_facts(
+            rule_id=wrapper_id,
+            raw=raw_display_facts,
+        ),
+        copy_pair_evidence,
     )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
@@ -5824,6 +5920,12 @@ def aggregate_luxian_0609_results(
                 raw_facts=raw_025_facts_by_rule.get(wrapper_id),
                 safe_facts=display_facts_by_rule.get(wrapper_id),
             )
+            _validate_lx0609_017_fact_status(
+                rule_id=wrapper_id,
+                status=str(result.get("status") or ""),
+                raw_facts=raw_copy_facts_by_rule.get(wrapper_id),
+                safe_facts=display_facts_by_rule.get(wrapper_id),
+            )
             if wrapper_id in display_facts_by_rule:
                 result["customer_display_facts"] = display_facts_by_rule[wrapper_id]
                 precise_findings = _controlled_customer_findings(
@@ -5911,7 +6013,13 @@ def aggregate_luxian_0609_results(
             )
             selected = direct_results[0]
             if str((selected.get("metadata") or {}).get("execution_source") or "") == "lx0609_native":
-                result = _copy_native_customer_fields(wrapper=wrapper, selected=selected)
+                result = _copy_native_customer_fields(
+                    wrapper=wrapper,
+                    selected=selected,
+                    evidence_materials=(audit_context or {}).get(
+                        "evidence_materials"
+                    ),
+                )
                 if wrapper_id in display_facts_by_rule:
                     result["customer_display_facts"] = display_facts_by_rule[wrapper_id]
                     precise_findings = _controlled_customer_findings(
