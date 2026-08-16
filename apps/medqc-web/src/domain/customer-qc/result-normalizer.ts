@@ -652,19 +652,17 @@ function extractCustomerDisplayFacts(raw: RawCustomerQcResult): CustomerDisplayF
     missingFields,
     implantEvents,
     implantVerification:
-      facts.verification_kind === 'implant_information_complete'
-        && hasImplantSourceContract(facts, 'implant_information_complete')
-        && Array.isArray(facts.checked_fields)
-        && facts.checked_fields.length === IMPLANT_REQUIRED_FIELDS.length
-        && facts.checked_fields.every(
-          (value, index) => value === IMPLANT_REQUIRED_FIELDS[index],
-        )
+      facts.verification_kind === 'implant_information_complete' &&
+      hasImplantSourceContract(facts, 'implant_information_complete') &&
+      Array.isArray(facts.checked_fields) &&
+      facts.checked_fields.length === IMPLANT_REQUIRED_FIELDS.length &&
+      facts.checked_fields.every((value, index) => value === IMPLANT_REQUIRED_FIELDS[index])
         ? {
             state: 'complete',
             checkedFields: [...IMPLANT_REQUIRED_FIELDS],
           }
-        : facts.verification_kind === 'implant_not_used'
-          && hasImplantSourceContract(facts, 'implant_not_used')
+        : facts.verification_kind === 'implant_not_used' &&
+            hasImplantSourceContract(facts, 'implant_not_used')
           ? { state: 'not_used' }
           : undefined,
     copySimilarity:
@@ -1746,16 +1744,16 @@ function evidenceSourcesFor(facts: CustomerDisplayFacts): CustomerQcEvidenceSour
 
 /**
  * 客户展示的确定性问题必须能说明具体原因、标准和证据。
- * 旧结果或兼容路径缺少这些事实时，保留后端原始结果用于审计，
- * 但不把它包装成客户可直接处理的“不合规”。
+ * 旧结果或兼容路径缺少这些事实时，仅用安全提示替换不可信展示文案；
+ * 执行器状态始终原样传递，前端不得改判。
  */
 function explanationIncompleteDescriptor(): CustomerReasonDescriptor {
   return {
-    summary: '本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。',
+    summary: '执行器已判定发现质控问题，但当前客户解释资料不完整。',
     detail:
-      '该结果未提供可展示的具体原因、核对标准或证据定位。为避免将无法复核的旧结果误呈现为确定缺陷，请重新质控或补齐该规则的受控解释合同。',
-    requirement: '确定性问题应同时提供规则专属原因、核对标准、实际情况及可定位证据。',
-    suggestion: '请重新质控；如仍出现该提示，请补齐对应规则的受控事实和证据引用后再确认。',
+      '本次结果状态保持为不合规；当前未提供可展示的具体原因、核对标准或证据定位。请复核执行资料并补齐该规则的受控解释合同。',
+    requirement: '不合规结果应同时提供规则专属原因、核对标准、实际情况及可定位证据。',
+    suggestion: '请复核本次执行结果，并补齐对应规则的受控事实和证据引用。',
   }
 }
 
@@ -1776,7 +1774,7 @@ export function normalizeCustomerQcResult(raw: RawCustomerQcResult): CustomerQcR
   const ruleDescriptor = ruleSpecificDescriptor(ruleId, facts)
   const actionableDescriptor = criteriaDisplay?.descriptor ?? ruleDescriptor ?? controlledDescriptor
   const explanationIncomplete = rawDecisionStatus === 'non_compliant' && !actionableDescriptor
-  const decisionStatus = explanationIncomplete ? 'evaluation_unknown' : rawDecisionStatus
+  const decisionStatus = rawDecisionStatus
   const descriptor =
     actionableDescriptor ??
     (explanationIncomplete
@@ -1790,11 +1788,15 @@ export function normalizeCustomerQcResult(raw: RawCustomerQcResult): CustomerQcR
     facts.copySimilarityThreshold !== undefined
       ? `相似度：${formatPercentage(facts.copySimilarity)}；判定阈值：${formatPercentage(facts.copySimilarityThreshold)}；超出阈值：${formatPercentage(Math.max(0, facts.copySimilarity - facts.copySimilarityThreshold)).replace('%', '个百分点')}。`
       : ruleId === 'LX0609-025' && facts.missingFields?.length && facts.implantEvents?.length
-        ? facts.implantEvents.map((event) => {
-            const names = event.implantNames.length ? `（${event.implantNames.join('、')}）` : ''
-            const fields = event.missingFields.map((value) => IMPLANT_FIELD_LABELS[value]).join('、')
-            return `第${event.eventPosition}台手术${names}缺失：${fields}`
-          }).join('；') + '。'
+        ? facts.implantEvents
+            .map((event) => {
+              const names = event.implantNames.length ? `（${event.implantNames.join('、')}）` : ''
+              const fields = event.missingFields
+                .map((value) => IMPLANT_FIELD_LABELS[value])
+                .join('、')
+              return `第${event.eventPosition}台手术${names}缺失：${fields}`
+            })
+            .join('；') + '。'
         : ruleId === 'LX0609-024' && facts.lymphNodeDocumentation?.checkedSources.length
           ? `已确认：本次手术已实施且属于恶性肿瘤手术；已核对来源：${facts.lymphNodeDocumentation.checkedSources.map((source) => PATHOLOGY_SOURCE_LABELS[source]).join('、')}。`
           : ruleId === 'LX0609-028' && facts.prophylaxisDuration

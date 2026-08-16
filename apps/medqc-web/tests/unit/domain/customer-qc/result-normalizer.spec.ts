@@ -29,7 +29,7 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_RAW_FINDING_MUST_NOT_WIN')
   })
 
-  it('缺少解释合同版本时不信任调用方伪造的展示文案', () => {
+  it('缺少解释合同版本时保留执行器状态并隐藏伪造文案', () => {
     const result = normalizeCustomerQcResult({
       schema_version: 'customer-qc-result-v1',
       rule_id: 'LX0609-001',
@@ -41,10 +41,12 @@ describe('normalizeCustomerQcResult', () => {
       suggestion: 'PRIVATE_UNTRUSTED_SUGGESTION',
     })
 
-    expect(result.decisionStatus).toBe('evaluation_unknown')
+    expect(result.decisionStatus).toBe('non_compliant')
     expect(result.display.summary).not.toBe('PRIVATE_UNTRUSTED_CONCLUSION')
     expect(JSON.stringify(result)).not.toContain('PRIVATE_UNTRUSTED')
-    expect(result.display.summary).toContain('暂不作为确定问题展示')
+    expect(result.display.summary).toBe('执行器已判定发现质控问题，但当前客户解释资料不完整。')
+    expect(result.display.detail).toContain('未提供可展示的具体原因')
+    expect(result.display.detail).toContain('结果状态保持为不合规')
   })
 
   it('通用不合规占位文案不能通过客户可解释质量门', () => {
@@ -58,16 +60,16 @@ describe('normalizeCustomerQcResult', () => {
 
     expect(hasActionableCustomerExplanation(raw)).toBe(false)
     const result = normalizeCustomerQcResult(raw)
-    expect(result.decisionStatus).toBe('evaluation_unknown')
+    expect(result.decisionStatus).toBe('non_compliant')
     expect(result.display).toMatchObject({
-      summary: '本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。',
-      requirement: '确定性问题应同时提供规则专属原因、核对标准、实际情况及可定位证据。',
+      summary: '执行器已判定发现质控问题，但当前客户解释资料不完整。',
+      requirement: '不合规结果应同时提供规则专属原因、核对标准、实际情况及可定位证据。',
     })
     expect(JSON.stringify(result)).not.toContain('发现该质控点对应的明确问题')
   })
 
-  it('49 条 LX0609 规则缺少可核对事实时均不得回退为泛化确定问题', () => {
-    const results = Array.from({ length: 49 }, (_, index) =>
+  it('75 条 LX0609 规则缺少可核对事实时均保留状态且不回退泛化文案', () => {
+    const results = Array.from({ length: 75 }, (_, index) =>
       normalizeCustomerQcResult({
         rule_id: `LX0609-${String(index + 1).padStart(3, '0')}`,
         status: 'non_compliant',
@@ -76,10 +78,8 @@ describe('normalizeCustomerQcResult', () => {
     )
 
     for (const result of results) {
-      expect(result.decisionStatus).toBe('evaluation_unknown')
-      expect(result.display.summary).toBe(
-        '本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。',
-      )
+      expect(result.decisionStatus).toBe('non_compliant')
+      expect(result.display.summary).toBe('执行器已判定发现质控问题，但当前客户解释资料不完整。')
       expect(JSON.stringify(result)).not.toContain('发现该质控点对应的明确问题')
     }
   })
@@ -208,9 +208,9 @@ describe('normalizeCustomerQcResult', () => {
 
     expect(result).toMatchObject({
       ruleId: 'LX0609-025',
-      decisionStatus: 'evaluation_unknown',
+      decisionStatus: 'non_compliant',
       display: {
-        summary: '本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。',
+        summary: '执行器已判定发现质控问题，但当前客户解释资料不完整。',
       },
     })
     expect(result.display.actualValue).toBeUndefined()
@@ -247,7 +247,8 @@ describe('normalizeCustomerQcResult', () => {
 
     expect(hasActionableCustomerExplanation(raw)).toBe(true)
     expect(result.display).toMatchObject({
-      summary: '已确认使用永久性植入物；第1台手术（人工硬脑膜）缺少材质；第2台手术（钛网）缺少数量。',
+      summary:
+        '已确认使用永久性植入物；第1台手术（人工硬脑膜）缺少材质；第2台手术（钛网）缺少数量。',
       detail:
         '逐台核对结果：第1台手术（人工硬脑膜）缺少材质；第2台手术（钛网）缺少数量。本次共缺少材质、数量。',
       actualValue: '第1台手术（人工硬脑膜）缺失：材质；第2台手术（钛网）缺失：数量。',
@@ -308,7 +309,7 @@ describe('normalizeCustomerQcResult', () => {
       },
     })
 
-    expect(result.decisionStatus).toBe('evaluation_unknown')
+    expect(result.decisionStatus).toBe('non_compliant')
     expect(JSON.stringify(result)).not.toContain('条码')
   })
 
@@ -320,7 +321,11 @@ describe('normalizeCustomerQcResult', () => {
         performed_surgery_confirmed: true,
         missing_fields: ['implant_material'],
         implant_event_details: [
-          { event_position: 1, missing_fields: ['implant_material'], implant_names: ['人工硬脑膜'] },
+          {
+            event_position: 1,
+            missing_fields: ['implant_material'],
+            implant_names: ['人工硬脑膜'],
+          },
         ],
         source_label: '病程记录',
         source_document_type: 'surgery_record',
@@ -334,7 +339,11 @@ describe('normalizeCustomerQcResult', () => {
         performed_surgery_confirmed: true,
         missing_fields: ['implant_material'],
         implant_event_details: [
-          { event_position: 1, missing_fields: ['implant_material'], implant_names: ['人工硬脑膜'] },
+          {
+            event_position: 1,
+            missing_fields: ['implant_material'],
+            implant_names: ['人工硬脑膜'],
+          },
         ],
         source_label: '手术记录',
       },
@@ -345,7 +354,13 @@ describe('normalizeCustomerQcResult', () => {
       facts: {
         verification_kind: 'implant_information_complete',
         performed_surgery_confirmed: false,
-        checked_fields: ['implant_name', 'implant_type', 'implant_specification', 'implant_material', 'implant_quantity'],
+        checked_fields: [
+          'implant_name',
+          'implant_type',
+          'implant_specification',
+          'implant_material',
+          'implant_quantity',
+        ],
         source_label: '手术记录',
         source_document_type: 'surgery_record',
       },
@@ -355,7 +370,13 @@ describe('normalizeCustomerQcResult', () => {
       status: 'compliant',
       facts: {
         verification_kind: 'implant_information_complete',
-        checked_fields: ['implant_name', 'implant_type', 'implant_specification', 'implant_material', 'implant_quantity'],
+        checked_fields: [
+          'implant_name',
+          'implant_type',
+          'implant_specification',
+          'implant_material',
+          'implant_quantity',
+        ],
         source_label: '手术记录',
         source_document_type: 'surgery_record',
       },
@@ -825,15 +846,15 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_TRANSFUSION_TEXT')
   })
 
-  it('缺少细分原因码时将 LX0609-025 降为建议确认，避免泛化缺陷', () => {
+  it('缺少细分原因码时保留 LX0609-025 状态并使用安全提示', () => {
     const result = normalizeCustomerQcResult({
       rule_id: 'LX0609-025',
       status: 'non_compliant',
       reason_code: 'reason_unavailable',
     })
 
-    expect(result.decisionStatus).toBe('evaluation_unknown')
-    expect(result.display.summary).toContain('暂不作为确定问题展示')
+    expect(result.decisionStatus).toBe('non_compliant')
+    expect(result.display.summary).toContain('执行器已判定发现质控问题')
   })
 
   it('将通用 data_gap 与临床结论分离，并给出安全的补充资料说明', () => {
@@ -865,7 +886,7 @@ describe('normalizeCustomerQcResult', () => {
     expect(result.display.summary).toBe('该结果需要人工复核后确认。')
   })
 
-  it('忽略空 result_status 并保留后续状态；无事实时不得展示为确定问题', () => {
+  it('忽略空 result_status 并原样保留后续状态；无事实时使用安全提示', () => {
     const result = normalizeCustomerQcResult({
       rule_id: 'LX0609-018',
       result_status: '',
@@ -873,7 +894,7 @@ describe('normalizeCustomerQcResult', () => {
       reason_code: 'complaint_too_short',
     })
 
-    expect(result.decisionStatus).toBe('evaluation_unknown')
+    expect(result.decisionStatus).toBe('non_compliant')
   })
 
   it('展示手术记录24小时内完成的实际时间事实', () => {
