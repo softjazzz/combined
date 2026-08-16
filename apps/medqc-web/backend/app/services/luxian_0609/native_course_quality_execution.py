@@ -39,8 +39,15 @@ from .course_quality.rule_018 import (
     _parse_lx018_diagnostic_relation,
     _parse_lx018_medical_analysis,
 )
+from .course_quality.rule_007 import (
+    RULE_007_RECORD_SOURCES as _RULE_007_RECORD_SOURCES,
+    evaluate_rule_007_legacy,
+    evaluate_rule_007_typed as _rule_007_decision,
+    rule_007_customer_display_facts as _rule_007_customer_display_facts,
+)
 from .course_quality.shared import (
     MAX_ROWS_PER_SOURCE as _MAX_ROWS_PER_SOURCE,
+    authoritative_course_time as _authoritative_course_time,
     clean_text as _clean,
     response_json_payload as _response_json_payload,
     row_text as _row_text,
@@ -72,10 +79,6 @@ _COURSE_SOURCES = (
     "daily_course_record",
     "senior_course_record",
     "rescue_record",
-)
-_RULE_007_RECORD_SOURCES = (
-    "daily_course_record",
-    "senior_course_record",
 )
 _RULE_009_EXTERNAL_EVENT_SOURCES = (
     "exam_item_report",
@@ -172,7 +175,6 @@ _RULE_CONTEXT_SOURCES = {
     "LX0609-018": ("admission_record", "diagnosis", "admission_record_diagnosis"),
 }
 
-_RULE_007_MAX_INTERVAL = timedelta(hours=72)
 _RULE_008_MAX_GAP_DAYS = 2
 _RULE_016_EXACT_MATCH = 1.0
 _RULE_009_TEMPLATE_VALUES = frozenset(
@@ -394,20 +396,6 @@ def _timeline_ready(documents: Mapping[str, Any]) -> bool:
     return len(time_markers) >= 2
 
 
-def _authoritative_course_time(value: Any) -> datetime | None:
-    """007 只接受受控文书时间字段，不使用正文或更新时间。"""
-
-    if isinstance(value, datetime):
-        return value if value.tzinfo is None else None
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.strip())
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is None else None
-
-
 def _authoritative_natural_date(value: Any) -> date | None:
     """把权威时间字段收敛为自然日；不读取正文，也不比较时分秒。"""
 
@@ -425,451 +413,6 @@ def _authoritative_natural_date(value: Any) -> date | None:
             return date.fromisoformat(normalized)
         except ValueError:
             return None
-
-
-def _rule_007_result(
-    *,
-    serious_state: str,
-    critical_state: str,
-    institute_id: str,
-    patient_id: str,
-    visit_id: str,
-    source_schema: str | None,
-    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
-    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
-) -> dict[str, Any]:
-    if serious_state == "present" or critical_state == "present":
-        return _result(
-            "LX0609-007",
-            "not_applicable",
-            "unstable_patient_fact_present",
-            executor_type="program",
-        )
-
-    coordinates = (institute_id, patient_id, visit_id)
-    if not all(str(value or "").strip() for value in coordinates):
-        return _result(
-            "LX0609-007",
-            "data_gap",
-            "course_time_source_unavailable",
-            executor_type="program",
-        )
-
-    try:
-        if evidence_snapshot is not None:
-            unstable_order_state = _snapshot_unstable_order_state(evidence_snapshot)
-            if unstable_order_state == "unavailable":
-                raise ValueError("controlled fact unavailable")
-            unstable_order_present = unstable_order_state == "present"
-        else:
-            unstable_order_present = has_luxian_0609_current_visit_unstable_order(
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                source_schema=source_schema,
-            )
-        if unstable_order_present:
-            return _result(
-                "LX0609-007",
-                "not_applicable",
-                "unstable_patient_order_present",
-                executor_type="program",
-            )
-
-        record_times: set[datetime] = set()
-        substantive_record_without_time = False
-        for source_key in _RULE_007_RECORD_SOURCES:
-            rows = (
-                [dict(row) for row in evidence_materials.rows(source_key)]
-                if evidence_materials is not None
-                else read_luxian_0609_native_source_rows(
-                    source_key=source_key,
-                    institute_id=institute_id,
-                    patient_id=patient_id,
-                    visit_id=visit_id,
-                    source_schema=source_schema,
-                )
-            )
-            if len(rows) >= luxian_0609_native_source_row_limit(source_key):
-                return _result(
-                    "LX0609-007",
-                    "data_gap",
-                    "course_time_source_truncated",
-                    executor_type="program",
-                )
-            for row in rows:
-                parsed = _authoritative_course_time(authoritative_document_time_value(row))
-                if parsed is not None:
-                    record_times.add(parsed)
-                elif _row_text(row):
-                    substantive_record_without_time = True
-    except EvidenceMaterialTruncated:
-        return _result(
-            "LX0609-007",
-            "data_gap",
-            "course_time_source_truncated",
-            executor_type="program",
-        )
-    except Exception:
-        return _result(
-            "LX0609-007",
-            "data_gap",
-            "course_time_source_unavailable",
-            executor_type="program",
-        )
-
-    ordered_times = sorted(record_times)
-    if len(ordered_times) < 2:
-        return _result(
-            "LX0609-007",
-            "data_gap",
-            "authoritative_course_time_unavailable",
-            executor_type="program",
-        )
-    interval_over_72h = any(
-        current - previous > _RULE_007_MAX_INTERVAL
-        for previous, current in zip(ordered_times, ordered_times[1:])
-    )
-    if interval_over_72h and substantive_record_without_time:
-        return _result(
-            "LX0609-007",
-            "data_gap",
-            "authoritative_course_time_incomplete",
-            executor_type="program",
-        )
-    if interval_over_72h:
-        return _result(
-            "LX0609-007",
-            "non_compliant",
-            "course_record_interval_over_72h",
-            executor_type="program",
-        )
-    return _result(
-        "LX0609-007",
-        "compliant",
-        "course_record_interval_within_72h",
-        executor_type="program",
-    )
-
-
-def _snapshot_unstable_order_state(
-    snapshot: Luxian0609EvidenceSnapshot,
-) -> str:
-    source_key = "inpat_nondrug_order.unstable_order"
-    observations = tuple(
-        item for item in snapshot.observations if item.source_key == source_key
-    )
-    facts = tuple(
-        item
-        for item in snapshot.facts
-        if item.source_key == source_key
-        and item.fact_type == "current_visit_unstable_order"
-    )
-    if len(observations) != 1 or len(facts) != 1:
-        return "unavailable"
-    observation = observations[0]
-    fact = facts[0]
-    normalized_value = fact.normalized_value
-    if not isinstance(normalized_value, Mapping):
-        return "unavailable"
-    present = normalized_value.get("present")
-    if (
-        observation.query_state.value == "available"
-        and fact.assertion.value == "affirmed"
-        and present is True
-    ):
-        return "present"
-    if (
-        observation.query_state.value == "empty"
-        and fact.assertion.value == "negated"
-        and present is False
-    ):
-        return "absent"
-    return "unavailable"
-
-
-def _rule_007_decision(
-    *,
-    snapshot: Luxian0609EvidenceSnapshot,
-    materials: Luxian0609EvidenceMaterialStore,
-) -> RuleDecision:
-    """只用同一 snapshot 的不稳定医嘱事实和两类病程权威时间裁决007。"""
-
-    if (
-        type(snapshot) is not Luxian0609EvidenceSnapshot
-        or type(materials) is not Luxian0609EvidenceMaterialStore
-        or materials.snapshot_hash != snapshot.snapshot_hash
-    ):
-        raise ValueError("typed 007 evidence session mismatch")
-
-    evaluator_version = "rule007-authoritative-time-v1"
-    observation_by_source = {
-        item.source_key: item for item in snapshot.observations
-    }
-
-    def decision(
-        *,
-        applicability: ApplicabilityState,
-        evidence_state: EvidenceState,
-        qc_direction: QcDirection,
-        reason_code: str,
-        refs: set[str],
-        confidence: float | None,
-    ) -> RuleDecision:
-        return RuleDecision(
-            rule_id="LX0609-007",
-            snapshot_hash=snapshot.snapshot_hash,
-            applicability=applicability,
-            evidence_state=evidence_state,
-            qc_direction=qc_direction,
-            reason_code=reason_code,
-            fact_refs=tuple(refs),
-            evaluator_version=evaluator_version,
-            confidence=confidence,
-        )
-
-    required_sources = (
-        "inpat_nondrug_order.unstable_order",
-        *_RULE_007_RECORD_SOURCES,
-    )
-    observations = {
-        source_key: observation_by_source.get(source_key)
-        for source_key in required_sources
-    }
-    if any(item is None for item in observations.values()):
-        return decision(
-            applicability=ApplicabilityState.ERROR,
-            evidence_state=EvidenceState.TECHNICAL_ERROR,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="snapshot_mismatch",
-            refs=set(),
-            confidence=None,
-        )
-    refs = {
-        item.snapshot_ref.removeprefix("sha256:")
-        for item in observations.values()
-        if item is not None
-    }
-
-    unstable_source = "inpat_nondrug_order.unstable_order"
-    unstable_observation = observations[unstable_source]
-    assert unstable_observation is not None
-    if unstable_observation.query_state.value == "error":
-        return decision(
-            applicability=ApplicabilityState.ERROR,
-            evidence_state=EvidenceState.TECHNICAL_ERROR,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="source_query_error",
-            refs=refs,
-            confidence=None,
-        )
-    if unstable_observation.query_state.value == "unavailable":
-        return decision(
-            applicability=ApplicabilityState.UNKNOWN,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="applicability_source_gap",
-            refs=refs,
-            confidence=None,
-        )
-    unstable_facts = tuple(
-        item
-        for item in snapshot.facts
-        if item.source_key == unstable_source
-        and item.fact_type == "current_visit_unstable_order"
-    )
-    if len(unstable_facts) != 1:
-        return decision(
-            applicability=ApplicabilityState.ERROR,
-            evidence_state=EvidenceState.TECHNICAL_ERROR,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="snapshot_mismatch",
-            refs=refs,
-            confidence=None,
-        )
-    unstable_fact = unstable_facts[0]
-    refs.add(unstable_fact.fact_id)
-    unstable_value = unstable_fact.normalized_value
-    unstable_present = (
-        isinstance(unstable_value, Mapping)
-        and unstable_value.get("present") is True
-        and unstable_fact.assertion.value == "affirmed"
-    )
-    unstable_absent = (
-        isinstance(unstable_value, Mapping)
-        and unstable_value.get("present") is False
-        and unstable_fact.assertion.value == "negated"
-    )
-    if unstable_present:
-        return decision(
-            applicability=ApplicabilityState.NOT_APPLICABLE,
-            evidence_state=EvidenceState.SUFFICIENT,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="eligibility_not_met",
-            refs=refs,
-            confidence=1.0,
-        )
-    if not unstable_absent:
-        return decision(
-            applicability=ApplicabilityState.ERROR,
-            evidence_state=EvidenceState.TECHNICAL_ERROR,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="snapshot_mismatch",
-            refs=refs,
-            confidence=None,
-        )
-
-    record_times: set[datetime] = set()
-    substantive_record_without_time = False
-    for source_key in _RULE_007_RECORD_SOURCES:
-        observation = observations[source_key]
-        assert observation is not None
-        if observation.query_state.value == "error":
-            return decision(
-                applicability=ApplicabilityState.ERROR,
-                evidence_state=EvidenceState.TECHNICAL_ERROR,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="source_query_error",
-                refs=refs,
-                confidence=None,
-            )
-        if observation.query_state.value == "unavailable":
-            return decision(
-                applicability=ApplicabilityState.APPLICABLE,
-                evidence_state=EvidenceState.DATA_GAP,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="source_unavailable",
-                refs=refs,
-                confidence=None,
-            )
-        if observation.completeness.value == "truncated":
-            return decision(
-                applicability=ApplicabilityState.APPLICABLE,
-                evidence_state=EvidenceState.DATA_GAP,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="source_truncated",
-                refs=refs,
-                confidence=None,
-            )
-        try:
-            rows = materials.rows(source_key)
-        except EvidenceMaterialTruncated:
-            return decision(
-                applicability=ApplicabilityState.APPLICABLE,
-                evidence_state=EvidenceState.DATA_GAP,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="source_truncated",
-                refs=refs,
-                confidence=None,
-            )
-        except Exception:
-            return decision(
-                applicability=ApplicabilityState.ERROR,
-                evidence_state=EvidenceState.TECHNICAL_ERROR,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="snapshot_mismatch",
-                refs=refs,
-                confidence=None,
-            )
-        for row in rows:
-            parsed = _authoritative_course_time(authoritative_document_time_value(row))
-            if parsed is not None:
-                record_times.add(parsed)
-            elif _row_text(row):
-                substantive_record_without_time = True
-
-    ordered_times = sorted(record_times)
-    if len(ordered_times) < 2:
-        return decision(
-            applicability=ApplicabilityState.APPLICABLE,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="authoritative_time_missing",
-            refs=refs,
-            confidence=None,
-        )
-    interval_over_72h = any(
-        current - previous > _RULE_007_MAX_INTERVAL
-        for previous, current in zip(ordered_times, ordered_times[1:])
-    )
-    if interval_over_72h and substantive_record_without_time:
-        return decision(
-            applicability=ApplicabilityState.APPLICABLE,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="authoritative_time_missing",
-            refs=refs,
-            confidence=None,
-        )
-    return decision(
-        applicability=ApplicabilityState.APPLICABLE,
-        evidence_state=EvidenceState.SUFFICIENT,
-        qc_direction=(
-            QcDirection.DEFECT if interval_over_72h else QcDirection.SATISFIED
-        ),
-        reason_code=(
-            "threshold_exceeded"
-            if interval_over_72h
-            else "requirement_within_threshold"
-        ),
-        refs=refs,
-        confidence=1.0,
-    )
-
-
-def _rule_007_customer_display_facts(
-    *,
-    materials: Luxian0609EvidenceMaterialStore,
-    decision: RuleDecision,
-) -> Mapping[str, Any] | None:
-    """为007输出实际查房间隔或不适用门控事实，不返回病历正文。"""
-
-    if decision.rule_id != "LX0609-007":
-        return None
-    if (
-        decision.applicability is ApplicabilityState.NOT_APPLICABLE
-        and decision.reason_code == "eligibility_not_met"
-    ):
-        return {
-            "failure_kind": "unstable_patient_order_present",
-            "stable_course_rule_applicable": False,
-        }
-    if decision.evidence_state is not EvidenceState.SUFFICIENT:
-        return None
-    source_by_time: dict[datetime, str] = {}
-    try:
-        for source_key in _RULE_007_RECORD_SOURCES:
-            for row in materials.rows(source_key):
-                if (
-                    record_time := _authoritative_course_time(
-                        authoritative_document_time_value(row)
-                    )
-                ) is not None:
-                    source_by_time.setdefault(record_time, source_key)
-    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
-        return None
-    ordered_times = sorted(source_by_time)
-    intervals = tuple(
-        (current - previous, previous, current)
-        for previous, current in zip(ordered_times, ordered_times[1:])
-    )
-    if not intervals:
-        return None
-    interval, previous, current = max(intervals, key=lambda item: item[0])
-    return {
-        "failure_kind": (
-            "course_record_interval_over_72h"
-            if interval > _RULE_007_MAX_INTERVAL
-            else "course_record_interval_within_72h"
-        ),
-        "interval_start_source": source_by_time[previous],
-        "interval_end_source": source_by_time[current],
-        "interval_start_time": previous.strftime("%Y-%m-%d %H:%M:%S"),
-        "interval_end_time": current.strftime("%Y-%m-%d %H:%M:%S"),
-        "interval_hours": round(interval.total_seconds() / 3600, 2),
-        "threshold_hours": 72,
-        "recorded_dates": [item.date().isoformat() for item in ordered_times],
-    }
 
 
 def _rule_008_009_decision(
@@ -3705,16 +3248,25 @@ async def execute_luxian_0609_native_course_quality_rules(
 
         controlled_fact = ""
         if rule_id == "LX0609-007":
+            outcome = evaluate_rule_007_legacy(
+                serious_state=serious_state,
+                critical_state=critical_state,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+                unstable_order_reader=has_luxian_0609_current_visit_unstable_order,
+                source_row_reader=read_luxian_0609_native_source_rows,
+                source_row_limit=luxian_0609_native_source_row_limit,
+                evidence_snapshot=evidence_snapshot,
+                evidence_materials=evidence_materials,
+            )
             results.append(
-                _rule_007_result(
-                    serious_state=serious_state,
-                    critical_state=critical_state,
-                    institute_id=institute_id,
-                    patient_id=patient_id,
-                    visit_id=visit_id,
-                    source_schema=source_schema,
-                    evidence_snapshot=evidence_snapshot,
-                    evidence_materials=evidence_materials,
+                _result(
+                    rule_id,
+                    outcome.status,
+                    outcome.reason_code,
+                    executor_type="program",
                 )
             )
             continue

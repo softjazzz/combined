@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import re
 from typing import Any, Mapping
 
 
 MAX_ROWS_PER_SOURCE = 8
+
+
+def authoritative_course_time(value: Any) -> datetime | None:
+    """只接受受控文书时间字段，不使用正文或更新时间。"""
+
+    if isinstance(value, datetime):
+        return value if value.tzinfo is None else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is None else None
 
 
 def clean_text(value: Any) -> str:
