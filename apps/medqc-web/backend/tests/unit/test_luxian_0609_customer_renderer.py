@@ -479,6 +479,30 @@ NOT_APPLICABLE_CASES = (
             "已核对会诊申请目的，其中未说明具体临床问题、会诊理由或明确目的。",
         ),
         (
+            "LX0609-021",
+            {
+                "verification_kind": "consultation_application_quality_check",
+                "episode_count": 4,
+                "document_count": 4,
+                "semantic_state": "mixed",
+                "checked_requirement": "说明具体临床问题、会诊理由或明确会诊目的",
+                "source_document_ids": ["opaque-1", "opaque-2"],
+            },
+            "共核对4次会诊申请，其中部分申请未说明具体临床问题、会诊理由或明确目的。",
+        ),
+        (
+            "LX0609-022",
+            {
+                "verification_kind": "consultation_opinion_quality_check",
+                "episode_count": 3,
+                "document_count": 3,
+                "semantic_state": "vague",
+                "checked_requirement": "给出针对当前病情的明确诊疗意见",
+                "source_document_ids": ["opaque-1"],
+            },
+            "共核对3次会诊意见，均未给出针对当前病情的明确诊疗意见。",
+        ),
+        (
             "LX0609-026",
             {
                 "verification_kind": "chemotherapy_order_course_comparison",

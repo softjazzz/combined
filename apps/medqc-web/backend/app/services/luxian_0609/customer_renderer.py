@@ -1795,6 +1795,30 @@ def customer_finding_from_controlled_facts(
             return "已找到会诊意见及对应的明确执行记录。"
 
     if rule_id in {"LX0609-021", "LX0609-022"}:
+        semantic_kind = (
+            "consultation_application_quality_check"
+            if rule_id == "LX0609-021"
+            else "consultation_opinion_quality_check"
+        )
+        semantic_state = str(facts.get("semantic_state") or "")
+        episode_count = facts.get("episode_count")
+        if (
+            kind == semantic_kind
+            and type(episode_count) is int
+            and 1 <= episode_count <= 100
+            and semantic_state in {"clear", "vague", "mixed"}
+        ):
+            if rule_id == "LX0609-021":
+                if semantic_state == "clear":
+                    return f"共核对{episode_count}次会诊申请，均已说明具体临床问题、会诊理由或明确目的。"
+                if semantic_state == "vague":
+                    return f"共核对{episode_count}次会诊申请，均未说明具体临床问题、会诊理由或明确目的。"
+                return f"共核对{episode_count}次会诊申请，其中部分申请未说明具体临床问题、会诊理由或明确目的。"
+            if semantic_state == "clear":
+                return f"共核对{episode_count}次会诊意见，均已给出针对当前病情的明确诊疗意见。"
+            if semantic_state == "vague":
+                return f"共核对{episode_count}次会诊意见，均未给出针对当前病情的明确诊疗意见。"
+            return f"共核对{episode_count}次会诊意见，其中部分意见未给出针对当前病情的明确诊疗意见。"
         assessment = str(facts.get("consultation_assessment") or "")
         target = "会诊申请目的" if rule_id == "LX0609-021" else "会诊意见"
         requirement = (
