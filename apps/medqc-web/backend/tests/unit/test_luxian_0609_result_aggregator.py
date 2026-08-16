@@ -308,22 +308,168 @@ def test_010_new_contract_rejects_invalid_or_private_association_facts(
     assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-010", raw=facts) is None
 
 
-def test_010_invalid_new_contract_never_falls_back_to_uncontrolled_display_facts() -> None:
+@pytest.mark.parametrize("entry_path", ("explicit", "native_metadata", "native_top_level"))
+def test_010_invalid_strict_contract_is_silently_discarded(entry_path) -> None:
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     )
     invalid = {**_010_association_facts(), "private_text": "must-not-pass"}
+    execution_result = {
+        "rule_id": "LX0609-010",
+        "status": "non_compliant",
+        "findings": "关联资料待核实。",
+    }
+    customer_display_facts = ()
+    if entry_path == "explicit":
+        customer_display_facts = (("LX0609-010", invalid),)
+    else:
+        execution_result["metadata"] = {
+            "execution_source": "lx0609_native",
+            "executor_type": "program",
+        }
+        if entry_path == "native_metadata":
+            execution_result["metadata"]["customer_display_facts"] = invalid
+        else:
+            execution_result["customer_display_facts"] = invalid
 
     result = module.aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-010"}],
-        execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-010"),),
-        customer_display_facts=(("LX0609-010", invalid),),
+        execution_results=[execution_result],
+        customer_display_facts=customer_display_facts,
     )[0]
 
     assert "customer_display_facts" not in result
     assert "customer_evidence" not in result
+    assert "must-not-pass" not in repr(result)
+
+
+@pytest.mark.parametrize("entry_path", ("explicit", "native_metadata", "native_top_level"))
+@pytest.mark.parametrize("requirement", (None, "reason_before_order"))
+def test_010_non_strict_invalid_facts_fail_closed(entry_path, requirement) -> None:
+    private_marker = "PRIVATE_NON_STRICT_010_FACT"
+    invalid = {"raw_private_text": private_marker}
+    if requirement is not None:
+        invalid["requirement"] = requirement
+    execution_result = {
+        "rule_id": "LX0609-010",
+        "status": "non_compliant",
+        "findings": "规则要求未满足。",
+    }
+    customer_display_facts = ()
+    if entry_path == "explicit":
+        customer_display_facts = (("LX0609-010", invalid),)
+    else:
+        execution_result["metadata"] = {
+            "execution_source": "lx0609_native",
+            "executor_type": "program",
+        }
+        if entry_path == "native_metadata":
+            execution_result["metadata"]["customer_display_facts"] = invalid
+        else:
+            execution_result["customer_display_facts"] = invalid
+
+    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": "LX0609-010"}],
+            execution_results=[execution_result],
+            customer_display_facts=customer_display_facts,
+        )
+
+    assert private_marker not in str(exc_info.value)
+
+
+def test_native_equal_dual_source_customer_facts_are_accepted() -> None:
+    facts = _010_association_facts()
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-010"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-010",
+                "status": "non_compliant",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "executor_type": "program",
+                    "customer_display_facts": dict(facts),
+                },
+                "customer_display_facts": dict(facts),
+            }
+        ],
+    )[0]
+
+    assert result["customer_display_facts"] == facts
+
+
+def test_native_conflicting_dual_source_safe_facts_fail_closed() -> None:
+    top_level_facts = _010_association_facts()
+    metadata_facts = {
+        **_010_association_facts(),
+        "order_count": 7,
+        "unmatched_or_ambiguous_order_count": 6,
+    }
+
+    with pytest.raises(ValueError, match="^invalid customer display facts$"):
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": "LX0609-010"}],
+            execution_results=[
+                {
+                    "rule_id": "LX0609-010",
+                    "status": "non_compliant",
+                    "metadata": {
+                        "execution_source": "lx0609_native",
+                        "executor_type": "program",
+                        "customer_display_facts": metadata_facts,
+                    },
+                    "customer_display_facts": top_level_facts,
+                }
+            ],
+        )
+
+
+def test_native_conflicting_dual_source_010_strict_raw_facts_fail_closed() -> None:
+    top_level_facts = {**_010_association_facts(), "private_text": "PRIVATE-A"}
+    metadata_facts = {**_010_association_facts(), "private_text": "PRIVATE-B"}
+
+    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": "LX0609-010"}],
+            execution_results=[
+                {
+                    "rule_id": "LX0609-010",
+                    "status": "non_compliant",
+                    "metadata": {
+                        "execution_source": "lx0609_native",
+                        "executor_type": "program",
+                        "customer_display_facts": metadata_facts,
+                    },
+                    "customer_display_facts": top_level_facts,
+                }
+            ],
+        )
+
+    assert "PRIVATE-A" not in str(exc_info.value)
+    assert "PRIVATE-B" not in str(exc_info.value)
+
+
+def test_native_equal_dual_source_010_strict_raw_facts_are_discarded() -> None:
+    strict_facts = {**_010_association_facts(), "private_text": "must-not-pass"}
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-010"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-010",
+                "status": "non_compliant",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "executor_type": "program",
+                    "customer_display_facts": dict(strict_facts),
+                },
+                "customer_display_facts": dict(strict_facts),
+            }
+        ],
+    )[0]
+
+    assert "customer_display_facts" not in result
     assert "must-not-pass" not in repr(result)
 
 
@@ -1481,32 +1627,31 @@ def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monke
     )
 
 
-def test_reduced_decision_preserves_controlled_customer_display_facts():
+def test_reduced_decision_rejects_unsupported_018_customer_display_facts():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     )
-    result = module.aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
-        execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-018"),),
-        customer_display_facts=(
-            (
-                "LX0609-018",
-                {
-                    "complaint_length": 12,
-                    "diagnostic_relation_state": "supported",
-                    "source_label": "入院记录—主诉",
-                },
-            ),
-        ),
-    )[0]
+    private_marker = "PRIVATE_UNSUPPORTED_018_FACT"
 
-    assert result["customer_display_facts"] == {
-        "complaint_length": 12,
-        "diagnostic_relation_state": "supported",
-        "source_label": "入院记录—主诉",
-    }
+    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+        module.aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+            execution_results=[],
+            reduced_decisions=(_reduced_decision("LX0609-018"),),
+            customer_display_facts=(
+                (
+                    "LX0609-018",
+                    {
+                        "complaint_length": 12,
+                        "diagnostic_relation_state": "supported",
+                        "source_label": private_marker,
+                    },
+                ),
+            ),
+        )
+
+    assert private_marker not in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -2517,6 +2662,73 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
     assert "PRIVATE_" not in repr(result)
 
 
+_STRICT_CUSTOMER_FACT_RULES = (
+    "LX0609-005",
+    "LX0609-009",
+    "LX0609-011",
+    "LX0609-030",
+    "LX0609-040",
+    "LX0609-043",
+    "LX0609-054",
+    "LX0609-064",
+    "LX0609-071",
+)
+
+
+@pytest.mark.parametrize("entry_path", ("explicit", "native_metadata", "native_top_level"))
+@pytest.mark.parametrize("rule_id", _STRICT_CUSTOMER_FACT_RULES)
+def test_public_aggregation_rejects_invalid_customer_display_facts(
+    rule_id, entry_path
+) -> None:
+    private_marker = f"PRIVATE_CUSTOMER_FACT_{rule_id}"
+    invalid_facts = {"raw_private_text": private_marker}
+    execution_result = {
+        "rule_id": rule_id,
+        "status": "non_compliant",
+        "findings": "规则要求未满足。",
+    }
+    customer_display_facts = ()
+    if entry_path == "explicit":
+        customer_display_facts = ((rule_id, invalid_facts),)
+    else:
+        execution_result["metadata"] = {
+            "execution_source": "lx0609_native",
+            "executor_type": "program",
+        }
+        if entry_path == "native_metadata":
+            execution_result["metadata"]["customer_display_facts"] = invalid_facts
+        else:
+            execution_result["customer_display_facts"] = invalid_facts
+
+    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+            execution_results=[execution_result],
+            customer_display_facts=customer_display_facts,
+            format_evidence=False,
+        )
+
+    assert private_marker not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("rule_id", _STRICT_CUSTOMER_FACT_RULES)
+def test_public_aggregation_allows_rules_without_customer_display_facts(rule_id) -> None:
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+        execution_results=[
+            {
+                "rule_id": rule_id,
+                "status": "non_compliant",
+                "findings": "规则要求未满足。",
+            }
+        ],
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "non_compliant"
+    assert "customer_display_facts" not in result
+
+
 def test_025_multi_surgery_projection_keeps_event_facts_and_all_real_evidence() -> None:
     raw_facts = {
         "failure_kind": "implant_information_incomplete",
@@ -3030,43 +3242,44 @@ def test_native_display_facts_create_only_whitelisted_internal_evidence_refs(
     assert "source_document_ids" not in result["customer_display_facts"]
 
 
-def test_native_result_precedes_higher_confidence_compatibility_result():
+def test_native_018_invalid_customer_display_facts_fail_closed():
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
+    private_marker = "PRIVATE_UNSUPPORTED_NATIVE_018_FACT"
 
-    result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
-        execution_results=[
-            {
-                "rule_id": "LX0609-018",
-                "status": "non_compliant",
-                "confidence": 0.99,
-                "findings": "兼容链通用结论",
-                "metadata": {"execution_source": "compatibility"},
-            },
-            {
-                "rule_id": "LX0609-018",
-                "status": "non_compliant",
-                "confidence": 0.1,
-                "findings": "原生结论",
-                "metadata": {
-                    "execution_source": "lx0609_native",
-                    "executor_type": "llm",
-                    "customer_display_facts": {
-                        "complaint_length": 21,
-                        "length_state": "violated",
-                        "diagnostic_relation_state": "supported",
-                        "source_label": "入院记录—主诉字段",
+    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+        aggregate(
+            wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+            execution_results=[
+                {
+                    "rule_id": "LX0609-018",
+                    "status": "non_compliant",
+                    "confidence": 0.99,
+                    "findings": "兼容链通用结论",
+                    "metadata": {"execution_source": "compatibility"},
+                },
+                {
+                    "rule_id": "LX0609-018",
+                    "status": "non_compliant",
+                    "confidence": 0.1,
+                    "findings": "原生结论",
+                    "metadata": {
+                        "execution_source": "lx0609_native",
+                        "executor_type": "llm",
+                        "customer_display_facts": {
+                            "complaint_length": 21,
+                            "length_state": "violated",
+                            "diagnostic_relation_state": "supported",
+                            "source_label": private_marker,
+                        },
                     },
                 },
-            },
-        ],
-    )[0]
+            ],
+        )
 
-    assert result["metadata"]["execution_source"] == "lx0609_native"
-    assert "customer_display_facts" not in result
+    assert private_marker not in str(exc_info.value)
 
 
 def test_exam_lab_native_result_preserves_only_safe_explanation_facts():
@@ -3103,23 +3316,36 @@ def test_exam_lab_native_result_preserves_only_safe_explanation_facts():
     assert "PRIVATE_TEXT" not in repr(result)
 
 
-def test_transfusion_native_result_preserves_only_safe_explanation_facts():
+@pytest.mark.parametrize(
+    ("rule_id", "system_gap_reason"),
+    (
+        ("LX0609-041", "consent_source_unavailable"),
+        ("LX0609-042", "consent_signature_contract_unavailable"),
+        ("LX0609-043", "pretransfusion_item_contract_unavailable"),
+        ("LX0609-044", "pretransfusion_assessment_source_unavailable"),
+        ("LX0609-048", "transfusion_comparison_fields_unavailable"),
+    ),
+)
+def test_transfusion_native_result_preserves_only_controlled_system_gap_facts(
+    rule_id, system_gap_reason
+):
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
     result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-048", "name": "术中输血记录"}],
+        wrapper_rules=[{"rule_id": rule_id, "name": "输血记录"}],
         execution_results=[{
-            "rule_id": "LX0609-048",
+            "rule_id": rule_id,
             "status": "data_gap",
             "metadata": {
                 "execution_source": "lx0609_native",
                 "customer_display_facts": {
                     "failure_kind": "system_data_contract_gap",
-                    "system_gap_reason": "transfusion_comparison_fields_unavailable",
+                    "system_gap_reason": system_gap_reason,
                     "gap_owner": "system_integration",
-                    "private_text": "PRIVATE_TRANSFUSION_TEXT",
+                    "conclusion": "当前资料不完整，暂无法形成可靠结论。",
+                    "handling_suggestion": "请补齐相关资料后重新质控。",
                 },
             },
         }],
@@ -3127,10 +3353,92 @@ def test_transfusion_native_result_preserves_only_safe_explanation_facts():
 
     assert result["customer_display_facts"] == {
         "failure_kind": "system_data_contract_gap",
-        "system_gap_reason": "transfusion_comparison_fields_unavailable",
+        "system_gap_reason": system_gap_reason,
         "gap_owner": "system_integration",
     }
-    assert "PRIVATE_TRANSFUSION_TEXT" not in repr(result)
+    assert "当前资料不完整" not in repr(result)
+    assert "请补齐相关资料" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "system_gap_reason"),
+    (
+        ("LX0609-041", "transfusion_comparison_fields_unavailable"),
+        ("LX0609-048", "consent_source_unavailable"),
+    ),
+)
+def test_transfusion_system_gap_reason_cannot_be_borrowed_between_rules(
+    rule_id, system_gap_reason
+):
+    private_marker = "PRIVATE_TRANSFUSION_TEXT"
+    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": rule_id}],
+            execution_results=[{
+                "rule_id": rule_id,
+                "status": "data_gap",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "customer_display_facts": {
+                        "failure_kind": "system_data_contract_gap",
+                        "system_gap_reason": system_gap_reason,
+                        "gap_owner": "system_integration",
+                        "conclusion": "当前资料不完整。",
+                        "handling_suggestion": "请补齐资料。",
+                        "private_text": private_marker,
+                    },
+                },
+            }],
+        )
+
+    assert private_marker not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "system_gap_reason"),
+    (
+        ("LX0609-041", "consent_source_unavailable"),
+        ("LX0609-042", "consent_signature_contract_unavailable"),
+        ("LX0609-043", "pretransfusion_item_contract_unavailable"),
+        ("LX0609-044", "pretransfusion_assessment_source_unavailable"),
+        ("LX0609-048", "transfusion_comparison_fields_unavailable"),
+    ),
+)
+@pytest.mark.parametrize("entry_path", ("native", "reduced"))
+def test_transfusion_system_gap_facts_require_data_gap_status(
+    rule_id, system_gap_reason, entry_path
+):
+    facts = {
+        "failure_kind": "system_data_contract_gap",
+        "system_gap_reason": system_gap_reason,
+        "gap_owner": "system_integration",
+        "conclusion": "当前资料不完整。",
+        "handling_suggestion": "请补齐资料。",
+    }
+    kwargs = {
+        "wrapper_rules": [{"rule_id": rule_id}],
+        "execution_results": [],
+        "customer_display_facts": ((rule_id, facts),),
+    }
+    if entry_path == "native":
+        kwargs["execution_results"] = [
+            {
+                "rule_id": rule_id,
+                "status": "compliant",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "customer_display_facts": facts,
+                },
+            }
+        ]
+    else:
+        kwargs["reduced_decisions"] = (_reduced_decision(rule_id),)
+
+    with pytest.raises(
+        ValueError,
+        match="^invalid transfusion customer display fact status$",
+    ):
+        aggregate_luxian_0609_results(**kwargs)
 
 
 @pytest.mark.parametrize(

@@ -1937,6 +1937,32 @@ def _build_diagnostic_trace(
     )
 
 
+_TRANSFUSION_SYSTEM_GAP_REASONS = {
+    "LX0609-041": "consent_source_unavailable",
+    "LX0609-042": "consent_signature_contract_unavailable",
+    "LX0609-043": "pretransfusion_item_contract_unavailable",
+    "LX0609-044": "pretransfusion_assessment_source_unavailable",
+    "LX0609-048": "transfusion_comparison_fields_unavailable",
+}
+
+
+def _validate_transfusion_system_gap_fact_status(
+    *,
+    rule_id: str,
+    status: str,
+    safe_facts: Mapping[str, Any] | None,
+) -> None:
+    """系统资料缺口只能交付 data_gap，禁止与合规或确定问题并存。"""
+
+    if (
+        rule_id in _TRANSFUSION_SYSTEM_GAP_REASONS
+        and isinstance(safe_facts, Mapping)
+        and safe_facts.get("failure_kind") == "system_data_contract_gap"
+        and status != "data_gap"
+    ):
+        raise ValueError("invalid transfusion customer display fact status")
+
+
 def _validate_lx0609_025_fact_status(
     *,
     rule_id: str,
@@ -2560,6 +2586,41 @@ def safe_luxian_0609_customer_display_facts(
                 return None
         return safe
 
+    expected_transfusion_system_gap_reason = _TRANSFUSION_SYSTEM_GAP_REASONS.get(rule_id)
+    if (
+        expected_transfusion_system_gap_reason is not None
+        and raw.get("failure_kind") == "system_data_contract_gap"
+    ):
+        allowed_keys = {
+            "failure_kind",
+            "system_gap_reason",
+            "gap_owner",
+            "conclusion",
+            "handling_suggestion",
+        }
+        conclusion = raw.get("conclusion")
+        handling_suggestion = raw.get("handling_suggestion")
+        if (
+            set(raw) != allowed_keys
+            or raw.get("system_gap_reason")
+            != expected_transfusion_system_gap_reason
+            or raw.get("gap_owner") != "system_integration"
+            or not isinstance(conclusion, str)
+            or not conclusion.strip()
+            or len(conclusion) > 500
+            or "\n" in conclusion
+            or not isinstance(handling_suggestion, str)
+            or not handling_suggestion.strip()
+            or len(handling_suggestion) > 500
+            or "\n" in handling_suggestion
+        ):
+            return None
+        return {
+            "failure_kind": "system_data_contract_gap",
+            "system_gap_reason": expected_transfusion_system_gap_reason,
+            "gap_owner": "system_integration",
+        }
+
     if rule_id == "LX0609-041":
         if (
             raw.get("verification_kind") == "transfusion_consent_present"
@@ -2747,17 +2808,6 @@ def safe_luxian_0609_customer_display_facts(
                 result["required_items"] = required
             return append_lx070_event_facts(result)
         return None
-    if rule_id == "LX0609-048" and (
-        raw.get("failure_kind") == "system_data_contract_gap"
-        and raw.get("system_gap_reason")
-        == "transfusion_comparison_fields_unavailable"
-        and raw.get("gap_owner") == "system_integration"
-    ):
-        return {
-            "failure_kind": "system_data_contract_gap",
-            "system_gap_reason": "transfusion_comparison_fields_unavailable",
-            "gap_owner": "system_integration",
-        }
     if rule_id in {"LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"}:
         kind = raw.get("verification_kind") or raw.get("failure_kind")
         if rule_id == "LX0609-044" and kind in {
@@ -5686,6 +5736,21 @@ def _copy_native_customer_fields(
 ) -> dict[str, Any]:
     """原生结果不携带旧映射诊断，并保留程序/模型执行类型。"""
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
+
+    def reject_invalid_display_facts() -> None:
+        if wrapper_id == "LX0609-017":
+            raise ValueError("invalid copy customer display facts")
+        if wrapper_id in {
+            "LX0609-020",
+            "LX0609-021",
+            "LX0609-022",
+            "LX0609-023",
+        }:
+            raise ValueError("invalid consultation customer display facts")
+        if wrapper_id == "LX0609-025":
+            raise ValueError("lx0609_025_display_fact_status_mismatch")
+        raise ValueError("invalid customer display facts")
+
     status = _status(selected)
     if status not in {"compliant", "non_compliant", "not_applicable", "data_gap", "uncertain", "technical_error"}:
         status = "technical_error"
@@ -5693,10 +5758,57 @@ def _copy_native_customer_fields(
     selected_metadata_mapping = (
         selected_metadata_raw if isinstance(selected_metadata_raw, Mapping) else {}
     )
-    raw_display_facts = selected_metadata_mapping.get("customer_display_facts")
-    safe_display_facts = safe_luxian_0609_customer_display_facts(
+    top_level_display_facts = selected.get("customer_display_facts")
+    metadata_display_facts = selected_metadata_mapping.get("customer_display_facts")
+    supplied_display_facts = tuple(
+        candidate
+        for candidate in (top_level_display_facts, metadata_display_facts)
+        if candidate is not None
+    )
+    supplied_safe_facts = tuple(
+        safe_luxian_0609_customer_display_facts(
+            rule_id=wrapper_id,
+            raw=supplied_facts,
+        )
+        for supplied_facts in supplied_display_facts
+    )
+    for supplied_facts, supplied_safe_facts_item in zip(
+        supplied_display_facts, supplied_safe_facts
+    ):
+        if supplied_safe_facts_item is not None:
+            continue
+        is_strict_010_contract = (
+            wrapper_id == "LX0609-010"
+            and isinstance(supplied_facts, Mapping)
+            and supplied_facts.get("requirement")
+            == "order_course_report_consistency"
+        )
+        if not is_strict_010_contract:
+            reject_invalid_display_facts()
+    if len(supplied_display_facts) == 2:
+        if all(item is not None for item in supplied_safe_facts):
+            if supplied_safe_facts[0] != supplied_safe_facts[1]:
+                reject_invalid_display_facts()
+        elif not (
+            wrapper_id == "LX0609-010"
+            and all(isinstance(item, Mapping) for item in supplied_display_facts)
+            and all(item is None for item in supplied_safe_facts)
+            and dict(supplied_display_facts[0])
+            == dict(supplied_display_facts[1])
+        ):
+            reject_invalid_display_facts()
+    raw_display_facts = (
+        top_level_display_facts
+        if top_level_display_facts is not None
+        else metadata_display_facts
+    )
+    safe_display_facts = (
+        supplied_safe_facts[0] if supplied_safe_facts else None
+    )
+    _validate_transfusion_system_gap_fact_status(
         rule_id=wrapper_id,
-        raw=raw_display_facts,
+        status=status,
+        safe_facts=safe_display_facts,
     )
     if (
         wrapper_id == "LX0609-017"
@@ -5775,6 +5887,7 @@ def _copy_native_customer_fields(
         "trigger_decision": {},
         "postprocess_reason": str(metadata.get("reason_code") or ""),
     }
+    result.pop("customer_display_facts", None)
     if safe_display_facts:
         result["customer_display_facts"] = safe_display_facts
     customer_evidence = _merge_customer_evidence(
@@ -5885,7 +5998,7 @@ def aggregate_luxian_0609_results(
             if rule_id == "LX0609-025":
                 raw_025_facts_by_rule[rule_id] = facts
         elif not is_strict_display_contract:
-            display_facts_by_rule[rule_id] = _strip_sensitive(dict(facts))
+            raise ValueError("invalid customer display facts")
         elif rule_id == "LX0609-025":
             raw_025_facts_by_rule[rule_id] = facts
         customer_evidence = _customer_evidence_from_display_facts(
@@ -5924,6 +6037,11 @@ def aggregate_luxian_0609_results(
                 rule_id=wrapper_id,
                 status=str(result.get("status") or ""),
                 raw_facts=raw_copy_facts_by_rule.get(wrapper_id),
+                safe_facts=display_facts_by_rule.get(wrapper_id),
+            )
+            _validate_transfusion_system_gap_fact_status(
+                rule_id=wrapper_id,
+                status=str(result.get("status") or ""),
                 safe_facts=display_facts_by_rule.get(wrapper_id),
             )
             if wrapper_id in display_facts_by_rule:
@@ -6028,6 +6146,11 @@ def aggregate_luxian_0609_results(
                     )
                     if precise_findings:
                         result["findings"] = precise_findings
+                _validate_transfusion_system_gap_fact_status(
+                    rule_id=wrapper_id,
+                    status=str(result.get("status") or ""),
+                    safe_facts=result.get("customer_display_facts"),
+                )
                 if wrapper_id in customer_evidence_by_rule:
                     result["customer_evidence"] = customer_evidence_by_rule[wrapper_id]
                 native_audit_context = {
