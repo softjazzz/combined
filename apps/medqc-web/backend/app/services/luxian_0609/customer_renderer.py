@@ -2090,6 +2090,39 @@ def customer_finding_from_controlled_facts(
     if rule_id == "LX0609-071" and kind == "physician_handoff_timeliness_check":
         return f"经治医师变更时间 {facts.get('change_time')}；交班记录时间：{joined('handoff_times') or '未找到'}；接班记录时间：{joined('handover_times') or '未找到'}，接班时限 24 小时。"
 
+    if rule_id == "LX0609-071" and kind == "physician_handoff_multi_event_check":
+        events = facts.get("events")
+        if not isinstance(events, list):
+            return ""
+        event_findings: list[str] = []
+        for event in events:
+            if not isinstance(event, Mapping):
+                return ""
+            position = event.get("event_position")
+            change_time = event.get("change_time")
+            handoff_time = event.get("handoff_time")
+            handover_time = event.get("handover_time")
+            outcome = event.get("outcome")
+            prefix = f"第{position}次变更（{change_time}）"
+            if outcome == "handoff_missing":
+                detail = "缺少交班记录"
+            elif outcome == "handover_missing":
+                detail = f"交班记录 {handoff_time}，缺少接班记录"
+            elif outcome in {"completed_within_threshold", "handover_late"}:
+                duration = _format_exact_elapsed_duration(
+                    started_at=change_time,
+                    finished_at=handover_time,
+                    threshold_hours=24,
+                )
+                detail = (
+                    f"交班记录 {handoff_time}，接班记录 {handover_time}，"
+                    f"变更后{duration}完成"
+                )
+            else:
+                return ""
+            event_findings.append(f"{prefix}：{detail}")
+        return f"共核对 {len(events)} 次经治医师变更：" + "；".join(event_findings) + "。"
+
     if rule_id == "LX0609-071" and kind == "physician_handoff_association_failed":
         return (
             f"检测到 {facts.get('change_event_count')} 次经治医师变更，"
@@ -2097,6 +2130,23 @@ def customer_finding_from_controlled_facts(
             f"接班记录 {facts.get('handover_record_count')} 份；"
             "现有资料无法将交班、接班记录逐次唯一对应到每次变更，"
             "暂不判定是否在 24 小时内完成。"
+        )
+
+    if rule_id == "LX0609-071" and kind == "physician_handoff_record_time_missing":
+        missing_parts: list[str] = []
+        if facts.get("missing_handoff_time_count"):
+            missing_parts.append(
+                f"{facts.get('missing_handoff_time_count')}份交班记录"
+            )
+        if facts.get("missing_handover_time_count"):
+            missing_parts.append(
+                f"{facts.get('missing_handover_time_count')}份接班记录"
+            )
+        return (
+            f"检测到 {facts.get('change_event_count')} 次经治医师变更；"
+            f"已找到交班记录 {facts.get('handoff_record_count')} 份、"
+            f"接班记录 {facts.get('handover_record_count')} 份，"
+            f"其中{'、'.join(missing_parts)}缺少权威记录时间，暂无法逐次核对24小时时限。"
         )
 
     if rule_id == "LX0609-071" and kind == "physician_change_time_missing":

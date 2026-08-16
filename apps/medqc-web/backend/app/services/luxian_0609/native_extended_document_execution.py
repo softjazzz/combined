@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import ceil
 from typing import Any, Mapping, Sequence
 
 from .decision_model import (
@@ -883,6 +884,174 @@ def _transfer_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, An
             marker in _clean(row.get("order_status"))
             for marker in ("取消", "作废", "撤销")
         )
+    )
+
+
+def _evaluate_physician_handoff_events(
+    *,
+    change_times: Sequence[datetime],
+    handoff_rows: Sequence[Mapping[str, Any]],
+    handover_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, str, dict[str, Any]]:
+    """在相邻变更事件划定的互斥时间窗内逐次核对交接班记录。"""
+
+    ordered_change_times = tuple(sorted(change_times))
+    timed_handoffs = tuple(
+        sorted(
+            (
+                (row_time, row)
+                for row in handoff_rows
+                if (row_time := _row_time(row)) is not None
+            ),
+            key=lambda item: item[0],
+        )
+    )
+    timed_handovers = tuple(
+        sorted(
+            (
+                (row_time, row)
+                for row in handover_rows
+                if (row_time := _row_time(row)) is not None
+            ),
+            key=lambda item: item[0],
+        )
+    )
+    events: list[dict[str, Any]] = []
+    source_document_refs: list[dict[str, str]] = []
+    all_source_document_refs: list[dict[str, str]] = []
+    seen_source_document_refs: set[tuple[str, str]] = set()
+    for source_type, rows in (
+        ("handoff_record", handoff_rows),
+        ("handover_record", handover_rows),
+    ):
+        for row in rows:
+            document_id = _clean(row.get("document_id") or row.get("id"))
+            ref_key = (source_type, document_id)
+            if not document_id or ref_key in seen_source_document_refs:
+                continue
+            seen_source_document_refs.add(ref_key)
+            all_source_document_refs.append(
+                {
+                    "source_type": source_type,
+                    "source_document_id": document_id,
+                }
+            )
+            if len(all_source_document_refs) >= 8:
+                break
+        if len(all_source_document_refs) >= 8:
+            break
+    all_completed = True
+
+    for index, change_time in enumerate(ordered_change_times):
+        previous_change = ordered_change_times[index - 1] if index else None
+        next_change = (
+            ordered_change_times[index + 1]
+            if index + 1 < len(ordered_change_times)
+            else None
+        )
+        handoff_candidates = tuple(
+            item
+            for item in timed_handoffs
+            if item[0] <= change_time
+            and (previous_change is None or item[0] > previous_change)
+        )
+        handover_candidates = tuple(
+            item
+            for item in timed_handovers
+            if item[0] >= change_time
+            and (next_change is None or item[0] < next_change)
+        )
+        if (
+            (index > 0 and len(handoff_candidates) > 1)
+            or len(handover_candidates) > 1
+        ):
+            return (
+                "data_gap",
+                "association_failed",
+                {
+                    "failure_kind": "physician_handoff_association_failed",
+                    "change_event_count": len(ordered_change_times),
+                    "change_times": [
+                        value.isoformat(sep=" ") for value in ordered_change_times
+                    ],
+                    "handoff_record_count": len(handoff_rows),
+                    "handoff_times": [
+                        value.isoformat(sep=" ") for value, _ in timed_handoffs
+                    ],
+                    "handover_record_count": len(handover_rows),
+                    "handover_times": [
+                        value.isoformat(sep=" ") for value, _ in timed_handovers
+                    ],
+                    "handover_threshold_hours": 24,
+                    "source_document_refs": all_source_document_refs,
+                },
+            )
+        selected_handoff = (
+            max(handoff_candidates, key=lambda item: item[0])
+            if handoff_candidates
+            else None
+        )
+        selected_handover = handover_candidates[0] if handover_candidates else None
+        handover_interval_seconds = (
+            ceil((selected_handover[0] - change_time).total_seconds())
+            if selected_handover is not None
+            else None
+        )
+        if selected_handoff is None:
+            outcome = "handoff_missing"
+        elif selected_handover is None:
+            outcome = "handover_missing"
+        elif handover_interval_seconds is not None and handover_interval_seconds > 86400:
+            outcome = "handover_late"
+        else:
+            outcome = "completed_within_threshold"
+        all_completed = all_completed and outcome == "completed_within_threshold"
+
+        events.append(
+            {
+                "event_position": index + 1,
+                "change_time": change_time.isoformat(sep=" "),
+                "handoff_time": (
+                    selected_handoff[0].isoformat(sep=" ")
+                    if selected_handoff is not None
+                    else None
+                ),
+                "handover_time": (
+                    selected_handover[0].isoformat(sep=" ")
+                    if selected_handover is not None
+                    else None
+                ),
+                "handover_interval_seconds": handover_interval_seconds,
+                "outcome": outcome,
+            }
+        )
+        for source_type, selected in (
+            ("handoff_record", selected_handoff),
+            ("handover_record", selected_handover),
+        ):
+            if selected is None:
+                continue
+            document_id = _clean(
+                selected[1].get("document_id") or selected[1].get("id")
+            )
+            if document_id:
+                source_document_refs.append(
+                    {
+                        "source_type": source_type,
+                        "source_document_id": document_id,
+                    }
+                )
+
+    return (
+        "compliant" if all_completed else "non_compliant",
+        "requirement_satisfied" if all_completed else "requirement_violated",
+        {
+            "verification_kind": "physician_handoff_multi_event_check",
+            "change_event_count": len(events),
+            "handover_threshold_hours": 24,
+            "events": events,
+            "source_document_refs": source_document_refs,
+        },
     )
 
 
@@ -2390,7 +2559,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "handover_threshold_hours": 24,
                         "source_document_refs": source_document_refs,
                     }))
-                elif len(change_times) > 1:
+                elif len(change_times) > 1 and (
+                    len(set(change_times)) != len(change_times)
+                    or len(change_times) > 4
+                ):
                     final_state, reason_code = "data_gap", "association_failed"
                     display.append((rule_id, {
                         "failure_kind": "physician_handoff_association_failed",
@@ -2409,6 +2581,37 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "handover_threshold_hours": 24,
                         "source_document_refs": source_document_refs,
                     }))
+                elif len(change_times) > 1 and (
+                    len(handoff_times) != len(handoff_rows)
+                    or len(handover_times) != len(handover_rows)
+                ):
+                    final_state, reason_code = (
+                        "data_gap",
+                        "authoritative_time_missing",
+                    )
+                    display.append((rule_id, {
+                        "failure_kind": "physician_handoff_record_time_missing",
+                        "change_event_count": len(change_times),
+                        "handoff_record_count": len(handoff_rows),
+                        "missing_handoff_time_count": (
+                            len(handoff_rows) - len(handoff_times)
+                        ),
+                        "handover_record_count": len(handover_rows),
+                        "missing_handover_time_count": (
+                            len(handover_rows) - len(handover_times)
+                        ),
+                        "handover_threshold_hours": 24,
+                        "source_document_refs": source_document_refs,
+                    }))
+                elif len(change_times) > 1:
+                    final_state, reason_code, multi_event_facts = (
+                        _evaluate_physician_handoff_events(
+                            change_times=change_times,
+                            handoff_rows=handoff_rows,
+                            handover_rows=handover_rows,
+                        )
+                    )
+                    display.append((rule_id, multi_event_facts))
                 else:
                     change_time = change_times[0]
                     selected_handoff = max(

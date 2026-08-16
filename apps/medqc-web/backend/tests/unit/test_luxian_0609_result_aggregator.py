@@ -1122,6 +1122,60 @@ def test_071_refs_cannot_exceed_the_declared_source_record_counts() -> None:
     assert "source_document_refs" not in result["customer_display_facts"]
 
 
+def _071_multi_event_facts() -> dict[str, object]:
+    return {
+        "verification_kind": "physician_handoff_multi_event_check",
+        "change_event_count": 2,
+        "handover_threshold_hours": 24,
+        "events": [
+            {
+                "event_position": 1,
+                "change_time": "2026-07-01 08:00:00",
+                "handoff_time": "2026-07-01 07:50:00",
+                "handover_time": "2026-07-01 14:00:00",
+                "handover_interval_seconds": 21600,
+                "outcome": "completed_within_threshold",
+            },
+            {
+                "event_position": 2,
+                "change_time": "2026-07-03 08:00:00",
+                "handoff_time": "2026-07-03 07:50:00",
+                "handover_time": None,
+                "handover_interval_seconds": None,
+                "outcome": "handover_missing",
+            },
+        ],
+    }
+
+
+def test_071_accepts_strict_multi_event_facts() -> None:
+    facts = _071_multi_event_facts()
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-071", raw=facts
+    ) == facts
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda facts: facts["events"][0].update({"outcome": "unknown"}),
+        lambda facts: facts["events"][0].update({"extra": "forbidden"}),
+        lambda facts: facts["events"][0].update({"event_position": 2}),
+        lambda facts: facts["events"][0].update(
+            {"handover_interval_seconds": 86401}
+        ),
+    ],
+)
+def test_071_rejects_invalid_multi_event_facts(mutate) -> None:
+    facts = _071_multi_event_facts()
+    mutate(facts)
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-071", raw=facts
+    ) is None
+
+
 def _gate(kind):
     if kind is FindingKind.REQUIREMENT_SATISFIED: decision = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
     elif kind is FindingKind.REQUIRED_DOCUMENT_MISSING: decision = GateDecision("LX0609-030", "matched", "surgery_record", "empty", "ready", (GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())

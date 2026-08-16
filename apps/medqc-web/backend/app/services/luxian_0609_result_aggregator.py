@@ -2184,7 +2184,9 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-069": {"consultation_timeliness_check"},
         "LX0609-071": {
             "physician_handoff_timeliness_check",
+            "physician_handoff_multi_event_check",
             "physician_handoff_association_failed",
+            "physician_handoff_record_time_missing",
             "physician_change_time_missing",
         },
         "LX0609-072": {"transfer_record_timeliness_check", "transfer_records_missing"},
@@ -2268,9 +2270,17 @@ def safe_luxian_0609_customer_display_facts(
         "physician_handoff_timeliness_check": {
             "change_time", "handoff_times", "handover_times", "handover_threshold_hours",
         },
+        "physician_handoff_multi_event_check": {
+            "change_event_count", "handover_threshold_hours", "events",
+        },
         "physician_handoff_association_failed": {
             "change_event_count", "change_times", "handoff_record_count", "handoff_times",
             "handover_record_count", "handover_times", "handover_threshold_hours",
+        },
+        "physician_handoff_record_time_missing": {
+            "change_event_count", "handoff_record_count", "missing_handoff_time_count",
+            "handover_record_count", "missing_handover_time_count",
+            "handover_threshold_hours",
         },
         "physician_change_time_missing": {
             "change_event_count", "timed_change_event_count", "missing_change_time_count",
@@ -2311,6 +2321,8 @@ def safe_luxian_0609_customer_display_facts(
             return None
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
+            if kind == "physician_handoff_multi_event_check" and key == "events":
+                continue
             value = raw.get(key)
             if value is None:
                 safe[key] = None
@@ -2394,6 +2406,121 @@ def safe_luxian_0609_customer_display_facts(
                     or timed_count + missing_count != change_event_count
                 ):
                     return None
+        if kind == "physician_handoff_multi_event_check":
+            change_event_count = raw.get("change_event_count")
+            raw_events = raw.get("events")
+            if (
+                not isinstance(change_event_count, int)
+                or isinstance(change_event_count, bool)
+                or not 2 <= change_event_count <= 4
+                or raw.get("handover_threshold_hours") != 24
+                or not isinstance(raw_events, list)
+                or len(raw_events) != change_event_count
+            ):
+                return None
+            controlled_events: list[dict[str, Any]] = []
+            allowed_outcomes = {
+                "completed_within_threshold",
+                "handoff_missing",
+                "handover_missing",
+                "handover_late",
+            }
+            for expected_position, event in enumerate(raw_events, start=1):
+                if not isinstance(event, Mapping) or set(event) != {
+                    "event_position",
+                    "change_time",
+                    "handoff_time",
+                    "handover_time",
+                    "handover_interval_seconds",
+                    "outcome",
+                }:
+                    return None
+                change_time = event.get("change_time")
+                handoff_time = event.get("handoff_time")
+                handover_time = event.get("handover_time")
+                interval_seconds = event.get("handover_interval_seconds")
+                outcome = event.get("outcome")
+                if (
+                    event.get("event_position") != expected_position
+                    or not isinstance(change_time, str)
+                    or not change_time
+                    or len(change_time) > 32
+                    or (
+                        handoff_time is not None
+                        and (
+                            not isinstance(handoff_time, str)
+                            or not handoff_time
+                            or len(handoff_time) > 32
+                            or "\n" in handoff_time
+                        )
+                    )
+                    or (
+                        handover_time is not None
+                        and (
+                            not isinstance(handover_time, str)
+                            or not handover_time
+                            or len(handover_time) > 32
+                            or "\n" in handover_time
+                        )
+                    )
+                    or (
+                        interval_seconds is not None
+                        and (
+                            not isinstance(interval_seconds, int)
+                            or isinstance(interval_seconds, bool)
+                            or interval_seconds < 0
+                        )
+                    )
+                    or outcome not in allowed_outcomes
+                ):
+                    return None
+                if outcome == "completed_within_threshold" and (
+                    handoff_time is None
+                    or handover_time is None
+                    or interval_seconds is None
+                    or interval_seconds > 86400
+                ):
+                    return None
+                if outcome == "handoff_missing" and handoff_time is not None:
+                    return None
+                if outcome == "handover_missing" and (
+                    handoff_time is None or handover_time is not None
+                ):
+                    return None
+                if outcome == "handover_late" and (
+                    handoff_time is None
+                    or
+                    handover_time is None
+                    or interval_seconds is None
+                    or interval_seconds <= 86400
+                ):
+                    return None
+                controlled_events.append(dict(event))
+            safe["events"] = controlled_events
+        if kind == "physician_handoff_record_time_missing":
+            counts = tuple(
+                raw.get(key)
+                for key in (
+                    "change_event_count",
+                    "handoff_record_count",
+                    "missing_handoff_time_count",
+                    "handover_record_count",
+                    "missing_handover_time_count",
+                )
+            )
+            if (
+                any(
+                    not isinstance(value, int) or isinstance(value, bool)
+                    for value in counts
+                )
+                or counts[0] <= 1
+                or min(counts[1:]) < 0
+                or counts[2] > counts[1]
+                or counts[4] > counts[3]
+                or counts[2] + counts[4] <= 0
+                or raw.get("handover_threshold_hours") != 24
+            ):
+                return None
         return safe
 
     if rule_id == "LX0609-041":
@@ -5015,6 +5142,17 @@ def _customer_evidence_from_display_facts(
             kind = raw.get("verification_kind") or raw.get("failure_kind")
             if kind == "physician_handoff_timeliness_check":
                 if any(count > 1 for count in source_ref_counts.values()):
+                    return []
+            elif kind == "physician_handoff_multi_event_check":
+                event_count = raw.get("change_event_count")
+                if (
+                    not isinstance(event_count, int)
+                    or isinstance(event_count, bool)
+                    or not 2 <= event_count <= 4
+                    or any(
+                        count > event_count for count in source_ref_counts.values()
+                    )
+                ):
                     return []
             else:
                 handoff_record_count = raw.get("handoff_record_count")

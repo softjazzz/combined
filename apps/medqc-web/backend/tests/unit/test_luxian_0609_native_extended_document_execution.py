@@ -1092,7 +1092,8 @@ async def test_071_multiple_change_events_report_association_gap_with_existing_r
         {
             "physician_change_event": (
                 {"change_datetime": "2026-07-01 08:00:00"},
-                {"change_datetime": "2026-07-03 08:00:00"},
+                # 同一权威时间的两条事件无法区分先后，必须继续失败关闭。
+                {"change_datetime": "2026-07-01 08:00:00"},
             ),
             "handoff_record": ({
                 "document_id": "HANDOFF-MULTI-071",
@@ -1117,7 +1118,7 @@ async def test_071_multiple_change_events_report_association_gap_with_existing_r
     assert canonical["customer_display_facts"] == {
         "failure_kind": "physician_handoff_association_failed",
         "change_event_count": 2,
-        "change_times": ["2026-07-01 08:00:00", "2026-07-03 08:00:00"],
+        "change_times": ["2026-07-01 08:00:00", "2026-07-01 08:00:00"],
         "handoff_record_count": 1,
         "handoff_times": ["2026-07-01 07:50:00"],
         "handover_record_count": 1,
@@ -1131,6 +1132,248 @@ async def test_071_multiple_change_events_report_association_gap_with_existing_r
         {"source_type": "handoff_record", "source_document_id": "HANDOFF-MULTI-071"},
         {"source_type": "handover_record", "source_document_id": "HANDOVER-MULTI-071"},
     ]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": (
+                {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00"},
+                {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00"},
+            ),
+            "handoff_record": (
+                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
+            ),
+            "handover_record": (
+                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
+                {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert canonical["status"] == "compliant"
+    assert canonical["customer_display_facts"]["change_event_count"] == 2
+    assert canonical["customer_display_facts"]["events"] == [
+        {
+            "event_position": 1,
+            "change_time": "2026-07-01 08:00:00",
+            "handoff_time": "2026-07-01 07:50:00",
+            "handover_time": "2026-07-01 14:00:00",
+            "handover_interval_seconds": 21600,
+            "outcome": "completed_within_threshold",
+        },
+        {
+            "event_position": 2,
+            "change_time": "2026-07-03 08:00:00",
+            "handoff_time": "2026-07-03 07:50:00",
+            "handover_time": "2026-07-03 14:00:00",
+            "handover_interval_seconds": 21600,
+            "outcome": "completed_within_threshold",
+        },
+    ]
+    assert canonical["customer_evidence"] == [
+        {"source_type": "handoff_record", "source_document_id": "HANDOFF-1"},
+        {"source_type": "handover_record", "source_document_id": "HANDOVER-1"},
+        {"source_type": "handoff_record", "source_document_id": "HANDOFF-2"},
+        {"source_type": "handover_record", "source_document_id": "HANDOVER-2"},
+    ]
+    assert "第1次变更" in canonical["findings"]
+    assert "第2次变更" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_change_events_report_the_specific_incomplete_event() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": (
+                {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00"},
+                {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00"},
+            ),
+            "handoff_record": (
+                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
+            ),
+            "handover_record": (
+                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert canonical["status"] == "non_compliant"
+    assert canonical["customer_display_facts"]["events"][1]["outcome"] == "handover_missing"
+    assert "第2次变更" in canonical["findings"]
+    assert "缺少接班记录" in canonical["findings"]
+    assert "无法逐次唯一对应" not in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_change_event_order_does_not_change_the_result() -> None:
+    source_rows = {
+        "physician_change_event": (
+            {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00"},
+            {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00"},
+        ),
+        "handoff_record": (
+            {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
+            {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
+        ),
+        "handover_record": (
+            {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
+            {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
+        ),
+    }
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",), source_rows
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert [
+        item["change_time"]
+        for item in canonical["customer_display_facts"]["events"]
+    ] == ["2026-07-01 08:00:00", "2026-07-03 08:00:00"]
+    assert canonical["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_records_in_one_event_window_fail_closed() -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": (
+                {"change_datetime": "2026-07-01 08:00:00"},
+                {"change_datetime": "2026-07-03 08:00:00"},
+            ),
+            "handoff_record": (
+                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2A", "record_time": "2026-07-03 07:40:00"},
+                {"document_id": "HANDOFF-2B", "record_time": "2026-07-03 07:50:00"},
+            ),
+            "handover_record": (
+                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
+                {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
+            ),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "association_failed"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_change_events_with_untimed_record_fail_closed() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": (
+                {"change_datetime": "2026-07-01 08:00:00"},
+                {"change_datetime": "2026-07-03 08:00:00"},
+            ),
+            "handoff_record": (
+                {"document_id": "HANDOFF-NO-TIME"},
+                {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
+            ),
+            "handover_record": (
+                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
+                {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
+            ),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert canonical["customer_display_facts"] == {
+        "failure_kind": "physician_handoff_record_time_missing",
+        "change_event_count": 2,
+        "handoff_record_count": 2,
+        "missing_handoff_time_count": 1,
+        "handover_record_count": 2,
+        "missing_handover_time_count": 0,
+        "handover_threshold_hours": 24,
+    }
+    assert "1份交班记录缺少权威记录时间" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_change_events_report_exact_late_handover() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": (
+                {"change_datetime": "2026-07-01 08:00:00"},
+                {"change_datetime": "2026-07-05 08:00:00"},
+            ),
+            "handoff_record": (
+                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2", "record_time": "2026-07-05 07:50:00"},
+            ),
+            "handover_record": (
+                {"document_id": "HANDOVER-LATE", "record_time": "2026-07-02 08:00:01"},
+                {"document_id": "HANDOVER-2", "record_time": "2026-07-05 14:00:00"},
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "non_compliant"
+    assert canonical["customer_display_facts"]["events"][0] == {
+        "event_position": 1,
+        "change_time": "2026-07-01 08:00:00",
+        "handoff_time": "2026-07-01 07:50:00",
+        "handover_time": "2026-07-02 08:00:01",
+        "handover_interval_seconds": 86401,
+        "outcome": "handover_late",
+    }
+    assert "24小时0分1秒（超时1秒）" in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
 
 
