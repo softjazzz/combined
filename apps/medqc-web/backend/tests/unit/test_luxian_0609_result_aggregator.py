@@ -733,6 +733,63 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
     ("rule_id", "facts"),
     [
         (
+            "LX0609-020",
+            {
+                "source_document_ids": ["CONSULT-REQUEST", "CONSULT-OPINION"],
+                "consultation_assessment": "不符合要求",
+                "execution_record_state": "未发现执行记录",
+                "execution_candidate_count": 0,
+                "PRIVATE_UNKNOWN": "PRIVATE-CONSULTATION-TEXT",
+            },
+        ),
+        (
+            "LX0609-021",
+            {
+                "source_document_ids": ["CONSULT-REQUEST"],
+                "consultation_assessment": "明确",
+                "PRIVATE_UNKNOWN": "PRIVATE-CONSULTATION-TEXT",
+            },
+        ),
+        (
+            "LX0609-022",
+            {
+                "source_document_ids": ["CONSULT-OPINION"],
+                "consultation_assessment": "不符合要求",
+                "PRIVATE_UNKNOWN": "PRIVATE-CONSULTATION-TEXT",
+            },
+        ),
+        (
+            "LX0609-023",
+            {
+                "verification_kind": "consultation_execution_quality_check",
+                "completed_opinion_episode_count": 1,
+                "recommendation_count": 1,
+                "specific_execution_count": 0,
+                "generic_execution_count": 1,
+                "missing_execution_count": 0,
+                "relation_state": "generic_or_copied_execution",
+                "source_document_ids": ["CONSULT-OPINION"],
+                "PRIVATE_UNKNOWN": "PRIVATE-CONSULTATION-TEXT",
+            },
+        ),
+    ],
+)
+def test_consultation_customer_facts_fail_closed_in_public_aggregation(
+    rule_id, facts
+):
+    with pytest.raises(ValueError, match="invalid consultation customer display facts"):
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": rule_id}],
+            execution_results=[],
+            reduced_decisions=(_reduced_decision(rule_id),),
+            customer_display_facts=((rule_id, facts),),
+        )
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts"),
+    [
+        (
             "LX0609-003",
             {
                 "failure_kind": "surgery_record_within_threshold",

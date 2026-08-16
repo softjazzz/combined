@@ -5727,6 +5727,13 @@ def aggregate_luxian_0609_results(
             rule_id=rule_id,
             raw=facts,
         )
+        if safe_facts is None and rule_id in {
+            "LX0609-020",
+            "LX0609-021",
+            "LX0609-022",
+            "LX0609-023",
+        }:
+            raise ValueError("invalid consultation customer display facts")
         is_strict_display_contract = rule_id == "LX0609-025" or (
             rule_id == "LX0609-010"
             and facts.get("requirement") == "order_course_report_consistency"
