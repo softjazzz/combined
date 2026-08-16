@@ -1867,6 +1867,8 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-067":
             outcome = evaluate_predischarge_course_presence(
+                death_state=death_state,
+                death_error=death_error,
                 registration_error=registration_error,
                 discharge_error=discharge_error,
                 discharge_time=_discharge_time(registration_rows, discharge_rows),

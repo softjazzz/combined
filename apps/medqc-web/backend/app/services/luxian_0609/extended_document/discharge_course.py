@@ -18,6 +18,8 @@ class PredischargeCourseOutcome:
 
 def evaluate_predischarge_course_presence(
     *,
+    death_state: str,
+    death_error: str,
     registration_error: str,
     discharge_error: str,
     discharge_time: datetime | None,
@@ -28,6 +30,13 @@ def evaluate_predischarge_course_presence(
 ) -> PredischargeCourseOutcome:
     """仅核对出院日及前一日的日常/上级医师病程。"""
 
+    if death_state == "present":
+        return PredischargeCourseOutcome(
+            "not_applicable",
+            "trigger_absent_complete",
+        )
+    if death_state == "unknown" and death_error:
+        return PredischargeCourseOutcome("data_gap", death_error)
     source_error = registration_error or discharge_error
     if source_error:
         return PredischargeCourseOutcome("data_gap", source_error)

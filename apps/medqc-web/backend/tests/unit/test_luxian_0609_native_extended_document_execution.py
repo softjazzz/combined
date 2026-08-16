@@ -3624,6 +3624,32 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_067_death_case_is_not_a_discharge_trigger() -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "死亡",
+                "discharge_datetime": "2026-07-15 21:22:22",
+            },),
+            "death_record": ({
+                "document_id": "DEATH-067",
+                "death_datetime": "2026-07-15 21:22:22",
+            },),
+            "daily_course_record": ({
+                "document_id": "DAILY-DEATH-DAY",
+                "record_time": "2026-07-15 09:00:00",
+            },),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "trigger_absent_complete"
+    assert "LX0609-067" not in dict(result.customer_display_facts)
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_067_existing_course_without_authoritative_time_is_data_gap() -> None:
     _, _, result, reduced = await _evaluate_selected(
         ("LX0609-067",),
