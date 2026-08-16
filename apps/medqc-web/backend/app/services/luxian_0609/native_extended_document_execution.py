@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from math import ceil
 from typing import Any, Mapping, Sequence
 
 from .decision_model import (
@@ -33,6 +32,7 @@ from .extended_document.discharge_documentation import (
 from .extended_document.discharge_course import (
     evaluate_predischarge_course_presence,
 )
+from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
@@ -131,9 +131,6 @@ _ANTIMICROBIALS = _SPECIAL_ANTIMICROBIALS + (
 _INVASIVE_PROCEDURES = (
     "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
     "气管插管", "支气管镜", "动脉置管",
-)
-_PHYSICIAN_CHANGE_ORDER_PATTERN = re.compile(
-    r"经治医师(?:发生)?变更|更换经治医师|交接班医嘱"
 )
 _CONSULTATION_REQUEST_TITLE_PATTERN = re.compile(r"会诊.*申请|申请.*会诊")
 _CONSULTATION_RECORD_TITLE_PATTERN = re.compile(r"会诊.*(?:记录|意见)|(?:记录|意见).*会诊")
@@ -866,174 +863,6 @@ def _transfer_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, An
             marker in _clean(row.get("order_status"))
             for marker in ("取消", "作废", "撤销")
         )
-    )
-
-
-def _evaluate_physician_handoff_events(
-    *,
-    change_times: Sequence[datetime],
-    handoff_rows: Sequence[Mapping[str, Any]],
-    handover_rows: Sequence[Mapping[str, Any]],
-) -> tuple[str, str, dict[str, Any]]:
-    """在相邻变更事件划定的互斥时间窗内逐次核对交接班记录。"""
-
-    ordered_change_times = tuple(sorted(change_times))
-    timed_handoffs = tuple(
-        sorted(
-            (
-                (row_time, row)
-                for row in handoff_rows
-                if (row_time := _row_time(row)) is not None
-            ),
-            key=lambda item: item[0],
-        )
-    )
-    timed_handovers = tuple(
-        sorted(
-            (
-                (row_time, row)
-                for row in handover_rows
-                if (row_time := _row_time(row)) is not None
-            ),
-            key=lambda item: item[0],
-        )
-    )
-    events: list[dict[str, Any]] = []
-    source_document_refs: list[dict[str, str]] = []
-    all_source_document_refs: list[dict[str, str]] = []
-    seen_source_document_refs: set[tuple[str, str]] = set()
-    for source_type, rows in (
-        ("handoff_record", handoff_rows),
-        ("handover_record", handover_rows),
-    ):
-        for row in rows:
-            document_id = _clean(row.get("document_id") or row.get("id"))
-            ref_key = (source_type, document_id)
-            if not document_id or ref_key in seen_source_document_refs:
-                continue
-            seen_source_document_refs.add(ref_key)
-            all_source_document_refs.append(
-                {
-                    "source_type": source_type,
-                    "source_document_id": document_id,
-                }
-            )
-            if len(all_source_document_refs) >= 8:
-                break
-        if len(all_source_document_refs) >= 8:
-            break
-    all_completed = True
-
-    for index, change_time in enumerate(ordered_change_times):
-        previous_change = ordered_change_times[index - 1] if index else None
-        next_change = (
-            ordered_change_times[index + 1]
-            if index + 1 < len(ordered_change_times)
-            else None
-        )
-        handoff_candidates = tuple(
-            item
-            for item in timed_handoffs
-            if item[0] <= change_time
-            and (previous_change is None or item[0] > previous_change)
-        )
-        handover_candidates = tuple(
-            item
-            for item in timed_handovers
-            if item[0] >= change_time
-            and (next_change is None or item[0] < next_change)
-        )
-        if (
-            (index > 0 and len(handoff_candidates) > 1)
-            or len(handover_candidates) > 1
-        ):
-            return (
-                "data_gap",
-                "association_failed",
-                {
-                    "failure_kind": "physician_handoff_association_failed",
-                    "change_event_count": len(ordered_change_times),
-                    "change_times": [
-                        value.isoformat(sep=" ") for value in ordered_change_times
-                    ],
-                    "handoff_record_count": len(handoff_rows),
-                    "handoff_times": [
-                        value.isoformat(sep=" ") for value, _ in timed_handoffs
-                    ],
-                    "handover_record_count": len(handover_rows),
-                    "handover_times": [
-                        value.isoformat(sep=" ") for value, _ in timed_handovers
-                    ],
-                    "handover_threshold_hours": 24,
-                    "source_document_refs": all_source_document_refs,
-                },
-            )
-        selected_handoff = (
-            max(handoff_candidates, key=lambda item: item[0])
-            if handoff_candidates
-            else None
-        )
-        selected_handover = handover_candidates[0] if handover_candidates else None
-        handover_interval_seconds = (
-            ceil((selected_handover[0] - change_time).total_seconds())
-            if selected_handover is not None
-            else None
-        )
-        if selected_handoff is None:
-            outcome = "handoff_missing"
-        elif selected_handover is None:
-            outcome = "handover_missing"
-        elif handover_interval_seconds is not None and handover_interval_seconds > 86400:
-            outcome = "handover_late"
-        else:
-            outcome = "completed_within_threshold"
-        all_completed = all_completed and outcome == "completed_within_threshold"
-
-        events.append(
-            {
-                "event_position": index + 1,
-                "change_time": change_time.isoformat(sep=" "),
-                "handoff_time": (
-                    selected_handoff[0].isoformat(sep=" ")
-                    if selected_handoff is not None
-                    else None
-                ),
-                "handover_time": (
-                    selected_handover[0].isoformat(sep=" ")
-                    if selected_handover is not None
-                    else None
-                ),
-                "handover_interval_seconds": handover_interval_seconds,
-                "outcome": outcome,
-            }
-        )
-        for source_type, selected in (
-            ("handoff_record", selected_handoff),
-            ("handover_record", selected_handover),
-        ):
-            if selected is None:
-                continue
-            document_id = _clean(
-                selected[1].get("document_id") or selected[1].get("id")
-            )
-            if document_id:
-                source_document_refs.append(
-                    {
-                        "source_type": source_type,
-                        "source_document_id": document_id,
-                    }
-                )
-
-    return (
-        "compliant" if all_completed else "non_compliant",
-        "requirement_satisfied" if all_completed else "requirement_violated",
-        {
-            "verification_kind": "physician_handoff_multi_event_check",
-            "change_event_count": len(events),
-            "handover_threshold_hours": 24,
-            "events": events,
-            "source_document_refs": source_document_refs,
-        },
     )
 
 
@@ -2234,242 +2063,31 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-071":
-            explicit_change_orders = tuple(
-                row
-                for row in nondrug_order_rows
-                if _PHYSICIAN_CHANGE_ORDER_PATTERN.search(
-                    " ".join(
-                        _clean(row.get(field))
-                        for field in ("order_name", "order_type", "record_content")
-                    )
-                )
+            outcome = evaluate_physician_handoff(
+                physician_change_rows=physician_change_rows,
+                physician_change_error=physician_change_error,
+                nondrug_order_rows=nondrug_order_rows,
+                nondrug_order_error=nondrug_order_error,
+                handoff_rows=handoff_rows,
+                handoff_error=handoff_error,
+                handover_rows=handover_rows,
+                handover_error=handover_error,
             )
-            change_source_key = "physician_change_event"
-            effective_change_rows = physician_change_rows
-            if not effective_change_rows and explicit_change_orders:
-                change_source_key = "inpat_nondrug_order"
-                effective_change_rows = explicit_change_orders
-
-            source_error = handoff_error or handover_error
-            if not effective_change_rows:
-                source_error = source_error or physician_change_error or nondrug_order_error
-            if source_error:
-                final_state, reason_code = "data_gap", source_error
-            elif not effective_change_rows:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            else:
-                change_times = tuple(
-                    parsed
-                    for row in effective_change_rows
-                    if (
-                        parsed := _parse_datetime(
-                            row.get("change_datetime")
-                            or row.get("handoff_datetime")
-                            or row.get("prescribed_datetime")
-                            or row.get("order_time")
-                        )
-                    )
-                    is not None
-                )
-                handoff_times = tuple(
-                    parsed
-                    for row in handoff_rows
-                    if (parsed := _row_time(row)) is not None
-                )
-                handover_times = tuple(
-                    parsed
-                    for row in handover_rows
-                    if (parsed := _row_time(row)) is not None
-                )
-                source_document_refs: list[dict[str, str]] = []
-                seen_document_refs: set[tuple[str, str]] = set()
-                for source_key, rows in (
-                    ("handoff_record", handoff_rows),
-                    ("handover_record", handover_rows),
-                ):
-                    for row in rows:
-                        document_id = _clean(
-                            row.get("document_id") or row.get("id")
-                        )
-                        reference_key = (source_key, document_id)
-                        if not document_id or reference_key in seen_document_refs:
-                            continue
-                        seen_document_refs.add(reference_key)
-                        source_document_refs.append(
-                            {
-                                "source_type": source_key,
-                                "source_document_id": document_id,
-                            }
-                        )
-                        if len(source_document_refs) >= 8:
-                            break
-                    if len(source_document_refs) >= 8:
-                        break
-                if len(change_times) != len(effective_change_rows):
-                    final_state, reason_code = (
-                        "data_gap",
-                        "authoritative_time_missing",
-                    )
-                    display.append((rule_id, {
-                        "failure_kind": "physician_change_time_missing",
-                        "change_event_count": len(effective_change_rows),
-                        "timed_change_event_count": len(change_times),
-                        "missing_change_time_count": (
-                            len(effective_change_rows) - len(change_times)
-                        ),
-                        "change_times": [
-                            value.isoformat(sep=" ") for value in change_times
-                        ],
-                        "handoff_record_count": len(handoff_rows),
-                        "handoff_times": [
-                            value.isoformat(sep=" ") for value in handoff_times
-                        ],
-                        "handover_record_count": len(handover_rows),
-                        "handover_times": [
-                            value.isoformat(sep=" ") for value in handover_times
-                        ],
-                        "handover_threshold_hours": 24,
-                        "source_document_refs": source_document_refs,
-                    }))
-                elif len(change_times) > 1 and (
-                    len(set(change_times)) != len(change_times)
-                    or len(change_times) > 4
-                ):
-                    final_state, reason_code = "data_gap", "association_failed"
-                    display.append((rule_id, {
-                        "failure_kind": "physician_handoff_association_failed",
-                        "change_event_count": len(effective_change_rows),
-                        "change_times": [
-                            value.isoformat(sep=" ") for value in change_times
-                        ],
-                        "handoff_record_count": len(handoff_rows),
-                        "handoff_times": [
-                            value.isoformat(sep=" ") for value in handoff_times
-                        ],
-                        "handover_record_count": len(handover_rows),
-                        "handover_times": [
-                            value.isoformat(sep=" ") for value in handover_times
-                        ],
-                        "handover_threshold_hours": 24,
-                        "source_document_refs": source_document_refs,
-                    }))
-                elif len(change_times) > 1 and (
-                    len(handoff_times) != len(handoff_rows)
-                    or len(handover_times) != len(handover_rows)
-                ):
-                    final_state, reason_code = (
-                        "data_gap",
-                        "authoritative_time_missing",
-                    )
-                    display.append((rule_id, {
-                        "failure_kind": "physician_handoff_record_time_missing",
-                        "change_event_count": len(change_times),
-                        "handoff_record_count": len(handoff_rows),
-                        "missing_handoff_time_count": (
-                            len(handoff_rows) - len(handoff_times)
-                        ),
-                        "handover_record_count": len(handover_rows),
-                        "missing_handover_time_count": (
-                            len(handover_rows) - len(handover_times)
-                        ),
-                        "handover_threshold_hours": 24,
-                        "source_document_refs": source_document_refs,
-                    }))
-                elif len(change_times) > 1:
-                    final_state, reason_code, multi_event_facts = (
-                        _evaluate_physician_handoff_events(
-                            change_times=change_times,
-                            handoff_rows=handoff_rows,
-                            handover_rows=handover_rows,
-                        )
-                    )
-                    display.append((rule_id, multi_event_facts))
-                else:
-                    change_time = change_times[0]
-                    selected_handoff = max(
-                        (
-                            (row_time, row)
-                            for row in handoff_rows
-                            if (row_time := _row_time(row)) is not None
-                            and row_time <= change_time
-                        ),
-                        key=lambda item: item[0],
-                        default=None,
-                    )
-                    selected_handover = min(
-                        (
-                            (row_time, row)
-                            for row in handover_rows
-                            if (row_time := _row_time(row)) is not None
-                            and row_time >= change_time
-                        ),
-                        key=lambda item: item[0],
-                        default=None,
-                    )
-                    selected_source_time_missing = (
-                        selected_handoff is None
-                        and bool(handoff_rows)
-                        and any(_row_time(row) is None for row in handoff_rows)
-                    ) or (
-                        selected_handover is None
-                        and bool(handover_rows)
-                        and any(_row_time(row) is None for row in handover_rows)
-                    )
-                    if selected_source_time_missing:
-                        final_state, reason_code = (
-                            "data_gap",
-                            "authoritative_time_missing",
-                        )
-                    else:
-                        compliant = (
-                            selected_handoff is not None
-                            and selected_handover is not None
-                            and selected_handover[0]
-                            <= change_time + timedelta(hours=24)
-                        )
-                        source_document_refs = []
-                        for source_key, selected in (
-                            ("handoff_record", selected_handoff),
-                            ("handover_record", selected_handover),
-                        ):
-                            if selected is None:
-                                continue
-                            selected_document_id = _clean(
-                                selected[1].get("document_id")
-                                or selected[1].get("id")
-                            )
-                            if selected_document_id:
-                                source_document_refs.append(
-                                    {
-                                        "source_type": source_key,
-                                        "source_document_id": selected_document_id,
-                                    }
-                                )
-                        final_state = "compliant" if compliant else "non_compliant"
-                        reason_code = (
-                            "requirement_satisfied"
-                            if compliant
-                            else "requirement_violated"
-                        )
-                        display.append((rule_id, {
-                            "verification_kind": "physician_handoff_timeliness_check",
-                            "change_time": change_time.isoformat(sep=" "),
-                            "handoff_times": [value.isoformat(sep=" ") for value in handoff_times],
-                            "handover_times": [value.isoformat(sep=" ") for value in handover_times],
-                            "handover_threshold_hours": 24,
-                            "source_document_refs": source_document_refs,
-                        }))
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
+            if outcome.legacy_planned_rule_ids_overridden:
+                selected = outcome.legacy_planned_rule_ids
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        change_source_key,
+                        outcome.change_source_key,
                         "handoff_record",
                         "handover_record",
                     ),
-                    final_state=final_state,
-                    reason_code=reason_code,
+                    final_state=outcome.final_state,
+                    reason_code=outcome.reason_code,
                 )
             )
             continue

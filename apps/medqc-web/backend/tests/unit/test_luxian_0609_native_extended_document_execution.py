@@ -1087,6 +1087,38 @@ async def test_071_physician_change_requires_handoff_and_handover() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("with_handover", [True, False])
+async def test_071_preserves_legacy_single_event_planned_rule_ids_shadowing(
+    with_handover: bool,
+) -> None:
+    """纯拆分须保留旧循环覆盖 planned_rule_ids 的历史副作用。"""
+
+    handover_rows = (
+        ({"document_id": "HANDOVER-071", "record_time": "2026-07-01 14:00:00"},)
+        if with_handover
+        else ()
+    )
+    _, _, result, _ = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "physician_change_event": (
+                {"change_datetime": "2026-07-01 08:00:00"},
+            ),
+            "handoff_record": (
+                {"document_id": "HANDOFF-071", "record_time": "2026-07-01 07:50:00"},
+            ),
+            "handover_record": handover_rows,
+        },
+    )
+
+    if with_handover:
+        assert result.planned_rule_ids[0] == datetime(2026, 7, 1, 14, 0)
+        assert result.planned_rule_ids[1]["document_id"] == "HANDOVER-071"
+    else:
+        assert result.planned_rule_ids is None
+
+
+@pytest.mark.asyncio
 async def test_071_multiple_change_events_report_association_gap_with_existing_records() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-071",),
