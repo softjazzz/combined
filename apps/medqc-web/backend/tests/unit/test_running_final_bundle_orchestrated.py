@@ -6,6 +6,104 @@ from app.services.qc_input_adapters.running_final_bundle_runtime import evaluate
 from app.services.sichuan_qc_service import SichuanQCService
 
 
+@pytest.mark.asyncio
+async def test_service_facade_subclass_should_resolve_base_definition_module(monkeypatch):
+    class _DerivedSichuanQCService(SichuanQCService):
+        pass
+
+    class _FacadeDependencyReached(RuntimeError):
+        pass
+
+    monkeypatch.setattr(
+        "app.services.qc_input_adapters.adapt_bundle_to_sichuan_eval_args",
+        lambda bundle, rule_ids: {
+            "document_id": "V-SUBCLASS",
+            "document_type": "在院病历",
+            "content": "病历正文",
+            "rule_ids": [],
+            "evidence_payload": {},
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.normalize_quality_profile",
+        lambda _profile: (_ for _ in ()).throw(_FacadeDependencyReached()),
+    )
+
+    with pytest.raises(_FacadeDependencyReached):
+        await _DerivedSichuanQCService().evaluate_running_final_bundle_input(
+            {"scene": "running", "visit_id": "V-SUBCLASS"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_service_facade_should_forward_running_final_bundle_options(monkeypatch):
+    service = SichuanQCService()
+    bundle = {"scene": "final", "visit_id": "V-FACADE"}
+
+    def cancellation_check():
+        return False
+
+    def trace_sink(_item):
+        return None
+
+    captured = {}
+
+    async def _fake_evaluate(host, forwarded_bundle, **kwargs):
+        captured.update(
+            {
+                "host": host,
+                "bundle": forwarded_bundle,
+                **kwargs,
+            }
+        )
+        return {"facade": "ok"}
+
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.evaluate_running_final_bundle_input",
+        _fake_evaluate,
+    )
+
+    result = await service.evaluate_running_final_bundle_input(
+        bundle,
+        rule_ids=["LX0609-033"],
+        bucket_strategy="domain_family",
+        quality_profile="effect_priority_v1",
+        batch_output_mode="minimal",
+        enable_selective_refine=True,
+        refine_confidence_threshold=0.71,
+        max_refine_candidates=3,
+        use_execution_cache=False,
+        enable_pack_probe=True,
+        rule_set_key="luxian_0609",
+        evaluation_as_of_date="2026-08-16",
+        evaluation_horizon_policy="frozen",
+        evaluation_horizon_unavailable_reason="none",
+        cancellation_check=cancellation_check,
+        execution_trace_sink=trace_sink,
+    )
+
+    assert result == {"facade": "ok"}
+    assert captured == {
+        "host": service,
+        "bundle": bundle,
+        "rule_ids": ["LX0609-033"],
+        "bucket_strategy": "domain_family",
+        "quality_profile": "effect_priority_v1",
+        "batch_output_mode": "minimal",
+        "enable_selective_refine": True,
+        "refine_confidence_threshold": 0.71,
+        "max_refine_candidates": 3,
+        "use_execution_cache": False,
+        "enable_pack_probe": True,
+        "rule_set_key": "luxian_0609",
+        "evaluation_as_of_date": "2026-08-16",
+        "evaluation_horizon_policy": "frozen",
+        "evaluation_horizon_unavailable_reason": "none",
+        "cancellation_check": cancellation_check,
+        "execution_trace_sink": trace_sink,
+    }
+
+
 def test_load_running_final_bundle_should_use_scene_bundle_auto_refresh(monkeypatch):
     monkeypatch.setattr(runtime_module, "engine", object())
 
