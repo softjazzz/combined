@@ -79,6 +79,27 @@ def test_010_other_deterministic_failures_render_specific_customer_copy(
     assert expected in finding
 
 
+def test_034_missing_anesthesia_consent_renders_specific_customer_copy() -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-034",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="required_document_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="customer-copy-audit-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == "已实施麻醉，但未找到对应的麻醉知情同意书"
+    assert "专用麻醉知情同意书" in result["evidence"]
+    assert "麻醉风险告知" in result["suggestion"]
+
+
 def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() -> None:
     finding = compliant_customer_finding(
         rule_id="LX0609-068",
