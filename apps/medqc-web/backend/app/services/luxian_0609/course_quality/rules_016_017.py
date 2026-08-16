@@ -800,18 +800,18 @@ async def _review_copy_candidates(
             outcome, "model_invalid_output", usage=usage
         )
 
-    if "uncertain" in parsed.values():
-        final_status = "evaluation_unknown"
-        final_reason = "semantic_low_confidence"
-        selected: tuple[_CopyReviewCandidate, ...] = ()
-    elif "substantial_copy" in parsed.values():
+    if "substantial_copy" in parsed.values():
         final_status = "non_compliant"
         final_reason = "copy_similarity_threshold_exceeded"
-        selected = tuple(
+        selected: tuple[_CopyReviewCandidate, ...] = tuple(
             expected[pair_ref]
             for pair_ref, verdict in parsed.items()
             if verdict == "substantial_copy"
         )
+    elif "uncertain" in parsed.values():
+        final_status = "evaluation_unknown"
+        final_reason = "semantic_low_confidence"
+        selected = ()
     else:
         final_status = "compliant"
         final_reason = "copy_similarity_within_threshold"

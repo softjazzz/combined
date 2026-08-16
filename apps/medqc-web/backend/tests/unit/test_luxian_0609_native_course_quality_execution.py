@@ -4560,6 +4560,59 @@ async def test_017_semantic_review_verdict_is_mapped_by_python_once(
 
 
 @pytest.mark.asyncio
+async def test_017_confirmed_substantial_copy_takes_priority_over_uncertain_pair(
+    monkeypatch,
+) -> None:
+    template = "患者病情稳定生命体征平稳继续观察病情" * 10
+    rows = [
+        {**_row(f"{template}今日腹痛减轻。", "2026-06-01 09:00:00"), "document_id": "PRIVATE-A"},
+        {**_row(f"{template}今日高热感染进展。", "2026-06-02 09:00:00"), "document_id": "PRIVATE-B"},
+        {**_row(f"{template}今日胸闷调整治疗。", "2026-06-03 09:00:00"), "document_id": "PRIVATE-C"},
+    ]
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: rows if kwargs["source_key"] == "daily_course_record" else [],
+    )
+    class _MixedReviewClient(_CopyReviewClient):
+        async def generate(self, prompt: str, **kwargs: Any) -> dict:
+            self.calls.append({"prompt": prompt, **kwargs})
+            pairs = re.findall(
+                r'"pair_ref":"(P\d+)","left_ref":"(D\d+)","right_ref":"(D\d+)"',
+                prompt,
+            )
+            assert len(pairs) >= 2
+            return _copy_review_response([
+                {
+                    "pair_ref": pair_ref,
+                    "verdict": "substantial_copy" if index == 0 else "uncertain",
+                    "document_refs": [left_ref, right_ref],
+                }
+                for index, (pair_ref, left_ref, right_ref) in enumerate(pairs)
+            ])
+
+    client = _MixedReviewClient()
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "copy_similarity_threshold_exceeded"
+    )
+    assert len(result.results[0]["metadata"]["best_match_pairs"]) == 1
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_017_high_similarity_uses_one_semantic_review(
     monkeypatch,
 ):
