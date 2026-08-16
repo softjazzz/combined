@@ -2940,6 +2940,33 @@ async def test_007_substantive_record_without_time_does_not_downgrade_compliant_
 
 
 @pytest.mark.asyncio
+async def test_008_legacy_timeline_keeps_first_course_and_rescue_sources() -> None:
+    client = _Client([{"is_compliant": True}])
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-008",),
+        wrapper_rules=[_wrapper("LX0609-008")],
+        evidence_payload=_payload(
+            documents={
+                "first_course_record": [
+                    _row("首次病程记录病重情况。", "2026-06-01 09:00:00")
+                ],
+                "rescue_record": [
+                    _row("抢救记录复核病情变化。", "2026-06-02 09:00:00")
+                ],
+            },
+            facts=[_strong_fact("current_visit_serious_order")],
+        ),
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.llm_call_count == 1
+    assert "首次病程记录病重情况" in client.prompts[0]
+    assert "抢救记录复核病情变化" in client.prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
     documents = {
         "daily_course_record": [
