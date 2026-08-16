@@ -1133,6 +1133,26 @@ def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy
 )
 def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
     session = _WriteSession()
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": "LX0609-001",
+        "status": status,
+        "result_status": status,
+        "display_status": status,
+        "is_compliant": is_compliant,
+    }
+    if status == "non_compliant":
+        item["criterion_results"] = [
+            {
+                "criterion_id": "requirement_check",
+                "kind": "semantic_relation",
+                "status": "failed",
+                "reason_code": "requirement_violated",
+            }
+        ]
 
     CustomQCWorkspaceService()._write_record_result_envelopes(
         session,
@@ -1146,19 +1166,7 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
                 }
             ),
         },
-        items=[
-            {
-                "record_id": "visit-1",
-                "visit_id": "visit-1",
-                "institute_id": "inst-1",
-                "patient_id": "patient-1",
-                "rule_id": "LX0609-001",
-                "status": status,
-                "result_status": status,
-                "display_status": status,
-                "is_compliant": is_compliant,
-            }
-        ],
+        items=[item],
         now=datetime(2026, 8, 15, 10, 0, 0),
     )
 
@@ -1501,3 +1509,82 @@ def test_writer_rejects_incomplete_case_coordinate_before_mutating_any_envelope(
         )
 
     assert session.statements == []
+
+
+def test_writer_rejects_non_compliant_without_controlled_explanation_before_mutation():
+    session = _WriteSession()
+
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        CustomQCWorkspaceService()._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps(
+                    {
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }
+                ),
+            },
+            items=[
+                {
+                    "record_id": "visit-1",
+                    "visit_id": "visit-1",
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "rule_id": "LX0609-071",
+                    "status": "non_compliant",
+                    "result_status": "non_compliant",
+                    "display_status": "non_compliant",
+                    "is_compliant": False,
+                    "reason_code": "association_failed",
+                }
+            ],
+            now=datetime(2026, 8, 16, 10, 0, 0),
+        )
+
+    assert session.statements == []
+
+
+def test_writer_accepts_non_compliant_with_controlled_failed_criterion():
+    session = _WriteSession()
+
+    CustomQCWorkspaceService()._write_record_result_envelopes(
+        session,
+        job_row={
+            "id": "job-current",
+            "created_by": "reviewer-a",
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+        },
+        items=[
+            {
+                "record_id": "visit-1",
+                "visit_id": "visit-1",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "rule_id": "LX0609-071",
+                "status": "non_compliant",
+                "result_status": "non_compliant",
+                "display_status": "non_compliant",
+                "is_compliant": False,
+                "reason_code": "association_failed",
+                "criterion_results": [
+                    {
+                        "criterion_id": "event_association",
+                        "kind": "semantic_relation",
+                        "status": "failed",
+                        "reason_code": "association_failed",
+                    }
+                ],
+            }
+        ],
+        now=datetime(2026, 8, 16, 10, 0, 0),
+    )
+
+    assert len(session.statements) == 2

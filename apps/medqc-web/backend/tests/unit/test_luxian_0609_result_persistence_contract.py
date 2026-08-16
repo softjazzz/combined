@@ -168,6 +168,45 @@ def test_complete_batch_job_rejects_malformed_result_without_completing(
     assert session.rollback_count == 1
 
 
+def test_complete_batch_job_rejects_unexplained_non_compliant_without_completing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """解释合同不完整的确定问题不得提交任务或Canonical结果。"""
+
+    session = _CompletionSession(
+        {
+            "id": "job-1",
+            "parent_job_id": None,
+            "created_by": "reviewer-1",
+            "filters_json": "{}",
+        }
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        CustomQCWorkspaceService().complete_batch_job(
+            job_id="job-1",
+            summary={"total_records": 1, "success_count": 1},
+            items=[
+                {
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                    "rule_id": "LX0609-071",
+                    "status": "non_compliant",
+                    "result_status": "non_compliant",
+                    "display_status": "non_compliant",
+                    "is_compliant": False,
+                    "reason_code": "association_failed",
+                }
+            ],
+            failed_records=[],
+        )
+
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
+
+
 def test_complete_batch_job_commits_task_and_canonical_envelope_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

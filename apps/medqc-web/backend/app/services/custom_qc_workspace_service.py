@@ -713,6 +713,29 @@ def _single_record_model_analysis(item: Dict[str, Any]) -> str:
     return _safe_text(item.get("model_analysis") or item.get("medical_analysis"))[:8000]
 
 
+def _validated_customer_explanation(
+    item: Dict[str, Any],
+    *,
+    rule_id: str,
+    status: str,
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """校验确定问题具备可审计解释；投影与Canonical写入共用同一合同。"""
+
+    customer_display_facts = _safe_customer_display_facts(item, rule_id=rule_id)
+    criterion_results = _safe_criterion_results(item)
+    has_failed_criterion = any(
+        row.get("status") == "failed" for row in criterion_results
+    )
+    if (
+        status == "non_compliant"
+        and rule_id.startswith("LX0609-")
+        and not customer_display_facts
+        and not has_failed_criterion
+    ):
+        raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+    return customer_display_facts, criterion_results
+
+
 def project_customer_safe_result_item(
     item: Dict[str, Any],
     *,
@@ -739,21 +762,11 @@ def project_customer_safe_result_item(
         or raw.get("rule_id")
         or raw.get("rule_code")
     ).upper()
-    customer_display_facts = _safe_customer_display_facts(raw, rule_id=rule_id)
-    criterion_results = _safe_criterion_results(raw)
-    has_failed_criterion = any(
-        row.get("status") == "failed" for row in criterion_results
+    customer_display_facts, criterion_results = _validated_customer_explanation(
+        raw,
+        rule_id=rule_id,
+        status=status,
     )
-    # 投影层不得改变执行器状态。正式 LX0609 的确定问题如果缺少经过白名单
-    # 校验的事实或子结论，说明上游交付合同不完整，必须失败关闭；不能降级为
-    # uncertain，也不能回退到可能掩盖真实问题的通用文案。
-    if (
-        status == "non_compliant"
-        and rule_id.startswith("LX0609-")
-        and not customer_display_facts
-        and not has_failed_criterion
-    ):
-        raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
     generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     # 原始执行结果中的 customer_* 字段仍可能混入病历句子。只有已经通过本投影器
     # 生成的 DTO 才允许复用客户文案；首次投影一律按状态生成固定安全表述。
@@ -5589,6 +5602,18 @@ class CustomQCWorkspaceService:
                 raise ValueError("Canonical Envelope 规则集合不完整，拒绝完成质控任务")
             if not _canonical_envelope_items_are_consistent(record_items):
                 raise ValueError("Canonical Envelope 状态字段不一致，拒绝完成质控任务")
+            for record_item in record_items:
+                rule_id = _safe_text(
+                    record_item.get("customer_rule_id")
+                    or record_item.get("qc_point_id")
+                    or record_item.get("rule_id")
+                    or record_item.get("rule_code")
+                ).upper()
+                _validated_customer_explanation(
+                    record_item,
+                    rule_id=rule_id,
+                    status=_canonical_customer_status(record_item),
+                )
 
         prepared_envelopes: List[tuple[CaseRef, Dict[str, Any]]] = []
         for record_ref, record_items in grouped.items():
