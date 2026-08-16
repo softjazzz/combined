@@ -2075,8 +2075,6 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
-            if outcome.legacy_planned_rule_ids_overridden:
-                selected = outcome.legacy_planned_rule_ids
             decisions.append(
                 _decision(
                     rule_id=rule_id,

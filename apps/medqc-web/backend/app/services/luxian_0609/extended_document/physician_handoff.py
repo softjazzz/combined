@@ -22,8 +22,6 @@ class PhysicianHandoffOutcome:
     reason_code: str
     change_source_key: str
     display_facts: Mapping[str, Any] | None = None
-    legacy_planned_rule_ids_overridden: bool = False
-    legacy_planned_rule_ids: Any = None
 
 
 def _document_refs(
@@ -405,8 +403,4 @@ def evaluate_physician_handoff(
             "handover_threshold_hours": 24,
             "source_document_refs": selected_refs,
         },
-        # 纯移动兼容：旧主执行器的单事件文书循环会把函数级 selected
-        # 覆盖成最后一条接班候选。该缺陷另立任务修复，本次保持返回值等价。
-        True,
-        selected_handover,
     )

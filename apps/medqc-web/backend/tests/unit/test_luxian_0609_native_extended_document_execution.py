@@ -1088,11 +1088,9 @@ async def test_071_physician_change_requires_handoff_and_handover() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("with_handover", [True, False])
-async def test_071_preserves_legacy_single_event_planned_rule_ids_shadowing(
+async def test_071_single_event_preserves_selected_rule_ids(
     with_handover: bool,
 ) -> None:
-    """纯拆分须保留旧循环覆盖 planned_rule_ids 的历史副作用。"""
-
     handover_rows = (
         ({"document_id": "HANDOVER-071", "record_time": "2026-07-01 14:00:00"},)
         if with_handover
@@ -1111,11 +1109,7 @@ async def test_071_preserves_legacy_single_event_planned_rule_ids_shadowing(
         },
     )
 
-    if with_handover:
-        assert result.planned_rule_ids[0] == datetime(2026, 7, 1, 14, 0)
-        assert result.planned_rule_ids[1]["document_id"] == "HANDOVER-071"
-    else:
-        assert result.planned_rule_ids is None
+    assert result.planned_rule_ids == ("LX0609-071",)
 
 
 @pytest.mark.asyncio
@@ -1141,6 +1135,7 @@ async def test_071_multiple_change_events_report_association_gap_with_existing_r
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "association_failed"
+    assert result.planned_rule_ids == ("LX0609-071",)
     canonical = _canonical_extended_result(
         rule_id="LX0609-071",
         snapshot=snapshot,
@@ -1198,6 +1193,7 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.planned_rule_ids == ("LX0609-071",)
     assert canonical["status"] == "compliant"
     assert canonical["customer_display_facts"]["change_event_count"] == 2
     assert canonical["customer_display_facts"]["events"] == [
@@ -1349,6 +1345,7 @@ async def test_071_multiple_change_events_with_untimed_record_fail_closed() -> N
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "authoritative_time_missing"
+    assert result.planned_rule_ids == ("LX0609-071",)
     canonical = _canonical_extended_result(
         rule_id="LX0609-071",
         snapshot=snapshot,
