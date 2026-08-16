@@ -44,6 +44,106 @@ def test_customer_aggregator_rejects_removed_legacy_rejudgment_keyword() -> None
         )
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "status", "facts"),
+    [
+        (
+            "LX0609-003",
+            "not_applicable",
+            {
+                "failure_kind": "qualified_surgery_absent",
+                "performed_surgery_confirmed": False,
+            },
+        ),
+        (
+            "LX0609-044",
+            "non_compliant",
+            {
+                "failure_kind": "pretransfusion_assessment_incomplete",
+                "performed_transfusion_confirmed": True,
+                "checked_fields": [
+                    "indication",
+                    "laboratory_indicator",
+                    "risk_history_or_status",
+                ],
+                "missing_fields": ["indication"],
+            },
+        ),
+    ],
+)
+def test_native_003_044_accepts_current_executor_customer_fact_contract(
+    rule_id, status, facts
+) -> None:
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+        execution_results=[
+            {
+                "rule_id": rule_id,
+                "status": status,
+                "is_compliant": status == "not_applicable",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "executor_type": "program",
+                    "customer_display_facts": facts,
+                },
+            }
+        ],
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == status
+    assert result["customer_display_facts"] == facts
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "status", "facts"),
+    [
+        (
+            "LX0609-003",
+            "non_compliant",
+            {
+                "failure_kind": "qualified_surgery_absent",
+                "performed_surgery_confirmed": False,
+            },
+        ),
+        (
+            "LX0609-044",
+            "compliant",
+            {
+                "failure_kind": "pretransfusion_assessment_incomplete",
+                "performed_transfusion_confirmed": True,
+                "checked_fields": [
+                    "indication",
+                    "laboratory_indicator",
+                    "risk_history_or_status",
+                ],
+                "missing_fields": ["indication"],
+            },
+        ),
+    ],
+)
+def test_native_003_044_rejects_customer_fact_status_mismatch(
+    rule_id, status, facts
+) -> None:
+    with pytest.raises(ValueError, match="invalid customer display fact status"):
+        aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+            execution_results=[
+                {
+                    "rule_id": rule_id,
+                    "status": status,
+                    "is_compliant": status == "compliant",
+                    "metadata": {
+                        "execution_source": "lx0609_native",
+                        "executor_type": "program",
+                        "customer_display_facts": facts,
+                    },
+                }
+            ],
+            format_evidence=False,
+        )
+
+
 def test_legacy_customer_display_guard_must_not_rejudge_executor_decision() -> None:
     result = aggregate_luxian_0609_results(
         wrapper_rules=[

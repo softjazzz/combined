@@ -285,6 +285,29 @@ def _validate_transfusion_system_gap_fact_status(
         raise ValueError("invalid transfusion customer display fact status")
 
 
+def _validate_lx0609_003_044_fact_status(
+    *,
+    rule_id: str,
+    status: str,
+    safe_facts: Mapping[str, Any] | None,
+) -> None:
+    """003/044 的确定性事实必须与执行器终态方向一致。"""
+
+    if not isinstance(safe_facts, Mapping):
+        return
+    kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
+    expected_status = {
+        ("LX0609-003", "qualified_surgery_absent"): "not_applicable",
+        ("LX0609-003", "surgery_record_late"): "non_compliant",
+        ("LX0609-003", "surgery_record_within_threshold"): "compliant",
+        ("LX0609-044", "pretransfusion_assessment_complete"): "compliant",
+        ("LX0609-044", "pretransfusion_assessment_incomplete"): "non_compliant",
+        ("LX0609-044", "pretransfusion_assessment_missing"): "non_compliant",
+    }.get((rule_id, kind))
+    if expected_status is not None and status != expected_status:
+        raise ValueError("invalid customer display fact status")
+
+
 def _validate_lx0609_025_fact_status(
     *,
     rule_id: str,
@@ -1130,15 +1153,30 @@ def safe_luxian_0609_customer_display_facts(
     if rule_id in {"LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"}:
         kind = raw.get("verification_kind") or raw.get("failure_kind")
         if rule_id == "LX0609-044" and kind in {
-            "pretransfusion_assessment_complete", "pretransfusion_assessment_incomplete",
+            "pretransfusion_assessment_complete",
+            "pretransfusion_assessment_incomplete",
+            "pretransfusion_assessment_missing",
         }:
             allowed_fields = {
-                "indication", "laboratory_indicator", "transfusion_history_or_reaction",
-                "patient_status", "planned_component", "expected_effect", "physician_signature",
+                "indication",
+                "laboratory_indicator",
+                "risk_history_or_status",
             }
             checked = controlled_list(raw.get("checked_fields"), allowed=allowed_fields)
             missing = controlled_list(raw.get("missing_fields"), allowed=allowed_fields)
-            if checked is None or missing is None or raw.get("performed_transfusion_confirmed") is not True:
+            if (
+                checked != sorted(allowed_fields)
+                or missing is None
+                or raw.get("performed_transfusion_confirmed") is not True
+                or (
+                    kind == "pretransfusion_assessment_complete"
+                    and missing
+                )
+                or (
+                    kind != "pretransfusion_assessment_complete"
+                    and not missing
+                )
+            ):
                 return None
             return {
                 "verification_kind" if kind == "pretransfusion_assessment_complete" else "failure_kind": kind,
@@ -2347,6 +2385,14 @@ def safe_luxian_0609_customer_display_facts(
         }
         return facts
     if rule_id == "LX0609-003":
+        if (
+            raw.get("failure_kind") == "qualified_surgery_absent"
+            and raw.get("performed_surgery_confirmed") is False
+        ):
+            return {
+                "failure_kind": "qualified_surgery_absent",
+                "performed_surgery_confirmed": False,
+            }
         surgery_end_time = raw.get("surgery_end_time")
         record_time = raw.get("record_time")
         elapsed_hours = raw.get("elapsed_hours")
@@ -4129,6 +4175,11 @@ def _copy_native_customer_fields(
         status=status,
         safe_facts=safe_display_facts,
     )
+    _validate_lx0609_003_044_fact_status(
+        rule_id=wrapper_id,
+        status=status,
+        safe_facts=safe_display_facts,
+    )
     if (
         wrapper_id == "LX0609-017"
         and raw_display_facts is not None
@@ -4362,6 +4413,11 @@ def aggregate_luxian_0609_results(
                 status=str(result.get("status") or ""),
                 safe_facts=display_facts_by_rule.get(wrapper_id),
             )
+            _validate_lx0609_003_044_fact_status(
+                rule_id=wrapper_id,
+                status=str(result.get("status") or ""),
+                safe_facts=display_facts_by_rule.get(wrapper_id),
+            )
             if wrapper_id in display_facts_by_rule:
                 result["customer_display_facts"] = display_facts_by_rule[wrapper_id]
                 precise_findings = _controlled_customer_findings(
@@ -4464,6 +4520,11 @@ def aggregate_luxian_0609_results(
                     if precise_findings:
                         result["findings"] = precise_findings
                 _validate_transfusion_system_gap_fact_status(
+                    rule_id=wrapper_id,
+                    status=str(result.get("status") or ""),
+                    safe_facts=result.get("customer_display_facts"),
+                )
+                _validate_lx0609_003_044_fact_status(
                     rule_id=wrapper_id,
                     status=str(result.get("status") or ""),
                     safe_facts=result.get("customer_display_facts"),
