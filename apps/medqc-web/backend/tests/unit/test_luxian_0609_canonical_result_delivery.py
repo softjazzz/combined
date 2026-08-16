@@ -1215,6 +1215,54 @@ def test_writer_marks_envelope_as_canonical_straight_through():
     assert envelope["items"][0]["conclusion"] == "引擎结论原文"
 
 
+def test_writer_uses_facade_envelope_item_projector(monkeypatch):
+    session = _WriteSession()
+    service = CustomQCWorkspaceService()
+    projected_item = {
+        "rule_id": "LX0609-001",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": True,
+        "projected_by_facade": True,
+    }
+    monkeypatch.setattr(
+        service,
+        "_envelope_item_from_rule_result",
+        lambda item: dict(projected_item),
+    )
+
+    service._write_record_result_envelopes(
+        session,
+        job_row={
+            "id": "job-current",
+            "created_by": "reviewer-a",
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+        },
+        items=[
+            {
+                "record_id": "visit-1",
+                "visit_id": "visit-1",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            }
+        ],
+        now=datetime(2026, 8, 15, 10, 0, 0),
+    )
+
+    insert_params = session.statements[-1].compile().params
+    envelope = json.loads(insert_params["envelope_json"])
+    assert envelope["items"] == [projected_item]
+
+
 def test_pending_rule_conclusion_remains_customer_text_through_canonical_delivery(
     monkeypatch,
 ):
