@@ -7,7 +7,7 @@ import pytest
 
 from app.routers.qc_sichuan import _build_record_status_counts
 from app.services.luxian_0609_result_aggregator import (
-    aggregate_luxian_0609_results as _aggregate_luxian_0609_results,
+    aggregate_luxian_0609_results,
     summarize_luxian_0609_results,
 )
 from app.services.luxian_0609_evidence_formatter import format_luxian_0609_evidence
@@ -70,13 +70,6 @@ from app.services.luxian_0609.surgery_text_fact_contract import (
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
-
-
-def aggregate_luxian_0609_results(**kwargs):
-    """冻结旧聚合展示测试；生产入口始终禁用二次业务判定。"""
-
-    kwargs.setdefault("legacy_customer_display_rejudgment", True)
-    return _aggregate_luxian_0609_results(**kwargs)
 
 
 @pytest.mark.asyncio
@@ -752,6 +745,150 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
     ]
     assert context.unified_engine_used is True
     assert context.evidence_snapshot is snapshot
+
+
+@pytest.mark.asyncio
+async def test_unified_027_missing_decision_and_projection_fail_closed(
+    monkeypatch,
+) -> None:
+    """027 正式执行缺少决策/投影时必须失败关闭，不能交给聚合器补判。"""
+    selected = ("LX0609-027",)
+    snapshot = _safe_evidence_snapshot()
+    session = Luxian0609EvidenceReadSession(
+        snapshot=snapshot,
+        materials=Luxian0609EvidenceMaterialStore.create(
+            snapshot=snapshot,
+            sources={},
+        ),
+    )
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("tumor_pathology", selected),),
+    )
+
+    async def _missing_decision(**_kwargs):
+        return NativeExecutionResult(
+            results=(),
+            planned_rule_ids=selected,
+            decisions=(),
+            customer_display_facts=(),
+        )
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: session,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                "LX0609-027",
+                name="出院记录中是否记录肿瘤后续治疗计划",
+                mapped_rule_ids=["SC-114"],
+                trigger_condition="肿瘤患者出院记录应体现后续治疗计划。",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_tumor_pathology_rules",
+        _missing_decision,
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={"programmatic_timeline": {}},
+        llm_client=object(),
+        settings=_all_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        source_schema="cdm",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-027"]
+    assert context.native_results[0]["status"] == "technical_error"
+    assert context.native_results[0]["is_compliant"] is False
+    assert context.native_results[0]["metadata"]["reason_code"] == "family_result_missing"
+    assert context.reduced_decisions == ()
+    assert context.customer_display_facts == ()
+
+    delivered = luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []},
+        context=context,
+        visit_id="private-visit",
+        model_name="unused",
+        evidence_payload={"programmatic_timeline": {}},
+    )
+    assert [item["rule_id"] for item in delivered["results"]] == ["LX0609-027"]
+    customer_result = delivered["results"][0]
+    assert customer_result["status"] == "technical_error"
+    assert customer_result["result_status"] == "technical_error"
+    assert customer_result["metadata"]["reason_code"] == "family_result_missing"
+    assert not customer_result.get("source_rule_id")
+    visible_result = repr(customer_result)
+    assert "底层" not in visible_result
+    assert "映射规则" not in visible_result
+
+
+@pytest.mark.parametrize(
+    ("migration_case", "rule_id", "expected_owner"),
+    (
+        ("003-positive-time", "LX0609-003", "surgery_gate"),
+        ("007-critical-context", "LX0609-007", "course_quality"),
+        ("019-safe-evidence", "LX0609-019", "tumor_pathology"),
+        ("019-recorded-specimen", "LX0609-019", "tumor_pathology"),
+        ("019-final-pathology-gap", "LX0609-019", "tumor_pathology"),
+        ("019-source-absent", "LX0609-019", "tumor_pathology"),
+        ("024-current-malignancy", "LX0609-024", "not_executed"),
+        ("025-required-facts", "LX0609-025", "not_executed"),
+        ("028-antibiotic-time", "LX0609-028", "not_executed"),
+        ("033-source-gap-1", "LX0609-033", "surgery_gate"),
+        ("033-source-gap-2", "LX0609-033", "surgery_gate"),
+        ("033-source-gap-3", "LX0609-033", "surgery_gate"),
+        ("038-anesthesia-source", "LX0609-038", "surgery_document"),
+        ("039-signature-fact", "LX0609-039", "surgery_document"),
+        ("026-chemo-trigger", "LX0609-026", "tumor_pathology"),
+        ("040-level-4-trigger", "LX0609-040", "surgery_mdt"),
+    ),
+)
+def test_migrated_customer_guard_is_owned_by_native_or_pending_contract(
+    migration_case,
+    rule_id,
+    expected_owner,
+) -> None:
+    """旧聚合器防误判用例迁移后，正式所有者只能是 Native 或阶段门。"""
+    plan = luxian_execution.build_luxian_0609_package_plan_from_settings(
+        inventory=load_luxian_0609_dependency_inventory(),
+        selected_rule_ids=(rule_id,),
+        settings=_all_native_settings(),
+    )
+
+    assert migration_case
+    assert plan.compatibility_rule_ids == ()
+    assert plan.compatibility_execution_rule_ids == ()
+    if expected_owner == "not_executed":
+        assert plan.not_executed_rule_ids == (rule_id,)
+        assert plan.native_executor_batches == ()
+    else:
+        assert plan.not_executed_rule_ids == ()
+        assert plan.native_executor_batches == ((expected_owner, (rule_id,)),)
 
 
 @pytest.mark.asyncio
@@ -4181,73 +4318,6 @@ def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
     assert aggregated[0]["metadata"]["aggregation_source"] == "trigger_gate"
 
 
-def test_customer_result_should_persist_source_diagnostic_trace():
-    rules = [
-        _wrapper(
-            "LX0609-019",
-            name="病理检查：取材情况未在病程记录/手术记录中进行记录",
-            mapped_rule_ids=["SC-099", "SC-037"],
-            primary="SC-099",
-            trigger_condition="存在病理报告、手术记录或送病检事实时，检查取材情况记录。",
-        )
-    ]
-    decisions = {
-        "LX0609-019": Luxian0609GateDecision(
-            rule_id="LX0609-019",
-            status=TRIGGER_PRESENT,
-            reason="发现手术送检和病理结果线索",
-            matched_keywords=("送病检", "病理结果"),
-        )
-    }
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-099",
-                "rule_name": "病理取材记录完整性",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "底层规则认为取材情况记录不完整。",
-                "evidence": "【手术记录】阑尾向患者家属展示后送病检。",
-                "evidence_items": [
-                    {
-                        "source_table": "surgery_record",
-                        "field_path": "标本处理",
-                        "quote": "阑尾向患者家属展示后送病检。",
-                    }
-                ],
-                "suggestion": "请补充取材部位和数量。",
-                "confidence": 0.82,
-                "metadata": {
-                    "executor_type": "llm",
-                    "model_version": "unit-test-model",
-                    "final_decision_source": "batch",
-                    "prompt": "should be stripped",
-                },
-            }
-        ],
-        gate_decisions=decisions,
-    )
-
-    result = aggregated[0]
-    trace = result["diagnostic_trace"]
-    assert result["status"] == "compliant"
-    assert result["is_compliant"] is True
-    assert result["metadata"]["customer_display_guard"] == "pathology_specimen_positive_recorded"
-    assert result["source_rule_id"] == "SC-099"
-    assert result["source_status"] == "compliant"
-    assert trace["source_execution_results"][0]["source_status"] == "non_compliant"
-    assert "取材情况记录不完整" in trace["source_execution_results"][0]["source_conclusion"]
-    assert "阑尾向患者家属展示后送病检" in str(result["source_evidence"])
-    assert trace["trigger_decision"]["status"] == TRIGGER_PRESENT
-    assert trace["source_execution_results"][0]["source_rule_id"] == "SC-099"
-    assert trace["source_execution_results"][0]["model_version"] == "unit-test-model"
-    assert "mapped execution result" in trace["aggregation_reason"]
-    assert "aggregation_reason" not in result
-    assert "aggregation_reason" not in result["metadata"]
-    assert "prompt" not in str(trace)
-    assert result["metadata"]["diagnostic_trace"]["source_rule_id"] == "SC-099"
 
 
 def test_trigger_gate_decision_result_should_use_customer_readable_evidence():
@@ -4404,159 +4474,12 @@ def test_aggregator_should_prioritize_non_compliant_over_primary_compliant():
     assert "手术记录超时" in aggregated[0]["findings"]
 
 
-def test_aggregator_should_not_show_lx0609_003_positive_time_result_as_defect():
-    rules = [
-        _wrapper(
-            "LX0609-003",
-            name="手术记录：手术后24小时内是否完成",
-            mapped_rule_ids=["SC-096"],
-            trigger_condition="手术记录应在术后24小时内完成。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-096",
-                "rule_name": "手术记录时限",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "手术记录在术后43分钟完成，未超过24小时，但缺少麻醉记录无法通过麻醉记录交叉验证。",
-                "evidence": "执行证据：手术结束时间2026-06-01 10:00；手术记录时间2026-06-01 10:43。",
-                "suggestion": "补充麻醉记录。",
-                "confidence": 0.88,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["is_compliant"] is None
-    assert "未超过术后24小时" in aggregated[0]["findings"]
-    assert "缺少麻醉记录" in aggregated[0]["findings"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "lx0609_003_positive_time_result"
 
 
-def test_aggregator_should_not_show_stable_round_defect_when_critical_context_exists():
-    rules = [
-        _wrapper(
-            "LX0609-007",
-            name="查房记录：病情稳定患者3天内无查房病程记录",
-            mapped_rule_ids=["LXE-18"],
-            trigger_condition="病情稳定患者应每3天记录查房病程。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "LXE-18",
-                "rule_name": "稳定患者查房频次",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "患者住院期间发生抢救，提示病情危重，但仍按稳定患者查房频次判定缺陷。",
-                "evidence": "执行证据：【上级查房记录】今日主治医师查看患者。",
-                "suggestion": "补写病程记录。",
-                "confidence": 0.82,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "ai_suggested_non_compliant"
-    assert "不能直接按“病情稳定患者3天内无查房病程记录”判为缺陷" in aggregated[0]["findings"]
-    assert "病危/病重医嘱" in aggregated[0]["suggestion"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "stable_round_has_critical_context"
 
 
-def test_aggregator_should_not_show_recorded_pathology_specimen_as_defect_for_019_and_024():
-    rules = [
-        _wrapper(
-            "LX0609-019",
-            name="病理检查：取材情况未在病程记录或手术记录中进行记录",
-            mapped_rule_ids=["SC-099"],
-            trigger_condition="病理取材情况应在手术记录或病程中记录。",
-        ),
-        _wrapper(
-            "LX0609-024",
-            name="恶性肿瘤手术记录未书写淋巴结清扫情况",
-            mapped_rule_ids=["SC-099"],
-            trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
-        ),
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-099",
-                "rule_name": "术中取材和病理结果记录",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "手术记录已记录术中取材及冰冻病理结果。",
-                "evidence": "执行证据：手术记录：送检肿物及第7组淋巴结，冰冻病理提示恶性。",
-                "suggestion": "人工复核。",
-                "confidence": 0.9,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    by_id = {item["rule_id"]: item for item in aggregated}
-    for rule_id in ["LX0609-019", "LX0609-024"]:
-        assert by_id[rule_id]["status"] == "compliant"
-        assert by_id[rule_id]["is_compliant"] is True
-        assert "未形成缺陷" in by_id[rule_id]["findings"]
-        assert by_id[rule_id]["metadata"]["customer_display_guard"] == "pathology_specimen_positive_recorded"
 
 
-def test_aggregator_should_not_map_final_pathology_gap_to_specimen_or_lymph_defect():
-    rules = [
-        _wrapper(
-            "LX0609-019",
-            name="病理检查：取材情况未在病程记录或手术记录中进行记录",
-            mapped_rule_ids=["SC-099"],
-            trigger_condition="病理取材情况应在手术记录或病程中记录。",
-        ),
-        _wrapper(
-            "LX0609-024",
-            name="恶性肿瘤手术记录未书写淋巴结清扫情况",
-            mapped_rule_ids=["SC-099"],
-            trigger_condition="恶性肿瘤手术记录应书写淋巴结清扫情况。",
-        ),
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-099",
-                "rule_name": "术中取材和病理结果记录",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "手术记录记录了术中冰冻病理结果，但未记录术后石蜡病理最终结果。",
-                "evidence": (
-                    "执行证据：【手术记录】楔形切除左肺上叶结节，检查切缘无出血，"
-                    "家属看过标本后送检。术中冰冻病理提示浸润性腺癌。"
-                ),
-                "suggestion": "补充术后石蜡病理最终诊断结果。",
-                "confidence": 0.95,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    by_id = {item["rule_id"]: item for item in aggregated}
-    for rule_id in ["LX0609-019", "LX0609-024"]:
-        assert by_id[rule_id]["status"] == "compliant"
-        assert by_id[rule_id]["is_compliant"] is True
-        assert by_id[rule_id]["metadata"]["customer_display_guard"] == "pathology_specimen_positive_recorded"
 
 
 def test_aggregator_should_keep_specimen_detail_absence_as_non_compliant():
@@ -4593,72 +4516,8 @@ def test_aggregator_should_keep_specimen_detail_absence_as_non_compliant():
     assert "未详细记录取材部位" in aggregated[0]["findings"]
 
 
-def test_aggregator_should_not_show_anesthesia_consent_as_record_sheet_defect():
-    rules = [
-        _wrapper(
-            "LX0609-038",
-            name="麻醉记录单：无麻醉记录单（局麻除外）",
-            mapped_rule_ids=["SC-090"],
-            trigger_condition="非局麻手术应有麻醉记录单。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-090",
-                "rule_name": "麻醉知情同意书存在性",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "缺少适用文书，未执行该规则：知情同意书。",
-                "evidence": "执行证据：知情同意书未见。",
-                "suggestion": "补齐知情同意书。",
-                "confidence": 0.8,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert "不能直接判定为无麻醉记录单" in aggregated[0]["findings"]
-    assert "麻醉记录单" in aggregated[0]["evidence"]
-    assert "知情同意书" not in aggregated[0]["evidence"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "anesthesia_consent_not_record_sheet_defect"
 
 
-def test_aggregator_should_not_show_preop_signature_contradiction_as_defect():
-    rules = [
-        _wrapper(
-            "LX0609-039",
-            name="术前讨论记录：除以紧急抢救生命为目的的急诊手术以外，无术前讨论记录",
-            mapped_rule_ids=["LX-019"],
-            trigger_condition="术前讨论记录应包含关键签名。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "LX-019",
-                "rule_name": "术前讨论记录",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "术前讨论记录缺失关键签名。",
-                "evidence": "执行证据：【术前讨论记录】主持人签名：李杰；记录医师：徐应福。",
-                "suggestion": "补齐关键签名。",
-                "confidence": 0.82,
-                "metadata": {},
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert "结论与证据存在矛盾" in aggregated[0]["findings"]
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "preop_discussion_signature_contradiction"
 
 
 def test_filter_executable_rules_should_skip_only_when_all_mapped_wrappers_terminal():
@@ -6376,35 +6235,6 @@ def test_trigger_gate_should_require_pathology_specimen_context_for_lx0609_019()
     assert present["LX0609-019"].matched_keywords
 
 
-def test_lx0609_019_should_be_not_applicable_without_pathology_source_evidence():
-    rules = [
-        _wrapper(
-            "LX0609-019",
-            name="病理检查：取材情况未在病程记录或手术记录中进行记录",
-            mapped_rule_ids=["SC-099"],
-            trigger_condition="病理取材情况应在病程记录或手术记录中记录。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-099",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "病程记录中未明确记载取材情况及病理结果。",
-                "evidence": "执行证据：【日常病程记录】今日查房，患者一般情况可，咳嗽、呼吸困难好转，二便正常。",
-                "suggestion": "请人工复核。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["is_compliant"] is None
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "pathology_specimen_requires_source_fact"
-    assert "病理报告、活检取材或手术送检" in aggregated[0]["findings"]
 
 
 async def _assert_pending_rule_uses_public_not_executed(rule_id: str) -> None:
@@ -6450,34 +6280,6 @@ async def _assert_pending_rule_uses_public_not_executed(rule_id: str) -> None:
 async def test_lx0609_028_uncertain_should_be_not_applicable_without_class_i_ii_incision():
     await _assert_pending_rule_uses_public_not_executed("LX0609-028")
 
-def test_lx0609_028_uncertain_should_show_missing_antibiotic_stop_time():
-    rules = [
-        _wrapper(
-            "LX0609-028",
-            name="抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物时间超过24小时",
-            mapped_rule_ids=["SC-ANTIBIOTIC"],
-            trigger_condition="I类、II类切口手术预防使用抗菌药物需核对医嘱起止时间。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "LX0609-028",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "当前自动判定未形成可靠结论，需人工复核。",
-                "evidence": "手术记录：患者行腹股沟疝修补术，I类切口。医嘱：术前30分钟给予头孢呋辛预防感染。",
-                "suggestion": "请人工复核。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "antibiotic_rule_missing_order_time"
-    assert "抗菌药物医嘱停止时间" in aggregated[0]["findings"]
 
 
 def test_trigger_gate_should_mark_copy_rule_data_gap_when_first_course_is_empty():
@@ -7171,31 +6973,6 @@ def test_lx0609_039_should_not_show_missing_discussion_when_discussion_time_exis
     assert outcome.status == "data_gap"
     assert outcome.reason_code == "surgeon_participation_unresolved"
 
-def test_lx0609_025_rejects_legacy_result_without_required_facts():
-    rules = [
-        _wrapper(
-            "LX0609-025",
-            name="手术记录中未记录植入物名称、种类、规格型号、材质及数量",
-            mapped_rule_ids=["SC-100", "SC-101"],
-            trigger_condition="存在植入物时核对条码和植入物信息。",
-        )
-    ]
-
-    with pytest.raises(ValueError, match="lx0609_025_display_fact_status_mismatch"):
-        aggregate_luxian_0609_results(
-            wrapper_rules=rules,
-            execution_results=[
-                {
-                    "rule_id": "SC-100",
-                    "status": "uncertain",
-                    "is_compliant": False,
-                    "findings": "未提及植入物，无法判定植入物条码是否齐全。",
-                    "evidence": "执行证据：手术记录未提及植入物。",
-                    "suggestion": "请补充植入物信息。",
-                }
-            ],
-            gate_decisions={},
-        )
 
 
 def test_lx0609_025_rejects_legacy_barcode_defect_without_required_facts():
@@ -7236,91 +7013,10 @@ def test_lx0609_025_excludes_barcode_from_required_implant_fields():
     assert all("barcode" not in field_name for field_name in LX0609_025_REQUIRED_FIELDS)
 
 
-def test_lx0609_033_should_be_data_gap_when_consent_source_is_not_covered():
-    rules = [
-        _wrapper(
-            "LX0609-033",
-            name="手术知情同意书：无手术知情同意书",
-            mapped_rule_ids=["SC-087"],
-            trigger_condition="手术患者应有手术知情同意书。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-087",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "未找到独立同意书。",
-                "evidence": "执行证据：病历目录未见手术知情同意书。",
-                "suggestion": "补齐手术知情同意书。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "surgery_consent_source_gap"
 
 
-def test_lx0609_033_should_not_mark_missing_consent_as_defect_without_synced_source_table():
-    rules = [
-        _wrapper(
-            "LX0609-033",
-            name="手术知情同意书：无手术知情同意书",
-            mapped_rule_ids=["SC-087"],
-            trigger_condition="手术患者应有手术知情同意书。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-087",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "病历中未包含手术知情同意书，存在缺失。",
-                "evidence": "执行证据：【手术记录】记录时间: 2025-09-02 09:57:05",
-                "suggestion": "补录并签署手术知情同意书。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "surgery_consent_source_gap"
 
 
-def test_lx0609_033_should_convert_ai_missing_consent_to_data_gap_without_source_coverage():
-    rules = [
-        _wrapper(
-            "LX0609-033",
-            name="手术知情同意书：无手术知情同意书",
-            mapped_rule_ids=["LXE-31"],
-            trigger_condition="手术患者应有手术知情同意书。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "LXE-31",
-                "status": "ai_suggested_non_compliant",
-                "is_compliant": False,
-                "findings": "病历中未检索到手术知情同意书或等效文书。",
-                "evidence": "执行证据：【手术记录】记录时间: 2026-02-07 21:57:03",
-                "suggestion": "补充手术知情同意书。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "surgery_consent_source_gap"
 
 
 @pytest.mark.asyncio
@@ -7372,45 +7068,6 @@ async def test_lx0609_033_should_not_treat_operation_text_consent_phrase_as_sour
     )
     assert result.llm_call_count == 0
 
-def test_lx0609_024_should_require_current_malignant_tumor_surgery_fact():
-    rules = [
-        _wrapper(
-            "LX0609-024",
-            name="恶性肿瘤手术记录未书写淋巴结清扫",
-            mapped_rule_ids=["SC-099"],
-            trigger_condition="恶性肿瘤手术需核对淋巴结清扫记录。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-099",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "手术记录中未记录术中取材情况及病理结果。",
-                "evidence": "执行证据：【手术记录】记录时间: 2026-02-07 21:57:03",
-                "suggestion": "补充术中取材及送检病理情况。",
-            }
-        ],
-        gate_decisions={},
-        audit_context={
-            "programmatic_timeline": {
-                "documents": {
-                    "surgery_record": [
-                        {
-                            "document_title": "手术记录",
-                            "content": "手术记录：手术名称：经尿道输尿管结石取石术。既往史：患者既往肺癌术后复查。",
-                        }
-                    ]
-                }
-            }
-        },
-    )
-
-    assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "malignant_tumor_surgery_requires_current_surgery_fact"
 
 
 def test_lx0609_018_semantic_result_with_controlled_criterion_is_non_compliant():
@@ -7443,40 +7100,6 @@ def test_lx0609_018_semantic_result_with_controlled_criterion_is_non_compliant()
     assert "逻辑链条不充分" in aggregated[0]["findings"]
 
 
-def test_lx0609_027_bottom_rule_without_result_should_be_review_needed():
-    rules = [
-        _wrapper(
-            "LX0609-027",
-            name="出院记录中是否记录肿瘤后续治疗计划",
-            mapped_rule_ids=["SC-114"],
-            trigger_condition="肿瘤患者出院记录应体现后续治疗计划。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-114",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "底层未返回结果，规则未形成结论。",
-                "evidence": "未返回底层执行结果。",
-                "suggestion": "请人工复核。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "data_gap"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "bottom_rule_no_reliable_result"
-    assert "自动判定未形成可靠结论" in aggregated[0]["findings"]
-    visible_text = " ".join(
-        str(aggregated[0].get(key) or "")
-        for key in ("findings", "evidence", "suggestion")
-    )
-    assert "底层" not in visible_text
-    assert "映射规则" not in visible_text
 
 
 def test_lx0609_026_gate_should_require_chemo_order_or_record_not_malignancy_only():
@@ -7512,35 +7135,6 @@ def test_lx0609_026_gate_should_require_chemo_order_or_record_not_malignancy_onl
     assert aggregated[0]["status"] == "not_applicable"
 
 
-def test_lx0609_026_should_not_apply_to_generic_treatment_without_chemo_fact():
-    rules = [
-        _wrapper(
-            "LX0609-026",
-            name="恶性肿瘤化学治疗记录与医嘱一致",
-            mapped_rule_ids=["SC-034", "SC-146"],
-            trigger_condition="化疗记录与医嘱应一致。",
-            data_dependencies=["化疗医嘱", "化疗记录"],
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-034",
-                "status": "uncertain",
-                "is_compliant": False,
-                "findings": "病程记录提及中药治疗，但未见对应诊疗医嘱。",
-                "evidence": "执行证据：【日常病程记录】目前顺产后第一天，继续当前治疗方案。",
-                "suggestion": "补开中药治疗医嘱。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["is_compliant"] is None
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "chemo_rule_requires_chemo_fact"
 
 
 def test_lx0609_040_gate_should_require_level_4_surgery_before_mdt_rule():
@@ -7594,33 +7188,6 @@ def test_lx0609_039_should_not_mark_missing_discussion_when_preop_discussion_exi
     assert outcome.status == "data_gap"
     assert outcome.reason_code == "surgeon_participation_unresolved"
 
-def test_lx0609_040_should_require_level_4_surgery_before_customer_defect():
-    rules = [
-        _wrapper(
-            "LX0609-040",
-            name="四级手术术前讨论未体现MDT",
-            mapped_rule_ids=["SC-106"],
-            trigger_condition="四级手术需核对MDT讨论记录。",
-        )
-    ]
-
-    aggregated = aggregate_luxian_0609_results(
-        wrapper_rules=rules,
-        execution_results=[
-            {
-                "rule_id": "SC-106",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "术前讨论记录未体现MDT讨论。",
-                "evidence": "执行证据：【术前讨论】腹腔镜胆囊切除术术前讨论记录。",
-                "suggestion": "补充MDT讨论记录。",
-            }
-        ],
-        gate_decisions={},
-    )
-
-    assert aggregated[0]["status"] == "not_applicable"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "mdt_rule_requires_level_4_surgery_fact"
 
 
 def test_lx0609_048_gate_should_require_intraoperative_transfusion():

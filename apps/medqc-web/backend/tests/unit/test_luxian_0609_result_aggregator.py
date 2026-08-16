@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from dataclasses import asdict, replace
 from types import SimpleNamespace
 
@@ -26,6 +27,21 @@ from app.services.luxian_0609_result_aggregator import (
 
 CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
+
+
+def test_customer_aggregator_has_no_legacy_rejudgment_switch() -> None:
+    assert "legacy_customer_display_rejudgment" not in inspect.signature(
+        aggregate_luxian_0609_results
+    ).parameters
+
+
+def test_customer_aggregator_rejects_removed_legacy_rejudgment_keyword() -> None:
+    with pytest.raises(TypeError, match="legacy_customer_display_rejudgment"):
+        aggregate_luxian_0609_results(
+            wrapper_rules=[],
+            execution_results=[],
+            legacy_customer_display_rejudgment=True,
+        )
 
 
 def test_legacy_customer_display_guard_must_not_rejudge_executor_decision() -> None:
@@ -129,78 +145,6 @@ def test_default_legacy_aggregation_preserves_executor_status_without_display_re
     assert "customer_display_status" not in uncertain_data.get("metadata", {})
 
 
-def test_explicit_legacy_display_rejudgment_keeps_historical_branches() -> None:
-    aggregate = __import__(
-        "app.services.luxian_0609_result_aggregator",
-        fromlist=["aggregate_luxian_0609_results"],
-    ).aggregate_luxian_0609_results
-    copied_course = "患者病情稳定，继续既定治疗方案，密切观察生命体征变化。" * 4
-    copy_context = {
-        "programmatic_timeline": {
-            "documents": {
-                "first_course_record": [],
-                "daily_course_record": [
-                    {"document_id": "first", "content": copied_course},
-                    {"document_id": "second", "content": copied_course},
-                ],
-            }
-        }
-    }
-
-    first_course_missing = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-016"}],
-        execution_results=[
-            {
-                "rule_id": "LX0609-016",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "执行器已判定首次病程复制。",
-                "metadata": {"execution_source": "legacy"},
-            }
-        ],
-        audit_context=copy_context,
-        format_evidence=False,
-        legacy_customer_display_rejudgment=True,
-    )[0]
-    assert first_course_missing["status"] == "data_gap"
-    assert first_course_missing["metadata"]["copy_rule_priority_guard"] == "first_course_missing"
-
-    uncertain_copy = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-017"}],
-        execution_results=[
-            {
-                "rule_id": "LX0609-017",
-                "status": "uncertain",
-                "is_compliant": None,
-                "findings": "需要人工复核。",
-                "metadata": {"execution_source": "legacy"},
-            }
-        ],
-        audit_context=copy_context,
-        format_evidence=False,
-        legacy_customer_display_rejudgment=True,
-    )[0]
-    assert uncertain_copy["status"] == "non_compliant"
-    assert uncertain_copy["metadata"]["customer_display_guard"] == "copy_compare_evidence"
-
-    uncertain_data = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-999"}],
-        execution_results=[
-            {
-                "rule_id": "LX0609-999",
-                "status": "uncertain",
-                "is_compliant": None,
-                "findings": "会诊执行记录缺失，需人工复核。",
-                "metadata": {"execution_source": "legacy"},
-            }
-        ],
-        format_evidence=False,
-        legacy_customer_display_rejudgment=True,
-    )[0]
-    assert uncertain_data["status"] == "data_gap"
-    assert uncertain_data["metadata"]["customer_display_status"] == "data_gap"
-
-
 @pytest.mark.parametrize(
     ("rule_id", "status", "is_compliant"),
     (
@@ -238,7 +182,6 @@ def test_native_and_phase_results_never_enter_legacy_display_rejudgment(
         ],
         audit_context={"programmatic_timeline": {"documents": {"first_course_record": []}}},
         format_evidence=False,
-        legacy_customer_display_rejudgment=True,
     )[0]
 
     assert result["status"] == status
@@ -1476,97 +1419,6 @@ def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostic
         "cl-181", "sc-081", "mapped execution", "raw_text", "raw_response",
         "raw_visit_coord_029", "raw_patient_coord_029", "raw_body_029", "prompt_version",
     ))
-
-
-@pytest.mark.parametrize(
-    ("rule_id", "target_source"),
-    (
-        ("LX0609-029", "presurg_summary"),
-        ("LX0609-032", "surgery_safecheck_record"),
-    ),
-)
-def test_surgery_document_missing_source_coverage_cannot_emit_defect(
-    rule_id, target_source
-):
-    aggregate = __import__(
-        "app.services.luxian_0609_result_aggregator",
-        fromlist=["aggregate_luxian_0609_results"],
-    ).aggregate_luxian_0609_results
-    result = aggregate(
-        wrapper_rules=[{"rule_id": rule_id}],
-        execution_results=[
-            {
-                "rule_id": rule_id,
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "目标文书缺失",
-                "evidence": "",
-                "suggestion": "",
-                "metadata": {"execution_source": "legacy"},
-            }
-        ],
-        format_evidence=False,
-        audit_context={"programmatic_timeline": {"source_table_coverage": {}}},
-        legacy_customer_display_rejudgment=True,
-    )[0]
-    assert result["status"] == "data_gap"
-    assert result["metadata"]["customer_display_guard"] == "surgery_document_target_source_unproven"
-
-    covered = aggregate(
-        wrapper_rules=[{"rule_id": rule_id}],
-        execution_results=[
-            {
-                "rule_id": rule_id,
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "目标文书缺失",
-                "evidence": "",
-                "suggestion": "",
-                "metadata": {"execution_source": "legacy"},
-            }
-        ],
-        format_evidence=False,
-        audit_context={
-            "programmatic_timeline": {
-                "source_table_coverage": {target_source: {"row_count": 0, "hit": False}}
-            }
-        },
-        legacy_customer_display_rejudgment=True,
-    )[0]
-    assert covered["status"] == "non_compliant"
-    assert covered["is_compliant"] is False
-
-    source_unproven = aggregate(
-        wrapper_rules=[{"rule_id": rule_id}],
-        execution_results=[
-            {
-                "rule_id": rule_id,
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "目标文书缺失",
-                "evidence": "",
-                "suggestion": "",
-                "metadata": {"execution_source": "legacy"},
-            }
-        ],
-        format_evidence=False,
-        audit_context={
-            "evidence_snapshot": SimpleNamespace(
-                observations=(
-                    SimpleNamespace(
-                        source_key=target_source,
-                        query_state=SimpleNamespace(value="unavailable"),
-                        completeness=SimpleNamespace(value="unproven"),
-                    ),
-                )
-            ),
-            "programmatic_timeline": {
-                "source_table_coverage": {target_source: {"row_count": 0, "hit": False}}
-            },
-        },
-        legacy_customer_display_rejudgment=True,
-    )[0]
-    assert source_unproven["status"] == "data_gap"
 
 
 def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monkeypatch):

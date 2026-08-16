@@ -2038,13 +2038,10 @@ def _copy_customer_fields(
     mapped_results: list[dict[str, Any]],
     source: str,
     gate_decision: Luxian0609GateDecision | None,
-    legacy_customer_display_rejudgment: bool = False,
 ) -> dict[str, Any]:
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
     primary_rule_id = _norm_id(wrapper.get("primary_execution_rule_id"))
     mapped_rule_ids = [_norm_id(item) for item in list(wrapper.get("mapped_rule_ids") or []) if _norm_id(item)]
-    if legacy_customer_display_rejudgment:
-        selected = _split_uncertain_customer_result(wrapper_id=wrapper_id, selected=selected)
     status = _status(selected)
     if status not in {
         "compliant",
@@ -5940,7 +5937,6 @@ def aggregate_luxian_0609_results(
     reduced_decisions: tuple[ReducedRuleDecision, ...] = (),
     customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = (),
     decision_trace_sink: DecisionTraceSink | None = None,
-    legacy_customer_display_rejudgment: bool = False,
 ) -> list[dict[str, Any]]:
     # 延迟加载避免聚合器导入时触发 luxian_0609 包的公开 re-export，
     # 从而与 customer_rule_package 形成循环依赖。
@@ -6097,7 +6093,6 @@ def aggregate_luxian_0609_results(
                     mapped_results=[],
                     source="trigger_gate",
                     gate_decision=decision,
-                    legacy_customer_display_rejudgment=legacy_customer_display_rejudgment,
                 )
                 if format_evidence:
                     result = format_luxian_0609_evidence(
@@ -6177,23 +6172,6 @@ def aggregate_luxian_0609_results(
                 result = finalize_luxian_0609_canonical_result(result)
                 customer_results.append(result)
                 continue
-            if legacy_customer_display_rejudgment:
-                selected = _guard_copy_rule_without_first_course(
-                    wrapper_id=wrapper_id,
-                    selected=selected,
-                    audit_context=audit_context,
-                )
-                selected = _apply_copy_compare_evidence_for_lx017(
-                    wrapper_id=wrapper_id,
-                    selected=selected,
-                    audit_context=audit_context,
-                )
-            selected = _guard_customer_display_result(
-                wrapper_id=wrapper_id,
-                selected=selected,
-                audit_context=audit_context,
-                legacy_business_rejudgment=legacy_customer_display_rejudgment,
-            )
             source = "customer_programmatic"
             result = _copy_customer_fields(
                 wrapper=wrapper,
@@ -6201,13 +6179,6 @@ def aggregate_luxian_0609_results(
                 mapped_results=direct_results,
                 source=source,
                 gate_decision=decision,
-                legacy_customer_display_rejudgment=legacy_customer_display_rejudgment,
-            )
-            result = _guard_customer_display_result(
-                wrapper_id=wrapper_id,
-                selected=result,
-                audit_context=audit_context,
-                legacy_business_rejudgment=legacy_customer_display_rejudgment,
             )
             if format_evidence:
                 result = format_luxian_0609_evidence(
@@ -6235,7 +6206,6 @@ def aggregate_luxian_0609_results(
                 mapped_results=mapped_results,
                 source=source,
                 gate_decision=decision,
-                legacy_customer_display_rejudgment=legacy_customer_display_rejudgment,
             )
         else:
             mapped_rule_ids = [_norm_id(item) for item in list(wrapper.get("mapped_rule_ids") or []) if _norm_id(item)]
@@ -6258,37 +6228,12 @@ def aggregate_luxian_0609_results(
                     "confidence": 0.0,
                     "metadata": {"technical_error_internal": True},
                 }
-            else:
-                if legacy_customer_display_rejudgment:
-                    selected = _guard_copy_rule_without_first_course(
-                        wrapper_id=wrapper_id,
-                        selected=selected,
-                        audit_context=audit_context,
-                    )
-                    selected = _apply_copy_compare_evidence_for_lx017(
-                        wrapper_id=wrapper_id,
-                        selected=selected,
-                        audit_context=audit_context,
-                    )
-                selected = _guard_customer_display_result(
-                    wrapper_id=wrapper_id,
-                    selected=selected,
-                    audit_context=audit_context,
-                    legacy_business_rejudgment=legacy_customer_display_rejudgment,
-                )
             result = _copy_customer_fields(
                 wrapper=wrapper,
                 selected=selected,
                 mapped_results=mapped_results,
                 source=source,
                 gate_decision=decision,
-                legacy_customer_display_rejudgment=legacy_customer_display_rejudgment,
-            )
-            result = _guard_customer_display_result(
-                wrapper_id=wrapper_id,
-                selected=result,
-                audit_context=audit_context,
-                legacy_business_rejudgment=legacy_customer_display_rejudgment,
             )
         if format_evidence:
             result = format_luxian_0609_evidence(
