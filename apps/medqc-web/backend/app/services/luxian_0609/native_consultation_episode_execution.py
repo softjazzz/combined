@@ -1316,6 +1316,124 @@ def _parse_compact_document_facts(
     return tuple(episodes)
 
 
+def _merge_authoritative_event_group_splits(
+    episodes: Sequence[_Episode],
+    *,
+    expected_refs: Sequence[str],
+    documents_by_ref: Mapping[str, Mapping[str, str]],
+) -> tuple[_Episode, ...]:
+    """按程序已确认的同一事件合并模型误拆的申请、意见文书。"""
+
+    document_order = {ref: index for index, ref in enumerate(expected_refs)}
+    group_episode_indexes: dict[str, list[int]] = {}
+    for index, item in enumerate(episodes):
+        groups = frozenset(
+            event_group_ref
+            for ref in item.member_refs
+            if (
+                event_group_ref := _clean(
+                    documents_by_ref[ref].get("event_group_ref")
+                )
+            )
+        )
+        if len(groups) > 1:
+            raise _SemanticInvalid()
+        if groups:
+            group_episode_indexes.setdefault(next(iter(groups)), []).append(index)
+
+    split_groups = {
+        group_ref: tuple(indexes)
+        for group_ref, indexes in group_episode_indexes.items()
+        if len(indexes) > 1
+    }
+    if not split_groups:
+        return tuple(episodes)
+
+    def _state(values: Sequence[str]) -> str:
+        # 明确事实可以收敛同事件内另一张角色单据的 absent；其余冲突保守
+        # 保留 unknown，避免把模型不确定性转成确定问题。
+        for candidate in ("clear", "unknown", "vague", "missing", "absent"):
+            if candidate in values:
+                return candidate
+        raise _SemanticInvalid()
+
+    merged_by_first_index: dict[int, _Episode] = {}
+    consumed: set[int] = set()
+    for group_ref, indexes in split_groups.items():
+        grouped = tuple(episodes[index] for index in indexes)
+        if any(
+            _clean(documents_by_ref[ref].get("event_group_ref")) != group_ref
+            for item in grouped
+            for ref in item.member_refs
+        ):
+            raise _SemanticInvalid()
+        member_refs = tuple(sorted(
+            (ref for item in grouped for ref in item.member_refs),
+            key=document_order.__getitem__,
+        ))
+        application_refs = tuple(sorted(
+            (ref for item in grouped for ref in item.application_refs),
+            key=document_order.__getitem__,
+        ))
+        opinion_refs = tuple(sorted(
+            (ref for item in grouped for ref in item.opinion_refs),
+            key=document_order.__getitem__,
+        ))
+        application_state = _state(tuple(item.application_state for item in grouped))
+        opinion_state = _state(tuple(item.opinion_state for item in grouped))
+        confidence = min(
+            (item.confidence for item in grouped),
+            key={"low": 0, "medium": 1, "high": 2}.__getitem__,
+        )
+        source_recommendations = tuple(
+            recommendation
+            for index in sorted(
+                indexes,
+                key=lambda value: min(
+                    document_order[ref] for ref in episodes[value].member_refs
+                ),
+            )
+            for recommendation in episodes[index].recommendations
+        )
+        if (
+            len(source_recommendations) > _MAX_RECOMMENDATIONS_PER_EPISODE
+            or source_recommendations
+            and (opinion_state != "clear" or confidence != "high")
+        ):
+            raise _SemanticInvalid()
+        episode_ref = member_refs[0]
+        recommendations = tuple(
+            _Recommendation(
+                f"{episode_ref}#r{number}",
+                item.action_type,
+                item.source_quote,
+                item.normalized_action,
+                item.opinion_ref,
+            )
+            for number, item in enumerate(source_recommendations, 1)
+        )
+        first_index = min(indexes)
+        merged_by_first_index[first_index] = _Episode(
+            episode_ref,
+            member_refs,
+            application_refs,
+            opinion_refs,
+            application_state,
+            opinion_state,
+            confidence,
+            recommendations,
+        )
+        consumed.update(indexes)
+
+    normalized: list[_Episode] = []
+    for index, item in enumerate(episodes):
+        if index in merged_by_first_index:
+            normalized.append(merged_by_first_index[index])
+        elif index not in consumed:
+            normalized.append(item)
+    return tuple(normalized)
+
+
 def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -> tuple[_Episode, ...]:
     if _uses_compact_document_contract(documents):
         return _parse_compact_document_facts(payload, documents)
@@ -1429,6 +1547,18 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
         assignment_bucket_by_ref.update((ref, bucket) for ref in group)
     if len(assigned) != len(expected_refs) or len(set(assigned)) != len(expected_refs) or set(assigned) != expected:
         raise _SemanticInvalid()
+    episodes = list(_merge_authoritative_event_group_splits(
+        episodes,
+        expected_refs=expected_refs,
+        documents_by_ref=documents_by_ref,
+    ))
+    assignment_bucket_by_ref = {
+        ref: f"episode:{item.episode_ref}"
+        for item in episodes
+        for ref in item.member_refs
+    }
+    for bucket, group in (("non_target", non_target), ("unresolved", unresolved)):
+        assignment_bucket_by_ref.update((ref, bucket) for ref in group)
     event_group_buckets: dict[str, set[str]] = {}
     for ref, document in documents_by_ref.items():
         event_group_ref = _clean(document.get("event_group_ref"))

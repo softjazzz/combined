@@ -780,6 +780,80 @@ async def test_application_alias_can_join_split_documents_into_one_episode(monke
 
 
 @pytest.mark.asyncio
+async def test_authoritative_event_group_merges_model_split_application_and_opinion(monkeypatch):
+    rows = _rows("申请会诊", "会诊意见为必要时复查", action_suffix=False)
+    rows[0].update({"application_id": "APPLY-SHARED"})
+    rows[1].update(
+        {
+            "consultation_id": "CONSULT-SHARED",
+            "application_id": "APPLY-SHARED",
+        }
+    )
+    source_rows = {
+        "consultation_record": rows,
+        "daily_course_record": [],
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "exam_item_report": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1"],
+                    application="vague",
+                    opinion="absent",
+                    application_refs=["consultation_record-1"],
+                    opinion_refs=[],
+                    recommendations=[],
+                ),
+                _episode(
+                    "consultation_record-2",
+                    ["consultation_record-2"],
+                    application="absent",
+                    opinion="vague",
+                    application_refs=[],
+                    opinion_refs=["consultation_record-2"],
+                    recommendations=[],
+                ),
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "not_applicable",
+        "non_compliant",
+        "non_compliant",
+        "not_applicable",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "trigger_absent_complete",
+        "requirement_violated",
+        "requirement_violated",
+        "trigger_absent_complete",
+    ]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
 async def test_pure_signature_template_is_excluded_before_episode_prompt(monkeypatch):
     template = "会诊医师签名：张三"
     substantive = "申请会诊并提出明确诊疗问题；会诊意见：建议调整治疗方案"
