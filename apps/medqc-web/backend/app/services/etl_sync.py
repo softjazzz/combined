@@ -28,6 +28,7 @@ from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
 from .config_registry import get_config, set_config
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
+from .case_scope_service import ACTIVE_ADMISSION_LOOKBACK_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -2317,7 +2318,11 @@ def estimate_pg_sync_impact(
     scope_result = _create_case_scope_service().resolve_hospitalization_scope(
         scope_mode=_scope_mode_for_scene(resolved_scene),
         as_of_date=as_of_date,
-        admission_start_date=None,
+        admission_start_date=(
+            as_of_date - timedelta(days=ACTIVE_ADMISSION_LOOKBACK_DAYS)
+            if resolved_scene in {"running", "both"}
+            else None
+        ),
         discharge_start_date=range_start_date if resolved_scene != "running" else None,
         discharge_end_date=discharge_end_date,
         departments=dept_filters,
@@ -3086,7 +3091,11 @@ def run_sync(
             scope_result = _create_case_scope_service().resolve_hospitalization_scope(
                 scope_mode=scope_mode,
                 as_of_date=as_of_date,
-                admission_start_date=None,
+                admission_start_date=(
+                    as_of_date - timedelta(days=ACTIVE_ADMISSION_LOOKBACK_DAYS)
+                    if resolved_scene in {"running", "both"}
+                    else None
+                ),
                 discharge_start_date=range_start_date if resolved_scene != "running" else None,
                 discharge_end_date=discharge_end_date,
                 departments=dept_filters,

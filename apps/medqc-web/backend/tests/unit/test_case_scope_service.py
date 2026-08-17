@@ -38,7 +38,29 @@ class _SourceCursor:
             return
         for table_name, rows in self._source_rows.items():
             if f"FROM public.{table_name}" in query:
-                self._rows = [dict(row) for row in rows]
+                selected_rows = [dict(row) for row in rows]
+                if table_name == "admission_record" and "NOT EXISTS" in query:
+                    discharged_identities = {
+                        (
+                            str(row.get("institute_id") or ""),
+                            str(row.get("patient_id") or ""),
+                            str(row.get("visit_id") or ""),
+                        )
+                        for source_name in ("mr", "discharge_record")
+                        for row in self._source_rows.get(source_name, [])
+                        if row.get("discharge_time") is not None
+                    }
+                    selected_rows = [
+                        row
+                        for row in selected_rows
+                        if (
+                            str(row.get("institute_id") or ""),
+                            str(row.get("patient_id") or ""),
+                            str(row.get("visit_id") or ""),
+                        )
+                        not in discharged_identities
+                    ]
+                self._rows = selected_rows
                 if "%s::text AS institute_id" in query:
                     for row in self._rows:
                         row.setdefault("institute_id", params[0])
@@ -63,24 +85,45 @@ class _SourceConnection:
         return None
 
 
-def test_active_scope_requires_reliable_inpat_registration_source():
+def test_active_scope_falls_back_to_recent_admission_minus_discharge_facts():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
     cursor = _SourceCursor(
         table_columns={
-            "admission_record": {
-                "institute_id",
-                "patient_id",
-                "visit_id",
-                "admission_datetime",
-                "discharge_datetime",
-            },
-            "mr": {
-                "institute_id",
-                "patient_id",
-                "visit_id",
-                "admission_datetime",
-                "discharge_datetime",
-            },
-        }
+            "inpat_registration": identity_columns
+            | {"admission_time", "discharge_time"},
+            "admission_record": identity_columns
+            | {"admission_time", "dept_name"},
+            "mr": identity_columns | {"discharge_time"},
+            "discharge_record": identity_columns | {"discharge_time"},
+        },
+        source_rows={
+            "inpat_registration": [],
+            "admission_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-ACTIVE",
+                    "visit_id": "V-ACTIVE",
+                    "admission_time": "2026-07-20 08:00:00",
+                    "current_department": "呼吸与危重症医学科",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-DISCHARGED",
+                    "visit_id": "V-DISCHARGED",
+                    "admission_time": "2026-07-21 08:00:00",
+                    "current_department": "儿科",
+                },
+            ],
+            "mr": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-DISCHARGED",
+                    "visit_id": "V-DISCHARGED",
+                    "discharge_time": "2026-07-25 10:00:00",
+                }
+            ],
+            "discharge_record": [],
+        },
     )
     service = CaseScopeService(
         remote_url_loader=lambda: "postgresql://source",
@@ -88,7 +131,52 @@ def test_active_scope_requires_reliable_inpat_registration_source():
         connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
     )
 
-    with pytest.raises(ValueError, match="请同步住院登记"):
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active",
+        as_of_date=date(2026, 7, 31),
+        discharge_start_date=None,
+        discharge_end_date=None,
+        departments=("呼吸与危重症医学科",),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P-ACTIVE", "V-ACTIVE"),)
+    assert result.selected[0]["source_table"] == "admission_record"
+    assert result.selected[0]["department"] == "呼吸与危重症医学科"
+    assert result.sources_used == ("admission_record", "mr", "discharge_record")
+    assert result.source_status == "degraded"
+    assert result.warnings == (
+        "住院登记没有可用在院时间，已按最近180天入院记录排除已出院病例。",
+    )
+    admission_queries = [
+        (query, params)
+        for query, params in cursor.queries
+        if "FROM public.admission_record" in query
+    ]
+    assert admission_queries
+    assert "admission_time >= %s::date" in admission_queries[0][0]
+    assert admission_queries[0][0].count("NOT EXISTS") == 2
+    assert "FROM public.mr AS discharged_0" in admission_queries[0][0]
+    assert "FROM public.discharge_record AS discharged_1" in admission_queries[0][0]
+    assert "2026-02-01" in admission_queries[0][1]
+
+
+def test_active_scope_fallback_requires_authoritative_discharge_facts():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {"admission_time", "discharge_time"},
+            "admission_record": identity_columns | {"admission_time"},
+        },
+        source_rows={"inpat_registration": []},
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    with pytest.raises(ValueError, match="权威出院事实"):
         service.resolve_hospitalization_scope(
             scope_mode="active",
             as_of_date=date(2026, 7, 31),

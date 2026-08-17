@@ -54,7 +54,7 @@ def test_estimate_pg_sync_impact_uses_running_case_refs_without_mr_no(monkeypatc
         {
             "scope_mode": "active",
             "as_of_date": date(2026, 8, 14),
-            "admission_start_date": None,
+            "admission_start_date": date(2026, 2, 15),
             "discharge_start_date": None,
             "discharge_end_date": None,
             "departments": ["重症医学科(ICU)"],
@@ -391,7 +391,7 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
     assert scope_calls[0] == {
         "scope_mode": "active",
         "as_of_date": date(2026, 8, 14),
-        "admission_start_date": None,
+        "admission_start_date": date(2026, 2, 15),
         "discharge_start_date": None,
         "discharge_end_date": None,
         "departments": ["重症医学科（ICU）"],
@@ -618,7 +618,7 @@ def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypa
         {
             "scope_mode": "active_and_discharged",
             "as_of_date": date(2026, 8, 14),
-            "admission_start_date": None,
+            "admission_start_date": date(2026, 2, 15),
             "discharge_start_date": date(2026, 8, 1),
             "discharge_end_date": date(2026, 8, 10),
             "departments": ["重症医学科（ICU）"],

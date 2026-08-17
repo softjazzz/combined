@@ -26,6 +26,7 @@ _DISCHARGE_TIME_COLUMNS = (
     "discharge_date",
 )
 _HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
+ACTIVE_ADMISSION_LOOKBACK_DAYS = 180
 
 
 @dataclass(frozen=True)
@@ -194,34 +195,84 @@ class CaseScopeService:
                     ),
                     alias="discharge_department",
                 )
-                if role == "active":
+                if role in {"active", "active_admission"}:
                     admission_calendar_value = (
                         f"({admission_column} AT TIME ZONE 'Asia/Shanghai')"
                         if admission_data_type == "timestamp with time zone"
                         else admission_column
                     )
-                    discharge_calendar_value = (
-                        f"({discharge_column} AT TIME ZONE 'Asia/Shanghai')"
-                        if discharge_data_type == "timestamp with time zone"
-                        else discharge_column
-                    )
+                    effective_admission_start = admission_start_date
+                    if role == "active_admission" and effective_admission_start is None:
+                        effective_admission_start = as_of_date - timedelta(
+                            days=ACTIVE_ADMISSION_LOOKBACK_DAYS
+                        )
                     admission_start_sql = (
                         f"{admission_calendar_value} >= %s::date AND "
-                        if admission_start_date
+                        if effective_admission_start
                         else ""
                     )
-                    where_sql = (
-                        admission_start_sql
-                        + f"{admission_calendar_value} < (%s::date + INTERVAL '1 day') "
-                        f"AND ({discharge_column} IS NULL "
-                        f"OR {discharge_calendar_value} >= (%s::date + INTERVAL '1 day'))"
-                    )
+                    if role == "active":
+                        discharge_calendar_value = (
+                            f"({discharge_column} AT TIME ZONE 'Asia/Shanghai')"
+                            if discharge_data_type == "timestamp with time zone"
+                            else discharge_column
+                        )
+                        where_sql = (
+                            admission_start_sql
+                            + f"{admission_calendar_value} < (%s::date + INTERVAL '1 day') "
+                            f"AND ({discharge_column} IS NULL "
+                            f"OR {discharge_calendar_value} >= (%s::date + INTERVAL '1 day'))"
+                        )
+                    else:
+                        where_sql = (
+                            admission_start_sql
+                            + f"{admission_calendar_value} < (%s::date + INTERVAL '1 day')"
+                        )
                     date_params: list[Any] = []
-                    if admission_start_date:
-                        date_params.append(admission_start_date.isoformat())
-                    date_params.extend(
-                        [as_of_date.isoformat(), as_of_date.isoformat()]
-                    )
+                    if effective_admission_start:
+                        date_params.append(effective_admission_start.isoformat())
+                    date_params.append(as_of_date.isoformat())
+                    if role == "active":
+                        date_params.append(as_of_date.isoformat())
+                    if role == "active_admission":
+                        for index, exclusion_source in enumerate(
+                            plan.get("active_exclusions") or ()
+                        ):
+                            exclusion_table = _text(exclusion_source.get("table_name"))
+                            exclusion_columns = set(
+                                exclusion_source.get("columns") or set()
+                            )
+                            exclusion_discharge_column = _text(
+                                exclusion_source.get("discharge_time_column")
+                            )
+                            exclusion_alias = f"discharged_{index}"
+                            institute_match = ""
+                            if (
+                                "institute_id" in columns
+                                and "institute_id" in exclusion_columns
+                            ):
+                                institute_match = (
+                                    f"AND {exclusion_alias}.institute_id::text "
+                                    "= source_row.institute_id::text "
+                                )
+                            elif "institute_id" in exclusion_columns:
+                                institute_match = (
+                                    f"AND {exclusion_alias}.institute_id::text = %s::text "
+                                )
+                                date_params.append(default_institute_id)
+                            where_sql += (
+                                " AND NOT EXISTS ("
+                                f"SELECT 1 FROM {schema_ident}.{exclusion_table} "
+                                f"AS {exclusion_alias} "
+                                f"WHERE {exclusion_alias}.{exclusion_discharge_column} "
+                                "IS NOT NULL "
+                                f"AND {exclusion_alias}.patient_id::text "
+                                "= source_row.patient_id::text "
+                                f"AND {exclusion_alias}.visit_id::text "
+                                "= source_row.visit_id::text "
+                                f"{institute_match}"
+                                ")"
+                            )
                 else:
                     if discharge_start_date is None or discharge_end_date is None:
                         raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
@@ -243,6 +294,11 @@ class CaseScopeService:
                     if admission_column
                     else "NULL AS admission_time"
                 )
+                discharge_time_expr = (
+                    f"{discharge_column} AS discharge_time"
+                    if discharge_column
+                    else "NULL AS discharge_time"
+                )
                 order_time_alias = (
                     "admission_time" if admission_column else "discharge_time"
                 )
@@ -257,11 +313,11 @@ class CaseScopeService:
                             {mr_no_expr},
                             {inpat_no_expr},
                             {admission_time_expr},
-                            {discharge_column} AS discharge_time,
+                            {discharge_time_expr},
                             {admission_department_expr},
                             {current_department_expr},
                             {discharge_department_expr}
-                        FROM {schema_ident}.{table_name}
+                        FROM {schema_ident}.{table_name} AS source_row
                         WHERE {where_sql}
                     )
                     SELECT DISTINCT ON (institute_id, patient_id, visit_id) *
@@ -276,9 +332,35 @@ class CaseScopeService:
                     for row in (cursor.fetchall() or [])
                 ]
 
-            candidates = [*fetch_source("active", plan.get("active"))]
+            active_source = plan.get("active")
+            active_candidates = fetch_source("active", active_source)
+            used_sources: list[str] = []
+            runtime_warnings = list(plan["warnings"])
+            source_status = str(plan["source_status"])
+            if active_candidates:
+                used_sources.append(_text(active_source.get("table_name")))
+            elif plan.get("active_fallback") is not None:
+                fallback_source = plan["active_fallback"]
+                if not plan.get("active_exclusions"):
+                    raise ValueError(
+                        "源库缺少可关联的权威出院事实，无法安全识别当前在院患者"
+                    )
+                active_candidates = fetch_source("active_admission", fallback_source)
+                used_sources.append(_text(fallback_source.get("table_name")))
+                used_sources.extend(
+                    _text(source.get("table_name"))
+                    for source in plan.get("active_exclusions") or ()
+                )
+                source_status = "degraded"
+                runtime_warnings.append(
+                    "住院登记没有可用在院时间，已按最近"
+                    f"{ACTIVE_ADMISSION_LOOKBACK_DAYS}天入院记录排除已出院病例。"
+                )
+
+            candidates = [*active_candidates]
             for discharged_source in plan.get("discharged") or ():
                 candidates.extend(fetch_source("discharged", discharged_source))
+                used_sources.append(_text(discharged_source.get("table_name")))
             missing_name_identities = sorted(
                 {
                     (
@@ -372,9 +454,9 @@ class CaseScopeService:
                 ),
                 selected=tuple(selected),
                 all_selected=tuple(all_selected),
-                sources_used=tuple(plan["sources_used"]),
-                source_status=str(plan["source_status"]),
-                warnings=tuple(plan["warnings"]),
+                sources_used=tuple(dict.fromkeys(filter(None, used_sources))),
+                source_status=source_status,
+                warnings=tuple(dict.fromkeys(runtime_warnings)),
             )
         finally:
             cursor.close()
@@ -638,6 +720,7 @@ def _resolve_source_plan(
         table_names: Sequence[str],
         *,
         require_admission_time: bool,
+        require_discharge_time: bool = True,
     ) -> dict[str, Any] | None:
         nonlocal blocked_by_missing_institute
         for table_name in table_names:
@@ -646,7 +729,9 @@ def _resolve_source_plan(
                 continue
             admission_column = _first_available(columns, _ADMISSION_TIME_COLUMNS)
             discharge_column = _first_available(columns, _DISCHARGE_TIME_COLUMNS)
-            if (require_admission_time and not admission_column) or not discharge_column:
+            if (require_admission_time and not admission_column) or (
+                require_discharge_time and not discharge_column
+            ):
                 continue
             if "institute_id" not in columns and not default_institute_id:
                 blocked_by_missing_institute = True
@@ -669,6 +754,7 @@ def _resolve_source_plan(
         table_names: Sequence[str],
         *,
         require_admission_time: bool,
+        require_discharge_time: bool = True,
     ) -> tuple[dict[str, Any], ...]:
         """按权威优先级返回全部可用来源，避免仅首表存在就漏掉其他病例。"""
 
@@ -677,6 +763,7 @@ def _resolve_source_plan(
             source = choose_source(
                 (table_name,),
                 require_admission_time=require_admission_time,
+                require_discharge_time=require_discharge_time,
             )
             if source is not None:
                 sources.append(source)
@@ -689,6 +776,24 @@ def _resolve_source_plan(
         if needs_active
         else None
     )
+    active_fallback = (
+        choose_source(
+            ("admission_record",),
+            require_admission_time=True,
+            require_discharge_time=False,
+        )
+        if needs_active
+        else None
+    )
+    active_exclusions = (
+        choose_sources(
+            ("mr", "discharge_record"),
+            require_admission_time=False,
+            require_discharge_time=True,
+        )
+        if needs_active and active_fallback is not None
+        else ()
+    )
     discharged_sources = (
         choose_sources(
             ("discharge_record", "mr", "inpat_registration", "admission_record"),
@@ -697,14 +802,14 @@ def _resolve_source_plan(
         if needs_discharged
         else ()
     )
-    if (needs_active and active_source is None) or (
+    if (needs_active and active_source is None and active_fallback is None) or (
         needs_discharged and not discharged_sources
     ):
         if blocked_by_missing_institute:
             raise ValueError(
                 "住院来源表缺少 institute_id，且未配置 default_institute_id"
             )
-        if needs_active and active_source is None:
+        if needs_active and active_source is None and active_fallback is None:
             raise ValueError("源库没有可识别的当前在院患者数据，请同步住院登记")
         raise ValueError("源库没有可识别的已出院患者数据，请同步出院记录或病案首页")
 
@@ -726,6 +831,8 @@ def _resolve_source_plan(
     )
     return {
         "active": active_source,
+        "active_fallback": active_fallback,
+        "active_exclusions": active_exclusions,
         "discharged": discharged_sources,
         "sources_used": sources_used,
         "source_status": "degraded" if warnings else "ready",
