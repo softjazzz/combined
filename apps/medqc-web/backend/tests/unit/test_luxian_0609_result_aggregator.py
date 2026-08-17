@@ -721,6 +721,38 @@ def test_task4_consultation_display_fact_contracts_are_preserved(rule_id, facts)
     assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
 
 
+def test_022_episode_results_are_strictly_validated_for_customer_delivery():
+    facts = {
+        "verification_kind": "consultation_opinion_quality_check",
+        "episode_count": 2,
+        "document_count": 2,
+        "semantic_state": "mixed",
+        "checked_requirement": "给出针对当前病情的明确诊疗意见",
+        "source_document_ids": ["CONSULT-1", "CONSULT-2"],
+        "episode_results": [
+            {
+                "episode_index": 1,
+                "semantic_state": "clear",
+                "source_document_id": "CONSULT-1",
+            },
+            {
+                "episode_index": 2,
+                "semantic_state": "vague",
+                "source_document_id": "CONSULT-2",
+            },
+        ],
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-022", raw=facts
+    ) == facts
+    facts["episode_results"][1]["source_document_id"] = "FORGED-DOCUMENT"
+    assert (
+        safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
+        is None
+    )
+
+
 def test_020_uses_exact_opinion_and_execution_document_refs_for_customer_evidence():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",

@@ -486,6 +486,77 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation(
+    monkeypatch,
+):
+    rows = _rows(
+        "第一次会诊意见明确",
+        "第二次会诊意见笼统",
+        "第三次会诊意见明确",
+        "第四次未记录明确意见",
+        action_suffix=False,
+    )
+    for index, row in enumerate(rows, start=1):
+        row["document_id"] = f"CONSULT-{index}"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode("consultation_record-1", ["consultation_record-1"]),
+                _episode(
+                    "consultation_record-2",
+                    ["consultation_record-2"],
+                    opinion="vague",
+                ),
+                _episode("consultation_record-3", ["consultation_record-3"]),
+                _episode(
+                    "consultation_record-4",
+                    ["consultation_record-4"],
+                    opinion="missing",
+                ),
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-022",),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert dict(result.customer_display_facts)["LX0609-022"]["episode_results"] == [
+        {
+            "episode_index": 1,
+            "semantic_state": "clear",
+            "source_document_id": "CONSULT-1",
+        },
+        {
+            "episode_index": 2,
+            "semantic_state": "vague",
+            "source_document_id": "CONSULT-2",
+        },
+        {
+            "episode_index": 3,
+            "semantic_state": "clear",
+            "source_document_id": "CONSULT-3",
+        },
+        {
+            "episode_index": 4,
+            "semantic_state": "missing",
+            "source_document_id": "CONSULT-4",
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_document_identity_separates_real_rows_without_application_id(
     monkeypatch,
 ):

@@ -445,6 +445,53 @@ NOT_APPLICABLE_CASES = (
 )
 
 
+def test_022_mixed_opinions_name_each_problematic_episode() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-022",
+        facts={
+            "verification_kind": "consultation_opinion_quality_check",
+            "episode_count": 4,
+            "document_count": 4,
+            "semantic_state": "mixed",
+            "checked_requirement": "给出针对当前病情的明确诊疗意见",
+            "source_document_ids": [
+                "CONSULT-1",
+                "CONSULT-2",
+                "CONSULT-3",
+                "CONSULT-4",
+            ],
+            "episode_results": [
+                {
+                    "episode_index": 1,
+                    "semantic_state": "clear",
+                    "source_document_id": "CONSULT-1",
+                },
+                {
+                    "episode_index": 2,
+                    "semantic_state": "vague",
+                    "source_document_id": "CONSULT-2",
+                },
+                {
+                    "episode_index": 3,
+                    "semantic_state": "clear",
+                    "source_document_id": "CONSULT-3",
+                },
+                {
+                    "episode_index": 4,
+                    "semantic_state": "missing",
+                    "source_document_id": "CONSULT-4",
+                },
+            ],
+        },
+    )
+
+    assert finding == (
+        "共核对4次会诊意见；需完善2次："
+        "第2次意见不明确；第4次未记录明确会诊意见。"
+        "其余2次意见明确。"
+    )
+
+
 @pytest.mark.parametrize(
     ("rule_id", "facts", "expected"),
     [

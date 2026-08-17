@@ -3160,6 +3160,9 @@ def safe_luxian_0609_customer_display_facts(
             "checked_requirement",
             "source_document_ids",
         }
+        has_episode_results = rule_id == "LX0609-022" and "episode_results" in raw
+        if has_episode_results:
+            expected_keys.add("episode_results")
         source_document_ids = raw.get("source_document_ids")
         if (
             set(raw) != expected_keys
@@ -3175,14 +3178,60 @@ def safe_luxian_0609_customer_display_facts(
             or any(not isinstance(value, str) or not value.strip() for value in source_document_ids)
         ):
             return None
-        return {
+        facts = {
             "verification_kind": expected_kind,
             "episode_count": raw["episode_count"],
             "document_count": raw["document_count"],
             "semantic_state": raw["semantic_state"],
             "checked_requirement": expected_requirement,
-            "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
+            "source_document_ids": list(dict.fromkeys(source_document_ids))[:12],
         }
+        if not has_episode_results:
+            return facts
+        episode_results = raw.get("episode_results")
+        if (
+            not isinstance(episode_results, list)
+            or len(episode_results) != raw["episode_count"]
+            or len(episode_results) > 12
+        ):
+            return None
+        safe_episode_results: list[dict[str, Any]] = []
+        episode_states: list[str] = []
+        allowed_states = {"clear", "vague", "missing", "unknown"}
+        source_document_id_set = set(source_document_ids)
+        for expected_index, item in enumerate(episode_results, start=1):
+            if not isinstance(item, Mapping) or set(item) != {
+                "episode_index",
+                "semantic_state",
+                "source_document_id",
+            }:
+                return None
+            source_document_id = item.get("source_document_id")
+            state = item.get("semantic_state")
+            if (
+                item.get("episode_index") != expected_index
+                or state not in allowed_states
+                or not isinstance(source_document_id, str)
+                or (
+                    source_document_id
+                    and source_document_id not in source_document_id_set
+                )
+            ):
+                return None
+            episode_states.append(state)
+            safe_episode_results.append(dict(item))
+        state_set = set(episode_states)
+        derived_state = (
+            "absent"
+            if not state_set
+            else next(iter(state_set))
+            if len(state_set) == 1
+            else "mixed"
+        )
+        if derived_state != raw["semantic_state"]:
+            return None
+        facts["episode_results"] = safe_episode_results
+        return facts
     if rule_id in {"LX0609-020", "LX0609-023"} and raw.get(
         "verification_kind"
     ) in {

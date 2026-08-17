@@ -1489,7 +1489,29 @@ def _consultation_semantic_display_facts(
         for ref in refs
         if (document_id := _clean(documents_by_ref.get(ref, {}).get("document_id")))
     ]
-    return {
+    episode_results: list[dict[str, Any]] = []
+    if rule_id == "LX0609-022":
+        for episode_index, episode in enumerate(relevant, start=1):
+            episode_refs = tuple(getattr(episode, ref_field)) or episode.member_refs
+            representative = next(
+                (
+                    documents_by_ref[ref]
+                    for ref in episode_refs
+                    if ref in documents_by_ref
+                ),
+                {},
+            )
+            representative_document_id = _clean(representative.get("document_id"))
+            if representative_document_id:
+                source_document_ids.append(representative_document_id)
+            episode_results.append(
+                {
+                    "episode_index": episode_index,
+                    "semantic_state": getattr(episode, state_field),
+                    "source_document_id": representative_document_id,
+                }
+            )
+    facts = {
         "verification_kind": (
             "consultation_application_quality_check"
             if is_application
@@ -1505,6 +1527,12 @@ def _consultation_semantic_display_facts(
         ),
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
     }
+    if rule_id == "LX0609-022":
+        facts["source_document_ids"] = list(dict.fromkeys(source_document_ids))[
+            :_MAX_EPISODES
+        ]
+        facts["episode_results"] = episode_results
+    return facts
 
 
 def _consultation_execution_display_facts(

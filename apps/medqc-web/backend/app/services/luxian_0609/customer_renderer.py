@@ -1816,6 +1816,42 @@ def customer_finding_from_controlled_facts(
                 return f"共核对{episode_count}次会诊申请，其中部分申请未说明具体临床问题、会诊理由或明确目的。"
             if semantic_state == "clear":
                 return f"共核对{episode_count}次会诊意见，均已给出针对当前病情的明确诊疗意见。"
+            episode_results = facts.get("episode_results")
+            if isinstance(episode_results, list):
+                issue_labels: list[str] = []
+                clear_count = unknown_count = 0
+                issue_state_labels = {
+                    "vague": "意见不明确",
+                    "missing": "未记录明确会诊意见",
+                }
+                for item in episode_results:
+                    if not isinstance(item, Mapping):
+                        return ""
+                    state = str(item.get("semantic_state") or "")
+                    if state == "clear":
+                        clear_count += 1
+                        continue
+                    if state == "unknown":
+                        unknown_count += 1
+                        continue
+                    label = issue_state_labels.get(state)
+                    if label is None:
+                        return ""
+                    episode_index = item.get("episode_index")
+                    issue_labels.append(f"第{episode_index}次{label}")
+                if issue_labels:
+                    finding = (
+                        f"共核对{episode_count}次会诊意见；需完善{len(issue_labels)}次："
+                        f"{'；'.join(issue_labels)}。"
+                    )
+                    remainder: list[str] = []
+                    if clear_count:
+                        remainder.append(f"其余{clear_count}次意见明确")
+                    if unknown_count:
+                        remainder.append(f"{unknown_count}次暂无法判断")
+                    if remainder:
+                        finding += f"{'，'.join(remainder)}。"
+                    return finding
             if semantic_state == "vague":
                 return f"共核对{episode_count}次会诊意见，均未给出针对当前病情的明确诊疗意见。"
             return f"共核对{episode_count}次会诊意见，其中部分意见未给出针对当前病情的明确诊疗意见。"
