@@ -363,6 +363,30 @@ def test_non_compliant_result_gives_rule_specific_action_instead_of_generic_advi
     assert result["suggestion"] != "请按质控要求核对并完善相关记录。"
 
 
+def test_022_suggestion_provides_a_safe_writing_template() -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-022",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-rule-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["suggestion"] == (
+        "请按“病情判断—具体措施—执行时点或条件—观察指标—复评或随访安排”书写。"
+        "例如：“结合目前……，考虑……；建议于……完成……或给予……，观察……；"
+        "如……则……，并于……复评。”请结合本次实际病情填写，"
+        "不要仅写“必要时检查或用药”等条件不清的表述。"
+    )
+
+
 DEFINED_RULE_IDS = tuple(
     contract.rule_id
     for contract in load_luxian_0609_rule_contracts()
