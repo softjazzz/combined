@@ -67,7 +67,7 @@
                 >
                   <component
                     :is="card.icon"
-                    :size="17"
+                    :size="19"
                     :stroke-width="2.1"
                   />
                 </span>
@@ -911,7 +911,7 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-kpi {
   min-width: 0;
-  padding: 16px 18px 15px;
+  padding: 18px 20px 17px;
   position: relative;
   border: 1px solid rgba(0, 0, 0, 0.075);
   border-radius: 16px;
@@ -927,17 +927,17 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-kpi__head > span:first-child {
   color: rgba(29, 29, 31, 0.55);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 22px;
 }
 .qc-home-kpi__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
   border-radius: 10px;
   background: rgba(0, 102, 204, 0.08);
   color: #0066cc;
@@ -945,18 +945,18 @@ watch([departmentFilter, keyword], () => {
 .qc-home-kpi strong {
   color: #1d1d1f;
   display: block;
-  font-size: 29px;
+  font-size: 32px;
   letter-spacing: -0.03em;
-  line-height: 36px;
-  margin: 8px 0 1px;
+  line-height: 39px;
+  margin: 9px 0 2px;
 }
 .qc-home-kpi small {
   display: block;
   overflow: hidden;
   color: rgba(29, 29, 31, 0.42);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 18px;
+  line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
