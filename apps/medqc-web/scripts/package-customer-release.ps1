@@ -201,8 +201,9 @@ if (Test-Path -LiteralPath $sourceHanDir) {
 
 Write-Step "Copy backend runtime allowlist (exclude development scripts and artifacts)"
 $backendSourceDir = Join-Path $projectRoot "backend"
-$backendRuntimeDirectories = @("alembic", "app", "config", "data", "services")
+$backendRuntimeDirectories = @("alembic", "app", "config", "data")
 $backendRuntimeFiles = @(".env.example", "alembic.ini", "requirements.txt")
+$backendRuntimeServiceFiles = @("__init__.py", "pdf_parser.py")
 $backendExcludeDirs = @(
     "__pycache__",
     ".pytest_cache",
@@ -272,6 +273,17 @@ foreach ($fileName in $backendRuntimeFiles) {
     throw "Required backend runtime file is missing: $fileName"
   }
   Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $backendDir $fileName) -Force
+}
+
+$backendServicesSourceDir = Join-Path $backendSourceDir "services"
+$backendServicesDestinationDir = Join-Path $backendDir "services"
+New-Item -ItemType Directory -Force -Path $backendServicesDestinationDir | Out-Null
+foreach ($fileName in $backendRuntimeServiceFiles) {
+  $sourceFile = Join-Path $backendServicesSourceDir $fileName
+  if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) {
+    throw "Required backend runtime service file is missing: $fileName"
+  }
+  Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $backendServicesDestinationDir $fileName) -Force
 }
 
 if (Test-Path -LiteralPath (Join-Path $backendDir "data\vector")) {
