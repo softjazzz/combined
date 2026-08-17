@@ -244,6 +244,35 @@ def test_result_mapping_binds_only_explicit_allowed_source_keys(monkeypatch):
     assert decision.reason_code == "requirement_satisfied"
 
 
+@pytest.mark.parametrize(
+    ("internal_reason", "expected_reason"),
+    (
+        ("authoritative_report_time_missing", "authoritative_report_time_missing"),
+        ("multiple_event_or_time_conflict", "association_failed"),
+        ("course_projection_incomplete", "source_truncated"),
+    ),
+)
+def test_result_mapping_preserves_specific_exam_lab_data_gap_reason(
+    monkeypatch,
+    internal_reason: str,
+    expected_reason: str,
+):
+    snapshot, _ = _typed_session(monkeypatch)
+
+    decision = build_exam_lab_rule_decision(
+        outcome=ExamLabOutcome(
+            rule_id="LX0609-011",
+            status="data_gap",
+            reason_code=internal_reason,
+        ),
+        snapshot=snapshot,
+        allowed_source_keys=("exam_master", "exam_item_report"),
+        evaluator_version="exam-lab-ruledecision-shadow-v1",
+    )
+
+    assert decision.reason_code == expected_reason
+
+
 def _wrapper(rule_id: str) -> dict:
     return {
         "rule_id": rule_id,

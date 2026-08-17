@@ -148,6 +148,17 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
                 "evidence_excerpt": "患者术后第1日精神可，切口无渗血。",
                 "excerpt_kind": "字段级依据",
             }],
+        }, {
+            "schema_version": "lx0609-customer-result-v2",
+            "rule_id": "LX0609-011",
+            "rule_version": "1.0",
+            "rule_name": "CT/MRI 报告后24小时内是否记录病程",
+            "status": "data_gap",
+            "result_status": "data_gap",
+            "is_compliant": None,
+            "reason_code": "authoritative_report_time_missing",
+            "findings": "PRIVATE_FREE_TEXT 不得直接导出",
+            "suggestion": "PRIVATE_FREE_SUGGESTION 不得直接导出",
         }],
     }
     session = _ReadSession([{
@@ -199,6 +210,10 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
     assert "推荐写法：请按“病情判断—具体措施—执行时点或条件" in html
     assert "PRIVATE_PATIENT_NAME" not in html
     assert "任意上游建议不得直接导出" not in html
+    assert "CT/MRI 报告缺少权威报告时间" in html
+    assert "核对 CT/MRI 报告时间" in html
+    assert "PRIVATE_FREE_TEXT" not in html
+    assert "PRIVATE_FREE_SUGGESTION" not in html
     assert html.count("data-record-group") == 1
 
 

@@ -33,6 +33,7 @@ from .document_domain_alignment import (
 from .luxian_0609.customer_renderer import (
     CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
     RULE_SET_VERSION,
+    exam_lab_data_gap_customer_message,
 )
 from .luxian_0609.customer_remediation import build_customer_remediation_suggestion
 from .luxian_0609.record_result_read_model import (
@@ -1677,6 +1678,18 @@ def _customer_export_rows(
             if canonical_suggestion:
                 projected["suggestion"] = canonical_suggestion
                 projected["customer_suggestion"] = canonical_suggestion
+            if _safe_text(projected.get("status")) == "data_gap":
+                gap_message = exam_lab_data_gap_customer_message(
+                    rule_id=_safe_text(projected.get("rule_id")),
+                    reason_code=_safe_text(projected.get("reason_code")),
+                )
+                if gap_message is not None:
+                    findings, _evidence, suggestion = gap_message
+                    projected["conclusion"] = findings
+                    projected["findings"] = findings
+                    projected["customer_conclusion"] = findings
+                    projected["suggestion"] = suggestion
+                    projected["customer_suggestion"] = suggestion
         items.append(projected)
     rows: List[List[str]] = []
     for item in items:

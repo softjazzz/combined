@@ -69,8 +69,16 @@ def build_exam_lab_rule_decision(
             "trigger_absent_complete",
         )
     elif outcome.status == "data_gap":
+        normalized_gap_reasons = {
+            # 执行器内部保留事件级缺口；RuleDecision 只交付统一合同已批准的
+            # 受控原因码，但不能把不同缺口全部压成 required_field_missing。
+            "authoritative_report_time_missing": "authoritative_report_time_missing",
+            "multiple_event_or_time_conflict": "association_failed",
+            "course_projection_incomplete": "source_truncated",
+        }
         preserved_gap_reasons = {
             "authoritative_time_missing",
+            "authoritative_report_time_missing",
             "authoritative_time_conflict",
             "evaluation_window_not_mature",
             "positive_assertion_not_explicit",
@@ -82,11 +90,14 @@ def build_exam_lab_rule_decision(
             ApplicabilityState.UNKNOWN,
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
-            outcome.reason_code
-            if outcome.reason_code in preserved_gap_reasons
-            else "source_unavailable"
-            if "unavailable" in outcome.reason_code
-            else "required_field_missing",
+            normalized_gap_reasons.get(
+                outcome.reason_code,
+                outcome.reason_code
+                if outcome.reason_code in preserved_gap_reasons
+                else "source_unavailable"
+                if "unavailable" in outcome.reason_code
+                else "required_field_missing",
+            ),
         )
     elif outcome.status == "evaluation_unknown":
         dimensions = (

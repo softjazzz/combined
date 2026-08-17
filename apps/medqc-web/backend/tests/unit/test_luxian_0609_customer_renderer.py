@@ -1141,6 +1141,62 @@ def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation(
     assert "未明确标注“阳性”" in result["evidence"]
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "reason_code", "expected_finding", "expected_suggestion"),
+    (
+        (
+            "LX0609-011",
+            "authoritative_report_time_missing",
+            "CT/MRI 报告缺少权威报告时间",
+            "核对 CT/MRI 报告时间",
+        ),
+        (
+            "LX0609-012",
+            "association_failed",
+            "CT/MRI 阳性结果与病程记录暂时无法唯一关联",
+            "核对检查医嘱、报告和病程记录的业务关联标识",
+        ),
+        (
+            "LX0609-014",
+            "source_truncated",
+            "细菌培养相关病程资料读取不完整",
+            "完整同步细菌培养报告及报告后病程记录",
+        ),
+        (
+            "LX0609-015",
+            "required_field_missing",
+            "阳性菌结果缺少可核对的结果或分析字段",
+            "核对培养结果、阳性标志和分析病程",
+        ),
+    ),
+)
+def test_exam_lab_data_gap_explains_the_specific_missing_information(
+    rule_id: str,
+    reason_code: str,
+    expected_finding: str,
+    expected_suggestion: str,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="exam-lab-ruledecision-shadow-v2",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "data_gap"
+    assert result["reason_code"] == reason_code
+    assert expected_finding in result["findings"]
+    assert expected_suggestion in result["suggestion"]
+
+
 def test_lx0609_025_renders_each_surgery_missing_fields_without_barcode() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-025",

@@ -466,6 +466,49 @@ _EVALUATION_WINDOW_RULE_LABELS = {
 }
 
 
+def exam_lab_data_gap_customer_message(
+    *, rule_id: str, reason_code: str
+) -> tuple[str, str, str] | None:
+    """返回检查检验事件级资料缺口文案；不读取正文，也不改变状态。"""
+
+    rule_labels = {
+        "LX0609-011": ("CT/MRI 报告记录", "CT/MRI", "CT/MRI"),
+        "LX0609-012": ("CT/MRI 阳性结果", "CT/MRI", "CT/MRI"),
+        "LX0609-014": ("细菌培养结果", "细菌培养", "培养"),
+        "LX0609-015": ("阳性菌结果", "阳性菌培养", "培养"),
+    }
+    labels = rule_labels.get(str(rule_id or "").strip().upper())
+    if labels is None:
+        return None
+    requirement_label, report_label, field_label = labels
+    normalized_reason = str(reason_code or "").strip().lower()
+    if normalized_reason == "authoritative_report_time_missing":
+        return (
+            f"{report_label} 报告缺少权威报告时间，暂无法核对24小时要求",
+            "已读取到目标检查检验事件，但缺少可用于计算24小时窗口的权威报告时间。",
+            f"请核对 {report_label} 报告时间及报告后病程记录时间，补齐后重新评估。",
+        )
+    if normalized_reason == "association_failed":
+        return (
+            f"{requirement_label}与病程记录暂时无法唯一关联",
+            "已读取到相关医嘱、报告或病程记录，但业务关联标识缺失、重复或时间相互冲突。",
+            "请核对检查医嘱、报告和病程记录的业务关联标识及权威时间后重新评估。",
+        )
+    if normalized_reason == "source_truncated":
+        return (
+            f"{report_label}相关病程资料读取不完整，暂无法完成核对",
+            "本次只读取到部分报告后病程资料，不能据此确认24小时内是否已记录或分析。",
+            f"请完整同步{report_label}报告及报告后病程记录后重新评估。",
+        )
+    if normalized_reason == "required_field_missing":
+        return (
+            f"{requirement_label}缺少可核对的结果或分析字段",
+            "已读取到相关记录，但报告结果、阳性标志或病程分析字段不完整。",
+            f"请核对{field_label}结果、阳性标志和分析病程，补齐缺失字段后重新评估。",
+        )
+    return None
+
+
 def _evaluation_window_gap_message(
     *, rule_id: str, reason_code: str
 ) -> tuple[str, str, str] | None:
@@ -2423,6 +2466,10 @@ def render_luxian_0609_customer_result(
         reason_specific_gap = _RULE_DATA_GAP_REASON_MESSAGES.get(
             (decision.rule_id, decision.reason_code)
         )
+        exam_lab_gap = exam_lab_data_gap_customer_message(
+            rule_id=decision.rule_id,
+            reason_code=decision.reason_code,
+        )
         evaluation_window_gap = _evaluation_window_gap_message(
             rule_id=decision.rule_id,
             reason_code=decision.reason_code,
@@ -2434,6 +2481,8 @@ def render_luxian_0609_customer_result(
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
         if reason_specific_gap is not None:
             findings, evidence, suggestion = reason_specific_gap
+        elif exam_lab_gap is not None:
+            findings, evidence, suggestion = exam_lab_gap
         elif evaluation_window_gap is not None:
             findings, evidence, suggestion = evaluation_window_gap
         elif controlled_gap is not None:
@@ -2482,7 +2531,14 @@ def render_luxian_0609_customer_result(
         reason_code=decision.reason_code,
         facts=safe_customer_display_facts,
     )
-    if structured_suggestion:
+    if structured_suggestion and not (
+        decision.final_state is CustomerFinalState.DATA_GAP
+        and exam_lab_data_gap_customer_message(
+            rule_id=decision.rule_id,
+            reason_code=decision.reason_code,
+        )
+        is not None
+    ):
         suggestion = structured_suggestion
     if decision.final_state in {
         CustomerFinalState.COMPLIANT,

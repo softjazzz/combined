@@ -266,6 +266,7 @@ def test_rule_028_required_field_gap_names_the_actual_prophylaxis_inputs() -> No
         ("association_failed", "资料关联失败", "无法准确关联"),
         ("linkage_unresolved", "关联资料不足", "对应关系"),
         ("authoritative_time_missing", "权威时间缺失", "权威时间"),
+        ("authoritative_report_time_missing", "报告时间缺失", "权威报告时间"),
         ("authoritative_time_conflict", "权威时间冲突", "存在冲突"),
         ("evaluation_window_not_mature", "评价窗口尚未结束", "尚未满"),
         ("applicability_source_gap", "适用性资料缺失", "是否适用"),
