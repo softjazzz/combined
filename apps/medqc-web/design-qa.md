@@ -5,6 +5,7 @@
 - 参考设计：`C:/Users/Coldplay/.codex/generated_images/019fb060-73b7-7dc1-b35b-2e8cd4eacf86/exec-f67a26b9-940e-4a4f-b5b9-6cd4560432e7.png`
 - 实现页面：`http://127.0.0.1:3000/workstation-v4`
 - 实现截图：`D:/LLM/LX888/apps/medqc-web/.runtime-logs/design-qa/qc-overview-dense-final-1536x864.png`
+- KPI 卡片复核截图：`D:/LLM/LX888/apps/medqc-web/.runtime-logs/design-qa/qc-overview-kpi-cards-redesign.png`
 - 并排对照：`D:/LLM/LX888/apps/medqc-web/.runtime-logs/design-qa/qc-overview-comparison.png`
 - 参考图尺寸：1672 × 941 px
 - 实现截图尺寸：1521 × 856 px
@@ -14,6 +15,7 @@
 
 - 顶部保持紧凑标题、搜索和真实科室筛选，去除无助于操作的说明性副标题。
 - KPI 顺序调整为高风险待复核、待质控、已完成、纳入病历，颜色和视觉权重与参考设计一致。
+- KPI 从连续分段条改为四张独立状态卡，使用受控语义图标、主数字和简短口径说明，避免表格感与彩色装饰过重。
 - 当前范围移入队列区域，规则集名称转换为客户可读的“泸县0609质控点”。
 - 主内容采用左侧高密度病历队列、右侧轻量运行状态的结构，优先支持复核人员扫描。
 - 保留现有工作台侧栏和导航，这是产品真实信息架构；参考图未包含应用外壳。

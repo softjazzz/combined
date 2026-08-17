@@ -59,8 +59,21 @@
               :key="card.key"
               :class="['qc-home-kpi', `is-${card.tone}`]"
             >
-              <span>{{ card.label }}</span>
+              <div class="qc-home-kpi__head">
+                <span>{{ card.label }}</span>
+                <span
+                  class="qc-home-kpi__icon"
+                  aria-hidden="true"
+                >
+                  <component
+                    :is="card.icon"
+                    :size="17"
+                    :stroke-width="2.1"
+                  />
+                </span>
+              </div>
               <strong>{{ card.value }}</strong>
+              <small>{{ card.helper }}</small>
             </article>
           </section>
 
@@ -493,7 +506,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs, { type Dayjs } from 'dayjs'
 import {
@@ -518,6 +531,8 @@ interface KpiCard {
   key: string
   label: string
   value: number
+  helper: string
+  icon: Component
   tone: 'brand' | 'warning' | 'success' | 'danger'
 }
 
@@ -587,24 +602,32 @@ const kpiCards = computed<KpiCard[]>(() => {
       key: 'risk',
       label: '高风险待复核',
       value: Number(kpis?.high_risk_review_total || 0),
+      helper: '含确定问题的病历',
+      icon: TriangleAlert,
       tone: 'danger',
     },
     {
       key: 'pending',
       label: '待质控',
       value: Number(kpis?.qc_pending_total || 0),
+      helper: '尚未生成最终结果',
+      icon: Activity,
       tone: 'warning',
     },
     {
       key: 'completed',
       label: '已完成',
       value: Number(kpis?.qc_completed_total || 0),
+      helper: '已生成正式质控结果',
+      icon: CircleCheckBig,
       tone: 'success',
     },
     {
       key: 'records',
       label: '纳入病历',
       value: Number(kpis?.records_total || 0),
+      helper: '当前筛选范围',
+      icon: Database,
       tone: 'brand',
     },
   ]
@@ -882,68 +905,87 @@ watch([departmentFilter, keyword], () => {
   font-weight: 500;
 }
 .qc-home-kpis {
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
   display: grid;
+  gap: 14px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
 }
 .qc-home-kpi {
-  border-right: 1px solid rgba(0, 0, 0, 0.07);
-  padding: 13px 20px 15px;
+  min-width: 0;
+  padding: 16px 18px 15px;
   position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.075);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.028);
+  backdrop-filter: blur(18px);
 }
-.qc-home-kpi:last-child {
-  border-right: 0;
+.qc-home-kpi__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
-.qc-home-kpi::before {
-  background: #94a3b8;
-  border-radius: 0 0 4px 4px;
-  content: '';
-  height: 3px;
-  left: 20px;
-  position: absolute;
-  top: 0;
-  width: 34px;
-}
-.qc-home-kpi.is-brand::before {
-  background: #0066cc;
-}
-.qc-home-kpi.is-warning::before {
-  background: #f59e0b;
-}
-.qc-home-kpi.is-success::before {
-  background: #10b981;
-}
-.qc-home-kpi.is-danger::before {
-  background: #ef4444;
-}
-.qc-home-kpi span {
-  display: block;
+.qc-home-kpi__head > span:first-child {
   color: rgba(29, 29, 31, 0.55);
   font-size: 13px;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 20px;
+}
+.qc-home-kpi__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 10px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
 }
 .qc-home-kpi strong {
   color: #1d1d1f;
   display: block;
-  font-size: 26px;
+  font-size: 29px;
   letter-spacing: -0.03em;
-  line-height: 34px;
-  margin: 8px 0 0;
+  line-height: 36px;
+  margin: 8px 0 1px;
+}
+.qc-home-kpi small {
+  display: block;
+  overflow: hidden;
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .qc-home-kpi.is-brand strong {
+  color: #0066cc;
+}
+.qc-home-kpi.is-brand .qc-home-kpi__icon {
+  background: rgba(0, 102, 204, 0.08);
   color: #0066cc;
 }
 .qc-home-kpi.is-warning strong {
   color: #c17a08;
 }
+.qc-home-kpi.is-warning .qc-home-kpi__icon {
+  background: rgba(245, 158, 11, 0.1);
+  color: #c17a08;
+}
 .qc-home-kpi.is-success strong {
   color: #047857;
 }
+.qc-home-kpi.is-success .qc-home-kpi__icon {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
 .qc-home-kpi.is-danger strong {
+  color: #dc2626;
+}
+.qc-home-kpi.is-danger .qc-home-kpi__icon {
+  background: rgba(239, 68, 68, 0.09);
   color: #dc2626;
 }
 .qc-home-grid {
@@ -1578,12 +1620,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   .qc-home-kpis {
     grid-template-columns: repeat(2, 1fr);
   }
-  .qc-home-kpi:nth-child(2) {
-    border-right: 0;
-  }
-  .qc-home-kpi:nth-child(-n + 2) {
-    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
-  }
   .qc-home-analysis {
     grid-template-columns: 1fr;
   }
@@ -1604,14 +1640,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   }
   .qc-home-kpis {
     grid-template-columns: 1fr;
-  }
-  .qc-home-kpi,
-  .qc-home-kpi:nth-child(2) {
-    border-right: 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
-  }
-  .qc-home-kpi:last-child {
-    border-bottom: 0;
   }
   .qc-home-conclusion__legend {
     grid-template-columns: 1fr;

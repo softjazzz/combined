@@ -223,8 +223,13 @@ describe('QCOverviewView', () => {
       { label: '已完成', value: '13', tone: 'is-success' },
       { label: '纳入病历', value: '18', tone: 'is-brand' },
     ])
-    expect(wrapper.find('.qc-home-kpi__icon').exists()).toBe(false)
-    expect(wrapper.find('.qc-home-kpi small').exists()).toBe(false)
+    expect(wrapper.findAll('.qc-home-kpi__icon')).toHaveLength(4)
+    expect(wrapper.findAll('.qc-home-kpi small').map((item) => item.text())).toEqual([
+      '含确定问题的病历',
+      '尚未生成最终结果',
+      '已生成正式质控结果',
+      '当前筛选范围',
+    ])
   })
 
   it('将技术异常和未知资料状态放入数据运行状态，不计入高风险队列', async () => {
