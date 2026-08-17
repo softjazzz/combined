@@ -261,8 +261,8 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
     visitId: record.visitId,
     department: record.department,
     bedNumber: record.bedNo,
-    admissionTime: formatQcTimestamp(record.admissionDate),
-    dischargeTime: formatQcTimestamp(record.dischargeDate),
+    admissionTime: formatMedicalRecordTimestamp(record.admissionDate),
+    dischargeTime: formatMedicalRecordTimestamp(record.dischargeDate),
     sourceLabel:
       record.sourceState && record.sourceState.status !== 'unknown' ? '资料同步待核实' : undefined,
     ...result,
@@ -307,7 +307,7 @@ function resolveResultPresentation(
       resultStatus: 'priority',
       resultLabel: '需优先复核',
       issueSummary,
-      latestQcTime: formatQcTimestamp(summary.completedAt),
+      latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
   }
   if (dataGap > 0) {
@@ -315,7 +315,7 @@ function resolveResultPresentation(
       resultStatus: 'data-gap',
       resultLabel: '资料待核实',
       issueSummary,
-      latestQcTime: formatQcTimestamp(summary.completedAt),
+      latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
   }
   if (uncertain > 0) {
@@ -323,23 +323,50 @@ function resolveResultPresentation(
       resultStatus: 'uncertain',
       resultLabel: '待判断',
       issueSummary,
-      latestQcTime: formatQcTimestamp(summary.completedAt),
+      latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
   }
   return {
     resultStatus: 'completed',
     resultLabel: '已完成',
     issueSummary,
-    latestQcTime: formatQcTimestamp(summary.completedAt),
+    latestQcTime: formatQcCompletedAt(summary.completedAt),
   }
 }
 
-function formatQcTimestamp(value?: string | null): string {
+function formatMedicalRecordTimestamp(value?: string | null): string {
   const text = String(value || '').trim()
   if (!text) return '—'
   const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
   if (!match) return '—'
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
+}
+
+const beijingQcTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+function formatQcCompletedAt(value?: string | null): string {
+  const text = String(value || '').trim()
+  if (!text) return '—'
+  const normalized = text.replace(' ', 'T')
+  // 工作区任务时间由 datetime.utcnow() 产生，历史值没有时区后缀，但语义为 UTC。
+  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/iu.test(normalized) ? normalized : `${normalized}Z`
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return '—'
+  const parts = Object.fromEntries(
+    beijingQcTimeFormatter
+      .formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  )
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
 }
 
 function applyFilters() {

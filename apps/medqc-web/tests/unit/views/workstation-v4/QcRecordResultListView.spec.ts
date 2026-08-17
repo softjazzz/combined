@@ -195,6 +195,22 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.text()).toContain('请复核结果交付')
   })
 
+  it('最近质控时间按北京时间展示，且已带时区的时间不重复转换', async () => {
+    const payload = response()
+    payload.data.records[0]!.latest_qc_summary!.completed_at = '2026-08-17T08:49:00'
+    payload.data.records[1]!.latest_qc_summary!.completed_at = '2026-08-17T16:49:00+08:00'
+    mocks.getRaw.mockResolvedValue(payload)
+
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    const renderedTimes = wrapper
+      .findAll('tbody tr[data-record-key] td:nth-child(7)')
+      .map((item) => item.text())
+    expect(renderedTimes.slice(0, 2)).toEqual(['2026-08-17 16:49', '2026-08-17 16:49'])
+    expect(wrapper.text()).toContain('2026-08-09 08:00')
+  })
+
   it('关键词、科室和日期过滤重置为第一页并只使用服务端请求', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
@@ -308,7 +324,7 @@ describe('QcRecordResultListView', () => {
       recordId: 'V-shared',
     })
     expect(String((drawer.props('focus') as { label: string }).label)).toContain('患者乙')
-    expect(String((drawer.props('focus') as { label: string }).label)).toContain('2026-08-09 09:02')
+    expect(String((drawer.props('focus') as { label: string }).label)).toContain('2026-08-09 17:02')
   })
 
   it('从首页携带三坐标键进入时按住院号服务端检索，并自动打开该病历质控结果', async () => {
