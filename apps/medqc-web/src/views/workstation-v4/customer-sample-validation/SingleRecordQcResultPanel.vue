@@ -274,32 +274,11 @@
               :item="item"
               variant="compliant"
             />
-            <section
+            <CriterionResultBlock
               v-if="item.criterion_results?.length"
-              class="detail-block criterion-block compliant-criterion-block"
-              data-testid="single-record-compliant-criteria"
-            >
-              <h4>合规依据</h4>
-              <article
-                v-for="criterion in item.criterion_results"
-                :key="criterion.criterion_id"
-                class="criterion-row"
-              >
-                <div class="criterion-head">
-                  <strong>{{ criterionLabel(criterion.criterion_id) }}</strong>
-                  <span :class="`is-${criterion.status}`">{{
-                    criterionStatusText(criterion.status)
-                  }}</span>
-                </div>
-                <p>{{ criterionFactText(criterion) }}</p>
-                <p
-                  v-if="criterion.medical_analysis"
-                  class="criterion-analysis"
-                >
-                  {{ criterion.medical_analysis }}
-                </p>
-              </article>
-            </section>
+              :criteria="item.criterion_results || []"
+              variant="compliant"
+            />
           </div>
 
           <div
@@ -461,32 +440,11 @@
                   </template>
                 </dl>
               </section>
-              <section
+              <CriterionResultBlock
                 v-if="!isCompliantResult(item) && item.criterion_results?.length"
-                class="detail-block criterion-block"
-              >
-                <h4>逐项判定</h4>
-                <article
-                  v-for="criterion in item.criterion_results"
-                  :key="criterion.criterion_id"
-                  class="criterion-row"
-                >
-                  <div class="criterion-head">
-                    <strong>{{ criterionLabel(criterion.criterion_id) }}</strong>
-                    <span :class="`is-${criterion.status}`">{{
-                      criterionStatusText(criterion.status)
-                    }}</span>
-                  </div>
-                  <p>{{ criterionFactText(criterion) }}</p>
-                  <details
-                    v-if="criterion.medical_analysis"
-                    class="medical-analysis"
-                  >
-                    <summary>医学分析</summary>
-                    <p>{{ criterion.medical_analysis }}</p>
-                  </details>
-                </article>
-              </section>
+                :criteria="item.criterion_results || []"
+                variant="decision"
+              />
             </div>
 
             <div class="detail-column detail-column-evidence">
@@ -568,6 +526,7 @@
 <script setup lang="ts">
 import { ArrowRight, ChevronRight, ChevronUp } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
+import CriterionResultBlock from './CriterionResultBlock.vue'
 import ExamLabEventResultBlock from './ExamLabEventResultBlock.vue'
 import TimelinessResultBlock from './TimelinessResultBlock.vue'
 import { buildExamLabEventPresentation } from './examLabEventPresentation'
@@ -578,7 +537,6 @@ import {
   buildSingleRecordQcStatusTabs,
   resolveSingleRecordQcResultTab,
   type SingleRecordQcEvidence,
-  type SingleRecordQcCriterionResult,
   type SingleRecordQcResultItem,
   type SingleRecordQcResultReportTab,
   type SingleRecordQcResultTabKey,
@@ -1020,14 +978,6 @@ function toggle(key: string) {
   emit('select', key)
 }
 
-function criterionLabel(criterionId: string) {
-  const labels: Record<string, string> = {
-    chief_complaint_length: '主诉书写规范性',
-    diagnostic_direction: '诊断指向性',
-  }
-  return labels[criterionId] || '子项核对'
-}
-
 function evidenceLabel(evidence: SingleRecordQcEvidence) {
   if (evidence.source_label) return evidence.source_label
   const labels: Record<string, string> = {
@@ -1065,29 +1015,6 @@ function displayEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence
   }
   // 这类“未记录”结果中，病程仅代表已核对范围，并不是支持缺陷的命中文书。
   return evidence.filter((item) => !examLabCourseEvidenceTypes.has(item.source_type || ''))
-}
-
-function criterionStatusText(status: string) {
-  if (status === 'passed') return '通过'
-  if (status === 'failed') return '未通过'
-  return '待确认'
-}
-
-function criterionFactText(criterion: SingleRecordQcCriterionResult) {
-  if (criterion.criterion_id === 'chief_complaint_length') {
-    const actual = criterion.actual_value ?? '未返回'
-    const expected = criterion.expected_value ?? '未返回'
-    return `主诉共 ${actual} 字；标准为不超过 ${expected} 字。`
-  }
-  if (criterion.criterion_id === 'diagnostic_direction') {
-    if (criterion.status === 'passed') return '主诉与第一诊断的医学指向关系已通过核对。'
-    if (criterion.status === 'failed') return '主诉与第一诊断的医学指向关系未通过核对。'
-    return '当前资料不足以完成主诉与第一诊断的医学指向核对。'
-  }
-  const actual = criterion.actual_value === undefined ? '' : `实际值：${criterion.actual_value}；`
-  const expected =
-    criterion.expected_value === undefined ? '' : `标准：${criterion.expected_value}。`
-  return actual || expected ? `${actual}${expected}` : '该子项已按规则要求完成核对。'
 }
 
 function isCompliantResult(item: SingleRecordQcResultItem) {
@@ -1670,10 +1597,6 @@ watch(
   background: rgba(255, 255, 255, 0.72);
 }
 
-.compliant-criterion-block {
-  padding-top: 1px;
-}
-
 .compliant-detail > :not(:first-child) {
   margin-top: 11px;
   padding-top: 11px;
@@ -1938,69 +1861,6 @@ watch(
 
 .medical-analysis[open] summary {
   margin-bottom: 6px;
-}
-
-.criterion-block {
-  display: grid;
-}
-
-.criterion-row {
-  padding: 8px 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.criterion-row:first-of-type {
-  border-top: 0;
-}
-
-.criterion-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.criterion-head strong {
-  font-size: 12px;
-  line-height: 19px;
-}
-
-.criterion-head span {
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 17px;
-}
-
-.criterion-head .is-passed {
-  background: #ecfdf3;
-  color: #087443;
-}
-
-.criterion-head .is-failed {
-  background: #fff0f0;
-  color: #d92d20;
-}
-
-.criterion-head .is-unknown {
-  background: #fff7e8;
-  color: #b26a00;
-}
-
-.criterion-row > p {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 12px;
-  line-height: 19px;
-}
-
-.criterion-row > .criterion-analysis {
-  margin-top: 5px;
-  color: rgba(29, 29, 31, 0.82);
-}
-
-.criterion-row .medical-analysis {
-  margin-top: 7px;
 }
 
 .evidence-list {

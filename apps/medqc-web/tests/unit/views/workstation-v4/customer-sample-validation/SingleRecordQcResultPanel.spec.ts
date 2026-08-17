@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import CriterionResultBlock from '@/views/workstation-v4/customer-sample-validation/CriterionResultBlock.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 
 const items = [
@@ -713,6 +714,9 @@ describe('SingleRecordQcResultPanel', () => {
       .get('button')
       .trigger('click')
 
+    expect(wrapper.findAllComponents(CriterionResultBlock)).toHaveLength(1)
+    expect(wrapper.findAll('.criterion-row')).toHaveLength(2)
+    expect(wrapper.emitted('select')).toEqual([['LX0609-018-0']])
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('逐项判定')
     expect(wrapper.text()).toContain('主诉书写规范性')
@@ -1276,6 +1280,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('合规')
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
     expect(wrapper.find('.result-detail').exists()).toBe(true)
+    expect(wrapper.findAllComponents(CriterionResultBlock)).toHaveLength(1)
+    expect(wrapper.findAll('.criterion-row')).toHaveLength(1)
     expect(wrapper.get('[data-testid="single-record-compliant-criteria"]').text()).toContain(
       '合规依据',
     )
