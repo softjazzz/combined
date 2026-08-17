@@ -3,9 +3,8 @@
     <div class="custom-scrollbar h-screen overflow-y-auto px-5 py-7 xl:px-8">
       <main class="qc-home-canvas mx-auto w-full max-w-[1440px]">
         <section class="qc-home-header workstation-surface-enter">
-          <div>
+          <div class="qc-home-header__copy">
             <h1>质控首页概览</h1>
-            <p>查看全院病历的泸县0609质控结果，并优先处理需要复核的病历。</p>
           </div>
           <HomeHeroBar
             v-model:keyword="keyword"
@@ -52,21 +51,6 @@
 
         <template v-else-if="clinicalQc">
           <section
-            class="qc-home-scope workstation-surface-enter"
-            data-testid="home-scope"
-          >
-            <span class="qc-home-scope__label">当前范围</span>
-            <span>{{ scopeHospitalText }}</span>
-            <i />
-            <span>{{ scopeDepartmentText }}</span>
-            <i />
-            <span>{{ scopeSceneText }}</span>
-            <i />
-            <span>{{ clinicalQc.scope.rule_set_key }} · {{ clinicalQc.scope.rule_set_version }}</span>
-            <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
-          </section>
-
-          <section
             class="qc-home-kpis workstation-surface-enter"
             data-testid="home-kpis"
           >
@@ -85,13 +69,13 @@
             data-testid="home-workspace"
           >
             <section
-              class="qc-home-panel"
+              class="qc-home-panel qc-home-panel--queue"
               data-testid="priority-queue"
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2>优先复核</h2>
-                  <p>按确定问题数排序，点击病历直接查看质控结果。</p>
+                  <h2>病历质控队列</h2>
+                  <p>优先展示需要复核的病历，直接进入对应的质控结果。</p>
                 </div>
                 <button
                   type="button"
@@ -104,9 +88,35 @@
               </header>
 
               <div
+                class="qc-home-scope qc-home-priority-scope"
+                data-testid="home-scope"
+              >
+                <span class="qc-home-scope__label">当前范围</span>
+                <span>{{ scopeHospitalText }}</span>
+                <i />
+                <span>{{ scopeDepartmentText }}</span>
+                <i />
+                <span>{{ scopeSceneText }}</span>
+                <i />
+                <span class="qc-home-scope__rule-set">泸县0609质控点</span>
+                <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
+              </div>
+
+              <div
                 v-if="clinicalQc.priority_items.length"
                 class="qc-home-priority-list"
               >
+                <div
+                  class="qc-home-priority-columns"
+                  aria-hidden="true"
+                >
+                  <span>患者 / 病历</span>
+                  <span>科室</span>
+                  <span>确定问题</span>
+                  <span>资料待核实</span>
+                  <span>最近质控</span>
+                  <span>操作</span>
+                </div>
                 <button
                   v-for="(item, index) in clinicalQc.priority_items"
                   :key="item.record_key"
@@ -120,21 +130,45 @@
                   }}</span>
                   <div class="qc-home-priority-row__identity">
                     <strong>{{ item.patient_name || '未返回患者姓名' }}</strong>
-                    <span>{{ item.department || '未分科室' }} · 住院号 {{ item.visit_id }}</span>
+                    <span>住院号 {{ item.visit_id }}</span>
                   </div>
+                  <span
+                    class="qc-home-priority-row__department"
+                    data-testid="priority-department"
+                  >{{ item.department || '未分科室' }}</span>
                   <div
-                    v-if="countOf(item, 'non_compliant')"
-                    class="qc-home-priority-row__metric"
+                    class="qc-home-priority-row__metric is-defect"
+                    data-testid="priority-defect-count"
                   >
                     <span>确定问题</span>
                     <strong>{{ countOf(item, 'non_compliant') }}</strong>
                     <small>项</small>
                   </div>
-                  <ChevronRight
-                    class="qc-home-priority-row__arrow"
-                    :size="18"
-                    aria-hidden="true"
-                  />
+                  <div
+                    class="qc-home-priority-row__metric is-gap"
+                    data-testid="priority-data-gap-count"
+                  >
+                    <span>资料待核实</span>
+                    <strong>{{ countOf(item, 'data_gap') }}</strong>
+                    <small>项</small>
+                  </div>
+                  <div
+                    class="qc-home-priority-row__time"
+                    data-testid="priority-completed-at"
+                  >
+                    <span>最近质控</span>
+                    <strong>{{ formatPriorityTime(item.completed_at) }}</strong>
+                  </div>
+                  <span
+                    class="qc-home-priority-row__action"
+                    data-testid="priority-open-result"
+                  >
+                    查看质控结果
+                    <ChevronRight
+                      :size="16"
+                      aria-hidden="true"
+                    />
+                  </span>
                 </button>
               </div>
               <a-empty
@@ -151,7 +185,7 @@
               >
                 <header class="qc-home-panel__head">
                   <div>
-                    <h2>数据运行状态</h2>
+                    <h2>运行与数据</h2>
                     <p>用于判断数据与任务是否可正常使用，不代表医疗结论。</p>
                   </div>
                 </header>
@@ -550,10 +584,10 @@ const kpiCards = computed<KpiCard[]>(() => {
   const kpis = clinicalQc.value?.kpis
   return [
     {
-      key: 'records',
-      label: '纳入病历',
-      value: Number(kpis?.records_total || 0),
-      tone: 'brand',
+      key: 'risk',
+      label: '高风险待复核',
+      value: Number(kpis?.high_risk_review_total || 0),
+      tone: 'danger',
     },
     {
       key: 'pending',
@@ -568,10 +602,10 @@ const kpiCards = computed<KpiCard[]>(() => {
       tone: 'success',
     },
     {
-      key: 'risk',
-      label: '高风险待复核',
-      value: Number(kpis?.high_risk_review_total || 0),
-      tone: 'danger',
+      key: 'records',
+      label: '纳入病历',
+      value: Number(kpis?.records_total || 0),
+      tone: 'brand',
     },
   ]
 })
@@ -694,6 +728,13 @@ function formatDateTime(value?: string | null): string {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : '暂未返回'
 }
 
+function formatPriorityTime(value?: string | null): string {
+  if (!value) return '暂未返回'
+  const parsed = dayjs(value)
+  if (!parsed.isValid()) return '暂未返回'
+  return parsed.isSame(dayjs(), 'day') ? parsed.format('HH:mm') : parsed.format('MM-DD HH:mm')
+}
+
 function disabledFutureDate(current: Dayjs) {
   return current.isAfter(dayjs(), 'day')
 }
@@ -772,14 +813,13 @@ watch([departmentFilter, keyword], () => {
   color: #1d1d1f;
 }
 .qc-home-canvas {
-  --qc-home-dashboard-columns: minmax(0, 1.65fr) minmax(330px, 0.85fr);
+  --qc-home-dashboard-columns: minmax(0, 1.88fr) minmax(320px, 0.72fr);
   display: grid;
   gap: 18px;
   min-height: calc(100vh - 64px);
 }
 .qc-home-header,
 .qc-home-panel,
-.qc-home-scope,
 .qc-home-notice,
 .qc-home-empty,
 .qc-home-loading {
@@ -793,8 +833,11 @@ watch([departmentFilter, keyword], () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 22px 24px;
+  gap: 20px;
+  padding: 17px 22px;
+}
+.qc-home-header__copy {
+  min-width: 230px;
 }
 .qc-home-header h1,
 .qc-home-panel h2 {
@@ -802,10 +845,9 @@ watch([departmentFilter, keyword], () => {
   font-weight: 700;
 }
 .qc-home-header h1 {
-  font-size: 28px;
-  line-height: 31px;
+  font-size: 24px;
+  line-height: 29px;
 }
-.qc-home-header p,
 .qc-home-panel p {
   margin: 7px 0 0;
   color: rgba(29, 29, 31, 0.6);
@@ -831,6 +873,9 @@ watch([departmentFilter, keyword], () => {
 .qc-home-scope__label {
   color: #0066cc;
 }
+.qc-home-scope__rule-set {
+  color: #1d1d1f;
+}
 .qc-home-scope__time {
   margin-left: auto;
   color: rgba(29, 29, 31, 0.48);
@@ -846,7 +891,7 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-kpi {
   border-right: 1px solid rgba(0, 0, 0, 0.07);
-  padding: 16px 20px;
+  padding: 13px 20px 15px;
   position: relative;
 }
 .qc-home-kpi:last-child {
@@ -877,14 +922,14 @@ watch([departmentFilter, keyword], () => {
 .qc-home-kpi span {
   display: block;
   color: rgba(29, 29, 31, 0.55);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 22px;
 }
 .qc-home-kpi strong {
   color: #1d1d1f;
   display: block;
-  font-size: 28px;
+  font-size: 26px;
   letter-spacing: -0.03em;
   line-height: 34px;
   margin: 8px 0 0;
@@ -906,6 +951,9 @@ watch([departmentFilter, keyword], () => {
   grid-template-columns: var(--qc-home-dashboard-columns);
   gap: 18px;
   align-items: stretch;
+}
+.qc-home-workspace {
+  min-height: 480px;
 }
 .qc-home-analysis {
   display: grid;
@@ -929,6 +977,10 @@ watch([departmentFilter, keyword], () => {
   display: grid;
   height: 100%;
   grid-template-rows: auto 1fr;
+}
+.qc-home-panel--queue .qc-home-panel__head {
+  border-bottom: 0;
+  padding-bottom: 8px;
 }
 .qc-home-panel__head {
   display: flex;
@@ -966,15 +1018,32 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-priority-list {
   display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.075);
+  border-radius: 12px;
+}
+.qc-home-priority-columns {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 105px 96px 106px 84px 82px;
+  gap: 10px;
+  padding: 11px 12px 9px 42px;
+  background: rgba(0, 0, 0, 0.018);
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+}
+.qc-home-priority-columns span:not(:first-child, :nth-child(2)) {
+  text-align: right;
 }
 .qc-home-priority-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto 22px;
+  grid-template-columns: 30px minmax(180px, 1fr) 105px 96px 106px 84px 82px;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
-  min-height: 70px;
-  padding: 12px 4px;
+  min-height: 74px;
+  padding: 11px 12px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
   border-top: 0;
   border-right: 0;
@@ -1012,6 +1081,14 @@ watch([departmentFilter, keyword], () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.qc-home-priority-row__department {
+  color: rgba(29, 29, 31, 0.64);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
 .qc-home-priority-row__identity strong {
   color: #1d1d1f;
   font-size: 15px;
@@ -1027,30 +1104,82 @@ watch([departmentFilter, keyword], () => {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  min-width: 112px;
   justify-content: flex-end;
-  padding: 7px 10px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.qc-home-priority-row__metric.is-defect {
+  padding: 5px 7px;
   border: 1px solid rgba(239, 68, 68, 0.12);
-  border-radius: 10px;
+  border-radius: 8px;
   background: rgba(239, 68, 68, 0.055);
   color: #b42318;
-  white-space: nowrap;
+}
+.qc-home-priority-row__metric.is-gap {
+  padding: 5px 7px;
+  border: 1px solid rgba(0, 102, 204, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 102, 204, 0.045);
+  color: #a16207;
 }
 .qc-home-priority-row__metric span,
 .qc-home-priority-row__metric small {
-  font-size: 12px;
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 11px;
 }
 .qc-home-priority-row__metric strong {
-  font-size: 16px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   line-height: 20px;
 }
-.qc-home-priority-row__arrow {
-  color: rgba(0, 102, 204, 0.58);
+.qc-home-priority-row__time {
+  min-width: 0;
+  text-align: right;
+}
+.qc-home-priority-row__time span,
+.qc-home-priority-row__time strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qc-home-priority-row__time span {
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 11px;
+  line-height: 16px;
+}
+.qc-home-priority-row__time strong {
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.72);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.qc-home-priority-row__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.qc-home-priority-row__action svg {
   transition: transform 160ms ease;
 }
-.qc-home-priority-row:hover .qc-home-priority-row__arrow {
+.qc-home-priority-row:hover .qc-home-priority-row__action svg {
   transform: translateX(2px);
+}
+.qc-home-priority-scope {
+  gap: 7px;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: rgba(29, 29, 31, 0.62);
+  font-size: 11px;
+}
+.qc-home-priority-scope .qc-home-scope__time {
+  font-size: 11px;
 }
 .qc-home-health-list {
   display: grid;
@@ -1392,6 +1521,52 @@ button.qc-home-defect-analysis__row:focus-visible {
   font-size: 13px;
   line-height: 20px;
 }
+@media (max-width: 1360px) {
+  .qc-home-grid {
+    grid-template-columns: 1fr;
+  }
+  .qc-home-workspace {
+    min-height: auto;
+  }
+}
+@media (max-width: 1100px) {
+  .qc-home-priority-row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .qc-home-priority-columns {
+    display: none;
+  }
+  .qc-home-priority-row__identity {
+    grid-column: 2;
+  }
+  .qc-home-priority-row__department {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: left;
+  }
+  .qc-home-priority-row__metric.is-defect {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .qc-home-priority-row__metric.is-gap,
+  .qc-home-priority-row__time {
+    grid-column: 2;
+  }
+  .qc-home-priority-row__metric.is-gap {
+    grid-row: 3;
+    justify-content: flex-start;
+  }
+  .qc-home-priority-row__time {
+    grid-row: 4;
+    text-align: left;
+  }
+  .qc-home-priority-row__action {
+    grid-column: 3;
+    grid-row: 2 / span 3;
+    align-self: center;
+  }
+}
 @media (max-width: 980px) {
   .qc-home-header {
     align-items: flex-start;
@@ -1408,9 +1583,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   }
   .qc-home-kpi:nth-child(-n + 2) {
     border-bottom: 1px solid rgba(0, 0, 0, 0.07);
-  }
-  .qc-home-grid {
-    grid-template-columns: 1fr;
   }
   .qc-home-analysis {
     grid-template-columns: 1fr;
@@ -1440,10 +1612,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   }
   .qc-home-kpi:last-child {
     border-bottom: 0;
-  }
-  .qc-home-priority-row {
-    grid-template-columns: 28px minmax(0, 1fr) 18px;
-    gap: 10px;
   }
   .qc-home-conclusion__legend {
     grid-template-columns: 1fr;
@@ -1477,15 +1645,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   .qc-home-conclusion__content {
     grid-template-columns: 1fr;
     justify-items: center;
-  }
-  .qc-home-priority-row__metric {
-    grid-column: 2;
-    justify-self: start;
-    min-width: 0;
-  }
-  .qc-home-priority-row__arrow {
-    grid-column: 3;
-    grid-row: 1 / span 2;
   }
   .qc-home-scope__time {
     width: 100%;

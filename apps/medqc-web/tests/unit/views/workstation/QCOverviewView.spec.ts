@@ -151,20 +151,23 @@ describe('QCOverviewView', () => {
     authState.isDemoAccount = false
   })
 
-  it('只展示权威 clinical_qc 指标、范围和结构化优先项，不展示固定涨跌或趋势', async () => {
+  it('以客户可读范围、运营优先 KPI 和结构化队列展示权威 clinical_qc 数据', async () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
     expect(wrapper.get('[data-testid="home-scope"]').text()).toContain('全院')
+    expect(wrapper.get('[data-testid="home-scope"]').text()).toContain('泸县0609质控点')
+    expect(wrapper.get('[data-testid="home-scope"]').text()).not.toContain('luxian_0609_qc_v1')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('18')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
     expect(wrapper.get('[data-testid="priority-queue"]').text()).toContain('测试患者')
-    const priorityMetric = wrapper.get('.qc-home-priority-row__metric')
-    expect(priorityMetric.get('span').text()).toBe('确定问题')
-    expect(priorityMetric.get('strong').text()).toBe('2')
-    expect(priorityMetric.get('small').text()).toBe('项')
-    expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('资料待核实')
-    expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('待判断')
+    const priorityRow = wrapper.get('.qc-home-priority-row')
+    expect(priorityRow.get('[data-testid="priority-defect-count"]').text()).toContain('确定问题2')
+    expect(priorityRow.get('[data-testid="priority-data-gap-count"]').text()).toContain(
+      '资料待核实1',
+    )
+    expect(priorityRow.get('[data-testid="priority-completed-at"]').text()).toContain('08-08 09:20')
+    expect(priorityRow.get('[data-testid="priority-open-result"]').text()).toContain('查看质控结果')
     expect(wrapper.text()).not.toContain('较昨日')
     expect(wrapper.text()).not.toContain('近7天')
     expect(wrapper.find('[data-testid="home-trend"]').exists()).toBe(false)
@@ -177,7 +180,7 @@ describe('QCOverviewView', () => {
     const action = wrapper.get('button.qc-home-priority-row')
     expect(action.attributes('aria-label')).toBe('查看测试患者的质控结果')
     expect(action.text()).toContain('01')
-    expect(action.text()).not.toContain('查看质控结果')
+    expect(action.text()).toContain('查看质控结果')
 
     await action.trigger('click')
 
@@ -191,7 +194,18 @@ describe('QCOverviewView', () => {
     })
   })
 
-  it('以统计分析样式展示四项 KPI，且只保留标题与数值', async () => {
+  it('将科室作为队列独立列展示，患者副行仅保留住院号', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const queue = wrapper.get('[data-testid="priority-queue"]')
+    expect(queue.get('.qc-home-priority-columns').text()).toContain('科室')
+    expect(queue.get('[data-testid="priority-department"]').text()).toBe('神经外科')
+    expect(queue.get('.qc-home-priority-row__identity').text()).toContain('住院号 V1')
+    expect(queue.get('.qc-home-priority-row__identity').text()).not.toContain('神经外科')
+  })
+
+  it('以运营优先顺序展示四项 KPI，且只保留标题与数值', async () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
@@ -204,10 +218,10 @@ describe('QCOverviewView', () => {
         tone: card.classes().find((className) => className.startsWith('is-')),
       })),
     ).toEqual([
-      { label: '纳入病历', value: '18', tone: 'is-brand' },
+      { label: '高风险待复核', value: '2', tone: 'is-danger' },
       { label: '待质控', value: '3', tone: 'is-warning' },
       { label: '已完成', value: '13', tone: 'is-success' },
-      { label: '高风险待复核', value: '2', tone: 'is-danger' },
+      { label: '纳入病历', value: '18', tone: 'is-brand' },
     ])
     expect(wrapper.find('.qc-home-kpi__icon').exists()).toBe(false)
     expect(wrapper.find('.qc-home-kpi small').exists()).toBe(false)
