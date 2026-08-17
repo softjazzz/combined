@@ -3200,10 +3200,15 @@ def safe_luxian_0609_customer_display_facts(
         allowed_states = {"clear", "vague", "missing", "unknown"}
         source_document_id_set = set(source_document_ids)
         for expected_index, item in enumerate(episode_results, start=1):
-            if not isinstance(item, Mapping) or set(item) != {
+            base_item_keys = {
                 "episode_index",
                 "semantic_state",
                 "source_document_id",
+            }
+            locator_item_keys = {"record_time", "document_title"}
+            if not isinstance(item, Mapping) or set(item) not in {
+                frozenset(base_item_keys),
+                frozenset(base_item_keys | locator_item_keys),
             }:
                 return None
             source_document_id = item.get("source_document_id")
@@ -3218,6 +3223,30 @@ def safe_luxian_0609_customer_display_facts(
                 )
             ):
                 return None
+            if locator_item_keys.issubset(item):
+                record_time = item.get("record_time")
+                document_title = item.get("document_title")
+                if not isinstance(record_time, str) or document_title != "会诊记录单":
+                    return None
+                if record_time:
+                    time_format = (
+                        "%Y-%m-%d %H:%M:%S"
+                        if re.fullmatch(
+                            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}",
+                            record_time,
+                        )
+                        else "%Y-%m-%d"
+                        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", record_time)
+                        else ""
+                    )
+                    if not time_format:
+                        return None
+                    try:
+                        parsed_time = datetime.strptime(record_time, time_format)
+                    except ValueError:
+                        return None
+                    if parsed_time.strftime(time_format) != record_time:
+                        return None
             episode_states.append(state)
             safe_episode_results.append(dict(item))
         state_set = set(episode_states)

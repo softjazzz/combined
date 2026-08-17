@@ -537,21 +537,29 @@ async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation
             "episode_index": 1,
             "semantic_state": "clear",
             "source_document_id": "CONSULT-1",
+            "record_time": "2026-07-20 01:00:00",
+            "document_title": "会诊记录单",
         },
         {
             "episode_index": 2,
             "semantic_state": "vague",
             "source_document_id": "CONSULT-2",
+            "record_time": "2026-07-20 02:00:00",
+            "document_title": "会诊记录单",
         },
         {
             "episode_index": 3,
             "semantic_state": "clear",
             "source_document_id": "CONSULT-3",
+            "record_time": "2026-07-20 03:00:00",
+            "document_title": "会诊记录单",
         },
         {
             "episode_index": 4,
             "semantic_state": "missing",
             "source_document_id": "CONSULT-4",
+            "record_time": "2026-07-20 04:00:00",
+            "document_title": "会诊记录单",
         },
     ]
 

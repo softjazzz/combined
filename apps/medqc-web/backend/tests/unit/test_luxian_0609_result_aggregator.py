@@ -734,11 +734,15 @@ def test_022_episode_results_are_strictly_validated_for_customer_delivery():
                 "episode_index": 1,
                 "semantic_state": "clear",
                 "source_document_id": "CONSULT-1",
+                "record_time": "2026-07-20 01:00:00",
+                "document_title": "会诊记录单",
             },
             {
                 "episode_index": 2,
                 "semantic_state": "vague",
                 "source_document_id": "CONSULT-2",
+                "record_time": "2026-07-20 02:00:00",
+                "document_title": "会诊记录单",
             },
         ],
     }
@@ -746,6 +750,18 @@ def test_022_episode_results_are_strictly_validated_for_customer_delivery():
     assert safe_luxian_0609_customer_display_facts(
         rule_id="LX0609-022", raw=facts
     ) == facts
+    facts["episode_results"][1]["record_time"] = "2026-02-30 10:00:00"
+    assert (
+        safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
+        is None
+    )
+    facts["episode_results"][1]["record_time"] = "2026-07-20 02:00:00"
+    facts["episode_results"][1]["document_title"] = "PRIVATE_PATIENT_TITLE"
+    assert (
+        safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
+        is None
+    )
+    facts["episode_results"][1]["document_title"] = "会诊记录单"
     facts["episode_results"][1]["source_document_id"] = "FORGED-DOCUMENT"
     assert (
         safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)

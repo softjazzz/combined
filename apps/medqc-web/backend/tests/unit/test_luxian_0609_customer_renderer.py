@@ -487,21 +487,29 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                     "episode_index": 1,
                     "semantic_state": "clear",
                     "source_document_id": "CONSULT-1",
+                    "record_time": "2026-07-20 09:00:00",
+                    "document_title": "会诊记录单",
                 },
                 {
                     "episode_index": 2,
                     "semantic_state": "vague",
                     "source_document_id": "CONSULT-2",
+                    "record_time": "2026-07-21 10:30:00",
+                    "document_title": "会诊记录单",
                 },
                 {
                     "episode_index": 3,
                     "semantic_state": "clear",
                     "source_document_id": "CONSULT-3",
+                    "record_time": "2026-07-22 11:00:00",
+                    "document_title": "会诊记录单",
                 },
                 {
                     "episode_index": 4,
                     "semantic_state": "missing",
                     "source_document_id": "CONSULT-4",
+                    "record_time": "2026-07-23 14:15:00",
+                    "document_title": "会诊记录单",
                 },
             ],
         },
@@ -509,7 +517,8 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
 
     assert finding == (
         "共核对4次会诊意见；需完善2次："
-        "第2次意见不明确；第4次未记录明确会诊意见。"
+        "2026-07-21 10:30:00《会诊记录单》（第2次）意见不明确；"
+        "2026-07-23 14:15:00《会诊记录单》（第4次）未记录明确会诊意见。"
         "其余2次意见明确。"
     )
 

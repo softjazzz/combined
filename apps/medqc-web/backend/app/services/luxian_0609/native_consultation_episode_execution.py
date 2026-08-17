@@ -1632,6 +1632,12 @@ def _consultation_semantic_display_facts(
                 {},
             )
             representative_document_id = _clean(representative.get("document_id"))
+            observed_time = _parse_observed_time(representative.get("time"))
+            record_time = ""
+            if observed_time is not None:
+                record_time = observed_time.value.strftime(
+                    "%Y-%m-%d %H:%M:%S" if observed_time.precise else "%Y-%m-%d"
+                )
             if representative_document_id:
                 source_document_ids.append(representative_document_id)
             episode_results.append(
@@ -1639,6 +1645,8 @@ def _consultation_semantic_display_facts(
                     "episode_index": episode_index,
                     "semantic_state": getattr(episode, state_field),
                     "source_document_id": representative_document_id,
+                    "record_time": record_time,
+                    "document_title": "会诊记录单",
                 }
             )
     facts = {

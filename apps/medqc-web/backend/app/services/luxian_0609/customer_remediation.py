@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Mapping
 
 from .phase_scope import load_luxian_0609_phase_scope
@@ -154,8 +155,8 @@ def _consultation_targets(facts: Mapping[str, Any] | None) -> tuple[str, str]:
     episodes = facts.get("episode_results")
     if not isinstance(episodes, (list, tuple)):
         return "", ""
-    vague: list[int] = []
-    missing: list[int] = []
+    vague: list[tuple[int, str]] = []
+    missing: list[tuple[int, str]] = []
     for item in episodes:
         if not isinstance(item, Mapping):
             continue
@@ -163,19 +164,53 @@ def _consultation_targets(facts: Mapping[str, Any] | None) -> tuple[str, str]:
         state = item.get("semantic_state")
         if type(index) is not int or index <= 0 or index > 100:
             continue
+        record_time = str(item.get("record_time") or "")
+        if re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2})?",
+            record_time,
+        ) is None:
+            record_time = ""
+        document_title = (
+            "会诊记录单" if item.get("document_title") == "会诊记录单" else ""
+        )
+        locator = f"第{index}次会诊记录"
+        if document_title:
+            locator = f"《{document_title}》（第{index}次）"
+        if record_time:
+            locator = f"{record_time}{locator}"
         if state == "vague":
-            vague.append(index)
+            vague.append((index, locator))
         elif state == "missing":
-            missing.append(index)
-    indexes = sorted(set(vague + missing))
-    if not indexes:
+            missing.append((index, locator))
+    issue_items = sorted({*vague, *missing})
+    if not issue_items:
         return "", ""
-    target = "、".join(f"第{index}次" for index in indexes) + "会诊记录"
+    if all(locator == f"第{index}次会诊记录" for index, locator in issue_items):
+        target = "、".join(f"第{index}次" for index, _ in issue_items) + "会诊记录"
+        needs = []
+        if vague:
+            needs.append(
+                "、".join(f"第{index}次" for index, _ in sorted(set(vague)))
+                + "意见补充明确诊疗判断"
+            )
+        if missing:
+            needs.append(
+                "、".join(f"第{index}次" for index, _ in sorted(set(missing)))
+                + "意见补充明确诊疗意见"
+            )
+        return target, "；".join(needs)
+    target = "、".join(locator for _, locator in issue_items)
     needs = []
     if vague:
-        needs.append("、".join(f"第{index}次" for index in sorted(set(vague))) + "意见补充明确诊疗判断")
+        needs.append(
+            "、".join(locator for _, locator in sorted(set(vague)))
+            + "意见补充明确诊疗判断"
+        )
     if missing:
-        needs.append("、".join(f"第{index}次" for index in sorted(set(missing))) + "意见补充明确诊疗意见")
+        needs.append(
+            "、".join(locator for _, locator in sorted(set(missing)))
+            + "意见补充明确诊疗意见"
+        )
     return target, "；".join(needs)
 
 

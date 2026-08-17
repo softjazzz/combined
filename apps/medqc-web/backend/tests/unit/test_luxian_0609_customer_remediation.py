@@ -137,16 +137,27 @@ def test_controlled_episode_facts_identify_the_consultations_to_revise() -> None
             "episode_count": 4,
             "episode_results": [
                 {"episode_index": 1, "semantic_state": "clear"},
-                {"episode_index": 2, "semantic_state": "vague"},
+                {
+                    "episode_index": 2,
+                    "semantic_state": "vague",
+                    "record_time": "2026-07-21 10:30:00",
+                    "document_title": "会诊记录单",
+                },
                 {"episode_index": 3, "semantic_state": "clear"},
-                {"episode_index": 4, "semantic_state": "missing"},
+                {
+                    "episode_index": 4,
+                    "semantic_state": "missing",
+                    "record_time": "2026-07-23 14:15:00",
+                    "document_title": "会诊记录单",
+                },
             ],
         },
     )
 
-    assert "第2次、第4次会诊记录" in suggestion
-    assert "第2次意见补充明确诊疗判断" in suggestion
-    assert "第4次意见补充明确诊疗意见" in suggestion
+    assert "2026-07-21 10:30:00《会诊记录单》（第2次）" in suggestion
+    assert "2026-07-23 14:15:00《会诊记录单》（第4次）" in suggestion
+    assert "第2次）意见补充明确诊疗判断" in suggestion
+    assert "第4次）意见补充明确诊疗意见" in suggestion
     assert "第1次、第3次" not in suggestion
 
 

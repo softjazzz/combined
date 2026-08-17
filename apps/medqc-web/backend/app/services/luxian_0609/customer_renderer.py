@@ -1793,7 +1793,23 @@ def customer_finding_from_controlled_facts(
                     if label is None:
                         return ""
                     episode_index = item.get("episode_index")
-                    issue_labels.append(f"第{episode_index}次{label}")
+                    record_time = str(item.get("record_time") or "")
+                    if re.fullmatch(
+                        r"\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2})?",
+                        record_time,
+                    ) is None:
+                        record_time = ""
+                    document_title = (
+                        "会诊记录单"
+                        if item.get("document_title") == "会诊记录单"
+                        else ""
+                    )
+                    locator = f"第{episode_index}次"
+                    if document_title:
+                        locator = f"《{document_title}》（{locator}）"
+                    if record_time:
+                        locator = f"{record_time}{locator}"
+                    issue_labels.append(f"{locator}{label}")
                 if issue_labels:
                     finding = (
                         f"共核对{episode_count}次会诊意见；需完善{len(issue_labels)}次："
