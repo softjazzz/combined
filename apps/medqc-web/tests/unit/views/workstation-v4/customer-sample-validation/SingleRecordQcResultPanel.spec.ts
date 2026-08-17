@@ -1153,6 +1153,14 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('448.6 小时')
     expect(wrapper.text()).toContain('超出时限')
     expect(wrapper.text()).toContain('440.6 小时')
+
+    const remainingFacts = wrapper.get('[data-testid="single-record-decision-facts"]')
+    const remainingFactLabels = remainingFacts.findAll('dt').map((label) => label.text())
+    expect(remainingFactLabels).not.toContain('规定时限')
+    expect(remainingFactLabels).not.toContain('实际间隔')
+    expect(remainingFactLabels).not.toContain('超出时限')
+    expect(remainingFactLabels).not.toContain('入院时间')
+    expect(remainingFactLabels).not.toContain('首次病程记录时间')
   })
 
   it('时限结果不向客户展示内部目标文书代码', async () => {

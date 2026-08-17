@@ -242,8 +242,7 @@
           <div
             v-if="
               isCompliantResult(item) &&
-                (timelinessMetrics(item).length ||
-                  timelinessTimeline(item).length ||
+                (hasTimelinessResult(item) ||
                   item.criterion_results?.length ||
                   hasCompliantNarrative(item))
             "
@@ -270,46 +269,11 @@
                 :content="item.standard"
               />
             </div>
-            <section
-              v-if="timelinessMetrics(item).length"
-              class="timeliness-metrics"
-              :class="`has-${timelinessMetrics(item).length}-metrics`"
-              data-testid="timeliness-metrics"
-            >
-              <div
-                v-for="row in timelinessMetrics(item)"
-                :key="row.key"
-                class="timeliness-metric"
-              >
-                <span>{{ row.label }}</span>
-                <strong>{{ row.value }}</strong>
-              </div>
-            </section>
-            <div
-              v-if="timelinessTimeline(item).length"
-              class="timeliness-timeline"
-              data-testid="timeliness-timeline"
-            >
-              <template
-                v-for="(row, index) in timelinessTimeline(item)"
-                :key="row.key"
-              >
-                <span class="timeline-point">
-                  <small>{{ row.label }}</small>
-                  <strong>{{ row.value }}</strong>
-                </span>
-                <span
-                  v-if="index < timelinessTimeline(item).length - 1"
-                  class="timeline-arrow"
-                  aria-hidden="true"
-                >
-                  <ArrowRight
-                    :size="15"
-                    :stroke-width="1.8"
-                  />
-                </span>
-              </template>
-            </div>
+            <TimelinessResultBlock
+              v-if="hasTimelinessResult(item)"
+              :item="item"
+              variant="compliant"
+            />
             <section
               v-if="item.criterion_results?.length"
               class="detail-block criterion-block compliant-criterion-block"
@@ -341,11 +305,7 @@
           <div
             v-if="
               !isCompliantResult(item) &&
-                (item.detail ||
-                  item.actual ||
-                  item.standard ||
-                  timelinessMetrics(item).length ||
-                  timelinessTimeline(item).length)
+                (item.detail || item.actual || item.standard || hasTimelinessResult(item))
             "
             class="decision-summary"
           >
@@ -370,48 +330,11 @@
               />
             </div>
 
-            <section
-              v-if="timelinessMetrics(item).length"
-              class="timeliness-metrics"
-              :class="`has-${timelinessMetrics(item).length}-metrics`"
-              data-testid="timeliness-metrics"
-            >
-              <div
-                v-for="row in timelinessMetrics(item)"
-                :key="row.key"
-                class="timeliness-metric"
-                :class="{ 'is-overdue': row.key === 'overdue_hours' }"
-              >
-                <span>{{ row.label }}</span>
-                <strong>{{ row.value }}</strong>
-              </div>
-            </section>
-
-            <div
-              v-if="timelinessTimeline(item).length"
-              class="timeliness-timeline"
-              data-testid="timeliness-timeline"
-            >
-              <template
-                v-for="(row, index) in timelinessTimeline(item)"
-                :key="row.key"
-              >
-                <span class="timeline-point">
-                  <small>{{ row.label }}</small>
-                  <strong>{{ row.value }}</strong>
-                </span>
-                <span
-                  v-if="index < timelinessTimeline(item).length - 1"
-                  class="timeline-arrow"
-                  aria-hidden="true"
-                >
-                  <ArrowRight
-                    :size="15"
-                    :stroke-width="1.8"
-                  />
-                </span>
-              </template>
-            </div>
+            <TimelinessResultBlock
+              v-if="hasTimelinessResult(item)"
+              :item="item"
+              variant="decision"
+            />
           </div>
 
           <div
@@ -646,7 +569,9 @@
 import { ArrowRight, ChevronRight, ChevronUp } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
 import ExamLabEventResultBlock from './ExamLabEventResultBlock.vue'
+import TimelinessResultBlock from './TimelinessResultBlock.vue'
 import { buildExamLabEventPresentation } from './examLabEventPresentation'
+import { customerFactValueLabel } from './customerFactValuePresentation'
 import {
   buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
@@ -659,6 +584,7 @@ import {
   type SingleRecordQcResultTabKey,
   type SingleRecordQcResultViewItem,
 } from './single-record-result-model'
+import { hasTimelinessResult, timelinessResultRows } from './timelinessResultPresentation'
 
 const props = withDefaults(
   defineProps<{
@@ -688,14 +614,9 @@ const factLabels: Record<string, string> = {
   effective_surgery_level: '手术等级',
   surgery_level_source: '等级来源',
   mdt_discussion_state: '多学科讨论',
-  threshold_hours: '规定时限',
   copy_similarity: '实际相似度',
   copy_similarity_threshold: '判定阈值',
   compared_sections: '比对范围',
-  anchor_time: '起算时间',
-  observed_time: '记录时间',
-  elapsed_hours: '实际间隔',
-  overdue_hours: '超出时限',
   identified_implants: '已识别植入物',
   missing_visit_sources: '缺少访视记录',
   performed_anesthesia_confirmed: '已实施麻醉',
@@ -724,42 +645,6 @@ const factLabels: Record<string, string> = {
   course_documented: '对应病程记录',
 }
 
-const factValueLabels: Record<string, string> = {
-  timeliness_requirement_not_met: '未在规定时限内完成',
-  timeliness_requirement_satisfied: '在规定时限内完成',
-  implant_information_incomplete: '植入物信息填写不完整',
-  surgery_document_missing: '目标手术文书缺失',
-  surgery_document_blank: '目标手术文书内容为空',
-  surgery_consent_document_missing: '未检索到手术知情同意书',
-  surgery_consent_body_missing: '手术知情同意书正文为空',
-  surgery_consent_signature_missing: '手术知情同意书签名不完整',
-  admission_first_course_copy_detected: '入院记录现病史与首次病程记录病例特点高度重复',
-  copy_similarity_threshold_exceeded: '病程记录相似度达到判定阈值',
-  implant_name: '名称',
-  implant_type: '种类',
-  implant_specification: '规格/型号',
-  implant_material: '材质',
-  implant_quantity: '数量',
-  surgery_record: '手术记录',
-  admission_record: '入院记录',
-  first_course_record: '首次病程记录',
-  presurg_summary: '术前小结',
-  surgery_safecheck_record: '手术安全核查表',
-  surgery: '手术',
-  non_surgical_operation: '非手术操作',
-  none: '未实施手术',
-  unknown: '暂无法确认',
-  hospital_performance: '院内绩效目录',
-  national_catalog: '国家临床版目录',
-  structured_field: '病历结构化字段',
-  completed: '已完成',
-  missing: '未完成',
-  blank: '正文为空',
-  signature_missing: '签名不完整',
-  patient: '患者或代理人',
-  surgeon: '术者',
-}
-
 const dataGapLabels: Record<string, string> = {
   reason_code: '缺口原因',
   missing_sources: '缺少来源',
@@ -774,8 +659,6 @@ const hiddenCustomerFactKeys = new Set(['missing_fields', 'target_document'])
 const examLabInternalFactKeys = new Set(['failure_kind', 'checked_sources'])
 const hiddenDataGapKeys = new Set(['reason_code', 'missing_fields'])
 
-const TIMELINESS_METRIC_KEYS = ['threshold_hours', 'elapsed_hours', 'overdue_hours'] as const
-const TIMELINESS_TIME_KEYS = ['anchor_time', 'observed_time'] as const
 const COPY_SOURCE_LABELS: Record<string, string> = {
   daily_course_record: '日常病程记录',
   senior_course_record: '上级医师查房记录',
@@ -797,11 +680,7 @@ function displayFactRows(item: SingleRecordQcResultItem) {
       const values = Array.isArray(rawValue) ? rawValue : [rawValue]
       const value = values
         .map((entry) => {
-          if (
-            ['threshold_hours', 'elapsed_hours', 'overdue_hours', 'window_hours'].includes(key) &&
-            typeof entry === 'number' &&
-            Number.isFinite(entry)
-          ) {
+          if (key === 'window_hours' && typeof entry === 'number' && Number.isFinite(entry)) {
             return `${entry} 小时`
           }
           if (
@@ -812,7 +691,7 @@ function displayFactRows(item: SingleRecordQcResultItem) {
             const percentage = Math.round(entry * 1000) / 10
             return `${Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1)}%`
           }
-          const customerLabel = factValueLabels[String(entry)]
+          const customerLabel = customerFactValueLabel(entry)
           if (key === 'failure_kind') return customerLabel || ''
           return customerLabel || String(entry)
         })
@@ -895,24 +774,8 @@ function resultHeadline(item: SingleRecordQcResultViewItem) {
 
 type DisplayFactRow = ReturnType<typeof displayFactRows>[number]
 
-function rowsByKeyOrder(item: SingleRecordQcResultItem, keys: readonly string[]): DisplayFactRow[] {
-  const rows = displayFactRows(item)
-  return keys
-    .map((key) => rows.find((row) => row.key === key))
-    .filter((row): row is DisplayFactRow => Boolean(row))
-}
-
-function timelinessMetrics(item: SingleRecordQcResultItem) {
-  return rowsByKeyOrder(item, TIMELINESS_METRIC_KEYS)
-}
-
-function timelinessTimeline(item: SingleRecordQcResultItem) {
-  return rowsByKeyOrder(item, TIMELINESS_TIME_KEYS)
-}
-
 function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
-  const displayedKeys = new Set(timelinessTimeline(item).map((row) => row.key))
-  timelinessMetrics(item).forEach((row) => displayedKeys.add(row.key))
+  const displayedKeys = new Set<string>(timelinessResultRows(item).map((row) => row.key))
   if (examLabEventPresentation(item)) {
     displayedKeys.add('report_time')
     displayedKeys.add('response_record_count')
@@ -1234,8 +1097,7 @@ function isCompliantResult(item: SingleRecordQcResultItem) {
 function isExpandable(item: SingleRecordQcResultViewItem) {
   if (!isCompliantResult(item)) return true
   return Boolean(
-    timelinessMetrics(item).length ||
-      timelinessTimeline(item).length ||
+    hasTimelinessResult(item) ||
       item.criterion_results?.length ||
       hasCompliantNarrative(item) ||
       hasCompliantSupportingDetails(item),
@@ -1808,10 +1670,6 @@ watch(
   background: rgba(255, 255, 255, 0.72);
 }
 
-.compliant-detail .timeliness-metrics {
-  margin-top: 0;
-}
-
 .compliant-criterion-block {
   padding-top: 1px;
 }
@@ -1857,87 +1715,6 @@ watch(
   line-height: 20px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-}
-
-.timeliness-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 13px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.timeliness-metrics.has-1-metrics {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.timeliness-metrics.has-2-metrics {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.timeliness-metric {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  padding: 10px;
-  border-right: 1px solid rgba(0, 0, 0, 0.07);
-  text-align: center;
-}
-
-.timeliness-metric:last-child {
-  border-right: 0;
-}
-
-.timeliness-metric span {
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 17px;
-}
-
-.timeliness-metric strong {
-  color: rgba(29, 29, 31, 0.9);
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 23px;
-}
-
-.timeliness-metric.is-overdue strong {
-  color: #d92d20;
-}
-
-.timeliness-timeline {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-top: 10px;
-  color: rgba(29, 29, 31, 0.64);
-}
-
-.timeline-point {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.timeline-point small {
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 11px;
-  line-height: 17px;
-}
-
-.timeline-point strong {
-  color: rgba(29, 29, 31, 0.78);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.timeline-arrow {
-  display: inline-flex;
-  align-items: center;
-  color: rgba(0, 102, 204, 0.5);
 }
 
 .detail-grid {
@@ -2344,11 +2121,6 @@ watch(
     border-top: 1px solid rgba(0, 0, 0, 0.07);
     border-left: 0;
   }
-
-  .timeliness-timeline {
-    flex-wrap: wrap;
-    gap: 6px 8px;
-  }
 }
 
 @container (max-width: 560px) {
@@ -2377,15 +2149,6 @@ watch(
   .copy-match-headline-documents {
     font-size: 12px;
     line-height: 19px;
-  }
-
-  .timeliness-metric {
-    padding: 8px 4px;
-  }
-
-  .timeliness-metric strong {
-    font-size: 14px;
-    line-height: 20px;
   }
 }
 </style>
