@@ -107,6 +107,8 @@ import type {
 } from '@/views/workstation-v4/semantic-rules/types'
 import { isBatchJobCancelable } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
+const LEGACY_RESULT_CONTRACT_ERROR = '历史质控结果交付合同不完整，无法安全展示'
+
 export function useCustomerSampleValidationController() {
   const {
     customerSampleGuideOpen,
@@ -2342,6 +2344,25 @@ export function useCustomerSampleValidationController() {
     }
   }
 
+  function markBatchJobReadFailure(jobId: string, errorMessage?: string) {
+    const messageText = String(errorMessage || '获取质控任务失败').trim()
+    if (currentQcTask.value?.id === jobId) {
+      currentQcTask.value = {
+        ...currentQcTask.value,
+        status: 'failed',
+        error_message: messageText,
+      }
+    }
+    if (batchJobDetail.value?.id === jobId) {
+      batchJobDetail.value = {
+        ...batchJobDetail.value,
+        status: 'failed',
+        error_message: messageText,
+      }
+    }
+    message.error(messageText)
+  }
+
   async function trackCurrentQcTask(jobId: string, options: { showError?: boolean } = {}) {
     const normalizedJobId = String(jobId || '').trim()
     stopCurrentQcTaskPolling()
@@ -2737,7 +2758,13 @@ export function useCustomerSampleValidationController() {
         return
       }
       const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
-      if (!result.success || !result.data) return
+      if (!result.success || !result.data) {
+        if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
+          stopCurrentQcTaskPolling()
+          markBatchJobReadFailure(normalizedJobId, result.message)
+        }
+        return
+      }
       currentQcTask.value = result.data
       if (!isBatchJobRunning(result.data.status)) {
         stopCurrentQcTaskPolling()
@@ -2825,7 +2852,13 @@ export function useCustomerSampleValidationController() {
         return
       }
       const result = await getSichuanWorkspaceBatchJob(jobId)
-      if (!result.success || !result.data) return
+      if (!result.success || !result.data) {
+        if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
+          stopBatchJobPolling()
+          markBatchJobReadFailure(jobId, result.message)
+        }
+        return
+      }
       batchJobDetail.value = result.data
       updateCurrentQcTask(result.data)
       if (!isBatchJobRunning(result.data.status)) {

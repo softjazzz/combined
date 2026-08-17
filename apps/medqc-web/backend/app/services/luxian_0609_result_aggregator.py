@@ -496,7 +496,19 @@ def safe_luxian_0609_customer_display_facts(
         for item in value:
             if not isinstance(item, Mapping):
                 return None
-            surgery_time = item.get("surgery_end_time")
+            surgery_end_time = item.get("surgery_end_time")
+            projected_surgery_time = item.get("surgery_time")
+            if (
+                surgery_end_time is not None
+                and projected_surgery_time is not None
+                and surgery_end_time != projected_surgery_time
+            ):
+                return None
+            surgery_time = (
+                surgery_end_time
+                if surgery_end_time is not None
+                else projected_surgery_time
+            )
             surgeon_names = item.get("surgeon_names")
             required_dates = item.get("required_postop_dates")
             covered_dates = item.get("covered_postop_dates")

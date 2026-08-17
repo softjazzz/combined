@@ -1636,3 +1636,67 @@ def test_writer_accepts_non_compliant_with_controlled_failed_criterion():
     )
 
     assert len(session.statements) == 2
+
+
+def test_writer_accepts_064_non_compliant_with_projected_multievent_facts():
+    session = _WriteSession()
+
+    CustomQCWorkspaceService()._write_record_result_envelopes(
+        session,
+        job_row={
+            "id": "job-current",
+            "created_by": "reviewer-a",
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+        },
+        items=[
+            {
+                "record_id": "visit-1",
+                "visit_id": "visit-1",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "rule_id": "LX0609-064",
+                "status": "non_compliant",
+                "result_status": "non_compliant",
+                "display_status": "non_compliant",
+                "is_compliant": False,
+                "reason_code": "requirement_violated",
+                "customer_display_facts": {
+                    "verification_kind": "postoperative_three_day_coverage_check",
+                    "performed_surgery_count": 1,
+                    "surgery_time": "2026-07-07 18:30:00",
+                    "required_postop_dates": [
+                        "2026-07-08",
+                        "2026-07-09",
+                        "2026-07-10",
+                    ],
+                    "covered_postop_dates": ["2026-07-08", "2026-07-09"],
+                    "surgeon_round_present": False,
+                    "surgery_events": [
+                        {
+                            "surgery_time": "2026-07-07 18:30:00",
+                            "surgery_name": "血肿清除术",
+                            "surgeon_names": ["韩平"],
+                            "required_postop_dates": [
+                                "2026-07-08",
+                                "2026-07-09",
+                                "2026-07-10",
+                            ],
+                            "covered_postop_dates": [
+                                "2026-07-08",
+                                "2026-07-09",
+                            ],
+                            "surgeon_round_present": False,
+                        }
+                    ],
+                },
+            }
+        ],
+        now=datetime(2026, 8, 17, 10, 0, 0),
+    )
+
+    assert len(session.statements) == 2

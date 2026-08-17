@@ -1642,6 +1642,50 @@ describe('CustomerSampleValidationView', () => {
     expect(statusBar.text()).not.toContain('执行中')
   })
 
+  it('任务详情因交付合同错误无法读取时停止主状态轮询并显示失败', async () => {
+    vi.useFakeTimers()
+    listManualSamplePools.mockResolvedValue({
+      success: true,
+      data: {
+        items: [buildPool({ latest_job_id: 'job-contract-error', latest_job_status: 'running' })],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    getSichuanWorkspaceBatchJob
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'job-contract-error',
+          rule_code: 'LX0609',
+          rule_name: '泸县0609质控点验证',
+          scope: 'running',
+          status: 'running',
+          rule_set_key: 'luxian_0609_qc_v1',
+          rule_set_name: '泸县0609质控点验证 v1',
+          created_at: '2026-08-17T02:43:20Z',
+        },
+      })
+      .mockResolvedValue({
+        success: false,
+        message: '历史质控结果交付合同不完整，无法安全展示',
+      })
+
+    await mountView()
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(10000)
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(2)
+    expect(message.error).toHaveBeenCalledWith('历史质控结果交付合同不完整，无法安全展示')
+  })
+
   it('默认选中泸县0609规则集并弱化内部覆盖标签', async () => {
     const wrapper = await mountView()
 

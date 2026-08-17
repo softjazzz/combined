@@ -1820,6 +1820,10 @@ def test_064_multievent_facts_expose_only_customer_safe_surgery_details():
     assert "PRIVATE_DOCUMENT_ID" not in repr(result)
     assert "PRIVATE_RECORD_CONTENT" not in repr(result)
 
+    projected_again = safe(rule_id="LX0609-064", raw=result)
+
+    assert projected_again == result
+
 
 def test_reduced_decision_preserves_surgery_record_present_facts():
     module = __import__(
