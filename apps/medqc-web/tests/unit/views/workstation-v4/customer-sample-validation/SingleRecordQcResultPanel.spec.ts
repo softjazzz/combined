@@ -833,9 +833,21 @@ describe('SingleRecordQcResultPanel', () => {
   })
 
   it.each([
-    { performed_surgery_confirmed: false, source_label: '手术记录', source_document_type: 'surgery_record' },
-    { performed_surgery_confirmed: true, source_label: '病程记录', source_document_type: 'surgery_record' },
-    { performed_surgery_confirmed: true, source_label: '手术记录', source_document_type: 'daily_course_record' },
+    {
+      performed_surgery_confirmed: false,
+      source_label: '手术记录',
+      source_document_type: 'surgery_record',
+    },
+    {
+      performed_surgery_confirmed: true,
+      source_label: '病程记录',
+      source_document_type: 'surgery_record',
+    },
+    {
+      performed_surgery_confirmed: true,
+      source_label: '手术记录',
+      source_document_type: 'daily_course_record',
+    },
   ])('025来源或手术事实不合法时不展示逐台手术核对', async (overrides) => {
     const malformed = {
       ...items[2]!,
@@ -1002,6 +1014,69 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).not.toContain(
       '日常病程记录',
     )
+  })
+
+  it('012按检查事件展示核对统计和逐次结果，不再把六次检查挤成长段文字', async () => {
+    const eventResults = [
+      ['2026-07-08 11:05:49', 'negative', 'not_applicable'],
+      ['2026-07-08 11:05:50', 'negative', 'not_applicable'],
+      ['2026-07-08 17:55:17', 'positive', 'non_compliant'],
+      ['2026-07-11 11:43:25', 'negative', 'not_applicable'],
+      ['2026-07-11 11:43:25', 'negative', 'not_applicable'],
+      ['2026-07-11 11:43:25', 'negative', 'not_applicable'],
+    ].map(([reportTime, positiveState, eventStatus], index) => ({
+      event_position: index + 1,
+      event_status: eventStatus,
+      report_time: reportTime,
+      positive_state: positiveState,
+      response_record_count: 0,
+      applicable: positiveState === 'positive',
+      ...(positiveState === 'positive' ? { requirement_met: false } : {}),
+    }))
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-012',
+            rule_name: 'CT/MRI 检查记录：阳性结果分析',
+            status: 'non_compliant',
+            conclusion:
+              '共核对6次CT/MRI检查：1）报告未明确阳性，本项不适用；2）报告未明确阳性，本项不适用；3）未找到报告后24小时内的阳性结果分析记录。',
+            customer_display_facts: {
+              failure_kind: 'exam_lab_requirement_not_documented',
+              subject: 'ct_mri',
+              requirement: 'positive_result_analysis_within_24h',
+              event_phase: 'report',
+              checked_sources: ['exam_lab_report', 'course_record'],
+              threshold_hours: 24,
+              event_count: 6,
+              event_position: 3,
+              event_results: eventResults,
+            },
+          },
+        ],
+      },
+    })
+
+    const conclusion = wrapper.get('[data-testid="single-record-result-conclusion"]')
+    expect(conclusion.text()).toContain('共核对 6 次 CT/MRI 检查')
+    expect(conclusion.text()).toContain('1 次阳性结果')
+    expect(conclusion.text()).toContain('未在 24 小时内完成分析')
+    expect(conclusion.text()).not.toContain('1）')
+
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    const summary = wrapper.get('[data-testid="exam-event-summary"]')
+    expect(summary.text()).toContain('检查 6 次')
+    expect(summary.text()).toContain('阳性 1 次')
+    expect(summary.text()).toContain('未完成分析 1 次')
+    const rows = wrapper.findAll('[data-testid="exam-event-row"]')
+    expect(rows).toHaveLength(6)
+    expect(rows[0]?.text()).toContain('2026-07-08 11:05:49')
+    expect(rows[0]?.text()).toContain('不适用')
+    expect(rows[2]?.text()).toContain('2026-07-08 17:55:17')
+    expect(rows[2]?.text()).toContain('阳性结果')
+    expect(rows[2]?.text()).toContain('未完成分析')
   })
 
   it('四级手术MDT问题展示手术等级、等级来源和讨论事实', async () => {

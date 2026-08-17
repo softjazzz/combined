@@ -226,7 +226,7 @@
               class="rule-conclusion"
               data-testid="single-record-result-conclusion"
             >{{
-              item.conclusionText
+              resultHeadline(item)
             }}</span>
           </span>
         </button>
@@ -424,6 +424,10 @@
             data-testid="single-record-detail-grid"
           >
             <div class="detail-column detail-column-main">
+              <ExamLabEventResultBlock
+                v-if="examLabEventPresentation(item)"
+                :presentation="examLabEventPresentation(item)!"
+              />
               <section
                 v-if="implantEventFacts(item).length"
                 class="detail-block implant-event-block"
@@ -641,6 +645,8 @@
 <script setup lang="ts">
 import { ArrowRight, ChevronRight, ChevronUp } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
+import ExamLabEventResultBlock from './ExamLabEventResultBlock.vue'
+import { buildExamLabEventPresentation } from './examLabEventPresentation'
 import {
   buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
@@ -879,6 +885,14 @@ function implantEventTitle(event: ReturnType<typeof implantEventFacts>[number]) 
   return `第 ${event.eventPosition} 台手术${names}`
 }
 
+function examLabEventPresentation(item: SingleRecordQcResultItem) {
+  return buildExamLabEventPresentation(item)
+}
+
+function resultHeadline(item: SingleRecordQcResultViewItem) {
+  return examLabEventPresentation(item)?.headline || item.conclusionText
+}
+
 type DisplayFactRow = ReturnType<typeof displayFactRows>[number]
 
 function rowsByKeyOrder(item: SingleRecordQcResultItem, keys: readonly string[]): DisplayFactRow[] {
@@ -899,6 +913,10 @@ function timelinessTimeline(item: SingleRecordQcResultItem) {
 function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
   const displayedKeys = new Set(timelinessTimeline(item).map((row) => row.key))
   timelinessMetrics(item).forEach((row) => displayedKeys.add(row.key))
+  if (examLabEventPresentation(item)) {
+    displayedKeys.add('report_time')
+    displayedKeys.add('response_record_count')
+  }
   return displayFactRows(item).filter((row) => !displayedKeys.has(row.key))
 }
 
