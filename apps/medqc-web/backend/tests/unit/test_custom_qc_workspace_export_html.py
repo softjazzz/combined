@@ -108,13 +108,39 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
         "root_job_id": "job-canonical-only",
         "record_ref": "rec_0123456789abcdef01234567",
         "items": [{
-            "rule_id": "LX0609-001",
+            "schema_version": "lx0609-customer-result-v2",
+            "rule_id": "LX0609-022",
             "rule_version": "1.0",
-            "rule_name": "Canonical 质控点",
-            "status": "compliant",
-            "result_status": "compliant",
-            "is_compliant": True,
-            "reason_code": "internal_reason_must_not_render",
+            "rule_name": "会诊记录单会诊意见是否明确",
+            "status": "non_compliant",
+            "result_status": "non_compliant",
+            "is_compliant": False,
+            "reason_code": "requirement_violated",
+            "suggestion": "PRIVATE_PATIENT_NAME 任意上游建议不得直接导出",
+            "customer_display_facts": {
+                "verification_kind": "consultation_opinion_quality_check",
+                "episode_count": 2,
+                "document_count": 2,
+                "semantic_state": "mixed",
+                "checked_requirement": "给出针对当前病情的明确诊疗意见",
+                "source_document_ids": ["CONSULT-1", "CONSULT-2"],
+                "episode_results": [
+                    {
+                        "episode_index": 1,
+                        "semantic_state": "clear",
+                        "source_document_id": "CONSULT-1",
+                        "record_time": "2026-07-20 01:00:00",
+                        "document_title": "会诊记录单",
+                    },
+                    {
+                        "episode_index": 2,
+                        "semantic_state": "vague",
+                        "source_document_id": "CONSULT-2",
+                        "record_time": "2026-07-20 02:00:00",
+                        "document_title": "会诊记录单",
+                    },
+                ],
+            },
             "evidence": [{
                 "source_type": "daily_course_record",
                 "source_ref": "src_1234567890abcdef12345678",
@@ -159,13 +185,20 @@ def test_export_batch_job_html_reads_only_this_jobs_canonical_envelopes(monkeypa
 
     html = service.export_batch_job_html(job=job)
 
-    assert "LX0609-001" in html
+    assert "LX0609-022" in html
     assert "LX0609-999" not in html
     assert "legacy-record-must-not-render" not in html
-    assert "internal_reason_must_not_render" not in html
+    assert "requirement_violated" not in html
     assert "患者术后第1日精神可，切口无渗血" in html
     assert "src_1234567890abcdef12345678" not in html
     assert "原因码" not in html
+    assert "病历引用" not in html
+    assert "rec_0123456789abcdef01234567" not in html
+    assert "2026-07-20 02:00:00《会诊记录单》（第2次）" in html
+    assert "第2次）意见补充明确诊疗判断" in html
+    assert "推荐写法：请按“病情判断—具体措施—执行时点或条件" in html
+    assert "PRIVATE_PATIENT_NAME" not in html
+    assert "任意上游建议不得直接导出" not in html
     assert html.count("data-record-group") == 1
 
 
@@ -270,6 +303,8 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
     assert "确定问题病历数：1" in html
     assert "不合规 1" in html
     assert "数据不足 1" in html
+    assert 'class="status-pill status-non-compliant"' in html
+    assert 'class="status-pill status-data-gap"' in html
     assert "LX0609-001" in html
     assert "LX0609-002" in html
     assert "发现该质控点对应的明确问题" in html
@@ -340,7 +375,8 @@ def test_export_batch_job_html_flattens_parent_child_jobs():
     assert html.count("data-result-row") == 2
     assert html.count("data-record-group") == 1
     assert "病历数：1" in html
-    assert html.count("rec_") >= 2
+    assert "病历引用" not in html
+    assert "rec_" not in html
     assert "V001" not in html
     assert "张某某" not in html
     assert "LX0609-001" in html
@@ -523,7 +559,7 @@ def test_customer_safe_batch_projection_is_idempotent_and_remains_safe_export():
     assert second["rule_set_key"] == "luxian_0609_qc_v1"
     assert second["draft_ids"] == ["LX0609-001"]
     assert second["items"] == first["items"]
-    assert "病历引用" in service.export_batch_job_html(job=second)
+    assert "病历引用" not in service.export_batch_job_html(job=second)
     assert "R-IDEMPOTENT" not in service.export_batch_job_html(job=second)
 
 

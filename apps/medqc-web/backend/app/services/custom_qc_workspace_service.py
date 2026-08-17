@@ -30,7 +30,11 @@ from .document_domain_alignment import (
     align_document_domain_fields,
     normalize_document_label,
 )
-from .luxian_0609.customer_renderer import RULE_SET_VERSION
+from .luxian_0609.customer_renderer import (
+    CUSTOMER_SCHEMA_VERSION as LUXIAN_0609_CUSTOMER_SCHEMA_VERSION,
+    RULE_SET_VERSION,
+)
+from .luxian_0609.customer_remediation import build_customer_remediation_suggestion
 from .luxian_0609.record_result_read_model import (
     _generation_key,
     _rule_set_value,
@@ -1648,8 +1652,32 @@ def _customer_export_rows(
     job: Dict[str, Any],
     *,
     hmac_key: str,
+    include_luxian_canonical_remediation: bool = False,
 ) -> tuple[List[Dict[str, Any]], List[List[str]], Dict[str, Any]]:
-    items = flatten_customer_safe_result_items(job, hmac_key=hmac_key)
+    source_items = iter_unique_customer_result_source_items(job, hmac_key=hmac_key)
+    items: List[Dict[str, Any]] = []
+    for source_item in source_items:
+        projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
+        if (
+            include_luxian_canonical_remediation
+            and _safe_text(source_item.get("schema_version"))
+            == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
+            and _safe_text(projected.get("rule_id")).startswith("LX0609-")
+        ):
+            # HTML 只读取已落 Canonical 的 LX0609 Renderer 结果，并且只用
+            # 再次通过客户投影白名单的状态、原因码和事实生成整改建议。
+            # 不直接信任或导出 Canonical 中保存的自由文本。
+            safe_facts = projected.get("customer_display_facts")
+            canonical_suggestion = build_customer_remediation_suggestion(
+                rule_id=_safe_text(projected.get("rule_id")),
+                status=_safe_text(projected.get("status")),
+                reason_code=_safe_text(projected.get("reason_code")),
+                facts=safe_facts if isinstance(safe_facts, Mapping) else None,
+            )
+            if canonical_suggestion:
+                projected["suggestion"] = canonical_suggestion
+                projected["customer_suggestion"] = canonical_suggestion
+        items.append(projected)
     rows: List[List[str]] = []
     for item in items:
         evidence_text = customer_evidence_summary(list(item.get("evidence") or []))
@@ -1706,7 +1734,11 @@ def _export_customer_safe_html(
     canonical_items: Sequence[Dict[str, Any]],
 ) -> str:
     canonical_job = {"id": job.get("id"), "items": list(canonical_items)}
-    items, rows, summary = _customer_export_rows(canonical_job, hmac_key=hmac_key)
+    items, rows, summary = _customer_export_rows(
+        canonical_job,
+        hmac_key=hmac_key,
+        include_luxian_canonical_remediation=True,
+    )
     return render_customer_safe_html(items=items, rows=rows, summary=summary)
 
 

@@ -54,6 +54,23 @@ def map_item_status_label(status: Any, is_compliant: Any) -> str:
     return "未判定" if status is None else status_text
 
 
+def _status_css_class(status: Any) -> str:
+    key = "" if status is None else str(status).strip().lower()
+    return {
+        "non_compliant": "non-compliant",
+        "ai_suggested_non_compliant": "ai-non-compliant",
+        "ai_suggested_compliant": "ai-compliant",
+        "data_gap": "data-gap",
+        "evaluation_unknown": "uncertain",
+        "uncertain": "uncertain",
+        "compliant": "compliant",
+        "not_applicable": "not-applicable",
+        "not_executed": "not-executed",
+        "technical_error": "technical-error",
+        "failed": "technical-error",
+    }.get(key, "unknown")
+
+
 def render_customer_safe_workbook(
     *,
     items: Sequence[Dict[str, Any]],
@@ -116,7 +133,7 @@ def render_customer_safe_html(
     summary: Dict[str, Any],
 ) -> str:
     # HTML 是客户报告，不展示内部原因码；CSV/XLSX 的现有结构保持不变。
-    html_columns = (0, 1, 2, 3, 5, 6, 7)
+    html_columns = (1, 2, 3, 5, 6, 7)
     headers = "".join(
         f"<th>{html.escape(CUSTOMER_EXPORT_HEADERS[index])}</th>"
         for index in html_columns
@@ -124,8 +141,8 @@ def render_customer_safe_html(
     groups: Dict[str, Dict[str, Any]] = {}
     for item, row in zip(items, rows):
         record_ref = str(item.get("record_ref") or "").strip()
-        group = groups.setdefault(record_ref, {"rows": [], "status_counts": {}})
-        group["rows"].append(row)
+        group = groups.setdefault(record_ref, {"entries": [], "status_counts": {}})
+        group["entries"].append((item, row))
         raw_status = item.get("status")
         status = "uncertain" if raw_status is None else str(raw_status).strip()
         status_counts = group["status_counts"]
@@ -143,18 +160,29 @@ def render_customer_safe_html(
         "technical_error",
     )
     record_sections: List[str] = []
-    for record_ref, group in groups.items():
-        body_rows = "".join(
-            "<tr data-result-row>"
-            + "".join(
-                f"<td>{html.escape(row[index], quote=True)}</td>"
-                for index in html_columns
+    for group_index, (_record_ref, group) in enumerate(groups.items(), start=1):
+        body_row_parts: List[str] = []
+        for item, row in group["entries"]:
+            status_class = _status_css_class(item.get("status"))
+            cells: List[str] = []
+            for column_index in html_columns:
+                cell_text = html.escape(row[column_index], quote=True)
+                if column_index == 3:
+                    cells.append(
+                        '<td class="result-status-cell">'
+                        f'<span class="status-pill status-{status_class}">{cell_text}</span>'
+                        "</td>"
+                    )
+                else:
+                    cells.append(f"<td>{cell_text}</td>")
+            body_row_parts.append(
+                f'<tr data-result-row class="result-row status-row-{status_class}">'
+                + "".join(cells)
+                + "</tr>"
             )
-            + "</tr>"
-            for row in group["rows"]
-        )
+        body_rows = "".join(body_row_parts)
         status_badges = "".join(
-            '<span class="status-pill">'
+            f'<span class="status-pill status-{_status_css_class(status)}">'
             f"{html.escape(map_item_status_label(status, status == 'compliant'))} "
             f"{group['status_counts'][status]}"
             "</span>"
@@ -165,8 +193,8 @@ def render_customer_safe_html(
             f"""<section class="record-group" data-record-group>
     <header class="record-heading">
       <div>
-        <span class="eyebrow">病历引用</span>
-        <h2>{html.escape(record_ref, quote=True)}</h2>
+        <span class="eyebrow">病历质控明细</span>
+        <h2>{"本次病历" if len(groups) == 1 else f"第 {group_index} 份病历"}</h2>
       </div>
       <div class="status-counts">{status_badges}</div>
     </header>
@@ -203,11 +231,25 @@ def render_customer_safe_html(
     .record-heading {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }}
     .eyebrow {{ display: block; margin-bottom: 5px; color: #64748b; font-size: 12px; }}
     .status-counts {{ display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }}
-    .status-pill {{ border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: 4px 9px; font-size: 12px; white-space: nowrap; }}
+    .status-pill {{ display: inline-flex; align-items: center; justify-content: center; border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: 4px 10px; font-size: 12px; font-weight: 700; line-height: 18px; white-space: nowrap; }}
+    .status-non-compliant, .status-technical-error {{ border-color: #fecaca; background: #fef2f2; color: #b91c1c; }}
+    .status-data-gap {{ border-color: #fde68a; background: #fffbeb; color: #a16207; }}
+    .status-compliant {{ border-color: #a7f3d0; background: #ecfdf5; color: #047857; }}
+    .status-not-applicable {{ border-color: #e2e8f0; background: #f8fafc; color: #475569; }}
+    .status-not-executed {{ border-color: #ddd6fe; background: #f5f3ff; color: #6d28d9; }}
+    .status-uncertain, .status-ai-non-compliant, .status-ai-compliant {{ border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }}
+    .status-unknown {{ border-color: #e5e7eb; background: #f9fafb; color: #4b5563; }}
     .table-wrap {{ overflow-x: auto; }}
     table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
     th, td {{ border-bottom: 1px solid #e5e7eb; padding: 9px; text-align: left; vertical-align: top; }}
     th {{ color: #4b5563; background: #f8fafc; }}
+    .result-status-cell {{ min-width: 94px; }}
+    .result-row td:first-child {{ box-shadow: inset 3px 0 0 transparent; }}
+    .status-row-non-compliant td:first-child, .status-row-technical-error td:first-child {{ box-shadow: inset 3px 0 0 #ef4444; }}
+    .status-row-data-gap td:first-child {{ box-shadow: inset 3px 0 0 #f59e0b; }}
+    .status-row-compliant td:first-child {{ box-shadow: inset 3px 0 0 #10b981; }}
+    .status-row-not-applicable td:first-child {{ box-shadow: inset 3px 0 0 #94a3b8; }}
+    .status-row-not-executed td:first-child {{ box-shadow: inset 3px 0 0 #8b5cf6; }}
     .empty-state {{ padding: 42px 18px; text-align: center; color: #64748b; }}
     .empty-state h2 {{ margin-bottom: 8px; color: #334155; }}
   </style>
