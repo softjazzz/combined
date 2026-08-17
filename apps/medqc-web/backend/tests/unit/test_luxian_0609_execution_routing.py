@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services.luxian_0609 import execution as execution_module
 from app.services.luxian_0609.customer_rule_package import LUXIAN_0609_RULE_SET_KEY
 from app.services.luxian_0609.execution import (
     aggregate_luxian_0609_orchestrated_results,
@@ -220,3 +221,43 @@ def test_public_execution_returns_controlled_not_executed_for_pending_rule(
     assert result["status"] == "not_executed"
     assert result["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
     assert result["suggestion"] == "待院方确认并发布业务口径后再启用本质控点。"
+
+
+def test_formal_execution_wraps_llm_client_at_single_egress_boundary(monkeypatch) -> None:
+    original_client = object()
+    wrapped_client = object()
+    seen: list[object] = []
+
+    def _wrap(client):
+        seen.append(client)
+        return wrapped_client
+
+    monkeypatch.setattr(execution_module, "wrap_luxian_0609_llm_client", _wrap)
+    inventory = load_luxian_0609_dependency_inventory()
+    prepared_rules = [
+        {"rule_id": rule_id}
+        for rule_id in resolve_package_entry_execution_rule_ids(
+            inventory=inventory,
+            selected_rule_ids=("LX0609-025",),
+        )
+    ]
+
+    asyncio.run(
+        prepare_luxian_0609_execution(
+            rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+            prepared_rules=prepared_rules,
+            visit_id="V-1",
+            medical_text="",
+            evidence_payload=None,
+            llm_client=original_client,
+            settings=_settings(
+                LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+                LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+                LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+                LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+            ),
+            selected_customer_rule_ids=("LX0609-025",),
+        )
+    )
+
+    assert seen == [original_client]

@@ -16,6 +16,7 @@ from .customer_rule_package import (
     summarize_luxian_0609_results,
 )
 from .input_builder import build_luxian_0609_input_profile
+from .llm_prompt_privacy import wrap_luxian_0609_llm_client
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from .decision_model import RuleDecision
@@ -238,6 +239,7 @@ async def prepare_luxian_0609_execution(
             prepared_rule_count=len(prepared_rules),
             executable_rule_count=len(prepared_rules),
         )
+    llm_client = wrap_luxian_0609_llm_client(llm_client)
 
     prepared_rule_count = len(prepared_rules)
     prepared_rule_ids = {
