@@ -12,6 +12,9 @@ from ..luxian_0609_rule_catalog import (
     get_luxian_0609_rule,
 )
 from .decision_reducer import CustomerFinalState, ReducedRuleDecision
+from .customer_remediation import (
+    build_customer_remediation_suggestion,
+)
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .source_gap_contract import customer_gap_message
 from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
@@ -634,59 +637,6 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "已核对有创操作医嘱与病程记录，未找到对应的操作记录。",
         "请分别补充上述有创操作的适应证、操作时间、过程、结果及并发症观察。",
     ),
-}
-_RULE_NON_COMPLIANT_SUGGESTIONS = {
-    "LX0609-001": "请补充入院记录，并确保在入院后24小时内完成。",
-    "LX0609-002": "请补充首次病程记录，并确保在入院后8小时内完成。",
-    "LX0609-003": "请按每台已实施手术补充对应手术记录，并在手术结束后24小时内完成。",
-    "LX0609-004": "请补充本次抢救记录，并确保在抢救结束后6小时内完成。",
-    "LX0609-005": "请补充主治医师及以上首次查房记录，并确保在入院后48小时内完成。",
-    "LX0609-006": "请补充副主任医师或主任医师首次查房记录，并确保在入院后72小时内完成。",
-    "LX0609-007": "请在病情稳定阶段至少每3天记录一次上级医师查房病程。",
-    "LX0609-008": "请在病重医嘱期间至少每2天记录一次查房或相关病程。",
-    "LX0609-009": "请在病危医嘱期间每日记录病程，并在明确病情变化后24小时内记录处置情况。",
-    "LX0609-010": "请逐条核对结果列出的CT/MRI医嘱，补齐对应检查主记录、检查报告及检查前病程中的检查原因。",
-    "LX0609-011": "请在CT/MRI报告出具后24小时内的病程中记录检查结果。",
-    "LX0609-013": "请在手术记录或病程记录中补充病理报告结果及后续处置。",
-    "LX0609-014": "请在细菌培养报告出具后24小时内的病程中记录培养结果。",
-    "LX0609-019": "请在手术记录或对应病程中补充病理取材部位、时间及送检情况。",
-    "LX0609-021": "请在会诊申请中写明具体临床问题、会诊理由和明确目的。",
-    "LX0609-022": (
-        "请按“病情判断—具体措施—执行时点或条件—观察指标—复评或随访安排”书写。"
-        "例如：“结合目前……，考虑……；建议于……完成……或给予……，观察……；"
-        "如……则……，并于……复评。”请结合本次实际病情填写，"
-        "不要仅写“必要时检查或用药”等条件不清的表述。"
-    ),
-    "LX0609-023": "请在会诊意见执行记录中归纳具体措施、执行结果和后续安排，不要仅照抄会诊意见。",
-    "LX0609-024": "请在恶性肿瘤手术记录中补充淋巴结清扫范围、数量及送检情况；未清扫时写明原因。",
-    "LX0609-026": "请核对化疗医嘱与病程记录，统一药物名称、剂量、用法和用药时间。",
-    "LX0609-027": "请在出院记录中补充恶性肿瘤后续诊疗计划、治疗安排和随访要求。",
-    "LX0609-028": "请按手术切口等级核对预防用抗菌药物起止时间；超过24小时（特殊情况48小时）时写明理由并及时调整。",
-    "LX0609-030": "请为每台已实施手术补充对应手术记录，并核对手术名称、时间和术者。",
-    "LX0609-031": "请由本次手术的术者完成手术记录签名，并核对术者与签名医师信息。",
-    "LX0609-032": "请为本次已实施手术补充手术安全核查表，并完成相关核查和签名。",
-    "LX0609-033": "请补充并归档本次手术知情同意书，完成告知内容和相关签名。",
-    "LX0609-034": "请补充并归档本次麻醉知情同意书，完成麻醉风险告知和相关签名。",
-    "LX0609-035": "请按结果列出的缺项补全麻醉知情同意书内容、双方签名及签署时间。",
-    "LX0609-037": "请按结果列出的缺项补全麻醉术前和术后访视记录。",
-    "LX0609-039": "请补充术前讨论记录，写明手术指征、风险、方案并记录术者参加情况。",
-    "LX0609-051": "请在患者死亡后7天内完成死亡病历讨论，并记录讨论结论。",
-    "LX0609-054": "请在病程中补充抗菌药物的使用原因、方案调整理由及相关依据。",
-    "LX0609-055": "请在首次使用抗菌药物后48至72小时内记录疗效、检验变化和方案调整。",
-    "LX0609-056": "请在两个以上重点抗菌药物联合使用前完成病原学检查；无法留取标本时写明原因。",
-    "LX0609-057": "请在病程中记录经验使用抗菌药物的理由，或明确记录无样本可采原因。",
-    "LX0609-060": "请补充并归档本次住院的死亡记录，写明死亡时间、过程和死亡原因。",
-    "LX0609-061": "请补充出院记录，并确保在患者出院后24小时内完成。",
-    "LX0609-062": "请按每项出院带药补全药品名称、剂量、给药途径和用药时间。",
-    "LX0609-063": "请核对出院记录与权威出院诊断，统一诊断内容和排列顺序。",
-    "LX0609-065": "请在术后72小时内完成上级医师查房，并记录术后病情、处置及计划。",
-    "LX0609-066": "请为每台已实施手术补充对应的术后首次病程记录。",
-    "LX0609-067": "请在出院前一天或出院当天补充病程，记录出院前病情和出院安排。",
-    "LX0609-069": "请在会诊申请后24小时内完成会诊，并准确记录申请和完成时间。",
-    "LX0609-070": "请在输血前补齐乙肝五项、丙肝、艾滋、梅毒和谷丙转氨酶检查。",
-    "LX0609-071": "请在经治医师变更时完成交班记录，并在24小时内完成接班记录。",
-    "LX0609-072": "请在转科医嘱后24小时内完成转出和转入记录。",
-    "LX0609-073": "请为本次转科同时补齐转出记录和转入记录。",
 }
 _RULE_NOT_APPLICABLE_MESSAGES = {
     ("LX0609-003", "performed_event_absent"): (
@@ -2438,6 +2388,7 @@ def _emit_safe_trace(
 def render_luxian_0609_customer_result(
     *,
     decision: ReducedRuleDecision,
+    safe_customer_display_facts: Mapping[str, Any] | None = None,
     trace_sink: SafeTraceSink | None = None,
 ) -> dict[str, Any]:
     """从可信目录和 reducer 决策零构造 DTO，不接受任意展示字符串。"""
@@ -2490,10 +2441,6 @@ def render_luxian_0609_customer_result(
             decision.rule_id,
             (findings, evidence, suggestion),
         )
-        suggestion = _RULE_NON_COMPLIANT_SUGGESTIONS.get(
-            decision.rule_id,
-            suggestion,
-        )
         if decision.rule_id == "LX0609-018":
             findings = _lx018_criterion_finding(decision.criterion_results) or findings
             evidence = "已分别核对主诉字数及主诉与入院第一诊断的诊断指向。"
@@ -2512,6 +2459,15 @@ def render_luxian_0609_customer_result(
             findings = _lx018_criterion_finding(decision.criterion_results) or findings
             evidence = "主诉字数已核对，但诊断指向的自动判断未形成可靠结论。"
             suggestion = "请人工核对主诉提供的诊断线索是否能够支持入院第一诊断。"
+
+    structured_suggestion = build_customer_remediation_suggestion(
+        rule_id=decision.rule_id,
+        status=decision.final_state.value,
+        reason_code=decision.reason_code,
+        facts=safe_customer_display_facts,
+    )
+    if structured_suggestion:
+        suggestion = structured_suggestion
     if decision.final_state in {
         CustomerFinalState.COMPLIANT,
         CustomerFinalState.NOT_APPLICABLE,

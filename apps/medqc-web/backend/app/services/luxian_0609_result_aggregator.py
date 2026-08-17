@@ -4459,6 +4459,7 @@ def aggregate_luxian_0609_results(
         if reduced is not None:
             result = render_luxian_0609_customer_result(
                 decision=reduced,
+                safe_customer_display_facts=display_facts_by_rule.get(wrapper_id),
                 trace_sink=decision_trace_sink,
             )
             _validate_lx0609_025_fact_status(

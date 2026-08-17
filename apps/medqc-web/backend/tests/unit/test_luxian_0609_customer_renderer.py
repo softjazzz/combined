@@ -359,7 +359,7 @@ def test_non_compliant_result_gives_rule_specific_action_instead_of_generic_advi
 
     result = render_luxian_0609_customer_result(decision=decision)
 
-    assert result["suggestion"] == expected_suggestion
+    assert expected_suggestion in result["suggestion"]
     assert result["suggestion"] != "请按质控要求核对并完善相关记录。"
 
 
@@ -379,12 +379,12 @@ def test_022_suggestion_provides_a_safe_writing_template() -> None:
 
     result = render_luxian_0609_customer_result(decision=decision)
 
-    assert result["suggestion"] == (
-        "请按“病情判断—具体措施—执行时点或条件—观察指标—复评或随访安排”书写。"
-        "例如：“结合目前……，考虑……；建议于……完成……或给予……，观察……；"
-        "如……则……，并于……复评。”请结合本次实际病情填写，"
-        "不要仅写“必要时检查或用药”等条件不清的表述。"
-    )
+    assert "修改对象：会诊记录单" in result["suggestion"]
+    assert "需要补充：针对当前病情的判断" in result["suggestion"]
+    assert "病情判断—具体措施—执行时点或条件—观察指标—复评或随访安排" in result[
+        "suggestion"
+    ]
+    assert "不要编造未核实事实" in result["suggestion"]
 
 
 DEFINED_RULE_IDS = tuple(
@@ -392,11 +392,7 @@ DEFINED_RULE_IDS = tuple(
     for contract in load_luxian_0609_rule_contracts()
     if contract.phase_status != "pending_definition"
 )
-CUSTOMER_EXECUTABLE_RULE_IDS = tuple(
-    contract.rule_id
-    for contract in load_luxian_0609_rule_contracts()
-    if contract.rule_id != "LX0609-049"
-)
+CUSTOMER_EXECUTABLE_RULE_IDS = DEFINED_RULE_IDS
 
 
 @pytest.mark.parametrize("rule_id", CUSTOMER_EXECUTABLE_RULE_IDS)
@@ -418,6 +414,8 @@ def test_every_customer_executable_rule_has_specific_action_instead_of_generic_a
 
     result = render_luxian_0609_customer_result(decision=decision)
 
+    assert result["status"] == "non_compliant", rule_id
+    assert result["reason_code"] == "requirement_violated", rule_id
     assert result["suggestion"] != "请按质控要求核对并完善相关记录。", rule_id
     assert len(result["suggestion"]) >= 12, rule_id
 

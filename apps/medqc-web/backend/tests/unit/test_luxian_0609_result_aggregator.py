@@ -753,6 +753,60 @@ def test_022_episode_results_are_strictly_validated_for_customer_delivery():
     )
 
 
+def test_022_safe_episode_facts_personalize_the_delivered_remediation() -> None:
+    facts = {
+        "verification_kind": "consultation_opinion_quality_check",
+        "episode_count": 4,
+        "document_count": 4,
+        "semantic_state": "mixed",
+        "checked_requirement": "给出针对当前病情的明确诊疗意见",
+        "source_document_ids": [
+            "CONSULT-1",
+            "CONSULT-2",
+            "CONSULT-3",
+            "CONSULT-4",
+        ],
+        "episode_results": [
+            {
+                "episode_index": 1,
+                "semantic_state": "clear",
+                "source_document_id": "CONSULT-1",
+            },
+            {
+                "episode_index": 2,
+                "semantic_state": "vague",
+                "source_document_id": "CONSULT-2",
+            },
+            {
+                "episode_index": 3,
+                "semantic_state": "clear",
+                "source_document_id": "CONSULT-3",
+            },
+            {
+                "episode_index": 4,
+                "semantic_state": "missing",
+                "source_document_id": "CONSULT-4",
+            },
+        ],
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-022"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-022", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-022", facts),),
+    )[0]
+
+    assert result["status"] == "non_compliant"
+    assert result["reason_code"] == "requirement_violated"
+    assert "修改对象：第2次、第4次会诊记录" in result["suggestion"]
+    assert "第2次意见补充明确诊疗判断" in result["suggestion"]
+    assert "第4次意见补充明确诊疗意见" in result["suggestion"]
+    assert "第1次、第3次" not in result["suggestion"]
+
+
 def test_020_uses_exact_opinion_and_execution_document_refs_for_customer_evidence():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
@@ -839,10 +893,11 @@ def test_020_non_compliant_delivery_explains_missing_recommendation_and_locates_
         "共核对2次已完成会诊的2条建议：1条已找到明确执行记录，"
         "1条未找到对应执行记录。未闭环：第2次会诊的检查类建议。"
     )
-    assert result["suggestion"] == (
+    assert "修改对象：每次会诊意见及对应执行记录" in result["suggestion"]
+    assert (
         "请针对结果列出的未闭环建议，在后续病程中补记具体执行措施、"
         "执行结果或未执行原因。"
-    )
+    ) in result["suggestion"]
     assert result["customer_evidence"] == facts["source_document_refs"]
     assert result["customer_display_facts"]["recommendation_results"] == facts[
         "recommendation_results"
