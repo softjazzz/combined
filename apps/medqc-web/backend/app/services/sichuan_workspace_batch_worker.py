@@ -3158,6 +3158,23 @@ async def run_sichuan_workspace_batch_job(
             final=True,
         )
 
+        if use_luxian_customer_results and failed_record_ids and all_failed_records:
+            first_failure_error = str(
+                all_failed_records[0].get("error") or ""
+            ).strip()
+            logger.error(
+                "LX0609正式质控未形成可交付结果，停止进入Canonical: first_error=%s",
+                first_failure_error or "unknown",
+            )
+            customer_safe_reason = (
+                "客户展示事实不符合交付合同（invalid customer display facts）"
+                if first_failure_error == "invalid customer display facts"
+                else "规则执行失败"
+            )
+            raise ValueError(
+                f"病历质控未形成可交付结果：{customer_safe_reason}"
+            )
+
         postprocess_summary = summarize_postprocessed_results(all_items) if should_postprocess_job else {}
         display_status_counts = dict(postprocess_summary.get("display_status_counts") or {})
         postprocess_label_counts = dict(postprocess_summary.get("postprocess_label_counts") or {})

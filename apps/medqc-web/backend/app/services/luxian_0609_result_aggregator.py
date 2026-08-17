@@ -1549,7 +1549,17 @@ def safe_luxian_0609_customer_display_facts(
                 facts[key] = value
         positive_state = raw.get("positive_state")
         if positive_state is not None:
-            if positive_state not in {"positive", "negative", "not_relevant"}:
+            if positive_state not in {
+                "positive",
+                "negative",
+                "not_relevant",
+                "unknown",
+            }:
+                return None
+            if (
+                positive_state == "unknown"
+                and verification_kind != "exam_lab_event_review_incomplete"
+            ):
                 return None
             facts["positive_state"] = positive_state
         for key in ("report_time", "response_record_time"):
@@ -1643,7 +1653,13 @@ def safe_luxian_0609_customer_display_facts(
                         "positive",
                         "negative",
                         "not_relevant",
+                        "unknown",
                     }:
+                        return None
+                    if (
+                        event_positive_state == "unknown"
+                        and item["event_status"] != "data_gap"
+                    ):
                         return None
                     safe_item["positive_state"] = event_positive_state
                 event_response_count = item.get("response_record_count")

@@ -3172,6 +3172,54 @@ def test_011_multi_event_details_reach_canonical_customer_finding():
     ]
 
 
+def test_012_unknown_positive_state_is_limited_to_incomplete_review() -> None:
+    facts = {
+        "verification_kind": "exam_lab_event_review_incomplete",
+        "subject": "ct_mri",
+        "requirement": "positive_result_analysis_within_24h",
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+        "positive_state": "unknown",
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-012", raw=facts
+    ) == facts
+    facts["verification_kind"] = "exam_lab_requirement_checked"
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-012", raw=facts
+    ) is None
+
+
+@pytest.mark.parametrize(
+    "event_status",
+    ["compliant", "non_compliant", "not_applicable"],
+)
+def test_012_unknown_event_positive_state_is_limited_to_data_gap(
+    event_status: str,
+) -> None:
+    facts = {
+        "verification_kind": "exam_lab_requirement_checked",
+        "subject": "ct_mri",
+        "requirement": "positive_result_analysis_within_24h",
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+        "event_count": 1,
+        "event_position": 1,
+        "event_results": [
+            {
+                "event_position": 1,
+                "event_status": event_status,
+                "positive_state": "unknown",
+            }
+        ],
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-012", raw=facts
+    ) is None
+
+
 @pytest.mark.parametrize(
     ("rule_id", "raw_facts", "expected_evidence"),
     [

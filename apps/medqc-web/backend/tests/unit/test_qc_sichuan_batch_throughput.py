@@ -513,6 +513,58 @@ class _IdempotentWorkspaceStub(_WorkspaceStub):
         raise AssertionError("复用 active job 时不应创建新任务")
 
 
+@pytest.mark.asyncio
+async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NoCompleteWorkspace(_WorkspaceStub):
+        def __init__(self) -> None:
+            super().__init__()
+            self.complete_calls = 0
+
+        def complete_batch_job(self, **kwargs: Any) -> None:
+            self.complete_calls += 1
+            super().complete_batch_job(**kwargs)
+
+    workspace = _NoCompleteWorkspace()
+    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-012"],
+        "selected_rule_ids": ["LX0609-012"],
+        "scoped_customer_rule_ids": ["LX0609-012"],
+        "record_rule_map": {"visit-001": ["LX0609-012"]},
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
+        raise ValueError("invalid customer display facts")
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(
+        batch_worker,
+        "load_luxian_0609_rules",
+        lambda: [get_luxian_0609_rule("LX0609-012")],
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "failed"
+    assert workspace.job["error_message"] == (
+        "病历质控未形成可交付结果："
+        "客户展示事实不符合交付合同（invalid customer display facts）"
+    )
+    assert workspace.complete_calls == 0
+    assert workspace.items == []
+
 class _ServiceStub:
     def __init__(self, status_by_rule: Optional[Dict[str, str]] = None) -> None:
         self.evaluate_calls = 0
@@ -3778,10 +3830,10 @@ async def test_luxian_runtime_shadow_preserves_explicit_empty_selected_scope(mon
     service = _ServiceStub()
     summaries: List[Dict[str, Any]] = []
 
-    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]:
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
         return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
 
-    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     async def _get_qc_service(): return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
@@ -3806,8 +3858,8 @@ async def test_luxian_runtime_shadow_flag_off_does_not_call_hook(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic"}
     service = _ServiceStub()
-    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]: return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
-    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]: return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     async def _get_qc_service(): return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)

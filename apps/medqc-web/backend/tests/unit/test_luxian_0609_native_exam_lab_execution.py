@@ -3425,6 +3425,99 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
 
 
 @pytest.mark.asyncio
+async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
+    monkeypatch,
+):
+    """报告阳性未明确的事件只能作为资料缺口，不能拖垮同病例的确定问题。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EXAM-1",
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-01 12:00:00",
+                "exam_conclusion": "检查所见详见报告。",
+            },
+            {
+                "exam_id": "EXAM-2",
+                "exam_name": "头颅MRI",
+                "report_time": "2026-04-04 12:00:00",
+                "exam_conclusion": "阳性：右侧基底节区异常信号。",
+            },
+        ),
+        course_rows=({
+            "record_time": "2026-04-04 13:00:00",
+            "record_content": "住院期间一般病程。",
+        },),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
+    )
+    client = _Client([{
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-012",
+                "event_position": 1,
+                "applicability": "unknown",
+                "semantic_state": "unknown",
+                "positive_state": "unknown",
+                "course_doc_positions": [],
+            },
+            {
+                "rule_id": "LX0609-012",
+                "event_position": 2,
+                "applicability": "applicable",
+                "semantic_state": "absent",
+                "positive_state": "positive",
+                "course_doc_positions": [],
+            },
+        ],
+    }])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+
+    assert reduced[0].final_state.value == "non_compliant"
+    display = dict(result.customer_display_facts)["LX0609-012"]
+    assert [item["event_status"] for item in display["event_results"]] == [
+        "data_gap",
+        "non_compliant",
+    ]
+    assert display["event_results"][0]["positive_state"] == "unknown"
+
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+    assert canonical[0]["status"] == "non_compliant"
+    assert canonical[0]["customer_display_facts"]["event_results"][0] == {
+        "event_position": 1,
+        "event_status": "data_gap",
+        "report_time": "2026-04-01 12:00:00",
+        "positive_state": "unknown",
+        "response_record_count": 0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_multi_event_all_data_gap_still_delivers_each_event_detail(monkeypatch):
     snapshot, materials = _typed_session(
         monkeypatch,
