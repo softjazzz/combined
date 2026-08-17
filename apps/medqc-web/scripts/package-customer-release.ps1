@@ -94,6 +94,25 @@ function Assert-NoReleaseForbiddenContent([string]$path) {
     throw "Forbidden release files found:`n$sample"
   }
 
+  $backendRoot = Join-Path $path "backend"
+  $allowedBackendRootEntries = @(
+    ".env.example",
+    "alembic",
+    "alembic.ini",
+    "app",
+    "config",
+    "data",
+    "requirements.txt",
+    "services"
+  )
+  $unexpectedBackendRootEntries = Get-ChildItem -LiteralPath $backendRoot -Force | Where-Object {
+    $_.Name -notin $allowedBackendRootEntries
+  }
+  if ($unexpectedBackendRootEntries.Count -gt 0) {
+    $sample = ($unexpectedBackendRootEntries | Select-Object -First 10 | ForEach-Object { $_.Name }) -join "`n"
+    throw "Unexpected backend root entries found in release package:`n$sample"
+  }
+
   $frontendDist = Join-Path $path "frontend\dist"
   if (Test-Path -LiteralPath $frontendDist) {
     $forbiddenApiHits = @(
@@ -180,11 +199,11 @@ if (Test-Path -LiteralPath $sourceHanDir) {
   } | Remove-Item -Force
 }
 
-Write-Step "Copy backend source (exclude ICD vector index and development directories)"
-Copy-TreeExclude `
-  -source (Join-Path $projectRoot "backend") `
-  -destination $backendDir `
-  -excludeDirs @(
+Write-Step "Copy backend runtime allowlist (exclude development scripts and artifacts)"
+$backendSourceDir = Join-Path $projectRoot "backend"
+$backendRuntimeDirectories = @("alembic", "app", "config", "data", "services")
+$backendRuntimeFiles = @(".env.example", "alembic.ini", "requirements.txt")
+$backendExcludeDirs = @(
     "__pycache__",
     ".pytest_cache",
     ".mypy_cache",
@@ -200,16 +219,16 @@ Copy-TreeExclude `
     "manual_qc_runs",
     "sample_pool_uploads",
     "vector"
-  ) `
-  -excludeFiles @(
+  )
+$backendExcludeFiles = @(
     ".coverage",
     ".env",
     "coverage.xml",
     "build_icd_vector_index.py",
     "icd_vector_retrieval_demo.py"
-  ) `
-  -excludeDirPatterns @("tmp*", "__pycache__") `
-  -excludeFilePatterns @(
+  )
+$backendExcludeDirPatterns = @("tmp*", "__pycache__")
+$backendExcludeFilePatterns = @(
     "*.pyc",
     "*.pyo",
     "*.log",
@@ -230,6 +249,30 @@ Copy-TreeExclude `
     "debug_*",
     "probe_*"
   )
+
+foreach ($directoryName in $backendRuntimeDirectories) {
+  $sourceDirectory = Join-Path $backendSourceDir $directoryName
+  if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) {
+    throw "Required backend runtime directory is missing: $directoryName"
+  }
+  $destinationDirectory = Join-Path $backendDir $directoryName
+  New-Item -ItemType Directory -Force -Path $destinationDirectory | Out-Null
+  Copy-TreeExclude `
+    -source $sourceDirectory `
+    -destination $destinationDirectory `
+    -excludeDirs $backendExcludeDirs `
+    -excludeFiles $backendExcludeFiles `
+    -excludeDirPatterns $backendExcludeDirPatterns `
+    -excludeFilePatterns $backendExcludeFilePatterns
+}
+
+foreach ($fileName in $backendRuntimeFiles) {
+  $sourceFile = Join-Path $backendSourceDir $fileName
+  if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) {
+    throw "Required backend runtime file is missing: $fileName"
+  }
+  Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $backendDir $fileName) -Force
+}
 
 if (Test-Path -LiteralPath (Join-Path $backendDir "data\vector")) {
   Remove-Item -LiteralPath (Join-Path $backendDir "data\vector") -Recurse -Force
