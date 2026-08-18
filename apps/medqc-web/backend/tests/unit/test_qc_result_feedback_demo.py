@@ -43,6 +43,9 @@ class _FeedbackStore:
             and item["created_by"] == created_by
         }
 
+    def list_all(self, *, created_by: str, limit: int):
+        return [item for item in self.saved if item["created_by"] == created_by][:limit]
+
     def save(self, **kwargs):
         self.saved.append(
             {
@@ -107,6 +110,51 @@ def test_demo_account_can_load_current_feedback(monkeypatch):
     assert response.json()["data"]["items"]["LX0609-001"]["feedback_type"] == "correct"
 
 
+def test_demo_account_can_load_all_feedback_without_patient_identity(monkeypatch):
+    store = _FeedbackStore()
+    store.saved.extend(
+        [
+            {
+                "root_job_id": "root-1",
+                "record_ref": "rec_0123456789abcdef01234567",
+                "rule_id": "LX0609-001",
+                "original_status": "compliant",
+                "feedback_type": "correct",
+                "expected_status": None,
+                "error_category": None,
+                "comment": "结果准确",
+                "result_digest": "b" * 64,
+                "created_by": "admin-001",
+                "created_at": "2026-08-18T10:00:00+00:00",
+                "updated_at": "2026-08-18T10:00:00+00:00",
+            },
+            {
+                "root_job_id": "root-2",
+                "record_ref": "rec_abcdefabcdefabcdefabcdef",
+                "rule_id": "LX0609-012",
+                "original_status": "non_compliant",
+                "feedback_type": "incorrect",
+                "expected_status": "data_gap",
+                "error_category": "wrong_status",
+                "comment": "需复核时间窗",
+                "result_digest": "c" * 64,
+                "created_by": "admin-001",
+                "created_at": "2026-08-18T11:00:00+00:00",
+                "updated_at": "2026-08-18T11:00:00+00:00",
+            },
+        ]
+    )
+
+    response = _client(monkeypatch, DEMO_USER, store).get(
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/all"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["total"] == 2
+    assert response.json()["data"]["items"][1]["rule_id"] == "LX0609-012"
+    assert "patient_name" not in response.text
+
+
 def test_non_demo_account_is_rejected_by_backend(monkeypatch):
     response = _client(monkeypatch, OTHER_USER, _FeedbackStore()).get(
         "/api/v1/qc/sichuan/workspace/result-feedback-demo",
@@ -118,6 +166,11 @@ def test_non_demo_account_is_rejected_by_backend(monkeypatch):
 
     assert response.status_code == 403
     assert "admin@medqc.com" not in response.text
+
+    all_response = _client(monkeypatch, OTHER_USER, _FeedbackStore()).get(
+        "/api/v1/qc/sichuan/workspace/result-feedback-demo/all"
+    )
+    assert all_response.status_code == 403
 
 
 def test_admin_role_without_fixed_demo_identity_is_rejected(monkeypatch):

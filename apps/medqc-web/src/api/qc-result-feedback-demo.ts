@@ -21,6 +21,9 @@ export type QcResultFeedbackErrorCategory =
   | 'other'
 
 export interface QcResultFeedbackRecord {
+  id?: string
+  root_job_id?: string
+  record_ref?: string
   rule_id: string
   original_status: string
   feedback_type: QcResultFeedbackType
@@ -67,6 +70,9 @@ function normalizeFeedback(value: unknown, ruleIdHint?: string): QcResultFeedbac
   const feedbackType = value.feedback_type
   if (!ruleId || !originalStatus || !isFeedbackType(feedbackType)) return null
   return {
+    id: asNonEmptyString(value.id),
+    root_job_id: asNonEmptyString(value.root_job_id),
+    record_ref: asNonEmptyString(value.record_ref),
     rule_id: ruleId,
     original_status: originalStatus,
     feedback_type: feedbackType,
@@ -77,6 +83,15 @@ function normalizeFeedback(value: unknown, ruleIdHint?: string): QcResultFeedbac
     created_at: asNonEmptyString(value.created_at),
     updated_at: asNonEmptyString(value.updated_at),
   }
+}
+
+function normalizeFeedbackList(value: unknown): QcResultFeedbackRecord[] {
+  const source = isRecord(value) ? value.items : value
+  if (!Array.isArray(source)) return []
+  return source.flatMap((item) => {
+    const feedback = normalizeFeedback(item)
+    return feedback ? [feedback] : []
+  })
 }
 
 function normalizeFeedbackMap(value: unknown): Record<string, QcResultFeedbackRecord> {
@@ -149,6 +164,23 @@ export async function getQcResultFeedbackDemo(params: {
     ...result,
     data: normalizeFeedbackMap(result.data),
   }
+}
+
+export async function listQcResultFeedbackDemo(
+  limit = 200,
+): Promise<QcResultFeedbackApiResult<QcResultFeedbackRecord[]>> {
+  const result = await request<unknown>(
+    {
+      method: 'GET',
+      url: `${FEEDBACK_PATH}/all`,
+      params: { limit },
+    },
+    '读取质控反馈记录失败',
+  )
+  if (!result.success) {
+    return result as QcResultFeedbackApiResult<QcResultFeedbackRecord[]>
+  }
+  return { ...result, data: normalizeFeedbackList(result.data) }
 }
 
 export async function saveQcResultFeedbackDemo(params: {

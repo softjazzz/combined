@@ -121,6 +121,15 @@
               </template>
               <span>终末病历质控</span>
             </a-menu-item>
+            <a-menu-item
+              v-if="isDemoFeedbackAccount"
+              key="/workstation-v4/qc-feedback-demo"
+            >
+              <template #icon>
+                <ReceiptText class="sidebar-icon" />
+              </template>
+              <span>质控反馈记录</span>
+            </a-menu-item>
             <a-menu-item key="/workstation-v4/customer-sample-validation">
               <template #icon>
                 <FileSearch class="sidebar-icon" />
@@ -536,6 +545,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v4/rules/custom-workspace': '自定义质控点',
     '/workstation-v4/records/running': '运行病历',
     '/workstation-v4/records/final': '终末病历质控',
+    '/workstation-v4/qc-feedback-demo': '质控反馈记录',
     '/workstation-v4/customer-sample-validation': '客户样本验证',
     '/workstation-v4/system-config': '系统配置',
   }
@@ -556,6 +566,15 @@ const roleLabel = computed(() => {
   const raw = authStore.userRoles?.[0] || ''
   return ROLE_LABEL_MAP[raw] || raw || '用户'
 })
+
+const isDemoFeedbackAccount = computed(
+  () =>
+    authStore.user?.is_demo_account === true &&
+    String(authStore.user?.id || '').trim() === 'admin-001' &&
+    String(authStore.user?.email || '')
+      .trim()
+      .toLowerCase() === 'admin@medqc.com',
+)
 
 const isQcOverviewRoute = computed(() => route.path === '/workstation-v4/qc-overview')
 

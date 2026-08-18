@@ -399,6 +399,32 @@ class ResultFeedbackDemoStore:
         finally:
             session.close()
 
+    def list_all(self, *, created_by: str, limit: int) -> list[dict[str, Any]]:
+        """读取演示账号已提交的全部反馈，不联表返回病历身份或正文。"""
+
+        session = _session()
+        try:
+            self._ensure_feedback_table(session)
+            try:
+                rows = (
+                    session.execute(
+                        select(self._feedback_table)
+                        .where(self._feedback_table.c.created_by == created_by)
+                        .order_by(
+                            self._feedback_table.c.updated_at.desc(),
+                            self._feedback_table.c.id.desc(),
+                        )
+                        .limit(limit)
+                    )
+                    .mappings()
+                    .all()
+                )
+            except (OperationalError, ProgrammingError) as exc:
+                raise ResultFeedbackDemoStoreUnavailable("反馈功能暂不可用") from exc
+            return [_serialize_row(row) for row in rows]
+        finally:
+            session.close()
+
     def save(
         self,
         *,

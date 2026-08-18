@@ -1002,6 +1002,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'qc-feedback-demo',
+        name: 'WorkstationV4QcFeedbackDemo',
+        component: () => import('@/views/workstation-v4/QcResultFeedbackDemoListView.vue'),
+        meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'customer-sample-validation',
         name: 'WorkstationV4CustomerSampleValidation',
         component: () => import('@/views/workstation-v4/CustomerSampleValidationView.vue'),
@@ -1018,9 +1024,7 @@ const routes: RouteRecordRaw[] = [
         path: 'customer-sample-validation/tasks',
         name: 'WorkstationV4CustomerSampleValidationTasks',
         component: () =>
-          import(
-            '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
-          ),
+          import('@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'),
         meta: { title: '质控记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {

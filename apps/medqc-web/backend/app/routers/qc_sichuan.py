@@ -1920,6 +1920,29 @@ async def get_demo_result_feedback(
     )
 
 
+@router.get("/workspace/result-feedback-demo/all")
+async def list_demo_result_feedbacks(
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=500),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """汇总读取演示账号自己的质控反馈，不返回患者身份或病历正文。"""
+
+    _require_demo_feedback_account(current_user)
+    try:
+        items = get_result_feedback_demo_store().list_all(
+            created_by="admin-001",
+            limit=limit,
+        )
+    except Exception as exc:
+        _raise_demo_feedback_store_error(exc)
+    return success_response(
+        data={"items": items, "total": len(items)},
+        message="获取质控反馈记录成功",
+        trace_id=get_trace_id(request),
+    )
+
+
 @router.put("/workspace/result-feedback-demo/{rule_id}")
 async def save_demo_result_feedback(
     request: Request,
