@@ -35,7 +35,9 @@ ALLOWED_FINAL_STATES = (
     "not_executed",
 )
 _DECISION_AUTHORITIES = frozenset({"program_only", "program_then_optional_llm"})
-_SOURCE_CONTRACT_STATES = frozenset({"legacy_projection_v1", "typed_shadow_v1"})
+_SOURCE_CONTRACT_STATES = frozenset(
+    {"legacy_projection_v1", "typed_shadow_v1", "typed_malignancy_gate_v1"}
+)
 _GOLDEN_GATE_STATES = frozenset({"pending", "accepted"})
 _CRITERION_KINDS = frozenset(
     {
@@ -191,7 +193,7 @@ class Luxian0609RuleContract:
             0
             if self.decision_authority == "program_only"
             else 2
-            if self.rule_id == "LX0609-023"
+            if self.rule_id in {"LX0609-023", "LX0609-024"}
             else 1
         )
         if self.max_llm_calls_per_rule != expected_calls:

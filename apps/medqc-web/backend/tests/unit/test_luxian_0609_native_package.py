@@ -347,8 +347,8 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
         native_surgery_document_029_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 66
-    assert len(plan.not_executed_rule_ids) == 7
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 67
+    assert len(plan.not_executed_rule_ids) == 6
     assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
     assert plan.compatibility_execution_rule_ids == (
         "LX-017",
@@ -382,8 +382,8 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
         native_surgery_document_029_enabled=False,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 67
-    assert len(plan.not_executed_rule_ids) == 7
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 68
+    assert len(plan.not_executed_rule_ids) == 6
     assert plan.compatibility_rule_ids == ("LX0609-029",)
     assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
 

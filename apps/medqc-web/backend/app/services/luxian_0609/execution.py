@@ -67,6 +67,7 @@ from .native_tumor_pathology_execution import (
     EXECUTOR_KEY as TUMOR_PATHOLOGY_EXECUTOR_KEY,
     execute_luxian_0609_native_tumor_pathology_rules,
 )
+from .malignancy_fact import MalignancyFactResolver
 from .native_course_quality_execution import (
     EXECUTOR_KEY as COURSE_QUALITY_EXECUTOR_KEY,
     execute_luxian_0609_native_course_quality_rules,
@@ -426,6 +427,7 @@ async def prepare_luxian_0609_execution(
             evidence_snapshot=evidence_snapshot,
             evidence_materials=evidence_materials,
             decision_rule_ids=typed_decision_rule_ids,
+            malignancy_resolver=MalignancyFactResolver(llm_client),
         )
         functions = LegacyNativeExecutorFunctions(
             surgery_presence=execute_luxian_0609_native_rules,

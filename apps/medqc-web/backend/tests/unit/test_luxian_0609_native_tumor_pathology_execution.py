@@ -13,6 +13,11 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 from app.services.luxian_0609.executor_registry import (
     resolve_legacy_executor_material_source_keys,
 )
+from app.services.luxian_0609.malignancy_fact import (
+    MalignancyFactResolver,
+    build_malignancy_sources,
+    build_stage_malignancy_sources,
+)
 from app.services.luxian_0609.decision_reducer import (
     reduce_luxian_0609_rule_decision,
 )
@@ -70,7 +75,13 @@ class _Client:
         self.outputs = list(outputs)
         self.prompts: list[str] = []
 
-    async def generate(self, prompt: str) -> dict:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> dict:
         self.prompts.append(prompt)
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
@@ -89,6 +100,109 @@ class _Client:
             },
             "_api_time": 0.2,
         }
+
+
+class _RawResponseClient:
+    def __init__(self, response: object) -> None:
+        self.response = response
+        self.calls = 0
+        self.kwargs: dict = {}
+
+    async def generate(self, _prompt: str, **kwargs) -> dict:
+        self.calls += 1
+        self.kwargs = dict(kwargs)
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
+
+
+def _malignancy_response(names: list[str], *, state: str) -> dict:
+    return {
+        "schema_version": "lx0609_malignancy_v1",
+        "results": [
+            {"ref": f"D{index:02d}", "state": state}
+            for index, _name in enumerate(names, start=1)
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_208790_shape_allows_one_complete_32_diagnosis_response() -> None:
+    names = [f"明确非恶性诊断{index}" for index in range(1, 33)]
+    client = _RawResponseClient(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            _malignancy_response(
+                                names, state="explicit_nonmalignant"
+                            ),
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 915,
+                "completion_tokens": 1500,
+                "total_tokens": 2415,
+            },
+            "_api_time": 0.2,
+        }
+    )
+    resolver = MalignancyFactResolver(client)
+
+    result = await resolver.resolve(
+        build_malignancy_sources(
+            diagnosis_state="available",
+            diagnosis_rows=tuple({"diagnosis_name": name} for name in names),
+            pathology_state="empty",
+            pathology_rows=(),
+        )
+    )
+
+    assert result.state == "absent"
+    assert resolver.claim_usage().total_tokens == 2415
+    assert client.calls == 1
+    assert client.kwargs == {
+        "max_completion_tokens": 2048,
+        "allow_length_retry": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_inpatient_pathology_can_confirm_malignancy_without_discharge_diagnosis() -> None:
+    client = _Client(
+        [
+            {
+                "schema_version": "lx0609_malignancy_v1",
+                "results": [
+                    {"ref": "D01", "state": "explicit_nonmalignant"},
+                    {"ref": "P01", "state": "explicit_malignant"},
+                ],
+            }
+        ]
+    )
+    resolver = MalignancyFactResolver(client)
+
+    result = await resolver.resolve(
+        build_stage_malignancy_sources(
+            visit_stage="inpatient",
+            admission_state="present",
+            admission_rows=({"diagnosis_name": "肺部感染"},),
+            diagnosis_state="empty",
+            diagnosis_rows=(),
+            discharge_diagnosis_state="empty",
+            discharge_diagnosis_rows=(),
+            pathology_state="present",
+            pathology_rows=({"diagnosis": "右肺浸润性腺癌"},),
+        )
+    )
+
+    assert result.state == "confirmed"
+    assert len(client.prompts) == 1
+    assert "P01" in client.prompts[0]
 
 
 def _material_session(
@@ -1286,7 +1400,7 @@ async def test_typed_026_binds_course_time_semantics_to_record_date(
         ("LX0609-019", "surgery", "unavailable", "data_gap", "source_unavailable"),
         ("LX0609-019", "surgery", "error", "technical_error", "source_query_error"),
         ("LX0609-019", "surgery", "truncated", "data_gap", "source_unavailable"),
-        ("LX0609-027", "diagnosis", "empty", "not_applicable", "trigger_absent_complete"),
+        ("LX0609-027", "diagnosis", "empty", "data_gap", "required_field_missing"),
         ("LX0609-027", "diagnosis", "unavailable", "data_gap", "source_unavailable"),
         ("LX0609-027", "diagnosis", "error", "technical_error", "source_query_error"),
         ("LX0609-027", "diagnosis", "truncated", "data_gap", "source_unavailable"),
@@ -1949,6 +2063,386 @@ async def test_nonmalignant_diagnosis_is_not_applicable_and_source_error_is_sani
     )
     assert [item["status"] for item in failed.results] == ["data_gap"] * 4
     assert secret not in repr(failed)
+
+
+@pytest.mark.asyncio
+async def test_complete_uncoded_nonmalignant_diagnoses_are_classified_once_for_026_027():
+    diagnosis_names = [
+        "功能性消化不良",
+        "便秘",
+        "吸入性肺炎",
+        "低蛋白血症",
+        "上颌骨骨折",
+        "急性胃黏膜病变",
+        "闭合性颅脑损伤重型",
+        "中度贫血",
+        "结膜炎",
+        "创伤性脑疝",
+        "颧骨骨折",
+        "低钙血症",
+        "发热",
+        "眼球破裂伤",
+        "营养风险",
+        "颅骨骨折",
+        "眉弓裂伤",
+        "心律失常",
+        "创伤性急性硬膜下出血",
+        "脑挫伤",
+        "蛛网膜下腔出血",
+        "大脑镰下疝",
+        "面部裂伤",
+        "视神经损伤",
+        "脑水肿",
+        "脑出血",
+        "脑疝",
+        "下颌骨骨折",
+        "肋骨骨折",
+        "尺骨骨折",
+        "细菌性肺炎",
+        "低钾血症",
+    ]
+    rows_by_source = {
+        "diagnosis": tuple(
+            {"diagnosis_name": name, "diagnosis_type": "出院诊断"}
+            for name in diagnosis_names
+        ),
+        "inpat_drug_order": (),
+        "daily_course_record": (),
+        "inpat_registration.discharge_horizon": (
+            {"discharge_datetime": "2026-07-08 10:00:00+08:00"},
+        ),
+        "discharge_record": ({"treatment_course": "出院后定期复查。"},),
+    }
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    selected = ("LX0609-026", "LX0609-027")
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",),
+            selected_rule_ids=selected,
+        ),
+    )
+    client = _Client(
+        [_malignancy_response(diagnosis_names, state="explicit_nonmalignant")]
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=None,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=selected,
+    )
+
+    assert [
+        reduce_luxian_0609_rule_decision(item).final_state.value
+        for item in result.decisions
+    ] == ["not_applicable", "not_applicable"]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
+    prompt = client.prompts[0]
+    assert "safe-institute" not in prompt
+    assert "safe-patient" not in prompt
+    assert "safe-visit" not in prompt
+    assert "D01" in prompt and "低钾血症" in prompt
+    assert "只能输出一个JSON对象" in prompt
+    assert '"schema_version":"lx0609_malignancy_v1","results":[' in prompt
+
+
+@pytest.mark.asyncio
+async def test_inpatient_uses_admission_diagnosis_for_026_and_skips_027() -> None:
+    rows_by_source = {
+        "admission_record_diagnosis": (
+            {"diagnosis_name": "右肺腺癌", "diagnosis_code": ""},
+        ),
+        # 在院病例不应因首页/出院诊断尚未形成而失败关闭，也不能读取其陈旧值。
+        "diagnosis": (),
+        "discharge_record_diagnosis": (
+            {"diagnosis_name": "陈旧的非恶性出院诊断", "diagnosis_code": ""},
+        ),
+        "inpat_registration.discharge_horizon": ({"discharge_datetime": None},),
+        "inpat_drug_order": (
+            {
+                "generic_name": "奥沙利铂",
+                "single_dose": "130",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "静滴",
+                "prescribed_datetime": "2026-04-26 09:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+        ),
+        "daily_course_record": (
+            {
+                "record_content": "2026-04-26 使用奥沙利铂130mg静滴，记录化疗经过。",
+                "record_time": "2026-04-26 10:00:00",
+            },
+        ),
+        "discharge_record": (),
+    }
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    selected = ("LX0609-026", "LX0609-027")
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",), selected_rule_ids=selected
+        ),
+    )
+    client = _Client(
+        [
+            {
+                "schema_version": "lx0609_malignancy_v1",
+                "results": [
+                    {"ref": "D01", "state": "explicit_malignant"},
+                ],
+            }
+        ]
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=None,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=selected,
+    )
+
+    assert [
+        reduce_luxian_0609_rule_decision(item).final_state.value
+        for item in result.decisions
+    ] == ["compliant", "not_applicable"]
+    assert [item.reason_code for item in result.decisions] == [
+        "requirement_satisfied",
+        "trigger_absent_complete",
+    ]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "右肺腺癌" in client.prompts[0]
+    assert "陈旧的非恶性出院诊断" not in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_inpatient_incomplete_admission_diagnosis_cannot_be_absent() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = {
+            "admission_record_diagnosis": (
+                {"diagnosis_name": "明确非恶性疾病", "diagnosis_code": ""},
+            ),
+            "diagnosis": ({"diagnosis_name": "陈旧出院诊断"},),
+            "inpat_registration.discharge_horizon": ({"discharge_datetime": None},),
+            "inpat_drug_order": (
+                {
+                    "generic_name": "奥沙利铂",
+                    "drug_type": "抗肿瘤化疗药物",
+                },
+            ),
+        }.get(source_key, ())
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=source_key == "admission_record_diagnosis",
+            limit_rows=1 if source_key == "admission_record_diagnosis" else 50,
+        )
+
+    selected = ("LX0609-026",)
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",), selected_rule_ids=selected
+        ),
+    )
+    client = _Client(
+        [
+            {
+                "schema_version": "lx0609_malignancy_v1",
+                "results": [
+                    {"ref": "D01", "state": "explicit_nonmalignant"},
+                ],
+            }
+        ]
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload=None,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=selected,
+    )
+
+    reduced = reduce_luxian_0609_rule_decision(result.decisions[0])
+    assert reduced.final_state.value == "data_gap"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        {
+            "choices": [{"message": {"content": "not-json"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "schema_version": "lx0609_malignancy_v1",
+                                "results": [
+                                    {"ref": "FORGED", "state": "explicit_malignant"}
+                                ],
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "schema_version": "lx0609_malignancy_v1",
+                                "results": [
+                                    {"ref": "D01", "state": "explicit_malignant"}
+                                ],
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": "1", "completion_tokens": 1, "total_tokens": 2},
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "schema_version": "lx0609_malignancy_v1",
+                                "results": [
+                                    {"ref": "D01", "state": "explicit_malignant"}
+                                ],
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 3},
+        },
+        RuntimeError("model unavailable"),
+    ],
+)
+async def test_027_malignancy_llm_contract_failure_is_technical_error(response):
+    selected = ("LX0609-027",)
+
+    def reader(**kwargs):
+        rows = {
+            "diagnosis": ({"diagnosis_name": "肺部占位性质待定"},),
+            "inpat_registration.discharge_horizon": (
+                {"discharge_datetime": "2026-07-08 10:00:00+08:00"},
+            ),
+            "discharge_record": ({"treatment_course": "出院后定期复查。"},),
+        }.get(kwargs["source_key"], ())
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",), selected_rule_ids=selected
+        ),
+    )
+    client = _RawResponseClient(response)
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper("LX0609-027")],
+        evidence_payload=None,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=selected,
+    )
+
+    reduced = reduce_luxian_0609_rule_decision(result.decisions[0])
+    assert reduced.final_state.value == "technical_error"
+    assert client.calls == 1
+    assert "FORGED" not in repr(result)
 
 
 def test_pathology_result_and_explicit_missing_facts_are_programmatic() -> None:

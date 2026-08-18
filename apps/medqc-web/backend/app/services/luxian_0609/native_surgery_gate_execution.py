@@ -24,6 +24,11 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
+from .malignancy_fact import (
+    MalignancyFactResolver,
+    build_stage_malignancy_sources,
+    resolve_malignancy_visit_stage,
+)
 from .source_evidence_reader import (
     has_qualified_traditional_surgery_row,
     has_strict_performed_time,
@@ -67,7 +72,9 @@ _TEXT_FACT_RULE_IDS = frozenset(
 _TYPED_TEXT_SOURCES = {
     "LX0609-024": (
         "surgery_record", "mr_surgery", "pathology_exam_master",
-        "pathology_exam_report", "diagnosis",
+        "pathology_exam_report", "admission_record_diagnosis", "diagnosis",
+        "discharge_record_diagnosis", "inpat_registration.discharge_horizon",
+        "discharge_record",
     ),
     # 025 的永久性植入事实可由正式手术记录或病程记录确认；mr_surgery 仅是
     # 操作清单，既不能补充字段事实，也不能因行数多而截断本规则的一次受控抽取。
@@ -1634,6 +1641,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
     decision_rule_ids: Sequence[str] = (),
+    malignancy_resolver: MalignancyFactResolver | None = None,
 ) -> NativeSurgeryGateExecutionResult:
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
     selected = tuple(
@@ -1733,6 +1741,85 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 key: source_states[key] for key in _TYPED_TEXT_SOURCES[rule_id]
             }
             states = set(states_by_source.values())
+            if rule_id == "LX0609-024" and malignancy_resolver is not None:
+                visit_stage = resolve_malignancy_visit_stage(
+                    horizon_state=states_by_source[
+                        "inpat_registration.discharge_horizon"
+                    ],
+                    horizon_rows=rows_by_source[
+                        "inpat_registration.discharge_horizon"
+                    ],
+                    discharge_record_state=states_by_source["discharge_record"],
+                )
+                if visit_stage == "technical_error":
+                    decisions.append(
+                        _decision_from_surgery_outcome(
+                            outcome=_SurgeryTextOutcome(
+                                rule_id, "technical_error", "source_query_error"
+                            ),
+                            snapshot=evidence_snapshot,
+                        )
+                    )
+                    continue
+                if visit_stage == "unknown":
+                    decisions.append(
+                        _decision_from_surgery_outcome(
+                            outcome=_SurgeryTextOutcome(
+                                rule_id, "data_gap", "discharge_stage_unavailable"
+                            ),
+                            snapshot=evidence_snapshot,
+                        )
+                    )
+                    continue
+                malignancy = await malignancy_resolver.resolve(
+                    build_stage_malignancy_sources(
+                        visit_stage=visit_stage,
+                        admission_state=states_by_source[
+                            "admission_record_diagnosis"
+                        ],
+                        admission_rows=rows_by_source[
+                            "admission_record_diagnosis"
+                        ],
+                        diagnosis_state=states_by_source["diagnosis"],
+                        diagnosis_rows=rows_by_source["diagnosis"],
+                        discharge_diagnosis_state=states_by_source[
+                            "discharge_record_diagnosis"
+                        ],
+                        discharge_diagnosis_rows=rows_by_source[
+                            "discharge_record_diagnosis"
+                        ],
+                        pathology_state=states_by_source["pathology_exam_report"],
+                        pathology_rows=rows_by_source["pathology_exam_report"],
+                    )
+                )
+                malignancy_usage = malignancy_resolver.claim_usage()
+                llm_call_count += malignancy_usage.llm_call_count
+                prompt_tokens += malignancy_usage.prompt_tokens
+                completion_tokens += malignancy_usage.completion_tokens
+                total_tokens += malignancy_usage.total_tokens
+                api_time += malignancy_usage.api_time
+                if malignancy.state != "confirmed":
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id,
+                        "technical_error"
+                        if malignancy.state == "technical_error"
+                        else "not_applicable"
+                        if malignancy.state == "absent"
+                        else "data_gap",
+                        malignancy.reason_code,
+                    )
+                    continue
+                # 阶段诊断替代源已由共享Resolver严格判定；后续手术资料门不能
+                # 再因未采用的另一阶段诊断为空或不可用而把确定事实降级。
+                states = {
+                    states_by_source[source_key]
+                    for source_key in (
+                        "surgery_record",
+                        "mr_surgery",
+                        "pathology_exam_master",
+                        "pathology_exam_report",
+                    )
+                }
             deterministic_outcome = (
                 _deterministic_024_outcome(
                     surgery_rows=rows_by_source["surgery_record"],

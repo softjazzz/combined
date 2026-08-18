@@ -204,6 +204,17 @@ def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> No
     assert resolve_legacy_executor_material_source_keys(("surgery_gate",)) == (
         "surgery_record",
     )
+    assert resolve_legacy_executor_material_source_keys(
+        ("surgery_gate",), selected_rule_ids=("LX0609-024",)
+    ) == (
+        "admission_record_diagnosis",
+        "diagnosis",
+        "discharge_record",
+        "discharge_record_diagnosis",
+        "inpat_registration.discharge_horizon",
+        "pathology_exam_report",
+        "surgery_record",
+    )
 
 
 def test_surgery_presence_declares_trigger_material_dependencies() -> None:
@@ -236,15 +247,25 @@ def test_tumor_pathology_materials_are_scoped_by_rule() -> None:
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-026", "LX0609-027"),
     ) == (
+        "admission_record_diagnosis",
         "daily_course_record",
         "diagnosis",
         "discharge_record",
+        "discharge_record_diagnosis",
         "inpat_drug_order",
+        "inpat_registration.discharge_horizon",
+        "pathology_exam_report",
     )
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-027",),
-    ) == ("diagnosis", "discharge_record")
+    ) == (
+        "diagnosis",
+        "discharge_record",
+        "discharge_record_diagnosis",
+        "inpat_registration.discharge_horizon",
+        "pathology_exam_report",
+    )
 
 
 @pytest.mark.asyncio
@@ -306,6 +327,7 @@ async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
         llm_client=object(),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
+        malignancy_resolver=object(),
     )
     registry = build_luxian_0609_legacy_executor_registry(
         resources=resources,
@@ -345,9 +367,11 @@ async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
     assert calls[4][1]["evidence_materials"] is materials
     assert calls[5][1]["evidence_snapshot"] is snapshot
     assert calls[5][1]["evidence_materials"] is materials
+    assert calls[5][1]["malignancy_resolver"] is resources.malignancy_resolver
     assert calls[6][1]["evidence_materials"] is materials
     assert calls[6][1]["evidence_snapshot"] is snapshot
     assert calls[7][1]["evidence_snapshot"] is snapshot
+    assert calls[7][1]["malignancy_resolver"] is resources.malignancy_resolver
     assert calls[-2][1]["evidence_materials"] is materials
     assert "rule_ids" not in calls[-2][1]
     assert calls[-1][1]["rule_ids"] == ("LX0609-051",)

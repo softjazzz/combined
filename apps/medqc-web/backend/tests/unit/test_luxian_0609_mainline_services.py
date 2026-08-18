@@ -856,7 +856,7 @@ async def test_unified_027_missing_decision_and_projection_fail_closed(
         ("019-recorded-specimen", "LX0609-019", "tumor_pathology"),
         ("019-final-pathology-gap", "LX0609-019", "tumor_pathology"),
         ("019-source-absent", "LX0609-019", "tumor_pathology"),
-        ("024-current-malignancy", "LX0609-024", "not_executed"),
+        ("024-current-malignancy", "LX0609-024", "surgery_gate"),
         ("025-required-facts", "LX0609-025", "not_executed"),
         ("028-antibiotic-time", "LX0609-028", "not_executed"),
         ("033-source-gap-1", "LX0609-033", "surgery_gate"),
@@ -3392,23 +3392,23 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
     assert dispatched == []
     assert calls == [
         ("course_quality", ("LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018")),
-        ("surgery_gate", ("LX0609-003", "LX0609-031", "LX0609-033")),
+        ("surgery_gate", ("LX0609-003", "LX0609-024", "LX0609-031", "LX0609-033")),
         ("surgery_document", ("LX0609-034", "LX0609-035", "LX0609-036", "LX0609-037", "LX0609-038", "LX0609-039")),
     ]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [
         item["status"] for item in result["evaluation_results"]
-        if item["rule_id"] in {"LX0609-024", "LX0609-025", "LX0609-028"}
-    ] == ["not_executed"] * 3
+        if item["rule_id"] in {"LX0609-025", "LX0609-028"}
+    ] == ["not_executed"] * 2
     assert [
         item["status"] for item in result["evaluation_results"]
-        if item["rule_id"] not in {"LX0609-024", "LX0609-025", "LX0609-028"}
-    ] == ["data_gap"] * 15
+        if item["rule_id"] not in {"LX0609-025", "LX0609-028"}
+    ] == ["data_gap"] * 16
     assert result["token_usage"]["total_tokens"] == 0
     legacy_ids = {
         raw_id
         for rule_id, values in mappings.items()
-        if rule_id not in {"LX0609-024", "LX0609-025", "LX0609-028"}
+        if rule_id not in {"LX0609-025", "LX0609-028"}
         for raw_id in values
     }
     assert all(raw_id not in repr(result["evaluation_results"]) for raw_id in legacy_ids)

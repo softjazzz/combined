@@ -1226,7 +1226,7 @@ def test_024_prompt_explicitly_rejects_historical_and_postoperative_false_eviden
     )
 
     assert "既往恶性史" in prompt
-    assert "术后并发症/造口/救治" in prompt
+    assert all(term in prompt for term in ("术后并发症", "造口", "救治"))
     assert "explicit_nonqualifying" in prompt
 
 

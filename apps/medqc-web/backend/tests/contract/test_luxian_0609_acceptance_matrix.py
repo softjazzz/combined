@@ -28,10 +28,10 @@ def test_matrix_keeps_formal_and_temporary_tiers_separate() -> None:
 
     assert summary["rule_count"] == 75
     assert summary["definition_tiers"] == {"formal": 67, "temporary": 8}
-    assert summary["pending_definition_rule_count"] == 7
-    assert summary["bound_fixture_count"] == 262
-    assert summary["case_slots"]["covered"] == 245
-    assert summary["case_slots"]["missing"] == 4
+    assert summary["pending_definition_rule_count"] == 6
+    assert summary["bound_fixture_count"] == 265
+    assert summary["case_slots"]["covered"] == 248
+    assert summary["case_slots"]["missing"] == 5
 
 
 def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> None:
@@ -42,7 +42,7 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
             if slot["coverage"] == "covered":
                 covered_slots.append((rule["rule_id"], slot_name, slot["fixture_refs"]))
 
-    assert len(covered_slots) == 245
+    assert len(covered_slots) == 248
     assert all(
         refs
         and all(
@@ -54,10 +54,10 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
         for _, _, refs in covered_slots
     )
     assert Counter(slot_name for _, slot_name, _ in covered_slots) == {
-        "compliant": 68,
-        "confirmed_issue": 66,
+        "compliant": 69,
+        "confirmed_issue": 67,
         "not_applicable": 43,
-        "data_insufficient": 68,
+        "data_insufficient": 69,
     }
 
 
@@ -67,7 +67,7 @@ def test_pending_definition_rules_never_receive_fixture_coverage() -> None:
         rule for rule in payload["rules"] if rule["definition_phase"] == "pending_definition"
     ]
 
-    assert len(pending_rules) == 7
+    assert len(pending_rules) == 6
     assert all(
         slot["coverage"] == "pending_definition" and not slot["fixture_refs"]
         for rule in pending_rules

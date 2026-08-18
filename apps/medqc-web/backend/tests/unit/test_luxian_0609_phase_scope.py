@@ -16,9 +16,9 @@ def test_phase_scope_freezes_all_75_customer_rules() -> None:
     assert {entry.definition_version for entry in entries} == {
         "lx0609-defined-scope-2026-08-15-r2"
     }
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 68
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 69
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 7
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 6
     assert sum(entry.catalog_registered for entry in entries) == 75
 
 
@@ -51,7 +51,6 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         for rule_id, entry in entries.items()
         if entry.phase_status == "pending_definition"
     } == {
-        "LX0609-024",
         "LX0609-025",
         "LX0609-028",
         "LX0609-049",

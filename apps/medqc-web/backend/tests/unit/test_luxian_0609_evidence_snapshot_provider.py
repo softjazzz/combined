@@ -522,6 +522,8 @@ def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
             return _rows(source_key, [{"diagnosis_code": "C00.0"}])
         if source_key == "discharge_record":
             return _rows(source_key, [{"document_id": "synthetic-discharge"}])
+        if source_key == "inpat_registration.discharge_horizon":
+            return _rows(source_key, [{"discharge_time": "2026-08-18 10:00:00"}])
         return _rows(source_key, [])
 
     session = build_luxian_0609_evidence_read_session(
@@ -534,12 +536,23 @@ def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
         row_reader=reader,
     )
 
-    assert calls == ["diagnosis", "discharge_record"]
-    assert session.materials.has_source("diagnosis")
-    assert session.materials.has_source("discharge_record")
+    assert calls == [
+        "diagnosis",
+        "discharge_record",
+        "discharge_record_diagnosis",
+        "inpat_registration.discharge_horizon",
+        "pathology_exam_report",
+    ]
+    assert all(
+        session.materials.has_source(source_key)
+        for source_key in calls
+    )
     assert tuple(item.source_key for item in session.snapshot.observations) == (
         "diagnosis",
         "discharge_record",
+        "discharge_record_diagnosis",
+        "inpat_registration.discharge_horizon",
+        "pathology_exam_report",
     )
     assert "synthetic-discharge" not in repr(session.snapshot.to_safe_dict())
 
@@ -548,7 +561,29 @@ def test_027_legacy_executor_prefetches_discharge_record() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-027",),
-    ) == ("diagnosis", "discharge_record")
+    ) == (
+        "diagnosis",
+        "discharge_record",
+        "discharge_record_diagnosis",
+        "inpat_registration.discharge_horizon",
+        "pathology_exam_report",
+    )
+
+
+def test_026_prefetches_stage_matched_diagnosis_sources() -> None:
+    assert resolve_legacy_executor_material_source_keys(
+        ("tumor_pathology",),
+        selected_rule_ids=("LX0609-026",),
+    ) == (
+        "admission_record_diagnosis",
+        "daily_course_record",
+        "diagnosis",
+        "discharge_record",
+        "discharge_record_diagnosis",
+        "inpat_drug_order",
+        "inpat_registration.discharge_horizon",
+        "pathology_exam_report",
+    )
 
 
 def _build(*, selected_rule_ids=("LX0609-030",), row_reader, **overrides):

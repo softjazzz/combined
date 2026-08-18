@@ -22,6 +22,7 @@ from app.services.luxian_0609.source_evidence_reader import (
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
+from app.services.luxian_0609.malignancy_fact import MalignancyFactResolver
 
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
@@ -1043,6 +1044,75 @@ async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() ->
 
     assert [item.final_state.value for item in reduced] == ["not_applicable"]
     assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_024_complete_uncoded_nonmalignant_diagnosis_stops_before_surgery_llm():
+    selected = ("LX0609-024",)
+
+    def reader(**kwargs):
+        rows_by_source = {
+            "surgery_record": (
+                {
+                    "surgery_name": "血肿清除术",
+                    "surgery_process": "完成血肿清除和去骨瓣减压。",
+                },
+            ),
+            "mr_surgery": ({"surgery_name": "血肿清除术"},),
+            "admission_record_diagnosis": (
+                {"diagnosis_name": "闭合性颅脑损伤重型"},
+            ),
+        }
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=rows_by_source.get(kwargs["source_key"], ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    client = _Client(
+        [
+            {
+                "schema_version": "lx0609_malignancy_v1",
+                "results": [
+                    {"ref": "D01", "state": "explicit_nonmalignant"},
+                ],
+            }
+        ]
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        wrapper_rules=[_wrapper("LX0609-024")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        malignancy_resolver=MalignancyFactResolver(client),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["not_applicable"]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio

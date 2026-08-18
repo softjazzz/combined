@@ -407,7 +407,7 @@ def build_surgery_text_fact_prompt(
             "任一五项字段在手术记录中明确缺失时输出missing；没有明确缺失但无法确认时输出unknown。"
         )
     return f"""你是泸县0609手术事实抽取器。只抽取事实，不直接输出质控状态。本次规则：{','.join(selected)}。
-每个本次手术事件单独输出。只有已实施的本次手术才是performed，拟行、计划、申请均为planned。024只在本次已实施手术与恶性原发治疗、淋巴结清扫或术中冰冻恶性有直接关联时，malignant_relation才可输出qualifying；既往恶性史、普通送病理、当前良性手术、术后并发症/造口/救治均必须输出explicit_nonqualifying，不能借此认定本次恶性手术。{shared_implant_instruction}{implant_025_instruction}治疗性抗菌药不能当预防用药；时间只能选择给定T候选。麻醉、输血、其他治疗同意书及空模板不能当手术知情同意书，且必须关联本次手术。
+每个本次手术事件单独输出。只有已实施的本次手术才是performed，拟行、计划、申请均为planned。024只在本次已实施手术属于胃癌、结直肠癌、食管癌、肺癌的肿瘤切除，宫颈癌根治术、膀胱癌根治性切除，或明确实施淋巴结清扫、淋巴结取样、前哨淋巴结活检时，malignant_relation才可输出qualifying。单纯活检、穿刺、内镜局部切除、置管、造口、引流、姑息减症、无关手术，以及脑肿瘤或血液肿瘤治疗必须输出explicit_nonqualifying。既往恶性史、普通送病理、当前良性手术、术后并发症或救治也不能认定为本次目标肿瘤手术。024的lymph_node_documentation=documented包括三类：记录清扫范围/取样送检，记录前哨淋巴结活检，或明确记录未行淋巴结处理及其原因；只有目标手术记录完全未交代淋巴结处理时才可输出not_documented。{shared_implant_instruction}{implant_025_instruction}治疗性抗菌药不能当预防用药；时间只能选择给定T候选。麻醉、输血、其他治疗同意书及空模板不能当手术知情同意书，且必须关联本次手术。
 {consent_033_instruction}
 只能引用给定S/T；无法确定必须unknown，禁止猜测。028引用start_time_ref或end_time_ref时，每个T所在文书的S引用都必须加入evidence_refs，不能只引用手术文书。
 材料：

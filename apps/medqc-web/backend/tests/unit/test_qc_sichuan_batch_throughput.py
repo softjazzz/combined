@@ -2301,7 +2301,6 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
     submitted_tasks: List[Dict[str, Any]] = []
     customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 76)]
     pending_rule_ids = [
-        "LX0609-024",
         "LX0609-025",
         "LX0609-028",
         "LX0609-049",
@@ -2359,8 +2358,8 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
     assert filters["active_customer_rule_ids"] == executable_rule_ids
     assert filters["pending_customer_rule_ids"] == pending_rule_ids
     assert filters["customer_rule_count"] == 75
-    assert filters["execution_rule_count"] == 68
-    assert filters["pending_rule_count"] == 7
+    assert filters["execution_rule_count"] == 69
+    assert filters["pending_rule_count"] == 6
     assert {"LX0609-051", "LX0609-061", "LX0609-067", "LX0609-071"}.issubset(
         filters["active_customer_rule_ids"]
     )

@@ -4,7 +4,7 @@
   "rule_master_version": "2026-08-15-r2",
   "generated_from": {
     "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
-    "runtime_contract_hash": "7e60b5748f063f821322a01b3b5d57fbb7744a647a433431defc1fe0d1720d9b",
+    "runtime_contract_hash": "fbe7e364de3a274d1c18cac55b1ec84c110a00e318b0df0cd24474687efc62ef",
     "synthetic_fixture_set": "0426-derived-v3"
   },
   "coverage_semantics": {
@@ -390,7 +390,7 @@
         "confirmed_issue": {
           "coverage": "covered",
           "fixture_refs": [
-            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_course_008_009_typed_natural_day_truth_table_is_python_only"
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_course_008_009_typed_natural_day_truth_table_requires_009_semantic_client"
           ],
           "expected_status": "non_compliant"
         },
@@ -450,7 +450,7 @@
         "confirmed_issue": {
           "coverage": "covered",
           "fixture_refs": [
-            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_course_008_009_typed_natural_day_truth_table_is_python_only"
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_course_008_009_typed_natural_day_truth_table_requires_009_semantic_client"
           ],
           "expected_status": "non_compliant"
         },
@@ -1067,7 +1067,7 @@
         "confirmed_issue": {
           "coverage": "covered",
           "fixture_refs": [
-            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_typed_018_reports_length_and_missing_diagnosis_as_separate_criteria"
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_typed_018_combines_length_and_diagnostic_direction"
           ],
           "expected_status": "non_compliant"
         },
@@ -1374,32 +1374,39 @@
       "rule_id": "LX0609-024",
       "title": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
       "definition_status": "formal",
-      "definition_phase": "pending_definition",
+      "definition_phase": "phase_1_target",
       "definition_version": "lx0609-defined-scope-2026-08-15-r2",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
-          "coverage": "pending_definition",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-017"],
+          "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "pending_definition",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_surgery_text_fact_contract.py::test_024_uses_available_current_surgery_material_without_strict_time"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "pending_definition",
+          "coverage": "missing",
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "pending_definition",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-024]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["恶性肿瘤诊断或病理诊断"],
       "required_evidence": ["surgery_record"],
       "expected_executor": "surgery_gate",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "max_llm_calls_per_rule": 2,
       "semantic_contract": {
         "minimal_input": {
           "documents": ["surgery_record"],
@@ -1414,7 +1421,7 @@
           "evaluation_unknown",
           "not_executed"
         ],
-        "max_llm_calls_per_rule": 1
+        "max_llm_calls_per_rule": 2
       }
     },
     {
@@ -1511,10 +1518,26 @@
         }
       },
       "required_facts": ["化疗医嘱", "药名", "剂量", "方法", "时间"],
-      "required_evidence": ["daily_course_record", "medical_order"],
+      "required_evidence": ["daily_course_record", "inpat_drug_order"],
       "expected_executor": "tumor_pathology",
-      "decision_authority": "program_only",
-      "max_llm_calls_per_rule": 0
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["daily_course_record", "inpat_drug_order"],
+          "facts": ["化疗医嘱", "药名", "剂量", "方法", "时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
     },
     {
       "rule_id": "LX0609-027",
@@ -1552,8 +1575,24 @@
       "required_facts": ["恶性肿瘤诊断"],
       "required_evidence": ["discharge_record"],
       "expected_executor": "tumor_pathology",
-      "decision_authority": "program_only",
-      "max_llm_calls_per_rule": 0
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["discharge_record"],
+          "facts": ["恶性肿瘤诊断"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
     },
     {
       "rule_id": "LX0609-028",

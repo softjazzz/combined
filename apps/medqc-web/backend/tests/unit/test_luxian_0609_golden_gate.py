@@ -381,10 +381,10 @@ def _current_rule_scope() -> tuple[tuple[str, ...], tuple[str, ...]]:
     )
 
 
-def test_v2_default_gate_requires_exact_current_68_rule_matrix() -> None:
+def test_v2_default_gate_requires_exact_current_69_rule_matrix() -> None:
     executable, pending = _current_rule_scope()
-    assert len(executable) == 68
-    assert len(pending) == 7
+    assert len(executable) == 69
+    assert len(pending) == 6
     batch, candidate, ledger = _v2_candidate_and_ledger(rule_ids=executable)
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
@@ -395,7 +395,7 @@ def test_v2_default_gate_requires_exact_current_68_rule_matrix() -> None:
     )
 
     assert exit_code == golden_gate.EXIT_PASSED
-    assert summary["accepted_count"] == 68
+    assert summary["accepted_count"] == 69
 
 
 def test_v2_default_gate_rejects_legacy_49_even_when_count_matches() -> None:

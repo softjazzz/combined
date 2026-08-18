@@ -26,7 +26,7 @@ FACT_REF = "b" * 64
 
 
 def test_every_active_non_compliant_rule_has_structured_action() -> None:
-    assert len(ACTIVE_FORMAL_RULE_IDS) == 68
+    assert len(ACTIVE_FORMAL_RULE_IDS) == 69
     assert not set(ACTIVE_FORMAL_RULE_IDS) & set(PENDING_RULE_IDS)
 
     for rule_id in ACTIVE_FORMAL_RULE_IDS:

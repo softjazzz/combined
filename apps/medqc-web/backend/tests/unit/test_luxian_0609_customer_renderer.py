@@ -111,6 +111,15 @@ def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() ->
     assert "书面签署" in finding
 
 
+def test_024_compliant_message_does_not_claim_dissection_when_reason_was_documented() -> None:
+    finding = compliant_customer_finding(
+        rule_id="LX0609-024",
+        criterion_results=(),
+    )
+
+    assert finding == "已核对目标恶性肿瘤手术记录，淋巴结处理情况或未处理原因已有记录。"
+
+
 @pytest.mark.parametrize(
     ("facts", "expected"),
     [

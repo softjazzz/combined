@@ -81,10 +81,9 @@ def test_defined_only_matrix_excludes_current_pending_rules(tmp_path: Path) -> N
         rule_id for visit_rules in grouped.values() for rule_id in visit_rules
     }
 
-    assert len(selected_rule_ids) == 68
+    assert len(selected_rule_ids) == 69
     assert selected_rule_ids.isdisjoint(
         {
-            "LX0609-024",
             "LX0609-025",
             "LX0609-028",
             "LX0609-049",

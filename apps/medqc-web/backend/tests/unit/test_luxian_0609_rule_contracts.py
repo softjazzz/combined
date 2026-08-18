@@ -37,9 +37,9 @@ def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> 
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 68
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 69
     assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 0
-    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 7
+    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 6
     assert {contract.definition_version for contract in contracts} == {
         "lx0609-defined-scope-2026-08-15-r2"
     }
@@ -191,6 +191,11 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         for contract in contracts
         if contract.source_contract_state == "typed_shadow_v1"
     }
+    typed_malignancy = {
+        contract.rule_id
+        for contract in contracts
+        if contract.source_contract_state == "typed_malignancy_gate_v1"
+    }
 
     assert program_only == {
         "LX0609-001",
@@ -202,8 +207,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-007",
         "LX0609-008",
         "LX0609-016",
-        "LX0609-026",
-        "LX0609-027",
         "LX0609-031",
         "LX0609-034",
         "LX0609-035",
@@ -270,10 +273,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-021",
         "LX0609-022",
         "LX0609-023",
-        "LX0609-024",
         "LX0609-025",
-        "LX0609-026",
-        "LX0609-027",
         "LX0609-028",
         "LX0609-029",
         "LX0609-030",
@@ -323,13 +323,14 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-073",
         "LX0609-074",
     }
+    assert typed_malignancy == {"LX0609-024", "LX0609-026", "LX0609-027"}
     assert all(contract.golden_gate_state == "pending" for contract in contracts)
     assert all(contract.data_dependencies for contract in contracts)
     assert all(
         contract.max_llm_calls_per_rule == 0
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
-        == (2 if contract.rule_id == "LX0609-023" else 1)
+        == (2 if contract.rule_id in {"LX0609-023", "LX0609-024"} else 1)
         and bool(contract.prompt_version)
         for contract in contracts
     )

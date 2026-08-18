@@ -270,13 +270,13 @@
     },
     {
       "rule_id": "LX0609-024",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_gate",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
-      "source_contract_state": "typed_shadow_v1",
+      "max_llm_calls_per_rule": 2,
+      "source_contract_state": "typed_malignancy_gate_v1",
       "golden_gate_state": "pending"
     },
     {
@@ -292,24 +292,24 @@
     },
     {
       "rule_id": "LX0609-026",
-      "contract_version": "v3",
+      "contract_version": "v4",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
-      "decision_authority": "program_only",
-      "max_llm_calls_per_rule": 0,
-      "source_contract_state": "typed_shadow_v1",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "source_contract_state": "typed_malignancy_gate_v1",
       "golden_gate_state": "pending"
     },
     {
       "rule_id": "LX0609-027",
-      "contract_version": "v3",
+      "contract_version": "v4",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
-      "decision_authority": "program_only",
-      "max_llm_calls_per_rule": 0,
-      "source_contract_state": "typed_shadow_v1",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "source_contract_state": "typed_malignancy_gate_v1",
       "golden_gate_state": "pending"
     },
     {

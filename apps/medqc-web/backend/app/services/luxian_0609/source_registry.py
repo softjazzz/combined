@@ -363,18 +363,26 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 病理/肿瘤规则的适用触发来源也必须参与 RuleDecision 引用绑定。
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
-    # 026 的旧客户文书范围没有结构化诊断，RuleDecision 只允许同一快照
-    # 中受控诊断代码决定恶性肿瘤适用性；化疗事实仍缺失时保守 DG。
-    "LX0609-026": ("diagnosis",),
+    # 026 绑定同一请求内的恶性事实、化疗医嘱和对应病程，禁止跨快照补证。
+    "LX0609-026": (
+        "admission_record_diagnosis", "diagnosis", "discharge_record_diagnosis",
+        "pathology_exam_report", "inpat_registration.discharge_horizon",
+        "discharge_record", "inpat_drug_order", "daily_course_record",
+    ),
     # 018 仅接受受控第一诊断：主要诊断，或入院/初步诊断中的编号首项。
     "LX0609-018": ("diagnosis", "admission_record_diagnosis"),
-    # 027 需要同一快照内的恶性诊断与出院记录，不能只绑定触发诊断。
-    "LX0609-027": ("diagnosis", "discharge_record"),
+    # 027 需要同一快照内的病历阶段、恶性事实与正式出院记录。
+    "LX0609-027": (
+        "diagnosis", "discharge_record_diagnosis", "pathology_exam_report",
+        "inpat_registration.discharge_horizon", "discharge_record",
+    ),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
     # 禁止从病程关键词推断当前手术。
     "LX0609-024": (
         "surgery_record", "mr_surgery", "pathology_exam_master",
-        "pathology_exam_report", "diagnosis",
+        "pathology_exam_report", "admission_record_diagnosis", "diagnosis",
+        "discharge_record_diagnosis", "inpat_registration.discharge_horizon",
+        "discharge_record",
     ),
     "LX0609-025": ("surgery_record", "mr_surgery", "daily_course_record"),
     "LX0609-028": (

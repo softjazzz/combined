@@ -21,6 +21,12 @@ from .decision_model import (
     RuleDecision,
 )
 from .native_execution import build_luxian_0609_native_result
+from .malignancy_fact import (
+    MalignancyFactResolver,
+    MalignancySource,
+    build_stage_malignancy_sources,
+    resolve_malignancy_visit_stage,
+)
 from .source_evidence_reader import (
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
@@ -48,8 +54,23 @@ _TYPED_RULE_SOURCE_KEYS = {
         "surgery_record",
         "daily_course_record",
     ),
-    "LX0609-026": ("diagnosis", "inpat_drug_order", "daily_course_record"),
-    "LX0609-027": ("diagnosis", "discharge_record"),
+    "LX0609-026": (
+        "admission_record_diagnosis",
+        "diagnosis",
+        "discharge_record_diagnosis",
+        "pathology_exam_report",
+        "inpat_registration.discharge_horizon",
+        "discharge_record",
+        "inpat_drug_order",
+        "daily_course_record",
+    ),
+    "LX0609-027": (
+        "diagnosis",
+        "discharge_record_diagnosis",
+        "pathology_exam_report",
+        "inpat_registration.discharge_horizon",
+        "discharge_record",
+    ),
 }
 _TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
 
@@ -152,8 +173,13 @@ _CONTROLLED_MESSAGES = {
 
 
 class TumorPathologyLLMClient(Protocol):
-    async def generate(self, prompt: str) -> dict[str, Any]:
-        ...
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int | None = None,
+        allow_length_retry: bool = True,
+    ) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -231,7 +257,10 @@ def _typed_decision_from_outcome(
             EvidenceState.TECHNICAL_ERROR,
             QcDirection.UNKNOWN,
             "source_query_error"
-            if outcome.reason_code == "source_query_error"
+            if outcome.reason_code in {
+                "source_query_error",
+                "malignancy_source_query_error",
+            }
             else "executor_exception",
         )
     else:
@@ -452,6 +481,50 @@ def _has_malignant_code(material: SourceMaterial) -> bool:
 
 def _has_any_diagnosis_code(material: SourceMaterial) -> bool:
     return any(_clean(row.get("diagnosis_code")) for row in material.rows)
+
+
+def _malignancy_sources(
+    source_for_rule: Any, *, visit_stage: str
+) -> tuple[MalignancySource, ...]:
+    admission = source_for_rule("admission_record_diagnosis")
+    diagnosis = source_for_rule("diagnosis")
+    discharge_diagnosis = source_for_rule("discharge_record_diagnosis")
+    pathology = source_for_rule("pathology_exam_report")
+    return build_stage_malignancy_sources(
+        visit_stage=visit_stage,
+        admission_state=admission.state,
+        admission_rows=admission.rows,
+        diagnosis_state=diagnosis.state,
+        diagnosis_rows=diagnosis.rows,
+        discharge_diagnosis_state=discharge_diagnosis.state,
+        discharge_diagnosis_rows=discharge_diagnosis.rows,
+        pathology_state=pathology.state,
+        pathology_rows=pathology.rows,
+    )
+
+
+def _typed_chemotherapy_orders(material: SourceMaterial) -> tuple[Mapping[str, Any], ...]:
+    return tuple(
+        row
+        for row in material.rows
+        if _CHEMOTHERAPY_CLASS_PATTERN.search(
+            _clean(
+                row.get("drug_type")
+                or row.get("order_class")
+                or row.get("order_category")
+            )
+        )
+    )
+
+
+def _discharge_stage(
+    horizon: SourceMaterial, discharge_record: SourceMaterial
+) -> str:
+    return resolve_malignancy_visit_stage(
+        horizon_state=horizon.state,
+        horizon_rows=horizon.rows,
+        discharge_record_state=discharge_record.state,
+    )
 
 
 def _has_complete_pathology_result(material: SourceMaterial) -> bool:
@@ -957,6 +1030,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
     decision_rule_ids: Sequence[str] = (),
+    malignancy_resolver: MalignancyFactResolver | None = None,
 ) -> NativeTumorPathologyExecutionResult:
     """按客户目录顺序执行；无受控适用事实时不调用模型。"""
 
@@ -980,6 +1054,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         raise ValueError("typed tumor pathology rules require one evidence session")
     if not selected:
         return NativeTumorPathologyExecutionResult((), ())
+
+    shared_malignancy = malignancy_resolver or MalignancyFactResolver(llm_client)
 
     documents = _documents(evidence_payload)
     facts = _timeline_facts(evidence_payload)
@@ -1113,23 +1189,185 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             context_sources = (*_PATHOLOGY_SOURCES, *_PATHOLOGY_TARGET_SOURCES)
         else:
             diagnosis = source_for_rule("diagnosis")
-            if typed_rule and diagnosis.state == "error":
+            if typed_rule and rule_id == "LX0609-026":
+                chemotherapy_orders = source_for_rule("inpat_drug_order")
+                course_records = source_for_rule("daily_course_record")
+                if chemotherapy_orders.state == "error":
+                    emit_outcome(
+                        rule_id,
+                        "technical_error",
+                        "source_query_error",
+                        executor_type="program",
+                    )
+                    continue
+                if chemotherapy_orders.state == "empty" or (
+                    chemotherapy_orders.state == "present"
+                    and not _typed_chemotherapy_orders(chemotherapy_orders)
+                ):
+                    emit_outcome(
+                        rule_id,
+                        "not_applicable",
+                        "chemotherapy_event_absent",
+                        executor_type="program",
+                    )
+                    continue
+                stage = _discharge_stage(
+                    source_for_rule("inpat_registration.discharge_horizon"),
+                    source_for_rule("discharge_record"),
+                )
+                if stage == "technical_error":
+                    emit_outcome(
+                        rule_id,
+                        "technical_error",
+                        "source_query_error",
+                        executor_type="program",
+                    )
+                    continue
+                if stage == "unknown":
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "discharge_stage_unavailable",
+                        executor_type="program",
+                    )
+                    continue
+                malignancy = await shared_malignancy.resolve(
+                    _malignancy_sources(source_for_rule, visit_stage=stage)
+                )
+                usage = shared_malignancy.claim_usage()
+                llm_call_count += usage.llm_call_count
+                prompt_tokens += usage.prompt_tokens
+                completion_tokens += usage.completion_tokens
+                total_tokens += usage.total_tokens
+                api_time += usage.api_time
+                if chemotherapy_orders.state in {"unavailable", "truncated"}:
+                    status = (
+                        "not_applicable"
+                        if malignancy.state == "absent"
+                        else "data_gap"
+                    )
+                    emit_outcome(
+                        rule_id,
+                        status,
+                        "chemotherapy_event_absent"
+                        if status == "not_applicable"
+                        else "chemotherapy_source_unavailable",
+                        executor_type="program",
+                    )
+                    continue
+                if malignancy.state == "technical_error":
+                    emit_outcome(
+                        rule_id,
+                        "technical_error",
+                        malignancy.reason_code,
+                        executor_type="program",
+                    )
+                    continue
+                if malignancy.state != "confirmed":
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "malignancy_evidence_conflict"
+                        if malignancy.state == "absent"
+                        else malignancy.reason_code,
+                        executor_type="program",
+                    )
+                    continue
+                if course_records.state == "error":
+                    emit_outcome(
+                        rule_id,
+                        "technical_error",
+                        "source_query_error",
+                        executor_type="program",
+                    )
+                    continue
+                if course_records.state in {"unavailable", "truncated"}:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "tumor_target_projection_unavailable",
+                        executor_type="program",
+                    )
+                    continue
+                status, reason_code, display_facts = _typed_chemotherapy_comparison(
+                    orders=chemotherapy_orders,
+                    course_records=course_records,
+                )
                 emit_outcome(
                     rule_id,
-                    "technical_error",
-                    "source_query_error",
+                    status,
+                    reason_code,
                     executor_type="program",
+                    display_facts=display_facts,
                 )
                 continue
-            if typed_rule and diagnosis.state in {"unavailable", "truncated"}:
-                emit_outcome(
-                    rule_id,
-                    "data_gap",
-                    "malignant_diagnosis_unavailable",
-                    executor_type="program",
+            if typed_rule and rule_id == "LX0609-027":
+                stage = _discharge_stage(
+                    source_for_rule("inpat_registration.discharge_horizon"),
+                    source_for_rule("discharge_record"),
                 )
-                continue
-            malignant_present = _has_fact(
+                if stage == "technical_error":
+                    emit_outcome(
+                        rule_id,
+                        "technical_error",
+                        "source_query_error",
+                        executor_type="program",
+                    )
+                    continue
+                if stage == "inpatient":
+                    emit_outcome(
+                        rule_id,
+                        "not_applicable",
+                        "visit_not_discharged",
+                        executor_type="program",
+                    )
+                    continue
+                if stage == "unknown":
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "discharge_stage_unavailable",
+                        executor_type="program",
+                    )
+                    continue
+                malignancy = await shared_malignancy.resolve(
+                    _malignancy_sources(source_for_rule, visit_stage=stage)
+                )
+                usage = shared_malignancy.claim_usage()
+                llm_call_count += usage.llm_call_count
+                prompt_tokens += usage.prompt_tokens
+                completion_tokens += usage.completion_tokens
+                total_tokens += usage.total_tokens
+                api_time += usage.api_time
+                if malignancy.state == "technical_error":
+                    emit_outcome(
+                        rule_id,
+                        "technical_error",
+                        malignancy.reason_code,
+                        executor_type="program",
+                    )
+                    continue
+                if malignancy.state == "absent":
+                    emit_outcome(
+                        rule_id,
+                        "not_applicable",
+                        "malignant_diagnosis_absent",
+                        executor_type="program",
+                    )
+                    continue
+                if malignancy.state != "confirmed":
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        malignancy.reason_code,
+                        executor_type="program",
+                    )
+                    continue
+                context_sources = _DISCHARGE_TARGET_SOURCES
+            elif typed_rule:
+                raise ValueError("unsupported typed tumor rule")
+
+            malignant_present = typed_rule or _has_fact(
                 facts_for_rule,
                 _MALIGNANT_FACT_TYPES,
                 frozenset({"diagnosis", "pathology_exam_report"}),
@@ -1155,43 +1393,6 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 )
                 continue
             if rule_id == "LX0609-026":
-                if typed_rule:
-                    chemotherapy_orders = source_for_rule("inpat_drug_order")
-                    course_records = source_for_rule("daily_course_record")
-                    if any(
-                        material.state == "error"
-                        for material in (chemotherapy_orders, course_records)
-                    ):
-                        emit_outcome(
-                            rule_id,
-                            "technical_error",
-                            "source_query_error",
-                            executor_type="program",
-                        )
-                        continue
-                    if any(
-                        material.state in {"unavailable", "truncated"}
-                        for material in (chemotherapy_orders, course_records)
-                    ):
-                        emit_outcome(
-                            rule_id,
-                            "data_gap",
-                            "tumor_target_projection_unavailable",
-                            executor_type="program",
-                        )
-                        continue
-                    status, reason_code, display_facts = _typed_chemotherapy_comparison(
-                        orders=chemotherapy_orders,
-                        course_records=course_records,
-                    )
-                    emit_outcome(
-                        rule_id,
-                        status,
-                        reason_code,
-                        executor_type="program",
-                        display_facts=display_facts,
-                    )
-                    continue
                 chemo_present = _has_fact(
                     facts_for_rule,
                     _CHEMO_FACT_TYPES,

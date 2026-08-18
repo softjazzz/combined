@@ -75,7 +75,6 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
         for rule_id in selected
         if rule_id
         not in {
-            "LX0609-024",
             "LX0609-025",
             "LX0609-028",
             "LX0609-049",
@@ -169,7 +168,7 @@ def test_disabled_rollout_flag_only_removes_its_group() -> None:
 
 @pytest.mark.parametrize(
     "rule_id",
-    ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-059"),
+    ("LX0609-025", "LX0609-028", "LX0609-059"),
 )
 def test_public_execution_returns_controlled_not_executed_for_pending_rule(
     rule_id: str,

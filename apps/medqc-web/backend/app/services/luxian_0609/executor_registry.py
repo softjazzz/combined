@@ -205,9 +205,32 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
     ),
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
-    "LX0609-026": ("diagnosis", "inpat_drug_order", "daily_course_record"),
+    "LX0609-024": (
+        "admission_record_diagnosis",
+        "diagnosis",
+        "discharge_record_diagnosis",
+        "inpat_registration.discharge_horizon",
+        "discharge_record",
+        "pathology_exam_report",
+    ),
+    "LX0609-026": (
+        "admission_record_diagnosis",
+        "diagnosis",
+        "discharge_record_diagnosis",
+        "pathology_exam_report",
+        "inpat_registration.discharge_horizon",
+        "discharge_record",
+        "inpat_drug_order",
+        "daily_course_record",
+    ),
     # 与 RuleDecision 来源契约保持一致：027 的裁剪上下文必须包含出院记录。
-    "LX0609-027": ("diagnosis", "discharge_record"),
+    "LX0609-027": (
+        "diagnosis",
+        "discharge_record_diagnosis",
+        "pathology_exam_report",
+        "inpat_registration.discharge_horizon",
+        "discharge_record",
+    ),
 }
 
 
@@ -254,6 +277,7 @@ class LegacyFamilyExecutionResources:
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None
     decision_rule_ids: tuple[str, ...] = ()
+    malignancy_resolver: Any = None
 
 
 @dataclass(frozen=True)
@@ -477,6 +501,7 @@ def build_luxian_0609_legacy_executor_registry(
                 llm_client=resources.llm_client,
                 evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
+                malignancy_resolver=resources.malignancy_resolver,
                 decision_rule_ids=tuple(
                     rule_id
                     for rule_id in context.selected_rule_ids
@@ -529,6 +554,7 @@ def build_luxian_0609_legacy_executor_registry(
                 llm_client=resources.llm_client,
                 evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
+                malignancy_resolver=resources.malignancy_resolver,
                 decision_rule_ids=tuple(
                     rule_id
                     for rule_id in context.selected_rule_ids
