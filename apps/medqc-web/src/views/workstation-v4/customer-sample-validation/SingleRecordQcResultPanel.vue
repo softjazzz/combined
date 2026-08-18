@@ -164,8 +164,14 @@
               <span
                 v-if="isExpandable(item)"
                 class="toggle-mark"
+                :class="{ 'has-feedback-entry': feedbackEnabled }"
                 aria-hidden="true"
               >
+                <span
+                  v-if="feedbackEnabled"
+                  class="feedback-entry-hint"
+                  data-testid="single-record-feedback-entry-hint"
+                >可反馈</span>
                 <ChevronUp
                   v-if="expandedKey === item.key"
                   :size="17"
@@ -1492,6 +1498,21 @@ watch(
 .result-row.is-expanded .toggle-mark {
   background: rgba(0, 102, 204, 0.08);
   color: #0066cc;
+}
+
+.toggle-mark.has-feedback-entry {
+  width: auto;
+  gap: 3px;
+  padding: 0 7px 0 8px;
+  border-radius: 999px;
+}
+
+.feedback-entry-hint {
+  color: #0066cc;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 .rule-name {

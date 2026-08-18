@@ -215,6 +215,15 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
 
+  it('演示反馈开启时，在折叠结果上明确提示可反馈', () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [items[0]!], feedbackEnabled: true },
+    })
+
+    expect(wrapper.get('[data-testid="single-record-feedback-entry-hint"]').text()).toBe('可反馈')
+    expect(wrapper.find('[data-testid="qc-result-feedback"]').exists()).toBe(false)
+  })
+
   it('直接展示 016 Canonical facts 中的实际相似度、阈值和比对范围', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {

@@ -1164,8 +1164,9 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .record-compare-grid {
-  height: min(720px, calc(100vh - 250px));
-  min-height: 560px;
+  /* 抽屉内可用高度不足时允许收缩，避免固定 560px 留出无效空白。 */
+  height: clamp(360px, calc(100dvh - 250px), 720px);
+  min-height: 0;
   display: grid;
   grid-template-columns: 270px minmax(420px, 1fr) minmax(410px, 460px);
 }
@@ -1658,8 +1659,8 @@ onBeforeUnmount(() => {
     color: #0066cc;
   }
   .record-compare-grid {
-    height: min(680px, calc(100vh - 230px));
-    min-height: 520px;
+    height: clamp(320px, calc(100dvh - 230px), 680px);
+    min-height: 0;
     display: block;
   }
   .record-content-column,
