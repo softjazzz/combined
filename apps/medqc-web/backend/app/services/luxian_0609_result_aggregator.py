@@ -42,6 +42,14 @@ _STATUS_PRIORITY = {
 }
 _HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
+
+class Luxian0609CustomerDisplayFactsError(ValueError):
+    """保留失败规则编号，但错误正文继续使用固定客户安全文本。"""
+
+    def __init__(self, rule_id: str) -> None:
+        super().__init__("invalid customer display facts")
+        self.rule_id = _norm_id(rule_id)
+
 _SENSITIVE_KEYS = {
     "raw_response",
     "raw_output",
@@ -4224,7 +4232,7 @@ def _copy_native_customer_fields(
             raise ValueError("invalid consultation customer display facts")
         if wrapper_id == "LX0609-025":
             raise ValueError("lx0609_025_display_fact_status_mismatch")
-        raise ValueError("invalid customer display facts")
+        raise Luxian0609CustomerDisplayFactsError(wrapper_id)
 
     status = _status(selected)
     if status not in {"compliant", "non_compliant", "not_applicable", "data_gap", "uncertain", "technical_error"}:

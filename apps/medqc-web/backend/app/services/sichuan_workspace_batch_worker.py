@@ -2847,6 +2847,10 @@ async def run_sichuan_workspace_batch_job(
             except QCJobCancelled:
                 raise
             except Exception as exc:
+                failure_error = str(exc)
+                failure_rule_id = str(getattr(exc, "rule_id", "") or "").strip().upper()
+                if re.fullmatch(r"LX0609-\d{3}", failure_rule_id):
+                    failure_error = f"{failure_error} [{failure_rule_id}]"
                 for rule_id in result_rule_ids:
                     state = result_rule_states[rule_id]
                     failed_by_rule[rule_id].append(
@@ -2860,7 +2864,7 @@ async def run_sichuan_workspace_batch_job(
                             "patient_name": str(record.get("patient_name") or ""),
                             "department": str(record.get("department") or ""),
                             "error_phase": "evaluate_document",
-                            "error": str(exc),
+                            "error": failure_error,
                         }
                     )
                 return {
@@ -3166,11 +3170,17 @@ async def run_sichuan_workspace_batch_job(
                 "LX0609正式质控未形成可交付结果，停止进入Canonical: first_error=%s",
                 first_failure_error or "unknown",
             )
-            customer_safe_reason = (
-                "客户展示事实不符合交付合同（invalid customer display facts）"
-                if first_failure_error == "invalid customer display facts"
-                else "规则执行失败"
+            invalid_facts_match = re.fullmatch(
+                r"invalid customer display facts(?: \[(LX0609-\d{3})\])?",
+                first_failure_error,
             )
+            customer_safe_reason = "规则执行失败"
+            if invalid_facts_match:
+                customer_safe_reason = (
+                    "客户展示事实不符合交付合同（invalid customer display facts）"
+                )
+                if invalid_facts_match.group(1):
+                    customer_safe_reason += f"；质控点 {invalid_facts_match.group(1)}"
             raise ValueError(
                 f"病历质控未形成可交付结果：{customer_safe_reason}"
             )

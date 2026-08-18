@@ -539,7 +539,9 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
     service = _ServiceStub()
 
     async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
-        raise ValueError("invalid customer display facts")
+        error = ValueError("invalid customer display facts")
+        error.rule_id = "LX0609-012"  # type: ignore[attr-defined]
+        raise error
 
     service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
@@ -560,7 +562,8 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
     assert workspace.job["status"] == "failed"
     assert workspace.job["error_message"] == (
         "病历质控未形成可交付结果："
-        "客户展示事实不符合交付合同（invalid customer display facts）"
+        "客户展示事实不符合交付合同（invalid customer display facts）；"
+        "质控点 LX0609-012"
     )
     assert workspace.complete_calls == 0
     assert workspace.items == []

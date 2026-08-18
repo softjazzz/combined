@@ -421,6 +421,8 @@ def test_010_non_strict_invalid_facts_fail_closed(entry_path, requirement) -> No
         )
 
     assert private_marker not in str(exc_info.value)
+    if entry_path != "explicit":
+        assert getattr(exc_info.value, "rule_id", "") == "LX0609-010"
 
 
 def test_native_equal_dual_source_customer_facts_are_accepted() -> None:
