@@ -133,6 +133,7 @@ function mountView() {
     global: {
       stubs: {
         HomeHeroBar: HomeHeroBarStub,
+        QcMetricCardStrip: false,
         'a-empty': true,
         'a-button': true,
         'a-tag': true,
@@ -209,7 +210,8 @@ describe('QCOverviewView', () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
-    const cards = wrapper.findAll('.qc-home-kpi')
+    expect(wrapper.get('[data-testid="home-kpis"]').attributes('aria-label')).toBe('质控指标汇总')
+    const cards = wrapper.findAll('.qc-metric-card-strip__card')
     expect(cards).toHaveLength(4)
     expect(
       cards.map((card) => ({
@@ -223,8 +225,8 @@ describe('QCOverviewView', () => {
       { label: '已完成', value: '13', tone: 'is-success' },
       { label: '纳入病历', value: '18', tone: 'is-brand' },
     ])
-    expect(wrapper.findAll('.qc-home-kpi__icon')).toHaveLength(4)
-    expect(wrapper.findAll('.qc-home-kpi small').map((item) => item.text())).toEqual([
+    expect(wrapper.findAll('.qc-metric-card-strip__icon')).toHaveLength(4)
+    expect(wrapper.findAll('.qc-metric-card-strip__helper').map((item) => item.text())).toEqual([
       '含确定问题的病历',
       '尚未生成最终结果',
       '已生成正式质控结果',
@@ -346,7 +348,7 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
 
     expect(apiGet).toHaveBeenCalledWith(
-      '/api/v1/workstation/home',
+      '/api/v1/workstation/qc-home',
       expect.objectContaining({ department: '神经外科' }),
     )
   })

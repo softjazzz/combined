@@ -2,54 +2,31 @@
   <main class="qc-record-result-list-view">
     <section class="qc-record-result-list-view__header">
       <div>
-        <div class="qc-record-result-list-view__eyebrow">
-          {{ carePhaseLabel }} · 质控结果
-        </div>
+        <div class="qc-record-result-list-view__eyebrow">{{ carePhaseLabel }} · 质控结果</div>
         <h1>{{ pageTitle }}</h1>
         <p>仅展示当前范围内病历的最新质控结果，不混入其他业务流程。</p>
       </div>
       <span class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
     </section>
 
-    <section
+    <QcMetricCardStrip
       class="qc-record-result-list-view__metrics"
       aria-label="质控结果汇总"
-    >
-      <div
-        v-for="metric in metricItems"
-        :key="metric.label"
-        class="qc-record-result-list-view__metric"
-      >
-        <span>{{ metric.label }}</span>
-        <strong>{{ metric.value }}</strong>
-      </div>
-    </section>
+      :cards="metricCards"
+    />
 
     <section class="qc-record-result-list-view__workbench">
       <div class="qc-record-result-list-view__toolbar">
-        <div
-          class="qc-record-result-list-view__filters"
-          aria-label="病历筛选条件"
-        >
+        <div class="qc-record-result-list-view__filters" aria-label="病历筛选条件">
           <input
             v-model="searchText"
             placeholder="搜索患者、住院号、科室"
             aria-label="关键词筛选"
             @keydown.enter.prevent="applyFilters"
-          >
-          <select
-            v-model="activeDept"
-            aria-label="科室筛选"
-            @change="applyFilters"
-          >
-            <option value="全部科室">
-              全部科室
-            </option>
-            <option
-              v-for="department in departmentOptions"
-              :key="department"
-              :value="department"
-            >
+          />
+          <select v-model="activeDept" aria-label="科室筛选" @change="applyFilters">
+            <option value="全部科室">全部科室</option>
+            <option v-for="department in departmentOptions" :key="department" :value="department">
               {{ department }}
             </option>
           </select>
@@ -58,14 +35,9 @@
             aria-label="开始日期筛选"
             :value="startDate"
             @change="updateStartDate"
-          >
+          />
           <span class="qc-record-result-list-view__date-separator">至</span>
-          <input
-            type="date"
-            aria-label="结束日期筛选"
-            :value="endDate"
-            @change="updateEndDate"
-          >
+          <input type="date" aria-label="结束日期筛选" :value="endDate" @change="updateEndDate" />
           <button
             class="qc-record-result-list-view__query-button"
             type="button"
@@ -76,10 +48,9 @@
           </button>
         </div>
         <div class="qc-record-result-list-view__toolbar-actions">
-          <span
-            v-if="selectedCount > 0"
-            class="qc-record-result-list-view__selection-count"
-          >已选 {{ selectedCount }} 份</span>
+          <span v-if="selectedCount > 0" class="qc-record-result-list-view__selection-count"
+            >已选 {{ selectedCount }} 份</span
+          >
           <button
             class="qc-record-result-list-view__export-selected-button"
             type="button"
@@ -116,10 +87,7 @@
         @update:selected-record-keys="updateSelectedRecordKeys"
       />
 
-      <footer
-        v-if="serverTotal > 0"
-        class="qc-record-result-list-view__pagination"
-      >
+      <footer v-if="serverTotal > 0" class="qc-record-result-list-view__pagination">
         <span>共 {{ serverTotal }} 份病历</span>
         <div>
           <button
@@ -159,8 +127,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
+import { Activity, CircleCheckBig, Database, TriangleAlert } from 'lucide-vue-next'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
@@ -174,6 +143,7 @@ import QcRecordResultTable, {
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import { downloadBlob } from './customer-sample-validation/batchExport'
+import QcMetricCardStrip from '@/views/workstation/components/QcMetricCardStrip.vue'
 
 const props = defineProps<{
   carePhase: QcRecordCarePhase
@@ -222,12 +192,65 @@ const departmentOptions = computed(() =>
   departments.value.map((item) => item.name).filter((name) => name && name !== '全部科室'),
 )
 
-const metricItems = computed(() => [
-  { label: '纳入病历', value: qcSummary.value.totalRecords },
-  { label: '已完成质控', value: qcSummary.value.readyRecords },
-  { label: '需优先复核', value: statusCount(qcSummary.value.statusCounts, 'non_compliant') },
-  { label: '资料待核实', value: statusCount(qcSummary.value.statusCounts, 'data_gap') },
+type QcRecordMetricKey = 'records' | 'completed' | 'priority' | 'dataGap'
+type QcMetricTone = 'brand' | 'warning' | 'success' | 'danger'
+
+interface QcRecordMetricItem {
+  key: QcRecordMetricKey
+  label: string
+  value: number
+}
+
+interface QcRecordMetricCardMeta {
+  helper: string
+  icon: Component
+  tone: QcMetricTone
+}
+
+const qcRecordMetricCardMeta: Record<QcRecordMetricKey, QcRecordMetricCardMeta> = {
+  records: {
+    helper: '当前固定范围',
+    icon: Database,
+    tone: 'brand',
+  },
+  completed: {
+    helper: '已生成正式质控结果',
+    icon: CircleCheckBig,
+    tone: 'success',
+  },
+  priority: {
+    helper: '含确定问题的病历',
+    icon: TriangleAlert,
+    tone: 'danger',
+  },
+  dataGap: {
+    helper: '资料待核实项',
+    icon: Activity,
+    tone: 'warning',
+  },
+}
+
+const metricItems = computed<QcRecordMetricItem[]>(() => [
+  { key: 'records', label: '纳入病历', value: qcSummary.value.totalRecords },
+  { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
+  {
+    key: 'priority',
+    label: '需优先复核',
+    value: statusCount(qcSummary.value.statusCounts, 'non_compliant'),
+  },
+  {
+    key: 'dataGap',
+    label: '资料待核实',
+    value: statusCount(qcSummary.value.statusCounts, 'data_gap'),
+  },
 ])
+
+const metricCards = computed(() =>
+  metricItems.value.map((metric) => ({
+    ...metric,
+    ...qcRecordMetricCardMeta[metric.key],
+  })),
+)
 
 const rows = computed<QcRecordResultRow[]>(() =>
   allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow),
@@ -621,38 +644,7 @@ function closeResultDrawer() {
 }
 
 .qc-record-result-list-view__metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 16px 0;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.86);
-}
-
-.qc-record-result-list-view__metric {
-  position: relative;
-  display: grid;
-  gap: 8px;
-  min-height: 88px;
-  padding: 17px 20px;
-}
-
-.qc-record-result-list-view__metric + .qc-record-result-list-view__metric {
-  border-left: 1px solid rgba(0, 0, 0, 0.07);
-}
-
-.qc-record-result-list-view__metric span {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.qc-record-result-list-view__metric strong {
-  color: #1d1d1f;
-  font-size: 23px;
-  font-weight: 700;
-  line-height: 24px;
 }
 
 .qc-record-result-list-view__workbench {
@@ -812,19 +804,6 @@ function closeResultDrawer() {
 @media (max-width: 900px) {
   .qc-record-result-list-view {
     padding: 16px;
-  }
-
-  .qc-record-result-list-view__metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .qc-record-result-list-view__metric:nth-child(3) {
-    border-left: 0;
-    border-top: 1px solid rgba(0, 0, 0, 0.07);
-  }
-
-  .qc-record-result-list-view__metric:nth-child(4) {
-    border-top: 1px solid rgba(0, 0, 0, 0.07);
   }
 
   .qc-record-result-list-view__toolbar,

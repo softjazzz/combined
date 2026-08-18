@@ -61,6 +61,27 @@ async def get_workstation_home(
         _raise_workstation_http_error(exc)
 
 
+@router.get("/qc-home")
+async def get_luxian_0609_home(
+    request: Request,
+    department: Optional[str] = Query(None, description="科室筛选"),
+    keyword: Optional[str] = Query(None, description="患者姓名/病案号/住院号/visit 搜索"),
+    priority_limit: int = Query(20, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
+):
+    """当前全病历质控首页的轻量读取入口。"""
+
+    try:
+        data = default_workstation_aggregation_service.get_luxian_0609_home(
+            department=department,
+            keyword=keyword,
+            priority_limit=priority_limit,
+        )
+        return success_response(data=data, trace_id=get_trace_id(request))
+    except Exception as exc:
+        _raise_workstation_http_error(exc)
+
+
 @router.get("/analytics/luxian-0609")
 async def get_luxian_0609_analytics(
     request: Request,

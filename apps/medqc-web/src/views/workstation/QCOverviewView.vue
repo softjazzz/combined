@@ -27,12 +27,7 @@
         >
           <strong>暂时无法加载质控首页</strong>
           <span>请稍后刷新；不会以旧任务或缓存数据替代当前结果。</span>
-          <a-button
-            size="small"
-            @click="void fetchHome()"
-          >
-            重新加载
-          </a-button>
+          <a-button size="small" @click="void fetchHome()"> 重新加载 </a-button>
         </section>
 
         <section
@@ -50,60 +45,30 @@
         </section>
 
         <template v-else-if="clinicalQc">
-          <section
-            class="qc-home-kpis workstation-surface-enter"
+          <QcMetricCardStrip
+            class="workstation-surface-enter"
             data-testid="home-kpis"
-          >
-            <article
-              v-for="card in kpiCards"
-              :key="card.key"
-              :class="['qc-home-kpi', `is-${card.tone}`]"
-            >
-              <div class="qc-home-kpi__head">
-                <span>{{ card.label }}</span>
-                <span
-                  class="qc-home-kpi__icon"
-                  aria-hidden="true"
-                >
-                  <component
-                    :is="card.icon"
-                    :size="19"
-                    :stroke-width="2.1"
-                  />
-                </span>
-              </div>
-              <strong>{{ card.value }}</strong>
-              <small>{{ card.helper }}</small>
-            </article>
-          </section>
+            aria-label="质控指标汇总"
+            :cards="kpiCards"
+          />
 
           <section
             class="qc-home-grid qc-home-workspace workstation-surface-enter"
             data-testid="home-workspace"
           >
-            <section
-              class="qc-home-panel qc-home-panel--queue"
-              data-testid="priority-queue"
-            >
+            <section class="qc-home-panel qc-home-panel--queue" data-testid="priority-queue">
               <header class="qc-home-panel__head">
                 <div>
                   <h2>病历质控队列</h2>
                   <p>优先展示需要复核的病历，直接进入对应的质控结果。</p>
                 </div>
-                <button
-                  type="button"
-                  class="qc-home-panel-link"
-                  @click="openRecordPool"
-                >
+                <button type="button" class="qc-home-panel-link" @click="openRecordPool">
                   全部病历
                   <ArrowRight :size="15" />
                 </button>
               </header>
 
-              <div
-                class="qc-home-scope qc-home-priority-scope"
-                data-testid="home-scope"
-              >
+              <div class="qc-home-scope qc-home-priority-scope" data-testid="home-scope">
                 <span class="qc-home-scope__label">当前范围</span>
                 <span>{{ scopeHospitalText }}</span>
                 <i />
@@ -112,17 +77,13 @@
                 <span>{{ scopeSceneText }}</span>
                 <i />
                 <span class="qc-home-scope__rule-set">泸县0609质控点</span>
-                <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
+                <span class="qc-home-scope__time"
+                  >生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span
+                >
               </div>
 
-              <div
-                v-if="clinicalQc.priority_items.length"
-                class="qc-home-priority-list"
-              >
-                <div
-                  class="qc-home-priority-columns"
-                  aria-hidden="true"
-                >
+              <div v-if="clinicalQc.priority_items.length" class="qc-home-priority-list">
+                <div class="qc-home-priority-columns" aria-hidden="true">
                   <span>患者 / 病历</span>
                   <span>科室</span>
                   <span>确定问题</span>
@@ -148,7 +109,8 @@
                   <span
                     class="qc-home-priority-row__department"
                     data-testid="priority-department"
-                  >{{ item.department || '未分科室' }}</span>
+                    >{{ item.department || '未分科室' }}</span
+                  >
                   <div
                     class="qc-home-priority-row__metric is-defect"
                     data-testid="priority-defect-count"
@@ -165,22 +127,13 @@
                     <strong>{{ countOf(item, 'data_gap') }}</strong>
                     <small>项</small>
                   </div>
-                  <div
-                    class="qc-home-priority-row__time"
-                    data-testid="priority-completed-at"
-                  >
+                  <div class="qc-home-priority-row__time" data-testid="priority-completed-at">
                     <span>最近质控</span>
                     <strong>{{ formatPriorityTime(item.completed_at) }}</strong>
                   </div>
-                  <span
-                    class="qc-home-priority-row__action"
-                    data-testid="priority-open-result"
-                  >
+                  <span class="qc-home-priority-row__action" data-testid="priority-open-result">
                     查看质控结果
-                    <ChevronRight
-                      :size="16"
-                      aria-hidden="true"
-                    />
+                    <ChevronRight :size="16" aria-hidden="true" />
                   </span>
                 </button>
               </div>
@@ -192,10 +145,7 @@
             </section>
 
             <aside class="qc-home-side-stack">
-              <section
-                class="qc-home-panel qc-home-panel--health"
-                data-testid="data-health"
-              >
+              <section class="qc-home-panel qc-home-panel--health" data-testid="data-health">
                 <header class="qc-home-panel__head">
                   <div>
                     <h2>运行与数据</h2>
@@ -223,10 +173,7 @@
                     </div>
                     <small>运行状态尚未接入首页</small>
                   </div>
-                  <div
-                    v-if="!isDemoPresentation"
-                    data-testid="health-status-item"
-                  >
+                  <div v-if="!isDemoPresentation" data-testid="health-status-item">
                     <span class="qc-home-health-list__icon is-danger">
                       <TriangleAlert :size="18" />
                     </span>
@@ -255,10 +202,7 @@
             </aside>
           </section>
 
-          <section
-            class="qc-home-analysis workstation-surface-enter"
-            data-testid="home-analysis"
-          >
+          <section class="qc-home-analysis workstation-surface-enter" data-testid="home-analysis">
             <section
               class="qc-home-panel qc-home-defect-analysis"
               data-testid="defect-analysis-chart"
@@ -266,19 +210,14 @@
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="defect-analysis-title">
-                    质控缺陷分析
-                  </h2>
+                  <h2 id="defect-analysis-title">质控缺陷分析</h2>
                   <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
                 </div>
               </header>
               <div class="qc-home-defect-analysis__toolbar">
                 <div class="qc-home-defect-analysis__control">
                   <span>统计对象</span>
-                  <div
-                    role="group"
-                    aria-label="统计对象"
-                  >
+                  <div role="group" aria-label="统计对象">
                     <button
                       type="button"
                       :class="{ 'is-active': analysisObject === 'department' }"
@@ -299,10 +238,7 @@
                 </div>
                 <div class="qc-home-defect-analysis__control">
                   <span>分析指标</span>
-                  <div
-                    role="group"
-                    aria-label="分析指标"
-                  >
+                  <div role="group" aria-label="分析指标">
                     <button
                       type="button"
                       :class="{ 'is-active': analysisMetric === 'total' }"
@@ -323,10 +259,7 @@
                 </div>
                 <div class="qc-home-defect-analysis__control">
                   <span>排序</span>
-                  <div
-                    role="group"
-                    aria-label="排序方式"
-                  >
+                  <div role="group" aria-label="排序方式">
                     <button
                       type="button"
                       :class="{ 'is-active': analysisSort === 'metric' }"
@@ -354,10 +287,7 @@
                   </div>
                 </div>
               </div>
-              <div
-                v-if="defectAnalysisItems.length"
-                class="qc-home-defect-analysis__list"
-              >
+              <div v-if="defectAnalysisItems.length" class="qc-home-defect-analysis__list">
                 <component
                   :is="analysisObject === 'department' ? 'button' : 'div'"
                   v-for="item in defectAnalysisItems"
@@ -378,13 +308,12 @@
                 >
                   <div class="qc-home-defect-analysis__meta">
                     <strong>{{ item.name }}</strong>
-                    <span>纳入 {{ item.recordsTotal }} 份 · 完成
-                      {{ item.completedRecordTotal }} 份</span>
+                    <span
+                      >纳入 {{ item.recordsTotal }} 份 · 完成
+                      {{ item.completedRecordTotal }} 份</span
+                    >
                   </div>
-                  <div
-                    class="qc-home-defect-analysis__metric"
-                    aria-hidden="true"
-                  >
+                  <div class="qc-home-defect-analysis__metric" aria-hidden="true">
                     <div class="qc-home-defect-analysis__track">
                       <i :style="{ width: `${defectAnalysisPercent(item)}%` }" />
                     </div>
@@ -400,10 +329,7 @@
                     aria-hidden="true"
                   />
                 </component>
-                <p
-                  v-if="hiddenDefectAnalysisCount"
-                  class="qc-home-defect-analysis__note"
-                >
+                <p v-if="hiddenDefectAnalysisCount" class="qc-home-defect-analysis__note">
                   仅展示前 8 项；其余 {{ hiddenDefectAnalysisCount }} 个{{
                     analysisObjectLabel
                   }}已收起。
@@ -423,16 +349,11 @@
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="qc-conclusion-title">
-                    结论结构
-                  </h2>
+                  <h2 id="qc-conclusion-title">结论结构</h2>
                   <p>已完成病历中的规则结论。</p>
                 </div>
               </header>
-              <div
-                v-if="conclusionSegments.length"
-                class="qc-home-conclusion__content"
-              >
+              <div v-if="conclusionSegments.length" class="qc-home-conclusion__content">
                 <div
                   class="qc-home-conclusion__ring"
                   role="img"
@@ -444,28 +365,15 @@
                     <span>规则结论</span>
                   </div>
                 </div>
-                <ul
-                  class="qc-home-conclusion__legend"
-                  aria-label="已完成病历中的规则结论图例"
-                >
-                  <li
-                    v-for="segment in conclusionSegments"
-                    :key="segment.status"
-                  >
-                    <i
-                      :style="{ background: segment.color }"
-                      aria-hidden="true"
-                    />
+                <ul class="qc-home-conclusion__legend" aria-label="已完成病历中的规则结论图例">
+                  <li v-for="segment in conclusionSegments" :key="segment.status">
+                    <i :style="{ background: segment.color }" aria-hidden="true" />
                     <span>{{ segment.label }} {{ segment.value }}</span>
                     <small>{{ segment.percent }}%</small>
                   </li>
                 </ul>
               </div>
-              <a-empty
-                v-else
-                description="暂无已完成质控结论"
-                :image-style="{ height: '58px' }"
-              />
+              <a-empty v-else description="暂无已完成质控结论" :image-style="{ height: '58px' }" />
             </section>
           </section>
 
@@ -492,12 +400,7 @@
             <template #description>
               <p>请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
             </template>
-            <a-button
-              type="primary"
-              @click="openRecordPool"
-            >
-              进入病历池
-            </a-button>
+            <a-button type="primary" @click="openRecordPool"> 进入病历池 </a-button>
           </a-empty>
         </section>
       </main>
@@ -526,6 +429,7 @@ import type {
   WorkstationHomePayload,
 } from '@/views/workstation-v2/types'
 import HomeHeroBar from './components/HomeHeroBar.vue'
+import QcMetricCardStrip from './components/QcMetricCardStrip.vue'
 
 interface KpiCard {
   key: string
@@ -796,7 +700,7 @@ async function fetchHome() {
   loading.value = true
   loadError.value = false
   try {
-    const res = await ApiService.get<WorkstationHomePayload>('/api/v1/workstation/home', {
+    const res = await ApiService.get<WorkstationHomePayload>('/api/v1/workstation/qc-home', {
       department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
       keyword: keyword.value.trim() || undefined,
       hotspot_limit: 20,
@@ -837,6 +741,7 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-canvas {
   --qc-home-dashboard-columns: minmax(0, 1.88fr) minmax(320px, 0.72fr);
+  align-content: start;
   display: grid;
   gap: 18px;
   min-height: calc(100vh - 64px);
@@ -903,90 +808,6 @@ watch([departmentFilter, keyword], () => {
   margin-left: auto;
   color: rgba(29, 29, 31, 0.48);
   font-weight: 500;
-}
-.qc-home-kpis {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.qc-home-kpi {
-  min-width: 0;
-  padding: 18px 20px 17px;
-  position: relative;
-  border: 1px solid rgba(0, 0, 0, 0.075);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.028);
-  backdrop-filter: blur(18px);
-}
-.qc-home-kpi__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.qc-home-kpi__head > span:first-child {
-  color: rgba(29, 29, 31, 0.55);
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 22px;
-}
-.qc-home-kpi__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  border-radius: 10px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
-}
-.qc-home-kpi strong {
-  color: #1d1d1f;
-  display: block;
-  font-size: 32px;
-  letter-spacing: -0.03em;
-  line-height: 39px;
-  margin: 9px 0 2px;
-}
-.qc-home-kpi small {
-  display: block;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.42);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.qc-home-kpi.is-brand strong {
-  color: #0066cc;
-}
-.qc-home-kpi.is-brand .qc-home-kpi__icon {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
-}
-.qc-home-kpi.is-warning strong {
-  color: #c17a08;
-}
-.qc-home-kpi.is-warning .qc-home-kpi__icon {
-  background: rgba(245, 158, 11, 0.1);
-  color: #c17a08;
-}
-.qc-home-kpi.is-success strong {
-  color: #047857;
-}
-.qc-home-kpi.is-success .qc-home-kpi__icon {
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
-}
-.qc-home-kpi.is-danger strong {
-  color: #dc2626;
-}
-.qc-home-kpi.is-danger .qc-home-kpi__icon {
-  background: rgba(239, 68, 68, 0.09);
-  color: #dc2626;
 }
 .qc-home-grid {
   display: grid;
@@ -1617,9 +1438,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   .qc-home-header :deep(.flex.min-w-\[280px\]) {
     width: 100%;
   }
-  .qc-home-kpis {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .qc-home-analysis {
     grid-template-columns: 1fr;
   }
@@ -1637,9 +1455,6 @@ button.qc-home-defect-analysis__row:focus-visible {
   }
   .qc-home-header h1 {
     font-size: 23px;
-  }
-  .qc-home-kpis {
-    grid-template-columns: 1fr;
   }
   .qc-home-conclusion__legend {
     grid-template-columns: 1fr;

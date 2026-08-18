@@ -51,6 +51,41 @@ def _service(monkeypatch, records: list[dict], summaries: dict) -> WorkstationAg
     return service
 
 
+def test_luxian_0609_home_returns_only_current_qc_projection(monkeypatch):
+    service = _service(
+        monkeypatch,
+        [_record(1, department="心内科")],
+        {("hospital-a", "patient-1", "visit-1"): _ready(non_compliant=1)},
+    )
+    monkeypatch.setattr(
+        service,
+        "_build_home_hotspots",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy hotspots must not load")),
+    )
+    monkeypatch.setattr(
+        service,
+        "_build_home_todos",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy todos must not load")),
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_batch_summary_notifications",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy notifications must not load")),
+    )
+
+    result = service.get_luxian_0609_home(department="心内科", keyword="张")
+
+    assert result["department_options"] == ["心内科"]
+    assert result["clinical_qc"]["kpis"] == {
+        "records_total": 1,
+        "qc_pending_total": 0,
+        "qc_completed_total": 1,
+        "high_risk_review_total": 1,
+    }
+    assert "hotspots" not in result
+    assert "my_todo_items" not in result
+
+
 def test_home_clinical_qc_kpis_use_full_scope_not_priority_limits(monkeypatch):
     records = [_record(index) for index in range(80)]
     summaries = {

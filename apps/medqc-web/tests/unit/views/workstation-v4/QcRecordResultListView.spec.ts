@@ -172,8 +172,14 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     expect(
-      wrapper.findAll('.qc-record-result-list-view__metric strong').map((item) => item.text()),
+      wrapper.findAll('.qc-metric-card-strip__card strong').map((item) => item.text()),
     ).toEqual(['20', '14', '4', '5'])
+    expect(wrapper.findAll('.qc-metric-card-strip__label').map((item) => item.text())).toEqual([
+      '纳入病历',
+      '已完成质控',
+      '需优先复核',
+      '资料待核实',
+    ])
     expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
     expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
     expect(wrapper.text()).not.toContain('不得展示')

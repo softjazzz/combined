@@ -332,6 +332,35 @@ class WorkstationAggregationService:
         finally:
             session.close()
 
+    def get_luxian_0609_home(
+        self,
+        *,
+        department: Optional[str] = None,
+        keyword: Optional[str] = None,
+        priority_limit: int = 20,
+    ) -> Dict[str, Any]:
+        """返回当前全病历质控首页所需的最小 Canonical 汇总。
+
+        该入口不读取旧热点、待办或通知聚合。它们仍由 ``get_home`` 为兼容页面提供，
+        但不能让当前质控首页为未展示的数据承担查询耗时。
+        """
+
+        session: Session = self._session_factory()
+        try:
+            clinical_qc = self._build_luxian_0609_home_projection(
+                session,
+                department=department,
+                keyword=keyword,
+                priority_limit=priority_limit,
+            )
+            return {
+                "department_options": clinical_qc["department_options"],
+                "scope": clinical_qc["scope"],
+                "clinical_qc": clinical_qc,
+            }
+        finally:
+            session.close()
+
     def get_luxian_0609_analytics(
         self,
         *,

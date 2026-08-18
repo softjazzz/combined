@@ -29,9 +29,10 @@
   },
   "lint-staged": {
     "apps/medqc-web/**/*.{js,jsx,ts,tsx,vue,cjs,mjs}": [
-      "corepack pnpm --filter ./apps/medqc-web exec eslint --fix"
+      "corepack pnpm --filter ./apps/medqc-web exec eslint --fix",
+      "corepack pnpm --filter ./apps/medqc-web exec prettier --write"
     ],
-    "apps/medqc-web/**/*.{js,jsx,ts,tsx,vue,json,md,yml,yaml,css,scss,less}": [
+    "apps/medqc-web/**/*.{json,md,yml,yaml,css,scss,less}": [
       "corepack pnpm --filter ./apps/medqc-web exec prettier --write"
     ]
   }
