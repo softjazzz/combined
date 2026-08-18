@@ -148,18 +148,22 @@ describe('QcRecordResultListView', () => {
   })
 
   it.each([
-    ['inpatient', '在院病历 · 质控结果', '固定范围：在院', 'admission', '运行病历质控'],
-    ['discharged', '已出院病历 · 质控结果', '固定范围：已出院', 'discharge', '终末病历质控'],
+    ['inpatient', '运行病历质控', '固定范围：在院', 'admission', '在院病历 · 质控结果'],
+    ['discharged', '终末病历质控', '固定范围：已出院', 'discharge', '已出院病历 · 质控结果'],
   ] as const)(
-    '固定 %s 服务端范围、保留范围说明且不展示重复页标题',
-    async (carePhase, eyebrow, scope, dateField, removedTitle) => {
+    '固定 %s 服务端范围、保留主标题且不展示范围说明',
+    async (carePhase, title, scope, dateField, removedEyebrow) => {
       const wrapper = mountView(carePhase)
       await flushPromises()
 
-      expect(wrapper.text()).toContain(eyebrow)
+      expect(wrapper.text()).toContain(title)
       expect(wrapper.text()).toContain(scope)
-      expect(wrapper.text()).toContain('仅展示当前范围内病历的最新质控结果，不混入其他业务流程。')
-      expect(wrapper.find('.qc-record-result-list-view__header').text()).not.toContain(removedTitle)
+      expect(wrapper.find('.qc-record-result-list-view__header').text()).not.toContain(
+        removedEyebrow,
+      )
+      expect(wrapper.find('.qc-record-result-list-view__header').text()).not.toContain(
+        '仅展示当前范围内病历的最新质控结果，不混入其他业务流程。',
+      )
       expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
         page: 1,
         page_size: 15,

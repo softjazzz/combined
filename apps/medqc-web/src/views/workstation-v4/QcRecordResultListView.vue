@@ -2,8 +2,7 @@
   <main class="qc-record-result-list-view">
     <section class="qc-record-result-list-view__header">
       <div>
-        <div class="qc-record-result-list-view__eyebrow">{{ carePhaseLabel }} · 质控结果</div>
-        <p>仅展示当前范围内病历的最新质控结果，不混入其他业务流程。</p>
+        <h1>{{ pageTitle }}</h1>
       </div>
       <span class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
     </section>
@@ -163,7 +162,7 @@ const startDate = ref('')
 const endDate = ref('')
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
-const carePhaseLabel = computed(() => (isInpatient.value ? '在院病历' : '已出院病历'))
+const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
 
 const {
@@ -608,18 +607,12 @@ function closeResultDrawer() {
   border-radius: 20px;
 }
 
-.qc-record-result-list-view__eyebrow {
-  color: #0066cc;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.qc-record-result-list-view .qc-record-result-list-view__header p {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-  line-height: 22px;
+.qc-record-result-list-view h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 31px;
 }
 
 .qc-record-result-list-view p {
