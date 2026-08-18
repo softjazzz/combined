@@ -4485,7 +4485,7 @@ def aggregate_luxian_0609_results(
             if rule_id == "LX0609-025":
                 raw_025_facts_by_rule[rule_id] = facts
         elif not is_strict_display_contract:
-            raise ValueError("invalid customer display facts")
+            raise Luxian0609CustomerDisplayFactsError(rule_id)
         elif rule_id == "LX0609-025":
             raw_025_facts_by_rule[rule_id] = facts
         customer_evidence = _customer_evidence_from_display_facts(
