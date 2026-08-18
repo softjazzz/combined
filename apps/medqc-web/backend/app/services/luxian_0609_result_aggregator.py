@@ -306,6 +306,7 @@ def _validate_lx0609_003_044_fact_status(
     kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
     expected_status = {
         ("LX0609-003", "qualified_surgery_absent"): "not_applicable",
+        ("LX0609-003", "surgery_not_performed"): "not_applicable",
         ("LX0609-003", "surgery_record_late"): "non_compliant",
         ("LX0609-003", "surgery_record_within_threshold"): "compliant",
         ("LX0609-044", "pretransfusion_assessment_complete"): "compliant",
@@ -2422,11 +2423,12 @@ def safe_luxian_0609_customer_display_facts(
         return facts
     if rule_id == "LX0609-003":
         if (
-            raw.get("failure_kind") == "qualified_surgery_absent"
+            raw.get("failure_kind")
+            in {"qualified_surgery_absent", "surgery_not_performed"}
             and raw.get("performed_surgery_confirmed") is False
         ):
             return {
-                "failure_kind": "qualified_surgery_absent",
+                "failure_kind": raw.get("failure_kind"),
                 "performed_surgery_confirmed": False,
             }
         surgery_end_time = raw.get("surgery_end_time")

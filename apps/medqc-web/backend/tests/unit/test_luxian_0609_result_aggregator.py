@@ -57,6 +57,14 @@ def test_customer_aggregator_rejects_removed_legacy_rejudgment_keyword() -> None
             },
         ),
         (
+            "LX0609-003",
+            "not_applicable",
+            {
+                "failure_kind": "surgery_not_performed",
+                "performed_surgery_confirmed": False,
+            },
+        ),
+        (
             "LX0609-044",
             "non_compliant",
             {
