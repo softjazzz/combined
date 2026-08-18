@@ -3,7 +3,6 @@
     <section class="qc-record-result-list-view__header">
       <div>
         <div class="qc-record-result-list-view__eyebrow">{{ carePhaseLabel }} · 质控结果</div>
-        <h1>{{ pageTitle }}</h1>
         <p>仅展示当前范围内病历的最新质控结果，不混入其他业务流程。</p>
       </div>
       <span class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
@@ -164,7 +163,6 @@ const startDate = ref('')
 const endDate = ref('')
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
-const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
 const carePhaseLabel = computed(() => (isInpatient.value ? '在院病历' : '已出院病历'))
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
 
@@ -617,12 +615,11 @@ function closeResultDrawer() {
   line-height: 18px;
 }
 
-.qc-record-result-list-view h1 {
-  margin: 4px 0 6px;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 31px;
+.qc-record-result-list-view .qc-record-result-list-view__header p {
+  margin: 4px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .qc-record-result-list-view p {

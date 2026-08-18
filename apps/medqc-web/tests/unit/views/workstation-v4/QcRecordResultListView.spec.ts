@@ -148,16 +148,18 @@ describe('QcRecordResultListView', () => {
   })
 
   it.each([
-    ['inpatient', '运行病历质控', '固定范围：在院', 'admission'],
-    ['discharged', '终末病历质控', '固定范围：已出院', 'discharge'],
+    ['inpatient', '在院病历 · 质控结果', '固定范围：在院', 'admission', '运行病历质控'],
+    ['discharged', '已出院病历 · 质控结果', '固定范围：已出院', 'discharge', '终末病历质控'],
   ] as const)(
-    '固定 %s 服务端范围并使用对应时间字段',
-    async (carePhase, title, scope, dateField) => {
+    '固定 %s 服务端范围、保留范围说明且不展示重复页标题',
+    async (carePhase, eyebrow, scope, dateField, removedTitle) => {
       const wrapper = mountView(carePhase)
       await flushPromises()
 
-      expect(wrapper.text()).toContain(title)
+      expect(wrapper.text()).toContain(eyebrow)
       expect(wrapper.text()).toContain(scope)
+      expect(wrapper.text()).toContain('仅展示当前范围内病历的最新质控结果，不混入其他业务流程。')
+      expect(wrapper.find('.qc-record-result-list-view__header').text()).not.toContain(removedTitle)
       expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
         page: 1,
         page_size: 15,
