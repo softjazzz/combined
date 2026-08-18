@@ -1146,6 +1146,12 @@ def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation(
     (
         (
             "LX0609-011",
+            "target_report_missing",
+            "未读取到对应检查报告",
+            "同步或核对对应的 CT/MRI 正式报告",
+        ),
+        (
+            "LX0609-011",
             "authoritative_report_time_missing",
             "CT/MRI 报告缺少权威报告时间",
             "核对 CT/MRI 报告时间",

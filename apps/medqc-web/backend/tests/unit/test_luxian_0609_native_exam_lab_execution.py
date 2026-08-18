@@ -247,6 +247,7 @@ def test_result_mapping_binds_only_explicit_allowed_source_keys(monkeypatch):
 @pytest.mark.parametrize(
     ("internal_reason", "expected_reason"),
     (
+        ("target_report_missing", "target_report_missing"),
         ("authoritative_report_time_missing", "authoritative_report_time_missing"),
         ("multiple_event_or_time_conflict", "association_failed"),
         ("course_projection_incomplete", "source_truncated"),
@@ -2958,11 +2959,48 @@ async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
         "data_gap",
         "data_gap",
     ]
+    assert [item.reason_code for item in result.decisions[1:]] == [
+        "target_report_missing",
+        "target_report_missing",
+        "target_report_missing",
+        "target_report_missing",
+    ]
     assert result.llm_call_count == 0
     assert client.prompts == []
     assert all(item.fact_refs for item in result.decisions)
     assert CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY in calls
     assert "inpat_nondrug_order" not in calls
+
+
+@pytest.mark.asyncio
+async def test_target_exam_report_without_report_time_has_specific_gap_reason(monkeypatch):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({
+            "exam_id": "EX-1",
+            "exam_type": "CT",
+            "exam_name": "头颅CT平扫",
+            "exam_time": "2026-07-07 09:00:00",
+            "exam_result_status": "已审核",
+            "record_content": "头颅CT提示颅内病变。",
+        },),
+    )
+    client = _Client([])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011",),
+        wrapper_rules=[_wrapper("LX0609-011")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011",),
+    )
+
+    assert result.decisions[0].reason_code == "authoritative_report_time_missing"
+    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio

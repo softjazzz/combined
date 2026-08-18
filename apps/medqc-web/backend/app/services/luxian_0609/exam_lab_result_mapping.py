@@ -72,11 +72,13 @@ def build_exam_lab_rule_decision(
         normalized_gap_reasons = {
             # 执行器内部保留事件级缺口；RuleDecision 只交付统一合同已批准的
             # 受控原因码，但不能把不同缺口全部压成 required_field_missing。
+            "target_report_missing": "target_report_missing",
             "authoritative_report_time_missing": "authoritative_report_time_missing",
             "multiple_event_or_time_conflict": "association_failed",
             "course_projection_incomplete": "source_truncated",
         }
         preserved_gap_reasons = {
+            "target_report_missing",
             "authoritative_time_missing",
             "authoritative_report_time_missing",
             "authoritative_time_conflict",

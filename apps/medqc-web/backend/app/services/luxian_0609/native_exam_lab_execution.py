@@ -1481,7 +1481,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             emit_typed(
                                 rule_id,
                                 "data_gap",
-                                "authoritative_report_time_missing",
+                                "target_report_missing",
                             )
                         else:
                             emit_typed(
@@ -1535,7 +1535,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         for event in events
                     ):
                         # 时间窗只能由受控字段计算；模型不能补造或推断时间。
-                        emit_typed(rule_id, "data_gap", "authoritative_time_missing")
+                        emit_typed(
+                            rule_id,
+                            "data_gap",
+                            "authoritative_time_missing"
+                            if rule_id == "LX0609-010"
+                            else "authoritative_report_time_missing",
+                        )
                         typed_processed.add(rule_id)
                     elif projection.course_projection_truncated:
                         emit_typed(rule_id, "data_gap", "course_projection_incomplete")

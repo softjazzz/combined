@@ -58,6 +58,15 @@ _DATA_GAP_EXPLANATIONS = {
         "missing_fields": ["用于计算质控时限的权威时间"],
         "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
     },
+    "target_report_missing": {
+        "reason_label": "目标报告缺失",
+        "missing_sources": ["对应的正式检查检验报告"],
+        "missing_fields": [],
+        "customer_message": (
+            "已读取到目标检查检验医嘱，但未读取到对应的正式报告，"
+            "暂时无法核对24小时要求。"
+        ),
+    },
     "authoritative_report_time_missing": {
         "reason_label": "报告时间缺失",
         "missing_sources": [],

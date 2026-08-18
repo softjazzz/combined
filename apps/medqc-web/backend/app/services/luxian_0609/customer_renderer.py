@@ -482,6 +482,13 @@ def exam_lab_data_gap_customer_message(
         return None
     requirement_label, report_label, field_label = labels
     normalized_reason = str(reason_code or "").strip().lower()
+    if normalized_reason == "target_report_missing":
+        return (
+            f"已发现{requirement_label}相关医嘱，但未读取到对应检查报告",
+            "已读取到目标检查检验医嘱，但受控报告来源中没有对应的正式报告；"
+            "不能仅凭医嘱推断检查已经完成或报告已经出具。",
+            f"请同步或核对对应的 {report_label} 正式报告及权威报告时间后重新评估。",
+        )
     if normalized_reason == "authoritative_report_time_missing":
         return (
             f"{report_label} 报告缺少权威报告时间，暂无法核对24小时要求",
