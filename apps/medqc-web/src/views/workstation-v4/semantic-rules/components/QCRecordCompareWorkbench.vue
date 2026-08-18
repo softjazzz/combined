@@ -170,8 +170,14 @@
           v-if="hasSingleRecordResult"
           :items="singleRecordItems || []"
           :presentation-mode="presentationMode"
+          :feedback-by-rule="feedbackByRule"
+          :feedback-enabled="feedbackEnabled"
+          :feedback-loading="feedbackLoading"
+          :feedback-error="feedbackError"
+          :feedback-saving-rule-id="feedbackSavingRuleId"
           @select="selectSingleRecordResult"
           @locate-evidence="locateSingleRecordEvidence"
+          @submit-feedback="handleSubmitFeedback"
         />
         <template v-else>
           <div class="record-column-head">
@@ -366,6 +372,8 @@ import type {
   QCRecordCompareEvidence,
   QCRecordCompareIssue,
 } from '@/views/workstation-v4/semantic-rules/types'
+import type { SaveQcResultFeedbackInput } from '@/api/qc-result-feedback-demo'
+import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-validation/useQcResultFeedback'
 
 const props = withDefaults(
   defineProps<{
@@ -386,6 +394,20 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: 'select-issue', issueKey: string): void
 }>()
+
+const qcFeedback = useQcResultFeedback(
+  () => props.jobId,
+  () => props.recordRef,
+)
+const feedbackByRule = qcFeedback.feedbackByRule
+const feedbackEnabled = qcFeedback.isEnabled
+const feedbackLoading = qcFeedback.loading
+const feedbackError = qcFeedback.error
+const feedbackSavingRuleId = qcFeedback.savingRuleId
+
+function handleSubmitFeedback(ruleId: string, input: SaveQcResultFeedbackInput) {
+  void qcFeedback.save(ruleId, input)
+}
 
 type LocationState = 'matched' | 'section' | 'document' | 'missing' | 'idle'
 

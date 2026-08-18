@@ -517,6 +517,15 @@
             <strong>处理建议</strong>
             <p>{{ item.suggestion }}</p>
           </section>
+
+          <QcResultFeedbackControl
+            v-if="feedbackEnabled"
+            :feedback="feedbackByRule[item.rule_id]"
+            :loading="feedbackLoading"
+            :saving="feedbackSavingRuleId === item.rule_id"
+            :error-message="feedbackError"
+            @submit="emit('submit-feedback', item.rule_id, $event)"
+          />
         </section>
       </article>
     </div>
@@ -526,6 +535,11 @@
 <script setup lang="ts">
 import { ArrowRight, ChevronRight, ChevronUp } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
+import QcResultFeedbackControl from './QcResultFeedbackControl.vue'
+import type {
+  QcResultFeedbackRecord,
+  SaveQcResultFeedbackInput,
+} from '@/api/qc-result-feedback-demo'
 import CriterionResultBlock from './CriterionResultBlock.vue'
 import ExamLabEventResultBlock from './ExamLabEventResultBlock.vue'
 import TimelinessResultBlock from './TimelinessResultBlock.vue'
@@ -549,13 +563,26 @@ const props = withDefaults(
     items: SingleRecordQcResultItem[]
     selectedKey?: string
     presentationMode?: 'flat' | 'grouped'
+    feedbackByRule?: Record<string, QcResultFeedbackRecord>
+    feedbackEnabled?: boolean
+    feedbackLoading?: boolean
+    feedbackError?: string
+    feedbackSavingRuleId?: string
   }>(),
-  { presentationMode: 'flat' },
+  {
+    presentationMode: 'flat',
+    feedbackByRule: () => ({}),
+    feedbackEnabled: false,
+    feedbackLoading: false,
+    feedbackError: '',
+    feedbackSavingRuleId: '',
+  },
 )
 
 const emit = defineEmits<{
   (event: 'select', key: string): void
   (event: 'locate-evidence', evidence: SingleRecordQcEvidence): void
+  (event: 'submit-feedback', ruleId: string, input: SaveQcResultFeedbackInput): void
 }>()
 
 const factLabels: Record<string, string> = {
@@ -1022,12 +1049,13 @@ function isCompliantResult(item: SingleRecordQcResultItem) {
 }
 
 function isExpandable(item: SingleRecordQcResultViewItem) {
+  if (props.feedbackEnabled) return true
   if (!isCompliantResult(item)) return true
   return Boolean(
     hasTimelinessResult(item) ||
-      item.criterion_results?.length ||
-      hasCompliantNarrative(item) ||
-      hasCompliantSupportingDetails(item),
+    item.criterion_results?.length ||
+    hasCompliantNarrative(item) ||
+    hasCompliantSupportingDetails(item),
   )
 }
 

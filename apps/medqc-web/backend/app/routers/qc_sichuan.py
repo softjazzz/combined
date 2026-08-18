@@ -6,8 +6,8 @@ import hashlib
 import logging
 import re
 from pathlib import Path
-from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException, Query, Request, Depends
+from pydantic import BaseModel, ValidationError
+from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from datetime import datetime, timezone
 
@@ -50,6 +50,14 @@ from ..services.luxian_0609_result_export_service import (
     export_single_record_result_html,
 )
 from ..services.custom_qc_sample_pool_service import CustomQCSamplePoolService
+from ..schemas.qc_sichuan import QcResultFeedbackRequest
+from ..services.qc_workspace.result_feedback_demo_store import (
+    ResultFeedbackDemoConflict,
+    ResultFeedbackDemoNotFound,
+    ResultFeedbackDemoStore,
+    ResultFeedbackDemoStoreUnavailable,
+    contains_sensitive_feedback_text,
+)
 from ..services.case_identity import CaseRef, case_refs_from_records
 from ..services.luxian_0609.evaluation_horizon import (
     build_record_evaluation_horizon_snapshot,
@@ -1328,6 +1336,48 @@ def _sichuan_workspace_service() -> CustomQCWorkspaceService:
     return CustomQCWorkspaceService()
 
 
+def get_result_feedback_demo_store() -> ResultFeedbackDemoStore:
+    """反馈演示版 Store 依赖。
+
+    这里不在应用启动时访问反馈表；表未迁移时只在反馈请求期间返回 503，
+    保证质控结果读取链不被新功能拖垮。
+    """
+
+    return ResultFeedbackDemoStore()
+
+
+def _require_demo_feedback_account(current_user: Dict[str, Any]) -> Dict[str, Any]:
+    """只允许固定功能演示账号，不能仅凭 admin 角色放行。"""
+
+    user_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    email = str(current_user.get("email") or "").strip().lower()
+    if user_id != "admin-001" or email != "admin@medqc.com":
+        raise HTTPException(status_code=403, detail="当前账号不支持质控结果反馈演示")
+    return current_user
+
+
+def _parse_demo_feedback_payload(body: Dict[str, Any]) -> QcResultFeedbackRequest:
+    """把校验错误收敛为安全文案，避免 422 回显用户输入。"""
+
+    try:
+        payload = QcResultFeedbackRequest.model_validate(body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail="反馈参数不符合要求") from exc
+    if contains_sensitive_feedback_text(payload.comment):
+        raise HTTPException(status_code=400, detail="说明中不能填写患者身份或联系方式")
+    return payload
+
+
+def _raise_demo_feedback_store_error(exc: Exception) -> None:
+    if isinstance(exc, ResultFeedbackDemoStoreUnavailable):
+        raise HTTPException(status_code=503, detail="反馈功能暂不可用") from exc
+    if isinstance(exc, ResultFeedbackDemoNotFound):
+        raise HTTPException(status_code=404, detail="质控结果不存在") from exc
+    if isinstance(exc, ResultFeedbackDemoConflict):
+        raise HTTPException(status_code=409, detail="质控结果无法唯一确认") from exc
+    raise exc
+
+
 def _shared_sample_pool_service() -> CustomQCSamplePoolService:
     return CustomQCSamplePoolService()
 
@@ -1837,6 +1887,65 @@ async def get_latest_workspace_record_result(
     return success_response(
         data=result,
         message="获取单病历最新质控结果成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/result-feedback-demo")
+async def get_demo_result_feedback(
+    request: Request,
+    root_job_id: str = Query(..., min_length=1, max_length=64),
+    record_ref: str = Query(..., min_length=1, max_length=96),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """读取演示账号在当前病历上的反馈，不读取或返回病历身份。"""
+
+    _require_demo_feedback_account(current_user)
+    try:
+        items = get_result_feedback_demo_store().list_for_record(
+            root_job_id=root_job_id,
+            record_ref=record_ref,
+            created_by="admin-001",
+        )
+    except Exception as exc:
+        _raise_demo_feedback_store_error(exc)
+    return success_response(
+        data={
+            "root_job_id": root_job_id,
+            "record_ref": record_ref,
+            "items": items,
+        },
+        message="获取质控结果反馈成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.put("/workspace/result-feedback-demo/{rule_id}")
+async def save_demo_result_feedback(
+    request: Request,
+    rule_id: str,
+    body: Dict[str, Any] = Body(...),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """保存演示账号对当前规则结果的反馈，不改变 Canonical。"""
+
+    _require_demo_feedback_account(current_user)
+    payload = _parse_demo_feedback_payload(body)
+    if payload.root_job_id and payload.root_job_id != str(payload.root_job_id).strip():
+        raise HTTPException(status_code=400, detail="反馈参数不符合要求")
+    try:
+        result = get_result_feedback_demo_store().save(
+            root_job_id=payload.root_job_id,
+            record_ref=payload.record_ref,
+            rule_id=rule_id,
+            created_by="admin-001",
+            payload=payload,
+        )
+    except Exception as exc:
+        _raise_demo_feedback_store_error(exc)
+    return success_response(
+        data=result,
+        message="质控结果反馈已保存",
         trace_id=get_trace_id(request),
     )
 
