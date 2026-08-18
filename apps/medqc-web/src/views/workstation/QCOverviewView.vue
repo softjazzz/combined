@@ -1274,9 +1274,8 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 .qc-home-conclusion__content {
   display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
-  align-items: center;
-  gap: 22px;
+  justify-items: center;
+  gap: 18px;
 }
 .qc-home-conclusion__ring {
   display: grid;
@@ -1311,18 +1310,25 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-conclusion__legend {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 16px;
+  width: 100%;
+  gap: 10px 12px;
   padding: 0;
   margin: 0;
   list-style: none;
 }
 .qc-home-conclusion__legend li {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   color: rgba(29, 29, 31, 0.72);
   font-size: 13px;
+}
+.qc-home-conclusion__legend span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .qc-home-conclusion__legend i {
   width: 8px;
@@ -1330,6 +1336,8 @@ button.qc-home-defect-analysis__row:focus-visible {
   border-radius: 50%;
 }
 .qc-home-conclusion__legend small {
+  margin-left: auto;
+  white-space: nowrap;
   color: rgba(29, 29, 31, 0.48);
   font-size: 12px;
 }
