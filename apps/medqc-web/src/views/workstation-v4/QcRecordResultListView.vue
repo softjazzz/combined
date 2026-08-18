@@ -7,13 +7,34 @@
       <span class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
     </section>
 
+    <nav class="qc-record-result-list-view__view-switch" aria-label="质控结果视图">
+      <button
+        type="button"
+        data-testid="qc-result-view-records"
+        :class="{ 'is-active': activeView === 'records' }"
+        :aria-pressed="activeView === 'records'"
+        @click="activeView = 'records'"
+      >
+        病历结果
+      </button>
+      <button
+        type="button"
+        data-testid="qc-result-view-analysis"
+        :class="{ 'is-active': activeView === 'analysis' }"
+        :aria-pressed="activeView === 'analysis'"
+        @click="activeView = 'analysis'"
+      >
+        结果分析
+      </button>
+    </nav>
+
     <QcMetricCardStrip
       class="qc-record-result-list-view__metrics"
       aria-label="质控结果汇总"
       :cards="metricCards"
     />
 
-    <section class="qc-record-result-list-view__workbench">
+    <section v-if="activeView === 'records'" class="qc-record-result-list-view__workbench">
       <div class="qc-record-result-list-view__toolbar">
         <div class="qc-record-result-list-view__filters" aria-label="病历筛选条件">
           <input
@@ -115,6 +136,12 @@
       </p>
     </section>
 
+    <QcRecordResultAnalysisPanel
+      v-else
+      :care-phase="carePhase"
+      @open-result="handleOpenAnalysisResult"
+    />
+
     <QCRecordResultComparisonDrawer
       :open="drawerOpen"
       :focus="selectedFocus"
@@ -138,8 +165,10 @@ import QcRecordResultTable, {
   type QcRecordCarePhase,
   type QcRecordResultRow,
 } from './components/qc/QcRecordResultTable.vue'
+import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
+import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
 import { downloadBlob } from './customer-sample-validation/batchExport'
 import QcMetricCardStrip from '@/views/workstation/components/QcMetricCardStrip.vue'
 
@@ -158,6 +187,7 @@ const selectedRecordKeys = ref<string[]>([])
 const selectedRecordRefs = ref<
   Record<string, { institute_id: string; patient_id: string; visit_id: string }>
 >({})
+const activeView = ref<'records' | 'analysis'>('records')
 const startDate = ref('')
 const endDate = ref('')
 
@@ -572,6 +602,32 @@ function handleOpenResult(recordKey: string) {
   drawerOpen.value = true
 }
 
+function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
+  closeResultDrawer()
+  const visitId = String(record.visit_id || '').trim()
+  const instituteId = String(record.institute_id || '').trim()
+  const patientId = String(record.patient_id || '').trim()
+  if (!visitId || !instituteId || !patientId) {
+    detailNotice.value = '无法确认当前病历身份，已停止读取质控结果'
+    return
+  }
+  const labelParts = [
+    String(record.patient_name || '').trim() || '患者信息待核实',
+    String(record.department || '').trim() || '未分科室',
+    `住院号 ${visitId}`,
+  ]
+  const completedAt = formatQcCompletedAt(record.completed_at)
+  if (completedAt !== '—') labelParts.push(`质控完成 ${completedAt}`)
+  selectedFocus.value = {
+    visitId,
+    instituteId,
+    patientId,
+    recordId: visitId,
+    label: labelParts.join(' · '),
+  }
+  drawerOpen.value = true
+}
+
 function closeResultDrawer() {
   drawerOpen.value = false
   selectedFocus.value = null
@@ -635,6 +691,35 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__metrics {
   margin: 16px 0;
+}
+
+.qc-record-result-list-view__view-switch {
+  display: inline-flex;
+  gap: 3px;
+  margin-top: 14px;
+  padding: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.qc-record-result-list-view__view-switch button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 12px;
+  background: transparent;
+  color: rgba(29, 29, 31, 0.58);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.qc-record-result-list-view__view-switch button.is-active {
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+  color: #0066cc;
 }
 
 .qc-record-result-list-view__workbench {

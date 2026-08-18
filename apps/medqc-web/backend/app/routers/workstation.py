@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -13,6 +13,9 @@ from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
 from ..services.workstation.worklist_service import default_workstation_aggregation_service
+from ..services.workstation.luxian_0609_result_analysis_service import (
+    default_luxian_0609_result_analysis_service,
+)
 
 router = APIRouter(prefix="/api/v1/workstation", tags=["workstation"])
 logger = logging.getLogger(__name__)
@@ -99,6 +102,48 @@ async def get_luxian_0609_analytics(
             completed_to=completed_to,
             department=department,
             job_id=str(job_id) if job_id else None,
+        )
+        return success_response(data=data, trace_id=get_trace_id(request))
+    except Exception as exc:
+        _raise_workstation_http_error(exc)
+
+
+@router.get("/qc-result-analysis/luxian-0609")
+async def get_luxian_0609_result_analysis(
+    request: Request,
+    care_phase: Literal["inpatient", "discharged"] = Query(..., description="病历范围：在院/已出院"),
+    department: Optional[str] = Query(None, description="科室筛选"),
+    doctor: Optional[str] = Query(None, description="主管医师筛选"),
+    rule_id: Optional[str] = Query(None, description="LX0609 质控点编码"),
+    result_status: Optional[
+        Literal[
+            "non_compliant",
+            "data_gap",
+            "uncertain",
+            "compliant",
+            "not_applicable",
+            "not_executed",
+        ]
+    ] = Query(None, description="客户可见的质控结果状态"),
+    completed_from: Optional[datetime] = Query(None, description="质控完成时间起点（闭区间）"),
+    completed_to: Optional[datetime] = Query(None, description="质控完成时间终点（闭区间）"),
+    page: int = Query(1, ge=1, description="病历下钻页码"),
+    page_size: int = Query(20, ge=1, le=100, description="病历下钻每页条数"),
+    current_user: dict = Depends(get_current_user),
+):
+    """读取当前范围中每份病历最新 Canonical 结果的规则下钻统计。"""
+
+    try:
+        data = default_luxian_0609_result_analysis_service.get_analysis(
+            care_phase=care_phase,
+            department=department,
+            doctor=doctor,
+            rule_id=rule_id,
+            result_status=result_status,
+            completed_from=completed_from,
+            completed_to=completed_to,
+            page=page,
+            page_size=page_size,
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:

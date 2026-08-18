@@ -44,6 +44,32 @@ const ResultDrawerStub = defineComponent({
   },
 })
 
+const ResultAnalysisStub = defineComponent({
+  name: 'QcRecordResultAnalysisPanel',
+  props: { carePhase: { type: String, required: true } },
+  emits: ['open-result'],
+  setup(_, { emit }) {
+    return () =>
+      h(
+        'button',
+        {
+          type: 'button',
+          'data-testid': 'result-analysis-stub',
+          onClick: () =>
+            emit('open-result', {
+              institute_id: 'H-analysis',
+              patient_id: 'P-analysis',
+              visit_id: 'V-analysis',
+              patient_name: '患者分析',
+              department: '康复科',
+              completed_at: '2026-08-19T08:00:00+00:00',
+            }),
+        },
+        '分析下钻',
+      )
+  },
+})
+
 function response() {
   return {
     data: {
@@ -131,7 +157,10 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
   return mount(QcRecordResultListView, {
     props: { carePhase },
     global: {
-      stubs: { QCRecordResultComparisonDrawer: ResultDrawerStub },
+      stubs: {
+        QCRecordResultComparisonDrawer: ResultDrawerStub,
+        QcRecordResultAnalysisPanel: ResultAnalysisStub,
+      },
     },
   })
 }
@@ -394,5 +423,23 @@ describe('QcRecordResultListView', () => {
       .vm.$emit('open-result', '["H","P","V-priority"]')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
     expect(wrapper.text()).not.toContain('下一闭环接入')
+  })
+
+  it('在同一页面切换结果分析，并将下钻病历交给既有结果抽屉', async () => {
+    const wrapper = mountView('discharged')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="qc-result-view-analysis"]').trigger('click')
+    expect(wrapper.find('[data-testid="result-analysis-stub"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="result-analysis-stub"]').trigger('click')
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(true)
+    expect(drawer.props('focus')).toMatchObject({
+      instituteId: 'H-analysis',
+      patientId: 'P-analysis',
+      visitId: 'V-analysis',
+      recordId: 'V-analysis',
+    })
   })
 })
