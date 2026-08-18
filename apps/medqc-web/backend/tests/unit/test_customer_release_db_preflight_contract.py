@@ -51,6 +51,18 @@ def test_release_package_contains_preflight_and_database_runbook() -> None:
         assert expected in guide
 
 
+def test_release_package_keeps_backend_launcher_in_runtime_allowlist() -> None:
+    package_source = PACKAGE_SCRIPT.read_text(encoding="utf-8")
+
+    assert '"start_dev_backend.ps1"' in package_source
+    assert '"start_dev_backend.ps1"' in package_source.split(
+        "$backendRuntimeFiles =", maxsplit=1
+    )[1].split(")", maxsplit=1)[0]
+    assert '"start_dev_backend.ps1"' in package_source.split(
+        "$allowedBackendRootEntries =", maxsplit=1
+    )[1].split(")", maxsplit=1)[0]
+
+
 def test_powershell_scripts_have_valid_syntax() -> None:
     command = (
         "$ErrorActionPreference='Stop'; "

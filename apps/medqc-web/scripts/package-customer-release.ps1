@@ -103,7 +103,8 @@ function Assert-NoReleaseForbiddenContent([string]$path) {
     "config",
     "data",
     "requirements.txt",
-    "services"
+    "services",
+    "start_dev_backend.ps1"
   )
   $unexpectedBackendRootEntries = Get-ChildItem -LiteralPath $backendRoot -Force | Where-Object {
     $_.Name -notin $allowedBackendRootEntries
@@ -202,7 +203,12 @@ if (Test-Path -LiteralPath $sourceHanDir) {
 Write-Step "Copy backend runtime allowlist (exclude development scripts and artifacts)"
 $backendSourceDir = Join-Path $projectRoot "backend"
 $backendRuntimeDirectories = @("alembic", "app", "config", "data")
-$backendRuntimeFiles = @(".env.example", "alembic.ini", "requirements.txt")
+$backendRuntimeFiles = @(
+  ".env.example",
+  "alembic.ini",
+  "requirements.txt",
+  "start_dev_backend.ps1"
+)
 $backendRuntimeServiceFiles = @("__init__.py", "pdf_parser.py")
 $backendExcludeDirs = @(
     "__pycache__",
@@ -312,6 +318,7 @@ $readmeLines = @(
   "## Directory layout",
   "- frontend/dist: frontend static assets",
   "- backend: backend source code",
+  "- backend/start_dev_backend.ps1: customer backend launcher (default port 8001)",
   "- tools/customer-db-preflight.ps1: PostgreSQL and Alembic read-only preflight",
   "- docs/0418/QC/sheet2_exact_review_acceptance_package.json: runtime acceptance-package artifact",
   "",
@@ -329,6 +336,7 @@ $readmeLines = @(
   "- This package does not include the ICD vector index builder script.",
   "- This package keeps only Source Han Sans SC Regular/Medium and removes SF Pro font files.",
   "- Frontend is built in customer mode and does not hardcode the public API domain.",
+  "- Start the backend from backend with: powershell -NoProfile -ExecutionPolicy Bypass -File .\start_dev_backend.ps1",
   "",
   "## Database deployment order",
   "1. Start PostgreSQL and confirm its configured port is listening. Opening /docs only proves the backend process is alive; it does not prove database health.",
