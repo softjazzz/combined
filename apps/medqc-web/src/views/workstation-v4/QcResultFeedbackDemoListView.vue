@@ -70,6 +70,8 @@
           <table>
             <thead>
               <tr>
+                <th>病历</th>
+                <th>科室</th>
                 <th>质控点</th>
                 <th>原结果</th>
                 <th>反馈</th>
@@ -85,7 +87,15 @@
                     `${feedback.root_job_id}-${feedback.record_ref}-${feedback.rule_id}`
                 "
               >
-                <td>
+                <td class="feedback-record">
+                  <strong>{{ feedback.patient_name || '患者信息待补' }}</strong>
+                  <span>{{ feedback.record_number || feedback.visit_id || '病历号待补' }}</span>
+                </td>
+                <td class="feedback-department">
+                  {{ feedback.department || '—' }}
+                </td>
+                <td class="feedback-rule">
+                  <strong>{{ feedback.rule_name || '质控点名称待补' }}</strong>
                   <code>{{ feedback.rule_id }}</code>
                 </td>
                 <td>
@@ -322,6 +332,32 @@ onMounted(() => {
   color: #174f83;
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 12px;
+}
+.feedback-record,
+.feedback-rule {
+  min-width: 190px;
+}
+.feedback-record strong,
+.feedback-rule strong {
+  display: block;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 20px;
+}
+.feedback-record span,
+.feedback-rule code {
+  display: block;
+  margin-top: 3px;
+}
+.feedback-record span {
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 12px;
+  line-height: 18px;
+}
+.feedback-department {
+  min-width: 138px;
+  color: rgba(29, 29, 31, 0.66) !important;
 }
 .status-label,
 .feedback-type {

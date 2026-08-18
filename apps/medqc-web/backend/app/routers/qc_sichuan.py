@@ -1346,6 +1346,84 @@ def get_result_feedback_demo_store() -> ResultFeedbackDemoStore:
     return ResultFeedbackDemoStore()
 
 
+def _project_demo_feedback_record_context(
+    items: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    identities: Dict[tuple[str, str, str], Dict[str, str]] = {}
+    for item in items:
+        identity = item.get("_record_identity")
+        if not isinstance(identity, dict):
+            continue
+        key = (
+            str(identity.get("institute_id") or "").strip(),
+            str(identity.get("patient_id") or "").strip(),
+            str(identity.get("visit_id") or "").strip(),
+        )
+        if all(key):
+            identities[key] = {
+                "institute_id": key[0],
+                "patient_id": key[1],
+                "visit_id": key[2],
+            }
+
+    records_by_identity: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    if identities:
+        try:
+            records = _sichuan_workspace_service().collect_records(
+                scope="all",
+                department=None,
+                doctor=None,
+                date_field="admission",
+                start_date=None,
+                end_date=None,
+                keyword=None,
+                record_refs=list(identities.values()),
+            )
+        except Exception:
+            logger.warning("读取质控反馈病例展示信息失败", exc_info=True)
+            records = []
+        for record in records:
+            key = (
+                str(record.get("institute_id") or "").strip(),
+                str(record.get("patient_id") or "").strip(),
+                str(record.get("visit_id") or record.get("record_id") or "").strip(),
+            )
+            if all(key):
+                records_by_identity[key] = record
+
+    projected: List[Dict[str, Any]] = []
+    for item in items:
+        identity = item.get("_record_identity")
+        identity_key = (
+            str(identity.get("institute_id") or "").strip(),
+            str(identity.get("patient_id") or "").strip(),
+            str(identity.get("visit_id") or "").strip(),
+        ) if isinstance(identity, dict) else ("", "", "")
+        record = records_by_identity.get(identity_key, {})
+        visit_id = str(record.get("visit_id") or identity_key[2] or "").strip()
+        safe_item = {
+            key: value
+            for key, value in item.items()
+            if not str(key).startswith("_")
+        }
+        safe_item.update(
+            {
+                "patient_name": str(record.get("patient_name") or "").strip(),
+                "record_number": str(
+                    record.get("inpat_no")
+                    or record.get("mr_no")
+                    or visit_id
+                    or ""
+                ).strip(),
+                "visit_id": visit_id,
+                "department": str(record.get("department") or "").strip(),
+                "care_phase": str(record.get("scope") or "").strip(),
+            }
+        )
+        projected.append(safe_item)
+    return projected
+
+
 def _require_demo_feedback_account(current_user: Dict[str, Any]) -> Dict[str, Any]:
     """只允许固定功能演示账号，不能仅凭 admin 角色放行。"""
 
@@ -1926,14 +2004,15 @@ async def list_demo_result_feedbacks(
     limit: int = Query(default=200, ge=1, le=500),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """汇总读取演示账号自己的质控反馈，不返回患者身份或病历正文。"""
+    """汇总反馈及客户可识别的病历标签，不返回三坐标或病历正文。"""
 
     _require_demo_feedback_account(current_user)
     try:
-        items = get_result_feedback_demo_store().list_all(
+        stored_items = get_result_feedback_demo_store().list_all(
             created_by="admin-001",
             limit=limit,
         )
+        items = _project_demo_feedback_record_context(stored_items)
     except Exception as exc:
         _raise_demo_feedback_store_error(exc)
     return success_response(

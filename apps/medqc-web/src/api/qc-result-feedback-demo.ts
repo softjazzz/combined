@@ -25,6 +25,12 @@ export interface QcResultFeedbackRecord {
   root_job_id?: string
   record_ref?: string
   rule_id: string
+  rule_name?: string
+  patient_name?: string
+  record_number?: string
+  visit_id?: string
+  department?: string
+  care_phase?: string
   original_status: string
   feedback_type: QcResultFeedbackType
   expected_status?: QcResultExpectedStatus | null
@@ -74,6 +80,12 @@ function normalizeFeedback(value: unknown, ruleIdHint?: string): QcResultFeedbac
     root_job_id: asNonEmptyString(value.root_job_id),
     record_ref: asNonEmptyString(value.record_ref),
     rule_id: ruleId,
+    rule_name: asNonEmptyString(value.rule_name),
+    patient_name: asNonEmptyString(value.patient_name),
+    record_number: asNonEmptyString(value.record_number),
+    visit_id: asNonEmptyString(value.visit_id),
+    department: asNonEmptyString(value.department),
+    care_phase: asNonEmptyString(value.care_phase),
     original_status: originalStatus,
     feedback_type: feedbackType,
     expected_status: asNonEmptyString(value.expected_status) as QcResultExpectedStatus | undefined,

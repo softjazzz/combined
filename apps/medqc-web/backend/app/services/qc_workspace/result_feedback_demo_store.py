@@ -399,8 +399,74 @@ class ResultFeedbackDemoStore:
         finally:
             session.close()
 
+    def _canonical_feedback_contexts(
+        self,
+        session: Session,
+        *,
+        feedback_rows: list[Mapping[str, Any]],
+        created_by: str,
+    ) -> dict[tuple[str, str], dict[str, Any]]:
+        root_job_ids = {
+            _safe_text(row.get("root_job_id"))
+            for row in feedback_rows
+            if _safe_text(row.get("root_job_id"))
+        }
+        if not root_job_ids:
+            return {}
+        try:
+            canonical_rows = (
+                session.execute(
+                    select(self._canonical_table).where(
+                        and_(
+                            self._canonical_table.c.root_job_id.in_(root_job_ids),
+                            self._canonical_table.c.created_by == created_by,
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        except (OperationalError, ProgrammingError) as exc:
+            raise ResultFeedbackDemoStoreUnavailable("反馈功能暂不可用") from exc
+
+        contexts: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in canonical_rows:
+            try:
+                envelope = json.loads(_safe_text(row.get("envelope_json")))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            if not isinstance(envelope, dict):
+                continue
+            root_job_id = _safe_text(envelope.get("root_job_id"))
+            record_ref = _safe_text(envelope.get("record_ref"))
+            if root_job_id not in root_job_ids or not _SAFE_RECORD_REF.fullmatch(record_ref):
+                continue
+            key = (root_job_id, record_ref)
+            identity = {
+                "institute_id": _safe_text(row.get("institute_id")),
+                "patient_id": _safe_text(row.get("patient_id")),
+                "visit_id": _safe_text(row.get("visit_id") or row.get("record_id")),
+            }
+            rule_names: dict[str, str] = {}
+            for item in list(envelope.get("items") or []):
+                if not isinstance(item, Mapping):
+                    continue
+                rule_id = _rule_id(item)
+                rule_name = _safe_text(
+                    item.get("rule_name")
+                    or item.get("customer_rule_name")
+                    or item.get("name")
+                )
+                if rule_id and rule_name:
+                    rule_names[rule_id] = rule_name
+            existing = contexts.get(key)
+            if existing and existing.get("identity") != identity:
+                raise ResultFeedbackDemoConflict("质控结果无法唯一确认")
+            contexts[key] = {"identity": identity, "rule_names": rule_names}
+        return contexts
+
     def list_all(self, *, created_by: str, limit: int) -> list[dict[str, Any]]:
-        """读取演示账号已提交的全部反馈，不联表返回病历身份或正文。"""
+        """读取全部反馈，并附带仅供路由解析病历展示信息的内部绑定。"""
 
         session = _session()
         try:
@@ -421,7 +487,34 @@ class ResultFeedbackDemoStore:
                 )
             except (OperationalError, ProgrammingError) as exc:
                 raise ResultFeedbackDemoStoreUnavailable("反馈功能暂不可用") from exc
-            return [_serialize_row(row) for row in rows]
+            contexts = self._canonical_feedback_contexts(
+                session,
+                feedback_rows=list(rows),
+                created_by=created_by,
+            )
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                item = _serialize_row(row)
+                context = contexts.get(
+                    (
+                        _safe_text(row.get("root_job_id")),
+                        _safe_text(row.get("record_ref")),
+                    ),
+                    {},
+                )
+                identity = context.get("identity")
+                if isinstance(identity, Mapping) and all(
+                    _safe_text(identity.get(key))
+                    for key in ("institute_id", "patient_id", "visit_id")
+                ):
+                    item["_record_identity"] = dict(identity)
+                rule_names = context.get("rule_names")
+                if isinstance(rule_names, Mapping):
+                    item["rule_name"] = _safe_text(
+                        rule_names.get(item["rule_id"])
+                    )
+                items.append(item)
+            return items
         finally:
             session.close()
 

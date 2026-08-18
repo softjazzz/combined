@@ -31,10 +31,15 @@ describe('QcResultFeedbackDemoListView', () => {
         {
           id: 'feedback-1',
           rule_id: 'LX0609-012',
+          rule_name: 'CT/MRI阳性结果分析',
           original_status: 'non_compliant',
           feedback_type: 'incorrect',
           comment: '需复核时间窗。',
           updated_at: '2026-08-18T08:00:00+00:00',
+          patient_name: '冯丽平',
+          record_number: '208790',
+          visit_id: '208790-合成检验v1',
+          department: '重症医学科（ICU）',
         },
         {
           id: 'feedback-2',
@@ -47,7 +52,7 @@ describe('QcResultFeedbackDemoListView', () => {
     })
   })
 
-  it('汇总演示账号跨病历的全部反馈，并隐藏病历身份', async () => {
+  it('汇总反馈时明确展示病历和质控点上下文', async () => {
     const wrapper = mount(QcResultFeedbackDemoListView)
     await flushPromises()
 
@@ -55,6 +60,10 @@ describe('QcResultFeedbackDemoListView', () => {
     expect(wrapper.text()).toContain('全部反馈')
     expect(wrapper.text()).toContain('2')
     expect(wrapper.text()).toContain('LX0609-012')
+    expect(wrapper.text()).toContain('CT/MRI阳性结果分析')
+    expect(wrapper.text()).toContain('冯丽平')
+    expect(wrapper.text()).toContain('208790')
+    expect(wrapper.text()).toContain('重症医学科（ICU）')
     expect(wrapper.text()).toContain('结果有误')
     expect(wrapper.text()).toContain('需复核时间窗。')
     expect(wrapper.text()).not.toContain('rec_')

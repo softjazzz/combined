@@ -110,7 +110,22 @@ def test_demo_account_can_load_current_feedback(monkeypatch):
     assert response.json()["data"]["items"]["LX0609-001"]["feedback_type"] == "correct"
 
 
-def test_demo_account_can_load_all_feedback_without_patient_identity(monkeypatch):
+class _WorkspaceRecords:
+    def collect_records(self, **_kwargs):
+        return [
+            {
+                "institute_id": "hospital-1",
+                "patient_id": "patient-1",
+                "visit_id": "208790-合成检验v1",
+                "patient_name": "冯丽平",
+                "inpat_no": "208790",
+                "department": "重症医学科（ICU）",
+                "scope": "final",
+            }
+        ]
+
+
+def test_demo_account_can_load_all_feedback_with_safe_record_context(monkeypatch):
     store = _FeedbackStore()
     store.saved.extend(
         [
@@ -141,8 +156,20 @@ def test_demo_account_can_load_all_feedback_without_patient_identity(monkeypatch
                 "created_by": "admin-001",
                 "created_at": "2026-08-18T11:00:00+00:00",
                 "updated_at": "2026-08-18T11:00:00+00:00",
+                "rule_name": "CT/MRI阳性结果分析",
+                "_record_identity": {
+                    "institute_id": "hospital-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "208790-合成检验v1",
+                },
             },
         ]
+    )
+
+    monkeypatch.setattr(
+        qc_sichuan_module,
+        "_sichuan_workspace_service",
+        lambda: _WorkspaceRecords(),
     )
 
     response = _client(monkeypatch, DEMO_USER, store).get(
@@ -151,8 +178,15 @@ def test_demo_account_can_load_all_feedback_without_patient_identity(monkeypatch
 
     assert response.status_code == 200
     assert response.json()["data"]["total"] == 2
-    assert response.json()["data"]["items"][1]["rule_id"] == "LX0609-012"
-    assert "patient_name" not in response.text
+    feedback = response.json()["data"]["items"][1]
+    assert feedback["rule_id"] == "LX0609-012"
+    assert feedback["rule_name"] == "CT/MRI阳性结果分析"
+    assert feedback["patient_name"] == "冯丽平"
+    assert feedback["record_number"] == "208790"
+    assert feedback["visit_id"] == "208790-合成检验v1"
+    assert feedback["department"] == "重症医学科（ICU）"
+    assert "hospital-1" not in response.text
+    assert "patient-1" not in response.text
 
 
 def test_non_demo_account_is_rejected_by_backend(monkeypatch):
@@ -281,8 +315,9 @@ class _Rows:
 
 
 class _CanonicalReadSession:
-    def __init__(self, canonical_rows):
+    def __init__(self, canonical_rows, feedback_rows=None):
         self.canonical_rows = canonical_rows
+        self.feedback_rows = feedback_rows or []
         self.executed_sql: list[str] = []
 
     def execute(self, statement):
@@ -290,6 +325,8 @@ class _CanonicalReadSession:
         self.executed_sql.append(sql)
         if "luxian_0609_record_result_envelopes" in sql:
             return _Rows(self.canonical_rows)
+        if "qc_result_feedback_demo" in sql and sql.lstrip().upper().startswith("SELECT"):
+            return _Rows(self.feedback_rows)
         return _Rows([])
 
     def commit(self):
@@ -308,6 +345,9 @@ def _canonical_row(*, root_job_id="root-1", record_ref="rec_0123456789abcdef0123
     return {
         "root_job_id": root_job_id,
         "created_by": "admin-001",
+        "institute_id": "hospital-1",
+        "patient_id": "patient-1",
+        "visit_id": "208790-合成检验v1",
         "envelope_json": json.dumps(
             {
                 "root_job_id": root_job_id,
@@ -317,6 +357,7 @@ def _canonical_row(*, root_job_id="root-1", record_ref="rec_0123456789abcdef0123
                 "items": [
                     {
                         "rule_id": "LX0609-001",
+                        "rule_name": "入院记录完成时限",
                         "status": "non_compliant",
                         "reason_code": "missing_record",
                         "customer_display_facts": {"summary": "受控测试"},
@@ -326,6 +367,24 @@ def _canonical_row(*, root_job_id="root-1", record_ref="rec_0123456789abcdef0123
             },
             ensure_ascii=False,
         ),
+    }
+
+
+def _feedback_row():
+    return {
+        "id": "feedback-1",
+        "root_job_id": "root-1",
+        "record_ref": "rec_0123456789abcdef01234567",
+        "rule_id": "LX0609-001",
+        "original_status": "non_compliant",
+        "feedback_type": "incorrect",
+        "expected_status": "not_applicable",
+        "error_category": "wrong_status",
+        "comment": "本次未发生该事件。",
+        "result_digest": "a" * 64,
+        "created_by": "admin-001",
+        "created_at": "2026-08-18T10:00:00+00:00",
+        "updated_at": "2026-08-18T10:00:00+00:00",
     }
 
 
@@ -427,3 +486,28 @@ def test_store_reads_canonical_but_only_writes_feedback_table(monkeypatch):
     ]
     assert any("qc_result_feedback_demo" in sql for sql in writes)
     assert all("luxian_0609_record_result_envelopes" not in sql for sql in writes)
+
+
+def test_store_list_all_binds_feedback_to_canonical_record_context(monkeypatch):
+    session = _CanonicalReadSession(
+        [_canonical_row()],
+        feedback_rows=[_feedback_row()],
+    )
+    monkeypatch.setattr(store_module, "engine", object())
+    monkeypatch.setattr(store_module, "_session", lambda: session)
+    store_module._feedback_table.cache_clear()
+
+    items = ResultFeedbackDemoStore().list_all(created_by="admin-001", limit=200)
+
+    assert items == [
+        _feedback_row()
+        | {
+            "rule_name": "入院记录完成时限",
+            "_record_identity": {
+                "institute_id": "hospital-1",
+                "patient_id": "patient-1",
+                "visit_id": "208790-合成检验v1",
+            },
+        }
+    ]
+    assert "envelope_json" not in items[0]
