@@ -830,6 +830,22 @@ def _apply_sync_derived_fields(
     existing_columns: set[str],
 ) -> None:
     normalized_table = str(table_name or "").strip().lower()
+    if (
+        normalized_table == "senior_course_record"
+        and "document_title" in existing_columns
+        and not _first_non_empty(normalized, ("document_title",))
+    ):
+        ward_round_type = _first_non_empty(
+            normalized,
+            ("ward_round_type", "round_type"),
+        )
+        if ward_round_type:
+            normalized["document_title"] = (
+                ward_round_type
+                if ward_round_type.endswith("记录")
+                else f"{ward_round_type}记录"
+            )
+
     if "document_id" in existing_columns and not _first_non_empty(normalized, ("document_id",)):
         if normalized_table == "labtest_item_report":
             test_no = _first_non_empty(normalized, ("test_no", "test_id"))
