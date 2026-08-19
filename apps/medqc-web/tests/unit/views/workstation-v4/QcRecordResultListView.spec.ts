@@ -292,7 +292,8 @@ describe('QcRecordResultListView', () => {
     await wrapper.find('select').setValue('重症医学科')
     await flushPromises()
 
-    await wrapper.get('.qc-record-result-list-view__export-button').trigger('click')
+    await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="qc-result-export-filtered"]').trigger('click')
     await flushPromises()
 
     expect(mocks.exportFilteredLuxian0609RecordResults).toHaveBeenCalledWith({
@@ -306,12 +307,25 @@ describe('QcRecordResultListView', () => {
     expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '终末病历质控-当前筛选.xlsx')
   })
 
+  it('未勾选病历时只禁用导出所选，仍可导出当前筛选结果', async () => {
+    const wrapper = mountView('discharged')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="qc-result-export-selected"]').attributes('disabled')).toBe('')
+    expect(
+      wrapper.get('[data-testid="qc-result-export-filtered"]').attributes('disabled'),
+    ).toBeUndefined()
+  })
+
   it('按勾选病历的三坐标精确导出Excel，不回退当前筛选或visitId单键', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
 
     await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
-    await wrapper.get('.qc-record-result-list-view__export-selected-button').trigger('click')
+    await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="qc-result-export-selected"]').trigger('click')
     await flushPromises()
 
     expect(mocks.exportFilteredLuxian0609RecordResults).toHaveBeenCalledWith({

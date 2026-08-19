@@ -70,22 +70,47 @@
           <span v-if="selectedCount > 0" class="qc-record-result-list-view__selection-count"
             >已选 {{ selectedCount }} 份</span
           >
-          <button
-            class="qc-record-result-list-view__export-selected-button"
-            type="button"
-            :disabled="loading || exporting || selectedCount === 0"
-            @click="exportSelectedRecords"
-          >
-            {{ exportingSelected ? '正在导出…' : '导出所选 Excel' }}
-          </button>
-          <button
-            class="qc-record-result-list-view__export-button"
-            type="button"
-            :disabled="loading || exporting"
-            @click="exportCurrentFilter"
-          >
-            {{ exporting ? '正在导出…' : '导出当前筛选 Excel' }}
-          </button>
+          <div class="qc-record-result-list-view__export-menu" @focusout="handleExportMenuFocusOut">
+            <button
+              class="qc-record-result-list-view__export-trigger"
+              type="button"
+              data-testid="qc-result-export-trigger"
+              :disabled="loading || exporting"
+              :aria-expanded="exportMenuOpen"
+              aria-haspopup="menu"
+              @click="exportMenuOpen = !exportMenuOpen"
+              @keydown.esc="exportMenuOpen = false"
+            >
+              <Download :size="15" aria-hidden="true" />
+              {{ exporting ? '正在导出…' : '导出 Excel' }}
+              <ChevronDown :size="14" aria-hidden="true" />
+            </button>
+            <div
+              v-if="exportMenuOpen"
+              class="qc-record-result-list-view__export-options"
+              role="menu"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="qc-result-export-selected"
+                :disabled="selectedCount === 0"
+                @click="runSelectedExport"
+              >
+                <strong>导出所选病历</strong>
+                <span>{{ selectedCount > 0 ? `${selectedCount} 份病历` : '请先勾选病历' }}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="qc-result-export-filtered"
+                @click="runFilteredExport"
+              >
+                <strong>导出当前筛选结果</strong>
+                <span>按当前科室、日期和关键词导出</span>
+              </button>
+            </div>
+          </div>
           <button
             class="qc-record-result-list-view__refresh-button"
             type="button"
@@ -161,7 +186,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
-import { Activity, CircleCheckBig, Database, TriangleAlert } from 'lucide-vue-next'
+import {
+  Activity,
+  ChevronDown,
+  CircleCheckBig,
+  Database,
+  Download,
+  TriangleAlert,
+} from 'lucide-vue-next'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
@@ -188,7 +220,7 @@ const route = useRoute()
 const detailNotice = ref('')
 const exportNotice = ref('')
 const exporting = ref(false)
-const exportingSelected = ref(false)
+const exportMenuOpen = ref(false)
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
 const selectedRecordKeys = ref<string[]>([])
@@ -469,6 +501,29 @@ function refreshAfterSyncAndQc() {
   refreshData()
 }
 
+function handleExportMenuFocusOut(event: FocusEvent) {
+  const currentTarget = event.currentTarget
+  const nextTarget = event.relatedTarget
+  if (
+    currentTarget instanceof HTMLElement &&
+    nextTarget instanceof Node &&
+    currentTarget.contains(nextTarget)
+  ) {
+    return
+  }
+  exportMenuOpen.value = false
+}
+
+function runSelectedExport() {
+  exportMenuOpen.value = false
+  void exportSelectedRecords()
+}
+
+function runFilteredExport() {
+  exportMenuOpen.value = false
+  void exportCurrentFilter()
+}
+
 async function exportSelectedRecords() {
   if (exporting.value || selectedCount.value === 0) return
   const recordRefs = selectedRecordKeys.value
@@ -483,7 +538,6 @@ async function exportSelectedRecords() {
   }
 
   exporting.value = true
-  exportingSelected.value = true
   exportNotice.value = ''
   try {
     const response = await exportFilteredLuxian0609RecordResults({
@@ -504,7 +558,6 @@ async function exportSelectedRecords() {
     exportNotice.value = '导出所选质控结果失败，请稍后重试'
   } finally {
     exporting.value = false
-    exportingSelected.value = false
   }
 }
 
@@ -762,25 +815,76 @@ function closeResultDrawer() {
   gap: 8px;
 }
 
-.qc-record-result-list-view__export-button,
-.qc-record-result-list-view__export-selected-button {
+.qc-record-result-list-view__export-menu {
+  position: relative;
+}
+
+.qc-record-result-list-view__export-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   min-height: 38px;
   padding: 0 15px;
-  border: 1px solid rgba(0, 102, 204, 0.2);
+  border: 1px solid #0066cc;
   border-radius: 10px;
-  background: rgba(0, 102, 204, 0.07);
-  color: #0066cc;
+  background: #0066cc;
+  color: #fff;
   font-size: 13px;
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
+  box-shadow: 0 7px 16px rgba(0, 102, 204, 0.18);
 }
 
-.qc-record-result-list-view__export-selected-button:not(:disabled) {
-  border-color: #0066cc;
-  background: #0066cc;
-  color: #fff;
-  box-shadow: 0 7px 16px rgba(0, 102, 204, 0.18);
+.qc-record-result-list-view__export-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 246px;
+  overflow: hidden;
+  padding: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(18px);
+}
+
+.qc-record-result-list-view__export-options button {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(29, 29, 31, 0.82);
+  text-align: left;
+  cursor: pointer;
+}
+
+.qc-record-result-list-view__export-options button:hover:not(:disabled),
+.qc-record-result-list-view__export-options button:focus-visible {
+  background: rgba(0, 102, 204, 0.07);
+  outline: none;
+}
+
+.qc-record-result-list-view__export-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.qc-record-result-list-view__export-options strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.qc-record-result-list-view__export-options span {
+  color: rgba(29, 29, 31, 0.5);
+  font-size: 11px;
+  line-height: 17px;
 }
 
 .qc-record-result-list-view__selection-count {
@@ -790,8 +894,7 @@ function closeResultDrawer() {
   white-space: nowrap;
 }
 
-.qc-record-result-list-view__export-button:disabled,
-.qc-record-result-list-view__export-selected-button:disabled {
+.qc-record-result-list-view__export-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -930,6 +1033,11 @@ function closeResultDrawer() {
 
   .qc-record-result-list-view__toolbar-actions {
     justify-content: flex-start;
+  }
+
+  .qc-record-result-list-view__export-options {
+    right: auto;
+    left: 0;
   }
 
   .qc-record-result-list-view__pagination {
