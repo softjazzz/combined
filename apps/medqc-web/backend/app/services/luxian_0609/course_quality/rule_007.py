@@ -430,7 +430,7 @@ def rule_007_customer_display_facts(
         }
     if decision.evidence_state is not EvidenceState.SUFFICIENT:
         return None
-    source_by_time: dict[datetime, str] = {}
+    record_by_time: dict[datetime, tuple[str, str]] = {}
     try:
         for source_key in RULE_007_RECORD_SOURCES:
             for row in materials.rows(source_key):
@@ -439,10 +439,16 @@ def rule_007_customer_display_facts(
                         authoritative_document_time_value(row)
                     )
                 ) is not None:
-                    source_by_time.setdefault(record_time, source_key)
+                    document_id = str(
+                        row.get("document_id") or row.get("id") or ""
+                    ).strip()
+                    record_by_time.setdefault(
+                        record_time,
+                        (source_key, document_id),
+                    )
     except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
         return None
-    ordered_times = sorted(source_by_time)
+    ordered_times = sorted(record_by_time)
     intervals = tuple(
         (current - previous, previous, current)
         for previous, current in zip(ordered_times, ordered_times[1:])
@@ -450,17 +456,34 @@ def rule_007_customer_display_facts(
     if not intervals:
         return None
     interval, previous, current = max(intervals, key=lambda item: item[0])
-    return {
+    interval_seconds = round(interval.total_seconds())
+    threshold_seconds = round(_MAX_INTERVAL.total_seconds())
+    previous_position = ordered_times.index(previous) + 1
+    current_position = ordered_times.index(current) + 1
+    previous_source, previous_document_id = record_by_time[previous]
+    current_source, current_document_id = record_by_time[current]
+    facts: dict[str, Any] = {
         "failure_kind": (
             "course_record_interval_over_72h"
             if interval > _MAX_INTERVAL
             else "course_record_interval_within_72h"
         ),
-        "interval_start_source": source_by_time[previous],
-        "interval_end_source": source_by_time[current],
+        "interval_start_source": previous_source,
+        "interval_end_source": current_source,
         "interval_start_time": previous.strftime("%Y-%m-%d %H:%M:%S"),
         "interval_end_time": current.strftime("%Y-%m-%d %H:%M:%S"),
-        "interval_hours": round(interval.total_seconds() / 3600, 2),
+        "interval_start_position": previous_position,
+        "interval_end_position": current_position,
+        "record_count": len(ordered_times),
+        "interval_seconds": interval_seconds,
+        "overdue_seconds": max(0, interval_seconds - threshold_seconds),
+        "interval_hours": round(interval_seconds / 3600, 2),
         "threshold_hours": 72,
         "recorded_dates": [item.date().isoformat() for item in ordered_times],
     }
+    # 文书 ID 仅供 Aggregator 生成不可逆客户证据引用，不进入安全展示事实。
+    # 两端必须同时可定位，避免只展示半个超时区间。
+    if previous_document_id and current_document_id:
+        facts["interval_start_document_id"] = previous_document_id
+        facts["interval_end_document_id"] = current_document_id
+    return facts

@@ -1868,6 +1868,92 @@ def test_001_time_conflict_rejects_a_duration_that_does_not_match_both_times():
     ) is None
 
 
+def test_007_overdue_interval_names_both_rounds_and_locates_both_records():
+    facts = {
+        "failure_kind": "course_record_interval_over_72h",
+        "interval_start_source": "senior_course_record",
+        "interval_end_source": "daily_course_record",
+        "interval_start_time": "2026-08-14 09:30:38",
+        "interval_end_time": "2026-08-17 10:37:00",
+        "interval_start_position": 2,
+        "interval_end_position": 3,
+        "record_count": 3,
+        "interval_seconds": 263182,
+        "overdue_seconds": 3982,
+        "interval_hours": 73.11,
+        "threshold_hours": 72,
+        "recorded_dates": ["2026-08-13", "2026-08-14", "2026-08-17"],
+        "interval_start_document_id": "round-20260814",
+        "interval_end_document_id": "round-20260817",
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-007", "name": "稳定患者查房时限"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-007", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-007", facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "non_compliant"
+    assert result["findings"] == (
+        "共识别3次有效查房记录；第2次查房（2026-08-14 09:30:38）至"
+        "第3次查房（2026-08-17 10:37:00）间隔73小时6分22秒，"
+        "超过72小时要求1小时6分22秒。"
+    )
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "senior_course_record",
+            "source_document_id": "round-20260814",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "round-20260817",
+        },
+    ]
+    assert "document_id" not in repr(result["customer_display_facts"])
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("interval_seconds", 263181),
+        ("overdue_seconds", 3981),
+        ("interval_end_position", 2),
+        ("interval_end_document_id", None),
+    ],
+)
+def test_007_interval_details_fail_closed_when_the_pair_is_inconsistent(
+    field: str,
+    invalid_value: object,
+):
+    facts = {
+        "failure_kind": "course_record_interval_over_72h",
+        "interval_start_source": "senior_course_record",
+        "interval_end_source": "daily_course_record",
+        "interval_start_time": "2026-08-14 09:30:38",
+        "interval_end_time": "2026-08-17 10:37:00",
+        "interval_start_position": 2,
+        "interval_end_position": 3,
+        "record_count": 3,
+        "interval_seconds": 263182,
+        "overdue_seconds": 3982,
+        "interval_hours": 73.11,
+        "threshold_hours": 72,
+        "recorded_dates": ["2026-08-13", "2026-08-14", "2026-08-17"],
+        "interval_start_document_id": "round-20260814",
+        "interval_end_document_id": "round-20260817",
+    }
+    facts[field] = invalid_value
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-007",
+        raw=facts,
+    ) is None
+
+
 def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",

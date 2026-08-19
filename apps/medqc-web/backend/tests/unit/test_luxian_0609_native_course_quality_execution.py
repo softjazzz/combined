@@ -924,8 +924,14 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
                 raise SourceEvidenceQueryError()
             if scenario == "over_72h":
                 rows = [
-                    _row("首次查房。", "2026-01-01 09:00:00"),
-                    _row("再次查房。", "2026-01-05 09:00:01"),
+                    {
+                        **_row("首次查房。", "2026-01-01 09:00:00"),
+                        "document_id": "round-1",
+                    },
+                    {
+                        **_row("再次查房。", "2026-01-05 09:00:01"),
+                        "document_id": "round-2",
+                    },
                 ]
             elif scenario == "submit_time":
                 rows = [
@@ -1004,9 +1010,16 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
             "interval_end_source": "daily_course_record",
             "interval_start_time": "2026-01-01 09:00:00",
             "interval_end_time": "2026-01-05 09:00:01",
+            "interval_start_position": 1,
+            "interval_end_position": 2,
+            "record_count": 2,
+            "interval_seconds": 345601,
+            "overdue_seconds": 86401,
             "interval_hours": 96.0,
             "threshold_hours": 72,
             "recorded_dates": ["2026-01-01", "2026-01-05"],
+            "interval_start_document_id": "round-1",
+            "interval_end_document_id": "round-2",
         }),)
         assert "首次查房" not in repr(result.customer_display_facts)
     elif scenario == "submit_time":
@@ -1016,6 +1029,11 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
             "interval_end_source": "daily_course_record",
             "interval_start_time": "2026-01-01 09:00:00",
             "interval_end_time": "2026-01-02 09:00:00",
+            "interval_start_position": 1,
+            "interval_end_position": 2,
+            "record_count": 2,
+            "interval_seconds": 86400,
+            "overdue_seconds": 0,
             "interval_hours": 24.0,
             "threshold_hours": 72,
             "recorded_dates": ["2026-01-01", "2026-01-02"],

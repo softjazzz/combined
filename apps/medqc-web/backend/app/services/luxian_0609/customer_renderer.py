@@ -1330,6 +1330,7 @@ def customer_finding_from_controlled_facts(
 
     if rule_id not in {
         "LX0609-001",
+        "LX0609-007",
         "LX0609-009",
         "LX0609-010",
         "LX0609-011",
@@ -1376,6 +1377,39 @@ def customer_finding_from_controlled_facts(
                 "暂无法判断是否在入院后24小时内完成。"
             )
         return ""
+
+    if rule_id == "LX0609-007":
+        start_position = facts.get("interval_start_position")
+        end_position = facts.get("interval_end_position")
+        record_count = facts.get("record_count")
+        interval_seconds = facts.get("interval_seconds")
+        overdue_seconds = facts.get("overdue_seconds")
+        if (
+            kind != "course_record_interval_over_72h"
+            or not all(
+                type(value) is int
+                for value in (
+                    start_position,
+                    end_position,
+                    record_count,
+                    interval_seconds,
+                    overdue_seconds,
+                )
+            )
+            or not isinstance(facts.get("interval_start_time"), str)
+            or not isinstance(facts.get("interval_end_time"), str)
+            or facts.get("threshold_hours") != 72
+            or interval_seconds <= 72 * 3600
+            or overdue_seconds != interval_seconds - 72 * 3600
+        ):
+            return ""
+        return (
+            f"共识别{record_count}次有效查房记录；"
+            f"第{start_position}次查房（{facts['interval_start_time']}）至"
+            f"第{end_position}次查房（{facts['interval_end_time']}）间隔"
+            f"{_duration_text(interval_seconds)}，超过72小时要求"
+            f"{_duration_text(overdue_seconds)}。"
+        )
 
     def labels(key: str, mapping: Mapping[str, str]) -> str:
         values = facts.get(key)

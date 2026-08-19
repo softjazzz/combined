@@ -2558,7 +2558,7 @@ def safe_luxian_0609_customer_display_facts(
             )
         ):
             return None
-        return {
+        facts: dict[str, Any] = {
             "failure_kind": failure_kind,
             "interval_start_source": raw["interval_start_source"],
             "interval_end_source": raw["interval_end_source"],
@@ -2568,6 +2568,88 @@ def safe_luxian_0609_customer_display_facts(
             "threshold_hours": 72,
             "recorded_dates": list(recorded_dates),
         }
+        enhanced_keys = {
+            "interval_start_position",
+            "interval_end_position",
+            "record_count",
+            "interval_seconds",
+            "overdue_seconds",
+        }
+        if any(key in raw for key in enhanced_keys):
+            start_position = raw.get("interval_start_position")
+            end_position = raw.get("interval_end_position")
+            record_count = raw.get("record_count")
+            interval_seconds = raw.get("interval_seconds")
+            overdue_seconds = raw.get("overdue_seconds")
+            if not all(
+                type(value) is int
+                for value in (
+                    start_position,
+                    end_position,
+                    record_count,
+                    interval_seconds,
+                    overdue_seconds,
+                )
+            ):
+                return None
+            if (
+                not 1 <= start_position < end_position <= record_count
+                or end_position != start_position + 1
+                or record_count != len(recorded_dates)
+            ):
+                return None
+            try:
+                started_at = datetime.strptime(
+                    raw["interval_start_time"], "%Y-%m-%d %H:%M:%S"
+                )
+                ended_at = datetime.strptime(
+                    raw["interval_end_time"], "%Y-%m-%d %H:%M:%S"
+                )
+            except ValueError:
+                return None
+            actual_seconds = round((ended_at - started_at).total_seconds())
+            expected_overdue_seconds = max(0, actual_seconds - 72 * 3600)
+            if (
+                actual_seconds <= 0
+                or interval_seconds != actual_seconds
+                or overdue_seconds != expected_overdue_seconds
+                or round(actual_seconds / 3600, 2)
+                != round(float(interval_hours), 2)
+                or recorded_dates[start_position - 1]
+                != started_at.date().isoformat()
+                or recorded_dates[end_position - 1] != ended_at.date().isoformat()
+                or (
+                    failure_kind == "course_record_interval_over_72h"
+                    and overdue_seconds <= 0
+                )
+                or (
+                    failure_kind == "course_record_interval_within_72h"
+                    and overdue_seconds != 0
+                )
+            ):
+                return None
+            facts.update(
+                {
+                    "interval_start_position": start_position,
+                    "interval_end_position": end_position,
+                    "record_count": record_count,
+                    "interval_seconds": interval_seconds,
+                    "overdue_seconds": overdue_seconds,
+                }
+            )
+        start_document_id = raw.get("interval_start_document_id")
+        end_document_id = raw.get("interval_end_document_id")
+        if start_document_id is not None or end_document_id is not None:
+            if not all(
+                isinstance(value, str)
+                and bool(value.strip())
+                and len(value.strip()) <= 256
+                and "\n" not in value
+                and "\r" not in value
+                for value in (start_document_id, end_document_id)
+            ):
+                return None
+        return facts
     if rule_id == "LX0609-008":
         failure_kind = raw.get("failure_kind")
         allowed = {
@@ -3648,6 +3730,34 @@ def _customer_evidence_from_display_facts(
         )
 
     source_document_id = valid_document_id(raw.get("source_document_id"))
+    if (
+        rule_id == "LX0609-007"
+        and raw.get("failure_kind") == "course_record_interval_over_72h"
+    ):
+        allowed_source_types = {"daily_course_record", "senior_course_record"}
+        start_source = str(raw.get("interval_start_source") or "").strip()
+        end_source = str(raw.get("interval_end_source") or "").strip()
+        start_document_id = valid_document_id(
+            raw.get("interval_start_document_id")
+        )
+        end_document_id = valid_document_id(raw.get("interval_end_document_id"))
+        if (
+            start_source in allowed_source_types
+            and end_source in allowed_source_types
+            and start_document_id
+            and end_document_id
+        ):
+            return [
+                {
+                    "source_type": start_source,
+                    "source_document_id": start_document_id,
+                },
+                {
+                    "source_type": end_source,
+                    "source_document_id": end_document_id,
+                },
+            ]
+        return []
     if rule_id == "LX0609-025" and raw.get("failure_kind") == "implant_information_incomplete":
         raw_event_details = raw.get("implant_event_details")
         if not isinstance(raw_event_details, list):
