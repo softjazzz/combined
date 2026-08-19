@@ -8,6 +8,7 @@ import json
 import re
 from types import MappingProxyType
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly
 
@@ -18,6 +19,7 @@ PERFORMED_TIME_FORMATS = (
     "%Y-%m-%d %H:%M:%S+08",
     "%Y-%m-%d %H:%M:%S+08:00",
 )
+_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 SURGERY_TIME_FIELDS = (
     "surgery_begin_time",
     "surgery_begin_datetime",
@@ -862,6 +864,10 @@ def read_luxian_0609_course_round_timeline(
 
 def parse_strict_performed_time(value: Any) -> datetime | None:
     """仅接受整值、trim 后可 round-trip 的已验收北京时间。"""
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            return None
+        return value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
     if not isinstance(value, str):
         return None
     candidate = value.strip()

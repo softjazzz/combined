@@ -1031,6 +1031,29 @@ def test_renderer_explains_data_gap_as_system_evidence_condition(
     assert "请补充或同步所需数据" not in result["suggestion"]
 
 
+def test_029_missing_surgery_time_does_not_claim_summary_linkage_failure():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-029",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="surgery-document-native-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == (
+        "当前缺少用于确认手术已实施的权威时间，暂时无法完成核对"
+    )
+    assert "术前小结" not in result["findings"]
+    assert "单台手术关联" not in result["findings"]
+
+
 def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(

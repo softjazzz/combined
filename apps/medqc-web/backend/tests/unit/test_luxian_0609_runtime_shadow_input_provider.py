@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -40,6 +40,18 @@ def test_shared_performed_fact_accepts_only_approved_source_representations():
     assert source_evidence_reader.has_trusted_performed_surgery(
         source_key="surgery_record",
         row={"surgery_begin_time": "2026-01-01 08:00:00+08"},
+    )
+    assert source_evidence_reader.has_trusted_performed_surgery(
+        source_key="surgery_record",
+        row={
+            "surgery_begin_time": datetime(
+                2026, 1, 1, 8, 0, tzinfo=timezone(timedelta(hours=8))
+            )
+        },
+    )
+    assert not source_evidence_reader.has_trusted_performed_surgery(
+        source_key="surgery_record",
+        row={"surgery_begin_time": datetime(2026, 1, 1, 8, 0)},
     )
     assert source_evidence_reader.has_trusted_performed_surgery(
         source_key="mr_surgery",

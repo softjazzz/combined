@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 
 import pytest
@@ -107,6 +107,19 @@ def _typed_029_session(
                 raise SourceEvidenceUnavailable()
             if surgery_mode == "exact":
                 rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            elif surgery_mode == "typed_datetime":
+                rows = (
+                    {
+                        "surgery_begin_time": datetime(
+                            2026,
+                            1,
+                            1,
+                            8,
+                            0,
+                            tzinfo=timezone(timedelta(hours=8)),
+                        )
+                    },
+                )
             elif surgery_mode == "multi":
                 rows = (
                     {"surgery_begin_time": "2026-01-01 08:00:00+08"},
@@ -224,6 +237,32 @@ async def test_typed_029_nonempty_summary_is_compliant_without_llm():
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert secret not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_029_accepts_database_timestamptz_with_nonempty_summary():
+    session = _typed_029_session(
+        surgery_mode="typed_datetime",
+        summary_rows=({"record_content": "术前小结正文完整"},),
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
 
 
 @pytest.mark.asyncio
