@@ -19,6 +19,14 @@ class SpaHandler(SimpleHTTPRequestHandler):
         rel = unquote(parsed.path).lstrip("/")
         return str(Path(self.directory, rel))
 
+    def end_headers(self) -> None:
+        """避免浏览器缓存 SPA 入口页而继续引用上一版的资源清单。"""
+        if urlparse(self.path).path == "/index.html":
+            self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        super().end_headers()
+
     def do_GET(self):
         if self._maybe_proxy():
             return
