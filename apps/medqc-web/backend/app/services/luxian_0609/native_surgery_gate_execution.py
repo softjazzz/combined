@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -108,6 +108,7 @@ _AUTHORITATIVE_RECORD_TIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}"
     r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
 )
+_HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
 _TRAUMA_DIAGNOSIS_PATTERN = re.compile(
     r"外伤|创伤|颅内血肿|硬膜外血肿|硬膜下血肿"
 )
@@ -569,12 +570,9 @@ def _authoritative_record_time(value: Any) -> datetime | None:
             return None
     else:
         return None
-    if parsed.tzinfo is None:
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
         return parsed
-    offset = parsed.utcoffset()
-    if offset != timedelta(hours=8):
-        return None
-    return parsed.replace(tzinfo=None)
+    return parsed.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
 
 
 def _authoritative_surgery_end_time(
@@ -582,11 +580,18 @@ def _authoritative_surgery_end_time(
 ) -> datetime | None:
     """003 只以受控手术结束时间为锚，不用开始时间替代。"""
 
+    def parse_end_time(value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            if value.tzinfo is None or value.utcoffset() is None:
+                return value
+            return value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+        return parse_strict_performed_time(value)
+
     if source_key == "surgery_record":
         parsed = tuple(
             value
             for field in ("surgery_end_time", "surgery_end_datetime")
-            if (value := parse_strict_performed_time(row.get(field))) is not None
+            if (value := parse_end_time(row.get(field))) is not None
         )
         return max(parsed) if parsed else None
     if source_key == "mr_surgery":

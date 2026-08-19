@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -1551,6 +1551,40 @@ async def test_typed_003_accepts_customer_iso_timezone_surgery_end_time():
     )
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_003_normalizes_timestamptz_surgery_and_record_times_to_beijing():
+    """同步后的 timestamptz 是精确时刻，不能因数据库以 UTC 返回而降为资料不足。"""
+
+    session = _typed_003_session(
+        surgery_time=datetime(2026, 8, 18, 11, 25, tzinfo=timezone(timedelta(hours=8))),
+        record_time=datetime(2026, 8, 18, 7, 46, 14, tzinfo=timezone.utc),
+    )
+
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert result.customer_display_facts[0][1]["surgery_end_time"] == "2026-08-18 11:25:00"
+    assert result.customer_display_facts[0][1]["record_time"] == "2026-08-18 15:46:14"
 
 
 @pytest.mark.asyncio
