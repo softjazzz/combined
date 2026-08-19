@@ -29,7 +29,14 @@ vi.mock('vue-router', () => ({
   useRoute: () => routeState,
 }))
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    user: { id: 'qc-result-list-test', email: 'qc-result-list-test@example.com' },
+  }),
+}))
+
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
+import QcSyncAndRunControl from '@/views/workstation-v4/components/qc/QcSyncAndRunControl.vue'
 
 const ResultDrawerStub = defineComponent({
   name: 'QCRecordResultComparisonDrawer',
@@ -168,6 +175,7 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
 describe('QcRecordResultListView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.sessionStorage.clear()
     routeState.query = {}
     mocks.getRaw.mockResolvedValue(response())
     mocks.exportFilteredLuxian0609RecordResults.mockResolvedValue({
@@ -423,6 +431,17 @@ describe('QcRecordResultListView', () => {
       .vm.$emit('open-result', '["H","P","V-priority"]')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
     expect(wrapper.text()).not.toContain('下一闭环接入')
+  })
+
+  it('同步并质控完成后刷新当前结果页', async () => {
+    const wrapper = mountView('discharged')
+    await flushPromises()
+    const requestsBeforeRefresh = mocks.getRaw.mock.calls.length
+
+    wrapper.getComponent(QcSyncAndRunControl).vm.$emit('completed')
+    await flushPromises()
+
+    expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 1)
   })
 
   it('在同一页面切换结果分析，并将下钻病历交给既有结果抽屉', async () => {

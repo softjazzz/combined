@@ -4,11 +4,18 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+from threading import Event, Lock
+
 import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers import sync as sync_router_module
+from app.services import sync_idempotency
 from app.services.sync_idempotency import SyncTriggerReservation
 
 
@@ -27,10 +34,15 @@ def _assert_error_shell(body: dict, expected_code: str | None = None) -> None:
         assert body.get("code") == expected_code
 
 
-def _override_user(client, roles: list[str]) -> None:
+def _override_user(
+    client,
+    roles: list[str],
+    *,
+    email: str = "sync@test.local",
+) -> None:
     user = {
-        "id": "u-sync-test",
-        "email": "sync@test.local",
+        "id": f"u-{email.split('@', maxsplit=1)[0]}",
+        "email": email,
         "display_name": "Sync Tester",
         "department": "信息科",
         "roles": roles,
@@ -113,6 +125,8 @@ class TestSyncRouter:
 
         _override_user(client, ["qc_manager"])
         resp = client.post("/api/v1/sync/preflight", json={"source": "pg", "tier": "all"})
+        assert resp.status_code == 403
+        resp = client.put("/api/v1/sync/config/policy", json={})
         assert resp.status_code == 403
 
         _override_user(client, ["sync_admin"])
@@ -530,6 +544,87 @@ class TestSyncRouter:
         assert "预检结果已过期" in str(resp.json())
         assert calls["run"] == 0
 
+    @pytest.mark.parametrize("scene", ("both", "frontpage"))
+    def test_trigger_rejects_auto_qc_for_unsupported_scene_before_sync(
+        self,
+        client,
+        monkeypatch,
+        scene,
+    ):
+        _override_user(client, ["admin"])
+        calls = {"run": 0}
+
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-invalid-auto-qc-scene",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+
+        def _fake_run_sync(**_kwargs):
+            calls["run"] += 1
+            return {
+                "success": False,
+                "status": "failed",
+                "scene": scene,
+                "error": "不应执行同步",
+            }
+
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": scene,
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-invalid-scene",
+            },
+        )
+
+        assert response.status_code == 422
+        assert "自动质控" in str(response.json())
+        assert calls["run"] == 0
+
+    @pytest.mark.parametrize("workflow_token", (None, "short", "bad token"))
+    def test_trigger_auto_qc_requires_valid_workflow_token_before_sync(
+        self,
+        client,
+        monkeypatch,
+        workflow_token,
+    ):
+        _override_user(client, ["admin"])
+        calls = {"run": 0}
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: calls.__setitem__("run", calls["run"] + 1),
+        )
+        payload = {
+            "source": "pg",
+            "tier": "all",
+            "scene": "running",
+            "auto_qc_after_sync": True,
+        }
+        if workflow_token is not None:
+            payload["auto_qc_workflow_token"] = workflow_token
+
+        response = client.post("/api/v1/sync/trigger", json=payload)
+
+        assert response.status_code == 422
+        assert "流程标识" in str(response.json())
+        assert calls["run"] == 0
+
     def test_trigger_running_rejected(self, client, monkeypatch):
         _override_user(client, ["admin"])
         monkeypatch.setattr(
@@ -672,6 +767,109 @@ class TestSyncRouter:
             "queued_records": 1,
             "job_id": "job-final-1",
         }
+        assert data["auto_qc"] == {
+            "scene": "final",
+            **data["auto_terminal_qc"],
+        }
+        assert "_internal_synced_case_refs" not in data
+
+    def test_trigger_explicit_final_auto_qc_uses_all_visible_synced_case_refs(
+        self,
+        client,
+        monkeypatch,
+    ):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-final-auto-qc",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        case_refs = [
+            {
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "visit_id": "visit-1",
+            },
+            {
+                "institute_id": "inst-1",
+                "patient_id": "patient-2",
+                "visit_id": "visit-2",
+            },
+        ]
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {
+                "success": True,
+                "status": "success",
+                "scene": "final",
+                "total_records": 2,
+                "_internal_synced_case_refs": case_refs,
+            },
+        )
+        from app.routers import qc_sichuan
+
+        class _Workspace:
+            def find_terminal_reevaluation_candidates(self, **_kwargs):
+                raise AssertionError("显式终末一键质控不得只筛转场复评候选")
+
+        captured_payloads: list[object] = []
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(*, payload, **_kwargs):
+            captured_payloads.append(payload)
+            return {
+                "success": True,
+                "data": {"id": "job-final-all-1", "idempotency_reused": False},
+            }
+
+        monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: _Workspace())
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "final",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-final-visible",
+            },
+        )
+
+        assert response.status_code == 200
+        data = _assert_success_shell(response.json())
+        assert len(captured_payloads) == 1
+        payload = captured_payloads[0]
+        assert payload.rule_set_key == qc_sichuan.LUXIAN_0609_RULE_SET_KEY
+        assert payload.scope == "final"
+        assert payload.date_field == "discharge"
+        assert payload.record_refs == case_refs
+        assert data["auto_qc"] == {
+            "scene": "final",
+            "status": "queued",
+            "eligible_records": 2,
+            "queued_records": 2,
+            "job_id": "job-final-all-1",
+        }
+        assert "auto_terminal_qc" not in data
         assert "_internal_synced_case_refs" not in data
 
     def test_trigger_running_sync_never_enqueues_terminal_qc(self, client, monkeypatch):
@@ -728,6 +926,744 @@ class TestSyncRouter:
         assert "auto_terminal_qc" not in data
         assert "_internal_synced_case_refs" not in data
 
+    def test_trigger_running_auto_qc_enqueues_visible_case_refs(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-running-auto-qc",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        case_ref = {
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 1,
+                "_internal_synced_case_refs": [case_ref],
+            },
+        )
+        from app.routers import qc_sichuan
+
+        captured_payloads: list[object] = []
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(*, payload, **_kwargs):
+            captured_payloads.append(payload)
+            return {
+                "success": True,
+                "data": {"id": "job-running-1", "idempotency_reused": False},
+            }
+
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-running-visible",
+            },
+        )
+
+        assert response.status_code == 200
+        data = _assert_success_shell(response.json())
+        assert len(captured_payloads) == 1
+        payload = captured_payloads[0]
+        assert payload.rule_set_key == qc_sichuan.LUXIAN_0609_RULE_SET_KEY
+        assert payload.scope == "running"
+        assert payload.date_field == "admission"
+        assert payload.record_refs == [case_ref]
+        assert data["auto_qc"] == {
+            "scene": "running",
+            "status": "queued",
+            "eligible_records": 1,
+            "queued_records": 1,
+            "job_id": "job-running-1",
+        }
+        assert "auto_terminal_qc" not in data
+        assert "_internal_synced_case_refs" not in data
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("qc_scope", ["running", "final"])
+    async def test_enqueue_qc_without_deliverable_records_is_not_applicable(self, qc_scope):
+        summary = await sync_router_module._enqueue_qc_after_sync(
+            request=None,
+            current_user={},
+            record_refs=[],
+            qc_scope=qc_scope,
+            explicit_request=True,
+        )
+
+        assert summary == {
+            "scene": qc_scope,
+            "status": "not_applicable",
+            "reason_code": "no_deliverable_records",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+
+    def test_trigger_partial_auto_qc_does_not_enqueue(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-partial-auto-qc",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {
+                "success": False,
+                "status": "partial",
+                "scene": "running",
+                "total_records": 1,
+                "warnings": ["部分资料同步失败"],
+                "_internal_synced_case_refs": [
+                    {
+                        "institute_id": "inst-1",
+                        "patient_id": "patient-1",
+                        "visit_id": "visit-1",
+                    }
+                ],
+            },
+        )
+        from app.routers import qc_sichuan
+
+        async def _unexpected_create_workspace_batch_job(**_kwargs):
+            raise AssertionError("同步未完整成功时不得创建质控任务")
+
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _unexpected_create_workspace_batch_job,
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-partial-sync",
+            },
+        )
+
+        assert response.status_code == 200
+        data = _assert_success_shell(response.json())
+        assert data["status"] == "partial"
+        assert data["auto_qc"] == {
+            "scene": "running",
+            "status": "not_created",
+            "reason_code": "sync_partial",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+        assert "_internal_synced_case_refs" not in data
+
+    def test_qc_manager_one_click_is_idempotent_per_user_and_keeps_job_ownership(
+        self,
+        client,
+        monkeypatch,
+    ):
+        reservations: dict[str, dict[str, object]] = {}
+        reservation_calls: list[dict[str, object]] = []
+        calls = {"run": 0, "qc": 0, "created_by": []}
+        case_ref = {
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }
+
+        def _fake_reserve(**kwargs):
+            reservation_calls.append(dict(kwargs))
+            key = str(kwargs["idempotency_key"])
+            existing = reservations.get(key)
+            if existing is not None:
+                return SyncTriggerReservation(
+                    created=False,
+                    run_id=str(existing["run_id"]),
+                    status=str(existing["status"]),
+                    result=existing.get("result"),
+                )
+            run_id = f"syncrun-qcm-{len(reservations) + 1}"
+            reservations[key] = {"run_id": run_id, "status": "pending", "result": None}
+            return SyncTriggerReservation(created=True, run_id=run_id, status="pending")
+
+        def _fake_complete(**kwargs):
+            entry = reservations[str(kwargs["idempotency_key"])]
+            entry["status"] = kwargs["status"]
+            entry["result"] = kwargs["result"]
+
+        def _fake_run_sync(**_kwargs):
+            calls["run"] += 1
+            return {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 1,
+                "_internal_synced_case_refs": [case_ref],
+            }
+
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            _fake_reserve,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            _fake_complete,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+        from app.routers import qc_sichuan
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(**_kwargs):
+            calls["qc"] += 1
+            calls["created_by"].append(_kwargs["current_user"]["email"])
+            return {
+                "success": True,
+                "data": {
+                    "id": f"job-qcm-{calls['qc']}",
+                    "idempotency_reused": False,
+                },
+            }
+
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+        request_body = {
+            "source": "pg",
+            "tier": "all",
+            "scene": "running",
+            "target_departments": ["骨科"],
+            "auto_qc_after_sync": True,
+            "auto_qc_workflow_token": "workflow-qcm-shared",
+        }
+
+        _override_user(client, ["qc_manager"], email="manager-a@test.local")
+        first = client.post("/api/v1/sync/trigger", json=request_body)
+        assert first.status_code == 200
+        first_data = _assert_success_shell(first.json())
+        assert first_data["idempotent_reused"] is False
+
+        _override_user(client, ["qc_manager"], email="manager-b@test.local")
+        second = client.post("/api/v1/sync/trigger", json=request_body)
+        assert second.status_code == 200
+        second_data = _assert_success_shell(second.json())
+        assert second_data["idempotent_reused"] is False
+        assert first_data["auto_qc"]["job_id"] == "job-qcm-1"
+        assert second_data["auto_qc"]["job_id"] == "job-qcm-2"
+
+        repeated = client.post("/api/v1/sync/trigger", json=request_body)
+        assert repeated.status_code == 200
+        repeated_data = _assert_success_shell(repeated.json())
+        assert repeated_data["idempotent_reused"] is True
+        assert repeated_data["auto_qc"] == second_data["auto_qc"]
+        assert calls == {
+            "run": 2,
+            "qc": 2,
+            "created_by": ["manager-a@test.local", "manager-b@test.local"],
+        }
+        assert [call["operator_email"] for call in reservation_calls] == [
+            "manager-a@test.local",
+            "manager-b@test.local",
+            "manager-b@test.local",
+        ]
+        assert reservation_calls[0]["idempotency_key"] != reservation_calls[1]["idempotency_key"]
+        assert reservation_calls[1]["idempotency_key"] == reservation_calls[2]["idempotency_key"]
+
+    def test_qc_manager_one_click_rejects_unrestricted_sync_inputs(self):
+        current_user = {"roles": ["qc_manager"]}
+        blocked_requests = (
+            sync_router_module.TriggerRequest(scene="running"),
+            sync_router_module.TriggerRequest(
+                scene="both",
+                auto_qc_after_sync=True,
+            ),
+            sync_router_module.TriggerRequest(
+                scene="running",
+                auto_qc_after_sync=True,
+                tables=["mr"],
+            ),
+            sync_router_module.TriggerRequest(
+                scene="running",
+                auto_qc_after_sync=True,
+                table_groups=["core_8"],
+            ),
+            sync_router_module.TriggerRequest(
+                scene="running",
+                auto_qc_after_sync=True,
+                sync_date="2026-08-18",
+            ),
+            sync_router_module.TriggerRequest(
+                scene="running",
+                auto_qc_after_sync=True,
+                policy_version="operator-selected-policy",
+            ),
+            sync_router_module.TriggerRequest(
+                scene="final",
+                auto_qc_after_sync=True,
+                preflight_fingerprint="stale-preflight-result",
+            ),
+            sync_router_module.TriggerRequest(
+                scene="running",
+                auto_qc_after_sync=True,
+                date_window={"start": "2026-08-01", "end": "2026-08-18"},
+            ),
+        )
+
+        for request in blocked_requests:
+            with pytest.raises(HTTPException) as exc_info:
+                sync_router_module._assert_qc_manager_one_click_request(
+                    request,
+                    current_user,
+                )
+            assert exc_info.value.status_code == 403
+
+    def test_trigger_retries_failed_auto_qc_enqueue_without_rerunning_sync_or_leaking_refs(
+        self,
+        client,
+        monkeypatch,
+    ):
+        _override_user(client, ["admin"])
+        reservations: dict[str, dict[str, object]] = {}
+        calls = {"run": 0, "qc": 0}
+        case_ref = {
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }
+
+        def _fake_reserve(**kwargs):
+            key = str(kwargs["idempotency_key"])
+            existing = reservations.get(key)
+            if existing is not None:
+                return SyncTriggerReservation(
+                    created=False,
+                    run_id=str(existing["run_id"]),
+                    status=str(existing["status"]),
+                    result=existing.get("result"),
+                )
+            reservations[key] = {
+                "run_id": "syncrun-qc-retry",
+                "status": "pending",
+                "result": None,
+            }
+            return SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-qc-retry",
+                status="pending",
+            )
+
+        def _fake_complete(**kwargs):
+            entry = reservations[str(kwargs["idempotency_key"])]
+            entry["status"] = kwargs["status"]
+            entry["result"] = kwargs["result"]
+
+        def _fake_claim(idempotency_key: str):
+            result = reservations[idempotency_key].get("result")
+            if not isinstance(result, dict):
+                return None
+            auto_qc = result.get("auto_qc")
+            raw_record_refs = result.get("_internal_synced_case_refs")
+            if (
+                not isinstance(auto_qc, dict)
+                or auto_qc.get("status") != "enqueue_failed"
+                or not isinstance(raw_record_refs, list)
+            ):
+                return None
+            record_refs = [dict(item) for item in raw_record_refs if isinstance(item, dict)]
+            if not record_refs:
+                return None
+            result["auto_qc"] = {
+                **auto_qc,
+                "status": "enqueueing",
+                "claimed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            result["auto_qc"].pop("reason_code", None)
+            return record_refs
+
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.claim_sync_auto_qc_retry",
+            _fake_claim,
+        )
+
+        def _fake_run_sync(**_kwargs):
+            calls["run"] += 1
+            return {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 1,
+                "_internal_synced_case_refs": [case_ref],
+            }
+
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            _fake_reserve,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            _fake_complete,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+        from app.routers import qc_sichuan
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(**_kwargs):
+            calls["qc"] += 1
+            if calls["qc"] in {1, 2}:
+                return {
+                    "success": True,
+                    "data": {"id": "", "idempotency_reused": False},
+                }
+            return {
+                "success": True,
+                "data": {"id": "job-recovered", "idempotency_reused": False},
+            }
+
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+        request_body = {
+            "source": "pg",
+            "tier": "all",
+            "scene": "running",
+            "auto_qc_after_sync": True,
+            "auto_qc_workflow_token": "workflow-retry-enqueue",
+        }
+
+        first = client.post("/api/v1/sync/trigger", json=request_body)
+        assert first.status_code == 200
+        first_data = _assert_success_shell(first.json())
+        assert first_data["auto_qc"] == {
+            "scene": "running",
+            "status": "enqueue_failed",
+            "reason_code": "enqueue_failed",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+        assert "_internal_synced_case_refs" not in first_data
+        assert first_data["warnings"] == [
+            sync_router_module._AUTO_QC_ENQUEUE_FAILED_WARNING
+        ]
+        stored_after_failure = next(iter(reservations.values()))["result"]
+        assert stored_after_failure["_internal_synced_case_refs"] == [case_ref]
+
+        second = client.post("/api/v1/sync/trigger", json=request_body)
+        assert second.status_code == 200
+        second_data = _assert_success_shell(second.json())
+        assert second_data["idempotent_reused"] is True
+        assert second_data["auto_qc"] == {
+            "scene": "running",
+            "status": "enqueue_failed",
+            "reason_code": "enqueue_failed",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+        assert "_internal_synced_case_refs" not in second_data
+        assert "_internal_synced_case_refs" not in second_data["result"]
+        stored_after_retry_failure = next(iter(reservations.values()))["result"]
+        assert stored_after_retry_failure["_internal_synced_case_refs"] == [case_ref]
+        assert "claimed_at" not in stored_after_retry_failure["auto_qc"]
+
+        third = client.post("/api/v1/sync/trigger", json=request_body)
+        assert third.status_code == 200
+        third_data = _assert_success_shell(third.json())
+        assert third_data["idempotent_reused"] is True
+        assert third_data["auto_qc"] == {
+            "scene": "running",
+            "status": "queued",
+            "eligible_records": 1,
+            "queued_records": 1,
+            "job_id": "job-recovered",
+        }
+        assert "_internal_synced_case_refs" not in third_data["result"]
+        stored_after_recovery = next(iter(reservations.values()))["result"]
+        assert "_internal_synced_case_refs" not in stored_after_recovery
+
+        fourth = client.post("/api/v1/sync/trigger", json=request_body)
+        assert fourth.status_code == 200
+        fourth_data = _assert_success_shell(fourth.json())
+        assert fourth_data["idempotent_reused"] is True
+        assert fourth_data["auto_qc"] == third_data["auto_qc"]
+        assert calls == {"run": 1, "qc": 3}
+
+    def test_concurrent_auto_qc_retry_only_one_request_enqueues_job(
+        self,
+        client,
+        monkeypatch,
+    ):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(sync_idempotency, "engine", None)
+        sync_idempotency.reset_sync_idempotency_for_testing()
+        calls = {"run": 0, "qc": 0}
+        case_ref = {
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }
+        retry_enqueue_entered = Event()
+        release_retry_enqueue = Event()
+        duplicate_enqueue_seen = Event()
+        calls_lock = Lock()
+
+        def _fake_run_sync(**_kwargs):
+            calls["run"] += 1
+            return {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 1,
+                "_internal_synced_case_refs": [case_ref],
+            }
+
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+        from app.routers import qc_sichuan
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(**_kwargs):
+            with calls_lock:
+                calls["qc"] += 1
+                attempt = calls["qc"]
+            if attempt == 1:
+                return {
+                    "success": True,
+                    "data": {"id": "", "idempotency_reused": False},
+                }
+            if attempt == 2:
+                retry_enqueue_entered.set()
+                assert release_retry_enqueue.wait(timeout=3)
+                return {
+                    "success": True,
+                    "data": {"id": "job-concurrent-recovered", "idempotency_reused": False},
+                }
+            duplicate_enqueue_seen.set()
+            return {
+                "success": True,
+                "data": {"id": "job-duplicate", "idempotency_reused": False},
+            }
+
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+        request_body = {
+            "source": "pg",
+            "tier": "all",
+            "scene": "running",
+            "auto_qc_after_sync": True,
+            "auto_qc_workflow_token": "workflow-concurrent-retry",
+        }
+
+        failed = client.post("/api/v1/sync/trigger", json=request_body)
+        assert failed.status_code == 200
+        assert _assert_success_shell(failed.json())["auto_qc"]["status"] == "enqueue_failed"
+
+        with TestClient(client.app) as owner_client, TestClient(client.app) as observer_client:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                owner_future = executor.submit(
+                    lambda: owner_client.post("/api/v1/sync/trigger", json=request_body)
+                )
+                assert retry_enqueue_entered.wait(timeout=3)
+                observer_future = executor.submit(
+                    lambda: observer_client.post("/api/v1/sync/trigger", json=request_body)
+                )
+                try:
+                    observer = observer_future.result(timeout=3)
+                finally:
+                    release_retry_enqueue.set()
+                owner = owner_future.result(timeout=3)
+
+        assert owner.status_code == 200
+        assert observer.status_code == 200
+        owner_data = _assert_success_shell(owner.json())
+        observer_data = _assert_success_shell(observer.json())
+        assert owner_data["auto_qc"] == {
+            "scene": "running",
+            "status": "queued",
+            "eligible_records": 1,
+            "queued_records": 1,
+            "job_id": "job-concurrent-recovered",
+        }
+        assert observer_data["auto_qc"] == {
+            "scene": "running",
+            "status": "enqueueing",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+        assert duplicate_enqueue_seen.is_set() is False
+        assert calls == {"run": 1, "qc": 2}
+
+    def test_expired_auto_qc_enqueueing_lease_is_reclaimed_without_resync(
+        self,
+        client,
+        monkeypatch,
+    ):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(sync_idempotency, "engine", None)
+        sync_idempotency.reset_sync_idempotency_for_testing()
+        calls = {"run": 0, "qc": 0}
+        case_ref = {
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }
+
+        def _fake_run_sync(**_kwargs):
+            calls["run"] += 1
+            return {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 1,
+                "_internal_synced_case_refs": [case_ref],
+            }
+
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+        from app.routers import qc_sichuan
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(**_kwargs):
+            calls["qc"] += 1
+            if calls["qc"] == 1:
+                return {
+                    "success": True,
+                    "data": {"id": "", "idempotency_reused": False},
+                }
+            return {
+                "success": True,
+                "data": {"id": "job-after-lease", "idempotency_reused": False},
+            }
+
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+        request_body = {
+            "source": "pg",
+            "tier": "all",
+            "sync_date": "2026-08-18",
+            "scene": "running",
+            "auto_qc_after_sync": True,
+            "auto_qc_workflow_token": "workflow-expired-lease",
+        }
+
+        failed = client.post("/api/v1/sync/trigger", json=request_body)
+        assert failed.status_code == 200
+        failed_data = _assert_success_shell(failed.json())
+        assert failed_data["auto_qc"]["status"] == "enqueue_failed"
+        idempotency_key = failed_data["idempotency_key"]
+
+        assert sync_idempotency.claim_sync_auto_qc_retry(idempotency_key) == [case_ref]
+        reserved = sync_idempotency.reserve_sync_trigger(
+            idempotency_key=idempotency_key,
+            source="pg",
+            tier="all",
+            sync_date="2026-08-18",
+            operator_email="sync@test.local",
+        )
+        assert reserved.result is not None
+        expired_result = dict(reserved.result)
+        expired_result["auto_qc"] = {
+            **reserved.result["auto_qc"],
+            "claimed_at": (datetime.now(timezone.utc) - timedelta(seconds=121)).isoformat(),
+        }
+        sync_idempotency.complete_sync_trigger(
+            idempotency_key=idempotency_key,
+            status="success",
+            result=expired_result,
+        )
+
+        recovered = client.post("/api/v1/sync/trigger", json=request_body)
+        assert recovered.status_code == 200
+        recovered_data = _assert_success_shell(recovered.json())
+        assert recovered_data["idempotent_reused"] is True
+        assert recovered_data["auto_qc"] == {
+            "scene": "running",
+            "status": "queued",
+            "eligible_records": 1,
+            "queued_records": 1,
+            "job_id": "job-after-lease",
+        }
+        assert "claimed_at" not in recovered_data["result"]["auto_qc"]
+        assert calls == {"run": 1, "qc": 2}
+
     def test_trigger_idempotency_reuse(self, client, monkeypatch):
         _override_user(client, ["admin"])
         calls = {"reserve": 0, "run": 0, "append": 0}
@@ -744,7 +1680,23 @@ class TestSyncRouter:
                 created=False,
                 run_id="syncrun-fixed-id",
                 status="success",
-                result={"success": True, "total_records": 2},
+                result={
+                    "success": True,
+                    "total_records": 2,
+                    "auto_terminal_qc": {
+                        "status": "queued",
+                        "eligible_records": 1,
+                        "queued_records": 1,
+                        "job_id": "job-final-reused",
+                    },
+                    "auto_qc": {
+                        "scene": "final",
+                        "status": "queued",
+                        "eligible_records": 1,
+                        "queued_records": 1,
+                        "job_id": "job-final-reused",
+                    },
+                },
             )
 
         monkeypatch.setattr("app.services.sync_idempotency.reserve_sync_trigger", _fake_reserve)
@@ -771,8 +1723,152 @@ class TestSyncRouter:
         second_data = _assert_success_shell(second.json())
         assert second_data["run_id"] == "syncrun-fixed-id"
         assert second_data["idempotent_reused"] is True
+        assert second_data["auto_terminal_qc"] == {
+            "status": "queued",
+            "eligible_records": 1,
+            "queued_records": 1,
+            "job_id": "job-final-reused",
+        }
+        assert second_data["auto_qc"]["job_id"] == "job-final-reused"
         assert calls["run"] == 1
         assert calls["append"] == 1
+
+    def test_trigger_auto_qc_idempotency_is_distinct_and_reuses_qc_summary(
+        self,
+        client,
+        monkeypatch,
+    ):
+        _override_user(client, ["admin"])
+        reservations: dict[str, dict[str, object]] = {}
+        calls = {"run": 0, "qc": 0}
+        case_ref = {
+            "institute_id": "inst-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+        }
+
+        def _fake_reserve(**kwargs):
+            key = str(kwargs["idempotency_key"])
+            existing = reservations.get(key)
+            if existing is not None:
+                return SyncTriggerReservation(
+                    created=False,
+                    run_id=str(existing["run_id"]),
+                    status=str(existing["status"]),
+                    result=existing.get("result"),
+                )
+            run_id = f"syncrun-auto-qc-{len(reservations) + 1}"
+            reservations[key] = {"run_id": run_id, "status": "pending", "result": None}
+            return SyncTriggerReservation(created=True, run_id=run_id, status="pending")
+
+        def _fake_complete(**kwargs):
+            entry = reservations[str(kwargs["idempotency_key"])]
+            entry["status"] = kwargs["status"]
+            entry["result"] = kwargs["result"]
+
+        def _fake_run_sync(**_kwargs):
+            calls["run"] += 1
+            return {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 1,
+                "_internal_synced_case_refs": [case_ref],
+            }
+
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            _fake_reserve,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            _fake_complete,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+        from app.routers import qc_sichuan
+
+        async def _fake_get_qc_service():
+            return object()
+
+        async def _fake_create_workspace_batch_job(**_kwargs):
+            calls["qc"] += 1
+            return {
+                "success": True,
+                "data": {"id": "job-running-idempotent", "idempotency_reused": False},
+            }
+
+        monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+        monkeypatch.setattr(
+            qc_sichuan,
+            "create_workspace_batch_job",
+            _fake_create_workspace_batch_job,
+        )
+
+        plain = client.post(
+            "/api/v1/sync/trigger",
+            json={"source": "pg", "tier": "all", "scene": "running"},
+        )
+        assert plain.status_code == 200
+        plain_data = _assert_success_shell(plain.json())
+        assert plain_data["idempotent_reused"] is False
+        assert "auto_qc" not in plain_data
+
+        automatic = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-idempotent-a",
+            },
+        )
+        assert automatic.status_code == 200
+        automatic_data = _assert_success_shell(automatic.json())
+        assert automatic_data["idempotent_reused"] is False
+        assert automatic_data["auto_qc"] == {
+            "scene": "running",
+            "status": "queued",
+            "eligible_records": 1,
+            "queued_records": 1,
+            "job_id": "job-running-idempotent",
+        }
+
+        repeated = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-idempotent-a",
+            },
+        )
+        assert repeated.status_code == 200
+        repeated_data = _assert_success_shell(repeated.json())
+        assert repeated_data["idempotent_reused"] is True
+        assert repeated_data["auto_qc"] == automatic_data["auto_qc"]
+
+        later_click = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-idempotent-b",
+            },
+        )
+        assert later_click.status_code == 200
+        later_click_data = _assert_success_shell(later_click.json())
+        assert later_click_data["idempotent_reused"] is False
+        assert later_click_data["auto_qc"]["job_id"] == "job-running-idempotent"
+        assert automatic_data["idempotency_key"] != later_click_data["idempotency_key"]
+        assert calls == {"run": 3, "qc": 2}
 
     def test_idempotency_key_includes_policy_scope_inputs(self):
         base = {
@@ -811,6 +1907,53 @@ class TestSyncRouter:
         assert key_a != key_b
         assert key_a != key_c
         assert key_a != key_d
+
+    def test_idempotency_key_without_auto_qc_keeps_legacy_fingerprint(self):
+        base_kwargs = {
+            "source": "pg",
+            "tier": "all",
+            "sync_date": "2026-05-25",
+            "operator": "admin@example.com",
+            "scene": "running",
+            "date_window": {"start": "2026-05-25", "end": "2026-05-25"},
+            "target_departments": ["orthopedics"],
+            "tables": ["mr"],
+            "table_groups": ["core_8"],
+            "policy_version": "policy-a",
+        }
+        expected_key = "pg:all:2026-05-25:admin@example.com:353dbf60fc0cf0d3fabb448b"
+        assert sync_router_module._build_idempotency_key(**base_kwargs) == expected_key
+        assert sync_router_module._build_idempotency_key(
+            **{
+                **base_kwargs,
+                "auto_qc_workflow_token": "workflow-ignored-for-plain-sync",
+            }
+        ) == expected_key
+
+    def test_idempotency_key_includes_workflow_token_only_for_auto_qc(self):
+        base_kwargs = {
+            "source": "pg",
+            "tier": "all",
+            "sync_date": "2026-05-25",
+            "operator": "admin@example.com",
+            "scene": "running",
+            "date_window": {"start": "2026-05-25", "end": "2026-05-25"},
+            "target_departments": ["orthopedics"],
+            "tables": ["mr"],
+            "table_groups": ["core_8"],
+            "policy_version": "policy-a",
+            "auto_qc_after_sync": True,
+        }
+        assert sync_router_module._build_idempotency_key(
+            **{**base_kwargs, "auto_qc_workflow_token": "workflow-token-a"}
+        ) == sync_router_module._build_idempotency_key(
+            **{**base_kwargs, "auto_qc_workflow_token": "workflow-token-a"}
+        )
+        assert sync_router_module._build_idempotency_key(
+            **{**base_kwargs, "auto_qc_workflow_token": "workflow-token-a"}
+        ) != sync_router_module._build_idempotency_key(
+            **{**base_kwargs, "auto_qc_workflow_token": "workflow-token-b"}
+        )
 
     def test_trigger_idempotency_reuse_partial_result_is_success_shell(self, client, monkeypatch):
         _override_user(client, ["admin"])
@@ -932,20 +2075,53 @@ class TestSyncRouter:
             lambda **_kwargs: {
                 "success": False,
                 "status": "failed",
+                "scene": "running",
                 "error": "同步执行失败",
                 "total_records": 0,
                 "warnings": [],
                 "tables": [],
+                "_internal_synced_case_refs": [
+                    {
+                        "institute_id": "inst-1",
+                        "patient_id": "patient-1",
+                        "visit_id": "visit-1",
+                    }
+                ],
             },
+        )
+
+        async def _unexpected_enqueue(**_kwargs):
+            raise AssertionError("同步失败时不得创建质控任务")
+
+        monkeypatch.setattr(
+            sync_router_module,
+            "_enqueue_qc_after_sync",
+            _unexpected_enqueue,
         )
 
         response = client.post(
             "/api/v1/sync/trigger",
-            json={"source": "pg", "tier": "all"},
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-failed-sync",
+            },
         )
 
         assert response.status_code == 200
-        _assert_error_shell(response.json(), expected_code="SYNC_TRIGGER_FAILED")
+        body = response.json()
+        _assert_error_shell(body, expected_code="SYNC_TRIGGER_FAILED")
+        assert body["data"]["auto_qc"] == {
+            "scene": "running",
+            "status": "not_created",
+            "reason_code": "sync_failed",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+        assert "_internal_synced_case_refs" not in body["data"]
         assert completion["status"] == "failed"
         assert history[0]["status"] == "failed"
 

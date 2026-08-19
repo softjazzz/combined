@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal, Optional
 
@@ -35,6 +36,8 @@ from ..core.rate_limit import enforce_rate_limit
 from ..core.response import success_response, get_trace_id
 
 logger = logging.getLogger(__name__)
+_AUTO_QC_ENQUEUE_FAILED_WARNING = "资料同步已完成，但质控任务未创建；可重试创建质控任务"
+_AUTO_QC_WORKFLOW_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$")
 
 router = APIRouter(prefix="/api/v1/sync", tags=["data-sync"])
 
@@ -55,54 +58,108 @@ def _err(request: Request, error: str, code: str, data: dict | None = None):
     return payload
 
 
-async def _enqueue_terminal_reevaluation_after_sync(
+def _public_sync_result(result: dict[str, object]) -> dict[str, object]:
+    """剥离仅供服务端补建质控任务使用的病例三坐标。"""
+
+    payload = dict(result)
+    payload.pop("_internal_synced_case_refs", None)
+    auto_qc = payload.get("auto_qc")
+    if isinstance(auto_qc, dict):
+        payload["auto_qc"] = {
+            key: value for key, value in auto_qc.items() if key != "claimed_at"
+        }
+    return payload
+
+
+async def _enqueue_qc_after_sync(
     *,
     request: Request,
     current_user: dict,
     record_refs: list[dict[str, str]],
+    qc_scope: Literal["running", "final"],
+    explicit_request: bool = False,
 ) -> dict[str, object]:
-    """复用正式质控入口，为运行期转出院的病历创建终末复评任务。"""
+    """仅使用本次同步确认可见的三坐标病例创建正式质控任务。"""
 
     if not record_refs:
         return {
             "status": "not_applicable",
+            "scene": qc_scope,
+            "reason_code": "no_deliverable_records",
             "eligible_records": 0,
             "queued_records": 0,
             "job_id": "",
         }
     from . import qc_sichuan
 
-    workspace = qc_sichuan._sichuan_workspace_service()
-    eligible_refs = workspace.find_terminal_reevaluation_candidates(
-        record_refs=record_refs,
-    )
-    if not eligible_refs:
-        return {
-            "status": "not_needed",
-            "eligible_records": 0,
-            "queued_records": 0,
-            "job_id": "",
-        }
+    if qc_scope == "final" and not explicit_request:
+        workspace = qc_sichuan._sichuan_workspace_service()
+        eligible_refs = workspace.find_terminal_reevaluation_candidates(
+            record_refs=record_refs,
+        )
+        if not eligible_refs:
+            return {
+                "status": "not_needed",
+                "scene": qc_scope,
+                "eligible_records": 0,
+                "queued_records": 0,
+                "job_id": "",
+            }
+        eligible_record_refs = [ref.as_dict() for ref in eligible_refs]
+        date_field = "discharge"
+    else:
+        eligible_record_refs = record_refs
+        date_field = "discharge" if qc_scope == "final" else "admission"
+
     response = await qc_sichuan.create_workspace_batch_job(
         request=request,
         payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
             rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
-            scope="final",
-            date_field="discharge",
-            record_refs=[ref.as_dict() for ref in eligible_refs],
+            scope=qc_scope,
+            date_field=date_field,
+            record_refs=eligible_record_refs,
             run_mode="parallel",
         ),
         qc_service=await qc_sichuan.get_qc_service(),
         current_user=current_user,
     )
+    if not isinstance(response, dict) or response.get("success") is not True:
+        raise RuntimeError("质控任务创建失败")
     data = response.get("data") if isinstance(response, dict) else None
     job_data = data if isinstance(data, dict) else {}
+    job_id = str(job_data.get("id") or "").strip()
+    if not job_id:
+        raise RuntimeError("质控任务创建未返回任务标识")
     reused = bool(job_data.get("idempotency_reused"))
     return {
         "status": "reused" if reused else "queued",
-        "eligible_records": len(eligible_refs),
-        "queued_records": len(eligible_refs),
-        "job_id": str(job_data.get("id") or ""),
+        "scene": qc_scope,
+        "eligible_records": len(eligible_record_refs),
+        "queued_records": len(eligible_record_refs),
+        "job_id": job_id,
+    }
+
+
+async def _enqueue_terminal_reevaluation_after_sync(
+    *,
+    request: Request,
+    current_user: dict,
+    record_refs: list[dict[str, str]],
+) -> dict[str, object]:
+    """保留既有终末复评摘要形状，正式创建逻辑由统一入口负责。"""
+
+    summary = await _enqueue_qc_after_sync(
+        request=request,
+        current_user=current_user,
+        record_refs=record_refs,
+        qc_scope="final",
+        explicit_request=False,
+    )
+    return {
+        "status": str(summary["status"]),
+        "eligible_records": int(summary["eligible_records"]),
+        "queued_records": int(summary["queued_records"]),
+        "job_id": str(summary["job_id"]),
     }
 
 
@@ -136,6 +193,84 @@ def require_sync_write_access(current_user: dict = Depends(get_current_user)) ->
     return current_user
 
 
+def require_sync_trigger_access(current_user: dict = Depends(get_current_user)) -> dict:
+    roles = _extract_roles(current_user)
+    if not roles.intersection({"admin", "qc_manager", "sync_admin", "super_admin"}):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="数据同步操作权限不足（仅 admin / qc_manager / sync_admin / super_admin 可操作）",
+        )
+    return current_user
+
+
+def _is_auto_qc_scene_supported(scene: Optional[str]) -> bool:
+    return str(scene or "").strip().lower() in {"running", "final"}
+
+
+def _assert_auto_qc_scene(req: TriggerRequest) -> None:
+    """自动质控仅有运行、终末两种已定义的任务范围。"""
+
+    if req.auto_qc_after_sync and not _is_auto_qc_scene_supported(req.scene):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="自动质控仅支持运行病历或终末病历场景",
+        )
+
+
+def _resolve_auto_qc_workflow_token(req: TriggerRequest) -> str:
+    """自动流程的点击标识：同一标识仅用于当前点击的重试。"""
+
+    if not req.auto_qc_after_sync:
+        return ""
+    workflow_token = str(req.auto_qc_workflow_token or "").strip()
+    if not _AUTO_QC_WORKFLOW_TOKEN_PATTERN.fullmatch(workflow_token):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一键同步并质控需要有效的流程标识（8-96 位字母、数字、点、下划线或连字符）",
+        )
+    return workflow_token
+
+
+def _assert_qc_manager_one_click_request(req: TriggerRequest, current_user: dict) -> None:
+    """限制质控科仅能执行预设的一键同步并质控，不赋予同步配置权限。"""
+
+    roles = _extract_roles(current_user)
+    if roles.intersection({"admin", "sync_admin", "super_admin"}):
+        return
+    if "qc_manager" not in roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="数据同步操作权限不足")
+    if req.auto_qc_after_sync is not True:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="质控科仅可使用同步并质控功能",
+        )
+    if not _is_auto_qc_scene_supported(req.scene):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="质控科仅可同步运行病历或终末病历",
+        )
+    if req.tables is not None or req.table_groups is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="质控科不可自定义同步表或同步分组",
+        )
+    if req.sync_date is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="质控科不可自定义同步日期",
+        )
+    if req.policy_version is not None or req.preflight_fingerprint is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="质控科不可携带同步策略或预检标识",
+        )
+    if str(req.scene or "").strip().lower() == "running" and req.date_window is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="运行病历同步不可设置日期范围",
+        )
+
+
 def _mask_pg_config(raw: dict) -> dict:
     data = dict(raw)
     password = str(data.get("remote_password") or "")
@@ -165,6 +300,8 @@ class TriggerRequest(BaseModel):
     policy_version: Optional[str] = Field(default=None, max_length=128)
     table_groups: Optional[list[str]] = None
     preflight_fingerprint: Optional[str] = Field(default=None, max_length=96)
+    auto_qc_after_sync: bool = False
+    auto_qc_workflow_token: Optional[str] = Field(default=None, max_length=96)
 
 
 class PgConfigUpdate(BaseModel):
@@ -307,6 +444,8 @@ def _build_idempotency_key(
     tables: Optional[list[str]] = None,
     table_groups: Optional[list[str]] = None,
     policy_version: str = "",
+    auto_qc_after_sync: bool = False,
+    auto_qc_workflow_token: str = "",
 ) -> str:
     fingerprint_payload = {
         "source": source,
@@ -320,6 +459,9 @@ def _build_idempotency_key(
         "policy_version": str(policy_version or ""),
         "operator": operator,
     }
+    if auto_qc_after_sync:
+        fingerprint_payload["auto_qc_after_sync"] = True
+        fingerprint_payload["auto_qc_workflow_token"] = str(auto_qc_workflow_token or "")
     payload = json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
     return f"{source}:{tier}:{sync_date}:{operator}:{digest}"
@@ -824,17 +966,24 @@ async def run_preflight(
 async def trigger_sync(
     request: Request,
     req: TriggerRequest,
-    current_user: dict = Depends(require_sync_write_access),
+    current_user: dict = Depends(require_sync_trigger_access),
     _: dict = Depends(require_product_activation),
 ):
-    """手动触发数据同步（仅 admin）"""
+    """手动触发数据同步；质控科仅可使用受限的一键同步并质控。"""
+    _assert_auto_qc_scene(req)
+    _assert_qc_manager_one_click_request(req, current_user)
+    auto_qc_workflow_token = _resolve_auto_qc_workflow_token(req)
     enforce_rate_limit(
         request,
         bucket="sync_trigger",
         max_requests=5,
         window_seconds=60,
     )
-    from ..services.sync_idempotency import complete_sync_trigger, reserve_sync_trigger
+    from ..services.sync_idempotency import (
+        claim_sync_auto_qc_retry,
+        complete_sync_trigger,
+        reserve_sync_trigger,
+    )
 
     effective_tier = "all"
     effective_sync_date = _resolve_effective_sync_date(req.source, req.sync_date)
@@ -877,6 +1026,8 @@ async def trigger_sync(
         tables=selected_tables,
         table_groups=req.table_groups,
         policy_version=policy_version,
+        auto_qc_after_sync=req.auto_qc_after_sync,
+        auto_qc_workflow_token=auto_qc_workflow_token,
     )
 
     reservation = reserve_sync_trigger(
@@ -887,9 +1038,105 @@ async def trigger_sync(
         operator_email=operator_email,
     )
     if not reservation.created:
+        reused_result = (
+            dict(reservation.result) if isinstance(reservation.result, dict) else None
+        )
+        if isinstance(reused_result, dict) and isinstance(reused_result.get("warnings"), list):
+            reused_result["warnings"] = list(reused_result["warnings"])
+        if isinstance(reused_result, dict) and isinstance(reused_result.get("auto_qc"), dict):
+            reused_result["auto_qc"] = dict(reused_result["auto_qc"])
+
+        existing_auto_qc = (
+            reused_result.get("auto_qc") if isinstance(reused_result, dict) else None
+        )
+        retry_scope = str(scene or "").strip().lower()
+        retry_record_refs = claim_sync_auto_qc_retry(idempotency_key) if (
+            bool(req.auto_qc_after_sync)
+            and isinstance(existing_auto_qc, dict)
+            and str(existing_auto_qc.get("status") or "").strip().lower()
+            in {"enqueue_failed", "enqueueing"}
+            and retry_scope in {"running", "final"}
+        ) else None
+        if retry_record_refs and isinstance(reused_result, dict):
+            claimed_auto_qc = dict(existing_auto_qc)
+            claimed_auto_qc["status"] = "enqueueing"
+            claimed_auto_qc.pop("reason_code", None)
+            reused_result["auto_qc"] = claimed_auto_qc
+            try:
+                reused_result["auto_qc"] = await _enqueue_qc_after_sync(
+                    request=request,
+                    current_user=current_user,
+                    record_refs=retry_record_refs,
+                    qc_scope=retry_scope,
+                    explicit_request=True,
+                )
+                reused_result["auto_qc"].pop("claimed_at", None)
+                reused_result.pop("_internal_synced_case_refs", None)
+                warnings = reused_result.get("warnings")
+                if isinstance(warnings, list):
+                    reused_result["warnings"] = [
+                        item for item in warnings
+                        if item != _AUTO_QC_ENQUEUE_FAILED_WARNING
+                    ]
+                complete_sync_trigger(
+                    idempotency_key=idempotency_key,
+                    status=reservation.status,
+                    result=reused_result,
+                    error="",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "retry_auto_%s_qc_enqueue_failed error_type=%s",
+                    retry_scope,
+                    type(exc).__name__,
+                )
+                reused_result["_internal_synced_case_refs"] = retry_record_refs
+                reused_result["auto_qc"] = {
+                    "status": "enqueue_failed",
+                    "scene": retry_scope,
+                    "reason_code": "enqueue_failed",
+                    "eligible_records": 0,
+                    "queued_records": 0,
+                    "job_id": "",
+                }
+                warnings = reused_result.setdefault("warnings", [])
+                if isinstance(warnings, list) and _AUTO_QC_ENQUEUE_FAILED_WARNING not in warnings:
+                    warnings.append(_AUTO_QC_ENQUEUE_FAILED_WARNING)
+                complete_sync_trigger(
+                    idempotency_key=idempotency_key,
+                    status=reservation.status,
+                    result=reused_result,
+                    error="",
+                )
+        elif (
+            bool(req.auto_qc_after_sync)
+            and isinstance(existing_auto_qc, dict)
+            and str(existing_auto_qc.get("status") or "").strip().lower()
+            in {"enqueue_failed", "enqueueing"}
+            and retry_scope in {"running", "final"}
+        ):
+            refreshed_reservation = reserve_sync_trigger(
+                idempotency_key=idempotency_key,
+                source=req.source,
+                tier=effective_tier,
+                sync_date=effective_sync_date,
+                operator_email=operator_email,
+            )
+            if not refreshed_reservation.created:
+                reservation = refreshed_reservation
+                reused_result = (
+                    dict(reservation.result)
+                    if isinstance(reservation.result, dict)
+                    else None
+                )
+                if isinstance(reused_result, dict) and isinstance(reused_result.get("warnings"), list):
+                    reused_result["warnings"] = list(reused_result["warnings"])
+                if isinstance(reused_result, dict) and isinstance(reused_result.get("auto_qc"), dict):
+                    reused_result["auto_qc"] = dict(reused_result["auto_qc"])
+
         reused_success = reservation.status in {"success", "partial"}
-        if isinstance(reservation.result, dict) and "success" in reservation.result:
-            reused_success = bool(reservation.result.get("success")) or reservation.status == "partial"
+        if isinstance(reused_result, dict) and "success" in reused_result:
+            reused_success = bool(reused_result.get("success")) or reservation.status == "partial"
         reused_payload: dict[str, object] = {
             "run_id": reservation.run_id,
             "status": reservation.status,
@@ -897,10 +1144,35 @@ async def trigger_sync(
             "idempotency_key": idempotency_key,
             "idempotent_reused": True,
         }
-        if reservation.result is not None:
+        if reused_result is not None:
+            reused_payload["result"] = _public_sync_result(reused_result)
+            if isinstance(reused_result.get("warnings"), list):
+                reused_payload["warnings"] = reused_result.get("warnings")
+            auto_qc_summary = reused_result.get("auto_qc")
+            if isinstance(auto_qc_summary, dict):
+                reused_payload["auto_qc"] = {
+                    key: value
+                    for key, value in auto_qc_summary.items()
+                    if key != "claimed_at"
+                }
+            auto_terminal_summary = reused_result.get("auto_terminal_qc")
+            if isinstance(auto_terminal_summary, dict):
+                reused_payload["auto_terminal_qc"] = dict(auto_terminal_summary)
+        elif reservation.result is not None:
             reused_payload["result"] = reservation.result
-            if isinstance(reservation.result.get("warnings"), list):
-                reused_payload["warnings"] = reservation.result.get("warnings")
+            if isinstance(reservation.result, dict):
+                if isinstance(reservation.result.get("warnings"), list):
+                    reused_payload["warnings"] = reservation.result.get("warnings")
+                auto_qc_summary = reservation.result.get("auto_qc")
+                if isinstance(auto_qc_summary, dict):
+                    reused_payload["auto_qc"] = {
+                        key: value
+                        for key, value in auto_qc_summary.items()
+                        if key != "claimed_at"
+                    }
+                auto_terminal_summary = reservation.result.get("auto_terminal_qc")
+                if isinstance(auto_terminal_summary, dict):
+                    reused_payload["auto_terminal_qc"] = dict(auto_terminal_summary)
         if reservation.error:
             reused_payload["error"] = reservation.error
         audit_event(
@@ -953,10 +1225,54 @@ async def trigger_sync(
                 dict(item) for item in raw_internal_refs if isinstance(item, dict)
             ]
     auto_terminal_qc: dict[str, object] | None = None
+    auto_qc: dict[str, object] | None = None
+    sync_result_status = (
+        str(result.get("status") or "").strip().lower()
+        if isinstance(result, dict)
+        else ""
+    )
+    sync_result_scene = (
+        str(result.get("scene") or scene).strip().lower()
+        if isinstance(result, dict)
+        else ""
+    )
     if (
         isinstance(result, dict)
-        and str(result.get("status") or "").strip().lower() == "success"
-        and str(result.get("scene") or scene).strip().lower() in {"final", "both"}
+        and bool(req.auto_qc_after_sync)
+        and sync_result_status == "success"
+        and sync_result_scene in {"running", "final"}
+    ):
+        try:
+            auto_qc = await _enqueue_qc_after_sync(
+                request=request,
+                current_user=current_user,
+                record_refs=internal_case_refs,
+                qc_scope=sync_result_scene,
+                explicit_request=True,
+            )
+        except Exception as exc:
+            logger.warning(
+                "auto_%s_qc_enqueue_failed error_type=%s",
+                sync_result_scene,
+                type(exc).__name__,
+            )
+            auto_qc = {
+                "status": "enqueue_failed",
+                "scene": sync_result_scene,
+                "reason_code": "enqueue_failed",
+                "eligible_records": 0,
+                "queued_records": 0,
+                "job_id": "",
+            }
+            if internal_case_refs:
+                result["_internal_synced_case_refs"] = internal_case_refs
+            warnings = result.setdefault("warnings", [])
+            if isinstance(warnings, list):
+                warnings.append(_AUTO_QC_ENQUEUE_FAILED_WARNING)
+    elif (
+        isinstance(result, dict)
+        and sync_result_status == "success"
+        and sync_result_scene in {"final", "both"}
     ):
         try:
             auto_terminal_qc = await _enqueue_terminal_reevaluation_after_sync(
@@ -964,6 +1280,7 @@ async def trigger_sync(
                 current_user=current_user,
                 record_refs=internal_case_refs,
             )
+            auto_qc = {"scene": "final", **auto_terminal_qc}
         except Exception as exc:
             logger.warning(
                 "auto_terminal_qc_enqueue_failed error_type=%s",
@@ -975,11 +1292,39 @@ async def trigger_sync(
                 "queued_records": 0,
                 "job_id": "",
             }
+            auto_qc = {
+                "status": "enqueue_failed",
+                "scene": "final",
+                "reason_code": "enqueue_failed",
+                "eligible_records": 0,
+                "queued_records": 0,
+                "job_id": "",
+            }
             warnings = result.setdefault("warnings", [])
             if isinstance(warnings, list):
                 warnings.append("资料同步已完成，但终末质控自动复评未创建，请稍后重试同步")
+    elif (
+        isinstance(result, dict)
+        and bool(req.auto_qc_after_sync)
+        and sync_result_status in {"partial", "failed"}
+        and sync_result_scene in {"running", "final"}
+    ):
+        auto_qc = {
+            "status": "not_created",
+            "scene": sync_result_scene,
+            "reason_code": f"sync_{sync_result_status}",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+        }
+        if sync_result_status == "partial":
+            warnings = result.setdefault("warnings", [])
+            if isinstance(warnings, list):
+                warnings.append("本次同步部分完成，未自动创建质控任务；请补齐同步后再运行")
     if isinstance(result, dict) and auto_terminal_qc is not None:
         result["auto_terminal_qc"] = auto_terminal_qc
+    if isinstance(result, dict) and auto_qc is not None:
+        result["auto_qc"] = auto_qc
 
     finished_at = datetime.now(timezone.utc)
     status_name = _infer_trigger_status(req.source, result)
@@ -1080,7 +1425,7 @@ async def trigger_sync(
             request,
             str(result.get("error") or "同步执行失败"),
             code="SYNC_TRIGGER_FAILED",
-            data=result,
+            data=_public_sync_result(result),
         )
 
     complete_sync_trigger(
@@ -1089,7 +1434,7 @@ async def trigger_sync(
         result=result if isinstance(result, dict) else None,
         error="",
     )
-    payload = dict(result) if isinstance(result, dict) else {"result": result}
+    payload = _public_sync_result(result) if isinstance(result, dict) else {"result": result}
     payload.setdefault("run_id", run_id)
     payload["idempotency_key"] = idempotency_key
     payload["idempotent_reused"] = False

@@ -678,6 +678,39 @@ def test_run_sync_internal_transition_refs_exclude_patients_still_in_hospital(mo
     assert result["_internal_synced_case_refs"] == [discharged_ref.as_dict()]
 
 
+def test_run_sync_internal_running_refs_include_visible_active_cases(monkeypatch):
+    active_ref = CaseRef("H1", "P1", "V1")
+    selected = (
+        {
+            **active_ref.as_dict(),
+            "hospitalization_status": "active",
+            "authoritative_time": "2026-08-14 09:00:00",
+            "department": "重症医学科（ICU）",
+        },
+    )
+    scope_result = HospitalizationScopeResult(
+        case_refs=(active_ref,),
+        selected=selected,
+        all_selected=selected,
+        sources_used=("inpat_registration",),
+        source_status="ready",
+        warnings=(),
+    )
+    _calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=scope_result,
+        sync_action=lambda _kwargs: _successful_case_set_result((active_ref,)),
+    )
+
+    result = etl_sync.run_sync(
+        tables=list(target_names),
+        scene="running",
+        include_internal_case_refs=True,
+    )
+
+    assert result["_internal_synced_case_refs"] == [active_ref.as_dict()]
+
+
 def test_run_sync_explicit_all_hospital_ignores_saved_departments(monkeypatch):
     case_refs = (CaseRef("H1", "P1", "V1"),)
     calls, target_names = _install_public_run_sync_fakes(

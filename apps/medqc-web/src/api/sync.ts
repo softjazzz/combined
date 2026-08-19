@@ -60,11 +60,42 @@ export interface SyncStatistics {
   FAILED: number
 }
 
+export interface SyncAutoQcSummary {
+  status: string
+  scene: 'running' | 'final'
+  eligible_records: number
+  queued_records: number
+  job_id: string
+  reason_code?: string
+}
+
 export interface SyncTriggerResponse {
   success: boolean
+  status?: string
   error?: string
   message?: string
-  [key: string]: any
+  auto_qc?: SyncAutoQcSummary
+  [key: string]: unknown
+}
+
+export interface SyncTriggerPayload {
+  source: SyncSource
+  tier?: SyncTier
+  sync_date?: string
+  tables?: string[]
+  scene?: SyncPolicyConfig['scope']
+  date_window?: {
+    start?: string
+    end?: string
+    start_date?: string
+    end_date?: string
+  }
+  target_departments?: string[]
+  policy_version?: string
+  table_groups?: string[]
+  preflight_fingerprint?: string
+  auto_qc_after_sync?: boolean
+  auto_qc_workflow_token?: string
 }
 
 export interface SyncConnectionStatus {
@@ -138,10 +169,7 @@ export interface SyncRunsResponse {
 
 export interface SyncTemplate {
   id:
-    | 'hospital_standard'
-    | 'single_department_focus'
-    | 'multi_department_joint'
-    | 'night_low_impact'
+    'hospital_standard' | 'single_department_focus' | 'multi_department_joint' | 'night_low_impact'
   name: string
   description: string
   risk_tip: string
@@ -293,23 +321,7 @@ export const syncApi = {
     return unwrapSyncResponse<SyncPreflightResult>(response.data)
   },
 
-  async triggerSync(payload: {
-    source: SyncSource
-    tier?: SyncTier
-    sync_date?: string
-    tables?: string[]
-    scene?: SyncPolicyConfig['scope']
-    date_window?: {
-      start?: string
-      end?: string
-      start_date?: string
-      end_date?: string
-    }
-    target_departments?: string[]
-    policy_version?: string
-    table_groups?: string[]
-    preflight_fingerprint?: string
-  }): Promise<SyncTriggerResponse> {
+  async triggerSync(payload: SyncTriggerPayload): Promise<SyncTriggerResponse> {
     const response = await http.post('/api/v1/sync/trigger', payload)
     return unwrapSyncResponse<SyncTriggerResponse>(response.data)
   },

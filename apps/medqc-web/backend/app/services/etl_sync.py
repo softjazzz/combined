@@ -3487,9 +3487,14 @@ def run_sync(
             ),
         }
         if include_internal_case_refs:
+            deliverable_case_refs = (
+                visible_case_refs
+                if resolved_scene == "running"
+                else visible_case_refs.intersection(discharged_case_refs)
+            )
             result_payload["_internal_synced_case_refs"] = [
                 case_ref.as_dict()
-                for case_ref in sorted(visible_case_refs.intersection(discharged_case_refs))
+                for case_ref in sorted(deliverable_case_refs)
             ]
         return result_payload
     finally:

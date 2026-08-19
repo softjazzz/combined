@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from threading import Barrier
 
 import pytest
@@ -92,6 +94,206 @@ def test_complete_persists_result(monkeypatch):
     assert reused.run_id == reserved.run_id
     assert reused.status == "success"
     assert reused.result == {"success": True, "total_records": 12}
+
+
+@pytest.mark.parametrize("storage", ("memory", "sqlite"))
+def test_claim_auto_qc_retry_is_atomic_and_marks_result_enqueueing(
+    monkeypatch,
+    storage: str,
+):
+    db_engine = None if storage == "memory" else _sqlite_engine_with_migrated_table()
+    monkeypatch.setattr(sync_idempotency, "engine", db_engine)
+    if storage == "memory":
+        sync_idempotency.reset_sync_idempotency_for_testing()
+
+    key = f"pg:all:2026-08-19:{storage}-auto-qc@medqc.com"
+    case_ref = {
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+    }
+    sync_idempotency.reserve_sync_trigger(
+        idempotency_key=key,
+        source="pg",
+        tier="all",
+        sync_date="2026-08-19",
+        operator_email=f"{storage}-auto-qc@medqc.com",
+    )
+    sync_idempotency.complete_sync_trigger(
+        idempotency_key=key,
+        status="success",
+        result={
+            "success": True,
+            "auto_qc": {
+                "status": "enqueue_failed",
+                "scene": "running",
+                "reason_code": "enqueue_failed",
+                "eligible_records": 0,
+                "queued_records": 0,
+                "job_id": "",
+            },
+            "_internal_synced_case_refs": [case_ref],
+        },
+    )
+
+    first_claim = sync_idempotency.claim_sync_auto_qc_retry(key)
+    second_claim = sync_idempotency.claim_sync_auto_qc_retry(key)
+
+    assert first_claim == [case_ref]
+    assert second_claim is None
+    reused = sync_idempotency.reserve_sync_trigger(
+        idempotency_key=key,
+        source="pg",
+        tier="all",
+        sync_date="2026-08-19",
+        operator_email=f"{storage}-auto-qc@medqc.com",
+    )
+    assert reused.status == "success"
+    assert reused.result is not None
+    assert reused.result["success"] is True
+    auto_qc = reused.result["auto_qc"]
+    assert {key: value for key, value in auto_qc.items() if key != "claimed_at"} == {
+        "status": "enqueueing",
+        "scene": "running",
+        "eligible_records": 0,
+        "queued_records": 0,
+        "job_id": "",
+    }
+    assert datetime.fromisoformat(auto_qc["claimed_at"]).tzinfo is not None
+    assert reused.result["_internal_synced_case_refs"] == [case_ref]
+
+
+@pytest.mark.parametrize("storage", ("memory", "sqlite"))
+def test_claim_auto_qc_retry_rejects_active_lease_and_reclaims_expired_lease(
+    monkeypatch,
+    storage: str,
+):
+    db_engine = None if storage == "memory" else _sqlite_engine_with_migrated_table()
+    monkeypatch.setattr(sync_idempotency, "engine", db_engine)
+    if storage == "memory":
+        sync_idempotency.reset_sync_idempotency_for_testing()
+
+    key = f"pg:all:2026-08-19:{storage}-auto-qc-lease@medqc.com"
+    case_ref = {
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+    }
+    now = datetime.now(timezone.utc)
+    active_claimed_at = (now - timedelta(seconds=1)).isoformat()
+    expired_claimed_at = (now - timedelta(seconds=121)).isoformat()
+    result = {
+        "success": True,
+        "auto_qc": {
+            "status": "enqueueing",
+            "scene": "running",
+            "eligible_records": 0,
+            "queued_records": 0,
+            "job_id": "",
+            "claimed_at": active_claimed_at,
+        },
+        "_internal_synced_case_refs": [case_ref],
+    }
+    sync_idempotency.reserve_sync_trigger(
+        idempotency_key=key,
+        source="pg",
+        tier="all",
+        sync_date="2026-08-19",
+        operator_email=f"{storage}-auto-qc-lease@medqc.com",
+    )
+    sync_idempotency.complete_sync_trigger(
+        idempotency_key=key,
+        status="success",
+        result=result,
+    )
+
+    assert sync_idempotency.claim_sync_auto_qc_retry(key) is None
+
+    result["auto_qc"] = {**result["auto_qc"], "claimed_at": expired_claimed_at}
+    sync_idempotency.complete_sync_trigger(
+        idempotency_key=key,
+        status="success",
+        result=result,
+    )
+
+    assert sync_idempotency.claim_sync_auto_qc_retry(key) == [case_ref]
+    reused = sync_idempotency.reserve_sync_trigger(
+        idempotency_key=key,
+        source="pg",
+        tier="all",
+        sync_date="2026-08-19",
+        operator_email=f"{storage}-auto-qc-lease@medqc.com",
+    )
+    assert reused.result is not None
+    new_claimed_at = datetime.fromisoformat(reused.result["auto_qc"]["claimed_at"])
+    assert new_claimed_at > datetime.fromisoformat(expired_claimed_at)
+
+
+def test_claim_auto_qc_retry_rolls_back_when_sql_cas_misses(monkeypatch):
+    raw_result = json.dumps(
+        {
+            "success": True,
+            "auto_qc": {
+                "status": "enqueue_failed",
+                "scene": "running",
+                "reason_code": "enqueue_failed",
+            },
+            "_internal_synced_case_refs": [
+                {
+                    "institute_id": "inst-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+    statements: list[tuple[str, dict[str, object]]] = []
+
+    class _Result:
+        rowcount = 0
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"result_json": raw_result}
+
+    class _Session:
+        committed = False
+        rolled_back = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, statement, parameters):
+            statements.append((str(statement), dict(parameters)))
+            return _Result()
+
+        def commit(self):
+            self.committed = True
+
+        def rollback(self):
+            self.rolled_back = True
+
+    class _Engine:
+        class dialect:
+            name = "sqlite"
+
+    session = _Session()
+    monkeypatch.setattr(sync_idempotency, "engine", _Engine())
+    monkeypatch.setattr(sync_idempotency, "Session", lambda _engine: session)
+
+    claimed = sync_idempotency.claim_sync_auto_qc_retry("pg:all:cas-miss")
+
+    assert claimed is None
+    assert session.committed is False
+    assert session.rolled_back is True
+    assert "result_json = :expected_result_json" in statements[1][0]
+    assert statements[1][1]["expected_result_json"] == raw_result
 
 
 @pytest.mark.parametrize("storage", ("memory", "sqlite"))

@@ -94,6 +94,13 @@
           >
             刷新
           </button>
+          <QcSyncAndRunControl
+            :care-phase="carePhase"
+            :department="activeDept"
+            :start-date="startDate"
+            :end-date="endDate"
+            @completed="refreshAfterSyncAndQc"
+          />
         </div>
       </div>
 
@@ -166,6 +173,7 @@ import QcRecordResultTable, {
   type QcRecordResultRow,
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
+import QcSyncAndRunControl from './components/qc/QcSyncAndRunControl.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
@@ -454,6 +462,11 @@ function updateSelectedRecordKeys(recordKeys: string[]) {
 function clearSelection() {
   selectedRecordKeys.value = []
   selectedRecordRefs.value = {}
+}
+
+function refreshAfterSyncAndQc() {
+  clearSelection()
+  refreshData()
 }
 
 async function exportSelectedRecords() {

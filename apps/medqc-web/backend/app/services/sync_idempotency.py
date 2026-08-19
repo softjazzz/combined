@@ -6,7 +6,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import text
@@ -20,6 +20,7 @@ _MEMORY_LOCK = threading.Lock()
 _MEMORY_STORE: dict[str, dict[str, Any]] = {}
 _RETRYABLE_TRIGGER_STATUSES = frozenset({"failed", "rejected", "partial"})
 _SYNC_TRIGGER_TABLE = "qc.sync_trigger_idempotency"
+_AUTO_QC_RETRY_LEASE_SECONDS = 120
 
 
 @dataclass
@@ -33,6 +34,68 @@ class SyncTriggerReservation:
 
 def _new_run_id() -> str:
     return f"syncrun-{uuid.uuid4().hex[:12]}"
+
+
+def _parse_sync_trigger_result(raw_result: object) -> dict[str, Any] | None:
+    if isinstance(raw_result, dict):
+        return dict(raw_result)
+    if not isinstance(raw_result, str) or not raw_result.strip():
+        return None
+    try:
+        parsed = json.loads(raw_result)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _prepare_auto_qc_retry_claim(
+    result: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    auto_qc = result.get("auto_qc")
+    raw_record_refs = result.get("_internal_synced_case_refs")
+    auto_qc_status = (
+        str(auto_qc.get("status") or "").strip().lower()
+        if isinstance(auto_qc, dict)
+        else ""
+    )
+    if (
+        not isinstance(auto_qc, dict)
+        or auto_qc_status not in {"enqueue_failed", "enqueueing"}
+        or not isinstance(raw_record_refs, list)
+    ):
+        return None
+    if auto_qc_status == "enqueueing" and _has_active_auto_qc_retry_lease(
+        auto_qc.get("claimed_at")
+    ):
+        return None
+
+    record_refs = [dict(item) for item in raw_record_refs if isinstance(item, dict)]
+    if not record_refs:
+        return None
+
+    claimed_result = dict(result)
+    claimed_auto_qc = dict(auto_qc)
+    claimed_auto_qc["status"] = "enqueueing"
+    claimed_auto_qc.pop("reason_code", None)
+    claimed_auto_qc["claimed_at"] = datetime.now(timezone.utc).isoformat()
+    claimed_result["auto_qc"] = claimed_auto_qc
+    return claimed_result, record_refs
+
+
+def _has_active_auto_qc_retry_lease(raw_claimed_at: object) -> bool:
+    if not isinstance(raw_claimed_at, str) or not raw_claimed_at.strip():
+        return False
+    try:
+        claimed_at = datetime.fromisoformat(raw_claimed_at.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if claimed_at.tzinfo is None:
+        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+    else:
+        claimed_at = claimed_at.astimezone(timezone.utc)
+    return claimed_at + timedelta(seconds=_AUTO_QC_RETRY_LEASE_SECONDS) > datetime.now(
+        timezone.utc
+    )
 
 
 def reserve_sync_trigger(
@@ -164,15 +227,7 @@ def reserve_sync_trigger(
 
         existing_run_id = str(row.get("run_id") or "")
         created = existing_run_id == run_id
-        result: dict[str, Any] | None = None
-        raw_result = row.get("result_json")
-        if isinstance(raw_result, str) and raw_result.strip():
-            try:
-                parsed = json.loads(raw_result)
-                if isinstance(parsed, dict):
-                    result = parsed
-            except Exception:
-                result = None
+        result = _parse_sync_trigger_result(row.get("result_json"))
         return SyncTriggerReservation(
             created=created,
             run_id=existing_run_id,
@@ -180,6 +235,71 @@ def reserve_sync_trigger(
             result=result,
             error=str(row.get("error") or ""),
         )
+
+
+def claim_sync_auto_qc_retry(
+    idempotency_key: str,
+) -> list[dict[str, Any]] | None:
+    """原子领取一次同步成功后的质控补建权，避免并发重复入队。"""
+
+    if engine is None:
+        with _MEMORY_LOCK:
+            row = _MEMORY_STORE.get(idempotency_key)
+            result = (
+                row.get("result")
+                if isinstance(row, dict) and isinstance(row.get("result"), dict)
+                else None
+            )
+            prepared = _prepare_auto_qc_retry_claim(result) if result else None
+            if prepared is None:
+                return None
+            claimed_result, record_refs = prepared
+            row["result"] = claimed_result
+            return record_refs
+
+    dialect_name = str(getattr(getattr(engine, "dialect", None), "name", "")).lower()
+    # 生产 PostgreSQL 使用行锁；SQLite 测试适配器不支持 FOR UPDATE 语法。
+    lock_clause = "" if dialect_name == "sqlite" else " FOR UPDATE"
+    with Session(engine) as session:
+        row = session.execute(
+            text(
+                f"""
+                SELECT result_json
+                FROM {_SYNC_TRIGGER_TABLE}
+                WHERE idempotency_key = :idempotency_key{lock_clause}
+                """
+            ),
+            {"idempotency_key": idempotency_key},
+        ).mappings().first()
+        raw_result_json = row.get("result_json") if row else None
+        result = _parse_sync_trigger_result(raw_result_json)
+        prepared = _prepare_auto_qc_retry_claim(result) if result else None
+        if prepared is None or not isinstance(raw_result_json, str):
+            session.rollback()
+            return None
+
+        claimed_result, record_refs = prepared
+        update_result = session.execute(
+            text(
+                f"""
+                UPDATE {_SYNC_TRIGGER_TABLE}
+                SET result_json = :result_json, updated_at = CURRENT_TIMESTAMP
+                WHERE idempotency_key = :idempotency_key
+                  AND result_json = :expected_result_json
+                """
+            ),
+            {
+                "idempotency_key": idempotency_key,
+                "result_json": json.dumps(claimed_result, ensure_ascii=False),
+                "expected_result_json": raw_result_json,
+            },
+        )
+        # FOR UPDATE 保护 PostgreSQL；条件更新同时覆盖 SQLite 等无行锁适配器。
+        if update_result.rowcount != 1:
+            session.rollback()
+            return None
+        session.commit()
+        return record_refs
 
 
 def complete_sync_trigger(
