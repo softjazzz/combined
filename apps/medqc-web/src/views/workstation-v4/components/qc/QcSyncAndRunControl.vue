@@ -42,6 +42,10 @@
             <dt>科室</dt>
             <dd>{{ departmentSelectionLabel }}</dd>
           </div>
+          <div v-if="scene === 'final'">
+            <dt>同步日期</dt>
+            <dd>{{ selectedStartDate }} 至 {{ selectedEndDate }}</dd>
+          </div>
         </dl>
 
         <fieldset class="qc-sync-and-run-control__department-selector">
@@ -79,6 +83,37 @@
               <span>{{ departmentOption }}</span>
             </label>
           </div>
+        </fieldset>
+
+        <fieldset v-if="scene === 'final'" class="qc-sync-and-run-control__date-selector">
+          <legend>同步日期范围</legend>
+          <p class="qc-sync-and-run-control__date-hint">
+            {{ finalDateRangeHint }}
+          </p>
+          <div class="qc-sync-and-run-control__date-inputs">
+            <label>
+              <span>开始日期</span>
+              <input
+                v-model="selectedStartDate"
+                type="date"
+                data-testid="sync-and-qc-start-date"
+                @change="onFinalDateRangeChange"
+              />
+            </label>
+            <span class="qc-sync-and-run-control__date-separator" aria-hidden="true"> 至 </span>
+            <label>
+              <span>结束日期</span>
+              <input
+                v-model="selectedEndDate"
+                type="date"
+                data-testid="sync-and-qc-end-date"
+                @change="onFinalDateRangeChange"
+              />
+            </label>
+          </div>
+          <p v-if="dateRangeError" class="qc-sync-and-run-control__date-hint is-error" role="alert">
+            {{ dateRangeError }}
+          </p>
         </fieldset>
 
         <p class="qc-sync-and-run-control__description">
@@ -227,6 +262,12 @@ interface PersistedSyncWorkflow {
 
 type PersistedWorkflow = PersistedQcWorkflow | PersistedSyncWorkflow
 
+interface FinalDateWindow {
+  startDate: string
+  endDate: string
+  usesDefault: boolean
+}
+
 const props = defineProps<{
   carePhase: QcRecordCarePhase
   department?: string
@@ -242,6 +283,9 @@ const authStore = useAuthStore()
 const JOB_POLL_INTERVAL_MS = 3000
 const MAX_CONSECUTIVE_JOB_POLL_FAILURES = 3
 const MAX_ENQUEUEING_CONFIRMATIONS = 50
+// 起止日期差最多30天，含开始、结束日期共31个自然日。
+const MAX_FINAL_DATE_RANGE_DAYS = 30
+const HOSPITAL_TIME_ZONE = 'Asia/Shanghai'
 const confirmationOpen = ref(false)
 const progressVisible = ref(false)
 const progressState = ref<ProgressState>('idle')
@@ -253,6 +297,10 @@ const departmentLoading = ref(false)
 const departmentLoadError = ref('')
 const availableDepartments = ref<string[]>([])
 const selectedDepartments = ref<string[]>(defaultTargetDepartments())
+const selectedStartDate = ref('')
+const selectedEndDate = ref('')
+const finalDateWindowUsesDefault = ref(false)
+const dateRangeError = ref('')
 const retryableQcPayload = ref<AutoQcSyncTriggerPayload | null>(null)
 let pollTimer: number | null = null
 let syncStatusPollTimer: number | null = null
@@ -288,6 +336,11 @@ const targetDepartments = computed(() =>
       : defaultTargetDepartments(),
 )
 const isBusy = computed(() => progressState.value === 'syncing' || progressState.value === 'qc')
+const finalDateRangeHint = computed(() =>
+  finalDateWindowUsesDefault.value
+    ? '未提供完整结果筛选日期，已默认最近7天（含今日），可按需调整。'
+    : '已沿用当前结果筛选日期，可按需调整。',
+)
 const progressTitle = computed(() => {
   if (progressState.value === 'completed') return '质控已完成'
   if (progressState.value === 'empty') return '同步已完成'
@@ -313,6 +366,118 @@ function normalizedDepartment(value?: string): string {
 function defaultTargetDepartments(): string[] {
   const department = normalizedDepartment(props.department)
   return department === '全部科室' ? ['*'] : [department]
+}
+
+function isValidIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return false
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  )
+}
+
+function normalizedIsoDate(value: unknown): string {
+  const date = String(value || '').trim()
+  return isValidIsoDate(date) ? date : ''
+}
+
+function dateParts(value: string): [number, number, number] {
+  const [year, month, day] = value.split('-').map(Number)
+  return [year || 0, month || 0, day || 0]
+}
+
+function addDaysToIsoDate(value: string, days: number): string {
+  const [year, month, day] = dateParts(value)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function daysBetweenIsoDates(startDate: string, endDate: string): number {
+  const [startYear, startMonth, startDay] = dateParts(startDate)
+  const [endYear, endMonth, endDay] = dateParts(endDate)
+  return Math.round(
+    (Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) /
+      86_400_000,
+  )
+}
+
+function currentHospitalDate(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: HOSPITAL_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const day = parts.find((part) => part.type === 'day')?.value
+  if (year && month && day) return `${year}-${month}-${day}`
+  return new Date().toISOString().slice(0, 10)
+}
+
+function defaultFinalDateWindow(): FinalDateWindow {
+  const endDate = currentHospitalDate()
+  return {
+    startDate: addDaysToIsoDate(endDate, -6),
+    endDate,
+    usesDefault: true,
+  }
+}
+
+function resolveFinalDateWindow(startValue: unknown, endValue: unknown): FinalDateWindow {
+  const startDate = normalizedIsoDate(startValue)
+  const endDate = normalizedIsoDate(endValue)
+  if (startDate && endDate) {
+    return { startDate, endDate, usesDefault: false }
+  }
+  return defaultFinalDateWindow()
+}
+
+function resetFinalDateWindowSelection() {
+  if (scene.value !== 'final') {
+    selectedStartDate.value = ''
+    selectedEndDate.value = ''
+    finalDateWindowUsesDefault.value = false
+    dateRangeError.value = ''
+    return
+  }
+  const dateWindow = resolveFinalDateWindow(props.startDate, props.endDate)
+  selectedStartDate.value = dateWindow.startDate
+  selectedEndDate.value = dateWindow.endDate
+  finalDateWindowUsesDefault.value = dateWindow.usesDefault
+  dateRangeError.value = ''
+}
+
+function onFinalDateRangeChange() {
+  finalDateWindowUsesDefault.value = false
+  dateRangeError.value = ''
+}
+
+function validateFinalDateWindow(): boolean {
+  if (scene.value !== 'final') return true
+  const startDate = normalizedIsoDate(selectedStartDate.value)
+  const endDate = normalizedIsoDate(selectedEndDate.value)
+  if (!startDate || !endDate) {
+    dateRangeError.value = '请选择有效的开始日期和结束日期。'
+    return false
+  }
+  if (startDate > endDate) {
+    dateRangeError.value = '开始日期不能晚于结束日期。'
+    return false
+  }
+  if (daysBetweenIsoDates(startDate, endDate) > MAX_FINAL_DATE_RANGE_DAYS) {
+    dateRangeError.value = '终末病历同步日期范围最多31天。'
+    return false
+  }
+  selectedStartDate.value = startDate
+  selectedEndDate.value = endDate
+  dateRangeError.value = ''
+  return true
 }
 
 function uniqueDepartments(values: string[]): string[] {
@@ -396,6 +561,7 @@ function openConfirmation() {
     return
   }
   resetDepartmentSelection()
+  resetFinalDateWindowSelection()
   confirmationOpen.value = true
   void loadDepartments()
 }
@@ -584,12 +750,20 @@ function normalizePersistedSyncPayload(value: unknown): AutoQcSyncTriggerPayload
     auto_qc_workflow_token: workflowToken,
   }
   const dateWindow = isRecord(value.date_window) ? value.date_window : null
-  const startDate = dateWindow ? textValue(dateWindow.start_date) : ''
-  const endDate = dateWindow ? textValue(dateWindow.end_date) : ''
-  if (persistedScene === 'final' && (startDate || endDate)) {
+  const startDate = normalizedIsoDate(dateWindow?.start_date)
+  const endDate = normalizedIsoDate(dateWindow?.end_date)
+  if (persistedScene === 'final') {
+    if (
+      !startDate ||
+      !endDate ||
+      startDate > endDate ||
+      daysBetweenIsoDates(startDate, endDate) > MAX_FINAL_DATE_RANGE_DAYS
+    ) {
+      return null
+    }
     payload.date_window = {
-      ...(startDate ? { start_date: startDate } : {}),
-      ...(endDate ? { end_date: endDate } : {}),
+      start_date: startDate,
+      end_date: endDate,
     }
   }
   return payload
@@ -793,14 +967,12 @@ function createTriggerPayload(): AutoQcSyncTriggerPayload {
     auto_qc_after_sync: true as const,
     auto_qc_workflow_token: createWorkflowToken(),
   }
-  const startDate = String(props.startDate || '').trim()
-  const endDate = String(props.endDate || '').trim()
-  if (scene.value !== 'final' || (!startDate && !endDate)) return payload
+  if (scene.value !== 'final') return payload
   return {
     ...payload,
     date_window: {
-      ...(startDate ? { start_date: startDate } : {}),
-      ...(endDate ? { end_date: endDate } : {}),
+      start_date: selectedStartDate.value,
+      end_date: selectedEndDate.value,
     },
   }
 }
@@ -939,6 +1111,7 @@ async function retryQcCreation() {
 
 async function startSyncAndQc() {
   if (isBusy.value) return
+  if (!validateFinalDateWindow()) return
   confirmationOpen.value = false
   progressVisible.value = true
   retryableQcPayload.value = null
@@ -1120,7 +1293,8 @@ onUnmounted(() => {
   text-align: right;
 }
 
-.qc-sync-and-run-control__department-selector {
+.qc-sync-and-run-control__department-selector,
+.qc-sync-and-run-control__date-selector {
   margin: 14px 22px 0;
   padding: 12px 14px 13px;
   border: 1px solid rgb(0 0 0 / 6%);
@@ -1128,7 +1302,8 @@ onUnmounted(() => {
   background: #fff;
 }
 
-.qc-sync-and-run-control__department-selector legend {
+.qc-sync-and-run-control__department-selector legend,
+.qc-sync-and-run-control__date-selector legend {
   padding: 0 3px;
   color: rgb(29 29 31 / 68%);
   font-size: 12px;
@@ -1172,6 +1347,58 @@ onUnmounted(() => {
 
 .qc-sync-and-run-control__department-hint.is-error {
   color: #b42318;
+}
+
+.qc-sync-and-run-control__date-hint {
+  margin: 0 0 8px;
+  color: rgb(29 29 31 / 56%);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qc-sync-and-run-control__date-hint.is-error {
+  margin-top: 8px;
+  margin-bottom: 0;
+  color: #b42318;
+}
+
+.qc-sync-and-run-control__date-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+
+.qc-sync-and-run-control__date-inputs label {
+  display: grid;
+  gap: 5px;
+  color: rgb(29 29 31 / 64%);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qc-sync-and-run-control__date-inputs input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 7px;
+  color: #1d1d1f;
+  background: #fff;
+  font: inherit;
+}
+
+.qc-sync-and-run-control__date-inputs input:focus {
+  border-color: #0066cc;
+  outline: 2px solid rgb(0 102 204 / 14%);
+  outline-offset: 1px;
+}
+
+.qc-sync-and-run-control__date-separator {
+  padding-bottom: 7px;
+  color: rgb(29 29 31 / 48%);
+  font-size: 12px;
 }
 
 .qc-sync-and-run-control__description,

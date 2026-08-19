@@ -625,6 +625,211 @@ class TestSyncRouter:
         assert "流程标识" in str(response.json())
         assert calls["run"] == 0
 
+    @pytest.mark.parametrize("role", ("admin", "qc_manager"))
+    @pytest.mark.parametrize(
+        "date_window",
+        (
+            None,
+            {},
+            {"start_date": "2026-08-01"},
+            {"end_date": "2026-08-18"},
+            {"start_date": " ", "end_date": "2026-08-18"},
+        ),
+    )
+    def test_trigger_auto_final_requires_complete_explicit_date_window_before_sync(
+        self,
+        client,
+        monkeypatch,
+        role,
+        date_window,
+    ):
+        _override_user(client, [role])
+        monkeypatch.setattr(sync_router_module, "enforce_rate_limit", lambda *_args, **_kwargs: None)
+        calls = {"run": 0}
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: calls.__setitem__("run", calls["run"] + 1),
+        )
+        payload = {
+            "source": "pg",
+            "tier": "all",
+            "scene": "final",
+            "auto_qc_after_sync": True,
+            "auto_qc_workflow_token": "workflow-final-window-invalid",
+        }
+        if date_window is not None:
+            payload["date_window"] = date_window
+
+        response = client.post("/api/v1/sync/trigger", json=payload)
+
+        assert response.status_code == 422
+        assert "终末病历" in str(response.json())
+        assert "日期范围" in str(response.json())
+        assert calls["run"] == 0
+
+    @pytest.mark.parametrize(
+        ("role", "date_window", "expected_detail"),
+        (
+            (
+                "admin",
+                {"start_date": "2026-08-01", "end_date": "2026-09-01"},
+                "最多 31 个自然日",
+            ),
+            (
+                "qc_manager",
+                {"start_date": "2026-08-31", "end_date": "2026-08-01"},
+                "开始日期不得晚于结束日期",
+            ),
+            (
+                "admin",
+                {"start_date": "2026-02-30", "end_date": "2026-03-01"},
+                "YYYY-MM-DD",
+            ),
+        ),
+    )
+    def test_trigger_auto_final_rejects_invalid_date_range_before_sync(
+        self,
+        client,
+        monkeypatch,
+        role,
+        date_window,
+        expected_detail,
+    ):
+        _override_user(client, [role])
+        monkeypatch.setattr(sync_router_module, "enforce_rate_limit", lambda *_args, **_kwargs: None)
+        calls = {"run": 0}
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: calls.__setitem__("run", calls["run"] + 1),
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "final",
+                "date_window": date_window,
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-final-window-range-invalid",
+            },
+        )
+
+        assert response.status_code == 422
+        assert expected_detail in str(response.json())
+        assert calls["run"] == 0
+
+    @pytest.mark.parametrize(
+        ("role", "date_window", "expected_window"),
+        (
+            (
+                "admin",
+                {"start_date": "2026-08-01", "end_date": "2026-08-31"},
+                {"start": "2026-08-01", "end": "2026-08-31"},
+            ),
+            (
+                "qc_manager",
+                {"start_date": "2026-08-01", "end_date": "2026-08-31"},
+                {"start": "2026-08-01", "end": "2026-08-31"},
+            ),
+            (
+                "admin",
+                {"start": "2026-08-01", "end": "2026-08-18"},
+                {"start": "2026-08-01", "end": "2026-08-18"},
+            ),
+            (
+                "qc_manager",
+                {"start": "2026-08-01", "end": "2026-08-18"},
+                {"start": "2026-08-01", "end": "2026-08-18"},
+            ),
+            ("admin", None, None),
+        ),
+    )
+    def test_trigger_final_date_window_contract_keeps_plain_fallback(
+        self,
+        client,
+        monkeypatch,
+        role,
+        date_window,
+        expected_window,
+    ):
+        _override_user(client, [role])
+        captured: list[dict] = []
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-final-date-window",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+
+        def _fake_run_sync(**kwargs):
+            captured.append(kwargs)
+            return {
+                "success": True,
+                "status": "success",
+                "scene": "final",
+                "total_records": 0,
+                "_internal_synced_case_refs": [],
+            }
+
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+        payload = {"source": "pg", "tier": "all", "scene": "final"}
+        if date_window is not None:
+            payload.update(
+                {
+                    "date_window": date_window,
+                    "auto_qc_after_sync": True,
+                    "auto_qc_workflow_token": "workflow-final-window-valid",
+                }
+            )
+
+        response = client.post("/api/v1/sync/trigger", json=payload)
+
+        assert response.status_code == 200
+        assert captured[0]["date_window"] == expected_window
+
+    @pytest.mark.parametrize("role", ("admin", "qc_manager"))
+    def test_trigger_auto_running_rejects_date_window_before_sync(
+        self,
+        client,
+        monkeypatch,
+        role,
+    ):
+        _override_user(client, [role])
+        monkeypatch.setattr(sync_router_module, "enforce_rate_limit", lambda *_args, **_kwargs: None)
+        calls = {"run": 0}
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: calls.__setitem__("run", calls["run"] + 1),
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "date_window": {"start": "2026-08-01", "end": "2026-08-18"},
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-running-window-invalid",
+            },
+        )
+
+        assert response.status_code == 422
+        assert "运行病历" in str(response.json())
+        assert "日期范围" in str(response.json())
+        assert calls["run"] == 0
+
     def test_trigger_running_rejected(self, client, monkeypatch):
         _override_user(client, ["admin"])
         monkeypatch.setattr(
@@ -849,6 +1054,7 @@ class TestSyncRouter:
                 "source": "pg",
                 "tier": "all",
                 "scene": "final",
+                "date_window": {"start_date": "2026-08-01", "end_date": "2026-08-18"},
                 "auto_qc_after_sync": True,
                 "auto_qc_workflow_token": "workflow-final-visible",
             },
@@ -1251,11 +1457,6 @@ class TestSyncRouter:
                 scene="final",
                 auto_qc_after_sync=True,
                 preflight_fingerprint="stale-preflight-result",
-            ),
-            sync_router_module.TriggerRequest(
-                scene="running",
-                auto_qc_after_sync=True,
-                date_window={"start": "2026-08-01", "end": "2026-08-18"},
             ),
         )
 

@@ -313,6 +313,163 @@ describe('QcSyncAndRunControl', () => {
     expect(wrapper.text()).toContain('质控已完成，结果已刷新')
   })
 
+  it('运行病历即使父页带有日期筛选也绝不发送 date_window', async () => {
+    const wrapper = mount(QcSyncAndRunControl, {
+      props: {
+        carePhase: 'inpatient',
+        department: '重症医学科',
+        startDate: '2026-08-01',
+        endDate: '2026-08-18',
+      },
+    })
+
+    await wrapper.get('[data-testid="sync-and-qc-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
+    await flushPromises()
+
+    const payload = mocks.triggerSync.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(payload).not.toHaveProperty('date_window')
+  })
+
+  it('终末病历确认框沿用父页完整日期范围，并将其传给同步请求', async () => {
+    const wrapper = mount(QcSyncAndRunControl, {
+      props: {
+        carePhase: 'discharged',
+        department: '重症医学科',
+        startDate: '2026-08-01',
+        endDate: '2026-08-18',
+      },
+    })
+
+    await wrapper.get('[data-testid="sync-and-qc-trigger"]').trigger('click')
+    await flushPromises()
+
+    expect(
+      (wrapper.get('[data-testid="sync-and-qc-start-date"]').element as HTMLInputElement).value,
+    ).toBe('2026-08-01')
+    expect(
+      (wrapper.get('[data-testid="sync-and-qc-end-date"]').element as HTMLInputElement).value,
+    ).toBe('2026-08-18')
+    await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.triggerSync).toHaveBeenCalledWith(
+      expectedWorkflowPayload({
+        source: 'pg',
+        scene: 'final',
+        target_departments: ['重症医学科'],
+        auto_qc_after_sync: true,
+        date_window: {
+          start_date: '2026-08-01',
+          end_date: '2026-08-18',
+        },
+      }),
+    )
+  })
+
+  it('终末病历日期差为30天时允许同步（共31个自然日）', async () => {
+    const wrapper = mount(QcSyncAndRunControl, {
+      props: {
+        carePhase: 'discharged',
+        department: '重症医学科',
+        startDate: '2026-01-01',
+        endDate: '2026-01-31',
+      },
+    })
+
+    await wrapper.get('[data-testid="sync-and-qc-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.triggerSync).toHaveBeenCalledWith(
+      expectedWorkflowPayload({
+        source: 'pg',
+        scene: 'final',
+        target_departments: ['重症医学科'],
+        auto_qc_after_sync: true,
+        date_window: {
+          start_date: '2026-01-01',
+          end_date: '2026-01-31',
+        },
+      }),
+    )
+  })
+
+  it('终末病历未收到完整父页日期时默认最近7天，并允许在确认框修改', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-19T04:00:00.000Z'))
+    try {
+      const wrapper = mount(QcSyncAndRunControl, {
+        props: {
+          carePhase: 'discharged',
+          department: '重症医学科',
+          startDate: '2026-08-01',
+        },
+      })
+
+      await wrapper.get('[data-testid="sync-and-qc-trigger"]').trigger('click')
+      await flushPromises()
+
+      const startInput = wrapper.get('[data-testid="sync-and-qc-start-date"]')
+      const endInput = wrapper.get('[data-testid="sync-and-qc-end-date"]')
+      expect((startInput.element as HTMLInputElement).value).toBe('2026-08-13')
+      expect((endInput.element as HTMLInputElement).value).toBe('2026-08-19')
+      expect(wrapper.text()).toContain('默认最近7天（含今日）')
+
+      await startInput.setValue('2026-08-05')
+      await endInput.setValue('2026-08-17')
+      await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
+      await flushPromises()
+
+      expect(mocks.triggerSync).toHaveBeenCalledWith(
+        expectedWorkflowPayload({
+          source: 'pg',
+          scene: 'final',
+          target_departments: ['重症医学科'],
+          auto_qc_after_sync: true,
+          date_window: {
+            start_date: '2026-08-05',
+            end_date: '2026-08-17',
+          },
+        }),
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each([
+    {
+      title: '开始日期晚于结束日期',
+      startDate: '2026-08-18',
+      endDate: '2026-08-17',
+      message: '开始日期不能晚于结束日期。',
+    },
+    {
+      title: '日期跨度超过31天',
+      startDate: '2026-01-01',
+      endDate: '2026-02-01',
+      message: '终末病历同步日期范围最多31天。',
+    },
+  ])('终末病历 $title 时在前端阻止同步', async ({ startDate, endDate, message }) => {
+    const wrapper = mount(QcSyncAndRunControl, {
+      props: {
+        carePhase: 'discharged',
+        department: '重症医学科',
+      },
+    })
+
+    await wrapper.get('[data-testid="sync-and-qc-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="sync-and-qc-start-date"]').setValue(startDate)
+    await wrapper.get('[data-testid="sync-and-qc-end-date"]').setValue(endDate)
+    await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(message)
+    expect(wrapper.find('[data-testid="sync-and-qc-confirm"]').exists()).toBe(true)
+    expect(mocks.triggerSync).not.toHaveBeenCalled()
+  })
+
   it('质控完成后再次主动点击会生成新的工作流令牌', async () => {
     const wrapper = mount(QcSyncAndRunControl, {
       props: {
@@ -681,6 +838,47 @@ describe('QcSyncAndRunControl', () => {
     await flushPromises()
 
     expect(window.sessionStorage.getItem('medqc:sync-and-qc:running')).toBeNull()
+    expect(mocks.getStatus).not.toHaveBeenCalled()
+    expect(mocks.triggerSync).not.toHaveBeenCalled()
+    expect(mocks.getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { title: '缺少日期范围', dateWindow: undefined },
+    { title: '仅有开始日期', dateWindow: { start_date: '2026-08-01' } },
+    {
+      title: '跨度超过31天',
+      dateWindow: { start_date: '2026-01-01', end_date: '2026-02-01' },
+    },
+  ])('历史终末同步记录$title 时不自动补日期重放', async ({ dateWindow }) => {
+    const payload: Record<string, unknown> = {
+      source: 'pg',
+      scene: 'final',
+      target_departments: ['重症医学科'],
+      auto_qc_after_sync: true,
+      auto_qc_workflow_token: PERSISTED_WORKFLOW_TOKEN,
+    }
+    if (dateWindow !== undefined) {
+      payload.date_window = dateWindow
+    }
+    window.sessionStorage.setItem(
+      'medqc:sync-and-qc:final',
+      JSON.stringify({
+        stage: 'syncing',
+        owner: 'qc-user-a',
+        payload,
+      }),
+    )
+
+    mount(QcSyncAndRunControl, {
+      props: {
+        carePhase: 'discharged',
+        department: '重症医学科',
+      },
+    })
+    await flushPromises()
+
+    expect(window.sessionStorage.getItem('medqc:sync-and-qc:final')).toBeNull()
     expect(mocks.getStatus).not.toHaveBeenCalled()
     expect(mocks.triggerSync).not.toHaveBeenCalled()
     expect(mocks.getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()

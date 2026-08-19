@@ -38,6 +38,7 @@ from ..core.response import success_response, get_trace_id
 logger = logging.getLogger(__name__)
 _AUTO_QC_ENQUEUE_FAILED_WARNING = "资料同步已完成，但质控任务未创建；可重试创建质控任务"
 _AUTO_QC_WORKFLOW_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$")
+_AUTO_QC_FINAL_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 router = APIRouter(prefix="/api/v1/sync", tags=["data-sync"])
 
@@ -264,13 +265,6 @@ def _assert_qc_manager_one_click_request(req: TriggerRequest, current_user: dict
             status_code=status.HTTP_403_FORBIDDEN,
             detail="质控科不可携带同步策略或预检标识",
         )
-    if str(req.scene or "").strip().lower() == "running" and req.date_window is not None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="运行病历同步不可设置日期范围",
-        )
-
-
 def _mask_pg_config(raw: dict) -> dict:
     data = dict(raw)
     password = str(data.get("remote_password") or "")
@@ -532,6 +526,62 @@ def _normalize_date_window_payload(raw: Optional[dict[str, str]]) -> Optional[di
         "start": start or None,
         "end": end or None,
     }
+
+
+def _assert_auto_qc_date_window(
+    req: TriggerRequest,
+    date_window: Optional[dict[str, str]],
+) -> None:
+    """冻结一键同步的场景范围，避免终末流程隐式回退到全局日期策略。"""
+
+    if not req.auto_qc_after_sync:
+        return
+    scene = str(req.scene or "").strip().lower()
+    if scene == "running":
+        if req.date_window is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="一键同步运行病历不可设置日期范围",
+            )
+        return
+    if scene != "final":
+        return
+    start_value = str(date_window.get("start") or "").strip() if isinstance(date_window, dict) else ""
+    end_value = str(date_window.get("end") or "").strip() if isinstance(date_window, dict) else ""
+    if not start_value or not end_value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "一键同步终末病历需要明确日期范围："
+                "date_window 必须同时包含非空 start_date 和 end_date（兼容 start/end）"
+            ),
+        )
+    if not (
+        _AUTO_QC_FINAL_DATE_PATTERN.fullmatch(start_value)
+        and _AUTO_QC_FINAL_DATE_PATTERN.fullmatch(end_value)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一键同步终末病历日期范围必须使用有效 YYYY-MM-DD 日期",
+        )
+    try:
+        start_date = date.fromisoformat(start_value)
+        end_date = date.fromisoformat(end_value)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一键同步终末病历日期范围必须使用有效 YYYY-MM-DD 日期",
+        ) from None
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一键同步终末病历开始日期不得晚于结束日期",
+        )
+    if (end_date - start_date).days > 30:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一键同步终末病历日期范围最多 31 个自然日",
+        )
 
 
 def _normalize_target_departments(values: Optional[list[str]]) -> Optional[list[str]]:
@@ -996,6 +1046,7 @@ async def trigger_sync(
         )
 
     date_window_payload = _normalize_date_window_payload(req.date_window)
+    _assert_auto_qc_date_window(req, date_window_payload)
     target_departments = _normalize_target_departments(req.target_departments)
     policy_version = str(req.policy_version or "").strip()
     scene = str(req.scene or "both")
