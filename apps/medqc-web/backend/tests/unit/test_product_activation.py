@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import base64
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -183,6 +186,55 @@ def test_signed_but_noncanonical_payload_encoding_is_rejected(tmp_path):
 
     with pytest.raises(ProductActivationError, match="编码"):
         service.activate(f"MQ1.{payload_part}.{signature}")
+
+
+def test_issuer_can_write_bootstrap_state_without_printing_activation_code(tmp_path):
+    _, public_path = _keypair(tmp_path)
+    private_path = tmp_path / "private.pem"
+    state_path = tmp_path / "product_activation_bootstrap.json"
+    issuer_script = Path(__file__).resolve().parents[3] / "scripts" / "generate_medqc_activation_code.py"
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=100)).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "Z")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(issuer_script),
+            "--private-key",
+            str(private_path),
+            "--public-key",
+            str(public_path),
+            "--customer",
+            "三个月预激活验收",
+            "--edition",
+            "trial",
+            "--serial",
+            "TRIAL-TEST-001",
+            "--expires-at",
+            expires_at,
+            "--state-output",
+            str(state_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert state_path.is_file()
+    assert "MQ1." not in (completed.stdout or "")
+    assert "MQ1." not in (completed.stderr or "")
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["payload"]["customer"] == "三个月预激活验收"
+    assert saved["payload"]["expires_at"] == expires_at
+    service = ProductActivationService(
+        required=True,
+        state_path=state_path,
+        public_key_path=public_path,
+    )
+    assert service.status()["status"] == "active"
 
 
 def test_activation_api_is_readable_by_logged_in_user_but_write_is_admin_only(client):

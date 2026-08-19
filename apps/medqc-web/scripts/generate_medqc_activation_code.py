@@ -21,6 +21,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.services.product_activation import (  # noqa: E402
     ACTIVATION_PRODUCT,
     ACTIVATION_SCHEMA_VERSION,
+    ProductActivationService,
     build_activation_code,
 )
 
@@ -43,6 +44,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--edition", default="customer")
     parser.add_argument("--serial", required=True)
     parser.add_argument("--expires-at", required=True, help="RFC3339 时间，例如 2027-08-19T00:00:00Z")
+    parser.add_argument(
+        "--public-key",
+        type=Path,
+        help="写入预激活状态时使用的验签公钥；省略时使用产品内置公钥",
+    )
+    parser.add_argument(
+        "--state-output",
+        type=Path,
+        help="直接写入可随客户包交付的激活状态；使用时不会在控制台打印完整激活码",
+    )
     return parser.parse_args()
 
 
@@ -63,7 +74,17 @@ def main() -> None:
     }
     if not payload["customer"] or not payload["edition"] or not payload["serial"]:
         raise SystemExit("客户、版本和序列号不能为空")
-    print(build_activation_code(private_key, payload))
+    activation_code = build_activation_code(private_key, payload)
+    if args.state_output:
+        service = ProductActivationService(
+            required=True,
+            state_path=args.state_output,
+            public_key_path=args.public_key,
+        )
+        service.activate(activation_code)
+        print(f"Bundled activation state created; expires_at={payload['expires_at']}")
+        return
+    print(activation_code)
 
 
 if __name__ == "__main__":

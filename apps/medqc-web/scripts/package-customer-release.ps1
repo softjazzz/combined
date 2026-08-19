@@ -2,7 +2,11 @@ param(
   [string]$OutputRoot = "D:\LLM\LX888\release",
   [switch]$SkipBuild,
   [string]$InventoryPath = "",
-  [switch]$AllowDirty
+  [switch]$AllowDirty,
+  [int]$BundledActivationMonths = 3,
+  [string]$BundledActivationCustomer = "MedQC 客户试用授权",
+  [string]$ActivationPrivateKeyPath = "",
+  [switch]$SkipBundledActivation
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +24,23 @@ $backendDir = Join-Path $releaseDir "backend"
 $frontendDir = Join-Path $releaseDir "frontend"
 $toolsDir = Join-Path $releaseDir "tools"
 $docsDir = Join-Path $releaseDir "docs"
+$bundledActivationSummary = "disabled by -SkipBundledActivation"
+$bundledActivationNote = "- This package contains no bundled activation; activate manually in System Settings."
+
+if (-not $SkipBundledActivation) {
+  if ($BundledActivationMonths -lt 1 -or $BundledActivationMonths -gt 24) {
+    throw "BundledActivationMonths must be between 1 and 24."
+  }
+  if ([string]::IsNullOrWhiteSpace($BundledActivationCustomer)) {
+    throw "BundledActivationCustomer must not be empty."
+  }
+  if ([string]::IsNullOrWhiteSpace($ActivationPrivateKeyPath)) {
+    $ActivationPrivateKeyPath = Join-Path $repoRoot "secrets\medqc-offline-activation-private.pem"
+  }
+  if (-not (Test-Path -LiteralPath $ActivationPrivateKeyPath -PathType Leaf)) {
+    throw "Bundled activation requires the issuer private key. Use -ActivationPrivateKeyPath or explicitly pass -SkipBundledActivation."
+  }
+}
 
 function Write-Step([string]$message) {
   Write-Host "[package] $message" -ForegroundColor Cyan
@@ -323,6 +344,40 @@ if (-not (Test-Path -LiteralPath $activationPublicKeyTarget -PathType Leaf)) {
   throw "Customer package is missing product_activation_public_key.pem"
 }
 
+if (-not $SkipBundledActivation) {
+  Write-Step "Issue default three-month bundled activation"
+  $activationIssuerScript = Join-Path $projectRoot "scripts\generate_medqc_activation_code.py"
+  if (-not (Test-Path -LiteralPath $activationIssuerScript -PathType Leaf)) {
+    throw "Activation issuer script is missing."
+  }
+  $activationIssuedAt = [DateTimeOffset]::UtcNow
+  $activationExpiresAt = $activationIssuedAt.AddMonths($BundledActivationMonths).ToString(
+    "yyyy-MM-ddTHH:mm:ssZ",
+    [System.Globalization.CultureInfo]::InvariantCulture
+  )
+  $activationSerial = "BUNDLED-$stamp"
+  $activationBootstrapTarget = Join-Path $backendDir "app\data\product_activation_bootstrap.json"
+  $activationIssuerArgs = @(
+    $activationIssuerScript,
+    "--private-key", $ActivationPrivateKeyPath,
+    "--public-key", $activationPublicKeyTarget,
+    "--customer", $BundledActivationCustomer,
+    "--edition", "trial",
+    "--serial", $activationSerial,
+    "--expires-at", $activationExpiresAt,
+    "--state-output", $activationBootstrapTarget
+  )
+  & python @activationIssuerArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to issue bundled product activation."
+  }
+  if (-not (Test-Path -LiteralPath $activationBootstrapTarget -PathType Leaf)) {
+    throw "Bundled product activation state was not created."
+  }
+  $bundledActivationSummary = "enabled; expires at $activationExpiresAt; existing customer activation is never overwritten"
+  $bundledActivationNote = "- A fresh installation receives the bundled three-month activation on first start. Existing activation state is never overwritten."
+}
+
 $backendServicesSourceDir = Join-Path $backendSourceDir "services"
 $backendServicesDestinationDir = Join-Path $backendDir "services"
 New-Item -ItemType Directory -Force -Path $backendServicesDestinationDir | Out-Null
@@ -356,6 +411,7 @@ $readmeLines = @(
   "",
   "Generated at: $generatedAt",
   "Non-releasable development package: $($AllowDirty.IsPresent)",
+  "Bundled product activation: $bundledActivationSummary",
   "",
   "## Directory layout",
   "- frontend/dist: frontend static assets",
@@ -380,6 +436,7 @@ $readmeLines = @(
   "- Frontend is built in customer mode and does not hardcode the public API domain.",
   "- Start the backend from backend with: powershell -NoProfile -ExecutionPolicy Bypass -File .\start_dev_backend.ps1",
   "- The customer launcher enforces PRODUCT_ACTIVATION_REQUIRED=true; activate offline in System Settings > Product Activation.",
+  $bundledActivationNote,
   "",
   "## Database deployment order",
   "1. Start PostgreSQL and confirm its configured port is listening. Opening /docs only proves the backend process is alive; it does not prove database health.",

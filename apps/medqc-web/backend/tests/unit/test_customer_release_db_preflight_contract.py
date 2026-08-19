@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REPO_ROOT = PROJECT_ROOT.parents[1]
 PACKAGE_SCRIPT = PROJECT_ROOT / "scripts" / "package-customer-release.ps1"
 PREFLIGHT_SCRIPT = PROJECT_ROOT / "scripts" / "customer-db-preflight.ps1"
+BACKEND_LAUNCHER = PROJECT_ROOT / "backend" / "start_dev_backend.ps1"
 DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs" / "deployment" / "客户机交付包编译打包指南.md"
 
 
@@ -74,6 +75,89 @@ def test_customer_release_requires_activation_and_rejects_issuer_secrets() -> No
     assert "product_activation_state.json" in package_source
 
 
+def test_customer_release_defaults_to_three_month_bootstrap_activation() -> None:
+    package_source = PACKAGE_SCRIPT.read_text(encoding="utf-8")
+    launcher_source = BACKEND_LAUNCHER.read_text(encoding="utf-8")
+
+    assert "[int]$BundledActivationMonths = 3" in package_source
+    assert "[switch]$SkipBundledActivation" in package_source
+    assert "AddMonths($BundledActivationMonths)" in package_source
+    assert "product_activation_bootstrap.json" in package_source
+    assert '"--state-output"' in package_source
+    assert "medqc-offline-activation-private.pem" in package_source
+    assert "product_activation_bootstrap.json" in launcher_source
+    assert "PRODUCT_ACTIVATION_STATE_PATH" in launcher_source
+    assert "[System.IO.File]::Copy" in launcher_source
+    assert "if (Test-Path -LiteralPath $activationStatePath -PathType Leaf)" in launcher_source
+
+
+def test_customer_launcher_installs_bootstrap_once_without_overwriting_existing_state(
+    tmp_path: Path,
+) -> None:
+    backend_root = tmp_path / "backend"
+    bootstrap_path = backend_root / "app" / "data" / "product_activation_bootstrap.json"
+    launcher_path = backend_root / "start_dev_backend.ps1"
+    program_data = tmp_path / "program-data"
+    bootstrap_path.parent.mkdir(parents=True)
+    launcher_path.write_text(BACKEND_LAUNCHER.read_text(encoding="utf-8"), encoding="utf-8")
+    bootstrap_path.write_text(
+        '{"activation_code":"MQ1.bootstrap","payload":{"customer":"试用授权"}}\n',
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    for key in tuple(environment):
+        if key.lower() == "programdata":
+            environment.pop(key)
+    environment["ProgramData"] = str(program_data)
+    state_path = program_data / "MedQC" / "license" / "activation.json"
+
+    first = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(launcher_path),
+            "-InstallActivationOnly",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=environment,
+    )
+    assert first.returncode == 0, first.stderr
+    assert state_path.read_text(encoding="utf-8").startswith(
+        '{"activation_code":"MQ1.bootstrap"'
+    )
+
+    existing = '{"activation_code":"MQ1.existing","payload":{"customer":"正式授权"}}\n'
+    state_path.write_text(existing, encoding="utf-8")
+    bootstrap_path.write_text(
+        '{"activation_code":"MQ1.changed","payload":{"customer":"另一个试用授权"}}\n',
+        encoding="utf-8",
+    )
+    second = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(launcher_path),
+            "-InstallActivationOnly",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=environment,
+    )
+    assert second.returncode == 0, second.stderr
+    assert state_path.read_text(encoding="utf-8") == existing
+    assert "MQ1." not in (first.stdout or "") + (first.stderr or "")
+    assert "MQ1." not in (second.stdout or "") + (second.stderr or "")
+
+
 def test_public_key_is_trackable_and_issuer_secret_directory_is_ignored() -> None:
     app_ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
     repo_ignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
@@ -94,7 +178,7 @@ def test_powershell_scripts_have_valid_syntax() -> None:
     )
     environment = os.environ.copy()
     environment["MEDQC_PS_FILES"] = os.pathsep.join(
-        (str(PACKAGE_SCRIPT), str(PREFLIGHT_SCRIPT))
+        (str(PACKAGE_SCRIPT), str(PREFLIGHT_SCRIPT), str(BACKEND_LAUNCHER))
     )
     completed = subprocess.run(
         [
@@ -112,4 +196,4 @@ def test_powershell_scripts_have_valid_syntax() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.count("OK ") == 2
+    assert completed.stdout.count("OK ") == 3
