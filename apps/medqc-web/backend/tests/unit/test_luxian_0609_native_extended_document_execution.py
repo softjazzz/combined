@@ -298,6 +298,35 @@ async def test_051_active_inpatient_keeps_data_gap_when_death_source_is_unavaila
 
 
 @pytest.mark.asyncio
+async def test_060_active_inpatient_with_complete_empty_death_source_is_not_applicable() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-060",),
+        {
+            "inpat_registration": (
+                {
+                    "admission_datetime": "2026-08-16 22:39:10",
+                    "patient_status": "在院",
+                },
+            ),
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-060",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "trigger_absent_complete"
+    assert canonical["status"] == "not_applicable"
+    assert canonical["findings"] == "本次住院结局不是死亡"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_death_case_skips_ordinary_discharge_rules() -> None:
     _, _, result, reduced = await _evaluate_selected(
         ("LX0609-051", "LX0609-060", "LX0609-061", "LX0609-068"),
