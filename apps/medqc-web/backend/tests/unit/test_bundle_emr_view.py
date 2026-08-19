@@ -825,6 +825,38 @@ def test_build_render_view_order_table_empty_state():
     assert payload["render_blocks"][0]["empty"] is True
 
 
+def test_build_render_view_preserves_multiline_surgery_process():
+    document = {
+        "id": "SURG-001",
+        "doc_key": "surgery_record::SURG-001",
+        "doc_type": "surgery_record",
+        "doc_name": "手术记录",
+        "group_key": "surgery",
+        "content": (
+            "手术项目: 腹腔镜疝修补术\n"
+            "手术经过: 1.插管全麻成功。\n"
+            "2.建立气腹并完成补片修补。\n"
+            "3.检查无活动性出血，术毕安返。\n"
+            "手术开始时间: 2026-08-18 09:05:00"
+        ),
+        "sections": [],
+        "source_fields": [],
+    }
+
+    payload = build_render_view(document)
+    fields = {
+        field["label"]: field["value"]
+        for field in payload["render_blocks"][0]["fields"]
+    }
+
+    assert fields["手术经过"] == (
+        "1.插管全麻成功。\n"
+        "2.建立气腹并完成补片修补。\n"
+        "3.检查无活动性出血，术毕安返。"
+    )
+    assert fields["手术开始时间"] == "2026-08-18 09:05:00"
+
+
 def test_build_documents_tree_should_group_exam_and_lab_documents():
     documents = [
         {

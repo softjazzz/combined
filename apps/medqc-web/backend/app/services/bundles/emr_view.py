@@ -235,26 +235,35 @@ def _should_skip_template_source_field(source_field: str) -> bool:
 def _extract_kv_from_content(content: str, *, max_fields: int, keep_empty_value: bool) -> list[dict[str, str]]:
     fields: list[dict[str, str]] = []
     seen: set[str] = set()
+    current_field: dict[str, str] | None = None
     for line in content.splitlines():
         raw = _safe_text(line)
         if not raw:
             continue
         matched = re.match(r"^([^:：]{1,36})[:：]\s*(.*)$", raw)
         if not matched:
+            if current_field is not None:
+                current_field["value"] = "\n".join(
+                    item for item in (current_field["value"], raw) if item
+                )
             continue
         key = matched.group(1).strip()
         value = matched.group(2).strip()
         if not key:
+            current_field = None
             continue
         if (not keep_empty_value) and (not value):
+            current_field = None
             continue
         norm_key = key.replace(" ", "_").lower()
         if norm_key in seen:
+            current_field = None
             continue
-        seen.add(norm_key)
-        fields.append({"key": norm_key, "label": key, "value": value})
         if len(fields) >= max_fields:
             break
+        seen.add(norm_key)
+        fields.append({"key": norm_key, "label": key, "value": value})
+        current_field = fields[-1]
     return fields
 
 
