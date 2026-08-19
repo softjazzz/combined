@@ -227,7 +227,7 @@ async def test_typed_029_nonempty_summary_is_compliant_without_llm():
 
 
 @pytest.mark.asyncio
-async def test_typed_029_multiple_surgeries_without_linkage_is_data_gap():
+async def test_typed_029_multiple_surgery_rows_with_summary_is_compliant():
     session = _typed_029_session(
         surgery_mode="multi",
         summary_rows=({"record_content": "术前小结正文完整"},),
@@ -248,8 +248,8 @@ async def test_typed_029_multiple_surgeries_without_linkage_is_data_gap():
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state.value == "data_gap"
-    assert reduced[0].reason_code == "association_failed"
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
 
 
 @pytest.mark.asyncio

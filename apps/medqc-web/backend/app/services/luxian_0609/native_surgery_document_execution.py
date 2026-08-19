@@ -1338,14 +1338,6 @@ async def _typed_029_outcome(
             ),
             0, 0, 0, 0, 0.0,
         )
-    surgery_count = _source_row_count(materials, "surgery_record")
-    if surgery_count is not None and surgery_count > 1:
-        return (
-            _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", "association_failed", "program"
-            ),
-            0, 0, 0, 0, 0.0,
-        )
     try:
         summary_rows = materials.rows("presurg_summary")
     except EvidenceMaterialTruncated:
