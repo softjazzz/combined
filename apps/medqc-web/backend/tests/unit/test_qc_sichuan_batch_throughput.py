@@ -54,6 +54,105 @@ def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rule_set_key",
+    [qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "sample_programmatic_v1"],
+    ids=["luxian-formal", "sample-programmatic"],
+)
+async def test_formal_worker_rechecks_activation_before_qc_service_and_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+    rule_set_key: str,
+) -> None:
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-001"],
+        "rule_set_key": rule_set_key,
+        "validation_mode": "programmatic",
+    }
+    qc_service_calls = 0
+    complete_calls = 0
+
+    class _MissingActivation:
+        def enforce(self) -> None:
+            raise ValueError("产品尚未激活")
+
+    async def _qc_service_provider():
+        nonlocal qc_service_calls
+        qc_service_calls += 1
+        return _ServiceStub()
+
+    original_complete = workspace.complete_batch_job
+
+    def _complete_batch_job(**kwargs: Any) -> None:
+        nonlocal complete_calls
+        complete_calls += 1
+        original_complete(**kwargs)
+
+    workspace.complete_batch_job = _complete_batch_job  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        batch_worker,
+        "get_product_activation_service",
+        lambda: _MissingActivation(),
+        raising=False,
+    )
+
+    await batch_worker.run_sichuan_workspace_batch_job(
+        "job-throughput-001",
+        workspace=workspace,
+        qc_service_provider=_qc_service_provider,
+    )
+
+    assert workspace.job["status"] == "failed"
+    assert "产品尚未激活" in workspace.job["error_message"]
+    assert qc_service_calls == 0
+    assert complete_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("early_return", ["missing", "parent"])
+async def test_worker_does_not_check_activation_for_missing_or_parent_job(
+    monkeypatch: pytest.MonkeyPatch,
+    early_return: str,
+) -> None:
+    workspace = _WorkspaceStub()
+    if early_return == "parent":
+        workspace.job["job_kind"] = "parent"
+    activation_calls = 0
+    qc_service_calls = 0
+
+    class _ActivationProbe:
+        def enforce(self) -> None:
+            nonlocal activation_calls
+            activation_calls += 1
+
+    if early_return == "missing":
+        monkeypatch.setattr(
+            workspace,
+            "get_batch_job_for_processing",
+            lambda **_kwargs: None,
+        )
+    monkeypatch.setattr(
+        batch_worker,
+        "get_product_activation_service",
+        lambda: _ActivationProbe(),
+    )
+
+    async def _qc_service_provider():
+        nonlocal qc_service_calls
+        qc_service_calls += 1
+        return _ServiceStub()
+
+    await batch_worker.run_sichuan_workspace_batch_job(
+        "job-throughput-001",
+        workspace=workspace,
+        qc_service_provider=_qc_service_provider,
+    )
+
+    assert activation_calls == 0
+    assert qc_service_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_luxian_batch_worker_rejects_customer_aggregation_without_unified_engine(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {

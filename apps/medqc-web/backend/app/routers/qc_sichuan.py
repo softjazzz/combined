@@ -39,6 +39,7 @@ from ..services.sc_rule_launch_tier import (
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin, require_roles, get_current_user
+from ..services.product_activation import require_product_activation
 from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
@@ -1504,8 +1505,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 async def create_workspace_batch_job(
     request: Request,
     payload: SichuanWorkspaceBatchJobCreateRequest,
+    current_user: Dict[str, Any] = Depends(require_product_activation),
     qc_service: SichuanQCService = Depends(get_qc_service),
-    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
     if payload.rule_set_key and not requested_rule_set:
@@ -2286,7 +2287,7 @@ async def cancel_workspace_batch_job(
 async def retry_workspace_batch_job(
     request: Request,
     job_id: str,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_product_activation),
 ):
     workspace = _sichuan_workspace_service()
     job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))

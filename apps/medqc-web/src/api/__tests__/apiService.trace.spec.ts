@@ -64,6 +64,7 @@ describe('apiService trace propagation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
+    vi.unstubAllEnvs()
   })
 
   it('request interceptor injects X-Trace-ID and X-Request-ID with same value', async () => {
@@ -83,6 +84,30 @@ describe('apiService trace propagation', () => {
     expect(nextConfig.headers.traceparent).toMatch(
       /^[\da-f]{2}-[\da-f]{32}-[\da-f]{16}-[\da-f]{2}$/i,
     )
+  })
+
+  it('redacts activation_code from debug logs without mutating the request body', async () => {
+    vi.stubEnv('VITE_API_DEBUG', 'true')
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    const { requestFulfilled } = await loadApiServiceWithAxiosMock()
+    const activationCode = 'MQ1.private-payload.private-signature'
+    const config: Record<string, any> = {
+      method: 'post',
+      url: '/api/v1/product-activation/activate',
+      headers: {},
+      data: {
+        activation_code: activationCode,
+        nested: [{ activation_code: activationCode }],
+      },
+    }
+
+    const nextConfig = requestFulfilled!(config)
+    const debugOutput = JSON.stringify(consoleSpy.mock.calls)
+
+    expect(debugOutput).not.toContain(activationCode)
+    expect(debugOutput).toContain('[REDACTED]')
+    expect(nextConfig.data.activation_code).toBe(activationCode)
+    expect(nextConfig.data.nested[0].activation_code).toBe(activationCode)
   })
 
   it('response error attaches server trace id to error object', async () => {

@@ -67,6 +67,7 @@ from .routers import sqlbot as sqlbot_router
 from .routers import clinical_completeness as clinical_completeness_router
 from .routers import pre_grouping as pre_grouping_router
 from .routers import payment_monitoring as payment_monitoring_router
+from .routers import product_activation as product_activation_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -169,6 +170,10 @@ def create_app() -> FastAPI:
             extra={"trace_id": trace_id, "path": request.url.path}
         )
 
+        response_headers = {"X-Trace-ID": trace_id}
+        if exc.headers:
+            response_headers.update(exc.headers)
+
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -177,7 +182,7 @@ def create_app() -> FastAPI:
                 "code": f"HTTP_{exc.status_code}",
                 "trace_id": trace_id,
             },
-            headers={"X-Trace-ID": trace_id}
+            headers=response_headers,
         )
 
     @app.exception_handler(RequestValidationError)
@@ -322,6 +327,7 @@ def create_app() -> FastAPI:
     app.include_router(pre_grouping_router.router)
     # 医保付费监测
     app.include_router(payment_monitoring_router.router)
+    app.include_router(product_activation_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

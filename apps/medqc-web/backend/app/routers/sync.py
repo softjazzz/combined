@@ -30,6 +30,7 @@ except Exception:  # pragma: no cover - 防御性兜底
 
 from ..core.audit import audit_event
 from ..core.security import get_current_user
+from ..services.product_activation import require_product_activation
 from ..core.rate_limit import enforce_rate_limit
 from ..core.response import success_response, get_trace_id
 
@@ -824,6 +825,7 @@ async def trigger_sync(
     request: Request,
     req: TriggerRequest,
     current_user: dict = Depends(require_sync_write_access),
+    _: dict = Depends(require_product_activation),
 ):
     """手动触发数据同步（仅 admin）"""
     enforce_rate_limit(

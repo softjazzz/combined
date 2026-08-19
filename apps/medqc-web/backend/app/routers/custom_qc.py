@@ -17,6 +17,7 @@ from ..services.custom_qc_service import (
 )
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ..services.llm_observability import llm_observation_context
+from ..services.product_activation import require_product_activation
 from ..services.sichuan_qc_service import SichuanQCService
 
 logger = logging.getLogger(__name__)
@@ -1138,7 +1139,7 @@ async def create_workspace_batch_job(
     request: Request,
     payload: WorkspaceBatchJobCreateRequest,
     background_tasks: BackgroundTasks,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     created_by = _current_user_id(current_user)
@@ -1342,7 +1343,7 @@ async def retry_workspace_batch_job(
     request: Request,
     job_id: str,
     background_tasks: BackgroundTasks,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))

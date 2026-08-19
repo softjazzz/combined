@@ -87,11 +87,25 @@ function Assert-NoReleaseForbiddenContent([string]$path) {
     $_.Name -like "*.out.log" -or
     $_.Name -like "*.err.log" -or
     $_.Name -eq ".coverage" -or
-    $_.Name -eq "coverage.xml"
+    $_.Name -eq "coverage.xml" -or
+    $_.Name -eq "generate_medqc_activation_code.py" -or
+    $_.Name -eq "product_activation_state.json" -or
+    $_.Name -eq "activation.json" -or
+    $_.Name -like ".activation-*.tmp"
   }
   if ($forbiddenFiles.Count -gt 0) {
     $sample = ($forbiddenFiles | Select-Object -First 10 | ForEach-Object { $_.FullName }) -join "`n"
     throw "Forbidden release files found:`n$sample"
+  }
+
+  $privateKeyFiles = @(
+    Get-ChildItem -LiteralPath $path -Recurse -File -Force |
+      Where-Object { $_.Extension -in @(".pem", ".key") } |
+      Select-String -SimpleMatch "PRIVATE KEY" -List
+  )
+  if ($privateKeyFiles.Count -gt 0) {
+    $sample = ($privateKeyFiles | Select-Object -First 10 | ForEach-Object { $_.Path }) -join "`n"
+    throw "Private key material found in release package:`n$sample"
   }
 
   $backendRoot = Join-Path $path "backend"
@@ -202,6 +216,10 @@ if (Test-Path -LiteralPath $sourceHanDir) {
 
 Write-Step "Copy backend runtime allowlist (exclude development scripts and artifacts)"
 $backendSourceDir = Join-Path $projectRoot "backend"
+$activationPublicKeySource = Join-Path $backendSourceDir "app\data\product_activation_public_key.pem"
+if (-not (Test-Path -LiteralPath $activationPublicKeySource -PathType Leaf)) {
+  throw "Required product activation public key is missing: product_activation_public_key.pem"
+}
 $backendRuntimeDirectories = @("alembic", "app", "config", "data")
 $backendRuntimeFiles = @(
   ".env.example",
@@ -281,6 +299,30 @@ foreach ($fileName in $backendRuntimeFiles) {
   Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $backendDir $fileName) -Force
 }
 
+$customerLauncherPath = Join-Path $backendDir "start_dev_backend.ps1"
+$customerLauncherSource = Get-Content -LiteralPath $customerLauncherPath -Raw
+$activationEnvironmentLine = '$env:PRODUCT_ACTIVATION_REQUIRED = "true"'
+if (-not $customerLauncherSource.Contains($activationEnvironmentLine)) {
+  $launcherMarker = '$ErrorActionPreference = "Stop"'
+  if (-not $customerLauncherSource.Contains($launcherMarker)) {
+    throw "Customer backend launcher is missing the expected initialization marker."
+  }
+  $customerLauncherSource = $customerLauncherSource.Replace(
+    $launcherMarker,
+    "$launcherMarker`n`n$activationEnvironmentLine"
+  )
+  [System.IO.File]::WriteAllText(
+    $customerLauncherPath,
+    $customerLauncherSource,
+    (New-Object System.Text.UTF8Encoding($false))
+  )
+}
+
+$activationPublicKeyTarget = Join-Path $backendDir "app\data\product_activation_public_key.pem"
+if (-not (Test-Path -LiteralPath $activationPublicKeyTarget -PathType Leaf)) {
+  throw "Customer package is missing product_activation_public_key.pem"
+}
+
 $backendServicesSourceDir = Join-Path $backendSourceDir "services"
 $backendServicesDestinationDir = Join-Path $backendDir "services"
 New-Item -ItemType Directory -Force -Path $backendServicesDestinationDir | Out-Null
@@ -337,6 +379,7 @@ $readmeLines = @(
   "- This package keeps only Source Han Sans SC Regular/Medium and removes SF Pro font files.",
   "- Frontend is built in customer mode and does not hardcode the public API domain.",
   "- Start the backend from backend with: powershell -NoProfile -ExecutionPolicy Bypass -File .\start_dev_backend.ps1",
+  "- The customer launcher enforces PRODUCT_ACTIVATION_REQUIRED=true; activate offline in System Settings > Product Activation.",
   "",
   "## Database deployment order",
   "1. Start PostgreSQL and confirm its configured port is listening. Opening /docs only proves the backend process is alive; it does not prove database health.",

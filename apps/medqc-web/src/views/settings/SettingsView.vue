@@ -1,29 +1,19 @@
 <template>
   <div class="settings-page">
     <div class="settings-page__inner">
-      <a-card
-        class="settings-card settings-header-card"
-        :bordered="false"
-      >
+      <a-card class="settings-card settings-header-card" :bordered="false">
         <div class="settings-header">
           <div class="settings-header__meta">
             <div class="settings-header__icon">
               <SettingOutlined />
             </div>
             <div>
-              <h1 class="settings-header__title">
-                系统设置
-              </h1>
-              <p class="settings-header__subtitle">
-                用户权限管理和系统配置
-              </p>
+              <h1 class="settings-header__title">系统设置</h1>
+              <p class="settings-header__subtitle">用户权限管理和系统配置</p>
             </div>
           </div>
           <div class="settings-header__actions">
-            <a-space
-              size="middle"
-              wrap
-            >
+            <a-space size="middle" wrap>
               <a-button
                 class="settings-header__action"
                 :icon="h(DownloadOutlined)"
@@ -43,82 +33,57 @@
         </div>
       </a-card>
 
-      <a-card
-        class="settings-card settings-tabs-card"
-        :bordered="false"
-      >
-        <a-tabs
-          v-model:active-key="activeTab"
-          type="card"
-          class="settings-tabs"
-        >
-          <a-tab-pane
-            key="users"
-            tab="用户管理"
-          >
+      <a-card class="settings-card settings-tabs-card" :bordered="false">
+        <a-tabs v-model:active-key="activeTab" type="card" class="settings-tabs">
+          <a-tab-pane key="users" tab="用户管理">
             <template #tab>
               <UserOutlined class="settings-tabs__icon" />
               <span>用户管理</span>
             </template>
           </a-tab-pane>
-          <a-tab-pane
-            key="roles"
-            tab="角色管理"
-          >
+          <a-tab-pane key="roles" tab="角色管理">
             <template #tab>
               <TeamOutlined class="settings-tabs__icon" />
               <span>角色管理</span>
             </template>
           </a-tab-pane>
-          <a-tab-pane
-            key="permissions"
-            tab="权限配置"
-          >
+          <a-tab-pane key="permissions" tab="权限配置">
             <template #tab>
               <SafetyCertificateOutlined class="settings-tabs__icon" />
               <span>权限配置</span>
             </template>
           </a-tab-pane>
-          <a-tab-pane
-            key="system"
-            tab="系统配置"
-          >
+          <a-tab-pane key="system" tab="系统配置">
             <template #tab>
               <SettingOutlined class="settings-tabs__icon" />
               <span>系统配置</span>
             </template>
           </a-tab-pane>
-          <a-tab-pane
-            key="llm"
-            tab="LLM配置"
-          >
+          <a-tab-pane key="product_activation" tab="产品激活">
+            <template #tab>
+              <KeyOutlined class="settings-tabs__icon" />
+              <span>产品激活</span>
+            </template>
+          </a-tab-pane>
+          <a-tab-pane key="llm" tab="LLM配置">
             <template #tab>
               <ApiOutlined class="settings-tabs__icon" />
               <span>LLM配置</span>
             </template>
           </a-tab-pane>
-          <a-tab-pane
-            key="classification"
-            tab="分类算法"
-          >
+          <a-tab-pane key="classification" tab="分类算法">
             <template #tab>
               <BranchesOutlined class="settings-tabs__icon" />
               <span>分类算法</span>
             </template>
           </a-tab-pane>
-          <a-tab-pane
-            key="qc_engine"
-            tab="质控配置"
-          >
+          <a-tab-pane key="qc_engine" tab="质控配置">
             <template #tab>
               <ExperimentOutlined class="settings-tabs__icon" />
               <span>质控配置</span>
             </template>
           </a-tab-pane>
-          <a-tab-pane
-            key="data_sync"
-            tab="数据同步"
-          >
+          <a-tab-pane key="data_sync" tab="数据同步">
             <template #tab>
               <SyncOutlined class="settings-tabs__icon" />
               <span>数据同步</span>
@@ -128,10 +93,7 @@
       </a-card>
 
       <div v-if="activeTab === 'users'">
-        <UserManagement
-          @create-user="showCreateUserModal"
-          @edit-user="editUser"
-        />
+        <UserManagement @create-user="showCreateUserModal" @edit-user="editUser" />
       </div>
 
       <div v-if="activeTab === 'roles'">
@@ -146,27 +108,21 @@
         <SystemConfig />
       </div>
 
+      <ProductActivationPanel v-if="activeTab === 'product_activation'" />
+
       <div v-if="activeTab === 'llm'">
         <div class="ds-root">
           <div class="ds-split">
             <div class="ds-split__aside">
-              <h2 class="ds-section-title">
-                LLM 配置
-              </h2>
+              <h2 class="ds-section-title">LLM 配置</h2>
               <p class="ds-section-desc">
                 配置大语言模型的厂商、模型和运行参数。当前支持阿里云百炼、SiliconFlow 和内部
                 Ollama，敏感凭据统一由后端 env 托管。
               </p>
             </div>
             <div class="ds-split__main">
-              <div
-                class="ds-card"
-                style="overflow: visible"
-              >
-                <div
-                  class="ds-card__body"
-                  style="padding: 20px"
-                >
+              <div class="ds-card" style="overflow: visible">
+                <div class="ds-card__body" style="padding: 20px">
                   <LLMApiConfig />
                 </div>
               </div>
@@ -179,22 +135,14 @@
         <div class="ds-root">
           <div class="ds-split">
             <div class="ds-split__aside">
-              <h2 class="ds-section-title">
-                分类算法
-              </h2>
+              <h2 class="ds-section-title">分类算法</h2>
               <p class="ds-section-desc">
                 管理医疗文书分类器的版本和运行状态。支持在基础、增强、先进三个版本之间切换。
               </p>
             </div>
             <div class="ds-split__main">
-              <div
-                class="ds-card"
-                style="overflow: visible"
-              >
-                <div
-                  class="ds-card__body"
-                  style="padding: 20px"
-                >
+              <div class="ds-card" style="overflow: visible">
+                <div class="ds-card__body" style="padding: 20px">
                   <ClassificationVersionManager />
                 </div>
               </div>
@@ -258,6 +206,7 @@ import {
   ApiOutlined,
   ExperimentOutlined,
   SyncOutlined,
+  KeyOutlined,
 } from '@ant-design/icons-vue'
 
 import UserEditModal from '@/components/settings/UserEditModal.vue'
@@ -269,12 +218,14 @@ import QcEngineConfig from '@/components/settings/QcEngineConfig.vue'
 import UserManagement from '@/components/settings/UserManagement.vue'
 import RoleManagement from '@/components/settings/RoleManagement.vue'
 import PermissionConfig from '@/components/settings/PermissionConfig.vue'
+import ProductActivationPanel from '@/components/settings/ProductActivationPanel.vue'
 
 type SettingsTab =
   | 'users'
   | 'roles'
   | 'permissions'
   | 'system'
+  | 'product_activation'
   | 'llm'
   | 'classification'
   | 'qc_engine'
@@ -288,6 +239,7 @@ const validTabs: SettingsTab[] = [
   'roles',
   'permissions',
   'system',
+  'product_activation',
   'llm',
   'classification',
   'qc_engine',

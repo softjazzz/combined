@@ -39,6 +39,7 @@ out/
 *.sln
 *.sw?
 *.pem
+!backend/app/data/product_activation_public_key.pem
 
 # Testing
 /coverage

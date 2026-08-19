@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
+    # 产品离线激活：默认关闭，客户正式包通过环境变量显式开启。
+    PRODUCT_ACTIVATION_REQUIRED: bool = False
+    PRODUCT_ACTIVATION_STATE_PATH: Optional[str] = None
+
     # CORS
     CORS_ORIGINS: List[str] = []
     CORS_ALLOW_CREDENTIALS: bool = True

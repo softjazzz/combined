@@ -208,3 +208,6 @@ apps/medqc-web/backend/backend/data/manual_qc_runs/
 
 # Local release bundles
 release/
+
+# Offline activation issuer secrets (never commit)
+/secrets/

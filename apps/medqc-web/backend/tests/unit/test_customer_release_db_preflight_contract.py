@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = PROJECT_ROOT.parents[1]
 PACKAGE_SCRIPT = PROJECT_ROOT / "scripts" / "package-customer-release.ps1"
 PREFLIGHT_SCRIPT = PROJECT_ROOT / "scripts" / "customer-db-preflight.ps1"
 DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs" / "deployment" / "客户机交付包编译打包指南.md"
@@ -61,6 +62,24 @@ def test_release_package_keeps_backend_launcher_in_runtime_allowlist() -> None:
     assert '"start_dev_backend.ps1"' in package_source.split(
         "$allowedBackendRootEntries =", maxsplit=1
     )[1].split(")", maxsplit=1)[0]
+
+
+def test_customer_release_requires_activation_and_rejects_issuer_secrets() -> None:
+    package_source = PACKAGE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "product_activation_public_key.pem" in package_source
+    assert 'PRODUCT_ACTIVATION_REQUIRED = "true"' in package_source
+    assert "PRIVATE KEY" in package_source
+    assert "generate_medqc_activation_code.py" in package_source
+    assert "product_activation_state.json" in package_source
+
+
+def test_public_key_is_trackable_and_issuer_secret_directory_is_ignored() -> None:
+    app_ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
+    repo_ignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    assert "!backend/app/data/product_activation_public_key.pem" in app_ignore
+    assert "/secrets/" in repo_ignore
 
 
 def test_powershell_scripts_have_valid_syntax() -> None:

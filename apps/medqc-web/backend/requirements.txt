@@ -28,6 +28,7 @@ pdfplumber==0.10.3
 
 # 认证和安全
 python-jose[cryptography]==3.3.0
+cryptography==45.0.4
 passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
 

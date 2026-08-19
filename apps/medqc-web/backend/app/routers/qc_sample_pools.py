@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
+from ..services.product_activation import require_product_activation
 from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
 from ..routers.qc_sichuan import (
     _build_workspace_record_scene_snapshot,
@@ -981,6 +982,7 @@ async def run_sample_pool_intrinsic_validation(
     pool_id: str,
     payload: SamplePoolRunRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
+    _: Dict[str, Any] = Depends(require_product_activation),
 ):
     if payload.record_ids:
         raise HTTPException(

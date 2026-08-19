@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import {
@@ -58,6 +58,28 @@ const API_TIMEOUT = 15000 // 15秒超时，避免过长等待
 const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
   import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
+const DEBUG_REDACTED = '[REDACTED]'
+const DEBUG_SENSITIVE_KEYS = new Set(['activation_code'])
+
+function redactDebugSensitiveValues(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactDebugSensitiveValues(item, seen))
+  }
+  if (!value || typeof value !== 'object') return value
+  if (seen.has(value)) return '[Circular]'
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return value
+
+  seen.add(value)
+  const redacted = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      DEBUG_SENSITIVE_KEYS.has(key) ? DEBUG_REDACTED : redactDebugSensitiveValues(item, seen),
+    ]),
+  )
+  seen.delete(value)
+  return redacted
+}
 
 // 调试信息
 if (API_DEBUG) {
@@ -139,7 +161,7 @@ apiClient.interceptors.request.use(
       console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
         traceId,
         headers: config.headers,
-        data: config.data,
+        data: redactDebugSensitiveValues(config.data),
         params: config.params,
       })
     }

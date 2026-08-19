@@ -56,6 +56,7 @@ from .qc_input_adapters import evaluate_running_final_bundle
 from .qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from .qc_result_adjudicator import adjudicate_postprocessed_qc_results
 from .qc_result_postprocessor import postprocess_qc_result, summarize_postprocessed_results
+from .product_activation import get_product_activation_service
 from .sample_programmatic_evidence import build_programmatic_evidence_payload
 from .sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
@@ -1249,6 +1250,9 @@ async def run_sichuan_workspace_batch_job(
         return
 
     try:
+        # HTTP 门禁之外在所有实际质控 Worker 入口统一验签，阻止旧队列或内部调用绕过授权。
+        # 不存在的任务及父任务已在上方返回，不触发授权检查。
+        get_product_activation_service().enforce()
         if not workspace.mark_batch_job_running(job_id=job_id):
             return
         qc_service = await qc_service_provider()
