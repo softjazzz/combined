@@ -3471,6 +3471,45 @@ def safe_luxian_0609_customer_display_facts(
         state = raw.get("timeliness_state")
         threshold = raw.get("threshold_hours")
         source_label = raw.get("source_label")
+        if failure_kind == "evidence_time_conflict":
+            conflict_seconds = raw.get("time_conflict_seconds")
+            anchor_time = raw.get("anchor_time")
+            observed_time = raw.get("observed_time")
+            try:
+                actual_conflict_seconds = round(
+                    (
+                        datetime.fromisoformat(anchor_time)
+                        - datetime.fromisoformat(observed_time)
+                    ).total_seconds()
+                )
+            except (TypeError, ValueError):
+                return None
+            if (
+                rule_id != "LX0609-001"
+                or target_document != "admission_record"
+                or state != "before"
+                or threshold != 24
+                or not isinstance(source_label, str)
+                or not source_label.strip()
+                or not isinstance(anchor_time, str)
+                or not anchor_time.strip()
+                or not isinstance(observed_time, str)
+                or not observed_time.strip()
+                or type(conflict_seconds) is not int
+                or conflict_seconds <= 0
+                or conflict_seconds != actual_conflict_seconds
+            ):
+                return None
+            return {
+                "failure_kind": "evidence_time_conflict",
+                "target_document": "admission_record",
+                "source_label": source_label.strip(),
+                "timeliness_state": "before",
+                "threshold_hours": 24,
+                "anchor_time": anchor_time.strip(),
+                "observed_time": observed_time.strip(),
+                "time_conflict_seconds": conflict_seconds,
+            }
         valid_state = (
             state in {"missing", "late"}
             if failure_kind == "timeliness_requirement_not_met"

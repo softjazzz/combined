@@ -1280,6 +1280,18 @@ _ANESTHESIA_VISIT_FIELD_LABELS = {
 }
 
 
+def _duration_text(total_seconds: int) -> str:
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        if seconds:
+            return f"{hours}小时{minutes}分{seconds}秒"
+        return f"{hours}小时{minutes}分" if minutes else f"{hours}小时"
+    if minutes:
+        return f"{minutes}分{seconds}秒" if seconds else f"{minutes}分"
+    return f"{seconds}秒"
+
+
 def _format_exact_elapsed_duration(
     *,
     started_at: Any,
@@ -1299,25 +1311,14 @@ def _format_exact_elapsed_duration(
         return ""
     if elapsed_seconds < 0:
         return ""
-    def duration_text(total_seconds: int) -> str:
-        hours, remainder = divmod(total_seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        if hours:
-            if seconds:
-                return f"{hours}小时{minutes}分{seconds}秒"
-            return f"{hours}小时{minutes}分" if minutes else f"{hours}小时"
-        if minutes:
-            return f"{minutes}分{seconds}秒" if seconds else f"{minutes}分"
-        return f"{seconds}秒"
-
-    duration = duration_text(elapsed_seconds)
+    duration = _duration_text(elapsed_seconds)
     if (
         isinstance(threshold_hours, (int, float))
         and not isinstance(threshold_hours, bool)
     ):
         threshold_seconds = round(float(threshold_hours) * 3600)
         if elapsed_seconds > threshold_seconds:
-            overdue = duration_text(elapsed_seconds - threshold_seconds)
+            overdue = _duration_text(elapsed_seconds - threshold_seconds)
             duration = f"{duration}（超时{overdue}）"
     return duration
 
@@ -1328,6 +1329,7 @@ def customer_finding_from_controlled_facts(
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
 
     if rule_id not in {
+        "LX0609-001",
         "LX0609-009",
         "LX0609-010",
         "LX0609-011",
@@ -1358,6 +1360,22 @@ def customer_finding_from_controlled_facts(
         return ""
 
     kind = str(facts.get("verification_kind") or facts.get("failure_kind") or "")
+
+    if rule_id == "LX0609-001":
+        conflict_seconds = facts.get("time_conflict_seconds")
+        if (
+            kind == "evidence_time_conflict"
+            and facts.get("target_document") == "admission_record"
+            and facts.get("timeliness_state") == "before"
+            and type(conflict_seconds) is int
+            and conflict_seconds > 0
+        ):
+            return (
+                "入院记录时间早于权威入院时间"
+                f"{_duration_text(conflict_seconds)}，时间顺序存在冲突，"
+                "暂无法判断是否在入院后24小时内完成。"
+            )
+        return ""
 
     def labels(key: str, mapping: Mapping[str, str]) -> str:
         values = facts.get(key)

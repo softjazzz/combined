@@ -295,6 +295,14 @@ def build_customer_remediation_suggestion(
         )
 
     if normalized_status == "evaluation_unknown":
+        if (
+            normalized_rule_id == "LX0609-001"
+            and reason_code == "evidence_conflict"
+            and isinstance(facts, Mapping)
+            and facts.get("failure_kind") == "evidence_time_conflict"
+            and facts.get("timeliness_state") == "before"
+        ):
+            return "请核对住院登记时间和入院记录完成时间。"
         action = _RULE_ACTIONS.get(normalized_rule_id)
         target = action[0] if action else "本质控点待复核资料"
         return _structured_action(

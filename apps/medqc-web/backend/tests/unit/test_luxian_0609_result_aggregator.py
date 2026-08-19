@@ -1807,6 +1807,67 @@ def test_002_late_result_renders_actual_interval_and_overdue_duration():
     assert result["customer_display_facts"]["overdue_hours"] == 440.6
 
 
+def test_001_time_conflict_renders_exact_customer_finding_and_review_action():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-001",
+            snapshot_hash="a" * 64,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.CONFLICT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="evidence_conflict",
+            fact_refs=("b" * 64,),
+            evaluator_version="basic-timeliness-authoritative-v1",
+            confidence=None,
+        )
+    )
+    facts = {
+        "failure_kind": "evidence_time_conflict",
+        "target_document": "admission_record",
+        "source_label": "入院记录",
+        "timeliness_state": "before",
+        "threshold_hours": 24,
+        "anchor_time": "2026-08-16 22:39:10",
+        "observed_time": "2026-08-16 22:20:29",
+        "time_conflict_seconds": 1121,
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-001", "name": "入院记录时限"}],
+        execution_results=[],
+        reduced_decisions=(decision,),
+        customer_display_facts=(("LX0609-001", facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "uncertain"
+    assert result["reason_code"] == "evidence_conflict"
+    assert result["findings"] == (
+        "入院记录时间早于权威入院时间18分41秒，时间顺序存在冲突，"
+        "暂无法判断是否在入院后24小时内完成。"
+    )
+    assert result["suggestion"] == "请核对住院登记时间和入院记录完成时间。"
+    assert result["customer_display_facts"] == facts
+
+
+def test_001_time_conflict_rejects_a_duration_that_does_not_match_both_times():
+    facts = {
+        "failure_kind": "evidence_time_conflict",
+        "target_document": "admission_record",
+        "source_label": "入院记录",
+        "timeliness_state": "before",
+        "threshold_hours": 24,
+        "anchor_time": "2026-08-16 22:39:10",
+        "observed_time": "2026-08-16 22:20:29",
+        "time_conflict_seconds": 60,
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-001",
+        raw=facts,
+    ) is None
+
+
 def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",

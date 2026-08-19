@@ -264,6 +264,48 @@ def test_001_compliant_keeps_time_facts_without_guessing_a_missing_document_id()
 
 
 @pytest.mark.unit
+def test_001_time_conflict_exposes_both_times_and_exact_lead_for_customer_projection():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-08-16 22:39:10"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "admission-conflict-document",
+                    "document_title": "入院记录",
+                    "record_time": "2026-08-16 22:20:29",
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [],
+        },
+        selected_rule_ids=("LX0609-001",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced[0].reason_code == "evidence_conflict"
+    assert execution.customer_display_facts == (
+        (
+            "LX0609-001",
+            {
+                "failure_kind": "evidence_time_conflict",
+                "target_document": "admission_record",
+                "source_label": "入院记录",
+                "timeliness_state": "before",
+                "threshold_hours": 24,
+                "anchor_time": "2026-08-16 22:39:10",
+                "observed_time": "2026-08-16 22:20:29",
+                "time_conflict_seconds": 1121,
+                "source_document_id": "admission-conflict-document",
+            },
+        ),
+    )
+
+
+@pytest.mark.unit
 def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_facts():
     session = _typed_basic_session(
         {

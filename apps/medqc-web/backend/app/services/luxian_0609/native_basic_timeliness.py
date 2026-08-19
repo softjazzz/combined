@@ -1014,6 +1014,28 @@ def _typed_basic_decisions(
                         confidence=None,
                     )
                 )
+                observed, source_document_id = admission_record_events[0]
+                assert anchor is not None
+                add_customer_fact(
+                    rule_id,
+                    {
+                        "failure_kind": "evidence_time_conflict",
+                        "target_document": "admission_record",
+                        "source_label": "入院记录",
+                        "timeliness_state": "before",
+                        "threshold_hours": 24,
+                        "anchor_time": format_time(anchor),
+                        "observed_time": format_time(observed),
+                        "time_conflict_seconds": round(
+                            (anchor - observed).total_seconds()
+                        ),
+                        **(
+                            {"source_document_id": source_document_id}
+                            if source_document_id
+                            else {}
+                        ),
+                    },
+                )
             elif delta_state == "within":
                 decisions.append(
                     conclusive(rule_id, QcDirection.SATISFIED, "requirement_within_threshold")
