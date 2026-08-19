@@ -807,6 +807,62 @@ def test_build_render_view_with_sections_and_kv():
     assert len(payload["highlight_anchors"]) >= 1
 
 
+def test_build_render_view_does_not_repeat_first_course_sections_as_basic_info():
+    document = {
+        "id": "first-1",
+        "doc_key": "first_course_record::first-1",
+        "doc_type": "first_course_record",
+        "doc_name": "首次病程记录",
+        "group_key": "course",
+        "content": "病例特点正文\n诊断依据正文\n鉴别诊断正文\n诊疗计划正文",
+        "sections": [
+            {
+                "section_key": key,
+                "section_label": label,
+                "text": text,
+                "source_field": key,
+                "order_index": index,
+            }
+            for index, (key, label, text) in enumerate(
+                (
+                    ("case_characteristic", "病例特点", "病例特点正文"),
+                    ("diagnose_based_on", "诊断依据", "诊断依据正文"),
+                    ("differential_diagnosis", "鉴别诊断", "鉴别诊断正文"),
+                    ("treatment_plan", "诊疗计划", "诊疗计划正文"),
+                )
+            )
+        ],
+        "source_fields": [
+            {
+                "source_field": key,
+                "used": True,
+                "raw_value_preview": text,
+            }
+            for key, text in (
+                ("case_characteristic", "病例特点正文"),
+                ("diagnose_based_on", "诊断依据正文"),
+                ("differential_diagnosis", "鉴别诊断正文"),
+                ("treatment_plan", "诊疗计划正文"),
+            )
+        ],
+    }
+
+    payload = build_render_view(document)
+
+    assert [block["block_type"] for block in payload["render_blocks"]] == [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+    ]
+    assert [block["title"] for block in payload["render_blocks"]] == [
+        "病例特点",
+        "诊断依据",
+        "鉴别诊断",
+        "诊疗计划",
+    ]
+
+
 def test_build_render_view_order_table_empty_state():
     order_doc = {
         "id": "order-1",

@@ -114,6 +114,7 @@ _GROUP_BY_DOC_TYPE: dict[str, str] = {
 }
 
 _ORDER_DOC_TYPES = {"inpat_drug_order", "inpat_nondrug_order"}
+_PARAGRAPH_ONLY_DOC_TYPES = {"first_course_record"}
 _RECORD_TIME_FALLBACK_DOC_TYPES = {
     "first_course_record",
     "daily_course_record",
@@ -1329,7 +1330,7 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
     kv_fields: list[dict[str, str]] = []
     if group_key == "orders" or doc_type in _ORDER_DOC_TYPES:
         render_blocks.append(_build_order_table_block(document))
-    else:
+    elif doc_type not in _PARAGRAPH_ONLY_DOC_TYPES:
         kv_fields = _extract_kv_fields(document)
         render_blocks.append(
             {
