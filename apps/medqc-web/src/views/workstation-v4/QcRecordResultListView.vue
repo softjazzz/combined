@@ -992,24 +992,7 @@ function closeResultDrawer() {
   font-weight: 600;
 }
 
-@media (max-width: 1680px) {
-  .qc-record-result-list-view__toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .qc-record-result-list-view__filters {
-    width: 100%;
-  }
-
-  .qc-record-result-list-view__toolbar-actions {
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    width: 100%;
-  }
-}
-
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .qc-record-result-list-view {
     padding: 16px;
   }
