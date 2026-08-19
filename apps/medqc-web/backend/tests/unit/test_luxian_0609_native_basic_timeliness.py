@@ -374,6 +374,47 @@ def test_002_006_accept_authoritative_submit_datetime_used_by_customer_documents
 
 
 @pytest.mark.unit
+def test_001_002_accept_the_localized_customer_record_time_and_document_identity():
+    """客户源 record_time/sys_index_id 经同步映射后必须形成可定位的确定结论。"""
+
+    selected = ("LX0609-001", "LX0609-002")
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [],
+            "admission_record": [
+                {
+                    "document_id": "101",
+                    "document_title": "入院记录",
+                    "admission_datetime": "2026-08-16 20:00:00",
+                    "record_datetime": "2026-08-16 22:20:29",
+                }
+            ],
+            "first_course_record": [
+                {
+                    "document_id": "102",
+                    "document_title": "首次病程记录",
+                    "record_datetime": "2026-08-16 22:38:08",
+                    "case_characteristic": "患者为31岁男性，起病缓，病程长。",
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [],
+        },
+        selected_rule_ids=selected,
+    )
+
+    execution, reduced = _reduce_typed_basic(session, selected)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    facts = dict(execution.customer_display_facts)
+    assert facts["LX0609-001"]["source_document_id"] == "101"
+    assert facts["LX0609-002"]["source_document_id"] == "102"
+
+
+@pytest.mark.unit
 def test_001_005_006_do_not_use_admission_record_time_as_its_own_anchor():
     session = _typed_basic_session(
         {

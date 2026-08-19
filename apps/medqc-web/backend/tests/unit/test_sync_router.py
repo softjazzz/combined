@@ -1215,6 +1215,87 @@ class TestSyncRouter:
         assert "auto_terminal_qc" not in data
         assert "_internal_synced_case_refs" not in data
 
+    def test_trigger_auto_qc_uses_formal_sync_group_not_saved_default(self, client, monkeypatch):
+        """旧配置即使仅启用核心表，一键质控也必须请求完整正式资料集。"""
+
+        _override_user(client, ["admin"])
+        captured_sync_calls: list[dict] = []
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-formal-sources",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **kwargs: captured_sync_calls.append(kwargs) or {
+                "success": True,
+                "status": "success",
+                "scene": "running",
+                "total_records": 0,
+                "_internal_synced_case_refs": [],
+            },
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-formal-sources",
+            },
+        )
+
+        assert response.status_code == 200
+        assert len(captured_sync_calls) == 1
+        assert "exam_master" in captured_sync_calls[0]["tables"]
+        assert "labtest_item_report" in captured_sync_calls[0]["tables"]
+        assert "consultation_record" in captured_sync_calls[0]["tables"]
+        assert "consent_form" in captured_sync_calls[0]["tables"]
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        (("tables", ["mr"]), ("table_groups", ["core_8"])),
+    )
+    def test_trigger_auto_qc_rejects_custom_table_scope_before_sync(
+        self, client, monkeypatch, field, value
+    ):
+        """一键入口不能被管理员降级为任意资料子集。"""
+
+        _override_user(client, ["admin"])
+        calls = {"run": 0}
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: calls.__setitem__("run", calls["run"] + 1),
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "running",
+                "auto_qc_after_sync": True,
+                "auto_qc_workflow_token": "workflow-scope-locked",
+                field: value,
+            },
+        )
+
+        assert response.status_code == 422
+        assert calls["run"] == 0
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize("qc_scope", ["running", "final"])
     async def test_enqueue_qc_without_deliverable_records_is_not_applicable(self, qc_scope):

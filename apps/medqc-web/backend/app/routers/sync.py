@@ -515,6 +515,19 @@ def _resolve_selected_tables(
     return (selected or None), missing_groups
 
 
+def _resolve_auto_qc_table_groups(req: TriggerRequest) -> Optional[list[str]]:
+    """一键质控始终使用受控资料集，避免旧同步开关造成证据缺失。"""
+
+    if not req.auto_qc_after_sync:
+        return req.table_groups
+    if req.tables is not None or req.table_groups is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一键同步并质控使用固定的泸县0609资料集，不可自定义同步表或分组",
+        )
+    return ["luxian_0609_formal"]
+
+
 def _normalize_date_window_payload(raw: Optional[dict[str, str]]) -> Optional[dict[str, str]]:
     if not isinstance(raw, dict):
         return None
@@ -1038,7 +1051,11 @@ async def trigger_sync(
     effective_tier = "all"
     effective_sync_date = _resolve_effective_sync_date(req.source, req.sync_date)
     operator_email = str(current_user.get("email") or current_user.get("id") or "unknown").strip().lower()
-    selected_tables, missing_groups = _resolve_selected_tables(req.tables, req.table_groups)
+    effective_table_groups = _resolve_auto_qc_table_groups(req)
+    selected_tables, missing_groups = _resolve_selected_tables(
+        req.tables,
+        effective_table_groups,
+    )
     if missing_groups:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -1057,7 +1074,7 @@ async def trigger_sync(
         date_window=date_window_payload,
         target_departments=target_departments,
         tables=selected_tables,
-        table_groups=req.table_groups,
+        table_groups=effective_table_groups,
         policy_version=policy_version,
     )
     supplied_preflight_fingerprint = str(req.preflight_fingerprint or "").strip()
@@ -1075,7 +1092,7 @@ async def trigger_sync(
         date_window=date_window_payload,
         target_departments=target_departments,
         tables=selected_tables,
-        table_groups=req.table_groups,
+        table_groups=effective_table_groups,
         policy_version=policy_version,
         auto_qc_after_sync=req.auto_qc_after_sync,
         auto_qc_workflow_token=auto_qc_workflow_token,
@@ -1418,7 +1435,7 @@ async def trigger_sync(
                 "source": req.source,
                 "tier": effective_tier,
                 "tables": selected_tables or [],
-                "table_groups": req.table_groups or [],
+                "table_groups": effective_table_groups or [],
                 "scene": scene,
                 "date_window": date_window_payload or {},
                 "target_departments": target_departments or ["*"],

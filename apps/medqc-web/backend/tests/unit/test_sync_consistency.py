@@ -1,15 +1,37 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
 
+from app.database.models.cdm import (
+    AdmissionRecord,
+    ConsultationRecord,
+    ExamMaster,
+    FirstCourseRecord,
+    HandoffRecord,
+    HandoverRecord,
+    SurgeryRecord,
+)
 from app.services import etl_sync, mongo_sync, sync_run_history
 from app.services.case_identity import CaseRef
 from app.services.case_scope_service import HospitalizationScopeResult
 from app.services.case_set_sync_service import CaseSetSyncResult
+from app.services.luxian_0609.exam_lab_fact_extraction import _row_text
+from app.services.luxian_0609.source_evidence_reader import _SNAPSHOT_SOURCE_FIELDS
+
+
+def _load_migration_module(filename: str):
+    path = Path(__file__).resolve().parents[2] / "alembic" / "versions" / filename
+    spec = importlib.util.spec_from_file_location(f"test_migration_{path.stem}", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_estimate_pg_sync_impact_uses_running_case_refs_without_mr_no(monkeypatch):
@@ -1295,6 +1317,175 @@ def test_upsert_to_local_derives_exam_document_id_from_source_keys(monkeypatch):
     assert executed_params[0]["record_content"] == "双肺炎症"
 
 
+def test_upsert_to_local_preserves_complete_surgery_record_fields(monkeypatch):
+    """手术结构化内容必须与源端一起落库，不能只保留摘要正文。"""
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    local_columns = [column.name for column in SurgeryRecord.__table__.columns]
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "public",
+            local_columns,
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="surgery_record",
+        records=[
+            {
+                "institute_id": "H1",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "S1",
+                "surgery_name": "腹腔镜下经腹膜前腹股沟疝补片修补术(TAPP)",
+                "surgery_begin_time": "2026-08-18T09:05:00+08:00",
+                "surgery_end_time": "2026-08-18T11:25:00+08:00",
+                "preoperative_diagnosis": "腹股沟疝",
+                "postoperative_diagnosis": "左侧腹股沟斜疝",
+                "surgery_process": "1. 插管全麻。\n2. 完成补片修补。",
+                "blood_loss": "10ml",
+                "record_content": "无特殊。",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    saved = executed_params[0]
+    assert saved["surgery_begin_time"] == "2026-08-18T09:05:00+08:00"
+    assert saved["surgery_end_time"] == "2026-08-18T11:25:00+08:00"
+    assert saved["preoperative_diagnosis"] == "腹股沟疝"
+    assert saved["postoperative_diagnosis"] == "左侧腹股沟斜疝"
+    assert saved["surgery_process"] == "1. 插管全麻。\n2. 完成补片修补。"
+    assert saved["blood_loss"] == "10ml"
+
+
+@pytest.mark.parametrize(
+    ("table_name", "model", "source_row", "expected"),
+    [
+        (
+            "admission_record",
+            AdmissionRecord,
+            {
+                "institute_id": "H1",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "sys_index_id": 101,
+                "record_time": "2026-08-16T22:20:29+08:00",
+                "admission_time": "2026-08-16T20:00:00+08:00",
+            },
+            {
+                "document_id": 101,
+                "record_datetime": "2026-08-16T22:20:29+08:00",
+                "admission_datetime": "2026-08-16T20:00:00+08:00",
+            },
+        ),
+        (
+            "first_course_record",
+            FirstCourseRecord,
+            {
+                "institute_id": "H1",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "sys_index_id": 102,
+                "record_time": "2026-08-16T22:38:08+08:00",
+                "case_characteristic": "患者为31岁男性。",
+            },
+            {
+                "document_id": 102,
+                "record_datetime": "2026-08-16T22:38:08+08:00",
+            },
+        ),
+        (
+            "consultation_record",
+            ConsultationRecord,
+            {
+                "institute_id": "H1",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "sys_index_id": 103,
+                "record_time": "2026-08-16T23:00:00+08:00",
+            },
+            {
+                "document_id": 103,
+                "submit_datetime": "2026-08-16T23:00:00+08:00",
+            },
+        ),
+    ],
+)
+def test_upsert_to_local_maps_customer_document_identity_and_record_time(
+    monkeypatch, table_name, model, source_row, expected
+):
+    """001/002 读取的文书身份和时间必须保留在同一条本地记录。"""
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "public",
+            [column.name for column in model.__table__.columns],
+            ["institute_id", "patient_id", "visit_id"],
+        ),
+    )
+
+    assert etl_sync.upsert_to_local(
+        table_name=table_name,
+        records=[source_row],
+        primary_keys=["patient_id", "visit_id"],
+    ) == 1
+    assert {key: executed_params[0][key] for key in expected} == expected
+
+
+def test_document_field_preservation_rejects_time_or_identity_loss():
+    """源端已有定位信息时，不得过滤后悄然留下不可核对文书。"""
+
+    with pytest.raises(ValueError, match="文书标识未保留"):
+        etl_sync._validate_document_field_preservation(
+            table_name="consultation_record",
+            normalized={"sys_index_id": "doc-103"},
+            existing_columns={"document_id"},
+        )
+    with pytest.raises(ValueError, match="文书权威时间未保留"):
+        etl_sync._validate_document_field_preservation(
+            table_name="consultation_record",
+            normalized={"record_time": "2026-08-16 23:00:00"},
+            existing_columns={"submit_datetime"},
+        )
+
+
 def test_upsert_to_local_derives_presurg_summary_content_without_overwriting_source_content(monkeypatch):
     executed_params: list[dict] = []
 
@@ -1897,6 +2088,42 @@ def test_all_managed_sync_tables_are_enabled_by_default():
     assert all(table["enabled"] is True for table in tables)
 
 
+def test_luxian_0609_formal_sync_group_covers_verified_quality_sources():
+    """一键质控必须显式选择正式资料集，不能受旧 enabled 覆盖配置影响。"""
+
+    groups = {
+        str(group["id"]): tuple(group["table_names"])
+        for group in etl_sync.list_sync_table_groups()
+    }
+
+    formal_tables = groups["luxian_0609_formal"]
+    assert "inpat_registration" in formal_tables
+    assert "consultation_record" in formal_tables
+    assert "exam_master" in formal_tables
+    assert "exam_item_report" in formal_tables
+    assert "labtest_master" in formal_tables
+    assert "labtest_item_report" in formal_tables
+    assert "blood_application" in formal_tables
+    assert "consent_form" in formal_tables
+
+
+def test_sync_catalog_uses_customer_verified_exam_and_lab_identity_fields():
+    entries = {
+        str(item["name"]): list(item["key_fields"])
+        for item in etl_sync.list_sync_tables()
+    }
+
+    assert entries["exam_master"] == ["patient_id", "visit_id", "exam_id"]
+    assert entries["exam_item_report"] == ["patient_id", "visit_id", "exam_id", "item_id"]
+    assert entries["labtest_master"] == ["patient_id", "visit_id", "test_id"]
+    assert entries["labtest_item_report"] == [
+        "patient_id",
+        "visit_id",
+        "test_id",
+        "print_order_id",
+    ]
+
+
 def test_upsert_to_local_external_session_does_not_commit(monkeypatch):
     class _ExternalSession:
         def __init__(self):
@@ -2356,3 +2583,393 @@ def test_pg_sync_state_persists_and_reads_progress_json(monkeypatch):
     assert loaded["is_running"] is True
     assert loaded["progress"]["run_id"] == "sync-progress-1"
     assert loaded["progress"]["tables_total"] == 8
+
+
+def test_upsert_to_local_preserves_structured_transfusion_consent_facts(monkeypatch):
+    """042 不能因结构化同意书字段在同步时被过滤而误判。"""
+
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "consent_type",
+                "name",
+                "diagnosis",
+                "transfusion_reason",
+                "blood_component",
+                "risk_description",
+                "alternative_plan",
+                "agent_sign",
+                "patient_sign_datetime",
+                "physician_sign",
+                "physician_sign_datetime",
+                "record_content",
+            ],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="consent_form",
+        records=[
+            {
+                "institute_id": "I",
+                "patient_id": "P",
+                "visit_id": "V",
+                "document_id": "C1",
+                "patient_name": "张三",
+                "diagnosis": "贫血",
+                "transfution_indication": "纠正贫血",
+                "transfuse_variety": "红细胞",
+                "risk_description": "已告知输血风险",
+                "replace_scheme": "已告知替代方案",
+                "agent_sign": "家属签名",
+                "patient_agentsign_datetime": "2026-08-19 10:05:00+08",
+                "physician_sign": "医师签名",
+                "physician_sign_time": "2026-08-19 10:06:00+08",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    saved = executed_params[0]
+    assert saved["name"] == "张三"
+    # 标准《输血治疗同意书》源表没有通用 consent_type；不能因标题为空而被
+    # 041/042 当作非输血同意书过滤掉。
+    assert saved["consent_type"] == "blood_transfusion"
+    assert saved["diagnosis"] == "贫血"
+    assert saved["transfusion_reason"] == "纠正贫血"
+    assert saved["blood_component"] == "红细胞"
+    assert saved["risk_description"] == "已告知输血风险"
+    assert saved["alternative_plan"] == "已告知替代方案"
+    assert saved["agent_sign"] == "家属签名"
+    assert saved["patient_sign_datetime"] == "2026-08-19 10:05:00+08"
+    assert saved["physician_sign_datetime"] == "2026-08-19 10:06:00+08"
+
+
+def test_upsert_to_local_maps_blood_application_source_identity_and_facts(monkeypatch):
+    """输血申请单必须保留源端真实主键及 044 所需的结构化事实。"""
+
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "application_id",
+                "patient_bloodtype_abo",
+                "transfuse_variety",
+                "transfuse_volume",
+                "transfuse_volume_unit",
+                "request_datetime",
+                "physician_name",
+                "record_content",
+            ],
+            ["institute_id", "patient_id", "visit_id", "application_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="blood_application",
+        records=[
+            {
+                "institute_id": "I",
+                "patient_id": "P",
+                "visit_id": "V",
+                "apply_no": "BA-001",
+                "blood_type": "A",
+                "blood_component": "血小板",
+                "blood_amount": "2",
+                "blood_unit": "U",
+                "apply_datetime": "2026-08-19 09:00:00+08",
+                "apply_doctor": "李医生",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "application_id"],
+    )
+
+    assert count == 1
+    saved = executed_params[0]
+    assert saved["application_id"] == "BA-001"
+    assert saved["patient_bloodtype_abo"] == "A"
+    assert saved["transfuse_variety"] == "血小板"
+    assert saved["transfuse_volume"] == "2"
+    assert saved["transfuse_volume_unit"] == "U"
+    assert saved["request_datetime"] == "2026-08-19 09:00:00+08"
+    assert saved["physician_name"] == "李医生"
+
+
+def test_exam_master_sync_uses_the_actual_exam_id_contract():
+    entry = next(item for item in etl_sync.SYNC_TABLES if item["name"] == "exam_master")
+
+    assert entry["key_fields"] == ["patient_id", "visit_id", "exam_id"]
+    assert {"institute_id", "exam_id"}.issubset(ExamMaster.__table__.columns.keys())
+    assert {
+        "description",
+        "impression",
+        "recommendation",
+        "abnormal_sign",
+        "report_status",
+    }.issubset(ExamMaster.__table__.columns.keys())
+
+
+def test_consent_sync_maps_the_customer_transfusion_consent_source_to_logical_target():
+    entry = next(item for item in etl_sync.SYNC_TABLES if item["name"] == "consent_form")
+
+    assert entry["source_table"] == "bloodtrans_inform_consent"
+    assert entry["procedure"] == "web.bloodtrans_inform_consent"
+
+
+@pytest.mark.parametrize(
+    ("table_name", "source_time_field"),
+    (("handoff_record", "handoff_time"), ("handover_record", "handover_time")),
+)
+def test_upsert_to_local_preserves_handoff_authoritative_time(
+    monkeypatch, table_name, source_time_field
+):
+    """071 的交接窗口不能因专用时间字段在同步时被丢弃而变成资料不足。"""
+
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            list(
+                (HandoffRecord if table_name == "handoff_record" else HandoverRecord)
+                .__table__.columns.keys()
+            ),
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name=table_name,
+        records=[
+            {
+                "institute_id": "I",
+                "patient_id": "P",
+                "visit_id": "V",
+                "document_id": "H1",
+                source_time_field: "2026-08-19 10:05:00+08",
+                "record_content": "已完成医师交接。",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["record_time"] == "2026-08-19 10:05:00+08"
+
+
+def test_upsert_to_local_preserves_exam_master_structured_evidence(monkeypatch):
+    """影像主表的描述、印象和报告状态必须进入本地证据快照。"""
+
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, _stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            list(ExamMaster.__table__.columns.keys()),
+            ["institute_id", "exam_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="exam_master",
+        records=[
+            {
+                "institute_id": "I",
+                "patient_id": "P",
+                "visit_id": "V",
+                "exam_id": "E-001",
+                "description": "右肺见实性结节",
+                "impression": "考虑恶性可能",
+                "recommendation": "建议进一步检查",
+                "abnormal_sign": "异常",
+                "exam_result_status": "已审核",
+                "exam_datetime": "2026-08-19 10:00:00+08",
+                "report_datetime": "2026-08-19 11:00:00+08",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "exam_id"],
+    )
+
+    assert count == 1
+    saved = executed_params[0]
+    assert saved["description"] == "右肺见实性结节"
+    assert saved["impression"] == "考虑恶性可能"
+    assert saved["recommendation"] == "建议进一步检查"
+    assert saved["abnormal_sign"] == "异常"
+    assert saved["report_status"] == "已审核"
+    assert saved["exam_time"] == "2026-08-19 10:00:00+08"
+    assert saved["report_time"] == "2026-08-19 11:00:00+08"
+
+
+def test_exam_master_description_and_impression_are_readable_as_rule_evidence():
+    fields = _SNAPSHOT_SOURCE_FIELDS["exam_master"]
+
+    assert {
+        "description",
+        "impression",
+        "recommendation",
+        "abnormal_sign",
+        "report_status",
+    }.issubset(fields)
+    assert _row_text(
+        {
+            "description": "右肺实性结节",
+            "impression": "考虑恶性可能",
+            "report_status": "已审核",
+        }
+    ) == "右肺实性结节 考虑恶性可能"
+
+
+def test_upsert_to_local_refuses_partial_full_visit_reload_before_delete(monkeypatch):
+    """重载病例有任一源行缺主键时，旧快照必须原样保留。"""
+
+    executed: list[tuple[str, object]] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed.append((str(stmt), params))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id", "record_content"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="拒绝删除旧快照"):
+        etl_sync.upsert_to_local(
+            table_name="daily_course_record",
+            records=[
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "document_id": "D1",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "record_content": "缺文书主键",
+                },
+            ],
+            primary_keys=["document_id"],
+            replace_case_refs=(CaseRef("H1", "P1", "V1"),),
+        )
+
+    assert executed == []
+
+
+@pytest.mark.parametrize(
+    "filename",
+    (
+        "20260819_000035_extend_surgery_record_structured_fields.py",
+        "20260819_000036_preserve_consent_and_exam_master_contracts.py",
+    ),
+)
+def test_sync_contract_migrations_never_mutate_public_source_in_split_mode(monkeypatch, filename):
+    class _Inspector:
+        @staticmethod
+        def get_schema_names():
+            return ["public", "cdm"]
+
+    monkeypatch.setenv("DB_SCHEMA_MODE", "split")
+    migration = _load_migration_module(filename)
+
+    assert migration._target_schemas(_Inspector()) == ["cdm"]

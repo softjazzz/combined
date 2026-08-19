@@ -372,6 +372,7 @@ class AdmissionRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
 
     # 入院信息
     admission_datetime = Column(DateTime, comment="入院时间")
+    record_datetime = Column(DateTime, comment="入院记录时间")
     admission_route = Column(String(100), comment="入院途径")
     dept_name = Column(String(100), comment="入院科室")
     ward_name = Column(String(100), comment="入院病区")
@@ -630,6 +631,29 @@ class SurgeryRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号/单号")
     visit_type = Column(String(100), comment="就诊类型")
+    dept_name = Column(String(100), comment="科室名称")
+    ward_name = Column(String(100), comment="病房名称")
+    submitter = Column(String(100), comment="记录者")
+    surgeon_sign = Column(String(100), comment="手术医师签名")
+    presurg_summary = Column(Text, comment="术前小结")
+    surgery_name = Column(Text, comment="手术项目")
+    surgery_code = Column(String(100), comment="手术编码")
+    surgery_level = Column(String(50), comment="手术等级")
+    surgical_level = Column(String(50), comment="手术等级（兼容来源字段）")
+    surgeon = Column(String(100), comment="手术医师")
+    first_assistant = Column(String(100), comment="手术第一助手")
+    second_assistant = Column(String(100), comment="手术第二助手")
+    anesthesiologist = Column(String(100), comment="麻醉医师")
+    anesthesia_method = Column(String(100), comment="麻醉方式")
+    preoperative_diagnosis = Column(Text, comment="术前诊断")
+    intraoperative_diagnosis = Column(Text, comment="术中诊断")
+    postoperative_diagnosis = Column(Text, comment="术后诊断")
+    surgery_process = Column(Text, comment="手术经过")
+    surgical_incisionheal_level = Column(String(100), comment="切口愈合等级")
+    surgery_begin_time = Column(DateTime(timezone=True), comment="手术开始时间")
+    surgery_end_time = Column(DateTime(timezone=True), comment="手术结束时间")
+    blood_loss = Column(String(100), comment="失血量")
+    other_content = Column(Text, comment="其他内容")
     record_content = Column(Text, comment="非结构化全文")
 
 
@@ -657,6 +681,42 @@ class LabtestItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     referencevalue_min = Column(String(100), comment="参考下限")
     referencevalue_max = Column(String(100), comment="参考上限")
     report_time = Column(DateTime, comment="报告时间")
+
+
+class ExamMaster(AuditMixin, PatientBasicMixin, Base):
+    """检查主表（exam_master）。
+
+    检查主表以 ``institute_id + exam_id`` 稳定标识一张检查申请；必须与
+    数据库主键一致，供整次住院重载时安全 UPSERT。
+    """
+
+    __tablename__ = "exam_master"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    exam_id = Column(String(100), primary_key=True, comment="检查ID")
+    patient_id = Column(String(100), comment="患者号")
+    visit_id = Column(String(100), comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    order_id = Column(String(100), comment="医嘱ID")
+    inpat_no = Column(String(100), comment="住院号")
+    exam_type = Column(String(100), comment="检查类别")
+    description = Column(Text, comment="检查描述")
+    impression = Column(Text, comment="检查印象")
+    recommendation = Column(Text, comment="检查建议")
+    abnormal_sign = Column(String(100), comment="异常标志")
+    device_information = Column(Text, comment="设备信息")
+    image_id = Column(String(100), comment="影像标识")
+    remark = Column(Text, comment="备注")
+    report_status = Column(String(100), comment="报告状态")
+    exam_reason = Column(Text, comment="检查原因")
+    request_dept = Column(String(100), comment="申请科室")
+    request_physician = Column(String(100), comment="申请医师")
+    performed_dept = Column(String(100), comment="执行科室")
+    request_time = Column(DateTime, comment="申请时间")
+    exam_time = Column(DateTime, comment="检查时间")
+    report_time = Column(DateTime, comment="报告时间")
+    record_content = Column(Text, comment="记录内容")
+    record_time = Column(DateTime, comment="记录时间")
 
 
 class ExamItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
@@ -738,6 +798,7 @@ class HandoffRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
+    record_time = Column(DateTime(timezone=True), comment="交班记录时间")
     record_content = Column(Text, comment="非结构化全文")
 
 
@@ -750,6 +811,7 @@ class HandoverRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
+    record_time = Column(DateTime(timezone=True), comment="接班记录时间")
     record_content = Column(Text, comment="非结构化全文")
 
 

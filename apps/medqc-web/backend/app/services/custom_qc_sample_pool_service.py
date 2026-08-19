@@ -4987,6 +4987,44 @@ class CustomQCSamplePoolService:
         except Exception:
             return "pending"
 
+    def _mark_sync_items_bundle_pending(
+        self,
+        *,
+        pool_id: str,
+        item_ids: Sequence[str],
+    ) -> None:
+        """在同步未形成完整 Bundle 时清除旧的可质控标记。
+
+        同步服务在明细源不可用时会保留已写入的 CDM，但不会刷新 Bundle。
+        此时若沿用旧的 ``ready`` 状态，后续运行入口会把旧快照误认为本次
+        同步结果。将状态退回 ``pending`` 只影响样本池可执行性，不修改
+        Bundle 或规则结果，待下一次完整同步成功后由 ``match_pool_items``
+        重新确认。
+        """
+        normalized_item_ids = [
+            _safe_text(item_id)
+            for item_id in item_ids
+            if _safe_text(item_id)
+        ]
+        if not normalized_item_ids:
+            return
+        session = _session()
+        try:
+            session.execute(
+                update(self._item_table)
+                .where(
+                    and_(
+                        self._item_table.c.pool_id == _safe_text(pool_id),
+                        self._item_table.c.id.in_(normalized_item_ids),
+                    )
+                )
+                .values(bundle_status="pending", updated_at=_now_utc())
+            )
+            self._update_pool_counters(session, pool_id)
+            session.commit()
+        finally:
+            session.close()
+
     def _wait_running_bundle_ready(
         self,
         *,
@@ -6320,12 +6358,15 @@ class CustomQCSamplePoolService:
                 "ambiguous": resolved["ambiguous"],
                 "unmatched": resolved["unmatched"],
                 "eligible_visits": 0,
+                "primary_visible": False,
                 "record_progress": _build_record_progress(total=0),
                 "synced_tables": [],
                 "total_rows_pulled": 0,
                 "total_rows_upserted": 0,
                 "sync_group_ids": sync_plan["group_ids"],
                 "missing_group_ids": sync_plan["missing_group_ids"],
+                "sync_ready": False,
+                "sync_block_reason": "no_resolved_cases",
                 "sync_performance": {
                     "source_resolve_ms": source_resolve_duration_ms,
                     "primary_visible_ms": round(
@@ -6383,24 +6424,15 @@ class CustomQCSamplePoolService:
             if _safe_text(item.get("id"))
         ]
         completed_case_keys: set[str] = set()
-        primary_match_result: Optional[Dict[str, Any]] = None
         primary_stage_complete = False
 
         def _case_progress_key(case_ref: CaseRef) -> str:
             return json.dumps(case_ref, ensure_ascii=False, separators=(",", ":"))
 
         def _forward_case_sync_progress(event: Dict[str, Any]) -> None:
-            nonlocal primary_match_result, primary_stage_complete
+            nonlocal primary_stage_complete
             if _safe_text(event.get("step_key")) == "primary_visible":
                 primary_stage_complete = True
-            if (
-                _safe_text(event.get("step_key")) == "primary_visible"
-                and primary_match_result is None
-            ):
-                primary_match_result = self.match_pool_items(
-                    pool_id=pool_id,
-                    item_ids=sync_item_ids,
-                )
             if progress_callback is None:
                 return
             processed_tables = int(event.get("processed_tables") or 0)
@@ -6501,6 +6533,11 @@ class CustomQCSamplePoolService:
             for item in synced_tables
             if _safe_text(item.get("sync_status")) == "source_table_unavailable"
         ]
+        unavailable_detail_tables = [
+            item
+            for item in skipped_optional_tables
+            if _safe_text(item.get("table_name")) not in PRIMARY_VISIBILITY_TABLES
+        ]
 
         if not primary_visible:
             primary_table_results = [
@@ -6530,9 +6567,43 @@ class CustomQCSamplePoolService:
                 "total_rows_upserted": sync_result.total_rows_upserted,
                 "sync_group_ids": sync_plan["group_ids"],
                 "missing_group_ids": sync_plan["missing_group_ids"],
+                "sync_ready": False,
+                "sync_block_reason": "primary_unavailable",
                 "skipped_optional_tables": skipped_optional_tables,
                 "bundle_refresh": {},
                 "pool": self.get_pool(pool_id=pool_id),
+                "post_match": None,
+            }
+
+        if unavailable_detail_tables:
+            self._mark_sync_items_bundle_pending(
+                pool_id=pool_id,
+                item_ids=sync_item_ids,
+            )
+            return {
+                "pool_id": pool_id,
+                "matched": resolved["matched"],
+                "ambiguous": resolved["ambiguous"],
+                "unmatched": resolved["unmatched"],
+                "eligible_visits": len(requested_visit_keys),
+                "primary_visible": True,
+                "primary_completed_at": primary_completed_at,
+                "primary_progress": primary_progress,
+                "record_progress": primary_progress,
+                "synced_tables": synced_tables,
+                "total_rows_pulled": sync_result.total_rows_pulled,
+                "total_rows_upserted": sync_result.total_rows_upserted,
+                "sync_group_ids": sync_plan["group_ids"],
+                "missing_group_ids": sync_plan["missing_group_ids"],
+                "sync_ready": False,
+                "sync_block_reason": "details_incomplete",
+                "skipped_optional_tables": skipped_optional_tables,
+                "bundle_refresh": {},
+                "final_reconciliation": False,
+                "final_reconciliation_count": 0,
+                "hard_delete_reconciliation": "not_supported",
+                "pool": self.get_pool(pool_id=pool_id),
+                "primary_match": None,
                 "post_match": None,
             }
 
@@ -6597,6 +6668,8 @@ class CustomQCSamplePoolService:
             "total_rows_upserted": sync_result.total_rows_upserted,
             "sync_group_ids": sync_plan["group_ids"],
             "missing_group_ids": sync_plan["missing_group_ids"],
+            "sync_ready": True,
+            "sync_block_reason": "",
             "skipped_optional_tables": skipped_optional_tables,
             "bundle_refresh": dict(sync_result.bundle_refresh),
             "final_reconciliation": bool(transition_identities),
@@ -6615,7 +6688,8 @@ class CustomQCSamplePoolService:
                 "total_duration_ms": total_duration_ms,
             },
             "pool": match_result.get("pool") or self.get_pool(pool_id=pool_id),
-            "primary_match": primary_match_result or match_result,
+            # 保留兼容字段；只有完整 Bundle 刷新后才写入匹配结果。
+            "primary_match": match_result,
             "post_match": match_result,
         }
 

@@ -233,6 +233,10 @@ _NATIVE_SOURCE_FIELDS = {
         "exam_name",
         "exam_item_name",
         "item_name",
+        "description",
+        "impression",
+        "recommendation",
+        "abnormal_sign",
         "performed_dept",
         "request_time",
         "exam_time",
@@ -240,6 +244,7 @@ _NATIVE_SOURCE_FIELDS = {
         "report_time",
         "report_datetime",
         "exam_result_status",
+        "report_status",
         "record_content",
     ),
     "exam_item_report": (
@@ -540,6 +545,18 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
 }
+
+# 文书完成时间在客户 CDM 中可能落为 record_time、record_datetime、
+# submit_time 或 submit_datetime。凡是原来已批准读取文书记录时间的来源，
+# 一律同时批准这四个等价的权威时间列；读取时仍只选择实际存在的列。
+# 这样同步后以 record_datetime 保存的时间不会在证据读取阶段再次被漏掉。
+for _source_key, _source_fields in tuple(_NATIVE_SOURCE_FIELDS.items()):
+    if "document_id" in _source_fields and any(
+        field in _source_fields for field in AUTHORITATIVE_DOCUMENT_TIME_FIELDS
+    ):
+        _NATIVE_SOURCE_FIELDS[_source_key] = tuple(
+            dict.fromkeys((*_source_fields, *AUTHORITATIVE_DOCUMENT_TIME_FIELDS))
+        )
 
 _SNAPSHOT_SOURCE_FIELDS = {
     source_key: _NATIVE_SOURCE_FIELDS[source_key]

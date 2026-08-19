@@ -231,8 +231,9 @@ def _parse_date(value: Any) -> date | None:
 def _row_text(row: Mapping[str, Any]) -> str:
     fields = (
         "record_content", "content", "exam_type", "exam_name", "exam_item_name",
-        "performed_dept", "item_name", "exam_result", "exam_impression", "exam_conclusion",
-        "impression", "conclusion", "labtest_subject", "lab_type", "test_type",
+        "performed_dept", "item_name", "description", "exam_result", "exam_impression",
+        "exam_conclusion", "impression", "conclusion", "recommendation", "abnormal_sign",
+        "labtest_subject", "lab_type", "test_type",
         "specimen", "result", "abnormal_indicator",
     )
     return _clean(" ".join(_clean(row.get(field)) for field in fields if _clean(row.get(field))))

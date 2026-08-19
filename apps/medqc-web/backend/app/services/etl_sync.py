@@ -55,12 +55,31 @@ _SUPPORTED_INCREMENTAL_STRATEGIES = frozenset(
     {"updated_at", "append_only_record_time", "full_visit_reload"}
 )
 _SYNC_CURSOR_SCHEMA_VERSION = "sample-sync-v1"
+_DOCUMENT_ID_SOURCE_CANDIDATES = ("document_id", "sys_index_id", "id")
+_AUTHORITATIVE_DOCUMENT_TIME_COLUMNS = (
+    "record_time",
+    "record_datetime",
+    "submit_time",
+    "submit_datetime",
+)
 
 # 源库字段与本地 CDM 列名不一致时的同步映射（目标列 -> 源候选列）。
 # 仅在目标列存在、本条记录未携带目标列时生效。
 _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
+    "admission_record": {
+        # 客户源表以 record_time / sys_index_id 表示文书时间和稳定身份；
+        # 001/002 必须用同一份本地字段计算并定位，不能只在展示层读取原值。
+        "document_id": ("document_id", "sys_index_id", "id"),
+        "record_datetime": (
+            "record_datetime",
+            "record_time",
+            "submit_datetime",
+            "submit_time",
+        ),
+    },
     "first_course_record": {
         # 泸县源库首程记录常以 submit_time 表示文书完成/记录时间，record_time 可能为空。
+        "document_id": ("document_id", "sys_index_id", "id"),
         "record_datetime": (
             "record_datetime",
             "record_time",
@@ -108,7 +127,68 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
         "billing_datetime": ("billing_datetime", "billing_time", "charge_time", "bill_time"),
     },
     "blood_application": {
-        "apply_datetime": ("apply_datetime", "apply_time", "application_datetime", "application_time", "request_time"),
+        # 客户源库常用 apply_no/blood_* 命名；本地 CDM 则以 application_id
+        # 及 transfuse_* 作为正式字段。申请号是本地复合主键的一部分，不能丢失。
+        "application_id": ("application_id", "apply_no", "application_no"),
+        "patient_bloodtype_abo": (
+            "patient_bloodtype_abo",
+            "blood_type",
+            "abo_blood_type",
+        ),
+        "transfuse_variety": ("transfuse_variety", "blood_component"),
+        "transfuse_volume": ("transfuse_volume", "blood_amount"),
+        "transfuse_volume_unit": ("transfuse_volume_unit", "blood_unit"),
+        "request_datetime": (
+            "request_datetime",
+            "apply_datetime",
+            "apply_time",
+            "application_datetime",
+            "application_time",
+            "request_time",
+        ),
+        "physician_name": ("physician_name", "apply_doctor", "request_physician"),
+    },
+    "consent_form": {
+        # 输血治疗同意书等专用同意书的标准字段需映射到通用同意书投影。
+        # 042 逐项校验这些事实；不能只依赖可能为空的 record_content。
+        "name": ("name", "patient_name"),
+        "transfusion_reason": (
+            "transfusion_reason",
+            "transfution_indication",
+            "transfusion_indication",
+            "indication",
+        ),
+        "blood_component": ("blood_component", "transfuse_variety"),
+        "alternative_plan": ("alternative_plan", "replace_scheme"),
+        "patient_sign_datetime": (
+            "patient_sign_datetime",
+            "patient_agentsign_datetime",
+            "patient_sign_time",
+        ),
+        "physician_sign_datetime": (
+            "physician_sign_datetime",
+            "physician_sign_time",
+            "sign_datetime",
+            "sign_time",
+        ),
+    },
+    "handoff_record": {
+        # 071 的交接窗口必须采用实际交班时间；部分源库不会同时填 record_time。
+        "record_time": (
+            "record_time",
+            "handoff_time",
+            "submit_datetime",
+            "submit_time",
+        ),
+    },
+    "handover_record": {
+        # 同上，接班记录的权威时间可能以 handover_time 单独提供。
+        "record_time": (
+            "record_time",
+            "handover_time",
+            "submit_datetime",
+            "submit_time",
+        ),
     },
     "mr_bloodtrans": {
         "transfution_datetime": (
@@ -141,13 +221,32 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "content",
         ),
     },
+    "exam_master": {
+        # 客户检查主表的检查/报告时间及报告状态存在两套标准命名；本地
+        # evidence reader 使用 exam_time/report_time/report_status，必须在落库时
+        # 统一，不能让已同步的影像报告再次被当作没有资料。
+        "exam_time": ("exam_time", "exam_datetime"),
+        "report_time": ("report_time", "report_datetime"),
+        "report_status": ("report_status", "exam_result_status"),
+    },
 }
 
 _GLOBAL_COLUMN_ALIASES: Dict[str, Tuple[str, ...]] = {
+    # 客户源库的多数文书表以 sys_index_id 作稳定行标识。若本地 CDM
+    # 仅有 document_id，必须在落库时完成同一字段映射；否则页面能列出
+    # 文书而规则无法定位其证据，形成“可见但不可核对”的错位。
+    "document_id": ("document_id", "sys_index_id", "id"),
     "admission_datetime": ("admission_datetime", "admission_time"),
     "discharge_datetime": ("discharge_datetime", "discharge_time"),
     "last_modified_datetime": ("last_modified_datetime", "last_modified_time"),
-    "submit_datetime": ("submit_datetime", "submit_time"),
+    # 很多本地文书表只有 submit_datetime，而客户源表只给 record_time。
+    # 二者均是文书已形成的权威时间，必须至少保存到一个可读取字段。
+    "submit_datetime": (
+        "submit_datetime",
+        "submit_time",
+        "record_datetime",
+        "record_time",
+    ),
     "record_datetime": ("record_datetime", "record_time", "round_time"),
     "report_datetime": ("report_datetime", "report_time", "result_datetime", "result_time", "exam_datetime", "exam_time"),
     "request_datetime": ("request_datetime", "request_time", "apply_datetime", "apply_time", "application_time"),
@@ -647,6 +746,11 @@ def _apply_sync_column_aliases(
         normalized=normalized,
         existing_columns=existing_columns,
     )
+    _validate_document_field_preservation(
+        table_name=table_name,
+        normalized=normalized,
+        existing_columns=existing_columns,
+    )
     return normalized
 
 
@@ -780,6 +884,25 @@ def _apply_sync_derived_fields(
             if exam_text:
                 normalized["record_content"] = exam_text
 
+    if (
+        normalized_table == "consent_form"
+        and "consent_type" in existing_columns
+        and not _first_non_empty(normalized, ("consent_type",))
+        # 只依据输血治疗同意书标准字段名标型；不能把手术/麻醉同意书误标为输血。
+        and any(
+            field in normalized
+            for field in (
+                "blood_transfusion_history",
+                "transfution_indication",
+                "transfusion_indication",
+                "transfuse_variety",
+                "blood_transfusion_method",
+                "planned_transfusion_datetime",
+            )
+        )
+    ):
+        normalized["consent_type"] = "blood_transfusion"
+
     if normalized_table in _STRUCTURED_DOCUMENT_CONTENT_FIELDS and "record_content" in existing_columns:
         if not _first_non_empty(normalized, ("record_content",)):
             structured_content = _compose_structured_document_content(
@@ -788,6 +911,43 @@ def _apply_sync_derived_fields(
             )
             if structured_content:
                 normalized["record_content"] = structured_content
+
+
+def _validate_document_field_preservation(
+    *,
+    table_name: str,
+    normalized: Dict[str, Any],
+    existing_columns: set[str],
+) -> None:
+    """阻止“源端可定位、落库后不可定位/不可取时”的静默字段丢失。
+
+    仅约束文书稳定身份与正式记录时间：它们既是病历浏览定位的基础，
+    也是 LX0609 规则对文书证据作确定判定的最低合同。正文和业务字段
+    仍按各表明确模型/结构化正文映射处理，不能在这里凭空扩张落库范围。
+    """
+
+    normalized_table = str(table_name or "").strip().lower()
+    if "document_id" in existing_columns:
+        source_document_id = _first_non_empty(
+            normalized, _DOCUMENT_ID_SOURCE_CANDIDATES
+        )
+        if source_document_id and not _first_non_empty(normalized, ("document_id",)):
+            raise ValueError(
+                f"{normalized_table} 文书标识未保留，拒绝静默同步"
+            )
+
+    source_time = _first_non_empty(normalized, _AUTHORITATIVE_DOCUMENT_TIME_COLUMNS)
+    target_time_columns = tuple(
+        field
+        for field in _AUTHORITATIVE_DOCUMENT_TIME_COLUMNS
+        if field in existing_columns
+    )
+    if source_time and target_time_columns and not _first_non_empty(
+        normalized, target_time_columns
+    ):
+        raise ValueError(
+            f"{normalized_table} 文书权威时间未保留，拒绝静默同步"
+        )
 
 
 def _route_tables_by_scene(
@@ -1131,6 +1291,7 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
             "pathology_exam_report",
             "surgery_application",
             "surgery_inform_consent",
+            "consent_form",
             "surgery_inventory_record",
             "preane_surveil_record",
             "daily_admission_record",
@@ -1158,6 +1319,7 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
             "diagnosis",
             "mr_diagnosis",
             "mr_surgery",
+            "mr_bloodtrans",
             "mr_cost",
             "admission_record",
             "admission_record_diagnosis",
@@ -1186,6 +1348,7 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
             "anesthesia_record",
             "surgery_application",
             "surgery_inform_consent",
+            "consent_form",
             "surgery_inventory_record",
             "preane_surveil_record",
             "postane_surveil_record",
@@ -1207,6 +1370,26 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
         ],
     },
 ]
+
+# 一键同步并质控必须选择一份固定、可审计的资料集，不能依赖客户历史
+# sync/sync_tables 覆盖配置中的 enabled 开关。它与样本验证全域共用同一组
+# 已纳管资料，避免再维护第二份会漂移的表名单。
+_sample_full_domain_tables = next(
+    (
+        list(group.get("table_names") or [])
+        for group in SYNC_TABLE_GROUPS
+        if str(group.get("id") or "") == "sample_full_domain"
+    ),
+    [],
+)
+SYNC_TABLE_GROUPS.append(
+    {
+        "id": "luxian_0609_formal",
+        "label": "泸县0609正式质控资料集",
+        "description": "一键同步并质控专用；覆盖已纳管的LX0609正式证据来源",
+        "table_names": _sample_full_domain_tables,
+    }
+)
 
 # 核心同步表配置：存储过程 → 本地 CDM 表
 # 历史 key_fields 字段保留兼容；新链路按本地主键 UPSERT
@@ -1232,6 +1415,15 @@ SYNC_TABLES = [
         "procedure": "web.mr_surgery",
         "params": 1,
         "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        # 输血正式规则必须先绑定本次住院的首页输血事件；不能只同步
+        # bloodtrans_record 文书而遗漏这个结构化触发事实。
+        "name": "mr_bloodtrans",
+        "label": "首页输血明细",
+        "procedure": "web.mr_bloodtrans",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "bloodtrans_id"],
     },
     {
         "name": "mr_cost",
@@ -1483,28 +1675,34 @@ SYNC_TABLES = [
         "label": "检查主表",
         "procedure": "web.exam_master",
         "params": 1,
-        "key_fields": ["patient_id", "visit_id", "exam_no"],
+        # 客户实际CDM以 exam_id 标识一张检查主表，历史 exam_no 配置会
+        # 使本地无主键表无法形成可重复的 UPSERT 合同。
+        "key_fields": ["patient_id", "visit_id", "exam_id"],
     },
     {
         "name": "exam_item_report",
         "label": "检查报告",
         "procedure": "web.exam_item_report",
         "params": 1,
-        "key_fields": ["patient_id", "visit_id", "exam_no", "item_no"],
+        # 客户源库的检查明细采用 exam_id/item_id，不存在历史 exam_no/item_no。
+        "key_fields": ["patient_id", "visit_id", "exam_id", "item_id"],
     },
     {
         "name": "labtest_master",
         "label": "检验主表",
         "procedure": "web.labtest_master",
         "params": 1,
-        "key_fields": ["patient_id", "visit_id", "test_no"],
+        # 客户源库以 test_id 标识检验申请。
+        "key_fields": ["patient_id", "visit_id", "test_id"],
     },
     {
         "name": "labtest_item_report",
         "label": "检验报告",
         "procedure": "web.labtest_item_report",
         "params": 1,
-        "key_fields": ["patient_id", "visit_id", "test_no", "item_no"],
+        # 同一检验申请可能出现重复 item_id；客户源库的稳定报告标识为
+        # test_id + print_order_id，保留 item_id 供规则读取项目事实。
+        "key_fields": ["patient_id", "visit_id", "test_id", "print_order_id"],
     },
     # ---- Wave 1 / T10 第二批扩表候选（先纳管，默认不启用）----
     {
@@ -1532,6 +1730,17 @@ SYNC_TABLES = [
         "name": "surgery_inform_consent",
         "label": "手术知情同意书",
         "procedure": "web.surgery_inform_consent",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        # 本地以逻辑 consent_form 汇总正式同意书证据；经客户源库元数据核实，
+        # 输血治疗同意书物理表是 bloodtrans_inform_consent。同步配置仍可按
+        # 医院能力覆盖，不能再假定存在同名通用表或不存在的标准别名。
+        "name": "consent_form",
+        "label": "同意书",
+        "source_table": "bloodtrans_inform_consent",
+        "procedure": "web.bloodtrans_inform_consent",
         "params": 1,
         "key_fields": ["patient_id", "visit_id", "document_id"],
     },
@@ -2717,6 +2926,17 @@ def upsert_to_local(
             grouped_rows.setdefault(column_shape, []).append(filtered)
 
         inserted = sum(len(rows) for rows in grouped_rows.values())
+        if normalized_replace_refs and skipped_missing_pk_rows:
+            missing_keys = ", ".join(sorted(missing_pk_names))
+            raise ValueError(
+                f"表 {table_name} 整次住院重载前发现 {skipped_missing_pk_rows}/{len(records)} "
+                f"行缺少本地主键字段，拒绝删除旧快照: {missing_keys}"
+            )
+        if normalized_replace_refs and skipped_empty_rows:
+            raise ValueError(
+                f"表 {table_name} 整次住院重载前发现 {skipped_empty_rows}/{len(records)} "
+                "行没有任何可落库字段，拒绝删除旧快照"
+            )
         if inserted == 0 and records:
             if skipped_missing_pk_rows:
                 missing_keys = ", ".join(sorted(missing_pk_names))

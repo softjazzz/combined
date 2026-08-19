@@ -203,6 +203,12 @@ def test_sample_pool_default_sync_uses_full_domain_group():
     assert "labtest_item_report" in plan["table_names"]
     assert "exam_item_report" in plan["table_names"]
     assert "blood_application" in plan["table_names"]
+    # 041～049、070 以首页输血事件作为正式触发事实；样本全域同步
+    # 不得只同步输血文书而遗漏该结构化锚点。
+    assert "mr_bloodtrans" in plan["table_names"]
+    # 手术知情同意书不能替代通用/麻醉/输血同意书来源；033～035、037、
+    # 038、041、042需要独立的 consent_form 物理来源。
+    assert "consent_form" in plan["table_names"]
     assert "crisis_value_record" in plan["table_names"]
     assert "docpat_commu_record" in plan["table_names"]
     assert "postane_surveil_record" in plan["table_names"]
@@ -220,6 +226,8 @@ def test_sample_full_domain_group_is_available_for_source_coverage_audit():
     assert "exam_item_report" in table_names
     assert "labtest_item_report" in table_names
     assert "blood_application" in table_names
+    assert "mr_bloodtrans" in table_names
+    assert "consent_form" in table_names
     assert "pathology_exam_report" in table_names
 
 
@@ -233,9 +241,36 @@ def test_sample_full_domain_key_fields_cover_customer_source_tables():
         "patient_id",
         "visit_id",
     ]
-    assert table_map["labtest_item_report"]["key_fields"] == ["patient_id", "visit_id", "test_no", "item_no"]
-    assert table_map["exam_item_report"]["key_fields"] == ["patient_id", "visit_id", "exam_no", "item_no"]
+    # 客户源库实测使用 test_id / print_order_id 与 exam_id / item_id；
+    # 不得把历史假设的 test_no、item_no、exam_no 当作同步身份。
+    assert table_map["labtest_item_report"]["key_fields"] == [
+        "patient_id",
+        "visit_id",
+        "test_id",
+        "print_order_id",
+    ]
+    assert table_map["exam_item_report"]["key_fields"] == [
+        "patient_id",
+        "visit_id",
+        "exam_id",
+        "item_id",
+    ]
     assert table_map["blood_application"]["key_fields"] == ["patient_id", "visit_id", "application_id"]
+    assert table_map["mr_bloodtrans"]["procedure"] == "web.mr_bloodtrans"
+    assert table_map["mr_bloodtrans"]["key_fields"] == [
+        "patient_id",
+        "visit_id",
+        "bloodtrans_id",
+    ]
+    # 本地逻辑表仍名为 consent_form；客户源库实际输血同意书表为
+    # bloodtrans_inform_consent，不能回退假设存在同名 web.consent_form。
+    assert table_map["consent_form"]["source_table"] == "bloodtrans_inform_consent"
+    assert table_map["consent_form"]["procedure"] == "web.bloodtrans_inform_consent"
+    assert table_map["consent_form"]["key_fields"] == [
+        "patient_id",
+        "visit_id",
+        "document_id",
+    ]
 
 
 def test_customer_test_record_table_specific_ids_cover_order_and_blood_application():
@@ -1992,7 +2027,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
         remote_read_calls.append(dict(kwargs))
         source_table = kwargs["source_table"]
         if source_table not in {"mr", "admission_record"}:
-            assert len(match_calls) == 1
+            assert not match_calls
             with detail_lock:
                 active_detail_reads += 1
                 max_active_detail_reads = max(max_active_detail_reads, active_detail_reads)
@@ -2113,7 +2148,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     assert result["sync_performance"]["bundle_refresh_ms"] >= 0
     assert result["sync_performance"]["visits_refreshed"] == 1
     assert result["sync_performance"]["retry_count"] == 0
-    assert [call["item_ids"] for call in match_calls] == [["item-1"], ["item-1"]]
+    assert [call["item_ids"] for call in match_calls] == [["item-1"]]
     detail_progress = [
         event
         for event in progress_events
@@ -2219,6 +2254,8 @@ def test_match_pool_items_falls_back_to_running_primary_records(
 
 def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
     service = object.__new__(CustomQCSamplePoolService)
+    match_calls = []
+    pending_calls = []
 
     monkeypatch.setattr(
         service,
@@ -2241,15 +2278,21 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
             },
         },
     )
-    monkeypatch.setattr(
-        service,
-        "match_pool_items",
-        lambda **_: {
+    def _match(**kwargs):
+        match_calls.append(dict(kwargs))
+        return {
             "pool": {"id": "pool-1", "matched_items": 1, "ready_items": 1},
             "matched": 1,
             "ambiguous": 0,
             "unmatched": 0,
-        },
+        }
+
+    monkeypatch.setattr(service, "match_pool_items", _match)
+    monkeypatch.setattr(service, "get_pool", lambda **_: {"id": "pool-1"})
+    monkeypatch.setattr(
+        service,
+        "_mark_sync_items_bundle_pending",
+        lambda **kwargs: pending_calls.append(dict(kwargs)),
     )
 
     monkeypatch.setattr(
@@ -2312,6 +2355,14 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
     assert skipped_by_table["docpat_commu_record"]["error_category"] == (
         "source_field_missing"
     )
+    assert result["primary_visible"] is True
+    assert result["sync_ready"] is False
+    assert result["sync_block_reason"] == "details_incomplete"
+    assert result["bundle_refresh"] == {}
+    assert result["primary_match"] is None
+    assert result["post_match"] is None
+    assert pending_calls == [{"pool_id": "pool-1", "item_ids": ["item-1"]}]
+    assert match_calls == []
 
 
 def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypatch):
@@ -2416,6 +2467,7 @@ def _run_two_stage_primary_sync(
     operations = []
     progress_events = []
     match_calls = []
+    pending_calls = []
     fetch_calls = []
     bundle_refresh_calls = []
     visit_index_calls = []
@@ -2425,6 +2477,7 @@ def _run_two_stage_primary_sync(
                 "operations": operations,
                 "progress_events": progress_events,
                 "match_calls": match_calls,
+                "pending_calls": pending_calls,
                 "fetch_calls": fetch_calls,
                 "bundle_refresh_calls": bundle_refresh_calls,
                 "visit_index_calls": visit_index_calls,
@@ -2540,6 +2593,14 @@ def _run_two_stage_primary_sync(
         lambda **kwargs: visit_index_calls.append(kwargs),
     )
     monkeypatch.setattr(service, "match_pool_items", _match)
+    monkeypatch.setattr(
+        service,
+        "_mark_sync_items_bundle_pending",
+        lambda **kwargs: (
+            operations.append("bundle:pending"),
+            pending_calls.append(dict(kwargs)),
+        ),
+    )
     monkeypatch.setattr(service, "get_pool", lambda **_: {"id": "pool-1"})
     def _refresh_all(**kwargs):
         operations.append("bundle:all")
@@ -2588,9 +2649,9 @@ def test_sync_pool_records_makes_inpat_registration_only_case_visible_before_det
 
     assert result["primary_visible"] is True
     assert result["primary_progress"]["completed"] == 1
-    assert len(match_calls) == 2
+    assert len(match_calls) == 1
     assert all(call["item_ids"] == ["item-1"] for call in match_calls)
-    assert operations.index("match") < operations.index("fetch:daily_course_record")
+    assert operations.index("fetch:daily_course_record") < operations.index("match")
     assert operations.index("fetch:daily_course_record") < operations.index("bundle:all")
     primary_visible_events = [
         event
@@ -3233,8 +3294,11 @@ def test_sync_pool_records_degrades_missing_primary_relation_to_admission_record
     assert result["primary_visible"] is True
     assert result["skipped_optional_tables"][0]["table_name"] == "mr"
     assert result["skipped_optional_tables"][0]["sync_status"] == "source_table_unavailable"
-    assert len(match_calls) == 2
-    assert operations.index("match") < operations.index("fetch:daily_course_record")
+    assert result["sync_ready"] is True
+    assert result["sync_block_reason"] == ""
+    assert len(match_calls) == 1
+    assert operations.index("fetch:daily_course_record") < operations.index("bundle:all")
+    assert operations.index("bundle:all") < operations.index("match")
 
 
 def test_sync_pool_records_stops_before_details_when_all_primary_records_unavailable(

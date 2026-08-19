@@ -1549,6 +1549,64 @@ def test_controlled_unstable_order_reader_uses_exact_bound_predicate(
     assert params["visit_id"] == "private-visit"
 
 
+def test_snapshot_reader_keeps_localized_admission_record_time_for_lx001_002(
+    monkeypatch,
+) -> None:
+    """同步层保存为 record_datetime 时，快照仍必须读取该权威文书时间。"""
+
+    connection = _FakeConnection(
+        [
+            {
+                "document_id": "admission-101",
+                "record_datetime": "2026-08-16 22:20:29",
+                "admission_datetime": "2026-08-16 20:00:00",
+                "chief_complaint": "腹痛",
+                "record_content": "完整入院记录",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(connection),
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, source_key: (
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "record_datetime",
+                "admission_datetime",
+                "chief_complaint",
+                "record_content",
+            ]
+            if source_key == "admission_record"
+            else []
+        ),
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key="admission_record",
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+    )
+
+    assert dict(result.rows[0])["record_datetime"] == "2026-08-16 22:20:29"
+    sql, _params = connection.calls[0]
+    assert '"record_datetime"' in sql
+
+
 def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
     monkeypatch,
 ) -> None:
