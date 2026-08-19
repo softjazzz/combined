@@ -245,12 +245,21 @@ def _timeline_facts(evidence_payload: Mapping[str, Any] | None) -> Sequence[Any]
 
 def _row_text(row: Mapping[str, Any]) -> str:
     return _clean(
-        row.get("case_characteristic")
-        or row.get("content")
-        or row.get("record_content")
-        or row.get("raw_text")
-        or row.get("content_preview")
-        or row.get("text_preview")
+        " ".join(
+            _clean(row.get(field))
+            for field in (
+                "case_characteristic",
+                "diagnose_based_on",
+                "differential_diagnosis",
+                "treatment_plan",
+                "content",
+                "record_content",
+                "raw_text",
+                "content_preview",
+                "text_preview",
+            )
+            if _clean(row.get(field))
+        )
     )
 
 

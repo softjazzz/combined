@@ -1365,6 +1365,46 @@ def test_010_accepts_pre_order_reason_from_first_course_record_datetime():
     assert outcome.reason_code == "exam_order_reason_recorded"
 
 
+def test_010_reads_exam_reason_from_first_course_treatment_plan():
+    """病例特点非空时，010仍必须读取诊疗计划中的检查原因。"""
+
+    outcome = exam_lab._order_based_exam_reason_outcome(
+        {
+            CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
+                {
+                    "order_id": "ORD-1",
+                    "order_name": "胸部CT平扫",
+                    "order_status": "新开",
+                    "prescribed_datetime": "2026-08-18 10:00:00",
+                },
+            ),
+            "first_course_record": (
+                {
+                    "record_datetime": "2026-08-18 09:00:00",
+                    "case_characteristic": "患者高龄，急性起病。",
+                    "treatment_plan": "行胸部CT了解胸部情况及有无肺部感染。",
+                },
+            ),
+        }
+    )
+
+    assert outcome is not None
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "exam_order_reason_recorded"
+
+
+def test_010_source_reader_keeps_full_first_course_reason_fields():
+    """正式资料投影不能只读取病例特点而遗漏诊疗计划。"""
+
+    from app.services.luxian_0609 import source_evidence_reader
+
+    projected = source_evidence_reader._NATIVE_SOURCE_FIELDS["first_course_record"]
+    assert "case_characteristic" in projected
+    assert "diagnose_based_on" in projected
+    assert "differential_diagnosis" in projected
+    assert "treatment_plan" in projected
+
+
 def test_010_source_reader_contract_keeps_structured_exam_order_linkage_fields(monkeypatch):
     """010 的医嘱—检查唯一关联只能使用受控的结构化业务键。"""
 

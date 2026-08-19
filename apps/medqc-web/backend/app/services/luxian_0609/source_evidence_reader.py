@@ -90,6 +90,9 @@ _NATIVE_SOURCE_FIELDS = {
         "document_title",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "case_characteristic",
+        "diagnose_based_on",
+        "differential_diagnosis",
+        "treatment_plan",
         "record_content",
     ),
     "rescue_record": (
