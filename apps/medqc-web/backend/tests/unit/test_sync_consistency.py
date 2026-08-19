@@ -1360,7 +1360,8 @@ def test_upsert_to_local_preserves_complete_surgery_record_fields(monkeypatch):
                 "surgery_end_time": "2026-08-18T11:25:00+08:00",
                 "preoperative_diagnosis": "腹股沟疝",
                 "postoperative_diagnosis": "左侧腹股沟斜疝",
-                "surgery_process": "1. 插管全麻。\n2. 完成补片修补。",
+                "surgery_process": "1. 插管全麻。",
+                "intraoperative_treatment": "2. 完成补片修补。\n3. 检查无活动性出血。",
                 "blood_loss": "10ml",
                 "record_content": "无特殊。",
             }
@@ -1374,8 +1375,34 @@ def test_upsert_to_local_preserves_complete_surgery_record_fields(monkeypatch):
     assert saved["surgery_end_time"] == "2026-08-18T11:25:00+08:00"
     assert saved["preoperative_diagnosis"] == "腹股沟疝"
     assert saved["postoperative_diagnosis"] == "左侧腹股沟斜疝"
-    assert saved["surgery_process"] == "1. 插管全麻。\n2. 完成补片修补。"
+    assert saved["surgery_process"] == (
+        "1. 插管全麻。\n2. 完成补片修补。\n3. 检查无活动性出血。"
+    )
     assert saved["blood_loss"] == "10ml"
+
+
+@pytest.mark.parametrize(
+    ("surgery_process", "intraoperative_treatment", "expected"),
+    [
+        (
+            "1. 插管全麻。",
+            "1. 插管全麻。\n2. 完成补片修补。",
+            "1. 插管全麻。\n2. 完成补片修补。",
+        ),
+        ("", "术中完成止血并清点器械。", "术中完成止血并清点器械。"),
+    ],
+)
+def test_merge_surgery_process_sections_deduplicates_source_fragments(
+    surgery_process,
+    intraoperative_treatment,
+    expected,
+):
+    assert etl_sync._merge_surgery_process_sections(
+        {
+            "surgery_process": surgery_process,
+            "intraoperative_treatment": intraoperative_treatment,
+        }
+    ) == expected
 
 
 @pytest.mark.parametrize(

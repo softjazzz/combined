@@ -809,6 +809,22 @@ def _first_non_empty(record: Dict[str, Any], field_names: Tuple[str, ...]) -> st
     return ""
 
 
+def _merge_surgery_process_sections(normalized: Dict[str, Any]) -> str:
+    """合并客户源中被拆列保存的手术经过与术中处理正文。"""
+
+    surgery_process = _first_non_empty(normalized, ("surgery_process",))
+    intraoperative_treatment = _first_non_empty(normalized, ("intraoperative_treatment",))
+    if not surgery_process:
+        return intraoperative_treatment
+    if not intraoperative_treatment:
+        return surgery_process
+    if surgery_process in intraoperative_treatment:
+        return intraoperative_treatment
+    if intraoperative_treatment in surgery_process:
+        return surgery_process
+    return f"{surgery_process}\n{intraoperative_treatment}"
+
+
 def _compose_structured_document_content(
     *,
     table_name: str,
@@ -830,6 +846,11 @@ def _apply_sync_derived_fields(
     existing_columns: set[str],
 ) -> None:
     normalized_table = str(table_name or "").strip().lower()
+    if normalized_table == "surgery_record" and "surgery_process" in existing_columns:
+        merged_surgery_process = _merge_surgery_process_sections(normalized)
+        if merged_surgery_process:
+            normalized["surgery_process"] = merged_surgery_process
+
     if "document_id" in existing_columns and not _first_non_empty(normalized, ("document_id",)):
         if normalized_table == "labtest_item_report":
             test_no = _first_non_empty(normalized, ("test_no", "test_id"))
