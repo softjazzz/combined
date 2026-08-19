@@ -119,13 +119,15 @@
           >
             刷新
           </button>
-          <QcSyncAndRunControl
-            :care-phase="carePhase"
-            :department="activeDept"
-            :start-date="startDate"
-            :end-date="endDate"
-            @completed="refreshAfterSyncAndQc"
-          />
+          <div class="qc-record-result-list-view__sync-control">
+            <QcSyncAndRunControl
+              :care-phase="carePhase"
+              :department="activeDept"
+              :start-date="startDate"
+              :end-date="endDate"
+              @completed="refreshAfterSyncAndQc"
+            />
+          </div>
         </div>
       </div>
 
@@ -939,7 +941,20 @@ function closeResultDrawer() {
 }
 
 .qc-record-result-list-view__query-button,
-.qc-record-result-list-view__refresh-button,
+.qc-record-result-list-view__refresh-button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: 8px;
+  background: #fff;
+  color: #0066cc;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .qc-record-result-list-view__pagination button {
   min-height: 34px;
   padding: 0 12px;
@@ -958,6 +973,27 @@ function closeResultDrawer() {
   border-color: #0066cc;
   background: #0066cc;
   color: #fff;
+}
+
+.qc-record-result-list-view__refresh-button {
+  border-color: #0066cc;
+  background: #0066cc;
+  color: #fff;
+}
+
+.qc-record-result-list-view__refresh-button:hover:not(:disabled),
+.qc-record-result-list-view__query-button:hover:not(:disabled) {
+  background: #0059b3;
+}
+
+.qc-record-result-list-view__sync-control {
+  display: inline-flex;
+}
+
+.qc-record-result-list-view__sync-control :deep(.qc-sync-and-run-control__trigger) {
+  min-height: 38px;
+  padding: 0 15px;
+  border-radius: 10px;
 }
 
 .qc-record-result-list-view__query-button:disabled,
