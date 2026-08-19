@@ -973,6 +973,13 @@ async def execute_luxian_0609_native_extended_document_rules(
         death_rows=death_rows,
         discharge_rows=discharge_rows,
     )
+    if (
+        death_state == "unknown"
+        and registration_rows
+        and not (registration_error or death_error or discharge_error)
+    ):
+        # 本次住院存在，死亡/出院三类权威来源均已完整读取且无死亡事实。
+        death_state = "absent"
     decisions: list[RuleDecision] = []
     display: list[tuple[str, Mapping[str, Any]]] = []
     surgery_applicability = (
