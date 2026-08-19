@@ -1251,6 +1251,41 @@ def test_006_explicit_senior_round_remains_zero_llm_call():
 
 
 @pytest.mark.unit
+def test_006_recognizes_explicit_senior_round_role_from_customer_record_body():
+    selected = ("LX0609-006",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-08-13 10:13:00"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "zhang-yunhai-senior-round",
+                    "record_time": "2026-08-14 09:30:38",
+                    "record_content": (
+                        "今日张云海副主任医师查房后指出:患者一般情况尚可。"
+                    ),
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+    )
+
+    execution, reduced = _reduce_typed_basic(session, selected)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    facts = dict(execution.customer_display_facts)
+    assert facts["LX0609-006"]["source_document_id"] == (
+        "zhang-yunhai-senior-round"
+    )
+    assert facts["LX0609-006"]["elapsed_hours"] == 23.29
+    assert not hasattr(execution, "__await__")
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body():
     class _LLM:

@@ -29,6 +29,10 @@ _INLINE_RESCUE_END_TIME_PATTERN = re.compile(
 )
 _ATTENDING_MARKERS = ("主治医师", "主治查房", "代主治医师", "代主治查房")
 _SENIOR_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房", "高级职称")
+_EXPLICIT_SENIOR_ROUND_BODY_PATTERN = re.compile(
+    r"(?:^|[。；;\n\r])\s*(?:今日|今晨|今早)\s*"
+    r"[\u4e00-\u9fff]{1,4}\s*(?:副主任医师|主任医师)\s*查房"
+)
 _ATTENDING_OR_ABOVE_DOCUMENT_TITLES = frozenset(
     {
         "上级医师查房记录",
@@ -250,6 +254,9 @@ def classify_course_round_role(
         return CourseRoundRole.SENIOR
     if any(marker in role_text for marker in _ATTENDING_MARKERS):
         return CourseRoundRole.ATTENDING_OR_ABOVE
+    body = str(row.get("record_content") or row.get("content") or "").strip()
+    if _EXPLICIT_SENIOR_ROUND_BODY_PATTERN.search(body):
+        return CourseRoundRole.SENIOR
     if is_generic_upper_physician_round(row, source_key=source_key):
         return CourseRoundRole.ATTENDING_OR_ABOVE
     if "查房" in role_text:

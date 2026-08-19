@@ -150,6 +150,11 @@ def _semantic_round_candidates(
                 source_key=source_key,
             ):
                 continue
+            if (
+                classify_course_round_role(row, source_key=source_key)
+                is CourseRoundRole.SENIOR
+            ):
+                continue
             body = next(
                 (
                     text
