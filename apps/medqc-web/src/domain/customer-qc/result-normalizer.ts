@@ -310,17 +310,45 @@ function extractCourseInterval(
   const endTime = facts.interval_end_time
   const hours = facts.interval_hours
   const thresholdHours = facts.threshold_hours
+  const validStartSource =
+    startSource === 'daily_course_record' ||
+    startSource === 'senior_course_record' ||
+    startSource === 'inpat_registration'
+  const validEndSource =
+    endSource === 'daily_course_record' ||
+    endSource === 'senior_course_record' ||
+    endSource === 'evaluation_context.horizon'
   if (
-    (startSource !== 'daily_course_record' && startSource !== 'senior_course_record') ||
-    (endSource !== 'daily_course_record' && endSource !== 'senior_course_record') ||
+    !validStartSource ||
+    !validEndSource ||
     typeof startTime !== 'string' ||
-    typeof endTime !== 'string' ||
     !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(startTime) ||
+    thresholdHours !== 72
+  )
+    return undefined
+  if (
+    endSource === 'evaluation_context.horizon' &&
+    facts.interval_end_precision === 'date' &&
+    typeof facts.interval_end_date === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(facts.interval_end_date) &&
+    endTime === undefined &&
+    hours === undefined
+  ) {
+    return {
+      startSource,
+      endSource,
+      startTime,
+      endDate: facts.interval_end_date,
+      endPrecision: 'date',
+      thresholdHours,
+    }
+  }
+  if (
+    typeof endTime !== 'string' ||
     !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(endTime) ||
     typeof hours !== 'number' ||
     !Number.isFinite(hours) ||
-    hours <= 72 ||
-    thresholdHours !== 72
+    hours <= 72
   )
     return undefined
   return { startSource, endSource, startTime, endTime, hours, thresholdHours }
@@ -1338,6 +1366,56 @@ function lx017Descriptor(facts: CustomerDisplayFacts): CustomerReasonDescriptor 
 function lx007Descriptor(facts: CustomerDisplayFacts): CustomerReasonDescriptor | undefined {
   const interval = facts.courseInterval
   if (!interval) return undefined
+  if (interval.endPrecision === 'date' && interval.endDate) {
+    const isZeroRounds = interval.startSource === 'inpat_registration'
+    return {
+      summary: isZeroRounds
+        ? `权威入院时间（${interval.startTime}）至评价截止日期（${interval.endDate}）已确认超过${interval.thresholdHours}小时要求；期间未见有效查房。`
+        : `最后一次查房（${interval.startTime}）至评价截止日期（${interval.endDate}）已确认超过${interval.thresholdHours}小时要求。`,
+      detail: isZeroRounds
+        ? `评价截止日期仅精确到日期；该日期已能确定入院后超过${interval.thresholdHours}小时仍未见可计入本项的查房记录。`
+        : `评价截止日期仅精确到日期；该日期已能确定最后一次查房后超过${interval.thresholdHours}小时仍未见可计入本项的后续记录。`,
+      requirement: `病情稳定（未下病危、病重医嘱）患者应每${interval.thresholdHours}小时至少有一份日常病程记录或上级医师查房记录。`,
+      suggestion: '请补充该时间段内反映患者病情和诊疗情况的日常病程记录或上级医师查房记录。',
+    }
+  }
+  if (
+    interval.endSource === 'evaluation_context.horizon' &&
+    interval.endTime !== undefined &&
+    interval.hours !== undefined
+  ) {
+    const isZeroRounds = interval.startSource === 'inpat_registration'
+    const hours = Number.isInteger(interval.hours) ? `${interval.hours}` : interval.hours.toFixed(2)
+    return {
+      summary: `${isZeroRounds ? '权威入院时间' : '最后一次查房'}（${interval.startTime}）至评价截止时间（${interval.endTime}）间隔${hours}小时，超过${interval.thresholdHours}小时要求${isZeroRounds ? '；期间未见有效查房' : ''}。`,
+      detail: isZeroRounds
+        ? '以权威入院时间为起点，评价截止时间前未见可计入本项的日常病程记录或上级医师查房记录。'
+        : '以最后一次查房为起点，评价截止时间前未见可计入本项的后续记录。',
+      requirement: `病情稳定（未下病危、病重医嘱）患者应每${interval.thresholdHours}小时至少有一份日常病程记录或上级医师查房记录。`,
+      suggestion: '请补充该时间段内反映患者病情和诊疗情况的日常病程记录或上级医师查房记录。',
+    }
+  }
+  if (
+    interval.startSource === 'inpat_registration' &&
+    interval.endTime !== undefined &&
+    interval.hours !== undefined
+  ) {
+    const hours = Number.isInteger(interval.hours) ? `${interval.hours}` : interval.hours.toFixed(2)
+    return {
+      summary: `权威入院时间（${interval.startTime}）至首次查房（${interval.endTime}）间隔${hours}小时，超过${interval.thresholdHours}小时要求。`,
+      detail: '以权威入院时间为起点，首次查房前未见可计入本项的日常病程记录或上级医师查房记录。',
+      requirement: `病情稳定（未下病危、病重医嘱）患者应每${interval.thresholdHours}小时至少有一份日常病程记录或上级医师查房记录。`,
+      suggestion: '请补充该时间段内反映患者病情和诊疗情况的日常病程记录或上级医师查房记录。',
+    }
+  }
+  if (
+    interval.startSource !== 'daily_course_record' &&
+    interval.startSource !== 'senior_course_record'
+  )
+    return undefined
+  if (interval.endSource !== 'daily_course_record' && interval.endSource !== 'senior_course_record')
+    return undefined
+  if (interval.endTime === undefined || interval.hours === undefined) return undefined
   const hours = Number.isInteger(interval.hours) ? `${interval.hours}` : interval.hours.toFixed(2)
   return {
     summary: `从${interval.startTime}至${interval.endTime}间隔${hours}小时，超过${interval.thresholdHours}小时要求。`,

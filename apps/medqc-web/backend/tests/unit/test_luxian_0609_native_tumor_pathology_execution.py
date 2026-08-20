@@ -210,6 +210,8 @@ def _material_session(
     truncated_master: bool = False,
     surgery_process: str = "术中切取病灶标本并送病理检查。",
     empty_targets: bool = False,
+    surgery_rows: tuple[dict, ...] | None = None,
+    daily_course_rows: tuple[dict, ...] | None = None,
 ):
     rows_by_source = {
         "pathology_exam_master": (
@@ -226,12 +228,18 @@ def _material_session(
             )
         ),
         "surgery_record": (
-            () if empty_targets else ({"surgery_process": surgery_process},)
+            surgery_rows
+            if surgery_rows is not None
+            else (() if empty_targets else ({"surgery_process": surgery_process},))
         ),
         "daily_course_record": (
-            ()
-            if empty_targets
-            else ({"record_content": "病程记录中已记录病理结果与处理计划。"},)
+            daily_course_rows
+            if daily_course_rows is not None
+            else (
+                ()
+                if empty_targets
+                else ({"record_content": "病程记录中已记录病理结果与处理计划。"},)
+            )
         ),
     }
 
@@ -324,6 +332,51 @@ async def test_typed_013_complete_empty_target_sources_are_non_compliant_without
         "requirement_met": False,
         "report_time": "2026-04-26 10:00:00",
     }
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("surgery_rows", "daily_course_rows"),
+    (
+        (
+            ({"record_content": "手术记录：病理检查结果提示病理诊断资料。"},),
+            (),
+        ),
+        (
+            (),
+            ({"record_content": "病程记录：病理检查结果提示病理诊断资料。"},),
+        ),
+    ),
+)
+async def test_typed_013_accepts_documentation_from_either_complete_target_source(
+    surgery_rows: tuple[dict, ...],
+    daily_course_rows: tuple[dict, ...],
+):
+    """013 只要求任一完整目标文书记录已完成的病理结果。"""
+
+    session = _material_session(
+        surgery_rows=surgery_rows,
+        daily_course_rows=daily_course_rows,
+    )
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-013",),
+        wrapper_rules=[_wrapper("LX0609-013")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-013",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "compliant"
+    assert dict(result.customer_display_facts)["LX0609-013"]["requirement_met"] is True
     assert result.llm_call_count == 0
 
 

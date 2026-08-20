@@ -43,6 +43,7 @@ def _typed_basic_session(
     ),
     failures: dict[str, Exception] | None = None,
     truncated_sources: frozenset[str] = frozenset(),
+    evaluation_as_of_date: str | None = "2026-07-16",
 ):
     def read(**kwargs):
         source_key = kwargs["source_key"]
@@ -62,6 +63,7 @@ def _typed_basic_session(
         visit_id="V",
         source_schema=None,
         created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date=evaluation_as_of_date,
         row_reader=read,
         additional_source_keys=(
             "admission_record",
@@ -72,6 +74,84 @@ def _typed_basic_session(
             "senior_course_record",
         ),
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("rule_id", "evaluation_as_of_date"),
+    [
+        ("LX0609-001", "2026-06-02"),
+        ("LX0609-002", "2026-06-01"),
+        ("LX0609-005", "2026-06-03"),
+        ("LX0609-006", "2026-06-04"),
+    ],
+)
+def test_missing_timeliness_document_before_maturity_is_not_non_compliant(
+    rule_id: str,
+    evaluation_as_of_date: str,
+):
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+        },
+        selected_rule_ids=(rule_id,),
+        evaluation_as_of_date=evaluation_as_of_date,
+    )
+
+    _, reduced = _reduce_typed_basic(session, (rule_id,))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("rule_id", "evaluation_as_of_date"),
+    [
+        ("LX0609-001", "2026-06-03"),
+        ("LX0609-002", "2026-06-02"),
+        ("LX0609-005", "2026-06-04"),
+        ("LX0609-006", "2026-06-05"),
+    ],
+)
+def test_missing_timeliness_document_after_maturity_is_non_compliant(
+    rule_id: str,
+    evaluation_as_of_date: str,
+):
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+        },
+        selected_rule_ids=(rule_id,),
+        evaluation_as_of_date=evaluation_as_of_date,
+    )
+
+    _, reduced = _reduce_typed_basic(session, (rule_id,))
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
+
+
+@pytest.mark.unit
+def test_missing_timeliness_document_with_negative_evaluation_interval_fails_closed():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+        },
+        selected_rule_ids=("LX0609-001",),
+        evaluation_as_of_date="2026-05-31",
+    )
+
+    _, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced[0].reason_code == "evidence_conflict"
 
 
 def _settings(*, basic_enabled: bool) -> SimpleNamespace:

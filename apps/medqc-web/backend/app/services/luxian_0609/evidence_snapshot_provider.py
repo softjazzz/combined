@@ -219,6 +219,11 @@ def build_luxian_0609_evidence_read_session(
         raise ValueError("selected_rule_ids must not be empty")
     needs_evaluation_horizon = bool(
         {
+            "LX0609-001",
+            "LX0609-002",
+            "LX0609-005",
+            "LX0609-006",
+            "LX0609-007",
             "LX0609-008",
             "LX0609-009",
             "LX0609-011",

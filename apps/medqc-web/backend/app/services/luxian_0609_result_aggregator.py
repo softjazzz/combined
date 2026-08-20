@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import isfinite
 from typing import TYPE_CHECKING, Any, Mapping
 from zoneinfo import ZoneInfo
@@ -2523,51 +2523,76 @@ def safe_luxian_0609_customer_display_facts(
             )
         recorded_dates = raw.get("recorded_dates")
         interval_hours = raw.get("interval_hours")
+        start_source = raw.get("interval_start_source")
+        end_source = raw.get("interval_end_source")
+        record_sources = {"daily_course_record", "senior_course_record"}
+        start_boundary_source = "inpat_registration"
+        end_boundary_source = "evaluation_context.horizon"
+        is_date_only_end = raw.get("interval_end_precision") == "date"
         if (
             failure_kind
             not in {
                 "course_record_interval_over_72h",
                 "course_record_interval_within_72h",
             }
-            or raw.get("interval_start_source")
-            not in {"daily_course_record", "senior_course_record"}
-            or raw.get("interval_end_source")
-            not in {"daily_course_record", "senior_course_record"}
-            or not all(
-                isinstance(raw.get(key), str)
-                and re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", raw[key])
-                for key in ("interval_start_time", "interval_end_time")
-            )
-            or not isinstance(interval_hours, (int, float))
+            or start_source not in record_sources | {start_boundary_source}
+            or end_source not in record_sources | {end_boundary_source}
+            or start_source == end_boundary_source
+            or end_source == start_boundary_source
+            or not isinstance(raw.get("interval_start_time"), str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", raw["interval_start_time"])
             or raw.get("threshold_hours") != 72
             or not isinstance(recorded_dates, list)
-            or len(recorded_dates) < 2
             or len(recorded_dates) > 64
             or not all(
                 isinstance(value, str)
                 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
                 for value in recorded_dates
             )
-            or (
-                failure_kind == "course_record_interval_over_72h"
-                and float(interval_hours) <= 72
-            )
-            or (
-                failure_kind == "course_record_interval_within_72h"
-                and float(interval_hours) > 72
-            )
+        ):
+            return None
+        if is_date_only_end:
+            end_date = raw.get("interval_end_date")
+            if (
+                failure_kind != "course_record_interval_over_72h"
+                or end_source != end_boundary_source
+                or "interval_end_time" in raw
+                or not isinstance(end_date, str)
+                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_date)
+                or interval_hours is not None
+                or raw.get("interval_seconds") is not None
+                or raw.get("overdue_seconds") is not None
+            ):
+                return None
+            try:
+                started_at = datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S")
+                confirmed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                return None
+            if confirmed_end_date <= (started_at + timedelta(hours=72)).date():
+                return None
+        elif (
+            raw.get("interval_end_precision") is not None
+            or raw.get("interval_end_date") is not None
+            or not isinstance(raw.get("interval_end_time"), str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", raw["interval_end_time"])
+            or not isinstance(interval_hours, (int, float))
+            or (failure_kind == "course_record_interval_over_72h" and float(interval_hours) <= 72)
+            or (failure_kind == "course_record_interval_within_72h" and float(interval_hours) > 72)
         ):
             return None
         facts: dict[str, Any] = {
             "failure_kind": failure_kind,
-            "interval_start_source": raw["interval_start_source"],
-            "interval_end_source": raw["interval_end_source"],
+            "interval_start_source": start_source,
+            "interval_end_source": end_source,
             "interval_start_time": raw["interval_start_time"],
-            "interval_end_time": raw["interval_end_time"],
-            "interval_hours": round(float(interval_hours), 2),
             "threshold_hours": 72,
             "recorded_dates": list(recorded_dates),
         }
+        if is_date_only_end:
+            facts.update({"interval_end_date": raw["interval_end_date"], "interval_end_precision": "date"})
+        else:
+            facts.update({"interval_end_time": raw["interval_end_time"], "interval_hours": round(float(interval_hours), 2)})
         enhanced_keys = {
             "interval_start_position",
             "interval_end_position",
@@ -2581,72 +2606,110 @@ def safe_luxian_0609_customer_display_facts(
             record_count = raw.get("record_count")
             interval_seconds = raw.get("interval_seconds")
             overdue_seconds = raw.get("overdue_seconds")
-            if not all(
-                type(value) is int
-                for value in (
-                    start_position,
-                    end_position,
-                    record_count,
-                    interval_seconds,
-                    overdue_seconds,
+            if is_date_only_end:
+                if (
+                    interval_seconds is not None
+                    or overdue_seconds is not None
+                    or not all(
+                        type(value) is int
+                        for value in (start_position, end_position, record_count)
+                    )
+                    or not 0 <= start_position < end_position <= record_count + 1
+                    or end_position != start_position + 1
+                    or record_count != len(recorded_dates)
+                    or (start_source == start_boundary_source and start_position != 0)
+                    or (start_source in record_sources and start_position < 1)
+                    or end_position != record_count + 1
+                ):
+                    return None
+                facts.update(
+                    {
+                        "interval_start_position": start_position,
+                        "interval_end_position": end_position,
+                        "record_count": record_count,
+                    }
                 )
-            ):
-                return None
-            if (
-                not 1 <= start_position < end_position <= record_count
-                or end_position != start_position + 1
-                or record_count != len(recorded_dates)
-            ):
-                return None
-            try:
-                started_at = datetime.strptime(
-                    raw["interval_start_time"], "%Y-%m-%d %H:%M:%S"
+            else:
+                if not all(
+                    type(value) is int
+                    for value in (
+                        start_position,
+                        end_position,
+                        record_count,
+                        interval_seconds,
+                        overdue_seconds,
+                    )
+                ):
+                    return None
+                if (
+                    not 0 <= start_position < end_position <= record_count + 1
+                    or end_position != start_position + 1
+                    or record_count != len(recorded_dates)
+                    or (start_source == start_boundary_source and start_position != 0)
+                    or (start_source in record_sources and start_position < 1)
+                    or (end_source == end_boundary_source and end_position != record_count + 1)
+                    or (end_source in record_sources and end_position > record_count)
+                ):
+                    return None
+                try:
+                    started_at = datetime.strptime(
+                        raw["interval_start_time"], "%Y-%m-%d %H:%M:%S"
+                    )
+                    ended_at = datetime.strptime(
+                        raw["interval_end_time"], "%Y-%m-%d %H:%M:%S"
+                    )
+                except ValueError:
+                    return None
+                actual_seconds = round((ended_at - started_at).total_seconds())
+                expected_overdue_seconds = max(0, actual_seconds - 72 * 3600)
+                if (
+                    actual_seconds <= 0
+                    or interval_seconds != actual_seconds
+                    or overdue_seconds != expected_overdue_seconds
+                    or round(actual_seconds / 3600, 2)
+                    != round(float(interval_hours), 2)
+                    or (start_source in record_sources and recorded_dates[start_position - 1] != started_at.date().isoformat())
+                    or (end_source in record_sources and recorded_dates[end_position - 1] != ended_at.date().isoformat())
+                    or (
+                        failure_kind == "course_record_interval_over_72h"
+                        and overdue_seconds <= 0
+                    )
+                    or (
+                        failure_kind == "course_record_interval_within_72h"
+                        and overdue_seconds != 0
+                    )
+                ):
+                    return None
+                facts.update(
+                    {
+                        "interval_start_position": start_position,
+                        "interval_end_position": end_position,
+                        "record_count": record_count,
+                        "interval_seconds": interval_seconds,
+                        "overdue_seconds": overdue_seconds,
+                    }
                 )
-                ended_at = datetime.strptime(
-                    raw["interval_end_time"], "%Y-%m-%d %H:%M:%S"
-                )
-            except ValueError:
-                return None
-            actual_seconds = round((ended_at - started_at).total_seconds())
-            expected_overdue_seconds = max(0, actual_seconds - 72 * 3600)
-            if (
-                actual_seconds <= 0
-                or interval_seconds != actual_seconds
-                or overdue_seconds != expected_overdue_seconds
-                or round(actual_seconds / 3600, 2)
-                != round(float(interval_hours), 2)
-                or recorded_dates[start_position - 1]
-                != started_at.date().isoformat()
-                or recorded_dates[end_position - 1] != ended_at.date().isoformat()
-                or (
-                    failure_kind == "course_record_interval_over_72h"
-                    and overdue_seconds <= 0
-                )
-                or (
-                    failure_kind == "course_record_interval_within_72h"
-                    and overdue_seconds != 0
-                )
-            ):
-                return None
-            facts.update(
-                {
-                    "interval_start_position": start_position,
-                    "interval_end_position": end_position,
-                    "record_count": record_count,
-                    "interval_seconds": interval_seconds,
-                    "overdue_seconds": overdue_seconds,
-                }
-            )
         start_document_id = raw.get("interval_start_document_id")
         end_document_id = raw.get("interval_end_document_id")
-        if start_document_id is not None or end_document_id is not None:
-            if not all(
-                isinstance(value, str)
-                and bool(value.strip())
-                and len(value.strip()) <= 256
-                and "\n" not in value
-                and "\r" not in value
-                for value in (start_document_id, end_document_id)
+        if (
+            start_source in record_sources
+            and end_source in record_sources
+            and (start_document_id is not None or end_document_id is not None)
+            and (start_document_id is None or end_document_id is None)
+        ):
+            return None
+        for source, document_id in (
+            (start_source, start_document_id),
+            (end_source, end_document_id),
+        ):
+            if source not in record_sources and document_id is not None:
+                return None
+            if document_id is not None and (
+                not isinstance(document_id, str)
+                or not document_id.strip()
+                or len(document_id.strip()) > 256
+                or "\n" in document_id
+                or "\r" in document_id
             ):
                 return None
         return facts
@@ -3741,23 +3804,16 @@ def _customer_evidence_from_display_facts(
             raw.get("interval_start_document_id")
         )
         end_document_id = valid_document_id(raw.get("interval_end_document_id"))
-        if (
-            start_source in allowed_source_types
-            and end_source in allowed_source_types
-            and start_document_id
-            and end_document_id
-        ):
-            return [
-                {
-                    "source_type": start_source,
-                    "source_document_id": start_document_id,
-                },
-                {
-                    "source_type": end_source,
-                    "source_document_id": end_document_id,
-                },
-            ]
-        return []
+        located: list[dict[str, str]] = []
+        if start_source in allowed_source_types and start_document_id:
+            located.append(
+                {"source_type": start_source, "source_document_id": start_document_id}
+            )
+        if end_source in allowed_source_types and end_document_id:
+            located.append(
+                {"source_type": end_source, "source_document_id": end_document_id}
+            )
+        return located
     if rule_id == "LX0609-025" and raw.get("failure_kind") == "implant_information_incomplete":
         raw_event_details = raw.get("implant_event_details")
         if not isinstance(raw_event_details, list):

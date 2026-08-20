@@ -822,6 +822,10 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
 ) -> None:
     rows_by_source = {
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+        "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+            {"discharge_datetime": "2026-01-02 12:00:00"}
+        ],
         "daily_course_record": [
             _row("患者病情稳定，继续当前治疗。", "2026-01-01 09:00:00"),
             _row("患者症状改善，继续观察。", "2026-01-02 09:00:00"),
@@ -845,6 +849,7 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
         visit_id="V",
         source_schema=None,
         created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-02",
         row_reader=read,
         additional_source_keys=("daily_course_record", "senior_course_record"),
     )
@@ -886,12 +891,406 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("horizon", "expected_state", "expected_reason"),
+    [
+        ("2026-01-04 07:59:59", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        ("2026-01-04 08:00:01", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+    ],
+)
+async def test_course_007_uses_admission_to_first_record_maturity_boundary(
+    horizon: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+) -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+                {"discharge_datetime": horizon}
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-04",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("evaluation_as_of_date", "expected_state", "expected_reason"),
+    [
+        ("2026-01-03", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        ("2026-01-04", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
+        ("2026-01-05", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+    ],
+)
+async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
+    evaluation_as_of_date: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+) -> None:
+    """冻结评价日缺少时分秒时，只对末段作可证明的三态判断。"""
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [],
+            "daily_course_record": [],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date=evaluation_as_of_date,
+        row_reader=read,
+    )
+    assert "horizon_datetime" not in session.materials.rows("evaluation_context.horizon")[0]
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    if expected_state is CustomerFinalState.NON_COMPLIANT:
+        facts = dict(result.customer_display_facts)["LX0609-007"]
+        assert facts["interval_end_source"] == "evaluation_context.horizon"
+        assert facts["interval_end_date"] == evaluation_as_of_date
+        assert facts["interval_end_precision"] == "date"
+        assert "interval_end_time" not in facts
+        assert "interval_end_document_id" not in facts
+
+
+@pytest.mark.asyncio
+async def test_course_007_date_only_horizon_does_not_hide_exact_internal_gap() -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [],
+            "daily_course_record": [_row("已精确计时的病程", "2026-01-05 09:00:00")],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-08",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].reason_code == "threshold_exceeded"
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_course_007_date_only_horizon_with_same_day_record_is_data_gap() -> None:
+    """同日病程可能早于冻结时点，不能据此前一条病程断言尾段超时。"""
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-14 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [],
+            "daily_course_record": [
+                _row("末次既有病程", "2026-01-14 08:00:00"),
+                _row("冻结当日候选病程", "2026-01-18 01:00:00"),
+            ],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-18",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert result.customer_display_facts == ()
+
+
+@pytest.mark.asyncio
+async def test_course_007_checks_last_record_to_evaluation_horizon() -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+                {"discharge_datetime": "2026-01-05 08:00:01"}
+            ],
+            "daily_course_record": [
+                _row("首次查房", "2026-01-01 08:00:00"),
+                _row("末次查房", "2026-01-02 08:00:00"),
+            ],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-05",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "threshold_exceeded"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scenario", "daily_rows", "horizon", "expected_document_field"),
+    [
+        (
+            "admission_to_first",
+            [
+                {
+                    **_row("首条病程", "2026-01-04 08:00:01"),
+                    "document_id": "first-course-document",
+                }
+            ],
+            "2026-01-04 09:00:00",
+            ("interval_end_document_id", "first-course-document"),
+        ),
+        (
+            "last_to_horizon",
+            [
+                {
+                    **_row("末条病程", "2026-01-02 08:00:00"),
+                    "document_id": "last-course-document",
+                }
+            ],
+            "2026-01-05 08:00:01",
+            ("interval_start_document_id", "last-course-document"),
+        ),
+    ],
+)
+async def test_course_007_keeps_real_document_id_at_boundary_interval(
+    scenario: str,
+    daily_rows: list[dict],
+    horizon: str,
+    expected_document_field: tuple[str, str],
+) -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+                {"discharge_datetime": horizon}
+            ],
+            "daily_course_record": daily_rows,
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date=horizon[:10],
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert scenario
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-007"]
+    assert facts[expected_document_field[0]] == expected_document_field[1]
+    if scenario == "admission_to_first":
+        assert "interval_start_document_id" not in facts
+    else:
+        assert "interval_end_document_id" not in facts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("scenario", "expected_state", "expected_reason"),
     [
         ("unstable", CustomerFinalState.NOT_APPLICABLE, "eligibility_not_met"),
         ("over_72h", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
         ("submit_time", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
-        ("missing_time", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
+        ("missing_time", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
         ("unavailable", CustomerFinalState.DATA_GAP, "source_unavailable"),
         ("query_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
         ("truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
@@ -909,6 +1308,26 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
 
     def read(**kwargs):
         source_key = kwargs["source_key"]
+        if source_key == "inpat_registration":
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=[{"admission_datetime": "2026-01-01 08:00:00"}],
+                truncated=False,
+                limit_rows=50,
+            )
+        if source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY:
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=[{
+                    "discharge_datetime": (
+                        "2026-01-05 09:00:02"
+                        if scenario == "over_72h"
+                        else "2026-01-02 12:00:00"
+                    )
+                }],
+                truncated=False,
+                limit_rows=50,
+            )
         if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
             rows = [{"present": True}] if scenario == "unstable" else []
             return SnapshotSourceRows.create(
@@ -976,6 +1395,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         visit_id="V",
         source_schema=None,
         created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date=("2026-01-05" if scenario == "over_72h" else "2026-01-02"),
         row_reader=read,
         additional_source_keys=("daily_course_record", "senior_course_record"),
     )
@@ -1043,6 +1463,10 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
             "failure_kind": "unstable_patient_order_present",
             "stable_course_rule_applicable": False,
         }),)
+    elif scenario == "missing_time":
+        assert dict(result.customer_display_facts)["LX0609-007"]["failure_kind"] == (
+            "course_record_interval_within_72h"
+        )
     else:
         assert result.customer_display_facts == ()
 
@@ -1375,6 +1799,131 @@ async def test_course_008_respects_effective_cancelled_and_unknown_order_statuse
     assert reduced[0].final_state is expected_state
     assert reduced[0].reason_code == expected_reason
     assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_009_stop_events_cut_off_the_required_interval() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "serious",
+                "event_kind": "start",
+                "status_state": "effective",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "s" * 64,
+            },
+            {
+                "severity": "serious",
+                "event_kind": "end",
+                "status_state": "effective",
+                "prescribed_datetime": "2026-01-02 08:00:00",
+                "row_ref": "t" * 64,
+            },
+            {
+                "severity": "critical",
+                "event_kind": "start",
+                "status_state": "effective",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "c" * 64,
+            },
+            {
+                "severity": "critical",
+                "event_kind": "end",
+                "status_state": "effective",
+                "prescribed_datetime": "2026-01-02 08:00:00",
+                "row_ref": "d" * 64,
+            },
+        ],
+        daily_rows=[
+            _row("第一日病程", "2026-01-01 08:00:00"),
+            _row("第二日病程", "2026-01-02 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-05",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert tuple(item.final_state for item in reduced) == (
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    )
+    assert tuple(item.reason_code for item in reduced) == (
+        "requirement_within_threshold",
+        "requirement_satisfied",
+    )
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_009_restart_after_stop_opens_a_new_required_interval() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "serious", "event_kind": "start", "status_state": "effective",
+                "prescribed_datetime": "2026-01-01 08:00:00", "row_ref": "s" * 64,
+            },
+            {
+                "severity": "serious", "event_kind": "end", "status_state": "effective",
+                "prescribed_datetime": "2026-01-02 08:00:00", "row_ref": "t" * 64,
+            },
+            {
+                "severity": "serious", "event_kind": "start", "status_state": "effective",
+                "prescribed_datetime": "2026-01-04 08:00:00", "row_ref": "u" * 64,
+            },
+            {
+                "severity": "critical", "event_kind": "start", "status_state": "effective",
+                "prescribed_datetime": "2026-01-01 08:00:00", "row_ref": "c" * 64,
+            },
+            {
+                "severity": "critical", "event_kind": "end", "status_state": "effective",
+                "prescribed_datetime": "2026-01-02 08:00:00", "row_ref": "d" * 64,
+            },
+            {
+                "severity": "critical", "event_kind": "start", "status_state": "effective",
+                "prescribed_datetime": "2026-01-04 08:00:00", "row_ref": "e" * 64,
+            },
+        ],
+        daily_rows=[
+            _row("第一日病程", "2026-01-01 08:00:00"),
+            _row("第二日病程", "2026-01-02 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-07",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert tuple(item.final_state for item in reduced) == (
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.NON_COMPLIANT,
+    )
+    assert tuple(item.reason_code for item in reduced) == (
+        "threshold_exceeded",
+        "requirement_violated",
+    )
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_display_uses_largest_adjacent_gap_not_active_span_length() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "serious", "event_kind": "start", "status_state": "effective",
+                "prescribed_datetime": "2026-01-01 08:00:00", "row_ref": "s" * 64,
+            },
+            {
+                "severity": "serious", "event_kind": "end", "status_state": "effective",
+                "prescribed_datetime": "2026-01-04 08:00:00", "row_ref": "e" * 64,
+            },
+        ],
+        daily_rows=[_row("中间病程", "2026-01-02 08:00:00")],
+        evaluation_as_of_date="2026-01-05",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-008"]["maximum_gap_days"] == 2
 
 
 @pytest.mark.asyncio

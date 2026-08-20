@@ -37,9 +37,8 @@ AUTHORITATIVE_DOCUMENT_TIME_FIELDS = (
     "submit_time",
     "submit_datetime",
 )
-_SEVERITY_ORDER_NEGATIVE_MARKERS = (
+_SEVERITY_ORDER_TERMINAL_MARKERS = (
     "解除",
-    "取消",
     "停止",
     "停病危",
     "停病重",
@@ -613,6 +612,7 @@ _SNAPSHOT_SOURCE_FIELDS = {
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY] = ("present",)
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY] = (
     "severity",
+    "event_kind",
     "status_state",
     "prescribed_datetime",
     "row_ref",
@@ -626,6 +626,7 @@ _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY] = (
 )
 _SNAPSHOT_SOURCE_FIELDS[EVALUATION_HORIZON_SOURCE_KEY] = (
     "horizon_date",
+    "horizon_datetime",
     "basis",
     "row_ref",
 )
@@ -1056,11 +1057,9 @@ def read_luxian_0609_severity_order_rows(
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
         f"AND ({bundle_assembly._quote_ident('order_name')} LIKE :critical_name "
         f"OR {bundle_assembly._quote_ident('order_name')} LIKE :serious_name) "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :relieve_name "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :cancel_name "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :stop_name "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :halt_critical_name "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :halt_serious_name "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :cancelled_name "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :revoked_name "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :voided_name "
         f"ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
@@ -1073,11 +1072,9 @@ def read_luxian_0609_severity_order_rows(
                     "visit_id": visit_id,
                     "critical_name": "%病危%",
                     "serious_name": "%病重%",
-                    "relieve_name": "%解除%",
-                    "cancel_name": "%取消%",
-                    "stop_name": "%停止%",
-                    "halt_critical_name": "%停病危%",
-                    "halt_serious_name": "%停病重%",
+                    "cancelled_name": "%取消%",
+                    "revoked_name": "%撤销%",
+                    "voided_name": "%作废%",
                     "limit_rows": limit_rows + 1,
                 },
             ).mappings().all()
@@ -1086,7 +1083,7 @@ def read_luxian_0609_severity_order_rows(
     safe_rows = []
     for row in raw_rows:
         order_name = str(row.get("order_name") or "")
-        if any(marker in order_name for marker in _SEVERITY_ORDER_NEGATIVE_MARKERS):
+        if "取消" in order_name or "撤销" in order_name or "作废" in order_name:
             continue
         has_critical = "病危" in order_name
         has_serious = "病重" in order_name
@@ -1111,6 +1108,14 @@ def read_luxian_0609_severity_order_rows(
         safe_rows.append(
             {
                 "severity": severity,
+                "event_kind": (
+                    "end"
+                    if any(
+                        marker in order_name
+                        for marker in _SEVERITY_ORDER_TERMINAL_MARKERS
+                    )
+                    else "start"
+                ),
                 "status_state": status_state,
                 "prescribed_datetime": row.get("prescribed_datetime"),
                 "row_ref": digest_source_evidence(
@@ -1118,6 +1123,12 @@ def read_luxian_0609_severity_order_rows(
                         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
                         row.get("order_id"),
                         severity,
+                        "end"
+                        if any(
+                            marker in order_name
+                            for marker in _SEVERITY_ORDER_TERMINAL_MARKERS
+                        )
+                        else "start",
                         status_state,
                         order_status,
                         row.get("prescribed_datetime"),

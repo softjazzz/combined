@@ -718,6 +718,80 @@ def test_007_builds_exact_unstable_order_fact_once(
     assert "institute-private-001" not in safe_output
 
 
+def test_007_reads_admission_anchor_and_derived_evaluation_horizon() -> None:
+    """007 的首尾区间必须由同一快照的入院与评价终点闭合。"""
+
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows_by_source = {
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+                {"discharge_datetime": "2026-01-04 08:00:01"}
+            ],
+        }
+        return _rows(source_key, rows_by_source.get(source_key, []))
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        evaluation_as_of_date="2026-01-04",
+        row_reader=reader,
+    )
+
+    assert "inpat_registration" in calls
+    assert CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY in calls
+    assert any(
+        item.source_key == "evaluation_context.horizon"
+        for item in session.snapshot.observations
+    )
+    assert session.materials.rows("evaluation_context.horizon") == (
+        {
+            "horizon_date": "2026-01-04",
+            "horizon_datetime": "2026-01-04T08:00:01",
+            "basis": "discharge_date",
+            "row_ref": session.materials.rows("evaluation_context.horizon")[0]["row_ref"],
+        },
+    )
+
+
+def test_007_preserves_date_only_frozen_evaluation_horizon() -> None:
+    """运行病例的冻结评价日不是文书时间，不能伪造时分秒。"""
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [],
+        }
+        return _rows(source_key, rows_by_source.get(source_key, []))
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        evaluation_as_of_date="2026-01-03",
+        row_reader=reader,
+    )
+
+    assert session.materials.rows("evaluation_context.horizon") == (
+        {
+            "horizon_date": "2026-01-03",
+            "basis": "evaluation_as_of",
+            "row_ref": session.materials.rows("evaluation_context.horizon")[0]["row_ref"],
+        },
+    )
+
+
 def test_non_007_does_not_query_unstable_order_fact() -> None:
     calls: list[str] = []
 
@@ -1676,12 +1750,16 @@ def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
     assert 'FROM "cdm"."inpat_nondrug_order"' in sql
     assert '"order_name" LIKE :critical_name' in sql
     assert '"order_status"' in sql
-    assert '"order_name" NOT LIKE :relieve_name' in sql
-    assert '"order_name" NOT LIKE :halt_critical_name' in sql
+    assert '"order_name" NOT LIKE :cancelled_name' in sql
+    assert '"order_name" NOT LIKE :revoked_name' in sql
+    assert '"order_name" NOT LIKE :voided_name' in sql
     assert "private-institute" not in sql
     assert params["institute_id"] == "private-institute"
     assert params["patient_id"] == "private-patient"
     assert params["visit_id"] == "private-visit"
+    assert params["cancelled_name"] == "%取消%"
+    assert params["revoked_name"] == "%撤销%"
+    assert params["voided_name"] == "%作废%"
     assert params["limit_rows"] == 51
 
 
@@ -1750,12 +1828,18 @@ def test_exam_lab_order_reader_filters_before_limit_and_keeps_complete_state(
 
 
 @pytest.mark.parametrize(
-    "order_name",
-    ["解除病危", "取消病重", "停止病危", "停病危", "停病重"],
+    ("order_name", "expected_event_kind"),
+    [
+        ("解除病危", "end"),
+        ("停止病危", "end"),
+        ("停病危", "end"),
+        ("停病重", "end"),
+    ],
 )
-def test_severity_order_reader_does_not_treat_negative_order_as_open_order(
+def test_severity_order_reader_keeps_terminal_order_out_of_open_trigger(
     monkeypatch,
     order_name: str,
+    expected_event_kind: str,
 ) -> None:
     connection = _FakeConnection(
         [
@@ -1799,8 +1883,36 @@ def test_severity_order_reader_does_not_treat_negative_order_as_open_order(
         source_schema=None,
     )
 
-    assert result.rows == ()
+    assert result.rows[0]["event_kind"] == expected_event_kind
     assert result.truncated is False
+
+
+def test_severity_order_reader_excludes_cancelled_order_name(monkeypatch) -> None:
+    connection = _FakeConnection(
+        [{
+            "order_name": "取消病重",
+            "order_id": "private-order",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+            "order_status": "新开",
+        }]
+    )
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _FakeEngine(connection))
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm")
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _source: [
+            "institute_id", "patient_id", "visit_id", "order_name", "order_id",
+            "prescribed_datetime", "order_status",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+    )
+
+    assert result.rows == ()
 
 
 @pytest.mark.parametrize("order_status", ["新开", "执行中", "停止"])
@@ -1857,6 +1969,7 @@ def test_severity_order_reader_accepts_only_audited_effective_statuses_without_e
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
             "private-order",
             "critical",
+            "start",
             "effective",
             order_status,
             "2026-01-01 08:00:00",

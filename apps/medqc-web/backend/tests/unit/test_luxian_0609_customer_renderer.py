@@ -59,6 +59,92 @@ def test_010_association_facts_render_exact_customer_counts() -> None:
 
 
 @pytest.mark.parametrize(
+    ("facts", "expected"),
+    [
+        (
+            {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": "inpat_registration",
+                "interval_end_source": "daily_course_record",
+                "interval_start_time": "2026-08-14 08:00:00",
+                "interval_end_time": "2026-08-17 10:02:00",
+                "interval_seconds": 266520,
+                "overdue_seconds": 7320,
+                "threshold_hours": 72,
+            },
+            "权威入院时间（2026-08-14 08:00:00）至首次查房（2026-08-17 10:02:00）间隔"
+            "74小时2分，超过72小时要求2小时2分。",
+        ),
+        (
+            {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": "senior_course_record",
+                "interval_end_source": "evaluation_context.horizon",
+                "interval_start_time": "2026-08-14 09:30:00",
+                "interval_end_date": "2026-08-18",
+                "interval_end_precision": "date",
+                "threshold_hours": 72,
+            },
+            "最后一次查房（2026-08-14 09:30:00）至评价截止日期（2026-08-18）"
+            "已确认超过72小时要求。",
+        ),
+        (
+            {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": "senior_course_record",
+                "interval_end_source": "evaluation_context.horizon",
+                "interval_start_time": "2026-08-14 09:30:00",
+                "interval_end_time": "2026-08-17 10:00:00",
+                "interval_seconds": 261000,
+                "overdue_seconds": 1800,
+                "threshold_hours": 72,
+            },
+            "最后一次查房（2026-08-14 09:30:00）至评价截止时间（2026-08-17 10:00:00）间隔"
+            "72小时30分，超过72小时要求30分。",
+        ),
+        (
+            {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": "inpat_registration",
+                "interval_end_source": "evaluation_context.horizon",
+                "interval_start_time": "2026-08-14 08:00:00",
+                "interval_end_date": "2026-08-18",
+                "interval_end_precision": "date",
+                "threshold_hours": 72,
+            },
+            "权威入院时间（2026-08-14 08:00:00）至评价截止日期（2026-08-18）"
+            "已确认超过72小时要求；期间未见有效查房。",
+        ),
+    ],
+)
+def test_007_boundary_overdue_renders_controlled_boundary_copy(facts, expected) -> None:
+    assert customer_finding_from_controlled_facts(rule_id="LX0609-007", facts=facts) == expected
+
+
+def test_007_zero_rounds_exact_boundaries_render_without_fabricating_round_number() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-007",
+        facts={
+            "failure_kind": "course_record_interval_over_72h",
+            "interval_start_source": "inpat_registration",
+            "interval_end_source": "evaluation_context.horizon",
+            "interval_start_time": "2026-08-14 08:00:00",
+            "interval_end_time": "2026-08-17 10:00:00",
+            "interval_seconds": 266400,
+            "overdue_seconds": 7200,
+            "threshold_hours": 72,
+        },
+    )
+
+    assert finding == (
+        "权威入院时间（2026-08-14 08:00:00）至评价截止时间（2026-08-17 10:00:00）间隔"
+        "74小时，超过72小时要求2小时；期间未见有效查房。"
+    )
+    assert "第0次" not in finding
+    assert "第1次" not in finding
+
+
+@pytest.mark.parametrize(
     ("failure_kind", "expected"),
     (
         ("exam_order_reason_missing", "检查前病程未记录检查原因"),

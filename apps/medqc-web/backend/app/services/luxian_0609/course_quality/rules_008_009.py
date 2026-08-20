@@ -107,6 +107,48 @@ def _authoritative_natural_date(value: Any) -> date | None:
             return None
 
 
+def _severity_active_date_intervals(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    horizon_date: date | None,
+) -> tuple[tuple[date, date | None], ...] | None:
+    """按权威时间顺序配对病重/病危开始与解除事件，保留再次下达区间。"""
+
+    events: list[tuple[date, int, str]] = []
+    for index, row in enumerate(rows):
+        if row.get("status_state") not in {None, "effective"}:
+            continue
+        event_kind = row.get("event_kind") or "start"
+        event_date = _authoritative_natural_date(row.get("prescribed_datetime"))
+        if event_date is None:
+            return None
+        events.append((event_date, index, event_kind))
+    active_start: date | None = None
+    intervals: list[tuple[date, date | None]] = []
+    for event_date, _index, event_kind in sorted(events):
+        if horizon_date is not None and event_date > horizon_date:
+            continue
+        if event_kind == "start":
+            if active_start is None:
+                active_start = event_date
+        elif active_start is not None:
+            intervals.append((active_start, event_date))
+            active_start = None
+    if active_start is not None:
+        intervals.append((active_start, horizon_date))
+    return tuple(intervals)
+
+
+def _date_in_active_intervals(
+    value: date,
+    intervals: Sequence[tuple[date, date | None]],
+) -> bool:
+    return any(
+        start <= value and (end is None or value <= end)
+        for start, end in intervals
+    )
+
+
 def _rule_008_009_decision(
     *,
     rule_id: str,
@@ -123,7 +165,7 @@ def _rule_008_009_decision(
         or materials.snapshot_hash != snapshot.snapshot_hash
     ):
         raise ValueError("typed severity evidence session mismatch")
-    evaluator_version = "course-severity-natural-day-v1"
+    evaluator_version = "course-severity-natural-day-v2"
     observation_by_source = {
         item.source_key: item for item in snapshot.observations
     }
@@ -237,6 +279,15 @@ def _rule_008_009_decision(
         )
     target = "serious" if rule_id == "LX0609-008" else "critical"
     target_rows = tuple(row for row in order_rows if row.get("severity") == target)
+    if any(row.get("event_kind") not in {None, "start", "end"} for row in target_rows):
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=refs,
+            confidence=None,
+        )
     if any(
         row.get("status_state") == "unresolved"
         for row in target_rows
@@ -265,6 +316,7 @@ def _rule_008_009_decision(
         row
         for row in target_rows
         if row.get("status_state") in {None, "effective"}
+        and row.get("event_kind") in {None, "start"}
     )
     if not relevant_orders:
         return decision(
@@ -365,6 +417,20 @@ def _rule_008_009_decision(
             confidence=None,
         )
 
+    active_intervals = _severity_active_date_intervals(
+        target_rows,
+        horizon_date=horizon_date,
+    )
+    if active_intervals is None:
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            refs=refs,
+            confidence=None,
+        )
+
     if (
         discharge_observation.query_state.value == "unavailable"
         or discharge_observation.completeness.value == "truncated"
@@ -444,9 +510,7 @@ def _rule_008_009_decision(
                     refs=refs,
                     confidence=None,
                 )
-            if parsed_date >= anchor_date and (
-                horizon_date is None or parsed_date <= horizon_date
-            ) and (
+            if _date_in_active_intervals(parsed_date, active_intervals) and (
                 rule_id != "LX0609-009"
                 or bool(_rule_009_substantive_text(row))
             ):
@@ -454,20 +518,31 @@ def _rule_008_009_decision(
 
     ordered_dates = sorted(timed_record_dates)
     if rule_id == "LX0609-008":
-        dates_with_anchor = [anchor_date, *ordered_dates]
-        if horizon_date is not None:
-            dates_with_anchor.append(horizon_date)
-        exceeded_interval = next(
-            (
+        interval_candidates = []
+        interval_gap_days: list[int] = []
+        for start_date, end_date in active_intervals:
+            dated_records = [
+                item for item in ordered_dates
+                if start_date <= item and (end_date is None or item <= end_date)
+            ]
+            interval_end = end_date or (dated_records[-1] if dated_records else start_date)
+            dates_with_anchor = [start_date, *dated_records, interval_end]
+            interval_gap_days.extend(
+                (current - previous).days
+                for previous, current in zip(
+                    dates_with_anchor,
+                    dates_with_anchor[1:],
+                )
+            )
+            interval_candidates.extend(
                 (previous, current)
                 for previous, current in zip(
                     dates_with_anchor,
                     dates_with_anchor[1:],
                 )
                 if (current - previous).days > _RULE_008_MAX_GAP_DAYS
-            ),
-            None,
-        )
+            )
+        exceeded_interval = next(iter(interval_candidates), None)
         interval_exceeded = exceeded_interval is not None
         if not interval_exceeded and horizon_date is None:
             return decision(
@@ -513,24 +588,19 @@ def _rule_008_009_decision(
                     "horizon_date": horizon_date.isoformat() if horizon_date else "",
                     "threshold_days": _RULE_008_MAX_GAP_DAYS,
                     "recorded_dates": [item.isoformat() for item in ordered_dates],
-                    "maximum_gap_days": max(
-                        (
-                            (current - previous).days
-                            for previous, current in zip(
-                                dates_with_anchor,
-                                dates_with_anchor[1:],
-                            )
-                        ),
-                        default=0,
-                    ),
+                    "maximum_gap_days": max(interval_gap_days, default=0),
                 }
             ),
         )
 
-    prefix_end = horizon_date or (ordered_dates[-1] if ordered_dates else anchor_date)
     expected_dates = {
-        anchor_date + timedelta(days=offset)
-        for offset in range((prefix_end - anchor_date).days + 1)
+        start_date + timedelta(days=offset)
+        for start_date, end_date in active_intervals
+        for interval_end in (end_date or max(
+            (item for item in ordered_dates if item >= start_date),
+            default=start_date,
+        ),)
+        for offset in range((interval_end - start_date).days + 1)
     }
     missing_dates = tuple(sorted(expected_dates.difference(timed_record_dates)))
     if missing_dates:
@@ -547,7 +617,7 @@ def _rule_008_009_decision(
                 "evaluated_scope": "critical_daily_course_coverage",
                 "pending_scope": ["condition_change_course_documentation"],
                 "anchor_date": anchor_date.isoformat(),
-                "horizon_date": prefix_end.isoformat(),
+                "horizon_date": max(expected_dates).isoformat(),
                 "required_dates": [
                     item.isoformat() for item in sorted(expected_dates)
                 ],
@@ -744,10 +814,15 @@ def _rule_009_semantic_context(
     ):
         return "", False, False, {}, {}, date.min
     try:
-        critical_dates = tuple(
-            _authoritative_natural_date(row.get("prescribed_datetime"))
+        critical_rows = tuple(
+            row
             for row in materials.rows(CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY)
             if row.get("severity") == "critical"
+        )
+        critical_dates = tuple(
+            _authoritative_natural_date(row.get("prescribed_datetime"))
+            for row in critical_rows
+            if row.get("event_kind") in {None, "start"}
         )
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
     except Exception:
@@ -761,6 +836,12 @@ def _rule_009_semantic_context(
     anchor_date = min(item for item in critical_dates if item is not None)
     horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
     if horizon_date is None or horizon_date < anchor_date:
+        return "", False, False, {}, {}, date.min
+    active_intervals = _severity_active_date_intervals(
+        critical_rows,
+        horizon_date=horizon_date,
+    )
+    if active_intervals is None:
         return "", False, False, {}, {}, date.min
     horizon_datetime = _authoritative_course_time(
         horizon_rows[0].get("horizon_datetime")
@@ -788,8 +869,8 @@ def _rule_009_semantic_context(
             event_time = _rule_009_external_event_time(source_key, row)
             # 不能因为一条尚未被模型识别为病情变化的外部行缺时间，就把整条
             # 规则降级。只有模型明确引用的事件才进入后续权威时间校验。
-            if event_time is not None and not (
-                anchor_date <= event_time.date() <= horizon_date
+            if event_time is not None and not _date_in_active_intervals(
+                event_time.date(), active_intervals
             ):
                 continue
             event_kind, event_ref = _rule_009_external_event_identity(
@@ -838,7 +919,7 @@ def _rule_009_semantic_context(
             content = _rule_009_substantive_text(row)
             if not content or (
                 record_date is not None
-                and not anchor_date <= record_date <= horizon_date
+                and not _date_in_active_intervals(record_date, active_intervals)
             ):
                 continue
             internal_ref = _rule_009_row_ref(source_key, index, row)
@@ -893,8 +974,10 @@ def _rule_009_semantic_context(
             f"内容={content}"
         )
     expected_dates = {
-        anchor_date + timedelta(days=offset)
-        for offset in range((horizon_date - anchor_date).days + 1)
+        start_date + timedelta(days=offset)
+        for start_date, end_date in active_intervals
+        for interval_end in (end_date or horizon_date,)
+        for offset in range((interval_end - start_date).days + 1)
     }
     if expected_dates.difference(substantive_dates):
         return "", False, False, {}, {}, evaluation_horizon

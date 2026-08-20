@@ -1916,6 +1916,148 @@ def test_007_overdue_interval_names_both_rounds_and_locates_both_records():
     assert "document_id" not in repr(result["customer_display_facts"])
 
 
+def test_007_start_boundary_overdue_delivers_controlled_fact_and_only_record_evidence():
+    facts = {
+        "failure_kind": "course_record_interval_over_72h",
+        "interval_start_source": "inpat_registration",
+        "interval_end_source": "senior_course_record",
+        "interval_start_time": "2026-08-14 08:00:00",
+        "interval_end_time": "2026-08-17 10:02:00",
+        "interval_start_position": 0,
+        "interval_end_position": 1,
+        "record_count": 1,
+        "interval_seconds": 266520,
+        "overdue_seconds": 7320,
+        "interval_hours": 74.03,
+        "threshold_hours": 72,
+        "recorded_dates": ["2026-08-17"],
+        "interval_end_document_id": "round-20260817",
+    }
+
+    safe = safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-007",
+        raw=facts,
+    )
+    assert safe == {
+        key: value
+        for key, value in facts.items()
+        if key != "interval_end_document_id"
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-007", "name": "稳定患者查房时限"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-007", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-007", facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["findings"] == (
+        "权威入院时间（2026-08-14 08:00:00）至首次查房（2026-08-17 10:02:00）间隔"
+        "74小时2分，超过72小时要求2小时2分。"
+    )
+    assert result["customer_display_facts"] == safe
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "senior_course_record",
+            "source_document_id": "round-20260817",
+        }
+    ]
+
+
+def test_007_date_only_tail_boundary_delivers_confirmed_overdue_without_document_evidence():
+    facts = {
+        "failure_kind": "course_record_interval_over_72h",
+        "interval_start_source": "daily_course_record",
+        "interval_end_source": "evaluation_context.horizon",
+        "interval_start_time": "2026-08-14 09:30:00",
+        "interval_end_date": "2026-08-18",
+        "interval_end_precision": "date",
+        "interval_start_position": 1,
+        "interval_end_position": 2,
+        "record_count": 1,
+        "threshold_hours": 72,
+        "recorded_dates": ["2026-08-14"],
+    }
+
+    safe = safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-007",
+        raw=facts,
+    )
+    assert safe == facts
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-007", "name": "稳定患者查房时限"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-007", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-007", facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["findings"] == (
+        "最后一次查房（2026-08-14 09:30:00）至评价截止日期（2026-08-18）"
+        "已确认超过72小时要求。"
+    )
+    assert result["customer_display_facts"] == facts
+    assert "customer_evidence" not in result
+
+
+@pytest.mark.parametrize(
+    ("facts", "expected"),
+    [
+        (
+            {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": "inpat_registration",
+                "interval_end_source": "evaluation_context.horizon",
+                "interval_start_time": "2026-08-14 08:00:00",
+                "interval_end_time": "2026-08-17 10:00:00",
+                "interval_start_position": 0,
+                "interval_end_position": 1,
+                "record_count": 0,
+                "interval_seconds": 266400,
+                "overdue_seconds": 7200,
+                "interval_hours": 74.0,
+                "threshold_hours": 72,
+                "recorded_dates": [],
+            },
+            "interval_end_time",
+        ),
+        (
+            {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": "inpat_registration",
+                "interval_end_source": "evaluation_context.horizon",
+                "interval_start_time": "2026-08-14 08:00:00",
+                "interval_end_date": "2026-08-18",
+                "interval_end_precision": "date",
+                "interval_start_position": 0,
+                "interval_end_position": 1,
+                "record_count": 0,
+                "threshold_hours": 72,
+                "recorded_dates": [],
+            },
+            "interval_end_date",
+        ),
+    ],
+)
+def test_007_zero_rounds_boundary_facts_are_safe_without_document_evidence(
+    facts: dict[str, object],
+    expected: str,
+) -> None:
+    safe = safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-007",
+        raw=facts,
+    )
+
+    assert safe == facts
+    assert expected in safe
+
+
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     [

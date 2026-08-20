@@ -262,9 +262,14 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 003 优先使用 surgery_record 自带时间，缺失时仅允许唯一 mr_surgery 时间配对；
     # 手术记录为空时，用申请与手术类医嘱共同确认“确无手术”，避免把未同步误判为不适用。
     "LX0609-003": ("mr_surgery", "surgery_application", "inpat_nondrug_order"),
-    "LX0609-001": ("inpat_registration", "discharge_record"),
+    "LX0609-001": (
+        "evaluation_context.horizon",
+        "inpat_registration",
+        "discharge_record",
+    ),
     "LX0609-002": (
         "admission_record",
+        "evaluation_context.horizon",
         "first_course_record",
         "inpat_registration",
     ),
@@ -272,12 +277,19 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-005": (
         "admission_record",
         "discharge_record",
+        "evaluation_context.horizon",
         "inpat_registration",
         "daily_course_record",
     ),
     "LX0609-006": (
         "admission_record",
         "discharge_record",
+        "evaluation_context.horizon",
+        "inpat_registration",
+    ),
+    "LX0609-007": (
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
         "inpat_registration",
     ),
     "LX0609-008": (

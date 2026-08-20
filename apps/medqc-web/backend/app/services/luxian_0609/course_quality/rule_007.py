@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Callable, Mapping
 
 from ..decision_model import (
@@ -19,12 +19,14 @@ from ..evidence_material import (
 )
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from ..source_evidence_reader import (
+    EVALUATION_HORIZON_SOURCE_KEY,
     authoritative_document_time_value,
 )
 from .shared import authoritative_course_time, row_text
 
 
 RULE_007_RECORD_SOURCES = ("daily_course_record", "senior_course_record")
+_RULE_007_ADMISSION_SOURCE = "inpat_registration"
 _MAX_INTERVAL = timedelta(hours=72)
 
 
@@ -32,6 +34,18 @@ _MAX_INTERVAL = timedelta(hours=72)
 class Rule007LegacyOutcome:
     status: str
     reason_code: str
+
+
+def _evaluation_horizon_date(value: Any) -> date | None:
+    """只接受 Provider 冻结的 ISO 日期，不能把创建时间伪装成评价终点。"""
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def evaluate_rule_007_legacy(
@@ -185,7 +199,7 @@ def evaluate_rule_007_typed(
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
 ) -> RuleDecision:
-    """只用同一snapshot的不稳定医嘱事实和两类病程权威时间裁决。"""
+    """用同一快照的入院、病程与评价终点核对完整稳定期区间。"""
 
     if (
         type(snapshot) is not Luxian0609EvidenceSnapshot
@@ -194,7 +208,7 @@ def evaluate_rule_007_typed(
     ):
         raise ValueError("typed 007 evidence session mismatch")
 
-    evaluator_version = "rule007-authoritative-time-v1"
+    evaluator_version = "rule007-authoritative-time-v2"
     observation_by_source = {
         item.source_key: item for item in snapshot.observations
     }
@@ -222,6 +236,8 @@ def evaluate_rule_007_typed(
 
     required_sources = (
         "inpat_nondrug_order.unstable_order",
+        _RULE_007_ADMISSION_SOURCE,
+        EVALUATION_HORIZON_SOURCE_KEY,
         *RULE_007_RECORD_SOURCES,
     )
     observations = {
@@ -311,6 +327,103 @@ def evaluate_rule_007_typed(
             confidence=None,
         )
 
+    for source_key in (_RULE_007_ADMISSION_SOURCE, EVALUATION_HORIZON_SOURCE_KEY):
+        observation = observations[source_key]
+        assert observation is not None
+        if observation.query_state.value == "error":
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="source_query_error",
+                refs=refs,
+                confidence=None,
+            )
+        if observation.query_state.value != "available":
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="source_unavailable",
+                refs=refs,
+                confidence=None,
+            )
+        if observation.completeness.value == "truncated":
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="source_truncated",
+                refs=refs,
+                confidence=None,
+            )
+    try:
+        admission_rows = tuple(materials.rows(_RULE_007_ADMISSION_SOURCE))
+        horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
+    except EvidenceMaterialTruncated:
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_truncated",
+            refs=refs,
+            confidence=None,
+        )
+    except Exception:
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=refs,
+            confidence=None,
+        )
+    if len(admission_rows) != 1 or len(horizon_rows) != 1:
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            refs=refs,
+            confidence=None,
+        )
+    horizon_fact = next(
+        (
+            fact
+            for fact in snapshot.facts
+            if fact.fact_type == "evaluation_horizon"
+            and fact.source_key == EVALUATION_HORIZON_SOURCE_KEY
+        ),
+        None,
+    )
+    if horizon_fact is None:
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=refs,
+            confidence=None,
+        )
+    refs.add(horizon_fact.fact_id)
+    admission_time = authoritative_course_time(admission_rows[0].get("admission_datetime"))
+    horizon_time = authoritative_course_time(horizon_rows[0].get("horizon_datetime"))
+    horizon_date = _evaluation_horizon_date(horizon_rows[0].get("horizon_date"))
+    if (
+        admission_time is None
+        or (horizon_time is None and horizon_date is None)
+        or (horizon_time is not None and horizon_time < admission_time)
+        or (horizon_time is None and horizon_date is not None and horizon_date < admission_time.date())
+    ):
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            refs=refs,
+            confidence=None,
+        )
+
     record_times: set[datetime] = set()
     substantive_record_without_time = False
     for source_key in RULE_007_RECORD_SOURCES:
@@ -372,8 +485,42 @@ def evaluate_rule_007_typed(
             elif row_text(row):
                 substantive_record_without_time = True
 
-    ordered_times = sorted(record_times)
-    if len(ordered_times) < 2:
+    ordered_times = sorted(
+        record_time
+        for record_time in record_times
+        if admission_time <= record_time
+        and (
+            (
+                horizon_time is None
+                and horizon_date is not None
+                and record_time.date() < horizon_date
+            )
+            or (horizon_time is not None and record_time <= horizon_time)
+        )
+    )
+    exact_boundary_times = (admission_time, *ordered_times)
+    interval_over_72h = any(
+        current - previous > _MAX_INTERVAL
+        for previous, current in zip(exact_boundary_times, exact_boundary_times[1:])
+    )
+    same_day_horizon_candidate = (
+        horizon_time is None
+        and horizon_date is not None
+        and any(
+            admission_time <= record_time and record_time.date() == horizon_date
+            for record_time in record_times
+        )
+    )
+    tail_start = exact_boundary_times[-1]
+    if horizon_time is not None:
+        interval_over_72h = interval_over_72h or horizon_time - tail_start > _MAX_INTERVAL
+    else:
+        assert horizon_date is not None
+        deadline_date = (tail_start + _MAX_INTERVAL).date()
+        tail_time_ambiguous = horizon_date == deadline_date
+        if not same_day_horizon_candidate:
+            interval_over_72h = interval_over_72h or horizon_date > deadline_date
+    if interval_over_72h and substantive_record_without_time:
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -382,11 +529,11 @@ def evaluate_rule_007_typed(
             refs=refs,
             confidence=None,
         )
-    interval_over_72h = any(
-        current - previous > _MAX_INTERVAL
-        for previous, current in zip(ordered_times, ordered_times[1:])
-    )
-    if interval_over_72h and substantive_record_without_time:
+    if (
+        horizon_time is None
+        and (tail_time_ambiguous or same_day_horizon_candidate)
+        and not interval_over_72h
+    ):
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -430,38 +577,116 @@ def rule_007_customer_display_facts(
         }
     if decision.evidence_state is not EvidenceState.SUFFICIENT:
         return None
-    record_by_time: dict[datetime, tuple[str, str]] = {}
+    record_points: list[tuple[datetime, str, str]] = []
     try:
+        admission_rows = tuple(materials.rows(_RULE_007_ADMISSION_SOURCE))
+        horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
+        if len(admission_rows) != 1 or len(horizon_rows) != 1:
+            return None
+        admission_time = authoritative_course_time(
+            admission_rows[0].get("admission_datetime")
+        )
+        horizon_time = authoritative_course_time(
+            horizon_rows[0].get("horizon_datetime")
+        )
+        horizon_date = _evaluation_horizon_date(horizon_rows[0].get("horizon_date"))
+        if (
+            admission_time is None
+            or (horizon_time is None and horizon_date is None)
+            or (horizon_time is not None and horizon_time < admission_time)
+            or (
+                horizon_time is None
+                and horizon_date is not None
+                and horizon_date < admission_time.date()
+            )
+        ):
+            return None
+        same_day_horizon_candidate = False
         for source_key in RULE_007_RECORD_SOURCES:
             for row in materials.rows(source_key):
-                if (
-                    record_time := authoritative_course_time(
-                        authoritative_document_time_value(row)
-                    )
-                ) is not None:
+                record_time = authoritative_course_time(
+                    authoritative_document_time_value(row)
+                )
+                if record_time is None or record_time < admission_time:
+                    continue
+                if horizon_time is not None and record_time <= horizon_time:
                     document_id = str(
                         row.get("document_id") or row.get("id") or ""
                     ).strip()
-                    record_by_time.setdefault(
-                        record_time,
-                        (source_key, document_id),
-                    )
+                    record_points.append((record_time, source_key, document_id))
+                elif horizon_time is None and horizon_date is not None:
+                    if record_time.date() < horizon_date:
+                        document_id = str(
+                            row.get("document_id") or row.get("id") or ""
+                        ).strip()
+                        record_points.append((record_time, source_key, document_id))
+                    elif record_time.date() == horizon_date:
+                        same_day_horizon_candidate = True
     except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
         return None
-    ordered_times = sorted(record_by_time)
+    ordered_records = sorted(
+        record_points,
+        key=lambda item: (item[0], item[1], item[2]),
+    )
+    ordered_points = [
+        (admission_time, _RULE_007_ADMISSION_SOURCE, ""),
+        *ordered_records,
+    ]
+    if horizon_time is None:
+        assert horizon_date is not None
+        tail_start = ordered_points[-1]
+        tail_deadline = (tail_start[0] + _MAX_INTERVAL).date()
+        if horizon_date > tail_deadline and not same_day_horizon_candidate:
+            previous_time, previous_source, _previous_document_id = tail_start
+            previous_position = (
+                ordered_records.index(tail_start) + 1
+                if tail_start in ordered_records
+                else 0
+            )
+            return {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": previous_source,
+                "interval_end_source": EVALUATION_HORIZON_SOURCE_KEY,
+                "interval_start_time": previous_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "interval_end_date": horizon_date.isoformat(),
+                "interval_end_precision": "date",
+                "interval_start_position": previous_position,
+                "interval_end_position": len(ordered_records) + 1,
+                "record_count": len(ordered_records),
+                "threshold_hours": 72,
+                "recorded_dates": [item[0].date().isoformat() for item in ordered_records],
+            }
+        exact_intervals = tuple(
+            current[0] - previous[0]
+            for previous, current in zip(ordered_points, ordered_points[1:])
+        )
+        if not any(interval > _MAX_INTERVAL for interval in exact_intervals):
+            # 日期终点不足以展示精确的末段间隔；合规时不产生展示事实。
+            return None
+        # 下方仅展示已确定的内部超时区间。
+    else:
+        ordered_points.append((horizon_time, EVALUATION_HORIZON_SOURCE_KEY, ""))
     intervals = tuple(
-        (current - previous, previous, current)
-        for previous, current in zip(ordered_times, ordered_times[1:])
+        (current[0] - previous[0], previous, current)
+        for previous, current in zip(ordered_points, ordered_points[1:])
     )
     if not intervals:
         return None
     interval, previous, current = max(intervals, key=lambda item: item[0])
     interval_seconds = round(interval.total_seconds())
     threshold_seconds = round(_MAX_INTERVAL.total_seconds())
-    previous_position = ordered_times.index(previous) + 1
-    current_position = ordered_times.index(current) + 1
-    previous_source, previous_document_id = record_by_time[previous]
-    current_source, current_document_id = record_by_time[current]
+    previous_position = (
+        ordered_records.index(previous) + 1
+        if previous in ordered_records
+        else 0
+    )
+    current_position = (
+        ordered_records.index(current) + 1
+        if current in ordered_records
+        else len(ordered_records) + 1
+    )
+    previous_time, previous_source, previous_document_id = previous
+    current_time, current_source, current_document_id = current
     facts: dict[str, Any] = {
         "failure_kind": (
             "course_record_interval_over_72h"
@@ -470,20 +695,21 @@ def rule_007_customer_display_facts(
         ),
         "interval_start_source": previous_source,
         "interval_end_source": current_source,
-        "interval_start_time": previous.strftime("%Y-%m-%d %H:%M:%S"),
-        "interval_end_time": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "interval_start_time": previous_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "interval_end_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
         "interval_start_position": previous_position,
         "interval_end_position": current_position,
-        "record_count": len(ordered_times),
+        "record_count": len(ordered_records),
         "interval_seconds": interval_seconds,
         "overdue_seconds": max(0, interval_seconds - threshold_seconds),
         "interval_hours": round(interval_seconds / 3600, 2),
         "threshold_hours": 72,
-        "recorded_dates": [item.date().isoformat() for item in ordered_times],
+        "recorded_dates": [item[0].date().isoformat() for item in ordered_records],
     }
     # 文书 ID 仅供 Aggregator 生成不可逆客户证据引用，不进入安全展示事实。
-    # 两端必须同时可定位，避免只展示半个超时区间。
-    if previous_document_id and current_document_id:
+    # 入院/评价终点本身没有文书 ID；边界区间仍保留另一端的真实病程定位。
+    if previous_document_id:
         facts["interval_start_document_id"] = previous_document_id
+    if current_document_id:
         facts["interval_end_document_id"] = current_document_id
     return facts

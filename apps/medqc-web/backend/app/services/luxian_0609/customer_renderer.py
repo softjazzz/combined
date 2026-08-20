@@ -1379,6 +1379,67 @@ def customer_finding_from_controlled_facts(
         return ""
 
     if rule_id == "LX0609-007":
+        start_source = facts.get("interval_start_source")
+        end_source = facts.get("interval_end_source")
+        start_time = facts.get("interval_start_time")
+        threshold_hours = facts.get("threshold_hours")
+        if (
+            kind == "course_record_interval_over_72h"
+            and end_source == "evaluation_context.horizon"
+            and isinstance(start_time, str)
+            and threshold_hours == 72
+            and facts.get("interval_end_precision") == "date"
+            and isinstance(facts.get("interval_end_date"), str)
+            and re.fullmatch(r"\d{4}-\d{2}-\d{2}", facts["interval_end_date"])
+        ):
+            if start_source == "inpat_registration":
+                return (
+                    f"权威入院时间（{start_time}）至评价截止日期（{facts['interval_end_date']}）"
+                    "已确认超过72小时要求；期间未见有效查房。"
+                )
+            if start_source not in {"daily_course_record", "senior_course_record"}:
+                return ""
+            return (
+                f"最后一次查房（{start_time}）至评价截止日期（{facts['interval_end_date']}）"
+                "已确认超过72小时要求。"
+            )
+        if (
+            kind == "course_record_interval_over_72h"
+            and end_source == "evaluation_context.horizon"
+            and start_source
+            in {"daily_course_record", "senior_course_record", "inpat_registration"}
+            and isinstance(start_time, str)
+            and isinstance(facts.get("interval_end_time"), str)
+            and threshold_hours == 72
+            and type(facts.get("interval_seconds")) is int
+            and type(facts.get("overdue_seconds")) is int
+            and facts["interval_seconds"] > 72 * 3600
+            and facts["overdue_seconds"] == facts["interval_seconds"] - 72 * 3600
+        ):
+            start_label = "权威入院时间" if start_source == "inpat_registration" else "最后一次查房"
+            no_rounds = "；期间未见有效查房" if start_source == "inpat_registration" else ""
+            return (
+                f"{start_label}（{start_time}）至评价截止时间（{facts['interval_end_time']}）间隔"
+                f"{_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_duration_text(facts['overdue_seconds'])}{no_rounds}。"
+            )
+        if (
+            kind == "course_record_interval_over_72h"
+            and start_source == "inpat_registration"
+            and end_source in {"daily_course_record", "senior_course_record"}
+            and isinstance(start_time, str)
+            and isinstance(facts.get("interval_end_time"), str)
+            and threshold_hours == 72
+            and type(facts.get("interval_seconds")) is int
+            and type(facts.get("overdue_seconds")) is int
+            and facts["interval_seconds"] > 72 * 3600
+            and facts["overdue_seconds"] == facts["interval_seconds"] - 72 * 3600
+        ):
+            return (
+                f"权威入院时间（{start_time}）至首次查房（{facts['interval_end_time']}）间隔"
+                f"{_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_duration_text(facts['overdue_seconds'])}。"
+            )
         start_position = facts.get("interval_start_position")
         end_position = facts.get("interval_end_position")
         record_count = facts.get("record_count")
@@ -1386,6 +1447,8 @@ def customer_finding_from_controlled_facts(
         overdue_seconds = facts.get("overdue_seconds")
         if (
             kind != "course_record_interval_over_72h"
+            or start_source not in {"daily_course_record", "senior_course_record"}
+            or end_source not in {"daily_course_record", "senior_course_record"}
             or not all(
                 type(value) is int
                 for value in (

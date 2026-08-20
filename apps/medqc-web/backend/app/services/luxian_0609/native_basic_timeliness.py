@@ -33,6 +33,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
 from .source_evidence_reader import (
+    EVALUATION_HORIZON_SOURCE_KEY,
     build_luxian_0609_course_round_timeline_from_rows,
     read_luxian_0609_course_round_timeline,
 )
@@ -89,10 +90,12 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
     "LX0609-001": (
         "admission_record",
         "discharge_record",
+        EVALUATION_HORIZON_SOURCE_KEY,
         "inpat_registration",
     ),
     "LX0609-002": (
         "admission_record",
+        EVALUATION_HORIZON_SOURCE_KEY,
         "first_course_record",
         "inpat_registration",
     ),
@@ -101,6 +104,7 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
         "admission_record",
         "daily_course_record",
         "discharge_record",
+        EVALUATION_HORIZON_SOURCE_KEY,
         "inpat_registration",
         "senior_course_record",
     ),
@@ -108,6 +112,7 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
         "admission_record",
         "daily_course_record",
         "discharge_record",
+        EVALUATION_HORIZON_SOURCE_KEY,
         "inpat_registration",
         "senior_course_record",
     ),
@@ -449,10 +454,12 @@ def _typed_basic_decisions(
         "LX0609-001": (
             "admission_record",
             "discharge_record",
+            EVALUATION_HORIZON_SOURCE_KEY,
             "inpat_registration",
         ),
         "LX0609-002": (
             "admission_record",
+            EVALUATION_HORIZON_SOURCE_KEY,
             "first_course_record",
             "inpat_registration",
         ),
@@ -461,6 +468,7 @@ def _typed_basic_decisions(
             "admission_record",
             "daily_course_record",
             "discharge_record",
+            EVALUATION_HORIZON_SOURCE_KEY,
             "inpat_registration",
             "senior_course_record",
         ),
@@ -468,6 +476,7 @@ def _typed_basic_decisions(
             "admission_record",
             "daily_course_record",
             "discharge_record",
+            EVALUATION_HORIZON_SOURCE_KEY,
             "inpat_registration",
             "senior_course_record",
         ),
@@ -683,6 +692,71 @@ def _typed_basic_decisions(
             applicability=ApplicabilityState.NOT_APPLICABLE,
         )
 
+    def missing_target_decision(
+        rule_id: str,
+        *,
+        anchor: datetime | None,
+        threshold: timedelta,
+    ) -> RuleDecision | None:
+        """仅在评价时点已越过时限时，将完整来源中的目标缺失判为缺陷。"""
+
+        if anchor is None:
+            return gap(rule_id, "authoritative_time_missing")
+        horizon_observation = observation_by_source[EVALUATION_HORIZON_SOURCE_KEY]
+        if horizon_observation.query_state.value == "empty":
+            return gap(rule_id, "authoritative_time_missing")
+        if horizon_observation.query_state.value != "available":
+            return gap(rule_id, "snapshot_mismatch", technical=True)
+        try:
+            horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
+        except EvidenceMaterialTruncated:
+            return gap(rule_id, "snapshot_mismatch", technical=True)
+        except Exception:
+            return gap(rule_id, "snapshot_mismatch", technical=True)
+        if len(horizon_rows) != 1:
+            return gap(rule_id, "snapshot_mismatch", technical=True)
+        horizon_row = horizon_rows[0]
+        try:
+            horizon_date = date.fromisoformat(str(horizon_row["horizon_date"]))
+        except (KeyError, TypeError, ValueError):
+            return gap(rule_id, "snapshot_mismatch", technical=True)
+        raw_horizon_datetime = horizon_row.get("horizon_datetime")
+        try:
+            horizon_datetime = (
+                datetime.fromisoformat(str(raw_horizon_datetime))
+                if raw_horizon_datetime is not None
+                else None
+            )
+        except ValueError:
+            return gap(rule_id, "snapshot_mismatch", technical=True)
+        if horizon_datetime is not None:
+            if horizon_datetime.tzinfo is not None:
+                return gap(rule_id, "snapshot_mismatch", technical=True)
+            if horizon_datetime.date() != horizon_date:
+                return conflict(rule_id)
+            maturity_state = (
+                "conflict"
+                if horizon_datetime < anchor
+                else "mature"
+                if horizon_datetime - anchor >= threshold
+                else "not_reached"
+            )
+        else:
+            maturity_state = (
+                "conflict"
+                if horizon_date < anchor.date()
+                else "mature"
+                if horizon_date > (anchor + threshold).date()
+                else "not_reached"
+            )
+        if maturity_state == "mature":
+            return None
+        if maturity_state == "not_reached":
+            return gap(rule_id, "evaluation_window_not_mature")
+        if maturity_state == "conflict":
+            return conflict(rule_id)
+        return gap(rule_id, "snapshot_mismatch", technical=True)
+
     def add_customer_fact(rule_id: str, facts: Mapping[str, Any]) -> None:
         """仅保留时限解释需要的标量事实；原始文书仍留在证据材料仓。"""
 
@@ -764,7 +838,19 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
             if not first_course_rows:
-                decisions.append(gap(rule_id, "source_readiness_unproven"))
+                missing_decision = missing_target_decision(
+                    rule_id,
+                    anchor=anchor,
+                    threshold=timedelta(hours=8),
+                )
+                decisions.append(
+                    missing_decision
+                    or conclusive(
+                        rule_id,
+                        QcDirection.DEFECT,
+                        "required_document_missing",
+                    )
+                )
                 continue
             complete_events: list[tuple[datetime, str | None]] = []
             incomplete = False
@@ -964,6 +1050,18 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
             if not admission_rows:
+                anchor, _anchor_date, anchor_gap = admission_anchor(rule_id)
+                if anchor_gap is not None:
+                    decisions.append(anchor_gap)
+                    continue
+                missing_decision = missing_target_decision(
+                    rule_id,
+                    anchor=anchor,
+                    threshold=timedelta(hours=24),
+                )
+                if missing_decision is not None:
+                    decisions.append(missing_decision)
+                    continue
                 decision = conclusive(
                     rule_id,
                     QcDirection.DEFECT,
@@ -1270,6 +1368,14 @@ def _typed_basic_decisions(
         elif ambiguous_round:
             decisions.append(gap(rule_id, "required_field_missing"))
         else:
+            missing_decision = missing_target_decision(
+                rule_id,
+                anchor=anchor,
+                threshold=threshold,
+            )
+            if missing_decision is not None:
+                decisions.append(missing_decision)
+                continue
             decision = conclusive(
                 rule_id,
                 QcDirection.DEFECT,

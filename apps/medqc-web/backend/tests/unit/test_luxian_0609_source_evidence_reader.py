@@ -55,6 +55,27 @@ class _Engine:
         yield self.connection
 
 
+class _SeverityConnection:
+    def __init__(self, rows: list[dict]):
+        self.rows = rows
+        self.calls: list[tuple[str, dict]] = []
+
+    def execute(self, statement, params):
+        sql = str(statement)
+        self.calls.append((sql, dict(params)))
+        rows = self.rows
+        if "NOT LIKE :cancelled_name" in sql:
+            rows = [
+                row
+                for row in rows
+                if not any(
+                    marker in str(row.get("order_name") or "")
+                    for marker in ("取消", "撤销", "作废")
+                )
+            ]
+        return _Rows(rows[: params["limit_rows"]])
+
+
 class _DischargeFallbackConnection:
     def __init__(self):
         self.calls: list[str] = []
@@ -171,3 +192,110 @@ def test_exam_lab_order_reader_filters_before_limit_so_unrelated_orders_cannot_h
     assert params["limit_rows"] == 51
     assert params["institute_id"] == "safe-institute"
     assert "safe-institute" not in sql
+
+
+def test_severity_order_reader_keeps_stop_event_for_interval_cutoff(monkeypatch) -> None:
+    connection = _SeverityConnection(
+        [
+            {
+                "order_id": "START-1",
+                "order_name": "病重通知",
+                "order_status": "执行中",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+            },
+            {
+                "order_id": "STOP-1",
+                "order_name": "停止病重",
+                "order_status": "停止",
+                "prescribed_datetime": "2026-01-02 08:00:00",
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_id",
+            "order_name",
+            "order_status",
+            "prescribed_datetime",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_severity_order_rows(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None
+    )
+
+    assert [(row["severity"], row["event_kind"]) for row in result.rows] == [
+        ("serious", "start"),
+        ("serious", "end"),
+    ]
+    assert "NOT LIKE :cancelled_name" in connection.calls[0][0]
+
+
+def test_severity_order_reader_filters_cancelled_rows_before_limit(monkeypatch) -> None:
+    """取消历史不能占满受控上限而掩盖后续有效病危医嘱。"""
+
+    connection = _SeverityConnection(
+        [
+            {
+                "order_id": f"CANCEL-{index:03d}",
+                "order_name": "取消病重通知",
+                "order_status": "取消",
+                "prescribed_datetime": f"2026-01-01 08:{index % 60:02d}:00",
+            }
+            for index in range(51)
+        ]
+        + [
+            {
+                "order_id": "ACTIVE-CRITICAL",
+                "order_name": "病危通知",
+                "order_status": "执行中",
+                "prescribed_datetime": "2026-01-02 08:00:00",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_id",
+            "order_name",
+            "order_status",
+            "prescribed_datetime",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_severity_order_rows(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None
+    )
+
+    assert [(row["severity"], row["event_kind"]) for row in result.rows] == [
+        ("critical", "start")
+    ]
+    assert result.truncated is False
+    sql, params = connection.calls[0]
+    assert "NOT LIKE :cancelled_name" in sql
+    assert params["cancelled_name"] == "%取消%"

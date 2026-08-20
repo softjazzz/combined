@@ -532,64 +532,32 @@ def _order_based_exam_reason_outcome(
             return _ExamLabOutcome("LX0609-010", "data_gap", "authoritative_order_time_missing")
         orders_by_id[order_id] = (order_time, order)
 
-    # 没有对应检查主表时，保留既有“检查前原因”口径，不能臆断医嘱已经执行。
-    if not exam_rows:
-        order_time = min(time for time, _order in orders_by_id.values())
-        reason_recorded = any(
-            (record_time := _parse_current_visit_time(authoritative_document_time_value(row)))
-            is not None
-            and record_time <= order_time
-            and _REASON_COURSE_PATTERN.search(_row_text(row))
-            for row in course_rows
-        )
-        return _ExamLabOutcome(
-            "LX0609-010",
-            "compliant" if reason_recorded else "non_compliant",
-            "exam_order_reason_recorded" if reason_recorded else "exam_order_reason_missing",
-        )
+    def associate_course_rows(
+        order_events: Sequence[tuple[str, datetime]],
+    ) -> dict[str, tuple[Mapping[str, Any], ...]] | _ExamLabOutcome:
+        """为每条医嘱建立唯一病程关联，缺失主表时也不允许任意覆盖。"""
 
-    exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
-    for exam in exam_rows:
-        order_id = _clean(exam.get("order_id"))
-        exam_id = _clean(exam.get("exam_id"))
-        if not order_id or not exam_id or order_id not in orders_by_id:
-            return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
-        exams_by_order.setdefault(order_id, []).append(exam)
-    # 关联是双向完整合同：不能只确认“已有主表的医嘱”唯一，还必须确认每条
-    # 有效 CT/MRI 医嘱都有且仅有一条检查主表。缺少主表时不能擅自视为未执行。
-    if (
-        set(exams_by_order) != set(orders_by_id)
-        or any(len(exams) != 1 for exams in exams_by_order.values())
-    ):
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
-
-    executed = tuple(
-        (order_id, orders_by_id[order_id][0], exams[0])
-        for order_id, exams in exams_by_order.items()
-    )
-    if not course_rows:
-        return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_course_missing")
-
-    # 病程表没有 order_id 字段时，允许以“完整检查名称 + 检查前最近权威时间”
-    # 建立唯一关系。只有候选唯一且不同检查不复用同一病程时才接受；任何并列、
-    # 缺失或复用仍失败关闭，不能用相同泛化病程互相顶替。
-    has_course_order_id = any(_clean(row.get("order_id")) for row in course_rows)
-    course_rows_by_order: dict[str, tuple[Mapping[str, Any], ...]] = {}
-    if has_course_order_id:
-        for order_id, _order_time, _exam in executed:
-            linked_rows = tuple(
-                row for row in course_rows if _clean(row.get("order_id")) == order_id
-            )
-            if not linked_rows:
-                return _ExamLabOutcome(
-                    "LX0609-010", "non_compliant", "exam_order_course_missing"
+        has_course_order_id = any(_clean(row.get("order_id")) for row in course_rows)
+        rows_by_order: dict[str, tuple[Mapping[str, Any], ...]] = {}
+        if has_course_order_id:
+            for order_id, _order_time in order_events:
+                linked_rows = tuple(
+                    row for row in course_rows if _clean(row.get("order_id")) == order_id
                 )
-            course_rows_by_order[order_id] = linked_rows
-    elif len(executed) == 1:
-        course_rows_by_order[executed[0][0]] = course_rows
-    else:
+                if not linked_rows:
+                    return _ExamLabOutcome(
+                        "LX0609-010", "non_compliant", "exam_order_course_missing"
+                    )
+                rows_by_order[order_id] = linked_rows
+            return rows_by_order
+        if len(order_events) == 1:
+            rows_by_order[order_events[0][0]] = course_rows
+            return rows_by_order
+
+        # 病程表没有 order_id 时，允许以“完整检查名称 + 检查前最近权威时间”
+        # 建立唯一关系。不同检查不得复用同一病程；无法唯一关联时失败关闭。
         used_course_rows: set[int] = set()
-        for order_id, order_time, _exam in sorted(executed, key=lambda item: item[1]):
+        for order_id, order_time in sorted(order_events, key=lambda item: item[1]):
             order_name = _clean(orders_by_id[order_id][1].get("order_name"))
             candidates: list[tuple[datetime, Mapping[str, Any]]] = []
             for row in course_rows:
@@ -613,7 +581,59 @@ def _order_based_exam_reason_outcome(
             if len(latest_rows) != 1 or id(latest_rows[0]) in used_course_rows:
                 return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
             used_course_rows.add(id(latest_rows[0]))
-            course_rows_by_order[order_id] = (latest_rows[0],)
+            rows_by_order[order_id] = (latest_rows[0],)
+        return rows_by_order
+
+    # 没有对应检查主表时，仍需逐医嘱核对检查前原因，不能以最早医嘱的结果覆盖全部。
+    if not exam_rows:
+        if not course_rows:
+            return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_reason_missing")
+        order_events = tuple(
+            (order_id, order_time)
+            for order_id, (order_time, _order) in orders_by_id.items()
+        )
+        course_rows_by_order = associate_course_rows(order_events)
+        if isinstance(course_rows_by_order, _ExamLabOutcome):
+            return course_rows_by_order
+        for order_id, order_time in order_events:
+            if not any(
+                (record_time := _parse_current_visit_time(authoritative_document_time_value(row)))
+                is not None
+                and record_time <= order_time
+                and _REASON_COURSE_PATTERN.search(_row_text(row))
+                for row in course_rows_by_order[order_id]
+            ):
+                return _ExamLabOutcome(
+                    "LX0609-010", "non_compliant", "exam_order_reason_missing"
+                )
+        return _ExamLabOutcome("LX0609-010", "compliant", "exam_order_reason_recorded")
+
+    exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
+    for exam in exam_rows:
+        order_id = _clean(exam.get("order_id"))
+        exam_id = _clean(exam.get("exam_id"))
+        if not order_id or not exam_id or order_id not in orders_by_id:
+            return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+        exams_by_order.setdefault(order_id, []).append(exam)
+    # 关联是双向完整合同：不能只确认“已有主表的医嘱”唯一，还必须确认每条
+    # 有效 CT/MRI 医嘱都有且仅有一条检查主表。缺少主表时不能擅自视为未执行。
+    if (
+        set(exams_by_order) != set(orders_by_id)
+        or any(len(exams) != 1 for exams in exams_by_order.values())
+    ):
+        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+
+    executed = tuple(
+        (order_id, orders_by_id[order_id][0], exams[0])
+        for order_id, exams in exams_by_order.items()
+    )
+    if not course_rows:
+        return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_course_missing")
+    course_rows_by_order = associate_course_rows(
+        tuple((order_id, order_time) for order_id, order_time, _exam in executed)
+    )
+    if isinstance(course_rows_by_order, _ExamLabOutcome):
+        return course_rows_by_order
 
     report_rows = tuple(
         row

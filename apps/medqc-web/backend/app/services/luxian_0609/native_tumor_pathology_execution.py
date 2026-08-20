@@ -1479,7 +1479,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 ),
             )
             continue
-        if rule_id == "LX0609-019":
+        if rule_id in {"LX0609-013", "LX0609-019"}:
             target_material_available = (
                 all(state in {"present", "empty"} for state in target_states)
                 and "present" in target_states

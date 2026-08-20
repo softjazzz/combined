@@ -299,6 +299,9 @@ def _safe_evidence_session() -> Luxian0609EvidenceReadSession:
 def _rule_007_evidence_session() -> Luxian0609EvidenceReadSession:
     rows_by_source = {
         "inpat_nondrug_order.unstable_order": [],
+        "inpat_registration": [
+            {"admission_datetime": "2026-01-01 08:00:00"}
+        ],
         "daily_course_record": [
             {
                 "record_content": "患者病情稳定，继续当前治疗。",
@@ -328,6 +331,7 @@ def _rule_007_evidence_session() -> Luxian0609EvidenceReadSession:
         visit_id="private-visit",
         source_schema=None,
         created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-03",
         row_reader=read,
         additional_source_keys=("daily_course_record", "senior_course_record"),
     )

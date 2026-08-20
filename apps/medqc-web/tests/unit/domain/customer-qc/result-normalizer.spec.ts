@@ -525,6 +525,84 @@ describe('normalizeCustomerQcResult', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE_COURSE_TEXT')
   })
 
+  it('为 LX0609-007 展示首尾边界，不把边界伪装成查房文书', () => {
+    const startBoundary = normalizeCustomerQcResult({
+      rule_id: 'LX0609-007',
+      status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'course_record_interval_over_72h',
+        interval_start_source: 'inpat_registration',
+        interval_end_source: 'senior_course_record',
+        interval_start_time: '2026-08-14 08:00:00',
+        interval_end_time: '2026-08-17 10:02:00',
+        interval_hours: 74.03,
+        threshold_hours: 72,
+      },
+    })
+    const dateBoundary = normalizeCustomerQcResult({
+      rule_id: 'LX0609-007',
+      status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'course_record_interval_over_72h',
+        interval_start_source: 'daily_course_record',
+        interval_end_source: 'evaluation_context.horizon',
+        interval_start_time: '2026-08-14 09:30:00',
+        interval_end_date: '2026-08-18',
+        interval_end_precision: 'date',
+        threshold_hours: 72,
+      },
+    })
+    const preciseTailBoundary = normalizeCustomerQcResult({
+      rule_id: 'LX0609-007',
+      status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'course_record_interval_over_72h',
+        interval_start_source: 'daily_course_record',
+        interval_end_source: 'evaluation_context.horizon',
+        interval_start_time: '2026-08-14 09:30:00',
+        interval_end_time: '2026-08-17 10:00:00',
+        interval_hours: 72.5,
+        threshold_hours: 72,
+      },
+    })
+    const zeroRoundsDateBoundary = normalizeCustomerQcResult({
+      rule_id: 'LX0609-007',
+      status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'course_record_interval_over_72h',
+        interval_start_source: 'inpat_registration',
+        interval_end_source: 'evaluation_context.horizon',
+        interval_start_time: '2026-08-14 08:00:00',
+        interval_end_date: '2026-08-18',
+        interval_end_precision: 'date',
+        threshold_hours: 72,
+      },
+    })
+
+    expect(startBoundary.display).toMatchObject({
+      summary:
+        '权威入院时间（2026-08-14 08:00:00）至首次查房（2026-08-17 10:02:00）间隔74.03小时，超过72小时要求。',
+      detail: '以权威入院时间为起点，首次查房前未见可计入本项的日常病程记录或上级医师查房记录。',
+    })
+    expect(dateBoundary.display).toMatchObject({
+      summary:
+        '最后一次查房（2026-08-14 09:30:00）至评价截止日期（2026-08-18）已确认超过72小时要求。',
+      detail:
+        '评价截止日期仅精确到日期；该日期已能确定最后一次查房后超过72小时仍未见可计入本项的后续记录。',
+    })
+    expect(preciseTailBoundary.display).toMatchObject({
+      summary:
+        '最后一次查房（2026-08-14 09:30:00）至评价截止时间（2026-08-17 10:00:00）间隔72.50小时，超过72小时要求。',
+      detail: '以最后一次查房为起点，评价截止时间前未见可计入本项的后续记录。',
+    })
+    expect(zeroRoundsDateBoundary.display).toMatchObject({
+      summary:
+        '权威入院时间（2026-08-14 08:00:00）至评价截止日期（2026-08-18）已确认超过72小时要求；期间未见有效查房。',
+      detail:
+        '评价截止日期仅精确到日期；该日期已能确定入院后超过72小时仍未见可计入本项的查房记录。',
+    })
+  })
+
   it('为基础时限规则展示锚点、首个可计入记录和超时原因', () => {
     const raw = {
       rule_id: 'LX0609-006',

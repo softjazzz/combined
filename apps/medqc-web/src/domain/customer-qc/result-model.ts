@@ -126,11 +126,13 @@ export interface CustomerDisplayFacts {
     recordTime: string
   }>
   courseInterval?: {
-    startSource: 'daily_course_record' | 'senior_course_record'
-    endSource: 'daily_course_record' | 'senior_course_record'
+    startSource: 'daily_course_record' | 'senior_course_record' | 'inpat_registration'
+    endSource: 'daily_course_record' | 'senior_course_record' | 'evaluation_context.horizon'
     startTime: string
-    endTime: string
-    hours: number
+    endTime?: string
+    endDate?: string
+    endPrecision?: 'date'
+    hours?: number
     thresholdHours: number
   }
   pathologySampling?: {
@@ -251,9 +253,7 @@ export interface CustomerDisplayFacts {
   examLab?: {
     subject: 'ct_mri' | 'culture_susceptibility'
     requirement:
-      | 'reason_before_order'
-      | 'result_recording_within_24h'
-      | 'positive_result_analysis_within_24h'
+      'reason_before_order' | 'result_recording_within_24h' | 'positive_result_analysis_within_24h'
     eventPhase: 'order' | 'report'
     checkedSources: Array<'exam_lab_order' | 'exam_lab_report' | 'course_record'>
   }
