@@ -4123,7 +4123,11 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
             _row("首次病程记录包含病例特点、诊断依据、鉴别诊断和诊疗计划。")
         ],
         "diagnosis": [
-            {"diagnosis_type": "主要诊断", "diagnosis_name": "不稳定型心绞痛"}
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_no": "1",
+                "diagnosis_name": "不稳定型心绞痛",
+            }
         ],
     }
 
@@ -4289,7 +4293,11 @@ async def test_typed_018_combines_length_and_diagnostic_direction(
             [{**_row("入院记录正文完整。"), "chief_complaint": complaint}]
             if source_key == "admission_record"
             else [
-                {"diagnosis_type": "主要诊断", "diagnosis_name": "稳定型心绞痛"}
+                {
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                    "diagnosis_name": "稳定型心绞痛",
+                }
             ]
             if source_key == "diagnosis"
             else []
@@ -4354,7 +4362,8 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
         "主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。现病史完整。"
     )
     diagnosis_row = {
-        "diagnosis_type": "主要诊断",
+        "diagnosis_type": "入院诊断",
+        "diagnosis_no": "1",
         "diagnosis_name": "不稳定型心绞痛",
     }
 
@@ -4441,7 +4450,11 @@ async def test_typed_018_uses_only_authoritative_primary_diagnosis():
                 {"diagnosis_type": "其他诊断", "diagnosis_name": f"不应采信的诊断{index}"}
                 for index in range(8)
             ],
-            {"diagnosis_type": "主要诊断", "diagnosis_name": "结肠恶性肿瘤"},
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_no": "1",
+                "diagnosis_name": "结肠恶性肿瘤",
+            },
         ],
     }
 
@@ -4504,6 +4517,7 @@ async def test_typed_018_reads_only_first_numbered_diagnosis():
         "diagnosis": [
             {
                 "diagnosis_type": "初步诊断",
+                "diagnosis_no": "1",
                 "diagnosis_name": "1、双侧肾周围炎,2、前列腺增生,3、2型糖尿病",
             }
         ],
@@ -4557,10 +4571,9 @@ async def test_typed_018_reads_admission_first_diagnosis():
         ],
         "diagnosis": [],
         "admission_record_diagnosis": [
-            {"diagnosis_type": "入院诊断", "diagnosis_id": "1"},
             {
                 "diagnosis_type": "初步诊断",
-                "diagnosis_id": "2",
+                "diagnosis_no": "1",
                 "diagnosis_name": (
                     "1、慢性阻塞性肺病伴有急性下呼吸道感染；"
                     "2、慢性呼吸衰竭；3、尘肺？"
@@ -4622,7 +4635,7 @@ async def test_typed_018_accepts_structured_complaint_when_record_content_is_emp
         "admission_record_diagnosis": [
             {
                 "diagnosis_type": "初步诊断",
-                "diagnosis_id": "1",
+                "diagnosis_no": "1",
                 "diagnosis_name": "左侧膝关节骨性关节病",
             }
         ],
@@ -4877,7 +4890,7 @@ def test_017_accepts_controlled_authoritative_time_fallback(fallback_field):
     assert result["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
 
 
-def test_017_same_day_only_records_are_not_applicable_without_comparison_pair():
+def test_017_same_day_records_are_compared_without_date_gate():
     result = course._copy_result(
         {
             "daily_course_record": [
@@ -4888,8 +4901,8 @@ def test_017_same_day_only_records_are_not_applicable_without_comparison_pair():
         source_complete=True,
     )
 
-    assert result["status"] == "not_applicable"
-    assert result["metadata"]["reason_code"] == "copy_adjacent_day_pair_unavailable"
+    assert result["status"] == "uncertain"
+    assert result["metadata"]["reason_code"] == "semantic_low_confidence"
 
 
 def test_017_template_shell_only_pair_is_compliant_without_llm():
@@ -6206,6 +6219,206 @@ async def test_017_fast5_missing_authoritative_course_time_is_data_gap(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_017_compares_distinct_same_day_records_in_authoritative_time_order(
+    monkeypatch,
+):
+    """同日两份不同文书仍须按权威时间成为可比候选，不能被日期门控遗漏。"""
+
+    copied = (
+        "患者腹部压痛范围较前缩小且白细胞复查持续下降，"
+        "继续根据培养结果调整抗感染方案并观察病情变化。"
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(copied, "2026-06-01 08:00:00"), "document_id": "same-day-a"},
+            {**_row(copied, "2026-06-01 16:00:00"), "document_id": "same-day-b"},
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_UnexpectedLLMClient(),
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "copy_similarity_threshold_exceeded"
+    )
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_017_same_timestamp_distinct_documents_are_data_gap(monkeypatch):
+    """两份独立文书的权威时间相同，不能伪造先后顺序或判为不适用。"""
+
+    copied = "患者腹部压痛范围较前缩小，继续抗感染治疗并观察病情变化。"
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(copied, "2026-06-01 08:00:00"), "document_id": "same-time-a"},
+            {**_row(copied, "2026-06-01 08:00:00"), "document_id": "same-time-b"},
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_UnexpectedLLMClient(),
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "copy_authoritative_time_ambiguous"
+    )
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_017_same_day_distinct_content_is_compared_without_model_call(monkeypatch):
+    """同日记录内容不同也要形成候选，并维持纯程序判定。"""
+
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {
+                **_row(
+                    "患者腹痛较前明显减轻，复查炎症指标下降，继续当前抗感染治疗并观察。",
+                    "2026-06-01 08:00:00",
+                ),
+                "document_id": "same-day-a",
+            },
+            {
+                **_row(
+                    "患者咳嗽咳痰加重，听诊双肺湿啰音，调整雾化治疗并复查胸部影像。",
+                    "2026-06-01 16:00:00",
+                ),
+                "document_id": "same-day-b",
+            },
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_UnexpectedLLMClient(),
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_018_sends_only_lowest_structured_admission_diagnosis_to_model():
+    """第二诊断即使更贴合主诉，也不得冒充结构化第一入院诊断。"""
+
+    client = _Client(
+        [
+            {
+                "diagnostic_relation_state": "mismatch",
+                "diagnostic_reason_dimensions": ["anatomic_site"],
+                "diagnostic_rationale_code": "diagnosis_mismatch",
+            }
+        ]
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [_row("主诉：反复胸痛3个月。现病史完整。")],
+                "admission_record_diagnosis": [
+                    {
+                        "diagnosis_type": "入院诊断",
+                        "diagnosis_no": "1",
+                        "diagnosis_name": "急性胆囊炎",
+                    },
+                    {
+                        "diagnosis_type": "入院诊断",
+                        "diagnosis_no": "2",
+                        "diagnosis_name": "不稳定型心绞痛",
+                    },
+                ],
+            }
+        ),
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert result.llm_call_count == 1
+    assert "急性胆囊炎" in client.prompts[0]
+    assert "不稳定型心绞痛" not in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "diagnoses",
+    [
+        [
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": "不稳定型心绞痛",
+            }
+        ],
+        [
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_no": "1",
+                "diagnosis_name": "急性胆囊炎",
+            },
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_no": "1",
+                "diagnosis_name": "不稳定型心绞痛",
+            },
+        ],
+    ],
+)
+async def test_018_missing_or_conflicting_structured_order_fails_closed(
+    diagnoses: list[dict[str, str]],
+):
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [_row("主诉：反复胸痛3个月。现病史完整。")],
+                "admission_record_diagnosis": diagnoses,
+            }
+        ),
+        llm_client=_UnexpectedLLMClient(),
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_018_requires_chief_complaint_and_primary_diagnosis():
     client = _Client([{
         "diagnostic_relation_state": "supported",
@@ -6230,7 +6443,11 @@ async def test_018_requires_chief_complaint_and_primary_diagnosis():
             documents={
                 "admission_record": [_row("主诉：反复胸痛3个月。现病史待查。")],
                 "diagnosis": [
-                    {"diagnosis_type": "主要诊断", "diagnosis_name": "不稳定型心绞痛"}
+                    {
+                        "diagnosis_type": "入院诊断",
+                        "diagnosis_no": "1",
+                        "diagnosis_name": "不稳定型心绞痛",
+                    }
                 ],
             }
         ),
@@ -6262,7 +6479,11 @@ async def test_018_returns_safe_criterion_results_without_returning_admission_te
                     _row(f"主诉：{complaint}。入院诊断：急性胆囊炎。")
                 ],
                 "diagnosis": [
-                    {"diagnosis_type": "主要诊断", "diagnosis_name": "急性胆囊炎"}
+                    {
+                        "diagnosis_type": "入院诊断",
+                        "diagnosis_no": "1",
+                        "diagnosis_name": "急性胆囊炎",
+                    }
                 ],
             }
         ),
@@ -6309,7 +6530,11 @@ async def test_018_length_boundary_allows_20_chars_and_rejects_21_chars():
                         _row(f"主诉：{complaint}。入院诊断：冠心病。")
                     ],
                     "diagnosis": [
-                        {"diagnosis_type": "主要诊断", "diagnosis_name": "冠心病"}
+                        {
+                            "diagnosis_type": "入院诊断",
+                            "diagnosis_no": "1",
+                            "diagnosis_name": "冠心病",
+                        }
                     ],
                 }
             ),
@@ -6348,7 +6573,11 @@ async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
             "admission_record": [_row("主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。")],
             "first_course_record": [_row("首次病程病例特点与诊断依据。")],
             "diagnosis": [
-                {"diagnosis_type": "主要诊断", "diagnosis_name": "不稳定型心绞痛"}
+                {
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                    "diagnosis_name": "不稳定型心绞痛",
+                }
             ],
         }
     )

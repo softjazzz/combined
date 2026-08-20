@@ -619,6 +619,7 @@ def _typed_003_decision(
         "mr_surgery",
         "surgery_application",
         "inpat_nondrug_order",
+        "evaluation_context.horizon",
     )
     observations = {
         item.source_key: item
@@ -712,6 +713,69 @@ def _typed_003_decision(
 
     mr_rows = support_rows["mr_surgery"]
     if not surgery_rows:
+        qualified_mr_rows = tuple(
+            row for row in mr_rows if _qualified_traditional_surgery_present((row,))
+        )
+        if qualified_mr_rows:
+            # 003 缺正式手术记录时，只能由唯一一台主表手术形成“应有记录”的
+            # 结论。同一结束时间不能把多行不同手术事件压成一个时间点。
+            if len(qualified_mr_rows) != 1:
+                return decision("data_gap", "association_failed")
+            surgery_end_time = _authoritative_surgery_end_time(
+                source_key="mr_surgery", row=qualified_mr_rows[0]
+            )
+            if surgery_end_time is None:
+                return decision("data_gap", "authoritative_time_missing")
+            horizon_observation = observations["evaluation_context.horizon"]
+            if horizon_observation.query_state.value == "empty":
+                return decision(
+                    "data_gap",
+                    horizon_observation.reason_code or "authoritative_time_missing",
+                )
+            if horizon_observation.query_state.value != "available":
+                return decision("technical_error", "snapshot_mismatch")
+            try:
+                horizon_rows = tuple(materials.rows("evaluation_context.horizon"))
+            except EvidenceMaterialTruncated:
+                return decision("technical_error", "snapshot_mismatch")
+            except EvidenceMaterialUnavailable:
+                return decision("technical_error", "snapshot_mismatch")
+            if len(horizon_rows) != 1:
+                return decision("technical_error", "snapshot_mismatch")
+            horizon_row = horizon_rows[0]
+            try:
+                horizon_date = datetime.fromisoformat(
+                    str(horizon_row["horizon_date"])
+                ).date()
+            except (KeyError, TypeError, ValueError):
+                return decision("technical_error", "snapshot_mismatch")
+            raw_horizon_datetime = horizon_row.get("horizon_datetime")
+            try:
+                horizon_datetime = (
+                    datetime.fromisoformat(str(raw_horizon_datetime))
+                    if raw_horizon_datetime is not None
+                    else None
+                )
+            except ValueError:
+                return decision("technical_error", "snapshot_mismatch")
+            if horizon_datetime is not None:
+                if horizon_datetime.tzinfo is not None:
+                    return decision("technical_error", "snapshot_mismatch")
+                if horizon_datetime.date() != horizon_date:
+                    return decision("data_gap", "authoritative_time_conflict")
+                if horizon_datetime < surgery_end_time:
+                    return decision("data_gap", "authoritative_time_conflict")
+                mature = horizon_datetime - surgery_end_time >= timedelta(hours=24)
+            else:
+                if horizon_date < surgery_end_time.date():
+                    return decision("data_gap", "authoritative_time_conflict")
+                mature = horizon_date > (surgery_end_time + timedelta(hours=24)).date()
+            return decision(
+                "non_compliant" if mature else "data_gap",
+                "required_document_missing"
+                if mature
+                else "evaluation_window_not_mature",
+            )
         if (
             observations["mr_surgery"].query_state.value == "available"
             and observations["mr_surgery"].completeness.value == "complete"

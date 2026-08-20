@@ -903,6 +903,38 @@ def test_020_customer_finding_does_not_hide_generic_or_unknown_recommendations()
     assert "1条暂无法判断" in finding
 
 
+def test_021_customer_finding_identifies_the_specific_vague_consultation_application():
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-021",
+        facts={
+            "verification_kind": "consultation_application_quality_check",
+            "episode_count": 2,
+            "document_count": 2,
+            "semantic_state": "mixed",
+            "checked_requirement": "说明具体临床问题、会诊理由或明确会诊目的",
+            "episode_results": [
+                {
+                    "episode_index": 1,
+                    "semantic_state": "clear",
+                    "record_time": "2026-07-20 01:00:00",
+                    "document_title": "会诊申请单",
+                },
+                {
+                    "episode_index": 2,
+                    "semantic_state": "vague",
+                    "record_time": "2026-07-20 02:00:00",
+                    "document_title": "会诊申请单",
+                },
+            ],
+        },
+    )
+
+    assert finding == (
+        "共核对2次会诊申请；需完善1次："
+        "2026-07-20 02:00:00《会诊申请单》（第2次）目的不明确。其余1次申请目的明确。"
+    )
+
+
 def test_controlled_finding_does_not_render_untrusted_matrix_values():
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-048",

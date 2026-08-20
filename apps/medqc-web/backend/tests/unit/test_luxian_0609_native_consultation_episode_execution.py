@@ -381,6 +381,44 @@ def test_candidate_time_accepts_short_timezone_suffix_and_order_update_fallback(
     assert "request_time" in source_evidence_reader._NATIVE_SOURCE_FIELDS["exam_master"]
 
 
+def test_exam_lab_and_surgery_candidates_use_business_event_time_not_sync_time():
+    """会诊发生在申请与实际检查、手术开始之间时，不能按同步/归档时间倒置。"""
+
+    consultation_time = datetime(2026, 7, 20, 10, 0, 0)
+    exam_time = episode._row_time(
+        {
+            "request_time": "2026-07-20 09:00:00",
+            "exam_time": "2026-07-20 11:00:00",
+            "report_time": "2026-07-20 14:00:00",
+            "record_time": "2026-07-20 18:00:00",
+        },
+        source_key="exam_master",
+    )
+    lab_time = episode._row_time(
+        {
+            "report_datetime": "2026-07-20 11:30:00",
+            "record_time": "2026-07-20 18:00:00",
+        },
+        source_key="labtest_master",
+    )
+    surgery_time = episode._row_time(
+        {
+            "surgery_begin_time": "2026-07-20 11:00:00",
+            "surgery_end_time": "2026-07-20 12:00:00",
+            "record_time": "2026-07-20 15:00:00",
+        },
+        source_key="surgery_record",
+    )
+
+    assert exam_time is not None and exam_time.value == datetime(2026, 7, 20, 11, 0, 0)
+    assert lab_time is not None and lab_time.value == datetime(2026, 7, 20, 11, 30, 0)
+    assert surgery_time is not None and surgery_time.value == datetime(2026, 7, 20, 11, 0, 0)
+    assert all(
+        observed is not None and observed.value > consultation_time
+        for observed in (exam_time, lab_time, surgery_time)
+    )
+
+
 def test_course_candidate_uses_submit_datetime_when_record_time_is_missing():
     """病程正式记录时间缺失时，提交时间仍是现有CDM认可的权威文书时间。"""
 
@@ -1970,7 +2008,7 @@ async def test_wrapped_or_multiple_or_forged_json_stays_fail_closed(monkeypatch,
 
 
 @pytest.mark.asyncio
-async def test_output_does_not_leak_text_time_or_model_response(monkeypatch):
+async def test_output_does_not_leak_text_or_model_response(monkeypatch):
     secret = "CONSULTATION_BODY_SECRET_20260720"
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows(secret))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -1979,9 +2017,18 @@ async def test_output_does_not_leak_text_time_or_model_response(monkeypatch):
     )
     rendered = repr(result)
     assert secret not in rendered
-    assert "2026-07-20" not in rendered
     assert "consultation_documents" not in rendered
     assert "model_raw_response" not in rendered
+    episode_facts = dict(result.customer_display_facts)["LX0609-021"]["episode_results"]
+    assert [{
+        key: item[key]
+        for key in ("episode_index", "semantic_state", "record_time", "document_title")
+    } for item in episode_facts] == [{
+        "episode_index": 1,
+        "semantic_state": "clear",
+        "record_time": "2026-07-20 01:00:00",
+        "document_title": "会诊申请单",
+    }]
 
 
 @pytest.mark.asyncio
@@ -2388,7 +2435,8 @@ async def test_020_requires_course_trace_even_when_structured_order_is_linked(mo
 
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 2
-    assert "头孢哌酮舒巴坦" not in client.prompts[1]
+    # 结构化医嘱必须纳入 020/023 的会诊执行证据池，但不能替代病程追踪。
+    assert "头孢哌酮舒巴坦" in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -2504,6 +2552,322 @@ async def test_020_display_facts_bind_selected_opinion_and_execution_documents(
             "source_document_id": "COURSE-EXECUTION",
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_020_023_include_each_authorized_execution_evidence_category_once(monkeypatch):
+    """病程为主证据，医嘱、检查、检验、手术均可作为同次执行的结构化佐证。"""
+
+    source_rows = {
+        "consultation_record": [{
+            "document_id": "CONSULT-OPINION",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 10:00:00",
+            "record_content": "会诊意见：建议完成后续处置。",
+        }],
+        "daily_course_record": [{
+            "document_id": "COURSE-EXECUTION",
+            "document_title": "日常病程记录",
+            "record_time": "2026-07-20 12:00:00",
+            "record_content": "已按会诊建议完成后续处置。",
+        }],
+        "senior_course_record": [],
+        "inpat_drug_order": [{
+            "order_id": "DRUG-ORDER",
+            "order_name": "后续处置用药",
+            "prescribed_datetime": "2026-07-20 12:10:00",
+        }],
+        "inpat_nondrug_order": [],
+        "exam_master": [{
+            "exam_id": "EXAM-MASTER",
+            "exam_name": "后续处置检查",
+            "report_time": "2026-07-20 12:30:00",
+        }],
+        "exam_item_report": [],
+        "labtest_master": [{
+            "test_id": "LAB-MASTER",
+            "labtest_subject": "后续处置检验",
+            "report_datetime": "2026-07-20 12:40:00",
+        }],
+        "labtest_item_report": [],
+        "surgery_record": [{
+            "document_id": "SURGERY-RECORD",
+            "surgery_name": "后续处置手术",
+            "record_time": "2026-07-20 12:50:00",
+        }],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "other",
+                "source_quote": "完成后续处置",
+                "normalized_action": "完成后续处置",
+                "opinion_ref": "__AUTO__",
+            }],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "linked_specific",
+            "structured_action_refs": [
+                "inpat_drug_order-1",
+                "exam_master-1",
+                "labtest_master-1",
+                "surgery_record-1",
+            ],
+            "execution_quotes": ["已按会诊建议完成后续处置"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 32
+    source_types = {
+        item["source_type"]
+        for item in dict(result.customer_display_facts)["LX0609-020"]["source_document_refs"]
+    }
+    assert source_types == {
+        "consultation_record",
+        "daily_course_record",
+        "inpat_drug_order",
+        "exam_master",
+        "labtest_master",
+        "surgery_record",
+    }
+    assert "exam_master-1" in client.prompts[1]
+    assert "labtest_master-1" in client.prompts[1]
+    assert "surgery_record-1" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action_type", "structured_refs"),
+    [
+        ("test", ("exam_master-1", "labtest_master-1")),
+        ("procedure", ("surgery_record-1",)),
+    ],
+)
+async def test_020_023_keep_action_matched_exam_lab_and_surgery_evidence(
+    monkeypatch,
+    action_type,
+    structured_refs,
+):
+    """检查/检验和手术必须进入其匹配建议的受控二阶段候选，而非仅供 other 使用。"""
+
+    source_rows = {
+        "consultation_record": [{
+            "document_id": "CONSULT-OPINION",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 10:00:00",
+            "record_content": "会诊意见：建议完成后续处置。",
+        }],
+        "daily_course_record": [{
+            "document_id": "COURSE-EXECUTION",
+            "document_title": "日常病程记录",
+            "record_time": "2026-07-20 12:00:00",
+            "record_content": "已按会诊建议完成后续处置。",
+        }],
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "inpat_nondrug_order": [],
+        "exam_master": [{
+            "exam_id": "EXAM-MASTER",
+            "exam_name": "后续处置检查",
+            "report_time": "2026-07-20 12:30:00",
+        }],
+        "exam_item_report": [],
+        "labtest_master": [{
+            "test_id": "LAB-MASTER",
+            "labtest_subject": "后续处置检验",
+            "report_datetime": "2026-07-20 12:40:00",
+        }],
+        "labtest_item_report": [],
+        "surgery_record": [{
+            "document_id": "SURGERY-RECORD",
+            "surgery_name": "后续处置手术",
+            "record_time": "2026-07-20 12:50:00",
+        }],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": action_type,
+                "source_quote": "完成后续处置",
+                "normalized_action": "完成后续处置",
+                "opinion_ref": "__AUTO__",
+            }],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "linked_specific",
+            "structured_action_refs": list(structured_refs),
+            "execution_quotes": ["已按会诊建议完成后续处置"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    assert all(ref in client.prompts[1] for ref in structured_refs)
+
+
+@pytest.mark.asyncio
+async def test_020_uses_actual_exam_time_not_preconsultation_request_time(monkeypatch):
+    """会诊后的检查不能因较早申请时间被错排除。"""
+
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows.update({
+        "consultation_record": [{
+            "document_id": "CONSULT-OPINION",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 10:00:00",
+            "record_content": "会诊意见：建议完善胸部CT检查。",
+        }],
+        "daily_course_record": [{
+            "document_id": "COURSE-EXECUTION",
+            "document_title": "日常病程记录",
+            "record_time": "2026-07-20 12:00:00",
+            "record_content": "已按会诊意见完善胸部CT检查。",
+        }],
+        "exam_master": [{
+            "exam_id": "EXAM-AFTER-CONSULT",
+            "exam_name": "胸部CT",
+            "request_time": "2026-07-20 09:00:00",
+            "exam_time": "2026-07-20 11:00:00",
+            "report_time": "2026-07-20 12:30:00",
+        }],
+    })
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "source_quote": "完善胸部CT检查",
+                "normalized_action": "完善胸部CT检查",
+                "opinion_ref": "__AUTO__",
+            }],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "linked_specific",
+            "structured_action_refs": ["exam_master-1"],
+            "execution_quotes": ["已按会诊意见完善胸部CT检查"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020",),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.llm_call_count == 2
+    assert "exam_master-1" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_020_excludes_surgery_completed_before_consultation(monkeypatch):
+    """手术记录晚写不能倒置为会诊后的已执行手术。"""
+
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows.update({
+        "consultation_record": [{
+            "document_id": "CONSULT-OPINION",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 12:00:00",
+            "record_content": "会诊意见：建议继续观察。",
+        }],
+        "daily_course_record": [{
+            "document_id": "COURSE-EXECUTION",
+            "document_title": "日常病程记录",
+            "record_time": "2026-07-20 15:00:00",
+            "record_content": "已按会诊意见继续观察。",
+        }],
+        "surgery_record": [{
+            "document_id": "SURGERY-BEFORE-CONSULT",
+            "surgery_name": "腹腔镜手术",
+            "surgery_begin_time": "2026-07-20 11:00:00",
+            "record_time": "2026-07-20 15:00:00",
+        }],
+    })
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "procedure",
+                "source_quote": "继续观察",
+                "normalized_action": "继续观察",
+                "opinion_ref": "__AUTO__",
+            }],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": ["已按会诊意见继续观察"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020",),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.llm_call_count == 2
+    assert "surgery_record-1" not in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -3258,6 +3622,26 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     session = _window_session(rows_by_source={
         "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
         "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+        "inpat_drug_order": ({
+            "order_id": "ORDER-1",
+            "generic_name": "头孢哌酮舒巴坦",
+            "prescribed_datetime": "2026-07-02 10:00:00",
+        },),
+        "exam_master": ({
+            "exam_id": "EXAM-1",
+            "exam_name": "胸部CT",
+            "report_time": "2026-07-02 10:30:00",
+        },),
+        "labtest_master": ({
+            "test_id": "LAB-1",
+            "labtest_subject": "血常规",
+            "report_datetime": "2026-07-02 11:00:00",
+        },),
+        "surgery_record": ({
+            "document_id": "SURGERY-1",
+            "surgery_name": "腹腔镜手术",
+            "record_time": "2026-07-02 11:30:00",
+        },),
     })
     client = _SequentialClient(
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
@@ -3278,12 +3662,28 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     assert result.results == ()
     assert [item.qc_direction.value for item in result.decisions] == ["satisfied", "satisfied"]
     assert all(len(item.fact_refs) >= 3 for item in result.decisions)
-    daily_ref = next(
-        item.snapshot_ref.removeprefix("sha256:")
+    source_refs = {
+        item.source_key: item.snapshot_ref.removeprefix("sha256:")
         for item in session.snapshot.observations
-        if item.source_key == "daily_course_record"
+        if item.source_key in {
+            "daily_course_record",
+            "inpat_drug_order",
+            "exam_master",
+            "labtest_master",
+            "surgery_record",
+        }
+    }
+    assert set(source_refs) == {
+        "daily_course_record",
+        "inpat_drug_order",
+        "exam_master",
+        "labtest_master",
+        "surgery_record",
+    }
+    assert all(
+        set(source_refs.values()).issubset(item.fact_refs)
+        for item in result.decisions
     )
-    assert all(daily_ref in item.fact_refs for item in result.decisions)
     assert result.llm_call_count == 2
 
 

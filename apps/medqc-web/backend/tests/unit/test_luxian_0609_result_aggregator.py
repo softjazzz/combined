@@ -21,6 +21,7 @@ from app.services.luxian_0609.decision_reducer import (
 )
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
+from app.services.luxian_0609 import native_consultation_episode_execution as consultation_episode
 from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
     safe_luxian_0609_customer_display_facts,
@@ -727,7 +728,9 @@ def test_extended_defect_facts_survive_customer_projection(rule_id, facts):
     ],
 )
 def test_task4_consultation_display_fact_contracts_are_preserved(rule_id, facts):
-    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == {
+        key: value for key, value in facts.items() if key != "source_document_ids"
+    }
 
 
 def test_022_episode_results_are_strictly_validated_for_customer_delivery():
@@ -758,7 +761,27 @@ def test_022_episode_results_are_strictly_validated_for_customer_delivery():
 
     assert safe_luxian_0609_customer_display_facts(
         rule_id="LX0609-022", raw=facts
-    ) == facts
+    ) == {
+        "verification_kind": "consultation_opinion_quality_check",
+        "episode_count": 2,
+        "document_count": 2,
+        "semantic_state": "mixed",
+        "checked_requirement": "给出针对当前病情的明确诊疗意见",
+        "episode_results": [
+            {
+                "episode_index": 1,
+                "semantic_state": "clear",
+                "record_time": "2026-07-20 01:00:00",
+                "document_title": "会诊记录单",
+            },
+            {
+                "episode_index": 2,
+                "semantic_state": "vague",
+                "record_time": "2026-07-20 02:00:00",
+                "document_title": "会诊记录单",
+            },
+        ],
+    }
     facts["episode_results"][1]["record_time"] = "2026-02-30 10:00:00"
     assert (
         safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
@@ -830,6 +853,104 @@ def test_022_safe_episode_facts_personalize_the_delivered_remediation() -> None:
     assert "第2次意见补充明确诊疗判断" in result["suggestion"]
     assert "第4次意见补充明确诊疗意见" in result["suggestion"]
     assert "第1次、第3次" not in result["suggestion"]
+
+
+def test_021_episode_locator_is_renderable_but_document_ids_only_enter_customer_evidence() -> None:
+    facts = {
+        "verification_kind": "consultation_application_quality_check",
+        "episode_count": 2,
+        "document_count": 2,
+        "semantic_state": "mixed",
+        "checked_requirement": "说明具体临床问题、会诊理由或明确会诊目的",
+        "source_document_ids": ["CONSULT-1", "CONSULT-2"],
+        "episode_results": [
+            {
+                "episode_index": 1,
+                "semantic_state": "clear",
+                "source_document_id": "CONSULT-1",
+                "record_time": "2026-07-20 01:00:00",
+                "document_title": "会诊申请单",
+            },
+            {
+                "episode_index": 2,
+                "semantic_state": "vague",
+                "source_document_id": "CONSULT-2",
+                "record_time": "2026-07-20 02:00:00",
+                "document_title": "会诊申请单",
+            },
+        ],
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-021"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-021", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-021", facts),),
+    )[0]
+
+    assert result["findings"] == (
+        "共核对2次会诊申请；需完善1次："
+        "2026-07-20 02:00:00《会诊申请单》（第2次）目的不明确。其余1次申请目的明确。"
+    )
+    assert result["customer_evidence"] == [
+        {"source_type": "consultation_record", "source_document_id": "CONSULT-1"},
+        {"source_type": "consultation_record", "source_document_id": "CONSULT-2"},
+    ]
+    assert "source_document_ids" not in result["customer_display_facts"]
+    assert all(
+        "source_document_id" not in item
+        for item in result["customer_display_facts"]["episode_results"]
+    )
+
+
+def test_022_failed_episode_after_eighth_still_has_customer_evidence() -> None:
+    """展示只保留安全定位信息时，证据仍必须优先覆盖实际失败的第12次。"""
+
+    documents = [
+        {
+            "ref": f"consultation_record-{index}",
+            "document_id": f"CONSULT-{index}",
+            "time": f"2026-07-20 {index:02d}:00:00",
+        }
+        for index in range(1, 13)
+    ]
+    episodes = tuple(
+        consultation_episode._Episode(
+            episode_ref=f"episode-{index}",
+            member_refs=(f"consultation_record-{index}",),
+            application_refs=(),
+            opinion_refs=(f"consultation_record-{index}",),
+            application_state="absent",
+            opinion_state="vague" if index == 12 else "clear",
+            confidence="high",
+            recommendations=(),
+        )
+        for index in range(1, 13)
+    )
+    facts = consultation_episode._consultation_semantic_display_facts(
+        rule_id="LX0609-022", episodes=episodes, documents=documents
+    )
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-022"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-022", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-022", facts),),
+    )[0]
+
+    assert {item["source_document_id"] for item in result["customer_evidence"]} >= {
+        "CONSULT-12"
+    }
+    assert len(result["customer_evidence"]) <= 8
+    assert "source_document_ids" not in result["customer_display_facts"]
+    assert all(
+        "source_document_id" not in item
+        for item in result["customer_display_facts"]["episode_results"]
+    )
 
 
 def test_020_uses_exact_opinion_and_execution_document_refs_for_customer_evidence():
@@ -996,7 +1117,9 @@ def test_023_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
 
     assert result["customer_evidence"] == facts["source_document_refs"]
     assert result["customer_display_facts"] == {
-        key: value for key, value in facts.items() if key != "source_document_refs"
+        key: value
+        for key, value in facts.items()
+        if key not in {"source_document_ids", "source_document_refs"}
     }
 
 

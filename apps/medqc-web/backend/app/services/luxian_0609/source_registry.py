@@ -260,8 +260,15 @@ _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
 
 _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 003 优先使用 surgery_record 自带时间，缺失时仅允许唯一 mr_surgery 时间配对；
-    # 手术记录为空时，用申请与手术类医嘱共同确认“确无手术”，避免把未同步误判为不适用。
-    "LX0609-003": ("mr_surgery", "surgery_application", "inpat_nondrug_order"),
+    # 手术记录为空时，合格 mr_surgery 的结束时间是独立已实施手术事实，
+    # 必须以正式评价时点判断24小时窗口是否成熟；其余场景仍用申请与手术类
+    # 医嘱共同确认“确无手术”，避免把未同步误判为不适用。
+    "LX0609-003": (
+        "evaluation_context.horizon",
+        "mr_surgery",
+        "surgery_application",
+        "inpat_nondrug_order",
+    ),
     "LX0609-001": (
         "evaluation_context.horizon",
         "inpat_registration",

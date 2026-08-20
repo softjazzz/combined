@@ -31,8 +31,17 @@ LX018_DIAGNOSTIC_REASON_DIMENSIONS = frozenset(
 )
 
 _COMPLAINT_VALUE_PATTERN = re.compile(r"主诉\s*[:：]\s*([^；;。\r\n]{1,160})")
-_PRIMARY_DIAGNOSIS_TYPES = frozenset({"主要诊断", "主诊断", "第一诊断"})
 _ADMISSION_FIRST_DIAGNOSIS_TYPES = frozenset({"初步诊断", "入院诊断"})
+_LX018_DIAGNOSIS_ORDER_FIELDS = (
+    "diagnosis_no",
+    "diagnosis_sequence",
+    "sequence",
+    "sequence_no",
+    "order_no",
+    "order",
+    "sort_order",
+)
+_LX018_SEQUENCE_VALUE_PATTERN = re.compile(r"^(?:.*\|\|)?([1-9]\d*)$")
 _NUMBERED_DIAGNOSIS_ITEM_PATTERN = re.compile(
     r"(?:^|[，,；;\s]+)\d+\s*[、.．]\s*([^，,；;\n\r]+)"
 )
@@ -121,32 +130,65 @@ def _split_numbered_diagnosis_items(value: Any) -> tuple[str, ...]:
     return items if len(items) >= 2 else ()
 
 
-def _lx018_primary_diagnosis_text(row: Mapping[str, Any]) -> str:
-    """返回可采信的第一诊断文本；不把其他诊断补成第一诊断。"""
+def _lx018_structured_order(row: Mapping[str, Any]) -> int | None:
+    """读取诊断的权威排序，缺失或互相冲突时拒绝推断。"""
 
-    diagnosis_type = _clean(row.get("diagnosis_type"))
-    diagnosis_name = _clean(row.get("diagnosis_name") or row.get("diagnosis"))
-    diagnosis_code = _clean(row.get("diagnosis_code"))
-    label = diagnosis_name or diagnosis_code
+    values: set[int] = set()
+    for field_name in _LX018_DIAGNOSIS_ORDER_FIELDS:
+        raw_value = _clean(row.get(field_name))
+        if not raw_value:
+            continue
+        match = _LX018_SEQUENCE_VALUE_PATTERN.fullmatch(raw_value)
+        if match is None:
+            return None
+        values.add(int(match.group(1)))
+    return values.pop() if len(values) == 1 else None
+
+
+def _lx018_diagnosis_label(row: Mapping[str, Any]) -> str:
+    label = _clean(row.get("diagnosis_name") or row.get("diagnosis"))
     if not label:
-        return ""
-    if diagnosis_type in _PRIMARY_DIAGNOSIS_TYPES:
-        return label
-    if diagnosis_type not in _ADMISSION_FIRST_DIAGNOSIS_TYPES:
-        return ""
+        label = _clean(row.get("diagnosis_code"))
     numbered_items = _split_numbered_diagnosis_items(label)
-    if numbered_items:
-        return numbered_items[0]
-    # cdm.diagnosis 已按稳定字段升序；拆成多行时第一行即入院第一诊断。
-    return label
+    return numbered_items[0] if numbered_items else label
+
+
+def _lx018_primary_diagnosis_resolution(
+    documents: Mapping[str, Any],
+) -> tuple[str, str]:
+    """只选择有权威排序的第一入院诊断；不能由数据库行序补位。"""
+
+    ordered_candidates: list[tuple[int, str]] = []
+    saw_admission_candidate = False
+    for source_key in LX018_DIAGNOSIS_SOURCES:
+        for row in _source_rows(documents, source_key, limit=None):
+            diagnosis_type = _clean(row.get("diagnosis_type"))
+            if diagnosis_type not in _ADMISSION_FIRST_DIAGNOSIS_TYPES:
+                continue
+            saw_admission_candidate = True
+            order = _lx018_structured_order(row)
+            label = _lx018_diagnosis_label(row)
+            # 缺少序号的“入院诊断”无法确认是否是第一诊断，不能按数据库返回顺序猜。
+            if order is None or not label:
+                return "unknown", ""
+            ordered_candidates.append((order, label))
+
+    if not ordered_candidates:
+        return ("unknown", "") if saw_admission_candidate else ("missing", "")
+    first_order = min(order for order, _ in ordered_candidates)
+    first_labels = {
+        label for order, label in ordered_candidates if order == first_order
+    }
+    return (
+        ("available", next(iter(first_labels)))
+        if len(first_labels) == 1
+        else ("unknown", "")
+    )
 
 
 def _lx018_primary_diagnosis_available(documents: Mapping[str, Any]) -> bool:
-    for source_key in LX018_DIAGNOSIS_SOURCES:
-        for row in _source_rows(documents, source_key, limit=None):
-            if _lx018_primary_diagnosis_text(row):
-                return True
-    return False
+    state, _ = _lx018_primary_diagnosis_resolution(documents)
+    return state == "available"
 
 
 def _lx018_prompt(*, context: str) -> str:

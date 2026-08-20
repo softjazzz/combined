@@ -456,7 +456,9 @@ def _typed_003_session(
     surgery_time: object = None,
     surgery_begin_time: object = None,
     mr_surgery_time: object = None,
+    mr_surgery_times: tuple[datetime, ...] = (),
     source_mode: str = "available",
+    evaluation_as_of_date: str | None = None,
 ):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -472,13 +474,16 @@ def _typed_003_session(
                     "record_time": record_time,
                 },
             ),
-            "mr_surgery": (
-                ({
-                    "surgery_begin_datetime": mr_surgery_time - timedelta(hours=7),
-                    "surgery_end_datetime": mr_surgery_time,
-                },)
-                if mr_surgery_time is not None
-                else ()
+            "mr_surgery": tuple(
+                {
+                    "surgery_begin_datetime": end_time - timedelta(hours=7),
+                    "surgery_end_datetime": end_time,
+                    "surgical_level": "二级",
+                }
+                for end_time in (
+                    mr_surgery_times
+                    or ((mr_surgery_time,) if mr_surgery_time is not None else ())
+                )
             ),
         }.get(source_key, ())
         return SnapshotSourceRows.create(
@@ -495,9 +500,93 @@ def _typed_003_session(
         visit_id="V",
         source_schema=None,
         created_at=CREATED_AT,
+        evaluation_as_of_date=evaluation_as_of_date,
         row_reader=reader,
     )
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("evaluation_as_of_date", "source_mode", "expected_state", "expected_reason"),
+    (
+        ("2026-01-02", "empty", "data_gap", "evaluation_window_not_mature"),
+        ("2026-01-03", "empty", "non_compliant", "required_document_missing"),
+        ("2025-12-31", "empty", "data_gap", "authoritative_time_conflict"),
+        ("2026-01-03", "error", "technical_error", "source_query_error"),
+    ),
+)
+async def test_typed_003_missing_document_uses_formal_horizon_after_independent_surgery(
+    evaluation_as_of_date: str,
+    source_mode: str,
+    expected_state: str,
+    expected_reason: str,
+) -> None:
+    """003 不能用任务创建时间把未到期的缺文书提前判成问题。"""
+
+    session = _typed_003_session(
+        source_mode=source_mode,
+        surgery_time=None,
+        mr_surgery_time=datetime(2026, 1, 1, 8, 0, 0),
+        evaluation_as_of_date=evaluation_as_of_date,
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_003_multiple_mr_surgery_events_with_same_end_time_are_data_gap() -> None:
+    """没有正式手术记录时，同结束时间不能把两台手术伪装成唯一事件。"""
+
+    session = _typed_003_session(
+        source_mode="empty",
+        mr_surgery_times=(
+            datetime(2026, 1, 1, 8, 0, 0),
+            datetime(2026, 1, 1, 8, 0, 0),
+        ),
+        evaluation_as_of_date="2026-01-03",
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
+    assert result.llm_call_count == result.total_tokens == 0
 
 @pytest.mark.asyncio
 async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(

@@ -3331,7 +3331,7 @@ def safe_luxian_0609_customer_display_facts(
             "checked_requirement",
             "source_document_ids",
         }
-        has_episode_results = rule_id == "LX0609-022" and "episode_results" in raw
+        has_episode_results = rule_id in {"LX0609-021", "LX0609-022"} and "episode_results" in raw
         if has_episode_results:
             expected_keys.add("episode_results")
         source_document_ids = raw.get("source_document_ids")
@@ -3355,7 +3355,6 @@ def safe_luxian_0609_customer_display_facts(
             "document_count": raw["document_count"],
             "semantic_state": raw["semantic_state"],
             "checked_requirement": expected_requirement,
-            "source_document_ids": list(dict.fromkeys(source_document_ids))[:12],
         }
         if not has_episode_results:
             return facts
@@ -3397,7 +3396,12 @@ def safe_luxian_0609_customer_display_facts(
             if locator_item_keys.issubset(item):
                 record_time = item.get("record_time")
                 document_title = item.get("document_title")
-                if not isinstance(record_time, str) or document_title != "会诊记录单":
+                expected_title = (
+                    "会诊申请单"
+                    if rule_id == "LX0609-021"
+                    else "会诊记录单"
+                )
+                if not isinstance(record_time, str) or document_title != expected_title:
                     return None
                 if record_time:
                     time_format = (
@@ -3419,7 +3423,18 @@ def safe_luxian_0609_customer_display_facts(
                     if parsed_time.strftime(time_format) != record_time:
                         return None
             episode_states.append(state)
-            safe_episode_results.append(dict(item))
+            safe_episode_results.append({
+                "episode_index": expected_index,
+                "semantic_state": state,
+                **(
+                    {
+                        "record_time": item["record_time"],
+                        "document_title": item["document_title"],
+                    }
+                    if locator_item_keys.issubset(item)
+                    else {}
+                ),
+            })
         state_set = set(episode_states)
         derived_state = (
             "absent"
@@ -3503,6 +3518,11 @@ def safe_luxian_0609_customer_display_facts(
                 "senior_course_record",
                 "inpat_drug_order",
                 "inpat_nondrug_order",
+                "exam_master",
+                "exam_item_report",
+                "labtest_master",
+                "labtest_item_report",
+                "surgery_record",
             }
             if not isinstance(source_document_refs, list) or len(source_document_refs) > 8:
                 return None
@@ -3578,7 +3598,6 @@ def safe_luxian_0609_customer_display_facts(
             "verification_kind": expected_verification_kind,
             **{key: raw[key] for key in count_keys},
             "relation_state": raw["relation_state"],
-            "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
         }
         if recommendation_results is not None:
             safe_facts["recommendation_results"] = recommendation_results
@@ -4017,6 +4036,11 @@ def _customer_evidence_from_display_facts(
             "senior_course_record",
             "inpat_drug_order",
             "inpat_nondrug_order",
+            "exam_master",
+            "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
+            "surgery_record",
         }
         raw_refs = raw.get("source_document_refs")
         if isinstance(raw_refs, list) and len(raw_refs) <= 8:

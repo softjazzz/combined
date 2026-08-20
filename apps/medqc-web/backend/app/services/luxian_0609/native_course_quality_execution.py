@@ -26,7 +26,7 @@ from .course_quality.rule_018 import (
     LX018_DIAGNOSTIC_RELATION_STATES as _LX018_DIAGNOSTIC_RELATION_STATES,
     _lx018_length_criterion_result,
     _lx018_primary_diagnosis_available,
-    _lx018_primary_diagnosis_text,
+    _lx018_primary_diagnosis_resolution,
     _lx018_prompt,
     _lx018_semantic_criterion_result,
     _lx018_unknown_semantic_result,
@@ -248,25 +248,25 @@ def _context(
         _substantive_rows(documents, _RULE_CONTEXT_SOURCES[rule_id])
     )
     if rule_id == "LX0609-018":
-        # trigger 读取完整 bounded diagnosis，模型上下文只保留最多8条受控第一诊断。
+        # trigger 读取完整 bounded diagnosis；模型上下文只投影唯一解析出的第一入院诊断。
         context_rows = [
             item for item in context_rows if item[0] not in _LX018_DIAGNOSIS_SOURCES
         ]
-        for source_key in _LX018_DIAGNOSIS_SOURCES:
-            context_rows.extend(
-                (
-                    source_key,
-                    row,
-                    content,
-                )
-                for row in _source_rows(documents, source_key, limit=None)
-                if (content := _lx018_primary_diagnosis_text(row))
+        diagnosis_state, diagnosis_text = _lx018_primary_diagnosis_resolution(documents)
+        selected_diagnosis_rows: list[tuple[str, Mapping[str, Any], str]] = []
+        if diagnosis_state == "available":
+            selected_diagnosis_rows.append(
+                ("admission_primary_diagnosis", {}, diagnosis_text)
             )
         admission_rows = [item for item in context_rows if item[0] == "admission_record"]
         diagnosis_rows = [
             item for item in context_rows if item[0] in _LX018_DIAGNOSIS_SOURCES
         ]
-        context_rows = admission_rows[:_MAX_ROWS_PER_SOURCE] + diagnosis_rows[:_MAX_ROWS_PER_SOURCE]
+        context_rows = (
+            admission_rows[:_MAX_ROWS_PER_SOURCE]
+            + diagnosis_rows[:_MAX_ROWS_PER_SOURCE]
+            + selected_diagnosis_rows
+        )
     for source_key, row, content in context_rows:
         record_time = _clean(row.get("record_time")) or "未提供"
         parts.append(f"[{source_key}] 记录时间={record_time}；内容={content[:_MAX_ROW_CHARS]}")

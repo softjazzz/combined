@@ -1933,22 +1933,23 @@ def customer_finding_from_controlled_facts(
             and 1 <= episode_count <= 100
             and semantic_state in {"clear", "vague", "mixed"}
         ):
-            if rule_id == "LX0609-021":
-                if semantic_state == "clear":
-                    return f"共核对{episode_count}次会诊申请，均已说明具体临床问题、会诊理由或明确目的。"
-                if semantic_state == "vague":
-                    return f"共核对{episode_count}次会诊申请，均未说明具体临床问题、会诊理由或明确目的。"
-                return f"共核对{episode_count}次会诊申请，其中部分申请未说明具体临床问题、会诊理由或明确目的。"
-            if semantic_state == "clear":
-                return f"共核对{episode_count}次会诊意见，均已给出针对当前病情的明确诊疗意见。"
             episode_results = facts.get("episode_results")
             if isinstance(episode_results, list):
                 issue_labels: list[str] = []
                 clear_count = unknown_count = 0
-                issue_state_labels = {
-                    "vague": "意见不明确",
-                    "missing": "未记录明确会诊意见",
-                }
+                is_application = rule_id == "LX0609-021"
+                issue_state_labels = (
+                    {
+                        "vague": "目的不明确",
+                        "missing": "未说明具体会诊目的",
+                    }
+                    if is_application
+                    else {
+                        "vague": "意见不明确",
+                        "missing": "未记录明确会诊意见",
+                    }
+                )
+                expected_title = "会诊申请单" if is_application else "会诊记录单"
                 for item in episode_results:
                     if not isinstance(item, Mapping):
                         return ""
@@ -1970,8 +1971,8 @@ def customer_finding_from_controlled_facts(
                     ) is None:
                         record_time = ""
                     document_title = (
-                        "会诊记录单"
-                        if item.get("document_title") == "会诊记录单"
+                        expected_title
+                        if item.get("document_title") == expected_title
                         else ""
                     )
                     locator = f"第{episode_index}次"
@@ -1981,18 +1982,29 @@ def customer_finding_from_controlled_facts(
                         locator = f"{record_time}{locator}"
                     issue_labels.append(f"{locator}{label}")
                 if issue_labels:
+                    target = "会诊申请" if is_application else "会诊意见"
                     finding = (
-                        f"共核对{episode_count}次会诊意见；需完善{len(issue_labels)}次："
+                        f"共核对{episode_count}次{target}；需完善{len(issue_labels)}次："
                         f"{'；'.join(issue_labels)}。"
                     )
                     remainder: list[str] = []
                     if clear_count:
-                        remainder.append(f"其余{clear_count}次意见明确")
+                        remainder.append(
+                            f"其余{clear_count}次{'申请目的明确' if is_application else '意见明确'}"
+                        )
                     if unknown_count:
                         remainder.append(f"{unknown_count}次暂无法判断")
                     if remainder:
                         finding += f"{'，'.join(remainder)}。"
                     return finding
+            if rule_id == "LX0609-021":
+                if semantic_state == "clear":
+                    return f"共核对{episode_count}次会诊申请，均已说明具体临床问题、会诊理由或明确目的。"
+                if semantic_state == "vague":
+                    return f"共核对{episode_count}次会诊申请，均未说明具体临床问题、会诊理由或明确目的。"
+                return f"共核对{episode_count}次会诊申请，其中部分申请未说明具体临床问题、会诊理由或明确目的。"
+            if semantic_state == "clear":
+                return f"共核对{episode_count}次会诊意见，均已给出针对当前病情的明确诊疗意见。"
             if semantic_state == "vague":
                 return f"共核对{episode_count}次会诊意见，均未给出针对当前病情的明确诊疗意见。"
             return f"共核对{episode_count}次会诊意见，其中部分意见未给出针对当前病情的明确诊疗意见。"

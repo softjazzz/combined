@@ -379,7 +379,10 @@ def _assess_copy(
     screened_pair_count = 0
     for left_index in range(len(ordered) - 1):
         for right_index in range(left_index + 1, len(ordered)):
-            if ordered[left_index][0].date() >= ordered[right_index][0].date():
+            # 017 的可比边界是同一次住院内两份独立病程的权威记录时间，
+            # 不是自然日。相同日期但先后完成的两份文书仍需比较；完全同一
+            # 时间戳则没有权威先后关系，不能借内存排序伪造相邻顺序。
+            if ordered[left_index][0] >= ordered[right_index][0]:
                 continue
             screened_pair_count += 1
             fast_score = _copy_fast_similarity(
@@ -398,6 +401,15 @@ def _assess_copy(
                 heapq.heapreplace(candidate_heap, candidate)
 
     if not candidate_heap:
+        # 有两份独立、可比较的病程，但权威时间完全相同，无法建立先后关系。
+        # 这不是规则不适用；不得用内存或文本排序伪造顺序。
+        if len(comparable) >= 2 and screened_pair_count == 0:
+            return _CopyRuleOutcome(
+                status="data_gap",
+                reason_code="copy_authoritative_time_ambiguous",
+                executor_type="program",
+                safe_metadata=safe_metadata,
+            )
         return _CopyRuleOutcome(
             status="not_applicable",
             reason_code="copy_adjacent_day_pair_unavailable",

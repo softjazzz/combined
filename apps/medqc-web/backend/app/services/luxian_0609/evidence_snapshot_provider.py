@@ -221,6 +221,7 @@ def build_luxian_0609_evidence_read_session(
         {
             "LX0609-001",
             "LX0609-002",
+            "LX0609-003",
             "LX0609-005",
             "LX0609-006",
             "LX0609-007",

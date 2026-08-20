@@ -81,6 +81,11 @@ _EXECUTION_SOURCE_KEYS = (
     "senior_course_record",
     "inpat_drug_order",
     "inpat_nondrug_order",
+    "exam_master",
+    "exam_item_report",
+    "labtest_master",
+    "labtest_item_report",
+    "surgery_record",
 )
 _SNAPSHOT_EXECUTION_SOURCE_KEYS = _EXECUTION_SOURCE_KEYS
 _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
@@ -101,9 +106,10 @@ _ACTION_TYPE_SOURCE_KEYS = {
     )),
     "test": frozenset((
         "inpat_nondrug_order", "daily_course_record", "senior_course_record",
+        "exam_master", "exam_item_report", "labtest_master", "labtest_item_report",
     )),
     "procedure": frozenset((
-        "inpat_nondrug_order", "daily_course_record", "senior_course_record",
+        "inpat_nondrug_order", "daily_course_record", "senior_course_record", "surgery_record",
     )),
     "transfer": frozenset((
         "inpat_nondrug_order", "inpat_drug_order", "daily_course_record", "senior_course_record",
@@ -758,6 +764,37 @@ def _row_time(
             "submit_time",
             "submit_datetime",
         )
+    elif source_key in {"exam_master", "exam_item_report"}:
+        # 检查执行的时序优先取实际检查时间；申请时间不能替代已实施检查，
+        # report/record_time 也可能只是报告或同步归档时间。
+        time_keys = (
+            "exam_time",
+            "exam_datetime",
+            "report_time",
+            "report_datetime",
+            "request_time",
+            "request_datetime",
+        )
+    elif source_key in {"labtest_master", "labtest_item_report"}:
+        # 检验以报告/申请等明确业务事件为准，禁止把本地同步 record_time
+        # 当成会诊后执行时间，避免把既往检验错纳入本次关联。
+        time_keys = (
+            "report_datetime",
+            "report_time",
+            "request_datetime",
+            "request_time",
+        )
+    elif source_key == "surgery_record":
+        # 手术记录通常在术后补写，020/023 的执行时序必须按实际手术开始，
+        # 而不是文书提交/归档时间。
+        time_keys = (
+            "surgery_begin_time",
+            "surgery_begin_datetime",
+            "surgery_end_time",
+            "surgery_end_datetime",
+            "record_time",
+            "record_datetime",
+        )
     else:
         time_keys = (
             "record_time",
@@ -863,6 +900,28 @@ def _candidate_text(*, row: Mapping[str, Any], source_key: str) -> str:
             "abnormal_indicator", "surgery_name", "surgery_process",
         )
     return _clean("；".join(_clean(row.get(key)) for key in fields if _clean(row.get(key))))
+
+
+def _candidate_document_id(*, row: Mapping[str, Any], source_key: str) -> str:
+    """只使用来源自身稳定业务键作为定位证据，禁止从正文或行号构造 ID。"""
+
+    identity_fields = {
+        "inpat_drug_order": ("order_id", "application_id", "document_id"),
+        "inpat_nondrug_order": ("order_id", "application_id", "document_id"),
+        "exam_master": ("document_id", "exam_id"),
+        "exam_item_report": ("document_id", "exam_id"),
+        "labtest_master": ("document_id", "test_id"),
+        "labtest_item_report": ("document_id", "test_id"),
+        "surgery_record": ("document_id",),
+    }
+    return next(
+        (
+            candidate
+            for field in identity_fields.get(source_key, ("document_id",))
+            if (candidate := _clean(row.get(field)))
+        ),
+        "",
+    )
 
 
 def _candidate_documents(
@@ -1000,15 +1059,7 @@ def _candidate_documents(
                 source_key=source_key,
                 observed_time=observed_time,
                 text=text,
-                document_id=_clean(
-                    (
-                        row.get("order_id")
-                        or row.get("application_id")
-                        or row.get("document_id")
-                    )
-                    if is_order_source
-                    else row.get("document_id")
-                ),
+                document_id=_candidate_document_id(row=row, source_key=source_key),
             ))
         if source_is_complete:
             source_complete_keys.add(source_key)
@@ -1614,15 +1665,22 @@ def _consultation_semantic_display_facts(
         if len(states) == 1
         else "mixed"
     )
-    source_document_ids = [
-        document_id
-        for ref in refs
-        if (document_id := _clean(documents_by_ref.get(ref, {}).get("document_id")))
-    ]
     episode_results: list[dict[str, Any]] = []
-    if rule_id == "LX0609-022":
+    episode_source_document_ids: list[tuple[str, tuple[str, ...]]] = []
+    if rule_id in {"LX0609-021", "LX0609-022"}:
         for episode_index, episode in enumerate(relevant, start=1):
             episode_refs = tuple(getattr(episode, ref_field)) or episode.member_refs
+            episode_document_ids = tuple(
+                dict.fromkeys(
+                    document_id
+                    for ref in episode_refs
+                    if (
+                        document_id := _clean(
+                            documents_by_ref.get(ref, {}).get("document_id")
+                        )
+                    )
+                )
+            )
             representative = next(
                 (
                     documents_by_ref[ref]
@@ -1638,17 +1696,32 @@ def _consultation_semantic_display_facts(
                 record_time = observed_time.value.strftime(
                     "%Y-%m-%d %H:%M:%S" if observed_time.precise else "%Y-%m-%d"
                 )
-            if representative_document_id:
-                source_document_ids.append(representative_document_id)
+            episode_state = getattr(episode, state_field)
+            episode_source_document_ids.append(
+                (episode_state, episode_document_ids)
+            )
             episode_results.append(
                 {
                     "episode_index": episode_index,
-                    "semantic_state": getattr(episode, state_field),
+                    "semantic_state": episode_state,
                     "source_document_id": representative_document_id,
                     "record_time": record_time,
-                    "document_title": "会诊记录单",
+                    "document_title": (
+                        "会诊申请单"
+                        if rule_id == "LX0609-021"
+                        else "会诊记录单"
+                    ),
                 }
             )
+    # 客户展示不携带原始文书 ID；证据投影仍必须优先保留实际缺陷 episode，
+    # 否则第 9--12 次会诊出现问题时会被通用 8 条证据上限截掉而无法定位。
+    source_document_ids = [
+        document_id
+        for wanted_state in ("vague", "missing", "unknown", "clear")
+        for episode_state, document_ids in episode_source_document_ids
+        if episode_state == wanted_state
+        for document_id in document_ids
+    ]
     facts = {
         "verification_kind": (
             "consultation_application_quality_check"
@@ -1665,7 +1738,7 @@ def _consultation_semantic_display_facts(
         ),
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
     }
-    if rule_id == "LX0609-022":
+    if rule_id in {"LX0609-021", "LX0609-022"}:
         facts["source_document_ids"] = list(dict.fromkeys(source_document_ids))[
             :_MAX_EPISODES
         ]
@@ -1899,10 +1972,10 @@ def _execution_prompt(
         for candidate in candidates
         if candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS
     )
-    # 4.20.4 的主核对对象是会诊后的病程记录。已有病程候选时，不再把
-    # 数百条医嘱塞入同一次语义提示词；医嘱只能在完全没有病程候选时作为
-    # 辅助诊断线索，绝不能替代020/023要求的病程执行记录。
-    prompt_candidates = course_candidates or tuple(candidates)
+    # 4.20.4 的主核对对象仍是会诊后的病程记录，但正式资料链已明确：医嘱、
+    # 检查、检验和手术可作为同次执行的结构化佐证。不能因为存在病程候选就
+    # 把这些已选来源从二阶段事实输入中静默丢失。
+    prompt_candidates = tuple(candidates)
     for item in completed:
         related_refs: list[str] = []
         eligible_sources = _ACTION_TYPE_SOURCE_KEYS.get(
@@ -1947,7 +2020,10 @@ def _execution_prompt(
     }, ensure_ascii=False)
     if len(payload) > _MAX_EXECUTION_PROMPT_CHARS:
         raise _SourceGap()
-    if course_candidates:
+    if course_candidates and not any(
+        candidate.source_key in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS
+        for candidate in prompt_candidates
+    ):
         return (
             "你只核对每条会诊建议在后续病程或查房记录中的执行痕迹，不得补充病历之外的信息。"
             "execution_record_state只能是specific_trace/generic_trace/copied_opinion/no_trace/unknown："
@@ -1982,7 +2058,8 @@ def _execution_prompt(
         "execution_state只描述结构化动作匹配：linked_specific=结构化候选明确落实同一条建议，"
         "linked_vague=结构化候选仅笼统相关，absent=无结构化动作匹配，unknown=无法判断。"
         "daily_course_record和senior_course_record只允许进入trace_refs，不能进入structured_action_refs；"
-        "inpat_drug_order和inpat_nondrug_order只允许进入structured_action_refs。"
+        "inpat_drug_order、inpat_nondrug_order、exam_master、exam_item_report、"
+        "labtest_master、labtest_item_report和surgery_record只允许进入structured_action_refs。"
         "只有病程写“遵会诊意见执行”“已按建议处理”或具体动作、但无对应医嘱/检查/检验/手术/操作结构化记录时，"
         "execution_record_state按其具体程度填写，但execution_state必须输出absent。"
         "只有结构化医嘱/检查/检验/操作动作、没有病程/查房执行记录痕迹时，execution_record_state必须为no_trace。"
