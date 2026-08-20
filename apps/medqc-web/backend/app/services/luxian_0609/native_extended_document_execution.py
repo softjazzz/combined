@@ -37,6 +37,7 @@ from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
     CRITICAL_VALUE_SOURCE_KEYS,
+    CriticalValueDisposition,
     CriticalValueInput,
     CriticalValueItem,
     evaluate_critical_value_rules,
@@ -157,6 +158,26 @@ _AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN = re.compile(
     r"(?:未|未予|尚未|拒绝|拒不).{0,8}"
     r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)"
 )
+
+
+def _critical_value_event_key(
+    source_key: str,
+    row: Mapping[str, Any],
+) -> str | None:
+    """按来源选择可跨表证明的危急值事件键，不把处置文书自身 ID 当关联键。"""
+
+    fields = (
+        ("report_id", "test_id", "document_id")
+        if source_key == "labtest_item_report"
+        else ("report_id", "test_id")
+        if source_key == "crisis_value_record"
+        else ()
+    )
+    for field in fields:
+        value = _clean(row.get(field))
+        if value:
+            return f"{field}:{value}"
+    return None
 
 
 def _discharge_approval_path(
@@ -1023,11 +1044,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                             or row.get("report_datetime")
                             or row.get("record_time")
                         ),
+                        event_key=_critical_value_event_key("labtest_item_report", row),
                     )
                     for row in lab_item_rows
                 ),
-                disposition_times=tuple(
-                    parsed
+                dispositions=tuple(
+                    CriticalValueDisposition(
+                        disposition_time=parsed,
+                        event_key=_critical_value_event_key("crisis_value_record", row),
+                    )
                     for row in crisis_rows
                     for parsed in (_row_time(row),)
                     if parsed is not None

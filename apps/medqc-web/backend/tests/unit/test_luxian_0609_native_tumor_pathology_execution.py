@@ -1011,10 +1011,13 @@ def _chemo_discharge_material_session(
     truncated_drug: bool = False,
     course_text: str = "2026-04-26 使用奥沙利铂 130mg 静滴，记录化疗经过。",
     course_record_time: str | None = None,
+    chemotherapy_orders: tuple[dict, ...] | None = None,
+    course_rows: tuple[dict, ...] | None = None,
 ):
     rows_by_source = {
         "diagnosis": ({"diagnosis_code": "C18.9"},),
-        "inpat_drug_order": (
+        "inpat_drug_order": chemotherapy_orders
+        or (
             {
                 "drug_code": "safe-drug",
                 "generic_name": "奥沙利铂",
@@ -1026,7 +1029,8 @@ def _chemo_discharge_material_session(
                 "order_status": "执行",
             },
         ),
-        "daily_course_record": (
+        "daily_course_record": course_rows
+        or (
             {
                 "record_content": course_text,
                 "record_time": course_record_time,
@@ -1043,7 +1047,7 @@ def _chemo_discharge_material_session(
             source_key=source_key,
             rows=rows_by_source.get(source_key, ()),
             truncated=truncated_drug and source_key == "inpat_drug_order",
-            limit_rows=1 if source_key == "inpat_drug_order" else 50,
+            limit_rows=1 if truncated_drug and source_key == "inpat_drug_order" else 50,
         )
 
     selected = ("LX0609-026",) if truncated_drug else ("LX0609-026", "LX0609-027")
@@ -1062,7 +1066,11 @@ def _chemo_discharge_material_session(
     )
 
 
-def _typed_013_027_session(*, diagnosis_code: str = "C18.9"):
+def _typed_013_027_session(
+    *,
+    diagnosis_code: str = "C18.9",
+    discharge_text: str = "出院记录中包含后续肿瘤治疗计划。",
+):
     rows_by_source = {
         "pathology_exam_master": (
             {"specimen_name": "手术标本", "record_content": "病理送检申请资料。"},
@@ -1080,9 +1088,7 @@ def _typed_013_027_session(*, diagnosis_code: str = "C18.9"):
             {"record_content": "病程记录中已记录病理结果与处理计划。"},
         ),
         "diagnosis": ({"diagnosis_code": diagnosis_code},),
-        "discharge_record": (
-            {"treatment_course": "出院记录中包含后续肿瘤治疗计划。"},
-        ),
+        "discharge_record": ({"treatment_course": discharge_text},),
     }
 
     def reader(**kwargs):
@@ -1365,6 +1371,433 @@ async def test_typed_026_compares_four_structured_order_fields_without_model(
     }
     assert facts["missing_order_fields"] == []
     assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_026_does_not_borrow_fields_between_chemotherapy_events(
+    monkeypatch,
+):
+    """两份医嘱的药名、剂量、用法不能跨不同病程条目拼成合规。"""
+
+    session = _chemo_discharge_material_session(
+        chemotherapy_orders=(
+            {
+                "drug_code": "safe-a",
+                "generic_name": "奥沙利铂",
+                "single_dose": "130",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "静滴",
+                "prescribed_datetime": "2026-04-26 09:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+            {
+                "drug_code": "safe-b",
+                "generic_name": "紫杉醇",
+                "single_dose": "80",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "滴注",
+                "prescribed_datetime": "2026-04-27 09:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+        ),
+        course_rows=(
+            {
+                "record_content": "2026-04-26 使用奥沙利铂80mg滴注。",
+                "record_time": "2026-04-26 10:00:00",
+            },
+            {
+                "record_content": "2026-04-27 使用紫杉醇130mg静滴。",
+                "record_time": "2026-04-27 10:00:00",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-026",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "non_compliant"
+    assert result.decisions[0].reason_code == "requirement_violated"
+    assert dict(result.customer_display_facts)["LX0609-026"]["field_results"] == {
+        "drug_name": "matched",
+        "dose": "mismatched",
+        "route": "mismatched",
+        "time": "matched",
+    }
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_026_fails_closed_when_two_orders_share_one_course_clause(
+    monkeypatch,
+):
+    """同一病程片段不能臆断为两份独立化疗医嘱均已执行。"""
+
+    duplicated_order = {
+        "generic_name": "奥沙利铂",
+        "single_dose": "130",
+        "single_dose_unit": "mg",
+        "drug_apply_method": "静滴",
+        "prescribed_datetime": "2026-04-26 09:00:00",
+        "drug_type": "抗肿瘤化疗药物",
+        "order_status": "执行",
+    }
+    session = _chemo_discharge_material_session(
+        chemotherapy_orders=(
+            {**duplicated_order, "drug_code": "safe-a"},
+            {**duplicated_order, "drug_code": "safe-b"},
+        ),
+        course_rows=(
+            {
+                "record_content": "2026-04-26 使用奥沙利铂130mg静滴。",
+                "record_time": "2026-04-26 10:00:00",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-026",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "data_gap"
+    assert result.decisions[0].reason_code == "required_field_missing"
+    facts = dict(result.customer_display_facts)["LX0609-026"]
+    assert facts["unresolved_event_count"] == 1
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_026_keeps_one_event_fields_together_within_one_course_record(
+    monkeypatch,
+):
+    """单一化疗事件可在同篇病程的相邻句中记录，不能被拆成跨事件串值。"""
+
+    session = _chemo_discharge_material_session(
+        chemotherapy_orders=(
+            {
+                "drug_code": "safe-cisplatin",
+                "generic_name": "顺铂",
+                "single_dose": "100",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "静滴",
+                "prescribed_datetime": "2026-04-26 09:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+        ),
+        course_rows=(
+            {
+                "record_content": "2026-04-26 予顺铂化疗。剂量100mg，静滴。",
+                "record_time": "2026-04-26 10:00:00",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-026",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "compliant"
+    assert result.decisions[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_026_keeps_each_multi_drug_event_with_its_following_detail_clauses(
+    monkeypatch,
+):
+    """同篇多药时，每个药名后的相邻剂量/用法仍属于该药，不能误报资料不足。"""
+
+    session = _chemo_discharge_material_session(
+        chemotherapy_orders=(
+            {
+                "drug_code": "safe-oxaliplatin",
+                "generic_name": "奥沙利铂",
+                "single_dose": "130",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "静滴",
+                "prescribed_datetime": "2026-04-26 09:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+            {
+                "drug_code": "safe-paclitaxel",
+                "generic_name": "紫杉醇",
+                "single_dose": "80",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "滴注",
+                "prescribed_datetime": "2026-04-26 10:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+        ),
+        course_rows=(
+            {
+                "record_content": (
+                    "2026-04-26 予奥沙利铂化疗。剂量130mg，静滴。"
+                    "2026-04-26 予紫杉醇化疗。剂量80mg，滴注。"
+                ),
+                "record_time": "2026-04-26 11:00:00",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-026",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "compliant"
+    assert dict(result.customer_display_facts)["LX0609-026"]["field_results"] == {
+        "drug_name": "matched",
+        "dose": "matched",
+        "route": "matched",
+        "time": "matched",
+    }
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_026_does_not_take_detail_clauses_past_the_next_drug_name(
+    monkeypatch,
+):
+    """后一种药的剂量和用法不能回填到前一种药。"""
+
+    session = _chemo_discharge_material_session(
+        chemotherapy_orders=(
+            {
+                "drug_code": "safe-oxaliplatin",
+                "generic_name": "奥沙利铂",
+                "single_dose": "130",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "静滴",
+                "prescribed_datetime": "2026-04-26 09:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+            {
+                "drug_code": "safe-paclitaxel",
+                "generic_name": "紫杉醇",
+                "single_dose": "80",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "滴注",
+                "prescribed_datetime": "2026-04-26 10:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
+        ),
+        course_rows=(
+            {
+                "record_content": (
+                    "2026-04-26 予奥沙利铂化疗。"
+                    "2026-04-26 予紫杉醇化疗，剂量80mg，滴注。"
+                ),
+                "record_time": "2026-04-26 11:00:00",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-026",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "non_compliant"
+    assert dict(result.customer_display_facts)["LX0609-026"]["field_results"] == {
+        "drug_name": "matched",
+        "dose": "mismatched",
+        "route": "mismatched",
+        "time": "matched",
+    }
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_027_requires_future_tumor_treatment_in_one_plan_clause(
+    monkeypatch,
+):
+    """既往化疗与普通门诊复查不能拼成出院后肿瘤治疗计划。"""
+
+    session = _typed_013_027_session(
+        discharge_text="既往已完成化疗。建议门诊复查血常规。"
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-027",),
+        wrapper_rules=[_wrapper("LX0609-027")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-027",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "non_compliant"
+    assert result.decisions[0].reason_code == "requirement_violated"
+    facts = dict(result.customer_display_facts)["LX0609-027"]
+    assert facts["plan_items"] == {
+        "future_plan": True,
+        "tumor_treatment": False,
+        "follow_up": True,
+    }
+    assert facts["requirement_met"] is False
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("discharge_text", "expected_state", "expected_treatment"),
+    (
+        ("出院后暂不化疗，定期复查。", "non_compliant", False),
+        ("出院后不建议化疗，定期复查。", "non_compliant", False),
+        ("出院后计划化疗，待病理明确后决定。", "non_compliant", False),
+        ("出院后无不适，建议化疗。", "compliant", True),
+        (
+            "建议出院后辅助化疗，必要时根据耐受性调整剂量。",
+            "compliant",
+            True,
+        ),
+        ("出院后必要时化疗。", "non_compliant", False),
+    ),
+)
+async def test_typed_027_does_not_treat_negative_or_pending_treatment_as_plan(
+    monkeypatch,
+    discharge_text,
+    expected_state,
+    expected_treatment,
+):
+    """治疗否定/待定无效，但与治疗无关的否定不影响明确计划。"""
+
+    session = _typed_013_027_session(discharge_text=discharge_text)
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-027",),
+        wrapper_rules=[_wrapper("LX0609-027")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-027",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == expected_state
+    facts = dict(result.customer_display_facts)["LX0609-027"]
+    assert facts["plan_items"]["tumor_treatment"] is expected_treatment
+    assert facts["requirement_met"] is expected_treatment
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio

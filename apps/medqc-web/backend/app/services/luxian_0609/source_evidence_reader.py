@@ -160,6 +160,7 @@ _NATIVE_SOURCE_FIELDS = {
         "anesthetist_sign",
     ),
     "mr_surgery": (
+        "surgery_id",
         "surgery_code",
         "surgery_name",
         "surgeon",
@@ -281,6 +282,7 @@ _NATIVE_SOURCE_FIELDS = {
     "labtest_item_report": (
         "document_id",
         "test_id",
+        "report_id",
         "item_code",
         "item_name",
         "lab_item_name",

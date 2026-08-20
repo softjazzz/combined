@@ -100,6 +100,7 @@ def _typed_029_session(
 ):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
+        truncated = False
         if source_key == "surgery_record":
             if surgery_mode == "error":
                 raise SourceEvidenceQueryError()
@@ -107,6 +108,27 @@ def _typed_029_session(
                 raise SourceEvidenceUnavailable()
             if surgery_mode == "exact":
                 rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            elif surgery_mode == "cross_matched_single":
+                rows = (
+                    {
+                        "document_id": "surgery-document-a",
+                        "surgery_begin_time": "2026-01-01 08:00:00+08",
+                        "surgery_end_time": "2026-01-01 10:00:00+08",
+                        "surgery_code": "17.1300X001",
+                        "surgery_name": "腹腔镜下经腹膜前腹股沟疝补片修补术(TAPP)",
+                    },
+                )
+            elif surgery_mode == "duplicate_document":
+                rows = (
+                    {
+                        "document_id": "surgery-document-a",
+                        "surgery_begin_time": "2026-01-01 08:00:00+08",
+                    },
+                    {
+                        "document_id": "surgery-document-a",
+                        "surgery_begin_time": "2026-01-01 08:00:00+08",
+                    },
+                )
             elif surgery_mode == "typed_datetime":
                 rows = (
                     {
@@ -125,6 +147,11 @@ def _typed_029_session(
                     {"surgery_begin_time": "2026-01-01 08:00:00+08"},
                     {"surgery_begin_time": "2026-01-01 10:00:00+08"},
                 )
+            elif surgery_mode == "multi_same_time":
+                rows = (
+                    {"surgery_begin_time": "2026-01-01 08:00:00+08"},
+                    {"surgery_begin_time": "2026-01-01 08:00:00+08"},
+                )
             elif surgery_mode == "nonexact":
                 rows = ({"surgery_begin_time": "2026-01-01 08:00"},)
             else:
@@ -134,16 +161,69 @@ def _typed_029_session(
                 raise SourceEvidenceQueryError()
             if mr_surgery_mode == "unavailable":
                 raise SourceEvidenceUnavailable()
-            rows = (
-                (
+            if mr_surgery_mode == "truncated":
+                rows = (
                     {
-                        "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
-                        "surgery_name": "连续性肾脏替代治疗",
+                        "surgery_id": "mr-surgery-truncated",
+                        "surgery_begin_datetime": datetime(2026, 1, 1, 10, 0),
+                        "surgical_level": "二级",
                     },
                 )
-                if mr_surgery_mode == "nontraditional"
-                else ()
-            )
+                truncated = True
+            else:
+                rows = (
+                    (
+                        {
+                            "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+                            "surgery_name": "连续性肾脏替代治疗",
+                        },
+                    )
+                    if mr_surgery_mode == "nontraditional"
+                    else ()
+                )
+            if mr_surgery_mode == "multi_traditional":
+                rows = (
+                    {
+                        "surgery_id": "mr-surgery-a",
+                        "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+                        "surgical_level": "二级",
+                    },
+                    {
+                        "surgery_id": "mr-surgery-b",
+                        "surgery_begin_datetime": datetime(2026, 1, 1, 10, 0),
+                        "surgical_level": "二级",
+                    },
+                )
+            if mr_surgery_mode == "single_traditional_shared":
+                rows = (
+                    {
+                        "surgery_id": "mr-surgery-a",
+                        "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+                        "surgery_end_datetime": datetime(2026, 1, 1, 10, 0),
+                        "surgery_code": "17.1300x001",
+                        "surgery_name": "腹腔镜下经腹膜前腹股沟疝补片修补术(TAPP)",
+                        "surgical_level": "二级",
+                    },
+                )
+            if mr_surgery_mode == "matched_plus_extra":
+                rows = (
+                    {
+                        "surgery_id": "mr-surgery-a",
+                        "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+                        "surgery_end_datetime": datetime(2026, 1, 1, 10, 0),
+                        "surgery_code": "17.1300x001",
+                        "surgery_name": "腹腔镜下经腹膜前腹股沟疝补片修补术(TAPP)",
+                        "surgical_level": "二级",
+                    },
+                    {
+                        "surgery_id": "mr-surgery-b",
+                        "surgery_begin_datetime": datetime(2026, 1, 1, 11, 0),
+                        "surgery_end_datetime": datetime(2026, 1, 1, 12, 0),
+                        "surgery_code": "17.1300x002",
+                        "surgery_name": "另一台手术",
+                        "surgical_level": "二级",
+                    },
+                )
         elif source_key == "presurg_summary":
             if summary_mode == "error":
                 raise SourceEvidenceQueryError()
@@ -155,7 +235,7 @@ def _typed_029_session(
         return SnapshotSourceRows.create(
             source_key=source_key,
             rows=rows,
-            truncated=False,
+            truncated=truncated,
             limit_rows=50,
         )
 
@@ -266,7 +346,7 @@ async def test_typed_029_accepts_database_timestamptz_with_nonempty_summary():
 
 
 @pytest.mark.asyncio
-async def test_typed_029_multiple_surgery_rows_with_summary_is_compliant():
+async def test_typed_029_multiple_surgery_rows_with_one_summary_requires_association():
     session = _typed_029_session(
         surgery_mode="multi",
         summary_rows=({"record_content": "术前小结正文完整"},),
@@ -287,8 +367,149 @@ async def test_typed_029_multiple_surgery_rows_with_summary_is_compliant():
         snapshot=session.snapshot,
     )
 
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_same_time_multiple_surgeries_with_one_summary_requires_association():
+    session = _typed_029_session(
+        surgery_mode="multi_same_time",
+        summary_rows=({"record_content": "术前小结正文完整"},),
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_cross_source_extra_surgery_requires_stable_event_coverage():
+    session = _typed_029_session(
+        summary_rows=({"record_content": "术前小结正文完整"},),
+        mr_surgery_mode="multi_traditional",
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_cross_source_matched_code_name_and_times_is_one_event():
+    session = _typed_029_session(
+        surgery_mode="cross_matched_single",
+        summary_rows=({"record_content": "术前小结正文完整"},),
+        mr_surgery_mode="single_traditional_shared",
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
     assert reduced[0].final_state.value == "compliant"
     assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_cross_source_one_to_two_events_requires_association():
+    session = _typed_029_session(
+        surgery_mode="cross_matched_single",
+        summary_rows=({"record_content": "术前小结正文完整"},),
+        mr_surgery_mode="matched_plus_extra",
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_duplicate_surgery_document_is_one_event():
+    session = _typed_029_session(
+        surgery_mode="duplicate_document",
+        summary_rows=({"record_content": "术前小结正文完整"},),
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -321,9 +542,17 @@ async def test_typed_029_multiple_surgeries_and_empty_summary_is_non_compliant()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mr_surgery_mode", ("unavailable", "error"))
-async def test_typed_029_confirmed_surgery_record_overrides_other_source_blocker(
+@pytest.mark.parametrize(
+    ("mr_surgery_mode", "expected_reason"),
+    (
+        ("unavailable", "source_unavailable"),
+        ("error", "source_unavailable"),
+        ("truncated", "source_truncated"),
+    ),
+)
+async def test_typed_029_unavailable_second_surgery_source_blocks_single_event_conclusion(
     mr_surgery_mode: str,
+    expected_reason: str,
 ):
     session = _typed_029_session(
         summary_rows=({"record_content": "本次手术术前评估及准备情况已记录。"},),
@@ -346,7 +575,8 @@ async def test_typed_029_confirmed_surgery_record_overrides_other_source_blocker
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state == "compliant"
+    assert reduced[0].final_state == "data_gap"
+    assert result.decisions[0].reason_code == expected_reason
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -523,6 +753,85 @@ def _typed_session(
         row_reader=reader,
         additional_source_keys=("surgery_record",),
     )
+
+
+def _typed_037_session(*, preanesthesia_content: str):
+    rows_by_source = {
+        "anesthesia_record": ({"anesthesia_method": "全身麻醉"},),
+        "preane_surveil_record": (
+            {
+                "record_time": "2026-07-30 08:00:00",
+                "record_content": preanesthesia_content,
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+        "postane_surveil_record": (
+            {
+                "record_time": "2026-07-31 08:00:00",
+                "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+    }
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-037",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-07-17T06:00:00+08:00",
+        row_reader=reader,
+    )
+
+
+@pytest.mark.asyncio
+async def test_typed_037_public_executor_rejects_local_negated_assessments():
+    session = _typed_037_session(
+        preanesthesia_content=(
+            "未见ASA分级；无气道评估（未作气道评估）；已核对禁食禁饮；"
+            "否认麻醉史；未见麻醉风险告知。"
+        )
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-037",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-037",),
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-037",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "non_compliant"
+    assert dict(result.customer_display_facts)["LX0609-037"] == {
+        "failure_kind": "anesthesia_visit_incomplete",
+        "performed_anesthesia_confirmed": True,
+        "missing_fields_by_visit": {
+            "preanesthesia_visit": [
+                "asa_level",
+                "airway_assessment",
+                "risk_discussion",
+            ]
+        },
+    }
+    assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.parametrize(
@@ -736,6 +1045,149 @@ def test_037_complete_visits_are_compliant(monkeypatch):
 
     assert state == "complete"
     assert missing == {}
+
+
+def test_037_explicitly_negated_preanesthesia_items_are_incomplete(monkeypatch):
+    rows_by_source = {
+        "preane_surveil_record": (
+            {
+                "record_time": "2026-07-30 08:00:00",
+                "record_content": (
+                    "ASA III级，气道评估未完成，已核对禁食禁饮；"
+                    "既往麻醉史无，麻醉风险尚未告知。"
+                ),
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+        "postane_surveil_record": (
+            {
+                "record_time": "2026-07-31 08:00:00",
+                "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+    }
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_visit_rows",
+        lambda _materials, source_key: rows_by_source[source_key],
+    )
+
+    state, missing = surgery_doc._anesthesia_visit_completeness(_RowsOnlyMaterials({}))
+
+    assert state == "incomplete"
+    assert missing == {
+        "preanesthesia_visit": ["airway_assessment", "risk_discussion"]
+    }
+
+
+def test_037_structured_asa_level_overrides_a_negated_text_fragment(monkeypatch):
+    rows_by_source = {
+        "preane_surveil_record": (
+            {
+                "record_time": "2026-07-30 08:00:00",
+                "ASA_level": "III",
+                "record_content": (
+                    "ASA评估未完成；完成气道评估，已核对禁食禁饮；"
+                    "既往麻醉史无，已完成麻醉风险告知。"
+                ),
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+        "postane_surveil_record": (
+            {
+                "record_time": "2026-07-31 08:00:00",
+                "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+    }
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_visit_rows",
+        lambda _materials, source_key: rows_by_source[source_key],
+    )
+
+    state, missing = surgery_doc._anesthesia_visit_completeness(_RowsOnlyMaterials({}))
+
+    assert state == "complete"
+    assert missing == {}
+
+
+def test_037_rejects_structured_placeholders_for_asa_and_signature(monkeypatch):
+    rows_by_source = {
+        "preane_surveil_record": (
+            {
+                "record_time": "2026-07-30 08:00:00",
+                "ASA_level": "-",
+                "record_content": (
+                    "完成气道评估，已核对禁食禁饮；"
+                    "既往麻醉史无，已完成麻醉风险告知。"
+                ),
+                "anesthetist_sign": "未签名",
+            },
+        ),
+        "postane_surveil_record": (
+            {
+                "record_time": "2026-07-31 08:00:00",
+                "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+    }
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_visit_rows",
+        lambda _materials, source_key: rows_by_source[source_key],
+    )
+
+    state, missing = surgery_doc._anesthesia_visit_completeness(_RowsOnlyMaterials({}))
+
+    assert state == "incomplete"
+    assert missing == {
+        "preanesthesia_visit": ["asa_level", "anesthetist_signature"]
+    }
+
+
+def test_037_rejects_front_negation_of_unperformed_preanesthesia_assessment(
+    monkeypatch,
+):
+    rows_by_source = {
+        "preane_surveil_record": (
+            {
+                "record_time": "2026-07-30 08:00:00",
+                "record_content": (
+                    "未进行ASA分级；未行气道评估；已核对禁食禁饮；"
+                    "未询问麻醉史；未进行麻醉风险告知。"
+                ),
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+        "postane_surveil_record": (
+            {
+                "record_time": "2026-07-31 08:00:00",
+                "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+    }
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_visit_rows",
+        lambda _materials, source_key: rows_by_source[source_key],
+    )
+
+    state, missing = surgery_doc._anesthesia_visit_completeness(_RowsOnlyMaterials({}))
+
+    assert state == "incomplete"
+    assert missing == {
+        "preanesthesia_visit": [
+            "asa_level",
+            "airway_assessment",
+            "anesthesia_history",
+            "risk_discussion",
+        ]
+    }
 
 
 def test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_record(

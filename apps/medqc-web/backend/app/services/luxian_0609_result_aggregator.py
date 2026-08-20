@@ -496,6 +496,94 @@ def safe_luxian_0609_customer_display_facts(
             return None
         return values
 
+    def controlled_critical_value_events(
+        value: Any,
+        *,
+        timing_rule: bool,
+    ) -> list[dict[str, Any]] | None:
+        """只投影危急值逐事件结论，拒绝业务/文书标识和原文。"""
+
+        if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
+            return None
+        allowed_outcomes = (
+            {"timely", "overdue", "unhandled", "association_failed"}
+            if timing_rule
+            else {"handled", "unhandled", "association_failed"}
+        )
+        safe_events: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, Mapping):
+                return None
+            names = item.get("critical_item_names")
+            flags = item.get("critical_flags")
+            report_time = item.get("report_time")
+            outcome = item.get("outcome")
+            if (
+                not isinstance(names, (list, tuple))
+                or not 1 <= len(names) <= 20
+                or any(
+                    not isinstance(name, str)
+                    or not name
+                    or len(name) > 40
+                    or "\n" in name
+                    for name in names
+                )
+                or not isinstance(flags, (list, tuple))
+                or len(flags) != len(names)
+                or any(flag not in {"PL", "PH"} for flag in flags)
+                or not isinstance(report_time, str)
+                or not report_time
+                or len(report_time) > 32
+                or "\n" in report_time
+                or outcome not in allowed_outcomes
+            ):
+                return None
+            safe_event: dict[str, Any] = {
+                "critical_item_names": list(names),
+                "critical_flags": list(flags),
+                "report_time": report_time,
+                "outcome": outcome,
+            }
+            disposition_time = item.get("disposition_time")
+            interval_hours = item.get("interval_hours")
+            needs_disposition = outcome in (
+                {"timely", "overdue"} if timing_rule else {"handled"}
+            )
+            allowed_keys = {
+                "critical_item_names",
+                "critical_flags",
+                "report_time",
+                "outcome",
+            }
+            if needs_disposition:
+                if (
+                    not isinstance(disposition_time, str)
+                    or not disposition_time
+                    or len(disposition_time) > 32
+                    or "\n" in disposition_time
+                ):
+                    return None
+                safe_event["disposition_time"] = disposition_time
+                allowed_keys.add("disposition_time")
+            elif disposition_time is not None:
+                return None
+            if timing_rule and outcome in {"timely", "overdue"}:
+                if (
+                    not isinstance(interval_hours, (int, float))
+                    or isinstance(interval_hours, bool)
+                    or not isfinite(float(interval_hours))
+                    or interval_hours < 0
+                ):
+                    return None
+                safe_event["interval_hours"] = round(float(interval_hours), 2)
+                allowed_keys.add("interval_hours")
+            elif interval_hours is not None:
+                return None
+            if set(item) != allowed_keys:
+                return None
+            safe_events.append(safe_event)
+        return safe_events
+
     def controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
         """只投影 064 客户逐台核对所需字段，拒绝原始文书和内部事件标识。"""
 
@@ -635,10 +723,11 @@ def safe_luxian_0609_customer_display_facts(
         },
         "critical_value_timeliness_check": {
             "critical_item_names", "critical_flags", "report_times", "disposition_times",
-            "threshold_hours", "actual_interval_hours",
+            "threshold_hours", "actual_interval_hours", "event_results",
         },
         "critical_value_disposition_presence_check": {
             "critical_item_names", "critical_flags", "report_times", "disposition_times",
+            "event_results",
         },
         "critical_value_result_detail_missing": {
             "lab_report_count", "missing_source",
@@ -747,6 +836,15 @@ def safe_luxian_0609_customer_display_facts(
             return None
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
+            if key == "event_results":
+                controlled_events = controlled_critical_value_events(
+                    raw.get(key),
+                    timing_rule=kind == "critical_value_timeliness_check",
+                )
+                if controlled_events is None:
+                    return None
+                safe[key] = controlled_events
+                continue
             if kind == "physician_handoff_multi_event_check" and key == "events":
                 continue
             value = raw.get(key)

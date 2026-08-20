@@ -55,6 +55,62 @@ class _Engine:
         yield self.connection
 
 
+class _SourceRowsConnection:
+    def __init__(self, rows: list[dict]):
+        self.rows = rows
+        self.calls: list[tuple[str, dict]] = []
+
+    def execute(self, statement, params):
+        self.calls.append((str(statement), dict(params)))
+        return _Rows(self.rows)
+
+
+def test_snapshot_reader_projects_real_mr_surgery_primary_identity(monkeypatch) -> None:
+    """029 只能依赖实际投影到 EvidenceSnapshot 的 mr_surgery 主键去重。"""
+
+    connection = _SourceRowsConnection(
+        [
+            {
+                "surgery_id": "mr-surgery-1",
+                "surgical_level": "二级",
+                "surgery_begin_datetime": "2026-01-01 08:00:00",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "surgery_id",
+            "surgical_level",
+            "surgery_begin_datetime",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key="mr_surgery",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+    )
+
+    assert result.rows[0]["surgery_id"] == "mr-surgery-1"
+    sql, _params = connection.calls[0]
+    assert '"surgery_id"' in sql
+
+
 class _SeverityConnection:
     def __init__(self, rows: list[dict]):
         self.rows = rows

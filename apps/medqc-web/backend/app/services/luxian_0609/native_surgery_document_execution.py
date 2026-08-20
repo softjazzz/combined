@@ -22,7 +22,10 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .fact_schema import Assertion, EventStatus
 from .native_execution import build_luxian_0609_native_result
 from .source_manifest import QueryStatus
-from .source_evidence_reader import has_qualified_traditional_surgery_row
+from .source_evidence_reader import (
+    has_qualified_traditional_surgery_row,
+)
+from .surgery_event_association import count_associated_performed_surgery_events
 from .surgery_applicability import resolve_surgery_applicability
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
@@ -105,6 +108,13 @@ _MIN_SUBSTANTIVE_CHARS = 16
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _PLACEHOLDER_PATTERN = re.compile(
     r"^(?:无|暂无|空|空白|待填|未填|模板|空模板|\[\]|\{\}|-)+$",
+    re.IGNORECASE,
+)
+_STRUCTURED_ABSENT_VALUE_PATTERN = re.compile(
+    r"^(?:-|—|--|/|\\|无|暂无|空|空白|不详|未知|"
+    r"待(?:填|填写|补充|完善|评估|签名|签字|记录|处理)?|"
+    r"未(?:填|填写|补充|完成|评估|签名|签字|记录|进行|行)?|"
+    r"尚未(?:完成|评估|签名|签字|记录|进行|填写)?)$",
     re.IGNORECASE,
 )
 _ANESTHESIA_CONSENT_PATTERN = re.compile(
@@ -734,11 +744,30 @@ def _row_has_any(
     *,
     structured_fields: Sequence[str] = (),
     text_markers: Sequence[str] = (),
+    negative_text_patterns: Sequence[str] = (),
 ) -> bool:
-    if any(_clean(row.get(field)) for field in structured_fields):
+    """仅接受结构化非空值或未被局部否定的文本字段事实。"""
+
+    if any(
+        (value := _clean(row.get(field)))
+        and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(value)
+        for field in structured_fields
+    ):
         return True
     text = _row_text(row)
-    return bool(text) and any(marker in text for marker in text_markers)
+    if not text:
+        return False
+    # 不能将一处“未完成/未告知”扩散到同一文书的所有字段；按最小分句
+    # 核对每一个标记，并只拒绝该标记所在分句的明确缺失表述。
+    segments = tuple(
+        segment.strip() for segment in re.split(r"[。；;，,\n]+", text) if segment.strip()
+    )
+    return any(
+        marker in segment
+        and not any(re.search(pattern, segment) for pattern in negative_text_patterns)
+        for marker in text_markers
+        for segment in segments
+    )
 
 
 def _anesthesia_visit_completeness(
@@ -759,15 +788,46 @@ def _anesthesia_visit_completeness(
     post = rows_by_source["postane_surveil_record"][0]
     pre_checks = {
         "asa_level": _row_has_any(
-            pre, structured_fields=("ASA_level", "asa_level"), text_markers=("ASA",)
+            pre,
+            structured_fields=("ASA_level", "asa_level"),
+            text_markers=("ASA",),
+            negative_text_patterns=(
+                r"ASA(?:分级|评估)?(?:尚未|未)(?:完成|评估|分级|记录|填写)",
+                r"(?:尚未|未|待)(?:完成|进行|行|填写|记录|评估|分级)?\s*ASA(?:分级|评估)?",
+                r"(?:无|未见|未作|未行|未进行)\s*ASA(?:分级|评估)?",
+                r"ASA(?:分级|评估)?\s*(?:无|未见|未作|未行|未进行)",
+            ),
         ),
-        "airway_assessment": _row_has_any(pre, text_markers=("气道",)),
+        "airway_assessment": _row_has_any(
+            pre,
+            text_markers=("气道",),
+            negative_text_patterns=(
+                r"气道(?:评估)?(?:尚未|未)(?:完成|评估|进行|记录|填写)",
+                r"气道(?:评估)?(?:缺少|缺失|不全|不完整)",
+                r"(?:尚未|未|待)(?:完成|进行|行|填写|记录|评估)?\s*气道(?:评估)?",
+                r"(?:无|未见|未作|未行|未进行)\s*气道(?:评估)?",
+                r"气道(?:评估)?\s*(?:无|未见|未作|未行|未进行)",
+            ),
+        ),
         "fasting_status": _row_has_any(pre, text_markers=("禁食", "禁饮")),
         "anesthesia_history": _row_has_any(
-            pre, text_markers=("麻醉史", "麻醉手术史")
+            pre,
+            text_markers=("麻醉史", "麻醉手术史"),
+            negative_text_patterns=(
+                r"(?:麻醉史|麻醉手术史)(?:尚未|未)(?:询问|记录|评估)",
+                r"(?:尚未|未|待)(?:完成|进行|行|询问|记录|评估)?\s*(?:麻醉史|麻醉手术史)",
+            ),
         ),
         "risk_discussion": _row_has_any(
-            pre, text_markers=("风险告知", "麻醉风险", "围术期风险")
+            pre,
+            text_markers=("风险告知", "麻醉风险", "围术期风险"),
+            negative_text_patterns=(
+                r"(?:麻醉风险|围术期风险)(?:尚未|未)(?:告知|讨论|评估|记录)",
+                r"风险告知(?:尚未|未)(?:完成|进行|记录)",
+                r"(?:尚未|未|待)(?:完成|进行|行|告知|讨论|评估|记录)?\s*(?:麻醉风险|围术期风险|风险告知)",
+                r"(?:无|未见|未作|未行|未进行)\s*(?:麻醉风险|围术期风险|风险告知)",
+                r"(?:麻醉风险|围术期风险|风险告知)\s*(?:无|未见|未作|未行|未进行)",
+            ),
         ),
         "anesthetist_signature": _row_has_any(
             pre,
@@ -1293,10 +1353,11 @@ async def _typed_029_outcome(
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
 ) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
-    """029：严格已实施手术事实触发后，只按术前小结正文存在性判定。"""
+    """029：确认手术事件覆盖后，核对每台手术的术前小结存在性。"""
 
-    # 029 的当前口径是纯存在性规则：严格手术 FactV2 触发后，只看术前
-    # 小结正文是否为非空、非占位值。模型、标题、时间和长度均不得参与判定。
+    # 029 是纯存在性规则：已证明仅一台手术时，只看术前小结正文是否为
+    # 非空、非占位值。多台手术缺少稳定关联时不得让任一小结覆盖全部事件。
+    # 模型、标题、时间和长度均不得参与正文存在性判定。
     applicability = resolve_surgery_applicability(
         snapshot=snapshot,
         materials=materials,
@@ -1351,6 +1412,26 @@ async def _typed_029_outcome(
         return (
             _SurgeryDocumentOutcome(
                 "LX0609-029", "data_gap", "preop_summary_source_unavailable", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    performed_event_count, count_reason = count_associated_performed_surgery_events(
+        materials
+    )
+    if performed_event_count is None:
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", count_reason, "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    if performed_event_count > 1:
+        # 当前资料合同没有稳定的“术前小结 ↔ 单台已实施手术”关联字段；
+        # 因而一份或多份非空小结都不能覆盖多台手术。完全无小结已在上方
+        # 由 complete-empty 来源明确证明为逐台缺失，才允许输出不合规。
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", "association_failed", "program"
             ),
             0, 0, 0, 0, 0.0,
         )

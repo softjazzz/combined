@@ -2142,6 +2142,12 @@ def customer_finding_from_controlled_facts(
                 f"已读取到检验报告 {facts.get('lab_report_count')} 条，但检验结果明细未同步，"
                 "无法取得 PL/PH 危急值标志及报告时间。"
             )
+        event_results = facts.get("event_results")
+        if isinstance(event_results, list) and event_results and all(
+            isinstance(item, Mapping) and item.get("outcome") == "association_failed"
+            for item in event_results
+        ):
+            return "处置记录存在，但无法与各次危急值报告唯一对应，暂无法核对。"
         items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
         reports = joined("report_times")
         dispositions = joined("disposition_times")

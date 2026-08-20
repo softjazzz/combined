@@ -23,6 +23,13 @@ class CriticalValueItem:
     marker_text: str
     display_flag: str
     report_time: datetime | None
+    event_key: str | None = None
+
+
+@dataclass(frozen=True)
+class CriticalValueDisposition:
+    disposition_time: datetime
+    event_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -32,7 +39,7 @@ class CriticalValueInput:
     lab_report_count: int
     lab_detail_count: int
     items: tuple[CriticalValueItem, ...]
-    disposition_times: tuple[datetime, ...]
+    dispositions: tuple[CriticalValueDisposition, ...]
 
 
 @dataclass(frozen=True)
@@ -43,24 +50,122 @@ class CriticalValueOutcome:
     display_facts: Mapping[str, object] | None = None
 
 
+def _critical_markers(item: CriticalValueItem) -> frozenset[str]:
+    """将字段或正文中的危急值标记归一化；同一项目多标记保留为冲突。"""
+
+    markers: set[str] = set()
+    for value in item.flag_values:
+        upper = value.upper()
+        for marker in _CRITICAL_MARKERS:
+            if marker == upper or marker in upper.split():
+                markers.add(marker)
+    marker_text = item.marker_text.upper()
+    for marker in _CRITICAL_MARKERS:
+        if f"（{marker}）" in marker_text or f"({marker})" in marker_text:
+            markers.add(marker)
+    return frozenset(markers)
+
+
+def _critical_display_flag(item: CriticalValueItem) -> str | None:
+    markers = _critical_markers(item)
+    return next(iter(markers)) if len(markers) == 1 else None
+
+
 def _is_critical_item(item: CriticalValueItem) -> bool:
-    normalized_flags = tuple(value.upper() for value in item.flag_values)
-    return (
-        any(
-            marker == value or marker in value.split()
-            for value in normalized_flags
-            for marker in _CRITICAL_MARKERS
+    return bool(_critical_markers(item))
+
+
+@dataclass(frozen=True)
+class _CriticalValueEvent:
+    items: tuple[CriticalValueItem, ...]
+    event_key: str | None
+    report_time: datetime | None
+
+
+def _events(
+    critical_items: tuple[CriticalValueItem, ...],
+) -> tuple[tuple[_CriticalValueEvent, ...], bool]:
+    """按检验报告/危急值事件归并项目；多事件不能靠时间猜测。"""
+
+    keyed: dict[str, list[CriticalValueItem]] = {}
+    unkeyed: list[CriticalValueItem] = []
+    for item in critical_items:
+        if item.event_key:
+            keyed.setdefault(item.event_key, []).append(item)
+        else:
+            unkeyed.append(item)
+
+    events: list[_CriticalValueEvent] = []
+    for event_key, grouped_items in keyed.items():
+        report_times = {item.report_time for item in grouped_items}
+        events.append(
+            _CriticalValueEvent(
+                items=tuple(grouped_items),
+                event_key=event_key,
+                report_time=(next(iter(report_times)) if len(report_times) == 1 else None),
+            )
         )
-        or any(marker in item.marker_text.upper() for marker in ("（PL）", "（PH）", "(PL)", "(PH)"))
+    if len(critical_items) == 1 and unkeyed:
+        events.append(
+            _CriticalValueEvent(
+                items=(unkeyed[0],),
+                event_key=None,
+                report_time=unkeyed[0].report_time,
+            )
+        )
+    else:
+        events.extend(
+            _CriticalValueEvent(
+                items=(item,),
+                event_key=None,
+                report_time=item.report_time,
+            )
+            for item in unkeyed
+        )
+
+    # 同一业务键下报告时间冲突，或多事件缺业务键，均不能安全关联处置。
+    association_unproven = any(
+        event.event_key is None for event in events
+    ) and len(events) > 1
+    association_unproven = association_unproven or any(
+        len({item.report_time for item in event.items}) > 1
+        for event in events
     )
+    return tuple(events), association_unproven
+
+
+def _event_display(
+    *,
+    event: _CriticalValueEvent,
+    disposition_time: datetime | None,
+    outcome: str,
+    interval_hours: float | None = None,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        "critical_item_names": [item.item_name[:40] for item in event.items],
+        "critical_flags": [
+            flag
+            for item in event.items
+            for flag in (_critical_display_flag(item),)
+            if flag is not None
+        ],
+        "outcome": outcome,
+    }
+    if event.report_time is not None:
+        result["report_time"] = event.report_time.isoformat(sep=" ")
+    if disposition_time is not None:
+        result["disposition_time"] = disposition_time.isoformat(sep=" ")
+    if interval_hours is not None:
+        result["interval_hours"] = round(interval_hours, 2)
+    return result
 
 
 def _display_facts(
     *,
     rule_id: str,
     critical_items: tuple[CriticalValueItem, ...],
-    disposition_times: tuple[datetime, ...],
-    intervals: tuple[float | None, ...],
+    dispositions: tuple[CriticalValueDisposition, ...],
+    event_results: tuple[dict[str, object], ...],
 ) -> dict[str, object]:
     facts: dict[str, object] = {
         "verification_kind": (
@@ -69,18 +174,28 @@ def _display_facts(
             else "critical_value_disposition_presence_check"
         ),
         "critical_item_names": [item.item_name[:40] for item in critical_items],
-        "critical_flags": [item.display_flag.upper() for item in critical_items],
+        "critical_flags": [
+            flag
+            for item in critical_items
+            for flag in (_critical_display_flag(item),)
+            if flag is not None
+        ],
         "report_times": [
             item.report_time.isoformat(sep=" ")
             for item in critical_items
             if item.report_time is not None
         ],
-        "disposition_times": [value.isoformat(sep=" ") for value in disposition_times],
+        "disposition_times": [
+            value.disposition_time.isoformat(sep=" ") for value in dispositions
+        ],
+        "event_results": list(event_results),
     }
     if rule_id == "LX0609-052":
         facts["threshold_hours"] = 6
         facts["actual_interval_hours"] = [
-            round(value, 2) for value in intervals if isinstance(value, (int, float))
+            item["interval_hours"]
+            for item in event_results
+            if isinstance(item.get("interval_hours"), (int, float))
         ]
     return facts
 
@@ -99,11 +214,15 @@ def evaluate_critical_value_rules(
         rule_id for rule_id in CRITICAL_VALUE_RULE_IDS if rule_id in set(requested)
     )
     critical_items = tuple(item for item in inputs.items if _is_critical_item(item))
-    report_times = tuple(item.report_time for item in critical_items)
+    critical_marker_conflict = any(
+        _critical_display_flag(item) is None for item in critical_items
+    )
+    events, event_association_unproven = _events(critical_items)
+    report_times = tuple(event.report_time for event in events)
     outcomes: list[CriticalValueOutcome] = []
 
     for rule_id in selected:
-        intervals: tuple[float | None, ...] = ()
+        event_results: tuple[dict[str, object], ...] = ()
         display_facts: Mapping[str, object] | None = None
         if inputs.lab_item_error:
             final_state, reason_code = "data_gap", inputs.lab_item_error
@@ -116,45 +235,137 @@ def evaluate_critical_value_rules(
             }
         elif not critical_items:
             final_state, reason_code = "not_applicable", "trigger_absent_complete"
+        elif critical_marker_conflict:
+            final_state, reason_code = "data_gap", "required_field_missing"
         elif inputs.crisis_error:
             final_state, reason_code = "data_gap", inputs.crisis_error
         elif any(value is None for value in report_times):
             final_state, reason_code = "data_gap", "authoritative_time_missing"
-        elif rule_id == "LX0609-053":
-            handled = all(
-                any(item >= report_time for item in inputs.disposition_times)
-                for report_time in report_times
-                if report_time is not None
-            )
-            final_state = "compliant" if handled else "non_compliant"
-            reason_code = (
-                "requirement_satisfied" if handled else "required_document_missing"
+        elif event_association_unproven and inputs.dispositions:
+            final_state, reason_code = "data_gap", "association_failed"
+            event_results = tuple(
+                _event_display(
+                    event=event,
+                    disposition_time=None,
+                    outcome="association_failed",
+                )
+                for event in events
             )
         else:
-            intervals = tuple(
-                min(
-                    (
-                        (item - report_time).total_seconds() / 3600
-                        for item in inputs.disposition_times
-                        if item >= report_time
-                    ),
-                    default=None,
-                )
-                for report_time in report_times
-                if report_time is not None
-            )
-            handled = bool(intervals) and all(
-                value is not None and value <= 6 for value in intervals
-            )
-            final_state = "compliant" if handled else "non_compliant"
-            reason_code = "requirement_within_threshold" if handled else "threshold_exceeded"
+            keyed_events = {
+                event.event_key: event
+                for event in events
+                if event.event_key is not None
+            }
+            dispositions_by_event: dict[str | None, list[datetime]] = {
+                event.event_key: [] for event in events
+            }
+            unmatched_dispositions = False
+            for disposition in inputs.dispositions:
+                if len(events) == 1 and disposition.event_key is None:
+                    dispositions_by_event[events[0].event_key].append(
+                        disposition.disposition_time
+                    )
+                elif disposition.event_key in keyed_events:
+                    dispositions_by_event[disposition.event_key].append(
+                        disposition.disposition_time
+                    )
+                else:
+                    unmatched_dispositions = True
 
-        if critical_items and display_facts is None:
+            if unmatched_dispositions:
+                final_state, reason_code = "data_gap", "association_failed"
+                event_results = tuple(
+                    _event_display(
+                        event=event,
+                        disposition_time=None,
+                        outcome="association_failed",
+                    )
+                    for event in events
+                )
+            elif rule_id == "LX0609-053":
+                event_results = tuple(
+                    _event_display(
+                        event=event,
+                        disposition_time=min(
+                            (
+                                value
+                                for value in dispositions_by_event[event.event_key]
+                                if event.report_time is not None and value >= event.report_time
+                            ),
+                            default=None,
+                        ),
+                        outcome=(
+                            "handled"
+                            if any(
+                                event.report_time is not None and value >= event.report_time
+                                for value in dispositions_by_event[event.event_key]
+                            )
+                            else "unhandled"
+                        ),
+                    )
+                    for event in events
+                )
+                handled = bool(event_results) and all(
+                    item["outcome"] == "handled" for item in event_results
+                )
+                final_state = "compliant" if handled else "non_compliant"
+                reason_code = (
+                    "requirement_satisfied" if handled else "required_document_missing"
+                )
+            else:
+                event_results = tuple(
+                    _event_display(
+                        event=event,
+                        disposition_time=(
+                            min(
+                                (
+                                    value
+                                    for value in dispositions_by_event[event.event_key]
+                                    if event.report_time is not None and value >= event.report_time
+                                ),
+                                default=None,
+                            )
+                        ),
+                        interval_hours=(
+                            min(
+                                (
+                                    (value - event.report_time).total_seconds() / 3600
+                                    for value in dispositions_by_event[event.event_key]
+                                    if event.report_time is not None and value >= event.report_time
+                                ),
+                                default=None,
+                            )
+                        ),
+                        outcome=(
+                            "timely"
+                            if any(
+                                event.report_time is not None
+                                and 0 <= (value - event.report_time).total_seconds() / 3600 <= 6
+                                for value in dispositions_by_event[event.event_key]
+                            )
+                            else "overdue"
+                            if any(
+                                event.report_time is not None and value >= event.report_time
+                                for value in dispositions_by_event[event.event_key]
+                            )
+                            else "unhandled"
+                        ),
+                    )
+                    for event in events
+                )
+                handled = bool(event_results) and all(
+                    item["outcome"] == "timely" for item in event_results
+                )
+                final_state = "compliant" if handled else "non_compliant"
+                reason_code = "requirement_within_threshold" if handled else "threshold_exceeded"
+
+        if critical_items and display_facts is None and not critical_marker_conflict:
             display_facts = _display_facts(
                 rule_id=rule_id,
                 critical_items=critical_items,
-                disposition_times=inputs.disposition_times,
-                intervals=intervals,
+                dispositions=inputs.dispositions,
+                event_results=event_results,
             )
         outcomes.append(
             CriticalValueOutcome(
@@ -172,6 +383,7 @@ __all__ = [
     "CRITICAL_VALUE_SOURCE_KEYS",
     "CriticalValueInput",
     "CriticalValueItem",
+    "CriticalValueDisposition",
     "CriticalValueOutcome",
     "evaluate_critical_value_rules",
 ]

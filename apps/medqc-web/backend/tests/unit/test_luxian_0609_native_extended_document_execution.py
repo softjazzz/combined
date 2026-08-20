@@ -2421,6 +2421,14 @@ async def test_critical_value_rules_use_one_public_execution_with_timely_disposi
         "disposition_times": ["2026-06-01 16:00:00"],
         "threshold_hours": 6,
         "actual_interval_hours": [2.0],
+        "event_results": [{
+            "critical_item_names": ["血钾"],
+            "critical_flags": ["PH"],
+            "report_time": "2026-06-01 14:00:00",
+            "disposition_time": "2026-06-01 16:00:00",
+            "interval_hours": 2.0,
+            "outcome": "timely",
+        }],
     }
     assert display["LX0609-053"] == {
         "verification_kind": "critical_value_disposition_presence_check",
@@ -2428,6 +2436,13 @@ async def test_critical_value_rules_use_one_public_execution_with_timely_disposi
         "critical_flags": ["PH"],
         "report_times": ["2026-06-01 14:00:00"],
         "disposition_times": ["2026-06-01 16:00:00"],
+        "event_results": [{
+            "critical_item_names": ["血钾"],
+            "critical_flags": ["PH"],
+            "report_time": "2026-06-01 14:00:00",
+            "disposition_time": "2026-06-01 16:00:00",
+            "outcome": "handled",
+        }],
     }
     assert all(item.fact_refs for item in result.decisions)
     assert result.llm_call_count == 0
@@ -2435,6 +2450,382 @@ async def test_critical_value_rules_use_one_public_execution_with_timely_disposi
     assert result.completion_tokens == 0
     assert result.total_tokens == 0
     assert result.api_time == 0.0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_disposition_cannot_cover_two_distinct_reports() -> None:
+    """同一处置记录不能被跨报告的两个危急值重复认领。"""
+
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "test_id": "LAB-08",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 08:00:00",
+                },
+                {
+                    "test_id": "LAB-09",
+                    "item_name": "血钙",
+                    "result_flag": "PL",
+                    "report_time": "2026-06-01 09:00:00",
+                },
+            ),
+            "crisis_value_record": ({
+                "test_id": "LAB-08",
+                "record_time": "2026-06-01 10:00:00",
+            },),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.NON_COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "threshold_exceeded",
+        "required_document_missing",
+    ]
+    expected_event_results = {
+        "LX0609-052": [
+            {
+                "critical_item_names": ["血钾"],
+                "critical_flags": ["PH"],
+                "report_time": "2026-06-01 08:00:00",
+                "disposition_time": "2026-06-01 10:00:00",
+                "outcome": "timely",
+                "interval_hours": 2.0,
+            },
+            {
+                "critical_item_names": ["血钙"],
+                "critical_flags": ["PL"],
+                "report_time": "2026-06-01 09:00:00",
+                "outcome": "unhandled",
+            },
+        ],
+        "LX0609-053": [
+            {
+                "critical_item_names": ["血钾"],
+                "critical_flags": ["PH"],
+                "report_time": "2026-06-01 08:00:00",
+                "disposition_time": "2026-06-01 10:00:00",
+                "outcome": "handled",
+            },
+            {
+                "critical_item_names": ["血钙"],
+                "critical_flags": ["PL"],
+                "report_time": "2026-06-01 09:00:00",
+                "outcome": "unhandled",
+            },
+        ],
+    }
+    for rule_id, expected in expected_event_results.items():
+        assert dict(result.customer_display_facts)[rule_id]["event_results"] == expected
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_single_report_rejects_explicitly_mismatched_disposition() -> None:
+    """单事件只兼容无业务键的旧处置，不能接受明确属于另一报告的记录。"""
+
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": ({
+                "test_id": "LAB-A",
+                "item_name": "血钾",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 08:00:00",
+            },),
+            "crisis_value_record": ({
+                "test_id": "LAB-B",
+                "record_time": "2026-06-01 10:00:00",
+            },),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "association_failed",
+        "association_failed",
+    ]
+    for rule_id in ("LX0609-052", "LX0609-053"):
+        assert dict(result.customer_display_facts)[rule_id]["event_results"] == [{
+            "critical_item_names": ["血钾"],
+            "critical_flags": ["PH"],
+            "report_time": "2026-06-01 08:00:00",
+            "outcome": "association_failed",
+        }]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_same_report_items_can_share_one_disposition() -> None:
+    """同一检验报告的多个危急项目属于一个事件，可共享其处置记录。"""
+
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {"test_id": "LAB-ONE", "item_name": "血钾", "result_flag": "PH", "report_time": "2026-06-01 08:00:00"},
+                {"test_id": "LAB-ONE", "item_name": "血钙", "result_flag": "PL", "report_time": "2026-06-01 08:00:00"},
+            ),
+            "crisis_value_record": ({"test_id": "LAB-ONE", "record_time": "2026-06-01 10:00:00"},),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "requirement_within_threshold",
+        "requirement_satisfied",
+    ]
+    for rule_id in ("LX0609-052", "LX0609-053"):
+        facts = dict(result.customer_display_facts)[rule_id]
+        assert facts["event_results"][0]["critical_item_names"] == ["血钾", "血钙"]
+        assert facts["event_results"][0]["report_time"] == "2026-06-01 08:00:00"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_report_id_overrides_shared_test_id_for_association() -> None:
+    """同一申请下多份报告必须优先按报告标识逐份核对。"""
+
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "test_id": "ORDER-1",
+                    "report_id": "REPORT-A",
+                    "document_id": "LAB-DOC-A",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 08:00:00",
+                },
+                {
+                    "test_id": "ORDER-1",
+                    "report_id": "REPORT-B",
+                    "document_id": "LAB-DOC-B",
+                    "item_name": "血钙",
+                    "result_flag": "PL",
+                    "report_time": "2026-06-01 08:00:00",
+                },
+            ),
+            "crisis_value_record": (
+                {
+                    "test_id": "ORDER-1",
+                    "report_id": "REPORT-A",
+                    "document_id": "CRISIS-DOC-A",
+                    "record_time": "2026-06-01 10:00:00",
+                },
+            ),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.NON_COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "threshold_exceeded",
+        "required_document_missing",
+    ]
+    for rule_id in ("LX0609-052", "LX0609-053"):
+        assert [
+            item["outcome"]
+            for item in dict(result.customer_display_facts)[rule_id]["event_results"]
+        ] == (["timely", "unhandled"] if rule_id == "LX0609-052" else ["handled", "unhandled"])
+
+
+@pytest.mark.asyncio
+async def test_critical_value_text_marker_survives_canonical_customer_projection() -> None:
+    """正文中的 (PL/PH) 标记必须被归一化，不能让 Canonical 拒绝结果。"""
+
+    _snapshot, _materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "item_name": "血钾",
+                    "record_content": "检验结果提示危急值（PH）",
+                    "report_time": "2026-06-01 14:00:00",
+                },
+            ),
+        },
+    )
+
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+    )
+
+    assert [item["status"] for item in canonical] == ["non_compliant", "non_compliant"]
+    for item in canonical:
+        assert item["customer_display_facts"]["critical_flags"] == ["PH"]
+        assert item["customer_display_facts"]["event_results"][0]["critical_flags"] == ["PH"]
+
+
+@pytest.mark.asyncio
+async def test_critical_value_conflicting_markers_are_data_gap_without_canonical_failure() -> None:
+    """同一结果出现相互冲突标记时只能待核，不能投影为空标记。"""
+
+    _snapshot, _materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "record_content": "同一结果同时标记（PL）",
+                    "report_time": "2026-06-01 14:00:00",
+                },
+            ),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "required_field_missing",
+        "required_field_missing",
+    ]
+    assert execution.customer_display_facts == ()
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+    )
+    assert [item["status"] for item in canonical] == ["data_gap", "data_gap"]
+
+
+@pytest.mark.asyncio
+async def test_critical_value_ignores_crisis_document_id_as_cross_table_key() -> None:
+    """危急值处置文书自身 ID 不是跨表业务键，单事件按无键兼容规则核对。"""
+
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "document_id": "LAB-DOCUMENT-1",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 08:00:00",
+                },
+            ),
+            "crisis_value_record": (
+                {
+                    "document_id": "CRISIS-DOCUMENT-OTHER",
+                    "record_time": "2026-06-01 10:00:00",
+                },
+            ),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "requirement_within_threshold",
+        "requirement_satisfied",
+    ]
+    assert all(
+        item["outcome"] in {"timely", "handled"}
+        for facts in dict(result.customer_display_facts).values()
+        for item in facts["event_results"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_critical_value_multi_report_without_disposition_key_is_data_gap() -> None:
+    """多报告时处置记录缺少关联键，不得按时间把它分配给某个报告。"""
+
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {"test_id": "LAB-08", "item_name": "血钾", "result_flag": "PH", "report_time": "2026-06-01 08:00:00"},
+                {"test_id": "LAB-09", "item_name": "血钙", "result_flag": "PL", "report_time": "2026-06-01 09:00:00"},
+            ),
+            "crisis_value_record": ({"record_time": "2026-06-01 10:00:00"},),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "association_failed",
+        "association_failed",
+    ]
+    for rule_id in ("LX0609-052", "LX0609-053"):
+        assert [
+            item["outcome"]
+            for item in dict(result.customer_display_facts)[rule_id]["event_results"]
+        ] == ["association_failed", "association_failed"]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_association_failure_is_not_rendered_as_matched_or_missing() -> None:
+    """关联失败必须明确告知存在处置、但不能唯一对应，不能覆盖成旧的存在性文案。"""
+
+    _snapshot, _materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "test_id": "LAB-08",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 08:00:00",
+                },
+                {
+                    "test_id": "LAB-09",
+                    "item_name": "血钙",
+                    "result_flag": "PL",
+                    "report_time": "2026-06-01 09:00:00",
+                },
+            ),
+            "crisis_value_record": ({"record_time": "2026-06-01 10:00:00"},),
+        },
+    )
+
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+    )
+
+    assert [item["status"] for item in canonical] == ["data_gap", "data_gap"]
+    assert [item["reason_code"] for item in canonical] == [
+        "association_failed",
+        "association_failed",
+    ]
+    assert [item["findings"] for item in canonical] == [
+        "处置记录存在，但无法与各次危急值报告唯一对应，暂无法核对。",
+        "处置记录存在，但无法与各次危急值报告唯一对应，暂无法核对。",
+    ]
 
 
 @pytest.mark.asyncio
@@ -2510,6 +2901,14 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
             "disposition_times": ["2026-06-01 16:00:00"],
             "threshold_hours": 6,
             "actual_interval_hours": [2.0],
+            "event_results": [{
+                "critical_item_names": ["血钾"],
+                "critical_flags": ["PH"],
+                "report_time": "2026-06-01 14:00:00",
+                "disposition_time": "2026-06-01 16:00:00",
+                "interval_hours": 2.0,
+                "outcome": "timely",
+            }],
         },
         {
             "verification_kind": "critical_value_disposition_presence_check",
@@ -2517,6 +2916,13 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
             "critical_flags": ["PH"],
             "report_times": ["2026-06-01 14:00:00"],
             "disposition_times": ["2026-06-01 16:00:00"],
+            "event_results": [{
+                "critical_item_names": ["血钾"],
+                "critical_flags": ["PH"],
+                "report_time": "2026-06-01 14:00:00",
+                "disposition_time": "2026-06-01 16:00:00",
+                "outcome": "handled",
+            }],
         },
     ]
     assert execution.llm_call_count == 0
@@ -2640,8 +3046,8 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
                 ),
             },
             frozenset(),
-            (CustomerFinalState.NON_COMPLIANT, CustomerFinalState.COMPLIANT),
-            ("threshold_exceeded", "requirement_satisfied"),
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("association_failed", "association_failed"),
         ),
     ],
 )

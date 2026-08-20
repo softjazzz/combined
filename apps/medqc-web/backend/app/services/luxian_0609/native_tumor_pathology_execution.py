@@ -139,11 +139,21 @@ _CHEMOTHERAPY_RELATIVE_DATE_PATTERN = re.compile(r"(?:今日|当日)")
 _CHEMOTHERAPY_EXPLICIT_DATE_PATTERN = re.compile(
     r"(?P<year>\d{4})[-年/](?P<month>\d{1,2})[-月/](?P<day>\d{1,2})日?"
 )
+_CLINICAL_CLAUSE_SEPARATOR = re.compile(r"[\r\n。；;！？!?]+")
 _DISCHARGE_PLAN_FUTURE_PATTERN = re.compile(r"(?:后续|出院后|继续|定期|计划|建议|门诊)")
 _DISCHARGE_PLAN_TREATMENT_PATTERN = re.compile(
     r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤|治疗计划)"
 )
 _DISCHARGE_PLAN_FOLLOW_UP_PATTERN = re.compile(r"(?:随访|复查|门诊)")
+_DISCHARGE_PLAN_NEGATIVE_TREATMENT_PATTERN = re.compile(
+    r"(?:暂不|不予|无需|未予|取消|停止|拒绝|不建议|不考虑|不行|不实施).{0,8}"
+    r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤)"
+)
+_DISCHARGE_PLAN_PENDING_TREATMENT_PATTERN = re.compile(
+    r"(?:待病理|待病检|待结果|待明确)"
+    r"|(?:必要时|酌情|视情况|视病情).{0,8}"
+    r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤)"
+)
 
 _MALIGNANT_FACT_TYPES = frozenset(
     {
@@ -912,6 +922,90 @@ def _chemotherapy_time_state(
     return "unknown"
 
 
+def _course_record_text(row: Mapping[str, Any]) -> str:
+    return _clean(
+        row.get("record_content") or row.get("content") or row.get("assembled_text")
+    )
+
+
+def _project_course_clause(
+    row: Mapping[str, Any], clause: str
+) -> Mapping[str, Any]:
+    projected = dict(row)
+    # _row_text 优先取 content；覆盖后确保比较仅使用当前片段。
+    projected["content"] = clause
+    projected["record_content"] = clause
+    projected["assembled_text"] = clause
+    return projected
+
+
+def _course_event_candidates(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    target_drug_names: Sequence[str],
+) -> tuple[Mapping[str, Any], ...]:
+    """单药病程可跨相邻句；多药同篇病程必须有可分离的局部片段。"""
+
+    normalized_targets = tuple(
+        value
+        for value in {
+            _normalized_comparison_text(drug_name) for drug_name in target_drug_names
+        }
+        if value
+    )
+    candidates: list[Mapping[str, Any]] = []
+    for row in rows:
+        raw_text = _course_record_text(row)
+        if not raw_text:
+            continue
+        normalized_row = _normalized_comparison_text(raw_text)
+        matched_targets = tuple(
+            target for target in normalized_targets if target in normalized_row
+        )
+        if len(matched_targets) == 1:
+            candidates.append(_project_course_clause(row, raw_text))
+            continue
+        if len(matched_targets) < 2:
+            continue
+        clauses = tuple(
+            normalized_clause
+            for clause in _CLINICAL_CLAUSE_SEPARATOR.split(raw_text)
+            if (normalized_clause := _clean(clause))
+        )
+        clause_targets = tuple(
+            tuple(
+                target
+                for target in matched_targets
+                if target in _normalized_comparison_text(clause)
+            )
+            for clause in clauses
+        )
+        target_clause_indexes = tuple(
+            index for index, targets in enumerate(clause_targets) if targets
+        )
+        for index in target_clause_indexes:
+            targets = clause_targets[index]
+            # 同一句同时提及多种药物时，不能猜测剂量/用法属于其中哪一种。
+            if len(targets) != 1:
+                candidates.append(_project_course_clause(row, clauses[index]))
+                continue
+            next_target_index = next(
+                (
+                    candidate_index
+                    for candidate_index in target_clause_indexes
+                    if candidate_index > index
+                ),
+                len(clauses),
+            )
+            # 一个药名句可吸收紧随的详情句，但绝不跨到下一种目标药名。
+            candidates.append(
+                _project_course_clause(
+                    row, "。".join(clauses[index:next_target_index])
+                )
+            )
+    return tuple(candidates)
+
+
 def _typed_chemotherapy_comparison(
     *,
     orders: SourceMaterial,
@@ -932,10 +1026,7 @@ def _typed_chemotherapy_comparison(
     )
     if not chemotherapy_orders:
         return "data_gap", "chemotherapy_fact_unavailable", None
-    course_text = _normalized_comparison_text(
-        " ".join(_row_text(row) for row in course_records.rows)
-    )
-    if not course_text:
+    if not any(_course_record_text(row) for row in course_records.rows):
         return "data_gap", "chemotherapy_course_record_unavailable", None
 
     field_results = {
@@ -945,6 +1036,7 @@ def _typed_chemotherapy_comparison(
         "time": "matched",
     }
     missing_order_fields: set[str] = set()
+    expected_events: list[dict[str, str]] = []
     for row in chemotherapy_orders:
         drug_name = _clean(
             row.get("generic_name") or row.get("drug_name") or row.get("brand_name")
@@ -959,31 +1051,86 @@ def _typed_chemotherapy_comparison(
             "route": route,
         }
         for field, expected in expected_values.items():
-            normalized = _normalized_comparison_text(expected)
-            if not normalized:
+            if not _normalized_comparison_text(expected):
                 missing_order_fields.add(field)
-            elif normalized not in course_text:
-                field_results[field] = "mismatched"
-        time_state = _chemotherapy_time_state(
-            prescribed=prescribed,
-            drug_name=drug_name,
-            course_rows=course_records.rows,
-        )
         if not _date_value(prescribed):
             missing_order_fields.add("time")
-        elif time_state != "matched":
-            field_results["time"] = time_state
+        expected_events.append(
+            {
+                "drug_name": drug_name,
+                "dose": expected_values["dose"],
+                "route": route,
+                "prescribed": prescribed,
+            }
+        )
 
     for field in missing_order_fields:
         field_results[field] = "unknown"
+    unresolved_event_count = 0
+    if not missing_order_fields:
+        course_clauses = _course_event_candidates(
+            course_records.rows,
+            target_drug_names=tuple(event["drug_name"] for event in expected_events),
+        )
+        claimed_clause_indexes: set[int] = set()
+        for event in expected_events:
+            normalized_drug = _normalized_comparison_text(event["drug_name"])
+            candidates = tuple(
+                (index, clause)
+                for index, clause in enumerate(course_clauses)
+                if normalized_drug
+                in _normalized_comparison_text(_row_text(clause))
+            )
+            if not candidates:
+                field_results["drug_name"] = "mismatched"
+                continue
+
+            timed_candidates = tuple(
+                (index, clause)
+                for index, clause in candidates
+                if _chemotherapy_time_state(
+                    prescribed=event["prescribed"],
+                    drug_name=event["drug_name"],
+                    course_rows=(clause,),
+                )
+                == "matched"
+            )
+            if len(timed_candidates) == 1:
+                candidate_index, candidate = timed_candidates[0]
+            elif len(timed_candidates) > 1 or len(candidates) > 1:
+                unresolved_event_count += 1
+                continue
+            else:
+                candidate_index, candidate = candidates[0]
+
+            # 一个片段不能同时证明两个独立化疗事件；无法唯一关联时拒绝猜测。
+            if candidate_index in claimed_clause_indexes:
+                unresolved_event_count += 1
+                continue
+            claimed_clause_indexes.add(candidate_index)
+            comparison_text = _normalized_comparison_text(_row_text(candidate))
+            for field in ("dose", "route"):
+                if _normalized_comparison_text(event[field]) not in comparison_text:
+                    field_results[field] = "mismatched"
+            time_state = _chemotherapy_time_state(
+                prescribed=event["prescribed"],
+                drug_name=event["drug_name"],
+                course_rows=(candidate,),
+            )
+            if time_state != "matched":
+                field_results["time"] = time_state
+
     facts = {
         "verification_kind": "chemotherapy_order_course_comparison",
         "order_count": len(chemotherapy_orders),
         "field_results": field_results,
         "missing_order_fields": sorted(missing_order_fields),
+        "unresolved_event_count": unresolved_event_count,
     }
     if missing_order_fields:
         return "data_gap", "chemotherapy_order_fields_missing", facts
+    if unresolved_event_count:
+        return "data_gap", "chemotherapy_event_association_ambiguous", facts
     if any(value == "unknown" for value in field_results.values()):
         return "data_gap", "chemotherapy_time_unavailable", facts
     if any(value == "mismatched" for value in field_results.values()):
@@ -994,11 +1141,26 @@ def _typed_chemotherapy_comparison(
 def _typed_discharge_plan_outcome(
     material: SourceMaterial,
 ) -> tuple[str, str, Mapping[str, Any]]:
-    text = _clean(" ".join(_row_text(row) for row in material.rows))
-    future_plan = bool(_DISCHARGE_PLAN_FUTURE_PATTERN.search(text))
-    treatment_plan = bool(_DISCHARGE_PLAN_TREATMENT_PATTERN.search(text))
-    follow_up_plan = bool(_DISCHARGE_PLAN_FOLLOW_UP_PATTERN.search(text))
-    compliant = future_plan and treatment_plan
+    clauses = tuple(
+        normalized_clause
+        for row in material.rows
+        for clause in _CLINICAL_CLAUSE_SEPARATOR.split(_row_text(row))
+        if (normalized_clause := _clean(clause))
+    )
+    future_plan = any(_DISCHARGE_PLAN_FUTURE_PATTERN.search(item) for item in clauses)
+    treatment_plan_clauses = tuple(
+        item
+        for item in clauses
+        if _DISCHARGE_PLAN_FUTURE_PATTERN.search(item)
+        and _DISCHARGE_PLAN_TREATMENT_PATTERN.search(item)
+        and not _DISCHARGE_PLAN_NEGATIVE_TREATMENT_PATTERN.search(item)
+        and not _DISCHARGE_PLAN_PENDING_TREATMENT_PATTERN.search(item)
+    )
+    treatment_plan = bool(treatment_plan_clauses)
+    follow_up_plan = any(
+        _DISCHARGE_PLAN_FOLLOW_UP_PATTERN.search(item) for item in clauses
+    )
+    compliant = treatment_plan
     return (
         "compliant" if compliant else "non_compliant",
         "malignant_discharge_plan_recorded"

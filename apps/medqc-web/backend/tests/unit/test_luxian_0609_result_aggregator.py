@@ -627,6 +627,82 @@ def test_critical_value_missing_result_detail_facts_are_preserved(rule_id):
     ("rule_id", "facts"),
     [
         (
+            "LX0609-052",
+            {
+                "verification_kind": "critical_value_timeliness_check",
+                "critical_item_names": ["血钾", "血钙"],
+                "critical_flags": ["PH", "PL"],
+                "report_times": ["2026-06-01 08:00:00"],
+                "disposition_times": ["2026-06-01 10:00:00"],
+                "threshold_hours": 6,
+                "actual_interval_hours": [2.0],
+                "event_results": [
+                    {
+                        "critical_item_names": ["血钾", "血钙"],
+                        "critical_flags": ["PH", "PL"],
+                        "report_time": "2026-06-01 08:00:00",
+                        "disposition_time": "2026-06-01 10:00:00",
+                        "interval_hours": 2.0,
+                        "outcome": "timely",
+                    }
+                ],
+            },
+        ),
+        (
+            "LX0609-053",
+            {
+                "verification_kind": "critical_value_disposition_presence_check",
+                "critical_item_names": ["血钾"],
+                "critical_flags": ["PH"],
+                "report_times": ["2026-06-01 08:00:00"],
+                "disposition_times": [],
+                "event_results": [
+                    {
+                        "critical_item_names": ["血钾"],
+                        "critical_flags": ["PH"],
+                        "report_time": "2026-06-01 08:00:00",
+                        "outcome": "unhandled",
+                    }
+                ],
+            },
+        ),
+    ],
+)
+def test_critical_value_event_results_are_strictly_preserved(rule_id, facts):
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id=rule_id,
+        raw=facts,
+    ) == facts
+
+
+def test_critical_value_event_results_reject_internal_identifiers():
+    facts = {
+        "verification_kind": "critical_value_disposition_presence_check",
+        "critical_item_names": ["血钾"],
+        "critical_flags": ["PH"],
+        "report_times": ["2026-06-01 08:00:00"],
+        "disposition_times": [],
+        "event_results": [
+            {
+                "critical_item_names": ["血钾"],
+                "critical_flags": ["PH"],
+                "report_time": "2026-06-01 08:00:00",
+                "outcome": "unhandled",
+                "event_id": "internal-report-123",
+            }
+        ],
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-053",
+        raw=facts,
+    ) is None
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts"),
+    [
+        (
             "LX0609-059",
             {
                 "failure_kind": "antimicrobial_course_documentation_missing",
