@@ -803,10 +803,13 @@ def safe_luxian_0609_customer_display_facts(
             "handover_record_count", "handover_times", "handover_threshold_hours",
         },
         "transfer_record_timeliness_check": {
-            "transfer_order_time", "threshold_hours", "record_times", "actual_interval_hours",
+            "transfer_order_time", "transfer_in_time", "transfer_out_time",
+            "threshold_hours", "transfer_in_interval_hours",
+            "transfer_out_interval_hours",
         },
         "transfer_record_presence_check": {
-            "transfer_order_count", "transfer_in_count", "transfer_out_count",
+            "transfer_order_time", "transfer_in_time", "transfer_out_time",
+            "transfer_in_associated", "transfer_out_associated",
         },
         "transfer_records_missing": {
             "transfer_order_count", "transfer_in_count", "transfer_out_count",
@@ -884,6 +887,55 @@ def safe_luxian_0609_customer_display_facts(
                 return None
             safe["performed_surgery_count"] = performed_surgery_count
             safe["surgery_events"] = surgery_events
+        if kind in {
+            "transfer_record_timeliness_check",
+            "transfer_record_presence_check",
+        }:
+            def valid_transfer_time(value: Any, *, allow_none: bool) -> bool:
+                if value is None:
+                    return allow_none
+                if (
+                    not isinstance(value, str)
+                    or not value
+                    or len(value) > 32
+                    or "\n" in value
+                    or ("T" not in value and " " not in value)
+                ):
+                    return False
+                try:
+                    datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    return False
+                return True
+
+            if not valid_transfer_time(
+                raw.get("transfer_order_time"), allow_none=False
+            ) or not all(
+                valid_transfer_time(raw.get(key), allow_none=True)
+                for key in ("transfer_in_time", "transfer_out_time")
+            ):
+                return None
+            if kind == "transfer_record_timeliness_check":
+                intervals = (
+                    raw.get("transfer_in_interval_hours"),
+                    raw.get("transfer_out_interval_hours"),
+                )
+                if raw.get("threshold_hours") != 24 or any(
+                    value is not None
+                    and (
+                        not isinstance(value, (int, float))
+                        or isinstance(value, bool)
+                        or not isfinite(float(value))
+                    )
+                    for value in intervals
+                ):
+                    return None
+            else:
+                if any(
+                    raw.get(key) not in {True, False, None}
+                    for key in ("transfer_in_associated", "transfer_out_associated")
+                ):
+                    return None
         if kind in {
             "physician_handoff_association_failed",
             "physician_change_time_missing",

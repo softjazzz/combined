@@ -2200,10 +2200,16 @@ def customer_finding_from_controlled_facts(
     if rule_id == "LX0609-061" and kind == "discharge_record_timeliness_check":
         interval = facts.get("actual_interval_hours")
         if isinstance(interval, (int, float)) and interval < 0:
+            lead_duration = _format_exact_elapsed_duration(
+                started_at=facts.get("record_time"),
+                finished_at=facts.get("discharge_time"),
+                threshold_hours=None,
+            )
             return (
-                f"出院记录于出院前 {abs(interval):g} 小时完成"
+                "出院记录时间早于权威出院时间 "
+                f"{lead_duration or f'{abs(interval):g} 小时'}"
                 f"（记录时间 {facts.get('record_time')}；出院时间 {facts.get('discharge_time')}），"
-                "符合出院后 24 小时内完成要求。"
+                "时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。"
             )
         exact_duration = _format_exact_elapsed_duration(
             started_at=facts.get("discharge_time"),
@@ -2383,10 +2389,39 @@ def customer_finding_from_controlled_facts(
         )
 
     if rule_id == "LX0609-072" and kind == "transfer_record_timeliness_check":
-        return f"转科医嘱时间 {facts.get('transfer_order_time')}；转入、转出记录时间：{joined('record_times')}；实际间隔 {joined('actual_interval_hours')} 小时，规定时限 24 小时。"
+        def timed_record_text(record_time: Any, interval_hours: Any) -> str:
+            time_text = record_time or "未能关联到本次转科"
+            interval_text = (
+                f"间隔 {interval_hours} 小时"
+                if isinstance(interval_hours, (int, float))
+                else "间隔无法计算"
+            )
+            return f"记录时间{time_text}，{interval_text}"
+
+        return (
+            f"转科医嘱时间 {facts.get('transfer_order_time')}；"
+            "转入"
+            f"{timed_record_text(facts.get('transfer_in_time'), facts.get('transfer_in_interval_hours'))}；"
+            "转出"
+            f"{timed_record_text(facts.get('transfer_out_time'), facts.get('transfer_out_interval_hours'))}；"
+            "规定时限 24 小时。"
+        )
 
     if rule_id == "LX0609-073" and kind == "transfer_record_presence_check":
-        return f"已确认转科医嘱 {facts.get('transfer_order_count')} 条，转入记录 {facts.get('transfer_in_count')} 份，转出记录 {facts.get('transfer_out_count')} 份。"
+        def association_text(associated: Any, value: Any) -> str:
+            if associated is True:
+                return f"已关联（{value}）"
+            if associated is False:
+                return "缺失"
+            return "暂无法唯一关联"
+
+        return (
+            f"转科医嘱时间 {facts.get('transfer_order_time')}；"
+            "转入记录"
+            f"{association_text(facts.get('transfer_in_associated'), facts.get('transfer_in_time'))}；"
+            "转出记录"
+            f"{association_text(facts.get('transfer_out_associated'), facts.get('transfer_out_time'))}。"
+        )
 
     if rule_id in {"LX0609-072", "LX0609-073"} and kind == "transfer_records_missing":
         return f"已确认转科医嘱 {facts.get('transfer_order_count')} 条，转入记录 {facts.get('transfer_in_count')} 份，转出记录 {facts.get('transfer_out_count')} 份；目标文书缺失。"

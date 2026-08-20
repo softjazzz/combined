@@ -5217,3 +5217,34 @@ def test_expected_version_validation_is_private(marker):
     with pytest.raises(ValueError) as error:
         aggregate_luxian_0609_programmatic_findings_shadow(gate_report=gate, finding_report=finding, expected_finding_schema_version=marker, expected_finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED)
     assert marker not in str(error.value)
+
+
+def test_transfer_customer_facts_allow_only_controlled_event_fields() -> None:
+    facts = {
+        "verification_kind": "transfer_record_timeliness_check",
+        "transfer_order_time": "2026-07-01 08:00:00",
+        "transfer_in_time": "2026-07-01 09:00:00",
+        "transfer_out_time": "2026-07-01 10:00:00",
+        "threshold_hours": 24,
+        "transfer_in_interval_hours": 1.0,
+        "transfer_out_interval_hours": 2.0,
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-072", raw=facts
+    ) == facts
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-072", raw={**facts, "document_id": "internal"}
+    ) == facts
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-072", raw={**facts, "transfer_in_time": "not-a-time"}
+    ) is None
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-072", raw={**facts, "transfer_order_time": None}
+    ) is None
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-072", raw={**facts, "transfer_order_time": "2026-07-01"}
+    ) is None
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-072", raw={**facts, "transfer_in_time": "2026-07-01"}
+    ) is None

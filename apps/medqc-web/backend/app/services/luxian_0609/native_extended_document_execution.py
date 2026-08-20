@@ -34,6 +34,9 @@ from .extended_document.discharge_course import (
 )
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.shared import _clean, _parse_datetime, _row_time
+from .extended_document.transfer_documentation import (
+    evaluate_transfer_documentation,
+)
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
     CRITICAL_VALUE_SOURCE_KEYS,
@@ -873,18 +876,6 @@ def _person_tokens(row: Mapping[str, Any]) -> set[str]:
         )
         if _clean(row.get(key))
     }
-
-
-def _transfer_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
-    return tuple(
-        row
-        for row in rows
-        if "转科" in _clean(row.get("order_name") or row.get("record_content"))
-        and not any(
-            marker in _clean(row.get("order_status"))
-            for marker in ("取消", "作废", "撤销")
-        )
-    )
 
 
 @dataclass(frozen=True)
@@ -2125,80 +2116,18 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id in {"LX0609-072", "LX0609-073"}:
-            source_error = (
-                nondrug_order_error or transfer_in_error or transfer_out_error
+            outcome = evaluate_transfer_documentation(
+                rule_id=rule_id,
+                nondrug_order_error=nondrug_order_error,
+                transfer_in_error=transfer_in_error,
+                transfer_out_error=transfer_out_error,
+                nondrug_order_rows=nondrug_order_rows,
+                transfer_in_rows=transfer_in_rows,
+                transfer_out_rows=transfer_out_rows,
             )
-            orders = _transfer_orders(nondrug_order_rows)
-            if source_error:
-                final_state, reason_code = "data_gap", source_error
-            elif not orders:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif not transfer_in_rows or not transfer_out_rows:
-                final_state, reason_code = (
-                    "non_compliant",
-                    "required_document_missing",
-                )
-                display.append((rule_id, {
-                    "failure_kind": "transfer_records_missing",
-                    "transfer_order_count": len(orders),
-                    "transfer_in_count": len(transfer_in_rows),
-                    "transfer_out_count": len(transfer_out_rows),
-                }))
-            elif len(orders) > 1:
-                final_state, reason_code = "data_gap", "association_failed"
-            elif rule_id == "LX0609-073":
-                final_state, reason_code = "compliant", "requirement_satisfied"
-                display.append((rule_id, {
-                    "verification_kind": "transfer_record_presence_check",
-                    "transfer_order_count": len(orders),
-                    "transfer_in_count": len(transfer_in_rows),
-                    "transfer_out_count": len(transfer_out_rows),
-                }))
-            else:
-                order_times = tuple(
-                    parsed
-                    for row in orders
-                    if (
-                        parsed := _parse_datetime(
-                            row.get("prescribed_datetime")
-                        )
-                    )
-                    is not None
-                )
-                record_times = tuple(
-                    parsed
-                    for row in (*transfer_in_rows, *transfer_out_rows)
-                    if (parsed := _row_time(row)) is not None
-                )
-                if not order_times or len(record_times) < 2:
-                    final_state, reason_code = (
-                        "data_gap",
-                        "authoritative_time_missing",
-                    )
-                else:
-                    trigger_time = min(order_times)
-                    compliant = all(
-                        0
-                        <= (record_time - trigger_time).total_seconds() / 3600
-                        <= 24
-                        for record_time in record_times
-                    )
-                    final_state = "compliant" if compliant else "non_compliant"
-                    reason_code = (
-                        "requirement_within_threshold"
-                        if compliant
-                        else "threshold_exceeded"
-                    )
-                    display.append((rule_id, {
-                        "verification_kind": "transfer_record_timeliness_check",
-                        "transfer_order_time": trigger_time.isoformat(sep=" "),
-                        "threshold_hours": 24,
-                        "record_times": [value.isoformat(sep=" ") for value in record_times],
-                        "actual_interval_hours": [
-                            round((value - trigger_time).total_seconds() / 3600, 2)
-                            for value in record_times
-                        ],
-                    }))
+            final_state, reason_code = outcome.final_state, outcome.reason_code
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
             decisions.append(
                 _decision(
                     rule_id=rule_id,

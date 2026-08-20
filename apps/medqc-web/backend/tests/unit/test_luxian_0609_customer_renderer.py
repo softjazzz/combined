@@ -769,7 +769,7 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "discharge_time": "2026-06-09 10:00:00",
                 "actual_interval_hours": -1.0,
             },
-            "出院记录于出院前 1 小时完成（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），符合出院后 24 小时内完成要求。",
+            "出院记录时间早于权威出院时间 1小时（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。",
         ),
         (
             "LX0609-066",
@@ -814,6 +814,25 @@ def test_061_boundary_overdue_duration_does_not_round_to_threshold() -> None:
     assert finding == (
         "出院时间 2026-06-09 10:00:00，出院记录时间 2026-06-10 10:00:01，"
         "实际间隔 24小时0分1秒（超时1秒），规定时限 24 小时。"
+    )
+
+
+def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-061",
+        facts={
+            "verification_kind": "discharge_record_timeliness_check",
+            "discharge_time": "2026-06-09 10:00:00",
+            "record_time": "2026-06-09 09:59:59",
+            "threshold_hours": 24,
+            "actual_interval_hours": -1 / 3600,
+        },
+    )
+
+    assert finding == (
+        "出院记录时间早于权威出院时间 1秒"
+        "（记录时间 2026-06-09 09:59:59；出院时间 2026-06-09 10:00:00），"
+        "时间顺序存在冲突，暂无法判断是否在出院后 24 小时内完成。"
     )
 
 
@@ -1911,3 +1930,39 @@ def test_safe_trace_is_separate_and_sink_failure_cannot_change_customer_result()
         trace_sink=explode,
     )
     assert repeated == result
+
+
+def test_transfer_customer_facts_render_each_document_association_separately() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-073",
+        facts={
+            "verification_kind": "transfer_record_presence_check",
+            "transfer_order_time": "2026-07-01 08:00:00",
+            "transfer_in_time": "2026-07-01 09:00:00",
+            "transfer_out_time": None,
+            "transfer_in_associated": True,
+            "transfer_out_associated": None,
+        },
+    )
+
+    assert "转入记录已关联（2026-07-01 09:00:00）" in finding
+    assert "转出记录暂无法唯一关联" in finding
+
+
+def test_transfer_timeliness_uses_a_readable_gap_when_interval_is_unavailable() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-072",
+        facts={
+            "verification_kind": "transfer_record_timeliness_check",
+            "transfer_order_time": "2026-07-01 08:00:00",
+            "transfer_in_time": None,
+            "transfer_out_time": "2026-07-01 10:00:00",
+            "threshold_hours": 24,
+            "transfer_in_interval_hours": None,
+            "transfer_out_interval_hours": 2.0,
+        },
+    )
+
+    assert "转入记录时间未能关联到本次转科，间隔无法计算" in finding
+    assert "转出记录时间2026-07-01 10:00:00，间隔 2.0 小时" in finding
+    assert "None 小时" not in finding

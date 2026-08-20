@@ -53,6 +53,7 @@ def evaluate_discharge_documentation_timeliness(
         ),
         None,
     )
+    actual_interval_hours: float | None = None
     if not discharge_rows:
         final_state, reason_code = (
             "non_compliant",
@@ -62,12 +63,16 @@ def evaluate_discharge_documentation_timeliness(
         final_state, reason_code = "data_gap", "authoritative_time_missing"
     else:
         hours = (record_time - discharge_time).total_seconds() / 3600
-        final_state = "compliant" if hours <= 24 else "non_compliant"
-        reason_code = (
-            "requirement_within_threshold"
-            if hours <= 24
-            else "threshold_exceeded"
-        )
+        actual_interval_hours = hours if hours < 0 else round(hours, 2)
+        if hours < 0:
+            final_state, reason_code = "data_gap", "authoritative_time_conflict"
+        else:
+            final_state = "compliant" if hours <= 24 else "non_compliant"
+            reason_code = (
+                "requirement_within_threshold"
+                if hours <= 24
+                else "threshold_exceeded"
+            )
 
     return DischargeDocumentationOutcome(
         final_state,
@@ -77,10 +82,6 @@ def evaluate_discharge_documentation_timeliness(
             "discharge_time": discharge_time.isoformat(sep=" "),
             "record_time": record_time.isoformat(sep=" ") if record_time else None,
             "threshold_hours": 24,
-            "actual_interval_hours": (
-                round((record_time - discharge_time).total_seconds() / 3600, 2)
-                if record_time
-                else None
-            ),
+            "actual_interval_hours": actual_interval_hours,
         },
     )

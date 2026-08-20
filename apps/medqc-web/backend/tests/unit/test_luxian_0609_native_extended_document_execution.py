@@ -706,6 +706,57 @@ async def test_061_discharge_record_uses_24_hour_threshold(
 
 
 @pytest.mark.asyncio
+async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": (
+                {
+                    "patient_status": "出院",
+                    "discharge_datetime": "2026-07-01 12:00:00",
+                },
+            ),
+            "discharge_record": ({"record_time": "2026-07-01 11:30:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_conflict"
+    assert result.customer_display_facts == (
+        (
+            "LX0609-061",
+            {
+                "verification_kind": "discharge_record_timeliness_check",
+                "discharge_time": "2026-07-01 12:00:00",
+                "record_time": "2026-07-01 11:30:00",
+                "threshold_hours": 24,
+                "actual_interval_hours": -0.5,
+            },
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_061_preserves_a_one_second_negative_interval_for_customer_display() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": (
+                {
+                    "patient_status": "出院",
+                    "discharge_datetime": "2026-07-01 12:00:00",
+                },
+            ),
+            "discharge_record": ({"record_time": "2026-07-01 11:59:59"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    facts = dict(result.customer_display_facts)["LX0609-061"]
+    assert facts["actual_interval_hours"] == pytest.approx(-1 / 3600)
+
+
+@pytest.mark.asyncio
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-064",
@@ -1625,6 +1676,150 @@ async def test_072_transfer_records_must_be_completed_in_24_hours() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_072_uses_the_unique_order_start_time_when_other_times_are_absent() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "start_time": "2026-07-01 08:00:00"},
+            ),
+            "transfer_in_record": ({"record_time": "2026-07-01 09:00:00"},),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_072_refuses_conflicting_authoritative_order_times() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": (
+                {
+                    "order_name": "转科医嘱",
+                    "prescribed_datetime": "2026-07-01 08:00:00",
+                    "start_time": "2026-07-01 09:00:00",
+                },
+            ),
+            "transfer_in_record": ({"record_time": "2026-07-01 10:00:00"},),
+            "transfer_out_record": ({"record_time": "2026-07-01 11:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_conflict"
+
+
+@pytest.mark.asyncio
+async def test_072_does_not_treat_a_prior_admission_transfer_record_as_this_transfer() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
+            "transfer_in_record": ({"record_time": "2025-12-31 09:00:00"},),
+            "transfer_out_record": ({"record_time": "2025-12-31 10:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
+async def test_072_date_only_transfer_record_is_not_used_to_prove_24_hour_timeliness() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
+            "transfer_in_record": ({"transfer_date": "2026-07-01"},),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_073_requires_one_current_transfer_in_and_out_record() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-073",
+        {
+            "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
+            "transfer_in_record": ({"record_time": "2026-07-01 09:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
+async def test_073_accepts_one_current_transfer_in_and_out_record() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-073",
+        {
+            "inpat_nondrug_order": (
+                {
+                    "order_name": "转科医嘱",
+                    "prescribed_datetime": "2026-07-01 08:00:00",
+                },
+            ),
+            "transfer_in_record": ({"record_time": "2026-07-01 09:00:00"},),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-073"] == {
+        "verification_kind": "transfer_record_presence_check",
+        "transfer_order_time": "2026-07-01 08:00:00",
+        "transfer_in_time": "2026-07-01 09:00:00",
+        "transfer_out_time": "2026-07-01 10:00:00",
+        "transfer_in_associated": True,
+        "transfer_out_associated": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_073_refuses_to_associate_multiple_current_transfer_candidates() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-073",
+        {
+            "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
+            "transfer_in_record": (
+                {"record_time": "2026-07-01 09:00:00"},
+                {"record_time": "2026-07-01 10:00:00"},
+            ),
+            "transfer_out_record": ({"record_time": "2026-07-01 11:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_073_refuses_to_associate_multiple_transfer_orders() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-073",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-02 08:00:00"},
+            ),
+            "transfer_in_record": ({"record_time": "2026-07-01 09:00:00"},),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
 
 
 @pytest.mark.asyncio
