@@ -65,6 +65,7 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
         "discharge_record_diagnosis": "snapshot-provider-discharge_record_diagnosis-v1",
         "mr_bloodtrans": "snapshot-provider-bloodtrans_record-v1",
         "bloodtrans_record": "snapshot-provider-bloodtrans_record-v1",
+        "evaluation_context.horizon": "snapshot-provider-evaluation_context.horizon-v1",
     }
     observations = []
     sources = {}
@@ -204,7 +205,11 @@ def test_068_binds_daily_and_senior_course_sources() -> None:
 
 def test_death_and_ordinary_discharge_rules_bind_mutual_exclusion_sources() -> None:
     expected_by_rule = {
-        "LX0609-051": {"inpat_registration", "discharge_record"},
+        "LX0609-051": {
+            "inpat_registration",
+            "discharge_record",
+            "evaluation_context.horizon",
+        },
         "LX0609-060": {"inpat_registration", "discharge_record"},
         "LX0609-061": {"inpat_registration", "death_record"},
         "LX0609-068": {"inpat_registration", "death_record"},
@@ -544,6 +549,11 @@ async def test_051_only_predated_discussion_is_missing_after_maturity_window() -
                 "document_id": "predated-discussion-051",
                 "record_time": "2026-06-30 12:00:00",
             },),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-08",
+                "horizon_datetime": "2026-07-08T12:00:00",
+                "basis": "evaluation_as_of",
+            },),
         },
     )
 
@@ -574,8 +584,8 @@ async def test_051_only_predated_discussion_is_missing_after_maturity_window() -
 
 @pytest.mark.asyncio
 async def test_051_only_predated_discussion_waits_until_seven_day_window_matures() -> None:
-    execution, reduced = await _evaluate(
-        "LX0609-051",
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-051",),
         {
             "death_record": ({
                 "document_id": "death-record-051",
@@ -585,13 +595,130 @@ async def test_051_only_predated_discussion_waits_until_seven_day_window_matures
                 "document_id": "predated-discussion-051",
                 "record_time": "2026-07-29 12:00:00",
             },),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-08-05",
+                "horizon_datetime": "2026-08-05T12:00:00",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-051",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+    assert canonical["status"] == "data_gap"
+    assert canonical["customer_display_facts"] == {
+        "verification_kind": "death_discussion_window_not_mature",
+        "death_time": "2026-07-30 12:00:00",
+        "deadline_time": "2026-08-06 12:00:00",
+        "evaluation_time": "2026-08-05 12:00:00",
+        "remaining_seconds": 86400,
+    }
+    assert "死亡时间 2026-07-30 12:00:00" in canonical["findings"]
+    assert "截止时间 2026-08-06 12:00:00" in canonical["findings"]
+    assert "尚余 24 小时" in canonical["findings"]
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_051_date_only_horizon_on_deadline_day_does_not_guess_maturity() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-051",
+        {
+            "death_record": ({
+                "death_datetime": "2026-07-30 12:00:00",
+            },),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-08-06",
+                "basis": "evaluation_as_of",
+            },),
         },
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_readiness_unproven"
-    assert execution.llm_call_count == 0
-    assert execution.total_tokens == 0
+    assert reduced.reason_code == "evaluation_window_not_mature"
+    assert execution.customer_display_facts == ((
+        "LX0609-051",
+        {
+            "verification_kind": "death_discussion_window_not_mature",
+            "death_time": "2026-07-30 12:00:00",
+            "deadline_time": "2026-08-06 12:00:00",
+            "evaluation_date": "2026-08-06",
+        },
+    ),)
+
+
+@pytest.mark.asyncio
+async def test_051_conflicting_death_times_fail_closed_before_discussion_matching() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-051",
+        {
+            "death_record": (
+                {"death_datetime": "2026-07-30 12:00:00"},
+                {"death_datetime": "2026-07-30 13:00:00"},
+            ),
+            "death_discussion": ({"record_time": "2026-07-30 12:30:00"},),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-08-08",
+                "horizon_datetime": "2026-08-08T12:00:00",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_conflict"
+    assert execution.customer_display_facts == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("horizon_rows", "expected_issue", "expected_finding"),
+    [
+        ((), "authoritative_time_missing", "缺少唯一评价时点"),
+        (({
+            "horizon_date": "2026-07-29",
+            "horizon_datetime": "2026-07-29T12:00:00",
+            "basis": "evaluation_as_of",
+        },), "authoritative_time_conflict", "死亡时间与评价时点顺序冲突"),
+    ],
+)
+async def test_051_confirmed_death_explains_unavailable_evaluation_horizon(
+    horizon_rows,
+    expected_issue: str,
+    expected_finding: str,
+) -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-051",),
+        {
+            "death_record": ({"death_datetime": "2026-07-30 12:00:00"},),
+            "evaluation_context.horizon": horizon_rows,
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-051",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == expected_issue
+    assert canonical["customer_display_facts"] == {
+        "verification_kind": "death_discussion_evaluation_horizon_unavailable",
+        "death_time": "2026-07-30 12:00:00",
+        "issue": expected_issue,
+    }
+    assert expected_finding in canonical["findings"]
+    assert "无法确认本次就诊是否属于死亡病例" not in canonical["findings"]
 
 
 @pytest.mark.asyncio
@@ -1832,10 +1959,14 @@ async def test_074_changed_diagnosis_requires_reason_and_basis() -> None:
                 {
                     "diagnosis_datetime": "2026-07-01 08:00:00",
                     "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
                 },
                 {
                     "diagnosis_datetime": "2026-07-02 08:00:00",
                     "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
                 },
             ),
             "daily_course_record": (
@@ -1859,10 +1990,14 @@ async def test_074_reason_written_before_diagnosis_change_does_not_pass() -> Non
                 {
                     "diagnosis_datetime": "2026-07-01 08:00:00",
                     "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
                 },
                 {
                     "diagnosis_datetime": "2026-07-02 08:00:00",
                     "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
                 },
             ),
             "daily_course_record": (
@@ -1887,8 +2022,18 @@ async def test_074_changed_diagnosis_requires_both_reason_and_basis() -> None:
         "LX0609-074",
         {
             "diagnosis": (
-                {"diagnosis_datetime": "2026-07-01 08:00:00", "diagnosis_name": "肺部感染"},
-                {"diagnosis_datetime": "2026-07-02 08:00:00", "diagnosis_name": "细菌性肺炎"},
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-02 08:00:00",
+                    "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
             ),
             "daily_course_record": ({
                 "record_time": "2026-07-02 09:00:00",
@@ -1898,6 +2043,172 @@ async def test_074_changed_diagnosis_requires_both_reason_and_basis() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_074_parallel_diagnoses_in_distinct_slots_are_not_a_diagnosis_change() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": (
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "高血压",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "2",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_074_same_slot_same_time_conflicting_names_refuse_to_infer_change_order() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": (
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_074_missing_diagnosis_slot_refuses_to_infer_a_change() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": (
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_074_reason_and_basis_without_authoritative_course_time_are_data_gap() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {
+            "diagnosis": (
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-02 08:00:00",
+                    "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+            ),
+            "daily_course_record": ({
+                "record_content": "补充诊断：细菌性肺炎。诊断依据为培养结果。",
+            },),
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-074",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert canonical["status"] == "data_gap"
+    assert canonical["customer_display_facts"] == {
+        "failure_kind": "diagnosis_change_documentation_time_missing",
+        "diagnosis_change_count": 1,
+        "untimed_document_count": 1,
+        "issue": "candidate_document_time_missing",
+    }
+
+
+@pytest.mark.asyncio
+async def test_074_multiple_changes_do_not_reuse_one_course_record_for_every_change() -> None:
+    execution, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": (
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-02 08:00:00",
+                    "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-03 08:00:00",
+                    "diagnosis_name": "重症肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-07-03 09:00:00",
+                "record_content": (
+                    "补充诊断：细菌性肺炎、重症肺炎。"
+                    "诊断依据为培养结果和病情变化。"
+                ),
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+    assert execution.customer_display_facts == ((
+        "LX0609-074",
+        {
+            "failure_kind": "diagnosis_change_association_failed",
+            "diagnosis_record_count": 3,
+            "diagnosis_change_count": 2,
+            "association_issue": "multiple_changes_unresolved",
+        },
+    ),)
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -3408,10 +3719,10 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
             },),
             "daily_course_record": (
                 {"record_time": "2026-06-01 12:00:00", "record_content": "患者重症感染，已在用药前留取血培养。经验性联合美罗培南和万古霉素覆盖耐药菌，记录启用及联合用药理由。"},
-                {"record_time": "2026-06-04 09:00:00", "record_content": "用药72小时效果评价：体温下降、白细胞和CRP降低，停用万古霉素并继续美罗培南。"},
+                {"record_time": "2026-06-04 09:00:00", "record_content": "用药72小时抗菌药物效果评价：抗感染治疗有效，体温下降、白细胞和CRP降低，停用万古霉素并继续美罗培南。"},
             ),
             "consultation_record": ({
-                "record_time": "2026-06-01 15:00:00",
+                "record_time": "2026-06-01 09:00:00",
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
             },),
         },
@@ -3500,7 +3811,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
             "daily_course_record": (
                 {
                     "record_time": evaluation_time,
-                    "record_content": "抗菌药物效果评价：体温下降，白细胞降低。",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降，白细胞降低。",
                 },
             ),
         },
@@ -3530,11 +3841,11 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
                 },
                 {
                     "record_time": "2026-06-03 10:00:00",
-                    "record_content": "抗菌药物效果评价：体温下降、白细胞下降。",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效，体温下降、白细胞下降。",
                 },
                 {
                     "record_time": "2026-06-04 12:00:00",
-                    "record_content": "抗菌药物效果评价：CRP下降。",
+                    "record_content": "抗菌药物效果评价：抗感染治疗有效，CRP下降。",
                 },
             ),
         },
@@ -3580,6 +3891,294 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
     assert result.prompt_tokens == 0
     assert result.completion_tokens == 0
     assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_055_bare_inflammatory_markers_at_48_hours_are_not_effect_evaluation() -> None:
+    """白细胞、CRP 等检验描述不能单独证明已完成疗效评价。"""
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "复查白细胞、CRP较前下降。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "threshold_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant() -> None:
+    """疗效不佳并拟调整方案属于真实的疗效评价，不能被误删。"""
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "抗感染治疗效果不佳，拟调整方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_055_untimed_explicit_effect_evaluation_is_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_content": "抗感染治疗效果不佳，拟调整方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_055_timed_in_window_evaluation_remains_compliant_with_untimed_candidate() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "抗感染治疗有效，继续原方案。",
+                },
+                {"record_content": "抗感染治疗效果不佳，拟调整方案。"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_058_expert_support_after_special_antimicrobial_use_is_non_compliant() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "start_time": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 11:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
+
+
+@pytest.mark.asyncio
+async def test_058_timed_consultation_support_is_compliant_when_daily_source_unavailable() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "start_time": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+        unavailable_sources={"daily_course_record"},
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+
+
+@pytest.mark.asyncio
+async def test_058_timed_consultation_support_is_compliant_when_senior_source_unavailable() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "start_time": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+        unavailable_sources={"senior_course_record"},
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+
+
+@pytest.mark.asyncio
+async def test_058_late_support_with_unavailable_senior_source_is_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "start_time": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 11:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+        unavailable_sources={"senior_course_record"},
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+
+
+@pytest.mark.asyncio
+async def test_058_without_special_antimicrobial_is_not_applicable_before_support_sources() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "阿莫西林",
+                "prescribed_datetime": "2026-06-01 10:00:00",
+            },),
+        },
+        unavailable_sources={"daily_course_record", "senior_course_record"},
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert "LX0609-058" not in dict(result.customer_display_facts)
+
+
+@pytest.mark.asyncio
+async def test_058_expert_support_without_authoritative_time_is_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "start_time": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_058_special_antimicrobial_without_authoritative_use_time_is_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_058_any_special_antimicrobial_without_time_blocks_earliest_use_guess() -> None:
+    """多条特殊级医嘱中任一条缺时，不能用另一条时间猜测首用药时点。"""
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": (
+                {
+                    "generic_name": "美罗培南",
+                    "start_time": "2026-06-01 10:00:00",
+                },
+                {"generic_name": "万古霉素"},
+            ),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_058_conflicting_special_antimicrobial_use_times_are_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "start_time": "2026-06-01 10:00:00",
+                "order_time": "2026-06-01 11:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_conflict"
+
+
+@pytest.mark.asyncio
+async def test_058_expert_support_at_special_antimicrobial_use_time_is_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "start_time": "2026-06-01 10:00:00",
+                "order_time": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 10:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-058"]
+    assert facts["support_before_use"] is True
+    assert facts["first_antimicrobial_time"] == "2026-06-01 10:00:00"
 
 
 @pytest.mark.asyncio

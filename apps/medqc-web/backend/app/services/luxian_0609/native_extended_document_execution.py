@@ -135,6 +135,22 @@ _ANTIMICROBIALS = _SPECIAL_ANTIMICROBIALS + (
     "阿米卡星", "阿奇霉素", "莫西沙星", "左氧氟沙星", "环丙沙星",
     "甲硝唑", "替硝唑", "奥硝唑", "克林霉素", "氟康唑",
 )
+_ANTIMICROBIAL_EFFECT_EVALUATION_ANCHORS = (
+    "抗菌药物效果评价", "抗菌治疗效果评价", "抗感染效果评价",
+    "疗效评价", "治疗效果", "抗感染效果", "抗菌治疗效果",
+)
+_ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
+    "有效", "好转", "改善", "感染控制", "疗效不佳", "效果不佳",
+    "无改善", "未改善", "无效", "治疗失败", "感染未控制", "病情加重",
+    "恶化", "调整方案", "更换抗菌药", "升级抗菌药", "降阶梯", "停用",
+)
+_ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
+_SPECIAL_ANTIMICROBIAL_ORDER_TIME_FIELDS = (
+    "start_time", "order_time", "prescribed_datetime", "update_time",
+)
+_SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
+    "感染专家", "专家会诊", "专家查房", "同意特殊级",
+)
 _INVASIVE_PROCEDURES = (
     "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
     "气管插管", "支气管镜", "动脉置管",
@@ -310,20 +326,21 @@ def _death_context(
     death_rows: Sequence[Mapping[str, Any]],
     discharge_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[str, datetime | None]:
-    if death_rows:
-        death_time = next(
-            (
-                candidate
-                for row in death_rows
-                if (
-                    candidate := _parse_datetime(
-                        row.get("death_datetime") or row.get("death_time")
-                    )
-                )
-                is not None
-            ),
-            None,
+    explicit_death_times = {
+        candidate
+        for row in (*death_rows, *registration_rows)
+        if (
+            candidate := _parse_datetime(
+                row.get("death_datetime") or row.get("death_time")
+            )
         )
+        is not None
+    }
+    if len(explicit_death_times) > 1:
+        return "conflict", None
+
+    if death_rows:
+        death_time = next(iter(explicit_death_times), None)
         if death_time is None:
             death_time = next(
                 (
@@ -333,28 +350,10 @@ def _death_context(
                 ),
                 None,
             )
-        if death_time is None:
-            death_time = next(
-                (
-                    _parse_datetime(row.get("death_datetime") or row.get("death_time"))
-                    for row in registration_rows
-                    if _parse_datetime(row.get("death_datetime") or row.get("death_time"))
-                    is not None
-                ),
-                None,
-            )
         return "present", death_time
 
     status = _registration_status(registration_rows)
-    death_time = next(
-        (
-            _parse_datetime(row.get("death_datetime") or row.get("death_time"))
-            for row in registration_rows
-            if _parse_datetime(row.get("death_datetime") or row.get("death_time"))
-            is not None
-        ),
-        None,
-    )
+    death_time = next(iter(explicit_death_times), None)
     if death_time is not None or any(marker in status for marker in _DEATH_MARKERS):
         return "present", death_time
     if (
@@ -408,6 +407,41 @@ def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[st
     return tuple(
         row for row in rows if any(name in _material_text(row) for name in _ANTIMICROBIALS)
     )
+
+
+def _is_antimicrobial_effect_evaluation(row: Mapping[str, Any]) -> bool:
+    """只接受明确治疗评价，不以单独的检验趋势替代病程评价。"""
+
+    text = _material_text(row)
+    has_outcome = any(
+        marker in text for marker in _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES
+    )
+    if not has_outcome:
+        return False
+    has_evaluation_anchor = any(
+        marker in text for marker in _ANTIMICROBIAL_EFFECT_EVALUATION_ANCHORS
+    )
+    has_antimicrobial_context = any(
+        marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS
+    ) or any(name in text for name in _ANTIMICROBIALS)
+    return has_evaluation_anchor or has_antimicrobial_context
+
+
+def _special_antimicrobial_order_time(
+    row: Mapping[str, Any],
+) -> tuple[datetime | None, str | None]:
+    """读取特殊级药物的权威使用时间，字段不一致时不能猜测先后。"""
+
+    values = {
+        parsed
+        for field in _SPECIAL_ANTIMICROBIAL_ORDER_TIME_FIELDS
+        if (parsed := _parse_datetime(row.get(field))) is not None
+    }
+    if len(values) > 1:
+        return None, "authoritative_time_conflict"
+    if not values:
+        return None, "authoritative_time_missing"
+    return next(iter(values)), None
 
 
 def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> bool:
@@ -834,6 +868,11 @@ async def execute_luxian_0609_native_extended_document_rules(
     discussion_rows, discussion_error = _source_rows(
         evidence_materials, "death_discussion"
     )
+    horizon_rows, horizon_error = (
+        _source_rows(evidence_materials, "evaluation_context.horizon")
+        if "LX0609-051" in selected
+        else ((), "")
+    )
     discharge_rows, discharge_error = _source_rows(
         evidence_materials, "discharge_record"
     )
@@ -1035,7 +1074,9 @@ async def execute_luxian_0609_native_extended_document_rules(
         }:
             antimicrobial_orders = _antimicrobial_orders(drug_order_rows)
             course_rows = (*daily_rows, *senior_rows)
-            source_error = drug_order_error or daily_error or senior_error
+            source_error = drug_order_error or (
+                "" if rule_id == "LX0609-058" else daily_error or senior_error
+            )
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif not antimicrobial_orders:
@@ -1059,11 +1100,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                         row.get("prescribed_datetime") or row.get("order_datetime")
                     )) is not None
                 )
+                effect_evaluation_rows = tuple(
+                    row for row in course_rows
+                    if _is_antimicrobial_effect_evaluation(row)
+                )
                 evaluation_times = tuple(
                     value
-                    for row in course_rows
-                    if _has_any_text((row,), ("效果评价", "体温下降", "白细胞", "CRP", "降阶梯"))
-                    and (value := _row_time(row)) is not None
+                    for row in effect_evaluation_rows
+                    if (value := _row_time(row)) is not None
+                )
+                has_untimed_effect_evaluation = any(
+                    _row_time(row) is None for row in effect_evaluation_rows
                 )
                 if not order_times:
                     final_state, reason_code = "data_gap", "authoritative_time_missing"
@@ -1077,8 +1124,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                         for value in eligible_evaluation_times
                     )
                     complete = any(48 <= value <= 72 for value in intervals)
-                    final_state = "compliant" if complete else "non_compliant"
-                    reason_code = "requirement_within_threshold" if complete else "threshold_exceeded"
+                    if complete:
+                        final_state, reason_code = "compliant", "requirement_within_threshold"
+                    elif has_untimed_effect_evaluation:
+                        final_state, reason_code = "data_gap", "authoritative_time_missing"
+                    else:
+                        final_state, reason_code = "non_compliant", "threshold_exceeded"
                     display.append((rule_id, {
                         "verification_kind": "antimicrobial_effect_evaluation_check",
                         "antimicrobials": [
@@ -1139,28 +1190,102 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "reason_or_no_specimen_documented": complete,
                     }))
             elif rule_id == "LX0609-058":
-                special_used = any(
-                    any(name in _material_text(row) for name in _SPECIAL_ANTIMICROBIALS)
+                special_orders = tuple(
+                    row
                     for row in antimicrobial_orders
-                )
-                if not special_used:
-                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
-                elif consultation_error:
-                    final_state, reason_code = "data_gap", consultation_error
-                else:
-                    complete = _has_any_text(
-                        (*consultation_rows, *senior_rows),
-                        ("感染专家", "专家会诊", "专家查房", "同意特殊级"),
+                    if any(
+                        name in _material_text(row)
+                        for name in _SPECIAL_ANTIMICROBIALS
                     )
-                    final_state = "compliant" if complete else "non_compliant"
-                    reason_code = "requirement_satisfied" if complete else "required_document_missing"
+                )
+                special_names = tuple(
+                    name
+                    for name in _SPECIAL_ANTIMICROBIALS
+                    if any(name in _material_text(row) for row in special_orders)
+                )
+                order_time_results = tuple(
+                    _special_antimicrobial_order_time(row)
+                    for row in special_orders
+                )
+                order_time_issue = next(
+                    (
+                        issue
+                        for _, issue in order_time_results
+                        if issue == "authoritative_time_conflict"
+                    ),
+                    None,
+                )
+                if order_time_issue is None and any(
+                    issue == "authoritative_time_missing"
+                    for _, issue in order_time_results
+                ):
+                    order_time_issue = "authoritative_time_missing"
+                order_times = tuple(
+                    value
+                    for value, issue in order_time_results
+                    if issue is None and value is not None
+                )
+                first_order_time = min(order_times, default=None)
+                expert_support_rows = tuple(
+                    row
+                    for row in (*consultation_rows, *senior_rows)
+                    if _has_any_text(
+                        (row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS
+                    )
+                )
+                expert_support_times = tuple(
+                    _row_time(row) for row in expert_support_rows
+                )
+                timed_expert_supports = tuple(
+                    value for value in expert_support_times if value is not None
+                )
+                expert_support_time = min(timed_expert_supports, default=None)
+                support_before_use = (
+                    first_order_time is not None
+                    and any(
+                        value <= first_order_time
+                        for value in timed_expert_supports
+                    )
+                )
+                if not special_orders:
+                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
+                elif order_time_issue is not None:
+                    final_state, reason_code = "data_gap", order_time_issue
+                elif first_order_time is None:
+                    final_state, reason_code = "data_gap", "authoritative_time_missing"
+                elif support_before_use:
+                    # 已读来源中一份可定时的用药前支持即可满足本规则；
+                    # 另一支持来源不可用不能推翻已确认的事实。
+                    final_state, reason_code = "compliant", "requirement_satisfied"
+                elif expert_support_rows and any(
+                    value is None for value in expert_support_times
+                ):
+                    final_state, reason_code = "data_gap", "authoritative_time_missing"
+                elif consultation_error or senior_error:
+                    final_state, reason_code = (
+                        "data_gap",
+                        consultation_error or senior_error,
+                    )
+                elif not expert_support_rows:
+                    final_state, reason_code = "non_compliant", "required_document_missing"
+                else:
+                    final_state, reason_code = "non_compliant", "requirement_violated"
+                if special_orders:
                     display.append((rule_id, {
                         "verification_kind": "special_antimicrobial_expert_support_check",
-                        "special_antimicrobials": [
-                            name for name in _SPECIAL_ANTIMICROBIALS
-                            if any(name in _material_text(row) for row in antimicrobial_orders)
-                        ],
-                        "expert_support_present": complete,
+                        "special_antimicrobials": list(special_names),
+                        "expert_support_present": bool(expert_support_rows),
+                        "first_antimicrobial_time": (
+                            first_order_time.isoformat(sep=" ")
+                            if first_order_time is not None
+                            else None
+                        ),
+                        "expert_support_time": (
+                            expert_support_time.isoformat(sep=" ")
+                            if expert_support_time is not None
+                            else None
+                        ),
+                        "support_before_use": support_before_use,
                     }))
             else:
                 used_names = tuple(
@@ -1188,8 +1313,12 @@ async def execute_luxian_0609_native_extended_document_rules(
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=(
-                    "inpat_drug_order", "daily_course_record", "senior_course_record",
-                    "consultation_record", "labtest_master", "labtest_item_report",
+                    ("inpat_drug_order", "senior_course_record", "consultation_record")
+                    if rule_id == "LX0609-058"
+                    else (
+                        "inpat_drug_order", "daily_course_record", "senior_course_record",
+                        "consultation_record", "labtest_master", "labtest_item_report",
+                    )
                 ),
                 final_state=final_state, reason_code=reason_code,
             ))
@@ -1353,7 +1482,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "discharge_record",
                         ),
                         final_state="data_gap",
-                        reason_code="applicability_source_gap",
+                        reason_code=(
+                            "authoritative_time_conflict"
+                            if death_state == "conflict"
+                            else "applicability_source_gap"
+                        ),
                     )
                 )
                 continue
@@ -1387,7 +1520,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 death_rows=death_rows,
                 discussion_rows=discussion_rows,
                 discussion_error=discussion_error,
-                snapshot_created_at=evidence_snapshot.created_at,
+                horizon_rows=horizon_rows,
+                horizon_error=horizon_error,
             )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
@@ -1395,7 +1529,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
-                    source_keys=("death_record", "death_discussion"),
+                    source_keys=(
+                        "death_record",
+                        "death_discussion",
+                        "evaluation_context.horizon",
+                    ),
                     final_state=outcome.final_state,
                     reason_code=outcome.reason_code,
                 )
@@ -2027,30 +2165,59 @@ async def execute_luxian_0609_native_extended_document_rules(
                     diagnosis_error or daily_error or senior_error,
                 )
             else:
-                ordered_diagnoses = sorted(
-                    (
-                        (parsed, _clean(row.get("diagnosis_name")))
-                        for row in diagnosis_rows
-                        if (
-                            parsed := _parse_datetime(row.get("diagnosis_datetime"))
+                diagnoses_by_slot: dict[tuple[str, str], list[tuple[datetime, str]]] = {}
+                invalid_reason: str | None = None
+                association_issue: str | None = None
+                for row in diagnosis_rows:
+                    diagnosis_time = _parse_datetime(row.get("diagnosis_datetime"))
+                    diagnosis_name = _clean(row.get("diagnosis_name"))
+                    diagnosis_type = _clean(row.get("diagnosis_type")).casefold()
+                    diagnosis_no = _clean(row.get("diagnosis_no")).casefold()
+                    if diagnosis_time is None or not diagnosis_name:
+                        invalid_reason = "authoritative_time_missing"
+                        break
+                    if not diagnosis_type or not diagnosis_no:
+                        invalid_reason = "association_failed"
+                        association_issue = "slot_missing"
+                        break
+                    diagnoses_by_slot.setdefault(
+                        (diagnosis_type, diagnosis_no), []
+                    ).append((diagnosis_time, diagnosis_name))
+
+                change_events: list[tuple[datetime, str]] = []
+                if invalid_reason is None:
+                    for slot_diagnoses in diagnoses_by_slot.values():
+                        names_by_time: dict[datetime, set[str]] = {}
+                        for diagnosis_time, diagnosis_name in slot_diagnoses:
+                            names_by_time.setdefault(diagnosis_time, set()).add(diagnosis_name)
+                        if any(len(names) > 1 for names in names_by_time.values()):
+                            invalid_reason = "association_failed"
+                            association_issue = "same_time_conflict"
+                            break
+                        ordered_diagnoses = sorted(
+                            (
+                                (diagnosis_time, next(iter(names)))
+                                for diagnosis_time, names in names_by_time.items()
+                            ),
+                            key=lambda item: item[0],
                         )
-                        is not None
-                        and _clean(row.get("diagnosis_name"))
-                    ),
-                    key=lambda item: item[0],
-                )
-                change_events = tuple(
-                    current_time
-                    for (_, previous_name), (current_time, current_name) in zip(
-                        ordered_diagnoses, ordered_diagnoses[1:]
-                    )
-                    if current_name != previous_name
-                )
-                if diagnosis_rows and len(ordered_diagnoses) != len(diagnosis_rows):
-                    final_state, reason_code = (
-                        "data_gap",
-                        "authoritative_time_missing",
-                    )
+                        change_events.extend(
+                            (current_time, current_name)
+                            for (_, previous_name), (current_time, current_name) in zip(
+                                ordered_diagnoses, ordered_diagnoses[1:]
+                            )
+                            if current_name != previous_name
+                        )
+
+                if invalid_reason is not None:
+                    final_state, reason_code = "data_gap", invalid_reason
+                    if invalid_reason == "association_failed":
+                        display.append((rule_id, {
+                            "failure_kind": "diagnosis_change_association_failed",
+                            "diagnosis_record_count": len(diagnosis_rows),
+                            "diagnosis_change_count": len(change_events),
+                            "association_issue": association_issue,
+                        }))
                 elif not change_events:
                     final_state, reason_code = (
                         "not_applicable",
@@ -2058,9 +2225,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                 else:
                     course_rows = tuple(
-                        (record_time, _row_text(row))
+                        (_row_time(row), _row_text(row))
                         for row in (*daily_rows, *senior_rows)
-                        if (record_time := _row_time(row)) is not None
                     )
                     reason_markers = (
                         "修正诊断",
@@ -2068,29 +2234,85 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "修改理由",
                     )
                     basis_markers = ("诊断依据", "依据为", "依据：", "依据:")
-                    has_reason_and_basis = all(
-                        any(
-                            record_time >= change_time
-                            and any(marker in text for marker in reason_markers)
-                            and any(marker in text for marker in basis_markers)
-                            for record_time, text in course_rows
+                    candidate_rows = tuple(
+                        (record_time, text)
+                        for record_time, text in course_rows
+                        if any(marker in text for marker in reason_markers)
+                        and any(marker in text for marker in basis_markers)
+                    )
+                    if len(change_events) == 1:
+                        has_reason_and_basis = any(
+                            record_time is not None and record_time >= change_events[0][0]
+                            for record_time, _ in candidate_rows
                         )
-                        for change_time in change_events
-                    )
-                    final_state = (
-                        "compliant" if has_reason_and_basis else "non_compliant"
-                    )
-                    reason_code = (
-                        "requirement_satisfied"
-                        if has_reason_and_basis
-                        else "requirement_violated"
-                    )
-                    display.append((rule_id, {
-                        "verification_kind": "diagnosis_change_documentation_check",
-                        "diagnosis_change_count": len(change_events),
-                        "reason_recorded": has_reason_and_basis,
-                        "basis_recorded": has_reason_and_basis,
-                    }))
+                        if (
+                            not has_reason_and_basis
+                            and candidate_rows
+                            and all(record_time is None for record_time, _ in candidate_rows)
+                        ):
+                            final_state, reason_code = (
+                                "data_gap",
+                                "authoritative_time_missing",
+                            )
+                            display.append((rule_id, {
+                                "failure_kind": "diagnosis_change_documentation_time_missing",
+                                "diagnosis_change_count": len(change_events),
+                                "untimed_document_count": len(candidate_rows),
+                                "issue": "candidate_document_time_missing",
+                            }))
+                        else:
+                            final_state = (
+                                "compliant" if has_reason_and_basis else "non_compliant"
+                            )
+                            reason_code = (
+                                "requirement_satisfied"
+                                if has_reason_and_basis
+                                else "requirement_violated"
+                            )
+                    else:
+                        matching_course_indexes = tuple(
+                            tuple(
+                                index
+                                for index, (record_time, text) in enumerate(candidate_rows)
+                                if record_time is not None
+                                and record_time >= change_time
+                                and diagnosis_name in text
+                            )
+                            for change_time, diagnosis_name in change_events
+                        )
+                        uniquely_matched = (
+                            len(matching_course_indexes) == len(change_events)
+                            and all(len(indexes) == 1 for indexes in matching_course_indexes)
+                            and len({indexes[0] for indexes in matching_course_indexes})
+                            == len(matching_course_indexes)
+                        )
+                        if uniquely_matched:
+                            final_state, reason_code = (
+                                "compliant",
+                                "requirement_satisfied",
+                            )
+                        else:
+                            final_state, reason_code = (
+                                "data_gap",
+                                "association_failed",
+                            )
+                            display.append((rule_id, {
+                                "failure_kind": "diagnosis_change_association_failed",
+                                "diagnosis_record_count": len(diagnosis_rows),
+                                "diagnosis_change_count": len(change_events),
+                                "association_issue": "multiple_changes_unresolved",
+                            }))
+                        has_reason_and_basis = uniquely_matched
+                    if reason_code not in {
+                        "association_failed",
+                        "authoritative_time_missing",
+                    }:
+                        display.append((rule_id, {
+                            "verification_kind": "diagnosis_change_documentation_check",
+                            "diagnosis_change_count": len(change_events),
+                            "reason_recorded": has_reason_and_basis,
+                            "basis_recorded": has_reason_and_basis,
+                        }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,

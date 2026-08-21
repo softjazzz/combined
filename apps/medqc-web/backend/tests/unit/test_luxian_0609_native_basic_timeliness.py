@@ -137,6 +137,208 @@ def test_missing_timeliness_document_after_maturity_is_non_compliant(
 
 
 @pytest.mark.unit
+def test_001_empty_template_after_maturity_is_treated_as_missing_admission_record():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "empty-template",
+                    "document_title": "入院记录",
+                    "record_time": "2026-06-01 10:00:00",
+                    "chief_complaint": " ",
+                    "history_of_present_illness": None,
+                    "record_content": "入院记录\n记录时间：2026-06-01 10:00:00\n正文：",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-001",),
+        evaluation_as_of_date="2026-06-03",
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
+    assert dict(execution.customer_display_facts)["LX0609-001"]["timeliness_state"] == "missing"
+    assert (
+        dict(execution.customer_display_facts)["LX0609-001"]["document_content_state"]
+        == "blank_or_placeholder"
+    )
+
+
+@pytest.mark.unit
+def test_001_empty_template_before_maturity_keeps_evaluation_window_open():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "empty-template",
+                    "record_time": "2026-06-01 10:00:00",
+                    "record_content": "入院记录 记录时间 2026-06-01 10:00:00 正文",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-001",),
+        evaluation_as_of_date="2026-06-02",
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+    assert execution.customer_display_facts == ()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "placeholder_body",
+    (
+        "。",
+        "-",
+        "--",
+        "无",
+        "否",
+        "无/否",
+        "暂无",
+        "无特殊",
+        "未填",
+        "未填写",
+        "不详",
+        "未知",
+        "null",
+        "none",
+        "主诉：无；现病史：否",
+    ),
+)
+def test_001_short_placeholder_body_is_not_a_substantive_admission_record(
+    placeholder_body: str,
+):
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "placeholder-template",
+                    "record_time": "2026-06-01 10:00:00",
+                    "record_content": placeholder_body,
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-001",),
+        evaluation_as_of_date="2026-06-03",
+    )
+
+    _, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "admission_row",
+    (
+        {"chief_complaint": "腹痛"},
+        {"history_of_present_illness": "腹痛3天"},
+    ),
+)
+def test_001_short_clinical_content_is_a_substantive_admission_record(
+    admission_row: dict[str, str],
+):
+    """001只核对文书是否完成，不能把短但真实的临床内容当作空模板。"""
+
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "short-clinical-document",
+                    "record_time": "2026-06-01 10:00:00",
+                    **admission_row,
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-001",),
+        evaluation_as_of_date="2026-06-03",
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert dict(execution.customer_display_facts)["LX0609-001"]["source_document_id"] == (
+        "short-clinical-document"
+    )
+
+
+@pytest.mark.unit
+def test_001_substantive_admission_record_without_authoritative_time_is_data_gap():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "substantive-without-time",
+                    "chief_complaint": "反复腹痛三天",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-001",),
+        evaluation_as_of_date="2026-06-03",
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert execution.customer_display_facts == ()
+
+
+@pytest.mark.unit
+def test_001_ignores_earlier_empty_template_and_uses_substantive_document():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "empty-template",
+                    "record_time": "2026-06-01 09:00:00",
+                    "record_content": "入院记录 记录时间 2026-06-01 09:00:00 正文",
+                },
+                {
+                    "document_id": "substantive-document",
+                    "record_time": "2026-06-01 10:00:00",
+                    "history_of_present_illness": "患者反复腹痛三天后入院。",
+                },
+            ],
+        },
+        selected_rule_ids=("LX0609-001",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    facts = dict(execution.customer_display_facts)["LX0609-001"]
+    assert facts["observed_time"] == "2026-06-01 10:00:00"
+    assert facts["source_document_id"] == "substantive-document"
+
+
+@pytest.mark.unit
 def test_missing_timeliness_document_with_negative_evaluation_interval_fails_closed():
     session = _typed_basic_session(
         {
@@ -226,6 +428,7 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
                     "document_title": "入院记录",
                     "admission_datetime": "2026-06-01 08:00:00",
                     "record_time": "2026-06-01 08:00:00",
+                    "chief_complaint": "反复腹痛三天",
                 }
             ],
             "daily_course_record": [
@@ -314,6 +517,7 @@ def test_001_compliant_keeps_time_facts_without_guessing_a_missing_document_id()
                 {
                     "document_title": "入院记录",
                     "record_time": "2026-06-01 10:00:00",
+                    "chief_complaint": "反复腹痛三天",
                 }
             ],
             "daily_course_record": [],
@@ -355,6 +559,7 @@ def test_001_time_conflict_exposes_both_times_and_exact_lead_for_customer_projec
                     "document_id": "admission-conflict-document",
                     "document_title": "入院记录",
                     "record_time": "2026-08-16 22:20:29",
+                    "chief_complaint": "左侧腹股沟包块伴不适半年",
                 }
             ],
             "daily_course_record": [],
@@ -397,6 +602,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
                     "document_id": "admission-private-id",
                     "document_title": "入院记录",
                     "record_time": "2026-06-02 10:00:00",
+                    "history_of_present_illness": "患者反复腹痛三天后入院。",
                 }
             ],
             "daily_course_record": [],
@@ -509,6 +715,7 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
                     "document_title": "入院记录",
                     "admission_datetime": "2026-08-16 20:00:00",
                     "record_datetime": "2026-08-16 22:20:29",
+                    "chief_complaint": "左侧腹股沟包块伴不适半年",
                 }
             ],
             "first_course_record": [
@@ -623,6 +830,7 @@ def test_001_005_006_use_discharge_admission_date_only_for_conclusive_boundaries
                 {
                     "document_title": "入院记录",
                     "record_time": admission_record_time,
+                    "chief_complaint": "反复腹痛三天",
                 }
             ],
             "discharge_record": [{"admission_date": "2026-06-01"}],
@@ -659,6 +867,7 @@ def test_001_005_006_exact_admission_datetime_wins_over_discharge_date_fallback(
                 {
                     "document_title": "入院记录",
                     "record_time": "2026-06-11 08:00:00",
+                    "chief_complaint": "反复腹痛三天",
                 }
             ],
             "discharge_record": [{"admission_date": "2026-06-01"}],
@@ -1061,6 +1270,7 @@ def test_001_005_006_typed_thresholds_are_exact_and_senior_satisfies_attending_o
                 {
                     "document_title": "入院记录",
                     "record_time": "2026-06-02 08:00:01",
+                    "chief_complaint": "反复腹痛三天",
                 }
             ],
             "daily_course_record": [],

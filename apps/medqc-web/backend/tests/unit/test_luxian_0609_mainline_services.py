@@ -391,6 +391,7 @@ def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
                 "document_title": "入院记录",
                 "admission_datetime": "2026-01-01 08:00:00",
                 "record_time": "2026-01-01 09:00:00",
+                "chief_complaint": "反复腹痛三天",
             }
         ],
         "daily_course_record": [

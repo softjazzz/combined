@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v21"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v22"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -509,8 +509,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-055": (
-        "senior_course_record", "consultation_record", "labtest_master",
-        "labtest_item_report",
+        "inpat_drug_order", "daily_course_record", "senior_course_record",
+        "consultation_record", "labtest_master", "labtest_item_report",
     ),
     "LX0609-056": (
         "daily_course_record", "senior_course_record", "consultation_record",
@@ -521,8 +521,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-058": (
-        "daily_course_record", "senior_course_record", "labtest_master",
-        "labtest_item_report",
+        "inpat_drug_order", "senior_course_record", "consultation_record",
     ),
     "LX0609-059": (
         "exam_master",
@@ -547,7 +546,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 第一阶段扩展规则的触发事实不扩张客户文书范围，但必须进入同一
     # Evidence Session。死亡与普通出院规则互相排斥，因此两类权威记录
     # 需要在同一快照内交叉确认适用性。
-    "LX0609-051": ("inpat_registration", "discharge_record"),
+    "LX0609-051": (
+        "inpat_registration",
+        "discharge_record",
+        "evaluation_context.horizon",
+    ),
     "LX0609-060": ("inpat_registration", "discharge_record"),
     "LX0609-061": ("inpat_registration", "death_record"),
     "LX0609-062": ("inpat_registration",),

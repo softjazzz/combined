@@ -733,6 +733,8 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-051": {
             "death_discussion_timeliness_check",
             "death_discussion_missing_after_deadline",
+            "death_discussion_window_not_mature",
+            "death_discussion_evaluation_horizon_unavailable",
         },
         "LX0609-052": {
             "critical_value_timeliness_check",
@@ -772,7 +774,11 @@ def safe_luxian_0609_customer_display_facts(
         },
         "LX0609-072": {"transfer_record_timeliness_check", "transfer_records_missing"},
         "LX0609-073": {"transfer_record_presence_check", "transfer_records_missing"},
-        "LX0609-074": {"diagnosis_change_documentation_check"},
+        "LX0609-074": {
+            "diagnosis_change_documentation_check",
+            "diagnosis_change_association_failed",
+            "diagnosis_change_documentation_time_missing",
+        },
         "LX0609-075": {
             "invasive_procedure_course_record_complete",
             "invasive_procedure_course_record_missing",
@@ -787,6 +793,13 @@ def safe_luxian_0609_customer_display_facts(
         },
         "death_discussion_missing_after_deadline": {
             "death_time", "threshold_hours", "discussion_count",
+        },
+        "death_discussion_window_not_mature": {
+            "death_time", "deadline_time", "evaluation_time",
+            "evaluation_date", "remaining_seconds",
+        },
+        "death_discussion_evaluation_horizon_unavailable": {
+            "death_time", "issue",
         },
         "critical_value_timeliness_check": {
             "critical_item_names", "critical_flags", "report_times", "disposition_times",
@@ -808,6 +821,7 @@ def safe_luxian_0609_customer_display_facts(
         },
         "special_antimicrobial_expert_support_check": {
             "special_antimicrobials", "expert_support_present",
+            "first_antimicrobial_time", "expert_support_time", "support_before_use",
         },
         "antimicrobial_course_documentation_complete": {
             "antimicrobials", "course_documented",
@@ -885,6 +899,12 @@ def safe_luxian_0609_customer_display_facts(
         "diagnosis_change_documentation_check": {
             "diagnosis_change_count", "reason_recorded", "basis_recorded",
         },
+        "diagnosis_change_association_failed": {
+            "diagnosis_record_count", "diagnosis_change_count", "association_issue",
+        },
+        "diagnosis_change_documentation_time_missing": {
+            "diagnosis_change_count", "untimed_document_count", "issue",
+        },
         "invasive_procedure_course_record_complete": {
             "ordered_procedures", "course_documented",
         },
@@ -905,6 +925,156 @@ def safe_luxian_0609_customer_display_facts(
             or raw.get("lab_report_count") <= 0
         ):
             return None
+        if kind == "death_discussion_window_not_mature":
+            death_time = raw.get("death_time")
+            deadline_time = raw.get("deadline_time")
+            evaluation_time = raw.get("evaluation_time")
+            evaluation_date = raw.get("evaluation_date")
+            remaining_seconds = raw.get("remaining_seconds")
+            expected_keys = {
+                "verification_kind",
+                "death_time",
+                "deadline_time",
+                *(
+                    ("evaluation_time", "remaining_seconds")
+                    if evaluation_time is not None
+                    else ("evaluation_date",)
+                ),
+            }
+            try:
+                death_dt = datetime.fromisoformat(str(death_time))
+                deadline_dt = datetime.fromisoformat(str(deadline_time))
+                evaluation_dt = (
+                    datetime.fromisoformat(str(evaluation_time))
+                    if evaluation_time is not None
+                    else None
+                )
+                evaluation_day = (
+                    datetime.fromisoformat(str(evaluation_date)).date()
+                    if evaluation_date is not None
+                    else None
+                )
+            except ValueError:
+                return None
+            if (
+                set(raw) != expected_keys
+                or deadline_dt - death_dt != timedelta(hours=168)
+                or (evaluation_time is None) == (evaluation_date is None)
+                or (
+                    evaluation_dt is not None
+                    and (
+                        not isinstance(remaining_seconds, int)
+                        or isinstance(remaining_seconds, bool)
+                        or remaining_seconds <= 0
+                        or int((deadline_dt - evaluation_dt).total_seconds())
+                        != remaining_seconds
+                    )
+                )
+                or (
+                    evaluation_day is not None
+                    and evaluation_day > deadline_dt.date()
+                )
+            ):
+                return None
+            safe_window = {
+                "verification_kind": kind,
+                "death_time": death_time,
+                "deadline_time": deadline_time,
+            }
+            if evaluation_dt is not None:
+                safe_window.update(
+                    evaluation_time=evaluation_time,
+                    remaining_seconds=remaining_seconds,
+                )
+            else:
+                safe_window["evaluation_date"] = evaluation_date
+            return safe_window
+        if kind == "death_discussion_evaluation_horizon_unavailable":
+            if (
+                set(raw) != {"verification_kind", "death_time", "issue"}
+                or raw.get("issue") not in {
+                    "authoritative_time_missing",
+                    "authoritative_time_conflict",
+                }
+            ):
+                return None
+            try:
+                datetime.fromisoformat(str(raw.get("death_time")))
+            except ValueError:
+                return None
+            return {
+                "verification_kind": kind,
+                "death_time": raw["death_time"],
+                "issue": raw["issue"],
+            }
+        if kind == "special_antimicrobial_expert_support_check":
+            expected_keys = {
+                "verification_kind",
+                "special_antimicrobials",
+                "expert_support_present",
+                "first_antimicrobial_time",
+                "expert_support_time",
+                "support_before_use",
+            }
+            medicines = raw.get("special_antimicrobials")
+            expert_present = raw.get("expert_support_present")
+            first_time = raw.get("first_antimicrobial_time")
+            support_time = raw.get("expert_support_time")
+            support_before_use = raw.get("support_before_use")
+            if (
+                set(raw) != expected_keys
+                or not isinstance(medicines, (list, tuple))
+                or not medicines
+                or len(medicines) > 20
+                or not all(
+                    isinstance(item, str) and 0 < len(item) <= 160 and "\n" not in item
+                    for item in medicines
+                )
+                or not isinstance(expert_present, bool)
+                or not isinstance(support_before_use, bool)
+            ):
+                return None
+            try:
+                first_dt = (
+                    datetime.fromisoformat(str(first_time))
+                    if first_time is not None
+                    else None
+                )
+                support_dt = (
+                    datetime.fromisoformat(str(support_time))
+                    if support_time is not None
+                    else None
+                )
+            except ValueError:
+                return None
+            if (
+                (first_time is not None and first_dt is None)
+                or (support_time is not None and support_dt is None)
+                or (not expert_present and (support_time is not None or support_before_use))
+                or (
+                    support_before_use
+                    and (
+                        not expert_present
+                        or first_dt is None
+                        or support_dt is None
+                        or support_dt > first_dt
+                    )
+                )
+                or (
+                    first_dt is not None
+                    and support_dt is not None
+                    and support_before_use != (support_dt <= first_dt)
+                )
+            ):
+                return None
+            return {
+                "verification_kind": kind,
+                "special_antimicrobials": list(medicines),
+                "expert_support_present": expert_present,
+                "first_antimicrobial_time": first_time,
+                "expert_support_time": support_time,
+                "support_before_use": support_before_use,
+            }
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
             if key == "event_results":
@@ -985,7 +1155,7 @@ def safe_luxian_0609_customer_display_facts(
             ) or not all(
                 valid_transfer_time(raw.get(key), allow_none=True)
                 for key in ("transfer_in_time", "transfer_out_time")
-            ):
+                ):
                 return None
             if kind == "transfer_record_timeliness_check":
                 intervals = (
@@ -1008,6 +1178,36 @@ def safe_luxian_0609_customer_display_facts(
                     for key in ("transfer_in_associated", "transfer_out_associated")
                 ):
                     return None
+        if kind == "diagnosis_change_association_failed":
+            diagnosis_record_count = raw.get("diagnosis_record_count")
+            diagnosis_change_count = raw.get("diagnosis_change_count")
+            if (
+                not isinstance(diagnosis_record_count, int)
+                or isinstance(diagnosis_record_count, bool)
+                or diagnosis_record_count <= 0
+                or not isinstance(diagnosis_change_count, int)
+                or isinstance(diagnosis_change_count, bool)
+                or diagnosis_change_count < 0
+                or raw.get("association_issue") not in {
+                    "slot_missing",
+                    "same_time_conflict",
+                    "multiple_changes_unresolved",
+                }
+            ):
+                return None
+        if kind == "diagnosis_change_documentation_time_missing":
+            diagnosis_change_count = raw.get("diagnosis_change_count")
+            untimed_document_count = raw.get("untimed_document_count")
+            if (
+                not isinstance(diagnosis_change_count, int)
+                or isinstance(diagnosis_change_count, bool)
+                or diagnosis_change_count <= 0
+                or not isinstance(untimed_document_count, int)
+                or isinstance(untimed_document_count, bool)
+                or untimed_document_count <= 0
+                or raw.get("issue") != "candidate_document_time_missing"
+            ):
+                return None
         if kind in {
             "physician_handoff_association_failed",
             "physician_change_time_missing",
@@ -3922,6 +4122,16 @@ def safe_luxian_0609_customer_display_facts(
             "threshold_hours": threshold,
             "source_label": source_label.strip(),
         }
+        document_content_state = raw.get("document_content_state")
+        if document_content_state is not None:
+            if (
+                rule_id != "LX0609-001"
+                or failure_kind != "timeliness_requirement_not_met"
+                or state != "missing"
+                or document_content_state != "blank_or_placeholder"
+            ):
+                return None
+            facts["document_content_state"] = "blank_or_placeholder"
         for key in ("anchor_time", "anchor_date", "observed_time"):
             value = raw.get(key)
             if isinstance(value, str) and value.strip():
@@ -5083,11 +5293,15 @@ def aggregate_luxian_0609_results(
                         "evidence_materials"
                     ),
                 )
-                if wrapper_id in display_facts_by_rule:
-                    result["customer_display_facts"] = display_facts_by_rule[wrapper_id]
+                facts_for_render = (
+                    display_facts_by_rule.get(wrapper_id)
+                    or result.get("customer_display_facts")
+                )
+                if isinstance(facts_for_render, Mapping):
+                    result["customer_display_facts"] = dict(facts_for_render)
                     precise_findings = _controlled_customer_findings(
                         rule_id=wrapper_id,
-                        facts=display_facts_by_rule[wrapper_id],
+                        facts=facts_for_render,
                     )
                     if precise_findings:
                         result["findings"] = precise_findings

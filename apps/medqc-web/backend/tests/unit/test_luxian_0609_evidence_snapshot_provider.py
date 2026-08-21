@@ -32,6 +32,7 @@ from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contra
 from app.services.luxian_0609.source_registry import (
     SourceAccessMode,
     load_luxian_0609_source_registry,
+    resolve_luxian_0609_decision_support_source_keys,
 )
 
 
@@ -609,6 +610,42 @@ def _rows(source_key: str, rows, *, truncated: bool = False, limit_rows: int = 5
     )
 
 
+def test_055_058_session_reads_each_executor_input_source() -> None:
+    """正式 Evidence Session 必须加载 055/058 执行器实际消费的材料。"""
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-055", "LX0609-058"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    required = {
+        "inpat_drug_order",
+        "daily_course_record",
+        "senior_course_record",
+        "consultation_record",
+    }
+    assert required.issubset(calls)
+    assert all(session.materials.has_source(source_key) for source_key in required)
+
+    sources_058 = set(resolve_luxian_0609_decision_support_source_keys(("LX0609-058",)))
+    assert sources_058 == {
+        "inpat_drug_order",
+        "consultation_record",
+        "senior_course_record",
+    }
+
+
 def test_033_reads_only_surgery_record_and_surgery_consent_sources() -> None:
     """033 只读取手术记录及手术知情同意书，不能被无关术前文书阻断。"""
 
@@ -789,6 +826,48 @@ def test_007_preserves_date_only_frozen_evaluation_horizon() -> None:
             "basis": "evaluation_as_of",
             "row_ref": session.materials.rows("evaluation_context.horizon")[0]["row_ref"],
         },
+    )
+
+
+def test_051_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
+    """死亡讨论成熟期只能读取同一 Evidence Session 的正式评价终点。"""
+
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows_by_source = {
+            "inpat_registration": [{"admission_datetime": "2026-07-30 08:00:00"}],
+            "death_record": [{"death_datetime": "2026-07-30 12:00:00"}],
+            "death_discussion": [],
+            "discharge_record": [],
+        }
+        return _rows(source_key, rows_by_source.get(source_key, []))
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-051",),
+        institute_id="I-051",
+        patient_id="P-051",
+        visit_id="V-051",
+        source_schema=None,
+        created_at="2026-08-20T23:59:59",
+        evaluation_as_of_date="2026-08-05",
+        evaluation_horizon_policy="frozen_task_date",
+        row_reader=reader,
+    )
+
+    assert "inpat_registration" in calls
+    assert "evaluation_context.horizon" not in calls
+    assert session.materials.rows("evaluation_context.horizon") == (
+        {
+            "horizon_date": "2026-08-05",
+            "basis": "evaluation_as_of",
+            "row_ref": session.materials.rows("evaluation_context.horizon")[0]["row_ref"],
+        },
+    )
+    assert any(
+        fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts
     )
 
 

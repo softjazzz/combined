@@ -461,6 +461,11 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         "已读取经治医师变更事件及交接班数据来源，但至少一次变更缺少可用于计算的权威时间。",
         "请补充或核对经治医师变更的权威时间后重新评估。",
     ),
+    ("LX0609-074", "association_failed"): (
+        "已读取诊断记录，但无法确定诊断修改顺序或逐次资料",
+        "已读取诊断记录；当前问题是诊断类别/序号缺失、重复或同刻冲突，或多次修改无法与对应病程逐次唯一关联；也不能据此认定缺少修改理由或诊断依据。",
+        "请核对诊断类别、序号、权威时间及每次修改对应的病程记录后重新评估。",
+    ),
 }
 
 _EVALUATION_WINDOW_RULE_LABELS = {
@@ -1362,7 +1367,64 @@ def customer_finding_from_controlled_facts(
 
     kind = str(facts.get("verification_kind") or facts.get("failure_kind") or "")
 
+    if rule_id == "LX0609-074" and kind == "diagnosis_change_association_failed":
+        diagnosis_record_count = facts.get("diagnosis_record_count")
+        diagnosis_change_count = facts.get("diagnosis_change_count")
+        association_issue = facts.get("association_issue")
+        if (
+            not isinstance(diagnosis_record_count, int)
+            or isinstance(diagnosis_record_count, bool)
+            or diagnosis_record_count <= 0
+            or not isinstance(diagnosis_change_count, int)
+            or isinstance(diagnosis_change_count, bool)
+            or diagnosis_change_count < 0
+        ):
+            return ""
+        if association_issue == "slot_missing":
+            return (
+                f"已读取 {diagnosis_record_count} 条诊断记录，"
+                "但诊断类别或序号缺失，无法确定修改顺序。"
+            )
+        if association_issue == "same_time_conflict":
+            return (
+                f"已读取 {diagnosis_record_count} 条诊断记录，"
+                "同一诊断类别和序号在同一时刻出现不同诊断，无法确定修改顺序。"
+            )
+        if association_issue == "multiple_changes_unresolved":
+            return (
+                f"已读取 {diagnosis_record_count} 条诊断记录，"
+                f"识别到 {diagnosis_change_count} 次诊断修改；"
+                "多次修改无法与对应病程逐次唯一关联。"
+            )
+        return ""
+
+    if rule_id == "LX0609-074" and kind == "diagnosis_change_documentation_time_missing":
+        diagnosis_change_count = facts.get("diagnosis_change_count")
+        untimed_document_count = facts.get("untimed_document_count")
+        if (
+            not isinstance(diagnosis_change_count, int)
+            or isinstance(diagnosis_change_count, bool)
+            or diagnosis_change_count <= 0
+            or not isinstance(untimed_document_count, int)
+            or isinstance(untimed_document_count, bool)
+            or untimed_document_count <= 0
+            or facts.get("issue") != "candidate_document_time_missing"
+        ):
+            return ""
+        return (
+            f"已读取 {untimed_document_count} 份含修改理由和诊断依据的病程，"
+            "但缺少权威记录时间，无法确认是否在诊断修改后完成。"
+        )
+
     if rule_id == "LX0609-001":
+        if (
+            kind == "timeliness_requirement_not_met"
+            and facts.get("target_document") == "admission_record"
+            and facts.get("timeliness_state") == "missing"
+            and facts.get("threshold_hours") == 24
+            and facts.get("document_content_state") == "blank_or_placeholder"
+        ):
+            return "已检到入院记录，但未发现可核验的有效文书内容。"
         conflict_seconds = facts.get("time_conflict_seconds")
         if (
             kind == "evidence_time_conflict"
@@ -2135,6 +2197,33 @@ def customer_finding_from_controlled_facts(
             )
         if kind == "death_discussion_missing_after_deadline":
             return f"患者于 {facts.get('death_time')} 死亡，超过 7 天仍未找到死亡病历讨论记录。"
+        if kind == "death_discussion_window_not_mature":
+            remaining_seconds = facts.get("remaining_seconds")
+            remaining_text = (
+                f"，尚余 {int(remaining_seconds) // 3600} 小时"
+                if isinstance(remaining_seconds, int) and remaining_seconds > 0
+                else ""
+            )
+            evaluation_text = (
+                f"当前评价时间 {facts.get('evaluation_time')}"
+                if facts.get("evaluation_time")
+                else f"当前评价日期 {facts.get('evaluation_date')}（无具体时刻）"
+            )
+            return (
+                f"死亡时间 {facts.get('death_time')}，死亡后7天截止时间 "
+                f"{facts.get('deadline_time')}；{evaluation_text}{remaining_text}，"
+                "尚未到评价时点。"
+            )
+        if kind == "death_discussion_evaluation_horizon_unavailable":
+            if facts.get("issue") == "authoritative_time_conflict":
+                return (
+                    f"死亡事实已确认（死亡时间 {facts.get('death_time')}），"
+                    "但死亡时间与评价时点顺序冲突，暂无法核对死亡后7天时限。"
+                )
+            return (
+                f"死亡事实已确认（死亡时间 {facts.get('death_time')}），"
+                "但缺少唯一评价时点，暂无法核对死亡后7天时限。"
+            )
 
     if rule_id in {"LX0609-052", "LX0609-053"}:
         if kind == "critical_value_result_detail_missing":
@@ -2185,11 +2274,22 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-058" and kind == "special_antimicrobial_expert_support_check":
         medicines = joined("special_antimicrobials")
-        return (
-            f"已使用特殊级抗菌药物 {medicines}，并找到专家查房或会诊支持记录。"
-            if facts.get("expert_support_present") is True
-            else f"已使用特殊级抗菌药物 {medicines}，未找到专家查房或会诊支持记录。"
-        )
+        first_use_time = facts.get("first_antimicrobial_time")
+        support_time = facts.get("expert_support_time")
+        if facts.get("support_before_use") is True:
+            return (
+                f"已使用特殊级抗菌药物 {medicines}，已在首次特殊级抗菌药使用时间 "
+                f"{first_use_time} 前或同刻找到专家支持记录（{support_time}）。"
+            )
+        if facts.get("expert_support_present") is True and support_time and first_use_time:
+            return (
+                f"已使用特殊级抗菌药物 {medicines}，但专家支持记录时间 "
+                f"{support_time} 晚于首次特殊级抗菌药使用时间 "
+                f"{first_use_time}，不满足用药前支持要求。"
+            )
+        if facts.get("expert_support_present") is True:
+            return f"已使用特殊级抗菌药物 {medicines}，但专家支持记录缺少可核对的权威时间。"
+        return f"已使用特殊级抗菌药物 {medicines}，未找到专家查房或会诊支持记录。"
 
     if rule_id == "LX0609-060" and kind == "death_record_presence_check":
         return (
@@ -2678,7 +2778,20 @@ def render_luxian_0609_customer_result(
             missing_items=_missing_item_labels(decision),
         )
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
-        if reason_specific_gap is not None:
+        if (
+            decision.rule_id == "LX0609-074"
+            and decision.reason_code == "authoritative_time_missing"
+            and isinstance(safe_customer_display_facts, Mapping)
+            and safe_customer_display_facts.get("failure_kind")
+            == "diagnosis_change_documentation_time_missing"
+        ):
+            findings = "已读取诊断修改理由和诊断依据，但无法核对完成时间"
+            evidence = (
+                "已读取含修改理由和诊断依据的病程，但缺少权威记录时间，"
+                "无法确认是否在诊断修改后完成。"
+            )
+            suggestion = "请补充或核对该病程记录的权威记录时间后重新评估。"
+        elif reason_specific_gap is not None:
             findings, evidence, suggestion = reason_specific_gap
         elif exam_lab_gap is not None:
             findings, evidence, suggestion = exam_lab_gap

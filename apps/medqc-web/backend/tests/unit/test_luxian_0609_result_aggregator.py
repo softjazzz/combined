@@ -31,6 +31,72 @@ CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
 
 
+def test_058_safe_projection_keeps_only_timed_expert_support_facts() -> None:
+    raw = {
+        "verification_kind": "special_antimicrobial_expert_support_check",
+        "special_antimicrobials": ["美罗培南"],
+        "expert_support_present": True,
+        "first_antimicrobial_time": "2026-06-01 10:00:00",
+        "expert_support_time": "2026-06-01 11:00:00",
+        "support_before_use": False,
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-058", raw=raw
+    ) == raw
+
+
+def test_058_safe_projection_rejects_inconsistent_timed_expert_support_facts() -> None:
+    raw = {
+        "verification_kind": "special_antimicrobial_expert_support_check",
+        "special_antimicrobials": ["美罗培南"],
+        "expert_support_present": True,
+        "first_antimicrobial_time": "2026-06-01 10:00:00",
+        "expert_support_time": "2026-06-01 11:00:00",
+        "support_before_use": True,
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-058", raw=raw
+    ) is None
+
+
+def test_058_canonical_projection_renders_expert_support_after_special_use() -> None:
+    facts = {
+        "verification_kind": "special_antimicrobial_expert_support_check",
+        "special_antimicrobials": ["美罗培南"],
+        "expert_support_present": True,
+        "first_antimicrobial_time": "2026-06-01 10:00:00",
+        "expert_support_time": "2026-06-01 11:00:00",
+        "support_before_use": False,
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-058", "name": "特殊级抗菌药物"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-058",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "executor_type": "program",
+                    "customer_display_facts": facts,
+                },
+            }
+        ],
+        format_evidence=False,
+    )[0]
+
+    expected_finding = (
+        "已使用特殊级抗菌药物 美罗培南，但专家支持记录时间 2026-06-01 11:00:00 "
+        "晚于首次特殊级抗菌药使用时间 2026-06-01 10:00:00，不满足用药前支持要求。"
+    )
+    assert result["customer_display_facts"] == facts
+    assert result["findings"] == expected_finding
+    assert result["decision_summary"] == expected_finding
+
+
 def test_069_safe_projection_keeps_strict_per_event_timeliness_facts() -> None:
     raw = {
         "verification_kind": "consultation_timeliness_check",
@@ -1676,6 +1742,46 @@ def test_071_single_change_association_gap_keeps_controlled_facts() -> None:
     }
 
 
+def test_074_association_failure_keeps_only_controlled_diagnosis_facts() -> None:
+    raw = {
+        "failure_kind": "diagnosis_change_association_failed",
+        "diagnosis_record_count": 3,
+        "diagnosis_change_count": 2,
+        "association_issue": "multiple_changes_unresolved",
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-074",
+        raw=raw,
+    ) == raw
+
+
+def test_074_association_failure_rejects_uncontrolled_issue_text() -> None:
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-074",
+        raw={
+            "failure_kind": "diagnosis_change_association_failed",
+            "diagnosis_record_count": 3,
+            "diagnosis_change_count": 2,
+            "association_issue": "private-note-leak",
+        },
+    ) is None
+
+
+def test_074_untimed_documentation_keeps_only_controlled_time_gap_facts() -> None:
+    raw = {
+        "failure_kind": "diagnosis_change_documentation_time_missing",
+        "diagnosis_change_count": 1,
+        "untimed_document_count": 1,
+        "issue": "candidate_document_time_missing",
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-074",
+        raw=raw,
+    ) == raw
+
+
 @pytest.mark.parametrize(
     "source_document_refs",
     [
@@ -2139,6 +2245,62 @@ def test_001_time_conflict_rejects_a_duration_that_does_not_match_both_times():
         rule_id="LX0609-001",
         raw=facts,
     ) is None
+
+
+def test_001_blank_or_placeholder_fact_is_strictly_whitelisted():
+    facts = {
+        "failure_kind": "timeliness_requirement_not_met",
+        "target_document": "admission_record",
+        "source_label": "入院记录",
+        "timeliness_state": "missing",
+        "threshold_hours": 24,
+        "document_content_state": "blank_or_placeholder",
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-001",
+        raw=facts,
+    ) == facts
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-001",
+        raw={**facts, "document_content_state": "untrusted"},
+    ) is None
+
+
+def test_001_blank_or_placeholder_fact_projects_the_specific_customer_finding():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-001",
+            snapshot_hash="a" * 64,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="required_document_missing",
+            fact_refs=("b" * 64,),
+            evaluator_version="basic-timeliness-authoritative-v1",
+            confidence=1.0,
+        )
+    )
+    facts = {
+        "failure_kind": "timeliness_requirement_not_met",
+        "target_document": "admission_record",
+        "source_label": "入院记录",
+        "timeliness_state": "missing",
+        "threshold_hours": 24,
+        "document_content_state": "blank_or_placeholder",
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-001", "name": "入院记录时限"}],
+        execution_results=[],
+        reduced_decisions=(decision,),
+        customer_display_facts=(("LX0609-001", facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "non_compliant"
+    assert result["customer_display_facts"] == facts
+    assert result["findings"] == "已检到入院记录，但未发现可核验的有效文书内容。"
 
 
 def test_007_overdue_interval_names_both_rounds_and_locates_both_records():

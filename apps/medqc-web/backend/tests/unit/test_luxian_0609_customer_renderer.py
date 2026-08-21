@@ -30,6 +30,45 @@ SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 
 
+def test_058_customer_finding_distinguishes_expert_support_after_special_use() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-058",
+        facts={
+            "verification_kind": "special_antimicrobial_expert_support_check",
+            "special_antimicrobials": ["美罗培南"],
+            "expert_support_present": True,
+            "first_antimicrobial_time": "2026-06-01 10:00:00",
+            "expert_support_time": "2026-06-01 11:00:00",
+            "support_before_use": False,
+        },
+    )
+
+    assert finding == (
+        "已使用特殊级抗菌药物 美罗培南，但专家支持记录时间 "
+        "2026-06-01 11:00:00 晚于首次特殊级抗菌药使用时间 "
+        "2026-06-01 10:00:00，不满足用药前支持要求。"
+    )
+
+
+def test_058_customer_finding_confirms_expert_support_before_or_at_special_use() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-058",
+        facts={
+            "verification_kind": "special_antimicrobial_expert_support_check",
+            "special_antimicrobials": ["美罗培南"],
+            "expert_support_present": True,
+            "first_antimicrobial_time": "2026-06-01 10:00:00",
+            "expert_support_time": "2026-06-01 10:00:00",
+            "support_before_use": True,
+        },
+    )
+
+    assert finding == (
+        "已使用特殊级抗菌药物 美罗培南，已在首次特殊级抗菌药使用时间 "
+        "2026-06-01 10:00:00 前或同刻找到专家支持记录（2026-06-01 10:00:00）。"
+    )
+
+
 def test_069_customer_finding_identifies_each_consultation_and_the_late_one() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-069",
@@ -61,6 +100,22 @@ def test_069_customer_finding_identifies_each_consultation_and_the_late_one() ->
     assert "第1次会诊" in finding
     assert "第2次会诊" in finding
     assert "超过24小时" in finding
+
+
+def test_001_blank_or_placeholder_admission_record_renders_specific_customer_copy() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-001",
+        facts={
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "admission_record",
+            "source_label": "入院记录",
+            "timeliness_state": "missing",
+            "threshold_hours": 24,
+            "document_content_state": "blank_or_placeholder",
+        },
+    )
+
+    assert finding == "已检到入院记录，但未发现可核验的有效文书内容。"
 
 
 def test_010_association_facts_render_exact_customer_counts() -> None:
@@ -352,6 +407,74 @@ def test_071_reason_copy_does_not_claim_that_handoff_records_exist(
 
     assert "已读取经治医师变更事件及交班、接班记录" not in rendered["evidence"]
     assert "已读取经治医师变更事件及交接班数据来源" in rendered["evidence"]
+
+
+def test_074_association_gap_uses_diagnosis_specific_copy_not_missing_reason_copy() -> None:
+    facts = {
+        "failure_kind": "diagnosis_change_association_failed",
+        "diagnosis_record_count": 3,
+        "diagnosis_change_count": 2,
+        "association_issue": "multiple_changes_unresolved",
+    }
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-074",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="association_failed",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-extended-document-v1",
+        )
+    )
+
+    rendered = render_luxian_0609_customer_result(
+        decision=decision,
+        safe_customer_display_facts=facts,
+    )
+
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-074",
+        facts=facts,
+    ) == "已读取 3 条诊断记录，识别到 2 次诊断修改；多次修改无法与对应病程逐次唯一关联。"
+    assert "已读取诊断记录" in rendered["evidence"]
+    assert "诊断类别/序号缺失、重复或同刻冲突" in rendered["evidence"]
+    assert "缺少诊断修正时间、对应修改理由或诊断依据" not in rendered["evidence"]
+
+
+def test_074_untimed_reason_and_basis_copy_does_not_claim_missing_documentation() -> None:
+    facts = {
+        "failure_kind": "diagnosis_change_documentation_time_missing",
+        "diagnosis_change_count": 1,
+        "untimed_document_count": 1,
+        "issue": "candidate_document_time_missing",
+    }
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-074",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-extended-document-v1",
+        )
+    )
+
+    rendered = render_luxian_0609_customer_result(
+        decision=decision,
+        safe_customer_display_facts=facts,
+    )
+
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-074",
+        facts=facts,
+    ) == "已读取 1 份含修改理由和诊断依据的病程，但缺少权威记录时间，无法确认是否在诊断修改后完成。"
+    assert "已读取含修改理由和诊断依据的病程" in rendered["evidence"]
+    assert "缺少权威记录时间" in rendered["evidence"]
+    assert "缺少诊断修正时间、对应修改理由或诊断依据" not in rendered["evidence"]
 
 
 def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course_record() -> None:

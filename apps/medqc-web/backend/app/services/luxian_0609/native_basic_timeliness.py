@@ -75,6 +75,33 @@ _FIRST_COURSE_BODY_FIELDS = (
     "raw_text",
 )
 _MIN_FIRST_COURSE_BODY_CHARS = 6
+_ADMISSION_RECORD_BODY_FIELDS = (
+    "chief_complaint",
+    "history_of_present_illness",
+    "record_content",
+)
+_MIN_ADMISSION_RECORD_BODY_CHARS = 2
+_ADMISSION_RECORD_FIELD_LABEL_PATTERN = re.compile(
+    r"(?:入院记录|记录时间|完成时间|提交时间|文书类型|文书编号|主诉|现病史|正文|"
+    r"chiefcomplaint|historyofpresentillness|recordcontent)",
+    flags=re.IGNORECASE,
+)
+_ADMISSION_RECORD_PLACEHOLDERS = frozenset(
+    {
+        "",
+        "无",
+        "否",
+        "无否",
+        "暂无",
+        "无特殊",
+        "未填",
+        "未填写",
+        "不详",
+        "未知",
+        "null",
+        "none",
+    }
+)
 _ROUND_BODY_FIELDS = ("record_content", "content", "assembled_text", "raw_text")
 _MAX_SEMANTIC_ROUND_CANDIDATES = 8
 _MAX_SEMANTIC_ROUND_BODY_CHARS = 1800
@@ -312,6 +339,26 @@ def _is_substantive_first_course_text(value: Any) -> bool:
         flags=re.IGNORECASE,
     )
     return len(shell_remainder) >= _MIN_FIRST_COURSE_BODY_CHARS
+
+
+def _is_substantive_admission_record(row: Mapping[str, Any]) -> bool:
+    """逐字段确认入院记录含有临床内容，拒绝标题、时间和受控占位值。"""
+
+    for field in _ADMISSION_RECORD_BODY_FIELDS:
+        value = row.get(field)
+        if not isinstance(value, str):
+            continue
+        normalized = re.sub(r"[\W_]+", "", value, flags=re.UNICODE)
+        meaningful = _ADMISSION_RECORD_FIELD_LABEL_PATTERN.sub("", normalized)
+        # 日期、时刻和纯数字不能单独证明存在有效临床内容；但“腹痛3天”
+        # 去除数字后仍保留足够的临床文字，不会被误伤。
+        meaningful = re.sub(r"(?:\d+|年|月|日|时|分|秒)", "", meaningful)
+        if (
+            meaningful not in _ADMISSION_RECORD_PLACEHOLDERS
+            and len(meaningful) >= _MIN_ADMISSION_RECORD_BODY_CHARS
+        ):
+            return True
+    return False
 
 
 def _technical_result(rule_id: str, reason_code: str) -> dict[str, Any]:
@@ -632,11 +679,14 @@ def _typed_basic_decisions(
     # 001 的合规解释必须能回到实际被选中的入院记录。时间计算仍只使用
     # 权威 record time；这里额外保留同一行的内部文书 ID，供安全聚合层生成
     # 不可逆引用。没有可靠 ID 时只展示时间事实，不猜测文书。
+    substantive_admission_rows = tuple(
+        row for row in admission_rows if _is_substantive_admission_record(row)
+    )
     admission_record_events = tuple(
         sorted(
             (
                 (event.observed_time, event.document_id)
-                for event in extract_document_events(admission_rows)
+                for event in extract_document_events(substantive_admission_rows)
                 if event.observed_time is not None
             ),
             key=lambda item: (item[0], item[1] or ""),
@@ -1049,7 +1099,7 @@ def _typed_basic_decisions(
                 reason, technical = admission_issue
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
-            if not admission_rows:
+            if not substantive_admission_rows:
                 anchor, _anchor_date, anchor_gap = admission_anchor(rule_id)
                 if anchor_gap is not None:
                     decisions.append(anchor_gap)
@@ -1068,16 +1118,26 @@ def _typed_basic_decisions(
                     "required_document_missing",
                 )
                 decisions.append(decision)
+                document_content_state = (
+                    "blank_or_placeholder" if admission_rows else None
+                )
                 add_customer_fact(
                     rule_id,
-                    timeliness_fact(
-                        rule_id=rule_id,
-                        target_document="admission_record",
-                        source_label="入院记录",
-                        state="missing",
-                        threshold_hours=24,
-                        anchor=None,
-                    ),
+                    {
+                        **timeliness_fact(
+                            rule_id=rule_id,
+                            target_document="admission_record",
+                            source_label="入院记录",
+                            state="missing",
+                            threshold_hours=24,
+                            anchor=None,
+                        ),
+                        **(
+                            {"document_content_state": document_content_state}
+                            if document_content_state is not None
+                            else {}
+                        ),
+                    },
                 )
                 continue
             if not admission_record_times:
@@ -1159,7 +1219,7 @@ def _typed_basic_decisions(
                         failure_kind="timeliness_requirement_satisfied",
                     ),
                 )
-            elif len(admission_record_times) < len(admission_rows):
+            elif len(admission_record_times) < len(substantive_admission_rows):
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
             elif delta_state == "ambiguous":
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
