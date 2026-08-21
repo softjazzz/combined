@@ -584,6 +584,73 @@ def safe_luxian_0609_customer_display_facts(
             safe_events.append(safe_event)
         return safe_events
 
+    def controlled_consultation_events(value: Any) -> list[dict[str, Any]] | None:
+        """只投影会诊逐次时限事实，拒绝业务标识和原文。"""
+
+        if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
+            return None
+        safe_events: list[dict[str, Any]] = []
+        allowed_outcomes = {
+            "within_threshold",
+            "threshold_exceeded",
+            "time_conflict",
+        }
+        allowed_keys = {
+            "sequence",
+            "request_time",
+            "completion_time",
+            "interval_seconds",
+            "outcome",
+        }
+        for expected_sequence, item in enumerate(value, start=1):
+            if not isinstance(item, Mapping) or set(item) != allowed_keys:
+                return None
+            request_time = item.get("request_time")
+            completion_time = item.get("completion_time")
+            seconds = item.get("interval_seconds")
+            outcome = item.get("outcome")
+            if (
+                item.get("sequence") != expected_sequence
+                or not isinstance(request_time, str)
+                or not isinstance(completion_time, str)
+                or not request_time
+                or not completion_time
+                or len(request_time) > 40
+                or len(completion_time) > 40
+                or "\n" in request_time
+                or "\n" in completion_time
+                or not isinstance(seconds, (int, float))
+                or isinstance(seconds, bool)
+                or not isfinite(float(seconds))
+                or outcome not in allowed_outcomes
+            ):
+                return None
+            try:
+                requested_at = datetime.fromisoformat(request_time.replace("Z", "+00:00"))
+                completed_at = datetime.fromisoformat(completion_time.replace("Z", "+00:00"))
+                calculated_seconds = (completed_at - requested_at).total_seconds()
+            except (TypeError, ValueError):
+                return None
+            expected_outcome = (
+                "time_conflict"
+                if calculated_seconds < 0
+                else "within_threshold"
+                if calculated_seconds <= 24 * 60 * 60
+                else "threshold_exceeded"
+            )
+            if abs(float(seconds) - calculated_seconds) > 0.001 or outcome != expected_outcome:
+                return None
+            safe_events.append(
+                {
+                    "sequence": expected_sequence,
+                    "request_time": request_time,
+                    "completion_time": completion_time,
+                    "interval_seconds": seconds,
+                    "outcome": outcome,
+                }
+            )
+        return safe_events
+
     def controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
         """只投影 064 客户逐台核对所需字段，拒绝原始文书和内部事件标识。"""
 
@@ -781,6 +848,7 @@ def safe_luxian_0609_customer_display_facts(
         },
         "consultation_timeliness_check": {
             "threshold_hours", "actual_interval_hours", "request_times", "record_times",
+            "event_results",
         },
         "physician_handoff_timeliness_check": {
             "change_time", "handoff_times", "handover_times", "handover_threshold_hours",
@@ -840,9 +908,13 @@ def safe_luxian_0609_customer_display_facts(
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
             if key == "event_results":
-                controlled_events = controlled_critical_value_events(
-                    raw.get(key),
-                    timing_rule=kind == "critical_value_timeliness_check",
+                controlled_events = (
+                    controlled_consultation_events(raw.get(key))
+                    if kind == "consultation_timeliness_check"
+                    else controlled_critical_value_events(
+                        raw.get(key),
+                        timing_rule=kind == "critical_value_timeliness_check",
+                    )
                 )
                 if controlled_events is None:
                     return None
@@ -965,7 +1037,7 @@ def safe_luxian_0609_customer_display_facts(
             ):
                 return None
             if kind == "physician_handoff_association_failed" and (
-                change_event_count <= 1 or len(change_times) != change_event_count
+                len(change_times) != change_event_count
             ):
                 return None
             if kind == "physician_change_time_missing":

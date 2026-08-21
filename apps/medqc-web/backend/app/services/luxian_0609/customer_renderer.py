@@ -452,7 +452,7 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         "请确认检查报告的阳性标志或补充明确阳性结论后重新评估。",
     ),
     ("LX0609-071", "association_failed"): (
-        "检测到多次经治医师变更，现有交接班资料无法逐次唯一对应",
+        "检测到经治医师变更事件，现有交接班资料无法与本次变更唯一对应",
         "已读取经治医师变更事件及交接班数据来源；当前问题是事件与文书无法逐次唯一关联，并非未读取到资料。",
         "请核对每次医师变更与交班、接班记录的业务关联标识及权威时间后重新评估。",
     ),
@@ -2315,6 +2315,25 @@ def customer_finding_from_controlled_facts(
         return f"出院日期 {facts.get('discharge_date')}；已核对 {joined('checked_dates')}，{state}出院前病程记录。"
 
     if rule_id == "LX0609-069" and kind == "consultation_timeliness_check":
+        events = facts.get("event_results")
+        if isinstance(events, list) and events:
+            event_findings: list[str] = []
+            for event in events:
+                if not isinstance(event, Mapping):
+                    return ""
+                sequence = event.get("sequence")
+                request_time = event.get("request_time")
+                completion_time = event.get("completion_time")
+                outcome = event.get("outcome")
+                prefix = f"第{sequence}次会诊：申请时间 {request_time}，完成时间 {completion_time}"
+                if outcome == "time_conflict":
+                    detail = "，完成时间早于申请时间，存在时间顺序冲突"
+                elif outcome == "threshold_exceeded":
+                    detail = "，超过24小时"
+                else:
+                    detail = "，在24小时内完成"
+                event_findings.append(prefix + detail + "。")
+            return " ".join(event_findings)
         return f"会诊申请时间：{joined('request_times')}；完成时间：{joined('record_times')}；实际间隔 {joined('actual_interval_hours')} 小时，规定时限 24 小时。"
 
     if rule_id == "LX0609-071" and kind == "physician_handoff_timeliness_check":

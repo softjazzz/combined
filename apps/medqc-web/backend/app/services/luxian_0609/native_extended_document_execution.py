@@ -26,6 +26,9 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .extended_document.death_discussion import (
     evaluate_death_discussion_timeliness,
 )
+from .extended_document.consultation_timeliness import (
+    evaluate_consultation_timeliness,
+)
 from .extended_document.discharge_documentation import (
     evaluate_discharge_documentation_timeliness,
 )
@@ -136,8 +139,6 @@ _INVASIVE_PROCEDURES = (
     "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
     "气管插管", "支气管镜", "动脉置管",
 )
-_CONSULTATION_REQUEST_TITLE_PATTERN = re.compile(r"会诊.*申请|申请.*会诊")
-_CONSULTATION_RECORD_TITLE_PATTERN = re.compile(r"会诊.*(?:记录|意见)|(?:记录|意见).*会诊")
 _DISCHARGE_APPROVAL_PATTERN = re.compile(
     r"(?:同意|准予|可以)(?:患者)?(?:于|拟于)?"
     r"(?:今日|明日|次日)?(?:办理)?出院"
@@ -214,98 +215,6 @@ def _discharge_approval_path(
     ):
         return "senior_approval"
     return None
-
-
-def _consultation_timeliness_facts(
-    rows: Sequence[Mapping[str, Any]],
-) -> tuple[tuple[float, ...], tuple[datetime, ...], tuple[datetime, ...], str]:
-    """兼容同一行时限字段，以及申请单/记录单分行保存的院端结构。"""
-
-    request_rows = tuple(
-        row
-        for row in rows
-        if _CONSULTATION_REQUEST_TITLE_PATTERN.search(
-            _clean(row.get("document_title"))
-        )
-    )
-    record_rows = tuple(
-        row
-        for row in rows
-        if not _CONSULTATION_REQUEST_TITLE_PATTERN.search(
-            _clean(row.get("document_title"))
-        )
-        and _CONSULTATION_RECORD_TITLE_PATTERN.search(
-            _clean(row.get("document_title"))
-        )
-    )
-
-    pairs: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
-    if request_rows or record_rows:
-        if len(request_rows) == len(record_rows) == 1:
-            pairs.append((request_rows[0], record_rows[0]))
-        elif request_rows and record_rows:
-            requests_by_id: dict[str, list[Mapping[str, Any]]] = {}
-            for row in request_rows:
-                business_id = _clean(
-                    row.get("consultation_id") or row.get("application_id")
-                )
-                if business_id:
-                    requests_by_id.setdefault(business_id, []).append(row)
-            for record_row in record_rows:
-                business_id = _clean(
-                    record_row.get("consultation_id")
-                    or record_row.get("application_id")
-                )
-                candidates = requests_by_id.get(business_id, []) if business_id else []
-                if len(candidates) != 1:
-                    return (), (), (), "association_failed"
-                pairs.append((candidates[0], record_row))
-            if len(pairs) != len(record_rows):
-                return (), (), (), "association_failed"
-        else:
-            return (), (), (), "association_failed"
-
-        request_times: list[datetime] = []
-        record_times: list[datetime] = []
-        for request_row, record_row in pairs:
-            request_time = _parse_datetime(
-                request_row.get("request_time")
-                or request_row.get("request_datetime")
-                or request_row.get("application_time")
-                or request_row.get("application_datetime")
-            ) or _row_time(request_row)
-            record_time = _row_time(record_row)
-            if request_time is None or record_time is None:
-                return (), (), (), "authoritative_time_missing"
-            request_times.append(request_time)
-            record_times.append(record_time)
-        return (
-            tuple(
-                (record_time - request_time).total_seconds() / 3600
-                for request_time, record_time in zip(request_times, record_times)
-            ),
-            tuple(request_times),
-            tuple(record_times),
-            "",
-        )
-
-    intervals: list[float] = []
-    request_times = []
-    record_times = []
-    for row in rows:
-        request_time = _parse_datetime(
-            row.get("request_time")
-            or row.get("request_datetime")
-            or row.get("application_time")
-            or row.get("application_datetime")
-        )
-        record_time = _row_time(row)
-        if request_time is None or record_time is None:
-            return (), (), (), "authoritative_time_missing"
-        request_times.append(request_time)
-        record_times.append(record_time)
-        intervals.append((record_time - request_time).total_seconds() / 3600)
-    return tuple(intervals), tuple(request_times), tuple(record_times), ""
 
 
 def _source_rows(
@@ -2038,51 +1947,19 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-069":
-            if consultation_error:
-                final_state, reason_code = "data_gap", consultation_error
-            elif not consultation_rows:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            else:
-                intervals, request_times, record_times, fact_error = (
-                    _consultation_timeliness_facts(consultation_rows)
-                )
-                if fact_error or not intervals:
-                    final_state, reason_code = "data_gap", (
-                        fact_error or "authoritative_time_missing"
-                    )
-                else:
-                    compliant = all(0 <= value <= 24 for value in intervals)
-                    final_state = "compliant" if compliant else "non_compliant"
-                    reason_code = (
-                        "requirement_within_threshold"
-                        if compliant
-                        else "threshold_exceeded"
-                    )
-                    display.append(
-                        (
-                            rule_id,
-                            {
-                                "verification_kind": "consultation_timeliness_check",
-                                "threshold_hours": 24,
-                                "actual_interval_hours": [
-                                    round(value, 2) for value in intervals
-                                ],
-                                "request_times": [
-                                    value.isoformat(sep=" ") for value in request_times
-                                ],
-                                "record_times": [
-                                    value.isoformat(sep=" ") for value in record_times
-                                ],
-                            },
-                        )
-                    )
+            outcome = evaluate_consultation_timeliness(
+                consultation_rows=consultation_rows,
+                consultation_error=consultation_error,
+            )
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=("consultation_record",),
-                    final_state=final_state,
-                    reason_code=reason_code,
+                    final_state=outcome.final_state,
+                    reason_code=outcome.reason_code,
                 )
             )
             continue

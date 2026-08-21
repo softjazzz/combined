@@ -550,6 +550,10 @@ class ConsultationRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
+    # 客户源 consult_apply_time 为 varchar；必须原样保存，再由规则层严格解析。
+    request_time = Column(String(100), comment="会诊申请时间（源值）")
+    consultation_time = Column(DateTime(timezone=True), comment="会诊完成时间")
+    record_time = Column(DateTime(timezone=True), comment="会诊记录时间")
     record_content = Column(Text, comment="非结构化全文")
 
 
@@ -798,6 +802,8 @@ class HandoffRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
+    shift_time = Column(DateTime(timezone=True), comment="交班时间")
+    handoff_doctor = Column(String(100), comment="交班医师")
     record_time = Column(DateTime(timezone=True), comment="交班记录时间")
     record_content = Column(Text, comment="非结构化全文")
 
@@ -811,6 +817,8 @@ class HandoverRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
+    shift_time = Column(DateTime(timezone=True), comment="接班时间")
+    handover_doctor = Column(String(100), comment="接班医师")
     record_time = Column(DateTime(timezone=True), comment="接班记录时间")
     record_content = Column(Text, comment="非结构化全文")
 

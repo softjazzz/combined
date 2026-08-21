@@ -2888,6 +2888,194 @@ def test_upsert_to_local_preserves_handoff_authoritative_time(
     assert executed_params[0]["record_time"] == "2026-08-19 10:05:00+08"
 
 
+def test_upsert_to_local_preserves_customer_consultation_event_times(monkeypatch):
+    """069 必须保留客户源会诊申请、完成和文书时间，不能退化成全文猜测。"""
+
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            list(ConsultationRecord.__table__.columns.keys()),
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="consultation_record",
+        records=[
+            {
+                "institute_id": "I",
+                "patient_id": "P",
+                "visit_id": "V",
+                "document_id": "C1",
+                "consult_apply_time": "2026-08-19 08:00:00+08",
+                "consultation_time": "2026-08-19 10:00:00+08",
+                "record_time": "2026-08-19 10:05:00+08",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["request_time"] == "2026-08-19 08:00:00+08"
+    assert executed_params[0]["consultation_time"] == "2026-08-19 10:00:00+08"
+    assert executed_params[0]["record_time"] == "2026-08-19 10:05:00+08"
+
+
+def test_customer_consultation_and_handoff_orm_types_match_audited_source() -> None:
+    """同步合同按客户源真实类型保真，不依赖数据库隐式时间转换。"""
+
+    assert ConsultationRecord.__table__.c.request_time.type.python_type is str
+    assert ConsultationRecord.__table__.c.consultation_time.type.python_type.__name__ == "datetime"
+    assert ConsultationRecord.__table__.c.record_time.type.python_type.__name__ == "datetime"
+    assert HandoffRecord.__table__.c.shift_time.type.python_type.__name__ == "datetime"
+    assert HandoffRecord.__table__.c.handoff_doctor.type.python_type is str
+    assert HandoverRecord.__table__.c.shift_time.type.python_type.__name__ == "datetime"
+    assert HandoverRecord.__table__.c.handover_doctor.type.python_type is str
+
+
+@pytest.mark.parametrize(
+    ("table_name", "source_fields"),
+    (
+        (
+            "consultation_record",
+            {
+                "consult_apply_time": "2026-08-19 08:00:00+08",
+                "consultation_time": "2026-08-19 10:00:00+08",
+            },
+        ),
+        (
+            "handoff_record",
+            {"shift_time": "2026-08-19 11:00:00+08", "handoff_doctor": "张医生"},
+        ),
+        (
+            "handover_record",
+            {"shift_time": "2026-08-19 11:00:00+08", "handover_doctor": "李医生"},
+        ),
+    ),
+)
+def test_upsert_to_local_rejects_missing_consultation_handoff_contract_columns(
+    monkeypatch, table_name, source_fields
+):
+    """客户未升级 037 时不得把 069/071 结构化事实静默过滤后继续同步。"""
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            raise AssertionError("合同校验失败前不得写数据库")
+
+        def commit(self):
+            raise AssertionError("合同校验失败前不得提交")
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="结构化字段未保留"):
+        etl_sync.upsert_to_local(
+            table_name=table_name,
+            records=[
+                {
+                    "institute_id": "I",
+                    "patient_id": "P",
+                    "visit_id": "V",
+                    "document_id": "DOC-1",
+                    **source_fields,
+                }
+            ],
+            primary_keys=["patient_id", "visit_id", "document_id"],
+        )
+
+
+@pytest.mark.parametrize(
+    ("table_name", "model", "doctor_field"),
+    (
+        ("handoff_record", HandoffRecord, "handoff_doctor"),
+        ("handover_record", HandoverRecord, "handover_doctor"),
+    ),
+)
+def test_upsert_to_local_preserves_customer_handoff_shift_and_doctor(
+    monkeypatch, table_name, model, doctor_field
+):
+    """071 的客户源 shift_time 和交接医生必须原样进入本地标准列。"""
+
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            list(model.__table__.columns.keys()),
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name=table_name,
+        records=[
+            {
+                "institute_id": "I",
+                "patient_id": "P",
+                "visit_id": "V",
+                "document_id": "H1",
+                "shift_time": "2026-08-19 11:00:00+08",
+                doctor_field: "张医生",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["shift_time"] == "2026-08-19 11:00:00+08"
+    assert executed_params[0][doctor_field] == "张医生"
+
+
 def test_upsert_to_local_preserves_exam_master_structured_evidence(monkeypatch):
     """影像主表的描述、印象和报告状态必须进入本地证据快照。"""
 
@@ -3027,6 +3215,7 @@ def test_upsert_to_local_refuses_partial_full_visit_reload_before_delete(monkeyp
     (
         "20260819_000035_extend_surgery_record_structured_fields.py",
         "20260819_000036_preserve_consent_and_exam_master_contracts.py",
+        "20260821_000037_preserve_consultation_and_handoff_facts.py",
     ),
 )
 def test_sync_contract_migrations_never_mutate_public_source_in_split_mode(monkeypatch, filename):
@@ -3039,3 +3228,53 @@ def test_sync_contract_migrations_never_mutate_public_source_in_split_mode(monke
     migration = _load_migration_module(filename)
 
     assert migration._target_schemas(_Inspector()) == ["cdm"]
+
+
+def test_consultation_handoff_migration_is_idempotent_and_cdm_only(monkeypatch):
+    migration = _load_migration_module(
+        "20260821_000037_preserve_consultation_and_handoff_facts.py"
+    )
+    existing: dict[str, set[str]] = {
+        "consultation_record": set(),
+        "handoff_record": set(),
+        "handover_record": set(),
+    }
+    added: list[tuple[str, str, str]] = []
+
+    class _Inspector:
+        @staticmethod
+        def get_schema_names():
+            return ["public", "cdm"]
+
+        @staticmethod
+        def get_table_names(*, schema):
+            assert schema == "cdm"
+            return list(existing)
+
+        @staticmethod
+        def get_columns(table_name, *, schema):
+            assert schema == "cdm"
+            return [{"name": name} for name in existing[table_name]]
+
+    def _add_column(table_name, column, *, schema):
+        assert schema == "cdm"
+        added.append((schema, table_name, column.name))
+        existing[table_name].add(column.name)
+
+    monkeypatch.setenv("DB_SCHEMA_MODE", "split")
+    monkeypatch.setattr(migration.op, "get_bind", lambda: object())
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: _Inspector())
+    monkeypatch.setattr(migration.op, "add_column", _add_column)
+
+    migration.upgrade()
+    migration.upgrade()
+
+    assert added == [
+        ("cdm", "consultation_record", "request_time"),
+        ("cdm", "consultation_record", "consultation_time"),
+        ("cdm", "consultation_record", "record_time"),
+        ("cdm", "handoff_record", "shift_time"),
+        ("cdm", "handoff_record", "handoff_doctor"),
+        ("cdm", "handover_record", "shift_time"),
+        ("cdm", "handover_record", "handover_doctor"),
+    ]

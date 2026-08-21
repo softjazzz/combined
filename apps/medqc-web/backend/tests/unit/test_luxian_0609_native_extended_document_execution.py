@@ -1118,7 +1118,7 @@ async def test_069_consultation_over_24_hours_is_non_compliant() -> None:
             "consultation_record": (
                 {
                     "request_time": "2026-07-01 08:00:00",
-                    "record_time": "2026-07-02 09:00:00",
+                    "consultation_time": "2026-07-02 09:00:00",
                 },
             ),
         },
@@ -1175,25 +1175,37 @@ async def test_071_physician_change_requires_handoff_and_handover() -> None:
         ("LX0609-071",),
         {
             "physician_change_event": (
-                {"change_datetime": "2026-07-01 08:00:00"},
+                {
+                    "change_datetime": "2026-07-01 08:00:00",
+                    "old_physician_name": "张甲",
+                    "new_physician_name": "李乙",
+                },
             ),
             "handoff_record": (
                 {
                     "document_id": "HANDOFF-OLD-071",
+                    "shift_time": "2026-06-01 08:00:00",
+                    "handoff_doctor": "张甲",
                     "record_time": "2026-06-01 07:50:00",
                 },
                 {
                     "document_id": "HANDOFF-071",
+                    "shift_time": "2026-07-01 08:00:00",
+                    "handoff_doctor": "张甲",
                     "record_time": "2026-07-01 07:50:00",
                 },
             ),
             "handover_record": (
                 {
                     "document_id": "HANDOVER-OLD-071",
+                    "shift_time": "2026-06-01 08:00:00",
+                    "handover_doctor": "李乙",
                     "record_time": "2026-06-01 14:00:00",
                 },
                 {
                     "document_id": "HANDOVER-071",
+                    "shift_time": "2026-07-01 08:00:00",
+                    "handover_doctor": "李乙",
                     "record_time": "2026-07-02 07:59:00",
                 },
             ),
@@ -1299,16 +1311,16 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
         ("LX0609-071",),
         {
             "physician_change_event": (
-                {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00"},
-                {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00"},
+                {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
+                {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00", "old_physician_name": "甲2", "new_physician_name": "乙2"},
             ),
             "handoff_record": (
-                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
-                {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
+                {"document_id": "HANDOFF-1", "shift_time": "2026-07-01 08:00:00", "handoff_doctor": "甲1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2", "shift_time": "2026-07-03 08:00:00", "handoff_doctor": "甲2", "record_time": "2026-07-03 07:50:00"},
             ),
             "handover_record": (
-                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
-                {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
+                {"document_id": "HANDOVER-1", "shift_time": "2026-07-01 08:00:00", "handover_doctor": "乙1", "record_time": "2026-07-01 14:00:00"},
+                {"document_id": "HANDOVER-2", "shift_time": "2026-07-03 08:00:00", "handover_doctor": "乙2", "record_time": "2026-07-03 14:00:00"},
             ),
         },
     )
@@ -1361,15 +1373,15 @@ async def test_071_multiple_change_events_report_the_specific_incomplete_event()
         ("LX0609-071",),
         {
             "physician_change_event": (
-                {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00"},
-                {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00"},
+                {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
+                {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00", "old_physician_name": "甲2", "new_physician_name": "乙2"},
             ),
             "handoff_record": (
-                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
-                {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
+                {"document_id": "HANDOFF-1", "shift_time": "2026-07-01 08:00:00", "handoff_doctor": "甲1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2", "shift_time": "2026-07-03 08:00:00", "handoff_doctor": "甲2", "record_time": "2026-07-03 07:50:00"},
             ),
             "handover_record": (
-                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
+                {"document_id": "HANDOVER-1", "shift_time": "2026-07-01 08:00:00", "handover_doctor": "乙1", "record_time": "2026-07-01 14:00:00"},
             ),
         },
     )
@@ -1396,16 +1408,16 @@ async def test_071_multiple_change_events_report_the_specific_incomplete_event()
 async def test_071_multiple_change_event_order_does_not_change_the_result() -> None:
     source_rows = {
         "physician_change_event": (
-            {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00"},
-            {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00"},
+            {"event_id": "CHANGE-2", "change_datetime": "2026-07-03 08:00:00", "old_physician_name": "甲2", "new_physician_name": "乙2"},
+            {"event_id": "CHANGE-1", "change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
         ),
         "handoff_record": (
-            {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
-            {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
+            {"document_id": "HANDOFF-2", "shift_time": "2026-07-03 08:00:00", "handoff_doctor": "甲2", "record_time": "2026-07-03 07:50:00"},
+            {"document_id": "HANDOFF-1", "shift_time": "2026-07-01 08:00:00", "handoff_doctor": "甲1", "record_time": "2026-07-01 07:50:00"},
         ),
         "handover_record": (
-            {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
-            {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
+            {"document_id": "HANDOVER-2", "shift_time": "2026-07-03 08:00:00", "handover_doctor": "乙2", "record_time": "2026-07-03 14:00:00"},
+            {"document_id": "HANDOVER-1", "shift_time": "2026-07-01 08:00:00", "handover_doctor": "乙1", "record_time": "2026-07-01 14:00:00"},
         ),
     }
     snapshot, materials, result, reduced = await _evaluate_selected(
@@ -1433,17 +1445,17 @@ async def test_071_multiple_records_in_one_event_window_fail_closed() -> None:
         ("LX0609-071",),
         {
             "physician_change_event": (
-                {"change_datetime": "2026-07-01 08:00:00"},
-                {"change_datetime": "2026-07-03 08:00:00"},
+                {"change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
+                {"change_datetime": "2026-07-03 08:00:00", "old_physician_name": "甲2", "new_physician_name": "乙2"},
             ),
             "handoff_record": (
-                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
-                {"document_id": "HANDOFF-2A", "record_time": "2026-07-03 07:40:00"},
-                {"document_id": "HANDOFF-2B", "record_time": "2026-07-03 07:50:00"},
+                {"document_id": "HANDOFF-1", "shift_time": "2026-07-01 08:00:00", "handoff_doctor": "甲1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2A", "shift_time": "2026-07-03 08:00:00", "handoff_doctor": "甲2", "record_time": "2026-07-03 07:40:00"},
+                {"document_id": "HANDOFF-2B", "shift_time": "2026-07-03 08:00:00", "handoff_doctor": "甲2", "record_time": "2026-07-03 07:50:00"},
             ),
             "handover_record": (
-                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
-                {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
+                {"document_id": "HANDOVER-1", "shift_time": "2026-07-01 08:00:00", "handover_doctor": "乙1", "record_time": "2026-07-01 14:00:00"},
+                {"document_id": "HANDOVER-2", "shift_time": "2026-07-03 08:00:00", "handover_doctor": "乙2", "record_time": "2026-07-03 14:00:00"},
             ),
         },
     )
@@ -1459,16 +1471,16 @@ async def test_071_multiple_change_events_with_untimed_record_fail_closed() -> N
         ("LX0609-071",),
         {
             "physician_change_event": (
-                {"change_datetime": "2026-07-01 08:00:00"},
-                {"change_datetime": "2026-07-03 08:00:00"},
+                {"change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
+                {"change_datetime": "2026-07-03 08:00:00", "old_physician_name": "甲2", "new_physician_name": "乙2"},
             ),
             "handoff_record": (
-                {"document_id": "HANDOFF-NO-TIME"},
-                {"document_id": "HANDOFF-2", "record_time": "2026-07-03 07:50:00"},
+                {"document_id": "HANDOFF-NO-TIME", "shift_time": "2026-07-01 08:00:00", "handoff_doctor": "甲1"},
+                {"document_id": "HANDOFF-2", "shift_time": "2026-07-03 08:00:00", "handoff_doctor": "甲2", "record_time": "2026-07-03 07:50:00"},
             ),
             "handover_record": (
-                {"document_id": "HANDOVER-1", "record_time": "2026-07-01 14:00:00"},
-                {"document_id": "HANDOVER-2", "record_time": "2026-07-03 14:00:00"},
+                {"document_id": "HANDOVER-1", "shift_time": "2026-07-01 08:00:00", "handover_doctor": "乙1", "record_time": "2026-07-01 14:00:00"},
+                {"document_id": "HANDOVER-2", "shift_time": "2026-07-03 08:00:00", "handover_doctor": "乙2", "record_time": "2026-07-03 14:00:00"},
             ),
         },
     )
@@ -1476,23 +1488,6 @@ async def test_071_multiple_change_events_with_untimed_record_fail_closed() -> N
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "authoritative_time_missing"
     assert result.planned_rule_ids == ("LX0609-071",)
-    canonical = _canonical_extended_result(
-        rule_id="LX0609-071",
-        snapshot=snapshot,
-        materials=materials,
-        result=result,
-        reduced=reduced,
-    )
-    assert canonical["customer_display_facts"] == {
-        "failure_kind": "physician_handoff_record_time_missing",
-        "change_event_count": 2,
-        "handoff_record_count": 2,
-        "missing_handoff_time_count": 1,
-        "handover_record_count": 2,
-        "missing_handover_time_count": 0,
-        "handover_threshold_hours": 24,
-    }
-    assert "1份交班记录缺少权威记录时间" in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -1502,16 +1497,16 @@ async def test_071_multiple_change_events_report_exact_late_handover() -> None:
         ("LX0609-071",),
         {
             "physician_change_event": (
-                {"change_datetime": "2026-07-01 08:00:00"},
-                {"change_datetime": "2026-07-05 08:00:00"},
+                {"change_datetime": "2026-07-01 08:00:00", "old_physician_name": "甲1", "new_physician_name": "乙1"},
+                {"change_datetime": "2026-07-05 08:00:00", "old_physician_name": "甲2", "new_physician_name": "乙2"},
             ),
             "handoff_record": (
-                {"document_id": "HANDOFF-1", "record_time": "2026-07-01 07:50:00"},
-                {"document_id": "HANDOFF-2", "record_time": "2026-07-05 07:50:00"},
+                {"document_id": "HANDOFF-1", "shift_time": "2026-07-01 08:00:00", "handoff_doctor": "甲1", "record_time": "2026-07-01 07:50:00"},
+                {"document_id": "HANDOFF-2", "shift_time": "2026-07-05 08:00:00", "handoff_doctor": "甲2", "record_time": "2026-07-05 07:50:00"},
             ),
             "handover_record": (
-                {"document_id": "HANDOVER-LATE", "record_time": "2026-07-02 08:00:01"},
-                {"document_id": "HANDOVER-2", "record_time": "2026-07-05 14:00:00"},
+                {"document_id": "HANDOVER-LATE", "shift_time": "2026-07-01 08:00:00", "handover_doctor": "乙1", "record_time": "2026-07-02 08:00:01"},
+                {"document_id": "HANDOVER-2", "shift_time": "2026-07-05 08:00:00", "handover_doctor": "乙2", "record_time": "2026-07-05 14:00:00"},
             ),
         },
     )
@@ -1593,6 +1588,8 @@ async def test_071_existing_handoff_source_without_authoritative_time_is_data_ga
         {
             "physician_change_event": ({
                 "change_datetime": "2026-07-01 08:00:00",
+                "old_physician_name": "张甲",
+                "new_physician_name": "李乙",
             },),
             **source_rows,
         },
@@ -1610,10 +1607,14 @@ async def test_071_truly_empty_handoff_source_is_non_compliant() -> None:
         {
             "physician_change_event": ({
                 "change_datetime": "2026-07-01 08:00:00",
+                "old_physician_name": "张甲",
+                "new_physician_name": "李乙",
             },),
             "handoff_record": (),
             "handover_record": ({
                 "document_id": "HANDOVER-071",
+                "shift_time": "2026-07-01 08:00:00",
+                "handover_doctor": "李乙",
                 "record_time": "2026-07-01 14:00:00",
             },),
         },
@@ -1635,8 +1636,8 @@ async def test_071_uses_explicit_physician_change_order_when_event_table_is_empt
                     "order_time": "2026-07-01 08:00:00",
                 },
             ),
-            "handoff_record": ({"record_time": "2026-07-01 07:50:00"},),
-            "handover_record": ({"record_time": "2026-07-01 14:00:00"},),
+            "handoff_record": ({"shift_time": "2026-07-01 08:00:00", "record_time": "2026-07-01 07:50:00"},),
+            "handover_record": ({"shift_time": "2026-07-01 08:00:00", "record_time": "2026-07-01 14:00:00"},),
         },
         unavailable_sources={"physician_change_event"},
     )

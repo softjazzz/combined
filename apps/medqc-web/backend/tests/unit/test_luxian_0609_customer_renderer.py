@@ -30,6 +30,39 @@ SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 
 
+def test_069_customer_finding_identifies_each_consultation_and_the_late_one() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-069",
+        facts={
+            "verification_kind": "consultation_timeliness_check",
+            "threshold_hours": 24,
+            "actual_interval_hours": [2.0, 27.0],
+            "request_times": ["2026-08-20 08:00:00+08:00", "2026-08-20 09:00:00+08:00"],
+            "record_times": ["2026-08-20 10:00:00+08:00", "2026-08-21 12:00:00+08:00"],
+            "event_results": [
+                {
+                    "sequence": 1,
+                    "request_time": "2026-08-20 08:00:00+08:00",
+                    "completion_time": "2026-08-20 10:00:00+08:00",
+                    "interval_seconds": 7200,
+                    "outcome": "within_threshold",
+                },
+                {
+                    "sequence": 2,
+                    "request_time": "2026-08-20 09:00:00+08:00",
+                    "completion_time": "2026-08-21 12:00:00+08:00",
+                    "interval_seconds": 97200,
+                    "outcome": "threshold_exceeded",
+                },
+            ],
+        },
+    )
+
+    assert "第1次会诊" in finding
+    assert "第2次会诊" in finding
+    assert "超过24小时" in finding
+
+
 def test_010_association_facts_render_exact_customer_counts() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-010",
@@ -243,12 +276,27 @@ def test_071_data_gap_facts_explain_existing_records_without_claiming_absence(
     assert "未读取到" not in finding
 
 
+def test_071_single_change_association_gap_does_not_claim_multiple_changes() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-071",
+        facts={
+            "failure_kind": "physician_handoff_association_failed",
+            "change_event_count": 1,
+            "handoff_record_count": 1,
+            "handover_record_count": 1,
+        },
+    )
+
+    assert "检测到 1 次经治医师变更" in finding
+    assert "多次经治医师变更" not in finding
+
+
 @pytest.mark.parametrize(
     ("reason_code", "expected_finding", "expected_evidence"),
     [
         (
             "association_failed",
-            "检测到多次经治医师变更",
+            "检测到经治医师变更事件",
             "并非未读取到资料",
         ),
         (

@@ -1,6 +1,8 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
 
+import pytest
+
 from app.services.luxian_0609 import source_evidence_reader
 
 
@@ -109,6 +111,79 @@ def test_snapshot_reader_projects_real_mr_surgery_primary_identity(monkeypatch) 
     assert result.rows[0]["surgery_id"] == "mr-surgery-1"
     sql, _params = connection.calls[0]
     assert '"surgery_id"' in sql
+
+
+@pytest.mark.parametrize(
+    ("source_key", "business_fields", "row"),
+    (
+        (
+            "consultation_record",
+            ("request_time", "consultation_time", "record_time"),
+            {
+                "request_time": "2026-08-19 08:00:00+08",
+                "consultation_time": "2026-08-19 10:00:00+08",
+                "record_time": "2026-08-19 10:05:00+08",
+            },
+        ),
+        (
+            "handoff_record",
+            ("shift_time", "handoff_doctor", "record_time"),
+            {
+                "shift_time": "2026-08-19 11:00:00+08",
+                "handoff_doctor": "张医生",
+                "record_time": "2026-08-19 11:05:00+08",
+            },
+        ),
+        (
+            "handover_record",
+            ("shift_time", "handover_doctor", "record_time"),
+            {
+                "shift_time": "2026-08-19 11:00:00+08",
+                "handover_doctor": "李医生",
+                "record_time": "2026-08-19 11:05:00+08",
+            },
+        ),
+    ),
+)
+def test_snapshot_reader_projects_customer_consultation_and_handoff_facts(
+    monkeypatch, source_key, business_fields, row
+) -> None:
+    """069/071 读取缝必须投影已同步的权威时间和交接医生。"""
+
+    source_row = {"document_id": "DOC-1", **row}
+    connection = _SourceRowsConnection([source_row])
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "document_id",
+            *business_fields,
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=source_key,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+    )
+
+    assert result.rows == (source_row,)
+    sql, _params = connection.calls[0]
+    for field in business_fields:
+        assert f'"{field}"' in sql
 
 
 class _SeverityConnection:

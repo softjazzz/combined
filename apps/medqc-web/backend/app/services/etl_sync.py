@@ -172,6 +172,13 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "sign_time",
         ),
     },
+    "consultation_record": {
+        # 客户源库用 consult_apply_time 表示会诊申请时间；本地统一为
+        # request_time，并同时保留会诊完成时间和记录时间供 069 逐事件核对。
+        "request_time": ("request_time", "consult_apply_time"),
+        "consultation_time": ("consultation_time",),
+        "record_time": ("record_time",),
+    },
     "handoff_record": {
         # 071 的交接窗口必须采用实际交班时间；部分源库不会同时填 record_time。
         "record_time": (
@@ -180,6 +187,8 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "submit_datetime",
             "submit_time",
         ),
+        "shift_time": ("shift_time", "handoff_time"),
+        "handoff_doctor": ("handoff_doctor",),
     },
     "handover_record": {
         # 同上，接班记录的权威时间可能以 handover_time 单独提供。
@@ -189,6 +198,8 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "submit_datetime",
             "submit_time",
         ),
+        "shift_time": ("shift_time", "handover_time"),
+        "handover_doctor": ("handover_doctor",),
     },
     "mr_bloodtrans": {
         "transfution_datetime": (
@@ -964,6 +975,31 @@ def _validate_document_field_preservation(
         raise ValueError(
             f"{normalized_table} 文书权威时间未保留，拒绝静默同步"
         )
+
+    # 069/071 的真实客户源已证明这些结构化字段不可由正文等价替代。
+    # 若客户未执行对应迁移，必须在写库前失败关闭，不能继续生成残缺快照。
+    required_structured_targets: tuple[str, ...] = ()
+    if normalized_table == "consultation_record":
+        required_structured_targets = (
+            "request_time",
+            "consultation_time",
+            "record_time",
+        )
+    elif normalized_table == "handoff_record":
+        required_structured_targets = ("shift_time", "handoff_doctor")
+    elif normalized_table == "handover_record":
+        required_structured_targets = ("shift_time", "handover_doctor")
+
+    alias_map = _TABLE_COLUMN_ALIASES.get(normalized_table, {})
+    for target_column in required_structured_targets:
+        source_candidates = alias_map.get(target_column, (target_column,))
+        if _first_non_empty(normalized, source_candidates) and (
+            target_column not in existing_columns
+            or not _first_non_empty(normalized, (target_column,))
+        ):
+            raise ValueError(
+                f"{normalized_table} 结构化字段未保留：{target_column}，拒绝静默同步"
+            )
 
 
 def _route_tables_by_scene(

@@ -31,6 +31,60 @@ CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
 
 
+def test_069_safe_projection_keeps_strict_per_event_timeliness_facts() -> None:
+    raw = {
+        "verification_kind": "consultation_timeliness_check",
+        "threshold_hours": 24,
+        "actual_interval_hours": [2.0, 27.0],
+        "request_times": ["2026-08-20 08:00:00+08:00", "2026-08-20 09:00:00+08:00"],
+        "record_times": ["2026-08-20 10:00:00+08:00", "2026-08-21 12:00:00+08:00"],
+        "event_results": [
+            {
+                "sequence": 1,
+                "request_time": "2026-08-20 08:00:00+08:00",
+                "completion_time": "2026-08-20 10:00:00+08:00",
+                "interval_seconds": 7200,
+                "outcome": "within_threshold",
+            },
+            {
+                "sequence": 2,
+                "request_time": "2026-08-20 09:00:00+08:00",
+                "completion_time": "2026-08-21 12:00:00+08:00",
+                "interval_seconds": 97200,
+                "outcome": "threshold_exceeded",
+            },
+        ],
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-069", raw=raw
+    ) == raw
+
+
+def test_069_safe_projection_rejects_private_or_inconsistent_event_facts() -> None:
+    raw = {
+        "verification_kind": "consultation_timeliness_check",
+        "threshold_hours": 24,
+        "actual_interval_hours": [2.0],
+        "request_times": ["2026-08-20 08:00:00+08:00"],
+        "record_times": ["2026-08-20 10:00:00+08:00"],
+        "event_results": [
+            {
+                "sequence": 1,
+                "request_time": "2026-08-20 08:00:00+08:00",
+                "completion_time": "2026-08-20 10:00:00+08:00",
+                "interval_seconds": 7200,
+                "outcome": "within_threshold",
+                "consultation_id": "PRIVATE-ID",
+            }
+        ],
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-069", raw=raw
+    ) is None
+
+
 def test_customer_aggregator_has_no_legacy_rejudgment_switch() -> None:
     assert "legacy_customer_display_rejudgment" not in inspect.signature(
         aggregate_luxian_0609_results
@@ -1602,6 +1656,26 @@ def test_071_projects_only_strict_handoff_and_handover_refs() -> None:
     assert "source_document_refs" not in result["customer_display_facts"]
 
 
+def test_071_single_change_association_gap_keeps_controlled_facts() -> None:
+    facts = _071_association_facts([])
+    facts["change_event_count"] = 1
+    facts["change_times"] = ["2026-07-01 08:00:00"]
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-071",
+        raw=facts,
+    ) == {
+        "failure_kind": "physician_handoff_association_failed",
+        "change_event_count": 1,
+        "change_times": ["2026-07-01 08:00:00"],
+        "handoff_record_count": 1,
+        "handoff_times": ["2026-07-01 07:50:00"],
+        "handover_record_count": 1,
+        "handover_times": ["2026-07-01 14:00:00"],
+        "handover_threshold_hours": 24,
+    }
+
+
 @pytest.mark.parametrize(
     "source_document_refs",
     [
@@ -1639,7 +1713,7 @@ def test_071_rejects_invalid_internal_refs_without_legacy_fallback(
 @pytest.mark.parametrize(
     "facts",
     [
-        {**_071_association_facts([]), "change_event_count": 1},
+        {**_071_association_facts([]), "change_event_count": 1, "change_times": []},
         {**_071_association_facts([]), "change_times": ["2026-07-01 08:00:00"]},
         {**_071_association_facts([]), "handoff_record_count": 0},
         {
