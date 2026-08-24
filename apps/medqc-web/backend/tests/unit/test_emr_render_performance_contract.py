@@ -69,6 +69,39 @@ def test_documents_summary_view_does_not_load_or_return_full_document_content(mo
     assert "content" not in payload["documents"][0]
 
 
+def test_documents_summary_view_projects_customer_safe_source_ref(monkeypatch):
+    monkeypatch.setattr(
+        emr_router_module,
+        "load_bundle_document_summaries",
+        lambda **_kwargs: {
+            "layout_version": "bundle_struct_v1",
+            "documents": [
+                {
+                    "document_id": "DOC-1",
+                    "doc_id": "DOC-1",
+                    "doc_type": "daily_course_record",
+                    "execution_domain": "course",
+                    "has_content": True,
+                }
+            ],
+            "documents_tree": [],
+            "domain_bundle_hits": {"course": True},
+            "empty_reason": "",
+        },
+    )
+
+    payload = emr_router_module._load_document_summaries_from_bundle(
+        record_id="V1",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+    )
+
+    assert payload["documents"][0]["source_ref"] == (
+        emr_router_module.build_customer_safe_source_ref("DOC-1")
+    )
+
+
 def test_render_with_execution_domain_loads_only_the_selected_domain(monkeypatch):
     calls: list[tuple[str, str]] = []
 

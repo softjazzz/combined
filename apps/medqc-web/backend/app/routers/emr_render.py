@@ -51,6 +51,16 @@ def _build_empty_documents_payload(reason: str) -> Dict[str, Any]:
     }
 
 
+def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any]:
+    for document in list(payload.get("documents") or []):
+        if not isinstance(document, dict):
+            continue
+        source_document_id = str(document.get("document_id") or "").strip()
+        if source_document_id:
+            document["source_ref"] = build_customer_safe_source_ref(source_document_id)
+    return payload
+
+
 def _load_documents_from_bundle(
     *,
     record_id: str,
@@ -71,13 +81,7 @@ def _load_documents_from_bundle(
             visit_id=normalized_visit_id,
             bundle_schema="public",
         )
-        for document in list(payload.get("documents") or []):
-            if not isinstance(document, dict):
-                continue
-            source_document_id = str(document.get("document_id") or "").strip()
-            if source_document_id:
-                document["source_ref"] = build_customer_safe_source_ref(source_document_id)
-        return payload
+        return _project_customer_safe_source_refs(payload)
     except Exception as exc:
         logger.warning("加载 bundle 文书失败: %s", exc)
         return _build_empty_documents_payload("bundle_load_failed")
@@ -96,11 +100,13 @@ def _load_document_summaries_from_bundle(
     if not (normalized_institute_id and normalized_patient_id and normalized_visit_id):
         return _build_empty_documents_payload("missing_bundle_identity")
     try:
-        return load_bundle_document_summaries(
-            institute_id=normalized_institute_id,
-            patient_id=normalized_patient_id,
-            visit_id=normalized_visit_id,
-            bundle_schema="public",
+        return _project_customer_safe_source_refs(
+            load_bundle_document_summaries(
+                institute_id=normalized_institute_id,
+                patient_id=normalized_patient_id,
+                visit_id=normalized_visit_id,
+                bundle_schema="public",
+            )
         )
     except Exception as exc:
         logger.warning("加载 bundle 文书目录失败: error_type=%s", type(exc).__name__)
