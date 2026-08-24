@@ -312,13 +312,19 @@ def _sanitize_customer_result(
 
 def _contract_maturity() -> dict[str, int]:
     contracts = load_luxian_0609_rule_contracts()
-    typed_rule_count = sum(item.contract_version != "v1" for item in contracts)
-    typed_source_count = sum(
-        item.source_contract_state == "typed_shadow_v1" for item in contracts
-    )
+    typed_contract_rule_ids = {
+        item.rule_id for item in contracts if item.contract_version != "v1"
+    }
+    typed_source_rule_ids = {
+        item.rule_id
+        for item in contracts
+        if item.source_contract_state == "typed_shadow_v1"
+    }
     return {
-        "rule_decision_count": typed_rule_count,
-        "typed_shadow_adapter_count": max(0, typed_source_count - typed_rule_count),
+        "rule_decision_count": len(typed_contract_rule_ids),
+        "typed_shadow_adapter_count": len(
+            typed_source_rule_ids - typed_contract_rule_ids
+        ),
         "legacy_projection_count": sum(
             item.source_contract_state == "legacy_projection_v1"
             for item in contracts

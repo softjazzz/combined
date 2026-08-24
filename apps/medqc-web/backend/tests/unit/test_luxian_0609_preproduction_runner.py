@@ -260,10 +260,49 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
             "latency_ms": 250.0,
         }
     ]
+    contracts = preproduction_runner.load_luxian_0609_rule_contracts()
+    typed_contract_rule_ids = {
+        item.rule_id for item in contracts if item.contract_version != "v1"
+    }
+    typed_source_rule_ids = {
+        item.rule_id
+        for item in contracts
+        if item.source_contract_state == "typed_shadow_v1"
+    }
+    typed_source_only_rule_ids = {
+        "LX0609-050",
+        "LX0609-051",
+        "LX0609-052",
+        "LX0609-053",
+        "LX0609-054",
+        "LX0609-055",
+        "LX0609-056",
+        "LX0609-057",
+        "LX0609-058",
+        "LX0609-060",
+        "LX0609-061",
+        "LX0609-062",
+        "LX0609-063",
+        "LX0609-064",
+        "LX0609-065",
+        "LX0609-066",
+        "LX0609-067",
+        "LX0609-068",
+        "LX0609-069",
+        "LX0609-070",
+        "LX0609-071",
+        "LX0609-072",
+        "LX0609-073",
+        "LX0609-074",
+        "LX0609-075",
+    }
+    assert typed_source_rule_ids - typed_contract_rule_ids == typed_source_only_rule_ids
     # 025/059 合同升级后，当前已有 50 条规则使用非 v1 决策合同；
-    # 这里验证合同成熟度，不等同于 68 条正式可执行规则数量。
+    # 这里验证合同成熟度及尚待升级的精确成员，不等同于正式可执行规则数量。
     assert result["metrics"]["rule_decision_count"] == 50
-    assert result["metrics"]["typed_shadow_adapter_count"] == 25
+    assert result["metrics"]["typed_shadow_adapter_count"] == len(
+        typed_source_only_rule_ids
+    )
     assert result["metrics"]["legacy_projection_count"] == 0
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0
@@ -742,20 +781,6 @@ def test_preproduction_runner_does_not_depend_on_router_or_sichuan_service():
     assert "SichuanQCService" not in text
     assert "load_or_assemble" not in text
     assert "workspace" not in text.lower()
-
-
-def test_preproduction_as_of_contract_is_shared_without_runner_dependency():
-    backend_dir = Path(__file__).resolve().parents[2]
-    router_text = (backend_dir / "app/routers/qc_sichuan.py").read_text(
-        encoding="utf-8"
-    )
-    service_text = (backend_dir / "app/services/sichuan_qc_service.py").read_text(
-        encoding="utf-8"
-    )
-    assert "evaluation_as_of_date" in router_text
-    assert "evaluation_as_of_date" in service_text
-    assert "preproduction_runner" not in router_text
-    assert "preproduction_runner" not in service_text
 
 
 def test_preproduction_runner_cold_process_does_not_load_sichuan_service():

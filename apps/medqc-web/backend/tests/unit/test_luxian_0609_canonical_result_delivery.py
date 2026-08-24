@@ -10,9 +10,20 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 import app.services.custom_qc_workspace_service as workspace_module
-from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.custom_qc_workspace_service import (
+    CustomQCWorkspaceService,
+    project_customer_safe_result_item,
+)
 from app.services.luxian_0609.customer_rule_package import LUXIAN_0609_RULE_SET_KEY
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
+from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
 from app.services.luxian_0609.execution import (
+    Luxian0609ExecutionContext,
     aggregate_luxian_0609_orchestrated_results,
     prepare_luxian_0609_execution,
 )
@@ -24,6 +35,9 @@ from app.services.luxian_0609.rule_decision_settings import (
     RULE_DECISION_ROLLOUT_GROUPS,
 )
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+from app.services.qc_workspace.canonical_result_store import (
+    envelope_item_from_rule_result,
+)
 
 
 class _Rows:
@@ -1367,6 +1381,71 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
         "本质控点当前不参与正式结论，未生成合规或问题判定。"
     )
     assert isinstance(dto["items"][0]["conclusion"], str)
+
+
+def test_typed_050_controlled_finding_survives_envelope_customer_projection() -> None:
+    reduced = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-050",
+            snapshot_hash="a" * 64,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            fact_refs=("b" * 64,),
+            evaluator_version="canonical-delivery-test-v1",
+            confidence=1.0,
+        )
+    )
+    controlled_facts = {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-08-01 08:00:00",
+        "uncertain_record_times": ["2026-08-09 09:00:00"],
+        "discussion_count": 0,
+        "raw_text": "PRIVATE_MEDICAL_BODY",
+    }
+    context = Luxian0609ExecutionContext(
+        enabled=True,
+        wrapper_rules=[{"rule_id": "LX0609-050", "name": "疑难病例讨论"}],
+        prepared_rule_count=1,
+        reduced_decisions=(reduced,),
+        customer_display_facts=(("LX0609-050", controlled_facts),),
+    )
+
+    aggregated = aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []},
+        context=context,
+        visit_id="PRIVATE_VISIT_ID",
+        model_name="unused",
+        evidence_payload=None,
+    )
+    envelope_item = envelope_item_from_rule_result(
+        {
+            **aggregated["results"][0],
+            "record_id": "PRIVATE_RECORD_ID",
+            "medical_text": "PRIVATE_MEDICAL_BODY",
+            "customer_conclusion": "FORGED_CUSTOMER_CONCLUSION",
+        }
+    )
+    projected = project_customer_safe_result_item(
+        envelope_item,
+        hmac_key="unit-test-key",
+    )
+
+    assert projected["schema_version"] == "customer-qc-result-v1"
+    assert projected["status"] == "non_compliant"
+    assert projected["conclusion"] == (
+        "入院时间为 2026-08-01 08:00:00，入院满 7 天后仍有诊断不明确记录"
+        "（2026-08-09 09:00:00）；疑难病例讨论记录 0 份。"
+    )
+    assert projected["findings"] == projected["conclusion"]
+    dumped = json.dumps(projected, ensure_ascii=False)
+    assert "PRIVATE_MEDICAL_BODY" not in dumped
+    assert "FORGED_CUSTOMER_CONCLUSION" not in dumped
+    assert project_customer_safe_result_item(
+        projected,
+        hmac_key="unit-test-key",
+    ) == projected
 
 
 @pytest.mark.parametrize(

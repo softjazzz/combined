@@ -380,7 +380,7 @@ def test_exam_lab_rules_bind_current_visit_nondrug_orders() -> None:
 
 
 def test_059_binds_only_event_order_and_course_decision_support_sources() -> None:
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v21"
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v22"
     expected_sources = (
         "exam_master",
         "exam_item_report",

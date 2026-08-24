@@ -48,7 +48,10 @@ from .luxian_0609_rule_catalog import (
 )
 from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .luxian_0609_result_export_service import customer_evidence_summary
-from .luxian_0609.customer_renderer import compliant_customer_finding
+from .luxian_0609.customer_renderer import (
+    compliant_customer_finding,
+    customer_finding_from_controlled_facts,
+)
 from .qc_workspace.export_service import (
     map_item_status_label as _map_item_status_label,
     render_customer_safe_csv,
@@ -406,6 +409,15 @@ def project_customer_safe_result_item(
             rule_id=rule_id,
             criterion_results=criterion_results,
         )
+    elif rule_id.startswith("LX0609-"):
+        # 首次投影不能信任 v2 schema 中的任意自由文本；规则专属说明只能由
+        # 已通过白名单校验的受控事实重新生成。
+        controlled_finding = customer_finding_from_controlled_facts(
+            rule_id=rule_id,
+            facts=customer_display_facts,
+        )
+        if controlled_finding:
+            conclusion = controlled_finding
     suggestion = _explicit_customer_text(
         raw,
         (
