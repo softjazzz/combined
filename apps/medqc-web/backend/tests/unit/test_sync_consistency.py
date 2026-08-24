@@ -15,6 +15,7 @@ from app.database.models.cdm import (
     FirstCourseRecord,
     HandoffRecord,
     HandoverRecord,
+    InpatDrugOrder,
     SurgeryRecord,
 )
 from app.services import etl_sync, mongo_sync, sync_run_history
@@ -1989,6 +1990,7 @@ def test_upsert_to_local_maps_inpatient_order_aliases(monkeypatch):
                 "visit_id",
                 "order_id",
                 "prescribed_datetime",
+                "planned_start_datetime",
                 "order_status",
                 "generic_name",
                 "drug_specification",
@@ -2009,7 +2011,9 @@ def test_upsert_to_local_maps_inpatient_order_aliases(monkeypatch):
                 "patient_id": "P1",
                 "visit_id": "V1",
                 "order_id": "O1",
-                "start_time": "2026-06-02 12:00:00+08",
+                "prescribed_time": "2026-06-02 10:00:00+08",
+                "planned_start_time": "2026-06-02 12:00:00+08",
+                "start_time": "2026-06-02 13:00:00+08",
                 "status": "新开",
                 "drug_name": "头孢曲松钠",
                 "specification": "1g",
@@ -2023,7 +2027,8 @@ def test_upsert_to_local_maps_inpatient_order_aliases(monkeypatch):
     )
 
     assert count == 1
-    assert executed_params[0]["prescribed_datetime"] == "2026-06-02 12:00:00+08"
+    assert executed_params[0]["prescribed_datetime"] == "2026-06-02 10:00:00+08"
+    assert executed_params[0]["planned_start_datetime"] == "2026-06-02 12:00:00+08"
     assert executed_params[0]["order_status"] == "新开"
     assert executed_params[0]["generic_name"] == "头孢曲松钠"
     assert executed_params[0]["drug_specification"] == "1g"
@@ -2031,6 +2036,66 @@ def test_upsert_to_local_maps_inpatient_order_aliases(monkeypatch):
     assert executed_params[0]["drug_apply_method"] == "静滴"
     assert executed_params[0]["single_dose"] == "1"
     assert executed_params[0]["single_dose_unit"] == "g"
+
+
+def test_upsert_to_local_does_not_treat_generic_start_time_as_prescribed_time(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "order_id",
+                "prescribed_datetime",
+                "planned_start_datetime",
+            ],
+            ["institute_id", "patient_id", "visit_id", "order_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="inpat_drug_order",
+        records=[{
+            "institute_id": "A",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "order_id": "O1",
+            "start_time": "2026-06-02 13:00:00+08",
+        }],
+        primary_keys=["patient_id", "visit_id", "order_id"],
+    )
+
+    assert count == 1
+    assert "prescribed_datetime" not in executed_params[0]
+    assert "planned_start_datetime" not in executed_params[0]
+
+
+def test_inpatient_drug_order_preserves_planned_start_separately_from_prescribed_time():
+    columns = InpatDrugOrder.__table__.columns
+
+    assert "prescribed_datetime" in columns
+    assert "planned_start_datetime" in columns
+    assert columns["planned_start_datetime"].comment == "计划开始/启用时间（非实际给药时间）"
 
 
 def test_upsert_to_local_keeps_transfer_record_structured_fields(monkeypatch):
@@ -3216,6 +3281,7 @@ def test_upsert_to_local_refuses_partial_full_visit_reload_before_delete(monkeyp
         "20260819_000035_extend_surgery_record_structured_fields.py",
         "20260819_000036_preserve_consent_and_exam_master_contracts.py",
         "20260821_000037_preserve_consultation_and_handoff_facts.py",
+        "20260824_000038_preserve_drug_order_planned_start.py",
     ),
 )
 def test_sync_contract_migrations_never_mutate_public_source_in_split_mode(monkeypatch, filename):
@@ -3278,3 +3344,41 @@ def test_consultation_handoff_migration_is_idempotent_and_cdm_only(monkeypatch):
         ("cdm", "handover_record", "shift_time"),
         ("cdm", "handover_record", "handover_doctor"),
     ]
+
+
+def test_drug_order_planned_start_migration_is_idempotent_and_cdm_only(monkeypatch):
+    migration = _load_migration_module(
+        "20260824_000038_preserve_drug_order_planned_start.py"
+    )
+    existing = {"inpat_drug_order": set()}
+    added: list[tuple[str, str, str]] = []
+
+    class _Inspector:
+        @staticmethod
+        def get_schema_names():
+            return ["public", "cdm"]
+
+        @staticmethod
+        def get_table_names(*, schema):
+            assert schema == "cdm"
+            return list(existing)
+
+        @staticmethod
+        def get_columns(table_name, *, schema):
+            assert schema == "cdm"
+            return [{"name": name} for name in existing[table_name]]
+
+    def _add_column(table_name, column, *, schema):
+        assert schema == "cdm"
+        added.append((schema, table_name, column.name))
+        existing[table_name].add(column.name)
+
+    monkeypatch.setenv("DB_SCHEMA_MODE", "split")
+    monkeypatch.setattr(migration.op, "get_bind", lambda: object())
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: _Inspector())
+    monkeypatch.setattr(migration.op, "add_column", _add_column)
+
+    migration.upgrade()
+    migration.upgrade()
+
+    assert added == [("cdm", "inpat_drug_order", "planned_start_datetime")]

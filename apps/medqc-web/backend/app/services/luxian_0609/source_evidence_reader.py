@@ -334,6 +334,7 @@ _NATIVE_SOURCE_FIELDS = {
         "start_time",
         "order_time",
         "prescribed_datetime",
+        "planned_start_datetime",
         "update_time",
         "order_status",
         "record_content",

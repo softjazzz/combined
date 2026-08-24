@@ -812,9 +812,13 @@ def safe_luxian_0609_customer_display_facts(
         "critical_value_result_detail_missing": {
             "lab_report_count", "missing_source",
         },
-        "antimicrobial_reason_documentation_check": {"antimicrobials", "reason_documented"},
+        "antimicrobial_reason_documentation_check": {
+            "antimicrobials", "reason_documented", "unmatched_antimicrobials",
+            "association_ambiguous",
+        },
         "antimicrobial_effect_evaluation_check": {
             "antimicrobials", "window_hours", "evaluation_intervals",
+            "unmatched_antimicrobials", "association_ambiguous",
         },
         "empiric_antimicrobial_reason_check": {
             "antimicrobials", "empiric_use_confirmed", "reason_or_no_specimen_documented",
@@ -822,6 +826,7 @@ def safe_luxian_0609_customer_display_facts(
         "special_antimicrobial_expert_support_check": {
             "special_antimicrobials", "expert_support_present",
             "first_antimicrobial_time", "expert_support_time", "support_before_use",
+            "unmatched_special_antimicrobials", "association_ambiguous",
         },
         "antimicrobial_course_documentation_complete": {
             "antimicrobials", "course_documented",
@@ -1043,12 +1048,16 @@ def safe_luxian_0609_customer_display_facts(
                 "first_antimicrobial_time",
                 "expert_support_time",
                 "support_before_use",
+                "unmatched_special_antimicrobials",
+                "association_ambiguous",
             }
             medicines = raw.get("special_antimicrobials")
+            unmatched = raw.get("unmatched_special_antimicrobials")
             expert_present = raw.get("expert_support_present")
             first_time = raw.get("first_antimicrobial_time")
             support_time = raw.get("expert_support_time")
             support_before_use = raw.get("support_before_use")
+            association_ambiguous = raw.get("association_ambiguous")
             if (
                 set(raw) != expected_keys
                 or not isinstance(medicines, (list, tuple))
@@ -1058,8 +1067,12 @@ def safe_luxian_0609_customer_display_facts(
                     isinstance(item, str) and 0 < len(item) <= 160 and "\n" not in item
                     for item in medicines
                 )
+                or not isinstance(unmatched, (list, tuple))
+                or len(unmatched) > len(medicines)
+                or not all(item in medicines for item in unmatched)
                 or not isinstance(expert_present, bool)
                 or not isinstance(support_before_use, bool)
+                or not isinstance(association_ambiguous, bool)
             ):
                 return None
             try:
@@ -1086,10 +1099,14 @@ def safe_luxian_0609_customer_display_facts(
                         or first_dt is None
                         or support_dt is None
                         or support_dt > first_dt
+                        or unmatched
+                        or association_ambiguous
                     )
                 )
                 or (
-                    first_dt is not None
+                    not unmatched
+                    and not association_ambiguous
+                    and first_dt is not None
                     and support_dt is not None
                     and support_before_use != (support_dt <= first_dt)
                 )
@@ -1102,6 +1119,8 @@ def safe_luxian_0609_customer_display_facts(
                 "first_antimicrobial_time": first_time,
                 "expert_support_time": support_time,
                 "support_before_use": support_before_use,
+                "unmatched_special_antimicrobials": list(unmatched),
+                "association_ambiguous": association_ambiguous,
             }
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
@@ -1144,6 +1163,18 @@ def safe_luxian_0609_customer_display_facts(
             ):
                 safe[key] = list(value)
             else:
+                return None
+        if kind in {"antimicrobial_reason_documentation_check",
+                    "antimicrobial_effect_evaluation_check"}:
+            medicines = safe.get("antimicrobials")
+            unmatched = safe.get("unmatched_antimicrobials")
+            if (
+                not isinstance(medicines, list) or not medicines
+                or any(not isinstance(name, str) for name in medicines)
+                or not isinstance(unmatched, list)
+                or any(name not in medicines for name in unmatched)
+                or type(safe.get("association_ambiguous")) is not bool
+            ):
                 return None
         if kind == "postoperative_three_day_coverage_check" and raw.get("surgery_events") is not None:
             surgery_events = controlled_postoperative_events(raw.get("surgery_events"))

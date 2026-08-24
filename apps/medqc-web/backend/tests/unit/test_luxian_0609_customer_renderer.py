@@ -40,13 +40,15 @@ def test_058_customer_finding_distinguishes_expert_support_after_special_use() -
             "first_antimicrobial_time": "2026-06-01 10:00:00",
             "expert_support_time": "2026-06-01 11:00:00",
             "support_before_use": False,
+            "unmatched_special_antimicrobials": ["美罗培南"],
+            "association_ambiguous": False,
         },
     )
 
     assert finding == (
-        "已使用特殊级抗菌药物 美罗培南，但专家支持记录时间 "
-        "2026-06-01 11:00:00 晚于首次特殊级抗菌药使用时间 "
-        "2026-06-01 10:00:00，不满足用药前支持要求。"
+        "已确认特殊级抗菌药物 美罗培南 的计划开始/启用时间为 "
+        "2026-06-01 10:00:00，但专家支持记录时间 2026-06-01 11:00:00 "
+        "晚于该时间，不满足计划启用前支持要求。"
     )
 
 
@@ -60,13 +62,74 @@ def test_058_customer_finding_confirms_expert_support_before_or_at_special_use()
             "first_antimicrobial_time": "2026-06-01 10:00:00",
             "expert_support_time": "2026-06-01 10:00:00",
             "support_before_use": True,
+            "unmatched_special_antimicrobials": [],
+            "association_ambiguous": False,
         },
     )
 
     assert finding == (
-        "已使用特殊级抗菌药物 美罗培南，已在首次特殊级抗菌药使用时间 "
-        "2026-06-01 10:00:00 前或同刻找到专家支持记录（2026-06-01 10:00:00）。"
+        "已确认特殊级抗菌药物 美罗培南 计划开始/启用时间为 "
+        "2026-06-01 10:00:00，并在该时间前或同刻找到专家支持记录（2026-06-01 10:00:00）。"
     )
+
+
+def test_058_customer_finding_does_not_call_partial_support_late() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-058",
+        facts={
+            "verification_kind": "special_antimicrobial_expert_support_check",
+            "special_antimicrobials": ["美罗培南", "万古霉素"],
+            "expert_support_present": True,
+            "first_antimicrobial_time": "2026-06-01 10:00:00",
+            "expert_support_time": "2026-06-01 09:00:00",
+            "support_before_use": False,
+            "unmatched_special_antimicrobials": ["万古霉素"],
+            "association_ambiguous": False,
+        },
+    )
+
+    assert finding == "已核对特殊级抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到可关联的计划启用前专家支持记录。"
+
+
+def test_054_customer_finding_identifies_the_unmatched_antimicrobial() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-054",
+        facts={
+            "verification_kind": "antimicrobial_reason_documentation_check",
+            "antimicrobials": ["美罗培南", "万古霉素"],
+            "reason_documented": False,
+            "unmatched_antimicrobials": ["万古霉素"],
+            "association_ambiguous": False,
+        },
+    )
+
+    assert finding == "已核对抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到明确的使用或调整动作及理由。"
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts", "expected"),
+    (
+        ("LX0609-054", {
+            "verification_kind": "antimicrobial_reason_documentation_check",
+            "antimicrobials": ["美罗培南", "万古霉素"],
+            "association_ambiguous": True,
+        }, "已核对抗菌药物 美罗培南、万古霉素；现有病程未明确关联到具体药物使用或调整事件，暂无法逐项核对理由。"),
+        ("LX0609-055", {
+            "verification_kind": "antimicrobial_effect_evaluation_check",
+            "antimicrobials": ["美罗培南", "万古霉素"],
+            "association_ambiguous": True,
+        }, "已核对抗菌药物 美罗培南、万古霉素；现有效果评价未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"),
+        ("LX0609-058", {
+            "verification_kind": "special_antimicrobial_expert_support_check",
+            "special_antimicrobials": ["美罗培南", "万古霉素"],
+            "association_ambiguous": True,
+        }, "已核对特殊级抗菌药物 美罗培南、万古霉素；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前支持。"),
+    ),
+)
+def test_antimicrobial_customer_finding_explains_ambiguous_association(
+    rule_id: str, facts: dict[str, object], expected: str
+) -> None:
+    assert customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts) == expected
 
 
 def test_069_customer_finding_identifies_each_consultation_and_the_late_one() -> None:
@@ -928,9 +991,12 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
             {
                 "verification_kind": "antimicrobial_effect_evaluation_check",
                 "antimicrobials": ["美罗培南", "万古霉素"],
+                "window_hours": [48, 72],
                 "evaluation_intervals": [],
+                "unmatched_antimicrobials": ["万古霉素"],
+                "association_ambiguous": False,
             },
-            "已核对抗菌药物 美罗培南、万古霉素，未找到首次用药后 48～72 小时内的效果评价记录。",
+            "已核对抗菌药物 美罗培南、万古霉素；其中 万古霉素 未找到计划开始/启用后 48～72 小时内的效果评价记录。",
         ),
         (
             "LX0609-061",

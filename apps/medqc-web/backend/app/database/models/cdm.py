@@ -1119,6 +1119,10 @@ class InpatDrugOrder(AuditMixin, Base):
     medication_duration = Column(String(100), comment="用药天数")
 
     prescribed_datetime = Column(DateTime, comment="开立时间")
+    planned_start_datetime = Column(
+        DateTime(timezone=True),
+        comment="计划开始/启用时间（非实际给药时间）",
+    )
     prescribed_doctor = Column(String(100), comment="开立医师姓名")
     order_status = Column(String(100), comment="医嘱状态")
     record_content = Column(Text, comment="记录内容")

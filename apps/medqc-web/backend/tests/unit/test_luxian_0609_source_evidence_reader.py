@@ -113,6 +113,48 @@ def test_snapshot_reader_projects_real_mr_surgery_primary_identity(monkeypatch) 
     assert '"surgery_id"' in sql
 
 
+def test_snapshot_reader_projects_drug_order_planned_start_time(monkeypatch) -> None:
+    connection = _SourceRowsConnection([{
+        "order_id": "O-1",
+        "generic_name": "美罗培南",
+        "prescribed_datetime": "2026-08-19 08:00:00+08",
+        "planned_start_datetime": "2026-08-19 10:00:00+08",
+    }])
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_id",
+            "generic_name",
+            "prescribed_datetime",
+            "planned_start_datetime",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key="inpat_drug_order",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+    )
+
+    assert result.rows[0]["planned_start_datetime"] == "2026-08-19 10:00:00+08"
+    sql, _params = connection.calls[0]
+    assert '"planned_start_datetime"' in sql
+
+
 @pytest.mark.parametrize(
     ("source_key", "business_fields", "row"),
     (

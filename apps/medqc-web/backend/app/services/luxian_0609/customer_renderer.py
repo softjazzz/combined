@@ -143,7 +143,7 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-052": ("PL/PH危急值标志、报告时间或处置记录时间",),
     "LX0609-053": ("PL/PH危急值标志、报告时间或危急值处置记录",),
     "LX0609-054": ("抗菌药物医嘱、用药调整动作或对应理由",),
-    "LX0609-055": ("抗菌药物首次用药时间或48～72小时效果评价时间",),
+    "LX0609-055": ("抗菌药物计划开始/启用时间或48～72小时效果评价时间",),
     "LX0609-057": ("经验用药事实、用药理由或无样可采原因",),
     "LX0609-058": ("特殊级抗菌药物医嘱或专家查房、会诊记录",),
     "LX0609-060": ("住院结局、死亡时间或死亡记录",),
@@ -380,8 +380,8 @@ _RULE_DATA_GAP_MESSAGES = {
     ),
     "LX0609-055": (
         "暂无法核对48～72小时抗菌药物效果评价",
-        "当前缺少首次用药时间、效果评价记录或评价时间。",
-        "请确认抗菌药物医嘱时间和效果评价病程已完整同步后重新评估。",
+        "当前缺少计划开始/启用时间、效果评价记录或评价时间。",
+        "请确认抗菌药物计划开始/启用时间和效果评价病程已完整同步后重新评估。",
     ),
     "LX0609-057": (
         "暂无法核对经验用药理由",
@@ -673,7 +673,7 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "请补充危急值处置过程及结果。",
     ),
     "LX0609-058": (
-        "使用特殊级抗菌药物，但未找到专家支持记录",
+        "已开立特殊级抗菌药物计划，但未找到专家支持记录",
         "已核对特殊级抗菌药物医嘱及专家查房、会诊资料。",
         "请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。",
     ),
@@ -2256,6 +2256,11 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-054" and kind == "antimicrobial_reason_documentation_check":
         medicines = joined("antimicrobials")
+        unmatched = joined("unmatched_antimicrobials")
+        if facts.get("association_ambiguous") is True:
+            return f"已核对抗菌药物 {medicines}；现有病程未明确关联到具体药物使用或调整事件，暂无法逐项核对理由。"
+        if unmatched:
+            return f"已核对抗菌药物 {medicines}；其中 {unmatched} 未找到明确的使用或调整动作及理由。"
         return (
             f"已核对抗菌药物 {medicines}，病程中已记录使用或调整理由。"
             if facts.get("reason_documented") is True
@@ -2265,9 +2270,14 @@ def customer_finding_from_controlled_facts(
     if rule_id == "LX0609-055" and kind == "antimicrobial_effect_evaluation_check":
         medicines = joined("antimicrobials")
         intervals = joined("evaluation_intervals")
+        unmatched = joined("unmatched_antimicrobials")
+        if facts.get("association_ambiguous") is True:
+            return f"已核对抗菌药物 {medicines}；现有效果评价未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"
+        if unmatched:
+            return f"已核对抗菌药物 {medicines}；其中 {unmatched} 未找到计划开始/启用后 48～72 小时内的效果评价记录。"
         if not intervals:
-            return f"已核对抗菌药物 {medicines}，未找到首次用药后 48～72 小时内的效果评价记录。"
-        return f"已核对抗菌药物 {medicines}；效果评价距首次用药 {intervals} 小时，要求在 48～72 小时内完成。"
+            return f"已核对抗菌药物 {medicines}，未找到计划开始/启用后 48～72 小时内的效果评价记录。"
+        return f"已核对抗菌药物 {medicines}；效果评价距计划开始/启用 {intervals} 小时，要求在 48～72 小时内完成。"
 
     if rule_id == "LX0609-057" and kind == "empiric_antimicrobial_reason_check":
         medicines = joined("antimicrobials")
@@ -2279,22 +2289,27 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-058" and kind == "special_antimicrobial_expert_support_check":
         medicines = joined("special_antimicrobials")
-        first_use_time = facts.get("first_antimicrobial_time")
+        unmatched = joined("unmatched_special_antimicrobials")
+        planned_start_time = facts.get("first_antimicrobial_time")
         support_time = facts.get("expert_support_time")
+        if facts.get("association_ambiguous") is True:
+            return f"已核对特殊级抗菌药物 {medicines}；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前支持。"
+        if unmatched and len(facts.get("special_antimicrobials") or ()) > 1:
+            return f"已核对特殊级抗菌药物 {medicines}；其中 {unmatched} 未找到可关联的计划启用前专家支持记录。"
         if facts.get("support_before_use") is True:
             return (
-                f"已使用特殊级抗菌药物 {medicines}，已在首次特殊级抗菌药使用时间 "
-                f"{first_use_time} 前或同刻找到专家支持记录（{support_time}）。"
+                f"已确认特殊级抗菌药物 {medicines} 计划开始/启用时间为 "
+                f"{planned_start_time}，并在该时间前或同刻找到专家支持记录（{support_time}）。"
             )
-        if facts.get("expert_support_present") is True and support_time and first_use_time:
+        if facts.get("expert_support_present") is True and support_time and planned_start_time:
             return (
-                f"已使用特殊级抗菌药物 {medicines}，但专家支持记录时间 "
-                f"{support_time} 晚于首次特殊级抗菌药使用时间 "
-                f"{first_use_time}，不满足用药前支持要求。"
+                f"已确认特殊级抗菌药物 {medicines} 的计划开始/启用时间为 "
+                f"{planned_start_time}，但专家支持记录时间 {support_time} 晚于该时间，"
+                "不满足计划启用前支持要求。"
             )
         if facts.get("expert_support_present") is True:
-            return f"已使用特殊级抗菌药物 {medicines}，但专家支持记录缺少可核对的权威时间。"
-        return f"已使用特殊级抗菌药物 {medicines}，未找到专家查房或会诊支持记录。"
+            return f"已开立特殊级抗菌药物 {medicines} 计划，但专家支持记录缺少可核对的权威时间。"
+        return f"已开立特殊级抗菌药物 {medicines} 计划，未找到专家查房或会诊支持记录。"
 
     if rule_id == "LX0609-060" and kind == "death_record_presence_check":
         return (

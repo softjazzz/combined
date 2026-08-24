@@ -3710,8 +3710,18 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
         rule_id,
         {
             "inpat_drug_order": (
-                {"generic_name": "美罗培南", "prescribed_datetime": "2026-06-01 10:00:00", "record_content": "经验性启用美罗培南"},
-                {"generic_name": "万古霉素", "prescribed_datetime": "2026-06-01 11:00:00", "record_content": "经验性联合万古霉素"},
+                {
+                    "generic_name": "美罗培南",
+                    "prescribed_datetime": "2026-06-01 10:00:00",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                    "record_content": "经验性启用美罗培南",
+                },
+                {
+                    "generic_name": "万古霉素",
+                    "prescribed_datetime": "2026-06-01 11:00:00",
+                    "planned_start_datetime": "2026-06-01 11:00:00",
+                    "record_content": "经验性联合万古霉素",
+                },
             ),
             "labtest_master": ({
                 "labtest_subject": "血培养及药敏", "specimen": "静脉血",
@@ -3723,7 +3733,7 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
             ),
             "consultation_record": ({
                 "record_time": "2026-06-01 09:00:00",
-                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+                "record_content": "感染专家会诊同意使用美罗培南和万古霉素。",
             },),
         },
     )
@@ -3754,6 +3764,49 @@ async def test_054_bare_antimicrobial_action_without_reason_is_non_compliant() -
 
 
 @pytest.mark.asyncio
+async def test_054_requires_action_and_reason_for_each_distinct_antimicrobial_event() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": (
+                {"order_id": "A-1", "generic_name": "美罗培南"},
+                {"order_id": "A-2", "generic_name": "万古霉素"},
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
+    facts = dict(result.customer_display_facts)["LX0609-054"]
+    assert facts["reason_documented"] is False
+    assert facts["unmatched_antimicrobials"] == ["万古霉素"]
+
+
+@pytest.mark.asyncio
+async def test_054_does_not_reuse_one_course_record_for_repeated_same_drug_events() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": (
+                {"order_id": "M-1", "generic_name": "美罗培南"},
+                {"order_id": "M-2", "generic_name": "美罗培南"},
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
 async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-057",
@@ -3769,6 +3822,54 @@ async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> No
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_057_structured_culture_then_start_fact_triggers_empiric_review() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-057",
+        {
+            "inpat_drug_order": ({"generic_name": "美罗培南"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 10:00:00",
+                "record_content": "留取血培养后启用美罗培南，待药敏结果调整方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-057"]
+    assert facts["empiric_use_confirmed"] is True
+
+
+@pytest.mark.asyncio
+async def test_057_single_order_accepts_explicit_generic_empiric_sequence() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-057",
+        {
+            "inpat_drug_order": ({"generic_name": "美罗培南"},),
+            "daily_course_record": ({
+                "record_content": "留取培养后启用抗菌药，待药敏结果调整方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_057_unknown_antimicrobial_treatment_intent_is_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-057",
+        {
+            "inpat_drug_order": ({"generic_name": "美罗培南"},),
+            "daily_course_record": (),
+            "senior_course_record": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "applicability_source_gap"
 
 
 @pytest.mark.asyncio
@@ -3805,7 +3906,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
             "inpat_drug_order": (
                 {
                     "generic_name": "美罗培南",
-                    "prescribed_datetime": "2026-06-01 10:00:00",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
                 },
             ),
             "daily_course_record": (
@@ -3824,6 +3925,78 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
 
 
 @pytest.mark.asyncio
+async def test_055_does_not_use_prescribed_or_update_time_as_planned_start() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 08:00:00",
+                "update_time": "2026-06-01 09:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 08:00:00",
+                "record_content": "抗菌药物效果评价：抗感染治疗有效。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_055_generic_effect_record_cannot_cover_multiple_drug_events() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": (
+                {
+                    "order_id": "M-1",
+                    "generic_name": "美罗培南",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+                {
+                    "order_id": "V-1",
+                    "generic_name": "万古霉素",
+                    "planned_start_datetime": "2026-06-01 11:00:00",
+                },
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "抗菌药物效果评价：抗感染治疗有效。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_055_one_order_row_with_two_drugs_requires_each_named_evaluation() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "order_id": "MV-1",
+                "generic_name": "美罗培南+万古霉素",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：抗感染治疗有效。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-055"][
+        "unmatched_antimicrobials"
+    ] == ["万古霉素"]
+
+
+@pytest.mark.asyncio
 async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> None:
     result, reduced = await _evaluate(
         "LX0609-055",
@@ -3831,7 +4004,7 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
             "inpat_drug_order": (
                 {
                     "generic_name": "美罗培南",
-                    "prescribed_datetime": "2026-06-01 10:00:00",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
                 },
             ),
             "daily_course_record": (
@@ -3866,7 +4039,7 @@ async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals()
             "inpat_drug_order": (
                 {
                     "generic_name": "美罗培南",
-                    "prescribed_datetime": "2026-06-01 10:00:00",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
                 },
             ),
             "daily_course_record": (
@@ -3901,7 +4074,7 @@ async def test_055_bare_inflammatory_markers_at_48_hours_are_not_effect_evaluati
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "prescribed_datetime": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
@@ -3922,7 +4095,7 @@ async def test_055_explicit_negative_effect_evaluation_at_48_hours_is_compliant(
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "prescribed_datetime": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
@@ -3941,7 +4114,7 @@ async def test_055_untimed_explicit_effect_evaluation_is_data_gap() -> None:
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "prescribed_datetime": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "daily_course_record": ({
                 "record_content": "抗感染治疗效果不佳，拟调整方案。",
@@ -3960,7 +4133,7 @@ async def test_055_timed_in_window_evaluation_remains_compliant_with_untimed_can
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "prescribed_datetime": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "daily_course_record": (
                 {
@@ -3982,7 +4155,7 @@ async def test_058_expert_support_after_special_antimicrobial_use_is_non_complia
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "start_time": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
                 "record_time": "2026-06-01 11:00:00",
@@ -3996,13 +4169,115 @@ async def test_058_expert_support_after_special_antimicrobial_use_is_non_complia
 
 
 @pytest.mark.asyncio
+async def test_058_does_not_use_prescribed_or_update_time_as_planned_start() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 08:00:00",
+                "update_time": "2026-06-01 09:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 07:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_058_generic_expert_support_cannot_cover_multiple_special_drug_events() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": (
+                {
+                    "order_id": "M-1",
+                    "generic_name": "美罗培南",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+                {
+                    "order_id": "V-1",
+                    "generic_name": "万古霉素",
+                    "planned_start_datetime": "2026-06-01 11:00:00",
+                },
+            ),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_058_support_for_one_named_drug_does_not_cover_later_named_drug() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": (
+                {
+                    "order_id": "M-1",
+                    "generic_name": "美罗培南",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+                {
+                    "order_id": "V-1",
+                    "generic_name": "万古霉素",
+                    "planned_start_datetime": "2026-06-02 10:00:00",
+                },
+            ),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意使用美罗培南。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+    facts = dict(result.customer_display_facts)["LX0609-058"]
+    assert facts["unmatched_special_antimicrobials"] == ["万古霉素"]
+
+
+@pytest.mark.asyncio
+async def test_058_one_order_row_with_two_drugs_requires_each_named_support() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "order_id": "MV-1",
+                "generic_name": "美罗培南+万古霉素",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "感染专家会诊同意使用美罗培南。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-058"][
+        "unmatched_special_antimicrobials"
+    ] == ["万古霉素"]
+
+
+@pytest.mark.asyncio
 async def test_058_timed_consultation_support_is_compliant_when_daily_source_unavailable() -> None:
     _, reduced = await _evaluate(
         "LX0609-058",
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "start_time": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
                 "record_time": "2026-06-01 09:00:00",
@@ -4023,7 +4298,7 @@ async def test_058_timed_consultation_support_is_compliant_when_senior_source_un
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "start_time": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
                 "record_time": "2026-06-01 09:00:00",
@@ -4044,7 +4319,7 @@ async def test_058_late_support_with_unavailable_senior_source_is_data_gap() -> 
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "start_time": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
                 "record_time": "2026-06-01 11:00:00",
@@ -4082,7 +4357,7 @@ async def test_058_expert_support_without_authoritative_time_is_data_gap() -> No
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "start_time": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
                 "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
@@ -4122,7 +4397,7 @@ async def test_058_any_special_antimicrobial_without_time_blocks_earliest_use_gu
             "inpat_drug_order": (
                 {
                     "generic_name": "美罗培南",
-                    "start_time": "2026-06-01 10:00:00",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
                 },
                 {"generic_name": "万古霉素"},
             ),
@@ -4138,7 +4413,7 @@ async def test_058_any_special_antimicrobial_without_time_blocks_earliest_use_gu
 
 
 @pytest.mark.asyncio
-async def test_058_conflicting_special_antimicrobial_use_times_are_data_gap() -> None:
+async def test_058_legacy_order_times_do_not_supply_planned_start() -> None:
     _, reduced = await _evaluate(
         "LX0609-058",
         {
@@ -4155,7 +4430,7 @@ async def test_058_conflicting_special_antimicrobial_use_times_are_data_gap() ->
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "authoritative_time_conflict"
+    assert reduced.reason_code == "authoritative_time_missing"
 
 
 @pytest.mark.asyncio
@@ -4165,8 +4440,7 @@ async def test_058_expert_support_at_special_antimicrobial_use_time_is_compliant
         {
             "inpat_drug_order": ({
                 "generic_name": "美罗培南",
-                "start_time": "2026-06-01 10:00:00",
-                "order_time": "2026-06-01 10:00:00",
+                "planned_start_datetime": "2026-06-01 10:00:00",
             },),
             "consultation_record": ({
                 "record_time": "2026-06-01 10:00:00",

@@ -100,9 +100,11 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
         "prescribed_datetime": (
             "prescribed_datetime",
             "prescribed_time",
-            "start_time",
-            "order_start_time",
-            "order_time",
+        ),
+        # 源字段仅表示计划开始/启用时间，必须与开立时间独立保存。
+        "planned_start_datetime": (
+            "planned_start_datetime",
+            "planned_start_time",
         ),
         "order_status": ("order_status", "status"),
         "generic_name": ("generic_name", "drug_name", "order_item_name", "order_item"),
