@@ -1384,6 +1384,71 @@ def test_023_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
 
 
 @pytest.mark.parametrize(
+    ("rule_id", "verification_kind", "requirement", "document_title"),
+    [
+        (
+            "LX0609-021",
+            "consultation_application_quality_check",
+            "说明具体临床问题、会诊理由或明确会诊目的",
+            "会诊申请单",
+        ),
+        (
+            "LX0609-022",
+            "consultation_opinion_quality_check",
+            "给出针对当前病情的明确诊疗意见",
+            "会诊记录单",
+        ),
+    ],
+)
+def test_021_022_customer_display_projection_is_idempotent(
+    rule_id: str,
+    verification_kind: str,
+    requirement: str,
+    document_title: str,
+) -> None:
+    raw = {
+        "verification_kind": verification_kind,
+        "episode_count": 1,
+        "document_count": 1,
+        "semantic_state": "vague",
+        "checked_requirement": requirement,
+        "source_document_ids": ["CONSULT-1"],
+        "episode_results": [
+            {
+                "episode_index": 1,
+                "semantic_state": "vague",
+                "source_document_id": "CONSULT-1",
+                "record_time": "2026-07-08 17:55:17",
+                "document_title": document_title,
+            },
+        ],
+    }
+
+    first = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw)
+    assert first is not None
+    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=first) == first
+
+
+def test_023_customer_display_projection_is_idempotent() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 3,
+        "recommendation_count": 4,
+        "specific_execution_count": 3,
+        "generic_execution_count": 1,
+        "missing_execution_count": 0,
+        "relation_state": "generic_or_copied_execution",
+        "source_document_ids": ["CONSULT-1"],
+    }
+
+    first = safe_luxian_0609_customer_display_facts(rule_id="LX0609-023", raw=raw)
+    assert first is not None
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-023", raw=first
+    ) == first
+
+
+@pytest.mark.parametrize(
     ("rule_id", "facts"),
     [
         (

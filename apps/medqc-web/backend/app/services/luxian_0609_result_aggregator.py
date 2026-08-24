@@ -3818,10 +3818,13 @@ def safe_luxian_0609_customer_display_facts(
             "checked_requirement",
             "source_document_ids",
         }
+        is_public_projection = "source_document_ids" not in raw
+        if is_public_projection:
+            expected_keys.remove("source_document_ids")
         has_episode_results = rule_id in {"LX0609-021", "LX0609-022"} and "episode_results" in raw
         if has_episode_results:
             expected_keys.add("episode_results")
-        source_document_ids = raw.get("source_document_ids")
+        source_document_ids = raw.get("source_document_ids", [])
         if (
             set(raw) != expected_keys
             or raw.get("verification_kind") != expected_kind
@@ -3860,8 +3863,9 @@ def safe_luxian_0609_customer_display_facts(
             base_item_keys = {
                 "episode_index",
                 "semantic_state",
-                "source_document_id",
             }
+            if not is_public_projection:
+                base_item_keys.add("source_document_id")
             locator_item_keys = {"record_time", "document_title"}
             if not isinstance(item, Mapping) or set(item) not in {
                 frozenset(base_item_keys),
@@ -3873,10 +3877,12 @@ def safe_luxian_0609_customer_display_facts(
             if (
                 item.get("episode_index") != expected_index
                 or state not in allowed_states
-                or not isinstance(source_document_id, str)
                 or (
-                    source_document_id
-                    and source_document_id not in source_document_id_set
+                    not is_public_projection
+                    and (
+                        not isinstance(source_document_id, str)
+                        or source_document_id not in source_document_id_set
+                    )
                 )
             ):
                 return None
@@ -3974,6 +3980,9 @@ def safe_luxian_0609_customer_display_facts(
             "relation_state",
             "source_document_ids",
         }
+        is_public_projection = "source_document_ids" not in raw
+        if is_public_projection:
+            expected_keys.remove("source_document_ids")
         if rule_id == "LX0609-020" and "recommendation_results" in raw:
             expected_keys.add("recommendation_results")
         allowed_internal_keys = {"source_document_refs"}
@@ -3984,7 +3993,7 @@ def safe_luxian_0609_customer_display_facts(
             "generic_execution_count",
             "missing_execution_count",
         )
-        source_document_ids = raw.get("source_document_ids")
+        source_document_ids = raw.get("source_document_ids", [])
         if (
             set(raw) - allowed_internal_keys != expected_keys
             or raw.get("verification_kind") != expected_verification_kind
