@@ -1449,6 +1449,39 @@ def test_typed_050_controlled_finding_survives_envelope_customer_projection() ->
 
 
 @pytest.mark.parametrize(
+    "field,value",
+    [
+        ("admission_time", "患者张三，身份证 510000199001011234"),
+        ("admission_time", "2026-02-30 08:00:00"),
+        ("uncertain_record_times", ["病历正文：患者李四住院于2026年08月01日"]),
+        ("uncertain_record_times", ["2026-08-09 09:00:00"] * 101),
+    ],
+)
+def test_typed_050_customer_projection_rejects_non_datetime_controlled_facts(
+    field: str,
+    value: object,
+) -> None:
+    facts = {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-08-01 08:00:00",
+        "uncertain_record_times": ["2026-08-09 09:00:00"],
+        "discussion_count": 0,
+    }
+    facts[field] = value
+
+    with pytest.raises(ValueError):
+        project_customer_safe_result_item(
+            {
+                "rule_id": "LX0609-050",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "customer_display_facts": facts,
+            },
+            hmac_key="unit-test-key",
+        )
+
+
+@pytest.mark.parametrize(
     "invalid_fields",
     [
         {"status": "future_status", "result_status": "future_status", "is_compliant": None},
