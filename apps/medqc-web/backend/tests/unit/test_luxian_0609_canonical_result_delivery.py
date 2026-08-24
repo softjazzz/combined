@@ -1448,6 +1448,33 @@ def test_typed_050_controlled_finding_survives_envelope_customer_projection() ->
     ) == projected
 
 
+def test_typed_050_scope_gap_survives_safe_projection_without_raw_text() -> None:
+    projected = project_customer_safe_result_item(
+        {
+            "rule_id": "LX0609-050",
+            "status": "data_gap",
+            "reason_code": "diagnosis_scope_uncertain",
+            "customer_display_facts": {
+                "verification_kind": "uncertain_diagnosis_scope_unverified",
+                "admission_time": "2026-08-01 08:00:00",
+                "uncertain_record_times": ["2026-08-09 09:00:00"],
+                "discussion_count": 0,
+                "raw_text": "PRIVATE_MEDICAL_BODY",
+            },
+            "customer_conclusion": "FORGED_CUSTOMER_CONCLUSION",
+        },
+        hmac_key="unit-test-key",
+    )
+
+    assert projected["status"] == "data_gap"
+    assert projected["reason_code"] == "diagnosis_scope_uncertain"
+    assert "2026-08-09 09:00:00" in projected["conclusion"]
+    assert "不能据此认定缺少疑难病例讨论" in projected["conclusion"]
+    dumped = json.dumps(projected, ensure_ascii=False)
+    assert "PRIVATE_MEDICAL_BODY" not in dumped
+    assert "FORGED_CUSTOMER_CONCLUSION" not in dumped
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

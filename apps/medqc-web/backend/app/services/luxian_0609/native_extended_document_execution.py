@@ -121,7 +121,8 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
 
 _DEATH_MARKERS = ("死亡", "病故")
 _ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院")
-_UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确", "原因待查", "性质待定")
+_UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确")
+_LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS = ("原因待查", "性质待定")
 _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?:药品|药物|用药|服药|服用|口服|停药|带药)"
 )
@@ -1041,7 +1042,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 ),
                 None,
             )
-            uncertain_rows = tuple(
+            strong_uncertain_rows = tuple(
                 row
                 for row in daily_rows
                 if any(marker in _material_text(row) for marker in _UNCERTAIN_DIAGNOSIS_MARKERS)
@@ -1049,23 +1050,36 @@ async def execute_luxian_0609_native_extended_document_rules(
                 and (row_time := _row_time(row)) is not None
                 and row_time >= admission_time + timedelta(days=7)
             )
+            local_uncertain_rows = tuple(
+                row for row in daily_rows
+                if any(marker in _material_text(row) for marker in _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS)
+                and admission_time is not None and (row_time := _row_time(row)) is not None
+                and row_time >= admission_time + timedelta(days=7)
+            )
+            uncertain_rows = strong_uncertain_rows or local_uncertain_rows
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif admission_time is None:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif not uncertain_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif not strong_uncertain_rows:
+                final_state, reason_code = "data_gap", "diagnosis_scope_uncertain"
             elif diffcase_rows:
                 final_state, reason_code = "compliant", "requirement_satisfied"
             else:
                 final_state, reason_code = "non_compliant", "required_document_missing"
-            if admission_time is not None:
+            scope_uncertain = reason_code == "diagnosis_scope_uncertain"
+            if admission_time is not None and not source_error:
                 display.append((rule_id, {
-                    "verification_kind": "uncertain_diagnosis_discussion_check",
+                    "verification_kind": (
+                        "uncertain_diagnosis_scope_unverified" if scope_uncertain
+                        else "uncertain_diagnosis_discussion_check"
+                    ),
                     "admission_time": admission_time.isoformat(sep=" "),
                     "uncertain_record_times": [
                         value.isoformat(sep=" ")
-                        for row in uncertain_rows
+                        for row in (local_uncertain_rows if scope_uncertain else strong_uncertain_rows)
                         if (value := _row_time(row)) is not None
                     ],
                     "discussion_count": len(diffcase_rows),

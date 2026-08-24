@@ -2814,6 +2814,67 @@ async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() ->
 
 
 @pytest.mark.asyncio
+async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-050",
+        {
+            "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-09 09:00:00",
+                "record_content": "患者发热原因待查，当前诊断为社区获得性肺炎，继续抗感染治疗。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "diagnosis_scope_uncertain"
+    assert dict(result.customer_display_facts)["LX0609-050"] == {
+        "verification_kind": "uncertain_diagnosis_scope_unverified",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": ["2026-06-09 09:00:00"],
+        "discussion_count": 0,
+    }
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_050_without_diagnosis_uncertainty_marker_remains_not_applicable() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-050",
+        {
+            "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-09 09:00:00",
+                "record_content": "当前诊断为社区获得性肺炎，继续抗感染治疗。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert dict(result.customer_display_facts)["LX0609-050"] == {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": [],
+        "discussion_count": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_050_source_failure_does_not_project_diagnosis_scope_facts() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-050",
+        {"inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},)},
+        unavailable_sources=frozenset({"daily_course_record"}),
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_unavailable"
+    assert "LX0609-050" not in dict(result.customer_display_facts)
+
+
+@pytest.mark.asyncio
 async def test_050_uses_admission_record_when_registration_time_is_missing() -> None:
     result, reduced = await _evaluate(
         "LX0609-050",

@@ -441,6 +441,11 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-050", "diagnosis_scope_uncertain"): (
+        "病程出现局部待查表述，暂无法确认是否需要疑难病例讨论",
+        "现有资料无法确认该表述是否表示本次住院整体诊断仍不明确，不能据此认定缺少疑难病例讨论。",
+        "请人工核对入院满7天后的整体诊断状态。",
+    ),
     ("LX0609-004", "applicability_source_gap"): (
         "暂无法确认本次住院是否发生抢救",
         "抢救记录来源查询完整但结果为空；缺少可独立证明是否发生抢救的权威事件资料，不能据此确认未发生抢救或判定本质控点不适用。",
@@ -2178,6 +2183,14 @@ def customer_finding_from_controlled_facts(
         if state == "completed":
             return f"已确认实施四级手术 {procedure}（等级来源：{source}），已完成术前多学科讨论。"
 
+    if rule_id == "LX0609-050" and kind == "uncertain_diagnosis_scope_unverified":
+        trigger_times = joined("uncertain_record_times")
+        return (
+            f"入院时间为 {facts.get('admission_time')}；入院满 7 天后的病程于 {trigger_times} "
+            "出现局部原因待查或性质待定表述。现有资料无法确认这是否表示本次住院整体诊断仍不明确，"
+            "不能据此认定缺少疑难病例讨论，请人工核对整体诊断状态。"
+        )
+
     if rule_id == "LX0609-050" and kind == "uncertain_diagnosis_discussion_check":
         count = facts.get("discussion_count")
         trigger_times = joined("uncertain_record_times")
@@ -2871,10 +2884,10 @@ def render_luxian_0609_customer_result(
                 reason_code=decision.reason_code,
             )
             is not None
-            or (
-                decision.rule_id == "LX0609-004"
-                and decision.reason_code == "applicability_source_gap"
-            )
+            or (decision.rule_id, decision.reason_code) in {
+                ("LX0609-004", "applicability_source_gap"),
+                ("LX0609-050", "diagnosis_scope_uncertain"),
+            }
         )
     ):
         suggestion = structured_suggestion

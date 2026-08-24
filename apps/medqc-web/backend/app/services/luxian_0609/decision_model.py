@@ -115,6 +115,7 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "linkage_unresolved",
             "applicability_source_gap",
             "candidate_scope_incomplete",
+            "diagnosis_scope_uncertain",
         }
     ),
     "evaluation_unknown": frozenset(

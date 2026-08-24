@@ -30,6 +30,48 @@ SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 
 
+def test_050_customer_finding_explains_local_diagnosis_scope_uncertainty() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-050",
+        facts={
+            "verification_kind": "uncertain_diagnosis_scope_unverified",
+            "admission_time": "2026-06-01 08:00:00",
+            "uncertain_record_times": ["2026-06-09 09:00:00"],
+            "discussion_count": 0,
+            "raw_text": "PRIVATE_MEDICAL_BODY",
+        },
+    )
+
+    assert finding == (
+        "入院时间为 2026-06-01 08:00:00；入院满 7 天后的病程于 "
+        "2026-06-09 09:00:00 出现局部原因待查或性质待定表述。"
+        "现有资料无法确认这是否表示本次住院整体诊断仍不明确，"
+        "不能据此认定缺少疑难病例讨论，请人工核对整体诊断状态。"
+    )
+    assert "PRIVATE_MEDICAL_BODY" not in finding
+
+
+def test_050_scope_gap_uses_reason_specific_customer_copy() -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-050",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="diagnosis_scope_uncertain",
+            fact_refs=(FACT_REF,),
+            evaluator_version="extended-document-v2",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == "病程出现局部待查表述，暂无法确认是否需要疑难病例讨论"
+    assert "不能据此认定缺少疑难病例讨论" in result["evidence"]
+    assert result["suggestion"] == "请人工核对入院满7天后的整体诊断状态。"
+
+
 def test_058_customer_finding_distinguishes_expert_support_after_special_use() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-058",

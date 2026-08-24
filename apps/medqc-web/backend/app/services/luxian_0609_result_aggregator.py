@@ -729,7 +729,7 @@ def safe_luxian_0609_customer_display_facts(
         return safe_events
 
     extended_kinds_by_rule = {
-        "LX0609-050": {"uncertain_diagnosis_discussion_check"},
+        "LX0609-050": {"uncertain_diagnosis_discussion_check", "uncertain_diagnosis_scope_unverified"},
         "LX0609-051": {
             "death_discussion_timeliness_check",
             "death_discussion_missing_after_deadline",
@@ -786,6 +786,9 @@ def safe_luxian_0609_customer_display_facts(
     }
     extended_allowed_keys = {
         "uncertain_diagnosis_discussion_check": {
+            "admission_time", "uncertain_record_times", "discussion_count",
+        },
+        "uncertain_diagnosis_scope_unverified": {
             "admission_time", "uncertain_record_times", "discussion_count",
         },
         "death_discussion_timeliness_check": {
@@ -1012,7 +1015,10 @@ def safe_luxian_0609_customer_display_facts(
                 "death_time": raw["death_time"],
                 "issue": raw["issue"],
             }
-        if kind == "uncertain_diagnosis_discussion_check":
+        if kind in {
+            "uncertain_diagnosis_discussion_check",
+            "uncertain_diagnosis_scope_unverified",
+        }:
             admission_time = raw.get("admission_time")
             record_times = raw.get("uncertain_record_times")
             discussion_count = raw.get("discussion_count")
