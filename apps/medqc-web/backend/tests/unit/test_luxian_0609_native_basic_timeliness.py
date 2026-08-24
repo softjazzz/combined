@@ -27,6 +27,7 @@ from app.services.luxian_0609_programmatic_rules import (
     evaluate_luxian_0609_programmatic_rules,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services import sample_programmatic_evidence as programmatic_evidence
 
 
@@ -74,6 +75,37 @@ def _typed_basic_session(
             "senior_course_record",
         ),
     )
+
+
+@pytest.mark.unit
+def test_004_complete_empty_rescue_records_fail_closed_in_canonical_result() -> None:
+    session = _typed_basic_session(
+        {"rescue_record": []},
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=_rules("LX0609-004"),
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        format_evidence=False,
+    )[0]
+
+    assert execution.results == ()
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "applicability_source_gap"
+    assert canonical["status"] == canonical["result_status"] == "data_gap"
+    assert canonical["is_compliant"] is None
+    assert canonical["reason_code"] == "applicability_source_gap"
+    assert canonical["findings"] == "暂无法确认本次住院是否发生抢救"
+    assert "缺少可独立证明是否发生抢救的权威事件资料" in canonical["evidence"]
+    assert "不能据此确认未发生抢救" in canonical["evidence"]
+    assert "权威抢救事件资料" in canonical["suggestion"]
+    assert "无需" not in canonical["suggestion"]
+    assert getattr(execution, "llm_call_count", 0) == 0
+    assert getattr(execution, "total_tokens", 0) == 0
 
 
 @pytest.mark.unit
@@ -1058,7 +1090,7 @@ def test_002_compliant_result_exposes_actual_interval_and_source_document():
 @pytest.mark.parametrize(
     ("rows", "expected_state", "expected_reason"),
     [
-        ([], CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete"),
+        ([], CustomerFinalState.DATA_GAP, "applicability_source_gap"),
         (
             [
                 {
@@ -1254,7 +1286,8 @@ def test_complete_empty_and_unavailable_rescue_sources_are_distinct() -> None:
         unavailable, ("LX0609-004",)
     )
 
-    assert complete_reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert complete_reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert complete_reduced[0].reason_code == "applicability_source_gap"
     assert unavailable_reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert unavailable_reduced[0].reason_code == "source_unavailable"
 

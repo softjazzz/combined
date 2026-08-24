@@ -569,6 +569,7 @@ def _typed_basic_decisions(
         reason_code: str,
         *,
         technical: bool = False,
+        applicability: ApplicabilityState | None = None,
     ) -> RuleDecision:
         return make(
             rule_id,
@@ -580,6 +581,7 @@ def _typed_basic_decisions(
             qc_direction=QcDirection.UNKNOWN,
             reason_code=reason_code,
             confidence=None,
+            applicability=applicability,
         )
 
     def conflict(rule_id: str) -> RuleDecision:
@@ -1010,7 +1012,13 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
             if not rescue_rows:
-                decisions.append(not_applicable(rule_id, "trigger_absent_complete"))
+                decisions.append(
+                    gap(
+                        rule_id,
+                        "applicability_source_gap",
+                        applicability=ApplicabilityState.UNKNOWN,
+                    )
+                )
                 continue
             rescue_timeline: list[tuple[timedelta, datetime, datetime, str]] = []
             incomplete = False

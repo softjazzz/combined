@@ -441,6 +441,11 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-004", "applicability_source_gap"): (
+        "暂无法确认本次住院是否发生抢救",
+        "抢救记录来源查询完整但结果为空；缺少可独立证明是否发生抢救的权威事件资料，不能据此确认未发生抢救或判定本质控点不适用。",
+        "请核对或补充本次住院的权威抢救事件资料后重新评估。",
+    ),
     ("LX0609-009", "candidate_scope_incomplete"): (
         "病情变化候选超过单次安全核对范围，暂未形成确定结论",
         "已读取本次住院相关病程及检查检验资料；本次仅因自动核对候选范围超过安全容量而停止，不能据此判断病历资料缺失。",
@@ -2845,11 +2850,17 @@ def render_luxian_0609_customer_result(
     )
     if structured_suggestion and not (
         decision.final_state is CustomerFinalState.DATA_GAP
-        and exam_lab_data_gap_customer_message(
-            rule_id=decision.rule_id,
-            reason_code=decision.reason_code,
+        and (
+            exam_lab_data_gap_customer_message(
+                rule_id=decision.rule_id,
+                reason_code=decision.reason_code,
+            )
+            is not None
+            or (
+                decision.rule_id == "LX0609-004"
+                and decision.reason_code == "applicability_source_gap"
+            )
         )
-        is not None
     ):
         suggestion = structured_suggestion
     if decision.final_state in {
