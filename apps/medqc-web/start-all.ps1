@@ -20,6 +20,7 @@ $frontendLog = Join-Path $tmpDir "frontend-$FrontendMode-$FrontendPort.log"
 $frontendErrLog = Join-Path $tmpDir "frontend-$FrontendMode-$FrontendPort.err.log"
 $backendLog = Join-Path $tmpDir "backend-$BackendPort.log"
 $backendErrLog = Join-Path $tmpDir "backend-$BackendPort.err.log"
+$frontendApiTarget = "http://${HealthCheckHost}:$BackendPort"
 $frontendModeExplicit = $PSBoundParameters.ContainsKey("FrontendMode")
 
 function Write-Step([string]$msg) {
@@ -164,7 +165,7 @@ function Start-NpmCommand([string[]]$arguments, [string]$workingDirectory, [stri
     -RedirectStandardError $errLog | Out-Null
 }
 
-function Start-FrontendDistViaPython([string]$projectRoot, [int]$port, [string]$pythonExe, [string]$log, [string]$errLog, [string]$frontendHost) {
+function Start-FrontendDistViaPython([string]$projectRoot, [int]$port, [string]$pythonExe, [string]$log, [string]$errLog, [string]$frontendHost, [string]$apiTarget) {
   $entry = Join-Path $projectRoot "scripts\serve_dist_spa.py"
   $distIndex = Join-Path $projectRoot "dist\index.html"
   if (-not (Test-Path -LiteralPath $entry)) {
@@ -182,7 +183,7 @@ function Start-FrontendDistViaPython([string]$projectRoot, [int]$port, [string]$
   }
 
   Start-Process -FilePath $resolvedPython `
-    -ArgumentList "scripts/serve_dist_spa.py --host $frontendHost --port $port --dir dist" `
+    -ArgumentList "scripts/serve_dist_spa.py --host $frontendHost --port $port --dir dist --api-target $apiTarget" `
     -WorkingDirectory $projectRoot `
     -RedirectStandardOutput $log `
     -RedirectStandardError $errLog | Out-Null
@@ -244,7 +245,7 @@ if ($FrontendMode -eq "dist") {
   if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 2)) {
     Remove-FileIfPossible $frontendLog
     Remove-FileIfPossible $frontendErrLog
-    Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog $FrontendHost | Out-Null
+    Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog $FrontendHost $frontendApiTarget | Out-Null
   } else {
     Write-Host "  frontend already running on $FrontendPort (dist/python), skip start"
   }
@@ -288,7 +289,7 @@ if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 40)) {
     if ($needFallback) {
       Write-Warning "frontend unstable. fallback to dist-python..."
       Stop-PortProcess $FrontendPort
-      $fallbackTriggered = Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog $FrontendHost
+      $fallbackTriggered = Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog $FrontendHost $frontendApiTarget
     }
   }
   if (-not $fallbackTriggered) {
