@@ -125,14 +125,14 @@ describe('WorkstationLoginView', () => {
     signIn.mockResolvedValue({ success: true })
   })
 
-  it('演示账号登录后直接进入客户样本验证导览', async () => {
+  it('演示账号登录后进入工作台首页', async () => {
     const wrapper = mountView()
 
     await wrapper.find('.login-demo').trigger('click')
     await flushPromises()
 
     expect(signIn).toHaveBeenCalledWith('admin@medqc.com', 'admin888', 'admin')
-    expect(routerReplace).toHaveBeenCalledWith('/workstation-v4/customer-sample-validation?tour=1')
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v4')
     expect(message.success).toHaveBeenCalledWith('登录成功')
   })
 

@@ -12,7 +12,6 @@ const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
 const showDemoAccounts = ref(false)
-const demoLoginTarget = '/workstation-v4/customer-sample-validation?tour=1'
 
 const redirectTarget = computed(() => {
   const raw = route.query.redirect
@@ -66,7 +65,7 @@ const handleLogin = async (loginData: LoginRequest) => {
     }
 
     message.success('登录成功')
-    await navigateAfterLogin(isDemoLogin ? demoLoginTarget : redirectTarget.value)
+    await navigateAfterLogin()
   } catch (error) {
     console.error('workstation 登录失败:', error)
     message.error('登录失败，请稍后重试')
@@ -112,7 +111,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
             src="@/assets/images/lx-logo.png"
             alt="泸县人民医院"
             class="h-[60px] w-auto object-contain drop-shadow-sm"
-          >
+          />
         </div>
       </header>
 
@@ -126,7 +125,8 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
             基于大模型的
             <span
               class="mt-2 block bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent pb-2"
-            >AI驱动病案质控平台</span>
+              >AI驱动病案质控平台</span
+            >
           </h1>
 
           <!-- 核心特性列表（优化版 Tag） -->
@@ -180,12 +180,8 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
                 @click="showDemoAccounts = !showDemoAccounts"
               >
                 <div>
-                  <div class="text-[15px] font-bold text-slate-800">
-                    演示账号快速登录
-                  </div>
-                  <div class="mt-0.5 text-xs text-slate-500">
-                    功能演示：admin / admin888
-                  </div>
+                  <div class="text-[15px] font-bold text-slate-800">演示账号快速登录</div>
+                  <div class="mt-0.5 text-xs text-slate-500">功能演示：admin / admin888</div>
                 </div>
                 <div
                   class="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200/50"
