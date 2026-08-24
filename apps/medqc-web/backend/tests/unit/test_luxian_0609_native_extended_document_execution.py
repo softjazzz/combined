@@ -1382,6 +1382,63 @@ async def test_071_single_event_preserves_selected_rule_ids(
 
 
 @pytest.mark.asyncio
+async def test_071_missing_shift_time_keeps_deliverable_association_facts() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-071",),
+        {
+            "inpat_nondrug_order": (
+                {
+                    "order_name": "经治医师变更",
+                    "prescribed_datetime": "2026-07-10 15:55:17",
+                },
+            ),
+            "handoff_record": (
+                {
+                    "document_id": "HANDOFF-071-NO-SHIFT",
+                    "record_time": "2026-07-10 15:45:17",
+                },
+            ),
+            "handover_record": (
+                {
+                    "document_id": "HANDOVER-071-NO-SHIFT",
+                    "record_time": "2026-07-10 16:55:17",
+                },
+            ),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "association_failed"
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-071",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert canonical["customer_display_facts"] == {
+        "failure_kind": "physician_handoff_association_failed",
+        "change_event_count": 1,
+        "change_times": ["2026-07-10 15:55:17"],
+        "handoff_record_count": 1,
+        "handoff_times": ["2026-07-10 15:45:17"],
+        "handover_record_count": 1,
+        "handover_times": ["2026-07-10 16:55:17"],
+        "handover_threshold_hours": 24,
+    }
+    assert canonical["customer_evidence"] == [
+        {
+            "source_type": "handoff_record",
+            "source_document_id": "HANDOFF-071-NO-SHIFT",
+        },
+        {
+            "source_type": "handover_record",
+            "source_document_id": "HANDOVER-071-NO-SHIFT",
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_071_multiple_change_events_report_association_gap_with_existing_records() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-071",),

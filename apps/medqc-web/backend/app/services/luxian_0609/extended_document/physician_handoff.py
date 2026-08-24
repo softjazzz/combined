@@ -229,8 +229,32 @@ def _evaluate_structured_change_events(
 
     if len(change_times) != len(change_rows):
         return association_failed()
+    missing_handoff_time_count = sum(
+        record_time is None for _, record_time, _, _ in handoff_data
+    )
+    missing_handover_time_count = sum(
+        record_time is None for _, record_time, _, _ in handover_data
+    )
+    if missing_handoff_time_count or missing_handover_time_count:
+        return (
+            "data_gap",
+            "authoritative_time_missing",
+            {
+                "failure_kind": "physician_handoff_record_time_missing",
+                "change_event_count": len(change_rows),
+                "handoff_record_count": len(handoff_rows),
+                "missing_handoff_time_count": missing_handoff_time_count,
+                "handover_record_count": len(handover_rows),
+                "missing_handover_time_count": missing_handover_time_count,
+                "handover_threshold_hours": 24,
+                "source_document_refs": all_refs,
+            },
+        )
     if any(shift_time is None for shift_time, _, _, _ in (*handoff_data, *handover_data)):
-        return "data_gap", "authoritative_time_missing", {}
+        # 文书本身有记录时间，但缺少所属交接班事件时间时，无法把它安全关联到
+        # 某次经治医师变更。保留已有数量、时间和证据供客户核对，不能返回空事实，
+        # 否则正式交付合同会拒绝整份质控结果。
+        return association_failed()
 
     events: list[dict[str, Any]] = []
     selected_rows: list[tuple[str, Sequence[Mapping[str, Any]]]] = []
