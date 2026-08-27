@@ -31,6 +31,7 @@ const QCRecordCompareWorkbenchStub = defineComponent({
     recordRef: { type: String, default: '' },
     issues: { type: Array, default: () => [] },
     singleRecordItems: { type: Array, default: () => [] },
+    debugContext: { type: Object, default: undefined },
     presentationMode: { type: String, default: 'flat' },
   },
   setup(props) {
@@ -46,6 +47,7 @@ const readyResult = {
   record_ref: 'rec-safe-001',
   job_id: 'job-safe-001',
   rule_set_key: 'luxian_0609_qc_v1',
+  rule_set_version: '2026.08.27',
   items: [
     {
       rule_id: 'LX0609-018',
@@ -188,6 +190,19 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(workbenchProps?.jobId).toBe('job-safe-001')
     expect(workbenchProps?.recordRef).toBe('rec-safe-001')
     expect(workbenchProps?.singleRecordItems).toEqual(readyResult.items)
+    expect(workbenchProps?.debugContext).toMatchObject({
+      instituteId: 'H1',
+      patientId: 'P001',
+      visitId: 'V001',
+      recordId: 'R001',
+      recordRef: 'rec-safe-001',
+      jobId: 'job-safe-001',
+      ruleSetKey: 'luxian_0609_qc_v1',
+      ruleSetVersion: '2026.08.27',
+      expectedRuleCount: 49,
+      resultRuleCount: 49,
+      isComplete: true,
+    })
     expect(workbenchProps?.presentationMode).toBe('flat')
   })
 

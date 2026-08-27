@@ -41,6 +41,7 @@
         :job-id="latestResult.job_id"
         :issues="[]"
         :single-record-items="latestResult.items"
+        :debug-context="debugContext"
         :presentation-mode="presentationMode"
       />
       <a-result
@@ -55,7 +56,7 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
@@ -92,6 +93,28 @@ const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)
 const authorizedRecordRef = ref('')
 let activeRequestSequence = 0
+
+const debugContext = computed(() => {
+  const result = latestResult.value
+  const focus = props.focus
+  if (!result || !focus) return undefined
+  return {
+    instituteId: focus.instituteId,
+    patientId: focus.patientId,
+    visitId: focus.visitId,
+    recordId: focus.recordId,
+    recordRef: result.record_ref,
+    jobId: result.job_id,
+    ruleSetKey: result.rule_set_key,
+    ruleSetVersion: result.rule_set_version,
+    resultSchemaVersion: result.schema_version,
+    expectedRuleCount: result.expected_rule_count,
+    resultRuleCount: result.result_rule_count,
+    isComplete: result.is_complete,
+    missingRuleIds: result.missing_rule_ids,
+    conflictingRuleIds: result.conflicting_rule_ids,
+  }
+})
 
 async function exportCurrentRecord() {
   const focus = props.focus

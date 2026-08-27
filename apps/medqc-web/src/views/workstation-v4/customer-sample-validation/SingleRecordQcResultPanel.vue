@@ -475,7 +475,11 @@ import {
   type SingleRecordQcResultViewItem,
 } from './single-record-result-model'
 import { hasTimelinessResult, timelinessResultRows } from './timelinessResultPresentation'
-import { buildQcResultDebugText, copyQcResultDebugText } from './qcResultDebugExport'
+import {
+  buildQcResultDebugText,
+  copyQcResultDebugText,
+  type QcResultDebugContext,
+} from './qcResultDebugExport'
 
 const props = withDefaults(
   defineProps<{
@@ -487,6 +491,7 @@ const props = withDefaults(
     feedbackLoading?: boolean
     feedbackError?: string
     feedbackSavingRuleId?: string
+    debugContext?: QcResultDebugContext
   }>(),
   {
     presentationMode: 'flat',
@@ -816,7 +821,9 @@ async function copyDebugResults() {
   if (!props.items.length || debugCopying.value) return
   debugCopying.value = true
   try {
-    const copied = await copyQcResultDebugText(buildQcResultDebugText(viewItems.value))
+    const copied = await copyQcResultDebugText(
+      buildQcResultDebugText(viewItems.value, props.debugContext),
+    )
     if (copied) message.success('质控结论和判定依据已复制')
     else message.error('复制失败，请检查浏览器剪贴板权限')
   } finally {

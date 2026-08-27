@@ -1,7 +1,24 @@
-import type { SingleRecordQcResultItem } from './single-record-result-model'
+import type { SingleRecordQcEvidence, SingleRecordQcResultItem } from './single-record-result-model'
 
-const DEBUG_SCHEMA = 'medqc-qc-debug-v1'
+const DEBUG_SCHEMA = 'medqc-qc-debug-v2'
 type QcDebugResultItem = SingleRecordQcResultItem & { displayStatus?: string }
+
+export interface QcResultDebugContext {
+  instituteId?: string
+  patientId?: string
+  visitId?: string
+  recordId?: string
+  recordRef?: string
+  jobId?: string
+  ruleSetKey?: string
+  ruleSetVersion?: string
+  resultSchemaVersion?: string
+  expectedRuleCount?: number
+  resultRuleCount?: number
+  isComplete?: boolean
+  missingRuleIds?: string[]
+  conflictingRuleIds?: string[]
+}
 
 function text(value: unknown): string {
   return String(value ?? '').trim()
@@ -20,6 +37,64 @@ function appendJsonSection(lines: string[], label: string, value: unknown) {
   lines.push('', `${label}：`, JSON.stringify(value, null, 2))
 }
 
+function appendEvidenceField(lines: string[], label: string, value: unknown) {
+  const normalized = text(value)
+  if (normalized) lines.push(`- ${label}：${normalized}`)
+}
+
+function appendEvidenceSections(lines: string[], evidence: SingleRecordQcEvidence[] | undefined) {
+  if (!Array.isArray(evidence) || evidence.length === 0) return
+  lines.push('', `关键证据 evidence（${evidence.length} 条）：`)
+  evidence.forEach((item, index) => {
+    lines.push(`### 证据 ${index + 1}`)
+    appendEvidenceField(lines, '来源文书', item.source_label)
+    appendEvidenceField(lines, '来源类型', item.source_type)
+    appendEvidenceField(lines, '安全引用', item.source_ref)
+    appendEvidenceField(lines, '记录时间', item.record_time)
+    appendEvidenceField(lines, '字段路径', item.field_path)
+    appendEvidenceField(lines, '摘要类型', item.excerpt_kind)
+    appendEvidenceField(lines, '关键原文摘要', item.evidence_excerpt)
+  })
+}
+
+function appendContext(lines: string[], context: QcResultDebugContext | undefined) {
+  if (!context) return
+  lines.push('', '## 任务与病历上下文')
+  appendTextSection(lines, '机构ID', context.instituteId)
+  appendTextSection(lines, '患者ID', context.patientId)
+  appendTextSection(lines, '就诊ID', context.visitId)
+  appendTextSection(lines, '病历ID', context.recordId)
+  appendTextSection(lines, '病历安全引用', context.recordRef)
+  appendTextSection(lines, '质控任务ID', context.jobId)
+  appendTextSection(lines, '规则集', context.ruleSetKey)
+  appendTextSection(lines, '规则集版本', context.ruleSetVersion)
+  appendTextSection(lines, '结果结构版本', context.resultSchemaVersion)
+  if (typeof context.expectedRuleCount === 'number') {
+    lines.push(`预期规则数：${context.expectedRuleCount}`)
+  }
+  if (typeof context.resultRuleCount === 'number') {
+    lines.push(`实际结果数：${context.resultRuleCount}`)
+  }
+  if (typeof context.isComplete === 'boolean') {
+    lines.push(`结果完整性：${context.isComplete ? '完整' : '不完整'}`)
+  }
+  appendJsonSection(lines, '缺失规则', context.missingRuleIds)
+  appendJsonSection(lines, '冲突规则', context.conflictingRuleIds)
+}
+
+function appendStatusSummary(lines: string[], items: QcDebugResultItem[]) {
+  const counts = new Map<string, number>()
+  items.forEach((item) => {
+    const status = text(item.status) || 'unknown'
+    counts.set(status, (counts.get(status) || 0) + 1)
+  })
+  if (!counts.size) return
+  lines.push('', '状态分布：')
+  Array.from(counts.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .forEach(([status, count]) => lines.push(`- ${status}：${count}`))
+}
+
 function buildRuleDebugSection(item: QcDebugResultItem, index: number): string {
   const lines = [`## ${index + 1}. ${text(item.rule_id) || '未知规则'} ${text(item.rule_name)}`]
   appendTextSection(lines, '适用文书', item.source_document)
@@ -36,11 +111,14 @@ function buildRuleDebugSection(item: QcDebugResultItem, index: number): string {
   appendJsonSection(lines, '受控判定事实 customer_display_facts', item.customer_display_facts)
   appendJsonSection(lines, '受控子结论 criterion_results', item.criterion_results)
   appendJsonSection(lines, '资料缺口 data_gap_details', item.data_gap_details)
-  appendJsonSection(lines, '关键证据 evidence', item.evidence)
+  appendEvidenceSections(lines, item.evidence)
   return lines.join('\n')
 }
 
-export function buildQcResultDebugText(items: QcDebugResultItem[]): string {
+export function buildQcResultDebugText(
+  items: QcDebugResultItem[],
+  context?: QcResultDebugContext,
+): string {
   const normalizedItems = Array.isArray(items) ? items : []
   const header = [
     '# MedQC 质控调试信息',
@@ -48,6 +126,8 @@ export function buildQcResultDebugText(items: QcDebugResultItem[]): string {
     `结果数量：${normalizedItems.length}`,
     '说明：以下内容来自本次质控保存结果，仅用于核对规则状态、判定事实和证据链。',
   ]
+  appendContext(header, context)
+  appendStatusSummary(header, normalizedItems)
   const sections = normalizedItems.map(buildRuleDebugSection)
   return [...header, ...sections.map((section) => `\n${section}`)].join('\n').trim()
 }

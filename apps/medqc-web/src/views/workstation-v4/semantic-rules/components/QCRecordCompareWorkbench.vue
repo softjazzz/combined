@@ -169,6 +169,7 @@
         <SingleRecordQcResultPanel
           v-if="hasSingleRecordResult"
           :items="singleRecordItems || []"
+          :debug-context="debugContext"
           :presentation-mode="presentationMode"
           :feedback-by-rule="feedbackByRule"
           :feedback-enabled="feedbackEnabled"
@@ -373,6 +374,7 @@ import type {
   QCRecordCompareIssue,
 } from '@/views/workstation-v4/semantic-rules/types'
 import type { SaveQcResultFeedbackInput } from '@/api/qc-result-feedback-demo'
+import type { QcResultDebugContext } from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
 import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-validation/useQcResultFeedback'
 
 const props = withDefaults(
@@ -386,6 +388,7 @@ const props = withDefaults(
     /** 单病历纵向切片专用；存在时右栏不再使用批量结果旧模型。 */
     singleRecordItems?: SingleRecordQcResultItem[]
     presentationMode?: 'flat' | 'grouped'
+    debugContext?: QcResultDebugContext
     activeIssueKey?: string
   }>(),
   { presentationMode: 'flat' },

@@ -349,6 +349,7 @@ describe('QCRecordCompareWorkbench', () => {
         issues: [],
         singleRecordItems,
         presentationMode: 'grouped',
+        debugContext: { patientId: 'patient-1', visitId: 'visit-1', jobId: 'job-1' },
       },
     })
 
@@ -357,6 +358,11 @@ describe('QCRecordCompareWorkbench', () => {
     const panel = wrapper.getComponent(SingleRecordQcResultPanel)
     expect(panel.props('presentationMode')).toBe('grouped')
     expect(panel.props('items')).toEqual(singleRecordItems)
+    expect(panel.props('debugContext')).toEqual({
+      patientId: 'patient-1',
+      visitId: 'visit-1',
+      jobId: 'job-1',
+    })
   })
 
   it('客户安全文书引用未命中时不得按相同片段猜测其他文书', async () => {

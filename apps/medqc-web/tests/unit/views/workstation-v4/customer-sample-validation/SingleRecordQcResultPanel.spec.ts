@@ -191,7 +191,16 @@ describe('SingleRecordQcResultPanel', () => {
       configurable: true,
       value: { writeText },
     })
-    const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items,
+        debugContext: {
+          patientId: 'P001',
+          visitId: 'V001',
+          jobId: 'job-safe-001',
+        },
+      },
+    })
 
     await wrapper.get('[data-testid="copy-qc-debug-results"]').trigger('click')
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
@@ -202,6 +211,9 @@ describe('SingleRecordQcResultPanel', () => {
     expect(copied).toContain('受控子结论 criterion_results')
     expect(copied).toContain('关键证据 evidence')
     expect(copied).toContain('LX0609-003 手术记录：手术后24小时内是否完成')
+    expect(copied).toContain('患者ID：P001')
+    expect(copied).toContain('就诊ID：V001')
+    expect(copied).toContain('质控任务ID：job-safe-001')
   })
 
   it('默认以紧凑摘要展示，客户可明确展开和收起完整详情', async () => {
