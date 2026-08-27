@@ -578,7 +578,11 @@ def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] 
             """),
             {"table_name": table_name},
         ).mappings().all()
-        columns = {row["column_name"]: dict(row) for row in rows}
+        columns: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            # rows 已按 search_path 优先级排序；同名表跨 schema 时保留首个命中，
+            # 避免后续低优先级 schema 的列类型覆盖实际查询所用表。
+            columns.setdefault(row["column_name"], dict(row))
         return columns if required_columns.issubset(columns) else None
 
     inspector = sa_inspect(bind)

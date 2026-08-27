@@ -42,6 +42,57 @@ class RunningWorkflowQueueStateService:
         return None
 
 
+def test_discharge_record_columns_keep_first_search_path_schema():
+    """同名表跨 schema 时，列类型必须来自 search_path 优先命中的表。"""
+
+    required_columns = {
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "dept_name",
+        "discharge_time",
+        "update_time",
+    }
+    rows = [
+        {
+            "table_schema": "cdm",
+            "column_name": column_name,
+            "data_type": "text" if column_name == "discharge_time" else "character varying",
+            "udt_name": "text" if column_name == "discharge_time" else "varchar",
+        }
+        for column_name in required_columns
+    ]
+    rows.append(
+        {
+            "table_schema": "public",
+            "column_name": "discharge_time",
+            "data_type": "timestamp without time zone",
+            "udt_name": "timestamp",
+        }
+    )
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return rows
+
+    class SessionStub:
+        def get_bind(self):
+            return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+        def execute(self, *_args, **_kwargs):
+            return Result()
+
+    columns = query_service_module._workstation_discharge_record_columns(SessionStub())
+
+    assert columns is not None
+    assert columns["discharge_time"]["table_schema"] == "cdm"
+    assert columns["discharge_time"]["data_type"] == "text"
+
+
 @pytest.fixture(autouse=True)
 def _default_qc_projection_is_not_run_for_frontpage_only_fixture(monkeypatch):
     """旧工作台单测不建 QC 结果表，显式替身隔离本轮投影依赖。"""
