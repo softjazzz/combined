@@ -36,7 +36,7 @@ vi.mock('@/stores/auth', () => ({
 }))
 
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
-import QcSyncAndRunControl from '@/views/workstation-v4/components/qc/QcSyncAndRunControl.vue'
+import QcRunSelectedControl from '@/views/workstation-v4/components/qc/QcRunSelectedControl.vue'
 
 const ResultDrawerStub = defineComponent({
   name: 'QCRecordResultComparisonDrawer',
@@ -447,12 +447,21 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.text()).not.toContain('下一闭环接入')
   })
 
-  it('同步并质控完成后刷新当前结果页', async () => {
+  it('将勾选病历的完整三坐标交给质控控件，完成后刷新当前结果页', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+
+    expect(wrapper.getComponent(QcRunSelectedControl).props('recordRefs')).toEqual([
+      {
+        institute_id: 'H',
+        patient_id: 'P',
+        visit_id: 'V-priority',
+      },
+    ])
     const requestsBeforeRefresh = mocks.getRaw.mock.calls.length
 
-    wrapper.getComponent(QcSyncAndRunControl).vm.$emit('completed')
+    wrapper.getComponent(QcRunSelectedControl).vm.$emit('completed')
     await flushPromises()
 
     expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 1)

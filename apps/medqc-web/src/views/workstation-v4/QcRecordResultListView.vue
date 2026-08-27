@@ -119,13 +119,11 @@
           >
             刷新
           </button>
-          <div class="qc-record-result-list-view__sync-control">
-            <QcSyncAndRunControl
+          <div class="qc-record-result-list-view__qc-control">
+            <QcRunSelectedControl
               :care-phase="carePhase"
-              :department="activeDept"
-              :start-date="startDate"
-              :end-date="endDate"
-              @completed="refreshAfterSyncAndQc"
+              :record-refs="selectedQcRecordRefs"
+              @completed="refreshAfterSelectedQc"
             />
           </div>
         </div>
@@ -207,7 +205,7 @@ import QcRecordResultTable, {
   type QcRecordResultRow,
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
-import QcSyncAndRunControl from './components/qc/QcSyncAndRunControl.vue'
+import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
@@ -229,6 +227,14 @@ const selectedRecordKeys = ref<string[]>([])
 const selectedRecordRefs = ref<
   Record<string, { institute_id: string; patient_id: string; visit_id: string }>
 >({})
+const selectedQcRecordRefs = computed(() =>
+  selectedRecordKeys.value
+    .map((recordKey) => selectedRecordRefs.value[recordKey])
+    .filter(
+      (recordRef): recordRef is { institute_id: string; patient_id: string; visit_id: string } =>
+        Boolean(recordRef),
+    ),
+)
 const activeView = ref<'records' | 'analysis'>('records')
 const startDate = ref('')
 const endDate = ref('')
@@ -498,7 +504,7 @@ function clearSelection() {
   selectedRecordRefs.value = {}
 }
 
-function refreshAfterSyncAndQc() {
+function refreshAfterSelectedQc() {
   clearSelection()
   refreshData()
 }
@@ -986,11 +992,11 @@ function closeResultDrawer() {
   background: #0059b3;
 }
 
-.qc-record-result-list-view__sync-control {
+.qc-record-result-list-view__qc-control {
   display: inline-flex;
 }
 
-.qc-record-result-list-view__sync-control :deep(.qc-sync-and-run-control__trigger) {
+.qc-record-result-list-view__qc-control :deep(.qc-run-selected-control__trigger) {
   min-height: 38px;
   padding: 0 15px;
   border-radius: 10px;
