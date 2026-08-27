@@ -90,10 +90,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const hospFilter = ref<HospitalStatusScope>(initialHospitalStatus)
   let activeRequestSequence = 0
 
-  const hospOptions = [
-    { value: 'all', label: '\u5168\u90e8' },
-    { value: 'inpatient', label: '\u5728\u9662' },
-    { value: 'discharged', label: '\u5df2\u51fa\u9662' },
+  const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
+    { value: 'all', label: '全部病历' },
+    { value: 'inpatient', label: '在院' },
+    { value: 'discharged', label: '已出院' },
   ]
 
   // 住院状态由服务端筛选；禁止对当前页病历再次本地过滤造成假统计。

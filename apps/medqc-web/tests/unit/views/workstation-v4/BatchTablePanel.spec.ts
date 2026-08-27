@@ -284,8 +284,34 @@ describe('BatchTablePanel 病历池列表', () => {
     expect(keys).toEqual(['patient', 'department', 'admissionDischarge', 'action'])
     expect(wrapper.text()).toContain('2026-08-01')
     expect(wrapper.text()).toContain('2026-08-08')
+    expect(wrapper.text()).toContain('已出院')
+    expect(wrapper.text()).toContain('入院')
+    expect(wrapper.text()).toContain('出院')
     expect(wrapper.text()).not.toContain('资料同步状态待核实')
     expect(wrapper.text()).not.toContain('已完成 · 75 条规则')
     expect(wrapper.text()).not.toContain('确定问题 2 项')
+  })
+
+  it('marks records without a discharge date as inpatient and explains the missing date', async () => {
+    const wrapper = mountTable()
+    await wrapper.setProps({
+      rows: [
+        {
+          id: 'record-2',
+          patientName: '患者乙',
+          visitId: 'V-2',
+          department: '外科',
+          stageStatus: '待处理',
+          riskReason: '',
+          updatedAt: '2026-08-09',
+          admissionDate: '2026-08-09',
+          dischargeDate: '-',
+          isDemo: false,
+        },
+      ],
+    })
+
+    expect(wrapper.text()).toContain('在院')
+    expect(wrapper.text()).toContain('尚未出院')
   })
 })

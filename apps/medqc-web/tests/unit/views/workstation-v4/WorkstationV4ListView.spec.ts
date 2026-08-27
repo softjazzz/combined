@@ -42,6 +42,37 @@ const SelectOptionStub = defineComponent({
   },
 })
 
+const SegmentedStub = defineComponent({
+  name: 'ASegmented',
+  props: {
+    value: {
+      type: String,
+      default: '',
+    },
+    options: {
+      type: Array,
+      default: () => [],
+    },
+  },
+  emits: ['update:value'],
+  setup(props, { attrs, emit }) {
+    return () =>
+      h(
+        'select',
+        {
+          ...attrs,
+          value: props.value,
+          onChange: (event: Event) => {
+            emit('update:value', (event.target as HTMLSelectElement).value)
+          },
+        },
+        (props.options as Array<{ value: string; label: string }>).map((option) =>
+          h('option', { value: option.value }, option.label),
+        ),
+      )
+  },
+})
+
 const passthroughStub = (name: string, tag = 'div') =>
   defineComponent({
     name,
@@ -125,7 +156,7 @@ function mountListView(overrides: Record<string, unknown> = {}) {
       activeDoctor: '全部主管医师',
       hospFilter: 'all',
       hospOptions: [
-        { value: 'all', label: '全部住院状态' },
+        { value: 'all', label: '全部病历' },
         { value: 'inpatient', label: '在院' },
         { value: 'discharged', label: '已出院' },
       ],
@@ -175,6 +206,7 @@ function mountListView(overrides: Record<string, unknown> = {}) {
         ATabPane: passthroughStub('ATabPane'),
         ASelect: SelectStub,
         ASelectOption: SelectOptionStub,
+        ASegmented: SegmentedStub,
         FrontpageTenderValidationDrawer: defineComponent({
           name: 'FrontpageTenderValidationDrawer',
           props: {
@@ -352,7 +384,14 @@ describe('WorkstationV4ListView filters', () => {
   it('shows the current hospital status and emits a server-side filter change for the record pool', async () => {
     const wrapper = mountListView({ hospFilter: 'inpatient' })
 
-    const hospitalSelect = wrapper.find('select.workbench-hosp-select')
+    const statusFilter = wrapper.find('.workbench-hosp-filter')
+    expect(statusFilter.attributes('aria-label')).toBe('住院状态筛选')
+    expect(statusFilter.text()).toContain('住院状态')
+    expect(statusFilter.text()).toContain('全部病历')
+    expect(statusFilter.text()).toContain('在院')
+    expect(statusFilter.text()).toContain('已出院')
+
+    const hospitalSelect = wrapper.find('select.workbench-hosp-segmented')
     expect(hospitalSelect.exists()).toBe(true)
     expect((hospitalSelect.element as HTMLSelectElement).value).toBe('inpatient')
 
@@ -367,7 +406,7 @@ describe('WorkstationV4ListView filters', () => {
       isStageQueueMode: true,
     })
 
-    expect(wrapper.find('select.workbench-hosp-select').exists()).toBe(false)
+    expect(wrapper.find('.workbench-hosp-filter').exists()).toBe(false)
     expect(wrapper.find('select.workbench-doctor-select').exists()).toBe(false)
   })
 

@@ -109,7 +109,7 @@
               class="batch-table-panel__avatar"
               :src="patientAvatarSrc(record)"
               :alt="`${record.patientName || '患者'}头像`"
-            >
+            />
             <span class="batch-table-panel__patient-meta">
               <span class="batch-table-panel__patient-name">
                 {{ record.patientName }}
@@ -144,10 +144,34 @@
           <span class="batch-table-panel__risk">{{ record.riskReason }}</span>
         </template>
         <template v-else-if="column.key === 'admissionDischarge'">
-          <span class="batch-table-panel__date-pair">
-            <span>{{ record.admissionDate || '-' }}</span>
-            <span>{{ record.dischargeDate || '-' }}</span>
-          </span>
+          <div class="batch-table-panel__hospitalization">
+            <span
+              class="batch-table-panel__hospitalization-status"
+              :class="
+                isDischargedRecord(record)
+                  ? 'batch-table-panel__hospitalization-status--discharged'
+                  : 'batch-table-panel__hospitalization-status--inpatient'
+              "
+            >
+              {{ isDischargedRecord(record) ? '已出院' : '在院' }}
+            </span>
+            <span class="batch-table-panel__date-pair">
+              <span class="batch-table-panel__date-line">
+                <span class="batch-table-panel__date-label">入院</span>
+                <span>{{ displayHospitalDate(record.admissionDate) }}</span>
+              </span>
+              <span class="batch-table-panel__date-line">
+                <span class="batch-table-panel__date-label">出院</span>
+                <span :class="{ 'batch-table-panel__date-pending': !isDischargedRecord(record) }">
+                  {{
+                    isDischargedRecord(record)
+                      ? displayHospitalDate(record.dischargeDate)
+                      : '尚未出院'
+                  }}
+                </span>
+              </span>
+            </span>
+          </div>
         </template>
         <template v-else-if="column.key === 'updatedAt'">
           <span class="batch-table-panel__updated-at">{{ record.updatedAt }}</span>
@@ -325,6 +349,15 @@ function patientAvatarSrc(record: { patientSex?: string; patientAge?: number }) 
   return female ? patientIconWoman : patientIconMan
 }
 
+function displayHospitalDate(value?: string) {
+  const normalized = String(value || '').trim()
+  return normalized && normalized !== '-' ? normalized : '-'
+}
+
+function isDischargedRecord(record: Pick<WorkbenchRow, 'dischargeDate'>) {
+  return displayHospitalDate(record.dischargeDate) !== '-'
+}
+
 function stageTagClass(stageStatus: string) {
   if (/终末|完成|已完成/.test(stageStatus)) return 'batch-table-panel__tag--success'
   if (/待复核|质控|待审核/.test(stageStatus)) return 'batch-table-panel__tag--review'
@@ -339,7 +372,12 @@ const stageColumns = [
   { title: '科室', key: 'department', dataIndex: 'department', width: 160 },
   { title: '状态', key: 'stageStatus', dataIndex: 'stageStatus', width: 110 },
   { title: '风险标签', key: 'risk', dataIndex: 'riskReason', width: 220 },
-  { title: '入院 / 出院', key: 'admissionDischarge', dataIndex: 'admissionDischarge', width: 140 },
+  {
+    title: '住院状态 / 入出院',
+    key: 'admissionDischarge',
+    dataIndex: 'admissionDischarge',
+    width: 230,
+  },
   { title: '更新时间', key: 'updatedAt', dataIndex: 'updatedAt', width: 150 },
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
@@ -347,7 +385,12 @@ const stageColumns = [
 const recordPoolColumns = [
   { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 320 },
   { title: '科室', key: 'department', dataIndex: 'department', width: 200 },
-  { title: '入院 / 出院', key: 'admissionDischarge', dataIndex: 'admissionDischarge', width: 180 },
+  {
+    title: '住院状态 / 入出院',
+    key: 'admissionDischarge',
+    dataIndex: 'admissionDischarge',
+    width: 230,
+  },
   { title: '操作', key: 'action', dataIndex: 'action', width: 100 },
 ]
 
@@ -546,12 +589,59 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
   text-overflow: ellipsis;
 }
 
-.batch-table-panel__date-pair {
+.batch-table-panel__hospitalization {
   display: flex;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.batch-table-panel__hospitalization-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.batch-table-panel__hospitalization-status--inpatient {
+  background: rgba(0, 102, 204, 0.1);
+  color: var(--workstation-brand-600, #1e5ae0);
+}
+
+.batch-table-panel__hospitalization-status--discharged {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+
+.batch-table-panel__date-pair {
+  display: grid;
+  gap: 3px;
   font-size: 12px;
   font-weight: 600;
   color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel__date-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.batch-table-panel__date-label {
+  min-width: 24px;
+  color: var(--workstation-text-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.batch-table-panel__date-pending {
+  color: var(--workstation-brand-600, #1e5ae0);
 }
 
 .batch-table-panel__updated-at {

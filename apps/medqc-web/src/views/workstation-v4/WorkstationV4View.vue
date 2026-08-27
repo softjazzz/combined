@@ -274,10 +274,7 @@
               <span class="paste-frontpage-preset__title">{{ preset.title }}</span>
               <span class="paste-frontpage-preset__subtitle">{{ preset.subtitle }}</span>
               <span class="paste-frontpage-preset__tags">
-                <span
-                  v-for="tag in preset.tags"
-                  :key="tag"
-                >{{ tag }}</span>
+                <span v-for="tag in preset.tags" :key="tag">{{ tag }}</span>
               </span>
             </button>
           </div>
@@ -290,10 +287,7 @@
           show-count
           :disabled="frontpageGenerating"
         />
-        <div
-          v-if="frontpageGenerating"
-          class="paste-frontpage-progress"
-        >
+        <div v-if="frontpageGenerating" class="paste-frontpage-progress">
           <FrontpageWorkspacePanel
             :generating="frontpageGenerating"
             :post-processing="frontpagePostProcessing"
@@ -316,9 +310,7 @@
           >
             清空
           </a-button>
-          <a-button @click="handlePasteFrontpageCancel">
-            取消
-          </a-button>
+          <a-button @click="handlePasteFrontpageCancel"> 取消 </a-button>
           <a-button
             type="primary"
             :loading="frontpageGenerating"
@@ -843,7 +835,7 @@ const scopeStatusText = computed(() => {
   if (activeDoctor.value !== '全部主管医师') {
     parts.push(activeDoctor.value)
   }
-  if (activeHospLabel.value !== '全部') {
+  if (hospFilter.value !== 'all') {
     parts.push(activeHospLabel.value)
   }
   if (currentStageFilter.value) {
@@ -949,7 +941,7 @@ const tableSummaryText = computed(() => {
   if (activeDoctor.value !== '全部主管医师') {
     parts.push(activeDoctor.value)
   }
-  if (activeHospLabel.value !== '全部') {
+  if (hospFilter.value !== 'all') {
     parts.push(activeHospLabel.value)
   }
   return parts.join(' / ')

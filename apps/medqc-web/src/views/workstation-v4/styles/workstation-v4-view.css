@@ -186,9 +186,29 @@
   width: 270px;
 }
 
-.wv4-record-pool-hero .workbench-hosp-select {
-  flex: 0 0 104px;
-  width: 104px;
+.wv4-record-pool-hero .workbench-hosp-filter {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 4px 5px 4px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+}
+
+.wv4-record-pool-hero .workbench-hosp-filter__label {
+  color: var(--workstation-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wv4-record-pool-hero .workbench-hosp-segmented {
+  background: rgba(241, 245, 249, 0.9);
+  font-size: 12px;
 }
 
 .wv4-record-pool-hero .ant-input-affix-wrapper,
@@ -982,6 +1002,14 @@
 
   .wv4-record-pool-hero .workbench-filter-toolbar {
     flex-wrap: wrap;
+  }
+
+  .wv4-record-pool-hero .workbench-hosp-filter {
+    width: 100%;
+  }
+
+  .wv4-record-pool-hero .workbench-hosp-segmented {
+    flex: 1 1 auto;
   }
 
   .wv4-record-pool-hero .wv4-filter-actions {
