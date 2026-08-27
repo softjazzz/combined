@@ -2346,6 +2346,13 @@ async def test_010_association_gap_delivers_counts_and_only_association_evidence
         "uniquely_linked_order_count": 1,
         "unmatched_or_ambiguous_order_count": 5,
         "association_issue_kind": "order_without_exam_master",
+        "trigger_orders": [
+            {
+                "order_name": "胸部CT平扫",
+                "order_time": f"2026-07-07 {index + 7:02d}:00:00",
+            }
+            for index in range(1, 7)
+        ],
     }
     assert canonical["findings"] == (
         "已核对6条CT/MRI医嘱与1条检查主记录，其中5条医嘱未找到唯一对应检查主记录，"
@@ -3443,6 +3450,44 @@ async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
         "target_report_missing",
         "target_report_missing",
     ]
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-010"]["trigger_orders"] == [
+        {
+            "order_name": "头颅CT平扫",
+            "order_time": "2026-07-07 14:31:00",
+        }
+    ]
+    for rule_id in ("LX0609-011", "LX0609-012"):
+        assert facts[rule_id]["trigger_orders"] == [
+            {
+                "order_name": "头颅CT平扫",
+                "order_time": "2026-07-07 14:31:00",
+            }
+        ]
+    for rule_id in ("LX0609-014", "LX0609-015"):
+        assert facts[rule_id]["trigger_orders"] == [
+            {
+                "order_name": "痰一般细菌培养及药敏",
+                "order_time": "2026-07-07 20:27:00",
+            }
+        ]
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[_wrapper(rule_id) for rule_id in exam_lab.EXAM_LAB_RULE_IDS],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+    public_facts = {
+        item["rule_id"]: item.get("customer_display_facts") for item in canonical
+    }
+    assert all(
+        public_facts[rule_id]["trigger_orders"]
+        for rule_id in exam_lab.EXAM_LAB_RULE_IDS
+    )
     assert result.llm_call_count == 0
     assert client.prompts == []
     assert all(item.fact_refs for item in result.decisions)

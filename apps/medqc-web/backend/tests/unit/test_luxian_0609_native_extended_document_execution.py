@@ -1132,6 +1132,12 @@ async def test_068_accepts_complete_automatic_discharge_process_in_daily_course(
         "checked_source": "daily_course_record",
         "approval_present": True,
         "approval_path": "automatic_discharge",
+        "source_document_refs": [
+            {
+                "source_type": "daily_course_record",
+                "source_document_id": "daily-auto-discharge",
+            }
+        ],
     }
 
 
@@ -1144,7 +1150,10 @@ async def test_068_automatic_discharge_preserves_canonical_customer_delivery() -
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
             ),
             "discharge_record": (
-                {"record_time": "2026-07-03 12:00:00"},
+                {
+                    "document_id": "discharge-record-must-not-be-evidence",
+                    "record_time": "2026-07-03 12:00:00",
+                },
             ),
             "daily_course_record": (
                 {
@@ -1178,6 +1187,19 @@ async def test_068_automatic_discharge_preserves_canonical_customer_delivery() -
     assert "自动出院" in item["findings"]
     assert item["customer_display_facts"]["approval_path"] == "automatic_discharge"
     assert item["customer_display_facts"]["checked_source"] == "daily_course_record"
+    assert item["customer_evidence"] == [
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "daily-auto-discharge",
+            "record_time": "2026-07-03 08:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": (
+                "目前患者病情危重，家属要求自动出院，劝阻无效，"
+                "请示上级医师及签《自动出院书》后办理出院。"
+            ),
+            "excerpt_kind": "文书级依据",
+        }
+    ]
     assert execution.llm_call_count == 0
     assert execution.total_tokens == 0
 

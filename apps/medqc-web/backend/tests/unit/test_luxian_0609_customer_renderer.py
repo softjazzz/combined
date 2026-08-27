@@ -1520,6 +1520,28 @@ def test_029_missing_surgery_time_explains_confirmed_trigger_and_linkage_gap():
     )
 
 
+def test_029_association_gap_explains_confirmed_surgery_and_summary():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-029",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="association_failed",
+            fact_refs=(FACT_REF,),
+            evaluator_version="surgery-document-native-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == (
+        "已确认本次存在已实施手术且已读取术前小结，但缺少可用于单台手术关联的"
+        "手术实施时间，暂无法确认该术前小结是否对应同一次手术"
+    )
+
+
 def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(

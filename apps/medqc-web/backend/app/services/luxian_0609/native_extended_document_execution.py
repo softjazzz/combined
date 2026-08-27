@@ -2119,7 +2119,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 continue
             source_error = registration_error or discharge_error
             discharge_time = _discharge_time(registration_rows, discharge_rows)
-            approval_match: tuple[str, str] | None = None
+            approval_match: tuple[str, str, Mapping[str, Any]] | None = None
             render_display = False
             if source_error:
                 final_state, reason_code = "data_gap", source_error
@@ -2132,7 +2132,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 }
                 approval_match = next(
                     (
-                        (source_key, approval_path)
+                        (source_key, approval_path, row)
                         for source_key, rows in (
                             ("daily_course_record", daily_rows),
                             ("senior_course_record", senior_rows),
@@ -2164,6 +2164,18 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     render_display = True
                 if render_display:
+                    approval_facts: dict[str, Any] = {}
+                    if approval_match is not None:
+                        approval_facts["approval_path"] = approval_match[1]
+                        document_id = _clean(
+                            approval_match[2].get("document_id")
+                            or approval_match[2].get("id")
+                        )
+                        if document_id:
+                            approval_facts["source_document_refs"] = [{
+                                "source_type": approval_match[0],
+                                "source_document_id": document_id,
+                            }]
                     display.append(
                         (
                             rule_id,
@@ -2187,11 +2199,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     else "daily_course_record,senior_course_record"
                                 ),
                                 "approval_present": present,
-                                **(
-                                    {"approval_path": approval_match[1]}
-                                    if approval_match is not None
-                                    else {}
-                                ),
+                                **approval_facts,
                             },
                         )
                     )

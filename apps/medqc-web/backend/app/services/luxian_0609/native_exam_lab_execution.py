@@ -759,6 +759,57 @@ def _target_source_document_ids(
     return tuple(dict.fromkeys(document_ids))
 
 
+def _trigger_order_summaries(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    fact_kind: str,
+) -> list[dict[str, str]]:
+    """保留触发资料缺口的具体医嘱名称和时间，不把业务键伪装成文书ID。"""
+
+    pattern = _target_order_pattern(fact_kind)
+    summaries: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows_by_source.get(_ORDER_SOURCE_KEY, ()):
+        if not isinstance(row, Mapping):
+            continue
+        order_name = _clean(row.get("order_name"))
+        if not order_name or not pattern.search(order_name):
+            continue
+        order_time = _clean(
+            row.get("start_time")
+            or row.get("order_time")
+            or row.get("prescribed_datetime")
+        )
+        key = (order_name, order_time)
+        if key in seen:
+            continue
+        seen.add(key)
+        summary = {"order_name": order_name}
+        if order_time:
+            summary["order_time"] = order_time
+        summaries.append(summary)
+        if len(summaries) >= 8:
+            break
+    return summaries
+
+
+def _target_report_missing_display_facts(
+    *,
+    rule_id: str,
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> Mapping[str, Any]:
+    fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+    return {
+        "failure_kind": "exam_lab_target_report_missing",
+        "subject": "ct_mri" if fact_kind == "exam" else "culture_susceptibility",
+        "checked_sources": ["exam_lab_order", "exam_lab_report"],
+        "trigger_orders": _trigger_order_summaries(
+            rows_by_source,
+            fact_kind=fact_kind,
+        ),
+    }
+
+
 def _context(documents: Mapping[str, Any], *, fact_kind: str) -> str:
     trigger_sources = _EXAM_SOURCE_KEYS if fact_kind == "exam" else _CULTURE_SOURCE_KEYS
     parts: list[str] = []
@@ -1352,14 +1403,21 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 检查前原因才进入后续48小时病程语义抽取。
                 order_outcome = _order_exam_structure_outcome(rows_by_source)
                 if order_outcome is not None:
+                    order_display_facts = dict(
+                        _order_contract_display_facts(
+                            order_outcome,
+                            rows_by_source=rows_by_source,
+                        )
+                    )
+                    order_display_facts["trigger_orders"] = _trigger_order_summaries(
+                        rows_by_source,
+                        fact_kind="exam",
+                    )
                     emit_typed(
                         order_outcome.rule_id,
                         order_outcome.status,
                         order_outcome.reason_code,
-                        display_facts=_order_contract_display_facts(
-                            order_outcome,
-                            rows_by_source=rows_by_source,
-                        ),
+                        display_facts=order_display_facts,
                     )
                     typed_processed.add("LX0609-010")
                     eligible_rule_ids.remove("LX0609-010")
@@ -1396,6 +1454,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 rule_id,
                                 "data_gap",
                                 "target_report_missing",
+                                display_facts=_target_report_missing_display_facts(
+                                    rule_id=rule_id,
+                                    rows_by_source=rows_by_source,
+                                ),
                             )
                         else:
                             emit_typed(

@@ -84,6 +84,9 @@ _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
     "LX0609-012": frozenset({"exam_master", "exam_item_report"}),
     "LX0609-014": frozenset({"labtest_master", "labtest_item_report"}),
     "LX0609-015": frozenset({"labtest_master", "labtest_item_report"}),
+    # 068 的出院登记和出院记录只负责确定适用性；客户证据必须来自实际
+    # 命中的出院前病程，不能因通用来源反查而展示成出院记录。
+    "LX0609-068": frozenset({"daily_course_record", "senior_course_record"}),
 }
 
 
@@ -497,6 +500,40 @@ def safe_luxian_0609_customer_display_facts(
         if allowed is not None and any(item not in allowed for item in values):
             return None
         return values
+
+    def controlled_trigger_orders(value: Any) -> list[dict[str, str]] | None:
+        if not isinstance(value, list) or not value or len(value) > 8:
+            return None
+        orders: list[dict[str, str]] = []
+        for item in value:
+            if not isinstance(item, Mapping) or set(item) not in (
+                {"order_name"},
+                {"order_name", "order_time"},
+            ):
+                return None
+            order_name = item.get("order_name")
+            order_time = item.get("order_time")
+            if (
+                not isinstance(order_name, str)
+                or not order_name.strip()
+                or len(order_name) > 200
+                or "\n" in order_name
+                or (
+                    order_time is not None
+                    and (
+                        not isinstance(order_time, str)
+                        or not order_time.strip()
+                        or len(order_time) > 40
+                        or "\n" in order_time
+                    )
+                )
+            ):
+                return None
+            order = {"order_name": order_name.strip()}
+            if order_time is not None:
+                order["order_time"] = order_time.strip()
+            orders.append(order)
+        return orders
 
     def controlled_critical_value_events(
         value: Any,
@@ -1923,6 +1960,7 @@ def safe_luxian_0609_customer_display_facts(
             "uniquely_linked_order_count",
             "unmatched_or_ambiguous_order_count",
             "association_issue_kind",
+            "trigger_orders",
         }
         allowed_internal_keys = {"source_document_ids", "source_document_refs"}
         if not set(raw).issubset(allowed_public_keys | allowed_internal_keys):
@@ -1973,6 +2011,15 @@ def safe_luxian_0609_customer_display_facts(
                 ):
                     return None
 
+        raw_trigger_orders = raw.get("trigger_orders")
+        trigger_orders = (
+            controlled_trigger_orders(raw_trigger_orders)
+            if raw_trigger_orders is not None
+            else None
+        )
+        if raw_trigger_orders is not None and trigger_orders is None:
+            return None
+
         result: dict[str, Any] = {
             (
                 "failure_kind" if failure_kind is not None else "verification_kind"
@@ -1987,6 +2034,8 @@ def safe_luxian_0609_customer_display_facts(
             "requirement": "order_course_report_consistency",
             "requirement_met": bool(raw.get("requirement_met")),
         }
+        if trigger_orders is not None:
+            result["trigger_orders"] = trigger_orders
         association_keys = (
             "order_count",
             "exam_master_count",
@@ -2024,6 +2073,32 @@ def safe_luxian_0609_customer_display_facts(
             result.update(counts)
             result["association_issue_kind"] = issue_kind
         return result
+
+    if (
+        rule_id
+        in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
+        and raw.get("failure_kind") == "exam_lab_target_report_missing"
+    ):
+        expected_subject = (
+            "ct_mri" if rule_id in {"LX0609-011", "LX0609-012"}
+            else "culture_susceptibility"
+        )
+        trigger_orders = controlled_trigger_orders(raw.get("trigger_orders"))
+        if (
+            set(raw) != {
+                "failure_kind", "subject", "checked_sources", "trigger_orders"
+            }
+            or raw.get("subject") != expected_subject
+            or raw.get("checked_sources") != ["exam_lab_order", "exam_lab_report"]
+            or trigger_orders is None
+        ):
+            return None
+        return {
+            "failure_kind": "exam_lab_target_report_missing",
+            "subject": expected_subject,
+            "checked_sources": ["exam_lab_order", "exam_lab_report"],
+            "trigger_orders": trigger_orders,
+        }
 
     if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
         subject = raw.get("subject")
@@ -4605,6 +4680,27 @@ def _customer_evidence_from_display_facts(
             if located:
                 return located
 
+    if rule_id == "LX0609-068":
+        allowed_source_types = {"daily_course_record", "senior_course_record"}
+        raw_refs = raw.get("source_document_refs")
+        if isinstance(raw_refs, list) and len(raw_refs) <= 1:
+            located: list[dict[str, str]] = []
+            for item in raw_refs:
+                if not isinstance(item, Mapping) or set(item) != {
+                    "source_type", "source_document_id"
+                }:
+                    return []
+                source_type = str(item.get("source_type") or "").strip()
+                document_id = valid_document_id(item.get("source_document_id"))
+                if source_type not in allowed_source_types or not document_id:
+                    return []
+                located.append({
+                    "source_type": source_type,
+                    "source_document_id": document_id,
+                })
+            if located:
+                return located
+
     if rule_id in {
         "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
     }:
@@ -5389,7 +5485,13 @@ def aggregate_luxian_0609_results(
             # 回退，否则命中文书缺 ID 时可能误借同来源另一份记录的 ID。
             decision_evidence = (
                 []
-                if wrapper_id in {"LX0609-025", "LX0609-051", "LX0609-067", "LX0609-071"}
+                if wrapper_id in {
+                    "LX0609-025",
+                    "LX0609-051",
+                    "LX0609-067",
+                    "LX0609-068",
+                    "LX0609-071",
+                }
                 else _customer_evidence_from_reduced_decision(
                     decision=reduced,
                     evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
