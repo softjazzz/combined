@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from datetime import date, datetime
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from sqlalchemy import inspect, text
 
@@ -2914,6 +2914,7 @@ def refresh_all_bundle_variants_for_rows(
     continue_on_error: bool = True,
     scenes: list[str] | tuple[str, ...] | None = None,
     domains: list[str] | tuple[str, ...] | None = None,
+    progress_callback: Callable[[dict[str, int]], None] | None = None,
 ) -> dict[str, Any]:
     """以病例级短生命周期快照统一刷新 scene 与 domain bundles。"""
 
@@ -2960,6 +2961,19 @@ def refresh_all_bundle_variants_for_rows(
     processed_visits = 0
     skipped_rows = 0
     seen: set[tuple[str, str, str]] = set()
+    progress_total = len(
+        {
+            (
+                str(row.get("institute_id") or "").strip(),
+                str(row.get("patient_id") or "").strip(),
+                str(row.get("visit_id") or "").strip(),
+            )
+            for row in rows or []
+            if str(row.get("institute_id") or "").strip()
+            and str(row.get("patient_id") or "").strip()
+            and str(row.get("visit_id") or "").strip()
+        }
+    )
 
     for row in rows or []:
         institute_id = str(row.get("institute_id") or "").strip()
@@ -3079,6 +3093,15 @@ def refresh_all_bundle_variants_for_rows(
                 )
                 if not continue_on_error:
                     raise
+
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "completed": processed_visits,
+                    "total": progress_total,
+                    "remaining": max(progress_total - processed_visits, 0),
+                }
+            )
 
     return {
         "processed": processed_visits,

@@ -3538,6 +3538,7 @@ def run_sync(
                 "syncing": "syncing_table",
                 "primary_visible": "primary_visibility",
                 "primary_unavailable": "primary_visibility",
+                "bundle_refresh": "bundle_refresh",
                 "completed": "finalizing",
             }
             processed_tables = int(payload.get("processed_tables") or 0)
@@ -3557,24 +3558,25 @@ def run_sync(
                 "identity_basis": "institute_id+patient_id+visit_id",
                 "label": "病历池可见进度",
             }
-            _emit_sync_progress(
-                progress_callback,
-                {
-                    "run_id": run_id,
-                    "status": "running",
-                    "stage": stage_by_step.get(step_key, step_key or "syncing_table"),
-                    "current_table": str(payload.get("current_table") or ""),
-                    "tables_total": total_tables,
-                    "tables_done": processed_tables,
-                    "rows_pulled_total": 0,
-                    "rows_upserted_total": 0,
-                    "eligible_visit_count": len(case_refs),
-                    "case_ref_count": len(case_refs),
-                    "visit_progress": visit_progress,
-                    "failed_tables": 0,
-                    "eta_seconds": None,
-                },
-            )
+            progress_payload = {
+                "run_id": run_id,
+                "status": "running",
+                "stage": stage_by_step.get(step_key, step_key or "syncing_table"),
+                "current_table": str(payload.get("current_table") or ""),
+                "tables_total": total_tables,
+                "tables_done": processed_tables,
+                "rows_pulled_total": 0,
+                "rows_upserted_total": 0,
+                "eligible_visit_count": len(case_refs),
+                "case_ref_count": len(case_refs),
+                "visit_progress": visit_progress,
+                "failed_tables": 0,
+                "eta_seconds": None,
+            }
+            bundle_progress = payload.get("bundle_progress")
+            if isinstance(bundle_progress, dict):
+                progress_payload["bundle_progress"] = dict(bundle_progress)
+            _emit_sync_progress(progress_callback, progress_payload)
 
         try:
             sync_result = _create_case_set_sync_service().sync_case_set(

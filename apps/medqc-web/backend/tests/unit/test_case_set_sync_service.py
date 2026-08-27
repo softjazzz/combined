@@ -218,6 +218,7 @@ def test_case_set_sync_fails_closed_when_any_bundle_refresh_fails(
 
 def test_case_set_sync_refreshes_all_bundles_once_after_detail_tables(monkeypatch):
     events: list[tuple[str, Any]] = []
+    progress_events: list[dict[str, Any]] = []
     case_refs = (CaseRef("I-1", "P-1", "V-1"), CaseRef("I-2", "P-2", "V-1"))
 
     monkeypatch.setattr(
@@ -241,6 +242,8 @@ def test_case_set_sync_refreshes_all_bundles_once_after_detail_tables(monkeypatc
     def _refresh(**kwargs: Any) -> dict[str, Any]:
         events.append(("refresh", tuple(tuple(row.values()) for row in kwargs["rows"])))
         assert kwargs["scenes"] == ("running", "final")
+        kwargs["progress_callback"]({"completed": 1, "total": 2})
+        kwargs["progress_callback"]({"completed": 2, "total": 2})
         return {
             "scenes": {"running": {"failed": 0}, "final": {"failed": 0}},
             "domains": {"course": {"failed": 0}},
@@ -261,6 +264,7 @@ def test_case_set_sync_refreshes_all_bundles_once_after_detail_tables(monkeypatc
         table_names=("daily_course_record", "mr"),
         policy_version="case-set-sync-v1",
         sync_scene="running",
+        progress_callback=progress_events.append,
     )
 
     assert result.primary_visible is True
@@ -270,6 +274,14 @@ def test_case_set_sync_refreshes_all_bundles_once_after_detail_tables(monkeypatc
     ]
     assert events[-1][0] == "refresh"
     assert sum(1 for event, _ in events if event == "refresh") == 1
+    bundle_events = [
+        event for event in progress_events if event.get("step_key") == "bundle_refresh"
+    ]
+    assert bundle_events[-1]["bundle_progress"] == {
+        "total": 2,
+        "completed": 2,
+        "remaining": 0,
+    }
     assert result.total_rows_pulled == 4
     assert result.total_rows_upserted == 4
 

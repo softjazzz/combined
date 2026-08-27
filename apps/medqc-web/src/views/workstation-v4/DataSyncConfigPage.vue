@@ -3,20 +3,12 @@
     <div
       class="flex-1 p-5 lg:p-6 overflow-hidden flex flex-col min-h-0 container mx-auto max-w-[1680px] w-full"
     >
-      <a-tabs
-        v-model:active-key="activeTab"
-        class="system-config-tabs flex-1 min-h-0"
-      >
-        <a-tab-pane
-          key="dataSync"
-          tab="数据同步配置"
-        >
+      <a-tabs v-model:active-key="activeTab" class="system-config-tabs flex-1 min-h-0">
+        <a-tab-pane key="dataSync" tab="数据同步配置">
           <div class="system-config-tab-shell flex flex-col h-full min-h-0 gap-4">
             <section class="system-config-hero">
               <div class="system-config-hero__main">
-                <div class="system-config-breadcrumb">
-                  系统配置 / 数据同步设置
-                </div>
+                <div class="system-config-breadcrumb">系统配置 / 数据同步设置</div>
                 <h2>病历数据同步设置</h2>
                 <p>
                   {{ pageSubtitle }}
@@ -85,10 +77,7 @@
                     <span>当前在院统计时间</span>
                     <strong>以执行检查时的医院当前时间为准</strong>
                   </div>
-                  <label
-                    v-else
-                    class="system-config-scope-field sync-filter-row__date"
-                  >
+                  <label v-else class="system-config-scope-field sync-filter-row__date">
                     <span>{{ syncStartDateLabel }}</span>
                     <a-date-picker
                       v-model:value="state.policyForm.start_date"
@@ -147,10 +136,7 @@
                   </a-tag>
                 </div>
 
-                <div
-                  v-if="state.preflightResult"
-                  class="sync-result-summary"
-                >
+                <div v-if="state.preflightResult" class="sync-result-summary">
                   <div class="sync-result-metric sync-result-metric--primary">
                     <span>{{ candidateProgressLabel }}</span>
                     <strong>{{
@@ -169,17 +155,14 @@
                     <em>{{ policyDateRangeLabel }}</em>
                   </div>
                 </div>
-                <div
-                  v-else
-                  class="sync-result-empty"
-                >
+                <div v-else class="sync-result-empty">
                   选择范围后点击“检查病历范围”，这里会显示候选病历数和阻断原因。
                 </div>
 
                 <div
                   v-if="
                     state.preflightResult?.blockers?.length ||
-                      state.preflightResult?.warnings?.length
+                    state.preflightResult?.warnings?.length
                   "
                   class="sync-result-messages"
                 >
@@ -199,19 +182,13 @@
                   </p>
                 </div>
 
-                <div
-                  v-if="showSyncProgress"
-                  class="system-config-sync-progress"
-                >
+                <div v-if="showSyncProgress" class="system-config-sync-progress">
                   <div class="system-config-sync-progress__head">
                     <div>
                       <h4>同步执行进度</h4>
                       <p>{{ syncProgressStageText }}</p>
                     </div>
-                    <a-tag
-                      class="wv4-status-chip"
-                      :class="syncProgressStatusClass"
-                    >
+                    <a-tag class="wv4-status-chip" :class="syncProgressStatusClass">
                       {{ state.isSyncing ? '执行中' : syncProgressStatusText }}
                     </a-tag>
                   </div>
@@ -229,11 +206,20 @@
                     </div>
                     <div>
                       <span>可进入病历池</span>
-                      <strong>{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong>
+                      <strong
+                        >{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong
+                      >
                     </div>
                     <div>
                       <span>资料类别进度</span>
                       <strong>{{ syncProgressTablesDone }} / {{ syncProgressTablesTotal }}</strong>
+                    </div>
+                    <div v-if="syncBundleProgressVisible">
+                      <span>病历资料视图</span>
+                      <strong
+                        >{{ syncBundleProgressCompleted }} /
+                        {{ syncBundleProgressTotal }} 份</strong
+                      >
                     </div>
                   </div>
 
@@ -256,22 +242,14 @@
                     <span v-if="syncProgressVisitWarning">{{ syncProgressVisitWarning }}</span>
                   </p>
                 </div>
-                <div
-                  v-if="hasPreflightPass"
-                  class="sync-result-actions"
-                >
-                  <label
-                    class="system-config-confirm-check"
-                    :class="{ 'is-disabled': isReadonly }"
-                  >
-                    <input
-                      v-model="syncScopeConfirmed"
-                      type="checkbox"
-                      :disabled="isReadonly"
-                    >
-                    <span>我已确认同步
+                <div v-if="hasPreflightPass" class="sync-result-actions">
+                  <label class="system-config-confirm-check" :class="{ 'is-disabled': isReadonly }">
+                    <input v-model="syncScopeConfirmed" type="checkbox" :disabled="isReadonly" />
+                    <span
+                      >我已确认同步
                       {{ Number(state.preflightResult?.estimated_impact || 0).toLocaleString() }}
-                      份病历</span>
+                      份病历</span
+                    >
                   </label>
                   <a-tooltip :title="syncScopeConfirmed ? '正式写入本地 CDM' : '请先确认同步范围'">
                     <a-button
@@ -288,10 +266,7 @@
               </div>
             </section>
 
-            <section
-              v-if="isSyncAdvancedUser"
-              class="system-config-advanced-section"
-            >
+            <section v-if="isSyncAdvancedUser" class="system-config-advanced-section">
               <div class="system-config-advanced-head">
                 <div>
                   <h3>高级设置与运行记录</h3>
@@ -329,10 +304,7 @@
                     </p>
                   </div>
                 </div>
-                <div
-                  v-if="preflightTableRows.length === 0"
-                  class="system-config-empty-table"
-                >
+                <div v-if="preflightTableRows.length === 0" class="system-config-empty-table">
                   尚未生成表组预检结果。
                 </div>
                 <table v-else>
@@ -346,10 +318,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr
-                      v-for="row in preflightTableRows"
-                      :key="row.table"
-                    >
+                    <tr v-for="row in preflightTableRows" :key="row.table">
                       <td>{{ row.table }}</td>
                       <td>{{ row.source }}</td>
                       <td>{{ row.dateField }}</td>
@@ -364,10 +333,7 @@
                 </table>
               </div>
 
-              <div
-                v-if="detailWorkbenchOpen"
-                class="system-config-detail-workbench"
-              >
+              <div v-if="detailWorkbenchOpen" class="system-config-detail-workbench">
                 <article
                   class="system-config-execution-card system-config-execution-card--connection"
                 >
@@ -825,6 +791,11 @@ const syncVisitProgress = computed<Record<string, unknown>>(() => {
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
 })
 
+const syncBundleProgress = computed<Record<string, unknown>>(() => {
+  const raw = syncProgress.value.bundle_progress
+  return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+})
+
 const syncProgressStageLabelMap: Record<string, string> = {
   initializing: '正在准备同步任务',
   preflight: '正在检查同步条件',
@@ -832,6 +803,7 @@ const syncProgressStageLabelMap: Record<string, string> = {
   syncing_table: '正在同步病历资料',
   primary_visibility: '正在同步病历主记录',
   primary_unavailable: '部分病历主记录待处理',
+  bundle_refresh: '正在刷新病历资料视图',
   finalizing: '正在刷新病历资料视图',
   completed: '同步已完成',
   failed: '同步未完成，请查看原因',
@@ -861,6 +833,15 @@ const syncProgressTablesDone = computed(() =>
 )
 const syncProgressTablesRemaining = computed(() =>
   Math.max(0, syncProgressTablesTotal.value - syncProgressTablesDone.value),
+)
+const syncBundleProgressTotal = computed(() => Number(syncBundleProgress.value.total || 0))
+const syncBundleProgressCompleted = computed(() =>
+  Math.min(syncBundleProgressTotal.value, Number(syncBundleProgress.value.completed || 0)),
+)
+const syncBundleProgressVisible = computed(
+  () =>
+    syncBundleProgressTotal.value > 0 ||
+    String(syncProgress.value.stage || '') === 'bundle_refresh',
 )
 const syncProgressRowsPulled = computed(() => Number(syncProgress.value.rows_pulled_total || 0))
 const syncProgressRowsUpserted = computed(() =>
@@ -896,6 +877,18 @@ const syncProgressCurrentTable = computed(() => {
   return table || '等待表同步开始'
 })
 const syncProgressPercent = computed(() => {
+  if (
+    String(syncProgress.value.stage || '') === 'bundle_refresh' &&
+    syncBundleProgressTotal.value > 0
+  ) {
+    return Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round((syncBundleProgressCompleted.value / syncBundleProgressTotal.value) * 100),
+      ),
+    )
+  }
   if (syncProgressTablesTotal.value > 0) {
     return Math.max(
       0,

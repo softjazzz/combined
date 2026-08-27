@@ -306,6 +306,19 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
             )
             callback(
                 {
+                    "step_key": "bundle_refresh",
+                    "current_table": "",
+                    "processed_tables": 4,
+                    "total_tables": 4,
+                    "bundle_progress": {
+                        "total": 2,
+                        "completed": 1,
+                        "remaining": 1,
+                    },
+                }
+            )
+            callback(
+                {
                     "step_key": "completed",
                     "current_table": "",
                     "processed_tables": 4,
@@ -426,6 +439,14 @@ def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
         item["name"] for item in target_tables
     )
     assert sync_calls[0]["sync_scene"] == "running"
+    bundle_progress = next(
+        event for event in progress_events if event.get("stage") == "bundle_refresh"
+    )
+    assert bundle_progress["bundle_progress"] == {
+        "total": 2,
+        "completed": 1,
+        "remaining": 1,
+    }
     final_progress = progress_events[-1]
     assert final_progress["status"] == "success"
     assert final_progress["stage"] == "completed"

@@ -651,6 +651,7 @@ def test_unified_refresh_should_read_each_material_once_and_keep_variant_limits(
     select_calls: list[dict[str, object]] = []
     scene_bundles: dict[tuple[str, str], dict] = {}
     domain_bundles: dict[tuple[str, str], dict] = {}
+    progress_events: list[dict[str, int]] = []
 
     def _fake_select_records(**kwargs):
         select_calls.append(kwargs)
@@ -694,6 +695,7 @@ def test_unified_refresh_should_read_each_material_once_and_keep_variant_limits(
         source_schema="cdm",
         scenes=("running", "final"),
         domains=("course",),
+        progress_callback=progress_events.append,
     )
 
     calls_by_visit_table: dict[tuple[str, str], list[dict[str, object]]] = {}
@@ -720,6 +722,10 @@ def test_unified_refresh_should_read_each_material_once_and_keep_variant_limits(
         )
     assert result["processed"] == 2
     assert result["material_reads"] == len(select_calls)
+    assert progress_events == [
+        {"completed": 1, "total": 2, "remaining": 1},
+        {"completed": 2, "total": 2, "remaining": 0},
+    ]
 
 
 def test_material_snapshot_should_match_legacy_assembly_key_fields(monkeypatch):

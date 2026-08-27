@@ -99,6 +99,7 @@ class CaseSetSyncService:
         *,
         case_refs: Sequence[CaseRef | Mapping[str, Any]],
         policy_version: str,
+        progress_callback: Callable[[dict[str, int]], None] | None = None,
     ) -> dict[str, Any]:
         config = self._db_config_loader()
         normalized = normalize_source_case_refs(
@@ -109,6 +110,7 @@ class CaseSetSyncService:
             rows=[case_ref.as_dict() for case_ref in normalized],
             scenes=("running", "final"),
             policy_version=str(policy_version or "").strip(),
+            progress_callback=progress_callback,
         )
         failed = sum(
             int((counts or {}).get("failed") or 0)
@@ -446,10 +448,40 @@ class CaseSetSyncService:
                 total_rows_upserted=total_rows_upserted,
                 bundle_refresh={},
             )
+        bundle_progress_total = len(visible_case_refs)
+        last_bundle_progress = -1
+
+        def _forward_bundle_progress(payload: dict[str, int]) -> None:
+            nonlocal last_bundle_progress
+            completed = max(
+                0,
+                min(bundle_progress_total, int(payload.get("completed") or 0)),
+            )
+            if completed == last_bundle_progress:
+                return
+            last_bundle_progress = completed
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "step_key": "bundle_refresh",
+                        "current_table": "",
+                        "processed_tables": len(ordered_tables),
+                        "total_tables": len(ordered_tables),
+                        "bundle_progress": {
+                            "total": bundle_progress_total,
+                            "completed": completed,
+                            "remaining": max(bundle_progress_total - completed, 0),
+                        },
+                    }
+                )
+
+        _forward_bundle_progress({"completed": 0})
         bundle_refresh = self.refresh_case_set_bundles(
             case_refs=visible_case_refs,
             policy_version=policy_version,
+            progress_callback=_forward_bundle_progress,
         )
+        _forward_bundle_progress({"completed": bundle_progress_total})
         if progress_callback is not None:
             progress_callback(
                 {

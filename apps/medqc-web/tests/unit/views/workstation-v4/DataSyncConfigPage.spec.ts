@@ -206,10 +206,17 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).toContain('正在确定病历范围')
     expect(wrapper.text()).not.toContain('正在同步数据：mr')
 
-    mockState.pgSyncState.progress.stage = 'finalizing'
+    mockState.pgSyncState.progress.stage = 'bundle_refresh'
     mockState.pgSyncState.progress.current_table = ''
+    mockState.pgSyncState.progress.bundle_progress = {
+      total: 20,
+      completed: 7,
+      remaining: 13,
+    }
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('正在刷新病历资料视图')
+    expect(wrapper.text()).toContain('病历资料视图')
+    expect(wrapper.text()).toContain('7 / 20 份')
   })
 
   it('按用户任务顺序展示三步单页同步引导', () => {
