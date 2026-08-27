@@ -87,7 +87,7 @@ export function resolveMedicalDocumentGroup(
     return { key: 'course', label: '病程记录' }
   }
   if (/consult|会诊/u.test(value)) return { key: 'consultation', label: '会诊记录' }
-  if (/surgery|anesth|手术|麻醉/u.test(value)) {
+  if (/surgery|presurg|anesth|手术|术前小结|麻醉/u.test(value)) {
     return { key: 'surgery', label: '手术麻醉' }
   }
   if (/exam|lab|pathology|检查|检验|病理/u.test(value)) {
