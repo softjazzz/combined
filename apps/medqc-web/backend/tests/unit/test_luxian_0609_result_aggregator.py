@@ -8,6 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services.luxian_0609 import native_consultation_episode_execution as consultation_episode
+from app.services.luxian_0609.customer_evidence_enrichment import (
+    enrich_customer_evidence,
+)
 from app.services.luxian_0609.deterministic_gate import GateDecision, GateFactRef, GateReport
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState,
@@ -21,7 +25,6 @@ from app.services.luxian_0609.decision_reducer import (
 )
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
-from app.services.luxian_0609 import native_consultation_episode_execution as consultation_episode
 from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
     safe_luxian_0609_customer_display_facts,
@@ -1163,6 +1166,95 @@ def test_021_episode_locator_is_renderable_but_document_ids_only_enter_customer_
         "source_document_id" not in item
         for item in result["customer_display_facts"]["episode_results"]
     )
+
+
+def test_customer_evidence_uses_frozen_material_for_time_and_excerpt() -> None:
+    class _Materials:
+        def rows(self, source_type: str):
+            assert source_type == "consultation_record"
+            return (
+                {
+                    "document_id": "CONSULT-1",
+                    "record_time": "2026-07-20 01:00:00",
+                    "record_content": "患者反复发热，申请感染科会诊协助明确抗感染方案。",
+                },
+                {
+                    "document_id": "CONSULT-2",
+                    "record_time": "2026-07-20 02:00:00",
+                    "record_content": "请相关科室会诊。",
+                },
+            )
+
+    facts = {
+        "verification_kind": "consultation_application_quality_check",
+        "episode_count": 2,
+        "document_count": 2,
+        "semantic_state": "mixed",
+        "checked_requirement": "说明具体临床问题、会诊理由或明确会诊目的",
+        "source_document_ids": ["CONSULT-1", "CONSULT-2"],
+        "episode_results": [
+            {
+                "episode_index": 1,
+                "semantic_state": "clear",
+                "source_document_id": "CONSULT-1",
+                "record_time": "2026-07-20 01:00:00",
+                "document_title": "会诊申请单",
+            },
+            {
+                "episode_index": 2,
+                "semantic_state": "vague",
+                "source_document_id": "CONSULT-2",
+                "record_time": "2026-07-20 02:00:00",
+                "document_title": "会诊申请单",
+            },
+        ],
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-021"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-021", direction=QcDirection.DEFECT),),
+        customer_display_facts=(("LX0609-021", facts),),
+        audit_context={"evidence_materials": _Materials()},
+    )[0]
+
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "consultation_record",
+            "source_document_id": "CONSULT-1",
+            "record_time": "2026-07-20 01:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "患者反复发热，申请感染科会诊协助明确抗感染方案。",
+            "excerpt_kind": "文书级依据",
+        },
+        {
+            "source_type": "consultation_record",
+            "source_document_id": "CONSULT-2",
+            "record_time": "2026-07-20 02:00:00",
+            "field_path": "record_content",
+            "evidence_excerpt": "请相关科室会诊。",
+            "excerpt_kind": "文书级依据",
+        },
+    ]
+
+
+def test_customer_evidence_does_not_enrich_ambiguous_document_identity() -> None:
+    class _Materials:
+        @staticmethod
+        def rows(_source_type: str):
+            return (
+                {"document_id": "DUPLICATE", "record_content": "第一份文书"},
+                {"document_id": "DUPLICATE", "record_content": "第二份文书"},
+            )
+
+    evidence = [
+        {"source_type": "daily_course_record", "source_document_id": "DUPLICATE"}
+    ]
+
+    assert enrich_customer_evidence(
+        evidence,
+        evidence_materials=_Materials(),
+    ) == evidence
 
 
 def test_022_failed_episode_after_eighth_still_has_customer_evidence() -> None:
@@ -4899,15 +4991,12 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
         else "compliant"
     )
     assert result["customer_display_facts"] == facts
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "copy-left",
-        },
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "copy-right",
-        },
+    assert [
+        (item["source_type"], item["source_document_id"])
+        for item in result["customer_evidence"]
+    ] == [
+        ("daily_course_record", "copy-left"),
+        ("daily_course_record", "copy-right"),
     ]
     if failure_kind == "copy_similarity_within_threshold":
         assert "达到或超过 70%" in result["findings"]
@@ -5153,15 +5242,12 @@ def test_017_native_fingerprints_bind_iso_timezone_rows_at_exact_second():
         audit_context={"evidence_materials": _Materials()},
     )
 
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "copy-left",
-        },
-        {
-            "source_type": "senior_course_record",
-            "source_document_id": "copy-right",
-        },
+    assert [
+        (item["source_type"], item["source_document_id"])
+        for item in result["customer_evidence"]
+    ] == [
+        ("daily_course_record", "copy-left"),
+        ("senior_course_record", "copy-right"),
     ]
 
 
@@ -5530,11 +5616,11 @@ def test_017_canonical_aggregation_keeps_four_ranked_copy_pairs_with_evidence():
 
     assert result["customer_display_facts"]["copy_match_pairs"] == pairs
     assert result["findings"].endswith("另有 3 组病程记录达到判定阈值。")
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": f"copy-{day:02d}",
-        }
+    assert [
+        (item["source_type"], item["source_document_id"])
+        for item in result["customer_evidence"]
+    ] == [
+        ("daily_course_record", f"copy-{day:02d}")
         for day in range(1, 9)
     ]
 

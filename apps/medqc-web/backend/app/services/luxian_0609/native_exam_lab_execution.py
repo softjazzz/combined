@@ -494,7 +494,7 @@ def _order_exam_structure_outcome(
         # “病程有检查、无医嘱”的缺陷。
         return None
     if course_rows and not orders and not exam_rows:
-        return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_course_without_order")
+        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
     if not orders:
         # 正式检查行若声明了order_id，则完整医嘱集中找不到该键属于关联冲突；
         # 只有检查来源本身不提供order_id时，才按院方“仅报告”能力继续核对。

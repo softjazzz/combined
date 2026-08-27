@@ -1922,8 +1922,8 @@ async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monk
                     "record_content": "头颅CT提示左侧硬膜下血肿。",
                 },
             ),
-            "non_compliant",
-            "exam_course_without_order",
+            "data_gap",
+            "exam_order_exam_association_failed",
         ),
         (
             (
@@ -2021,11 +2021,14 @@ async def test_010_public_native_uses_order_exam_report_contract(
         ),
     )
 
-    assert decision.reason_code == (
-        "requirement_satisfied" if expected_state == "compliant" else "requirement_violated"
-    )
+    expected_reason_code = {
+        "compliant": "requirement_satisfied",
+        "non_compliant": "requirement_violated",
+        "data_gap": "association_failed",
+    }[expected_state]
+    assert decision.reason_code == expected_reason_code
     assert canonical["status"] == expected_state
-    if expected_state == "non_compliant":
+    if expected_state in {"non_compliant", "data_gap"}:
         facts = dict(result.customer_display_facts)["LX0609-010"]
         assert facts["failure_kind"] == expected_failure_kind
     assert result.llm_call_count == (1 if expected_state == "compliant" else 0)
@@ -2517,15 +2520,12 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     assert canonical["customer_display_facts"]["reviewed_record_scope"] == (
         "首次病程记录及后续病程记录"
     )
-    assert canonical["customer_evidence"] == [
-        {
-            "source_type": "exam_master",
-            "source_document_id": "ct-report-012",
-        },
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "course-012",
-        },
+    assert [
+        (item["source_type"], item["source_document_id"])
+        for item in canonical["customer_evidence"]
+    ] == [
+        ("exam_master", "ct-report-012"),
+        ("daily_course_record", "course-012"),
     ]
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
@@ -2789,15 +2789,12 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
     assert result.llm_call_count == 0
     assert canonical["status"] == "non_compliant"
     assert canonical["reason_code"] == "requirement_violated"
-    assert canonical["customer_evidence"] == [
-        {
-            "source_type": "labtest_item_report",
-            "source_document_id": "culture-report-015",
-        },
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "course-culture-015",
-        },
+    assert [
+        (item["source_type"], item["source_document_id"])
+        for item in canonical["customer_evidence"]
+    ] == [
+        ("labtest_item_report", "culture-report-015"),
+        ("daily_course_record", "course-culture-015"),
     ]
 
 

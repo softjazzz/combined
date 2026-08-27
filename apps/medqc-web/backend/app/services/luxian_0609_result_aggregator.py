@@ -15,6 +15,7 @@ from .luxian_0609_result_schema import (
 from .luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_canonical_result,
 )
+from .luxian_0609.customer_evidence_enrichment import enrich_customer_evidence
 from .luxian_0609.decision_reducer import ReducedRuleDecision
 from .luxian_0609.source_evidence_reader import authoritative_document_time_value
 from .luxian_0609.surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
@@ -5378,6 +5379,10 @@ def aggregate_luxian_0609_results(
                 copy_pair_evidence,
                 decision_evidence,
             )
+            customer_evidence = enrich_customer_evidence(
+                customer_evidence,
+                evidence_materials=(audit_context or {}).get("evidence_materials"),
+            )
             if customer_evidence:
                 result["customer_evidence"] = customer_evidence
             result = finalize_luxian_0609_canonical_result(result)
@@ -5461,6 +5466,16 @@ def aggregate_luxian_0609_results(
                 )
                 if wrapper_id in customer_evidence_by_rule:
                     result["customer_evidence"] = customer_evidence_by_rule[wrapper_id]
+                enriched_customer_evidence = enrich_customer_evidence(
+                    list(result.get("customer_evidence") or []),
+                    evidence_materials=(audit_context or {}).get(
+                        "evidence_materials"
+                    ),
+                )
+                if enriched_customer_evidence:
+                    result["customer_evidence"] = enriched_customer_evidence
+                else:
+                    result.pop("customer_evidence", None)
                 native_audit_context = {
                     key: value
                     for key, value in dict(audit_context or {}).items()
