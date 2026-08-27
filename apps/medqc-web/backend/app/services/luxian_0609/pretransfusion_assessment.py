@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+import re
 from typing import Any, Mapping
 
 
@@ -19,6 +21,52 @@ INDICATOR_FIELDS = (
     "rbc_antibody",
 )
 _EMPTY_VALUES = {"", "-", "--", "无", "未查", "未检测", "不详"}
+_APPLICATION_TEXT_FIELDS = ("record_content", "content", "assembled_text", "raw_text")
+_NUMBER = r"\d+(?:\.\d+)?"
+_TEXT_INDICATOR_PATTERNS = (
+    ("hemoglobin", re.compile(rf"(?:血红蛋白|HGB|Hb)\s*[:：=]?\s*{_NUMBER}\s*(?:g/L|g\/l)?", re.I)),
+    ("hematocrit", re.compile(rf"(?:红细胞压积|HCT)\s*[:：=]?\s*{_NUMBER}\s*%?", re.I)),
+    ("rbc", re.compile(rf"(?:红细胞计数|RBC)\s*[:：=]?\s*{_NUMBER}", re.I)),
+    ("prothrombin_time", re.compile(rf"(?:凝血酶原时间|PT)\s*[:：=]?\s*{_NUMBER}\s*(?:s|秒)?", re.I)),
+    ("partial_thromboplastin_time", re.compile(rf"(?:活化部分凝血活酶时间|APTT)\s*[:：=]?\s*{_NUMBER}\s*(?:s|秒)?", re.I)),
+    ("fibrinogen", re.compile(rf"(?:纤维蛋白原|FIB)\s*[:：=]?\s*{_NUMBER}", re.I)),
+    ("albumin", re.compile(rf"(?:白蛋白|ALB)\s*[:：=]?\s*{_NUMBER}\s*(?:g/L|g\/l)?", re.I)),
+    ("teg", re.compile(rf"(?:血栓弹力图|TEG)\s*[:：=]?\s*{_NUMBER}", re.I)),
+    ("platelet_antibody", re.compile(r"(?:血小板抗体)\s*[:：=]?\s*(?:阳性|阴性|\+|-)")),
+    ("rbc_antibody", re.compile(r"(?:红细胞抗体|不规则抗体)\s*[:：=]?\s*(?:阳性|阴性|\+|-)")),
+)
+
+
+@dataclass(frozen=True)
+class PretransfusionReasonCandidate:
+    application_ref: str
+    application_text: str
+    application_time: datetime
+    transfusion_time: datetime
+    indicators: tuple[str, ...]
+    source_document_refs: tuple[tuple[str, str], ...]
+
+    def display_facts(self, *, reason_present: bool) -> dict[str, Any]:
+        facts = {
+            "performed_transfusion_confirmed": True,
+            "checked_fields": ["application_reason", "laboratory_indicator"],
+            "missing_fields": [] if reason_present else ["application_reason"],
+            "assessment_indicators": list(self.indicators),
+            "application_time": self.application_time.isoformat(sep=" "),
+            "transfusion_time": self.transfusion_time.isoformat(sep=" "),
+            "source_document_refs": [
+                {"source_type": source_type, "source_document_id": document_id}
+                for source_type, document_id in self.source_document_refs
+            ],
+        }
+        facts[
+            "verification_kind" if reason_present else "failure_kind"
+        ] = (
+            "pretransfusion_assessment_complete"
+            if reason_present
+            else "pretransfusion_assessment_incomplete"
+        )
+        return facts
 
 
 def _text(value: Any) -> str:
@@ -57,6 +105,49 @@ def _event_time(row: Mapping[str, Any]) -> datetime | None:
     return None
 
 
+def _application_text(row: Mapping[str, Any]) -> str:
+    return _text(next((row.get(field) for field in _APPLICATION_TEXT_FIELDS if _text(row.get(field))), ""))
+
+
+def _indicators(row: Mapping[str, Any]) -> list[str]:
+    found = {
+        field for field in INDICATOR_FIELDS if _text(row.get(field)) not in _EMPTY_VALUES
+    }
+    content = _application_text(row)
+    found.update(field for field, pattern in _TEXT_INDICATOR_PATTERNS if pattern.search(content))
+    return [field for field in INDICATOR_FIELDS if field in found]
+
+
+def _source_document_refs(
+    *,
+    application: Mapping[str, Any],
+    transfusion_records: list[Mapping[str, Any]],
+    transfusion_time: datetime,
+) -> tuple[tuple[str, str], ...]:
+    refs: list[tuple[str, str]] = []
+    application_id = _text(application.get("application_id") or application.get("document_id"))
+    if application_id:
+        refs.append(("blood_application", application_id))
+    located_records = [
+        (row, _text(row.get("document_id")), _event_time(row))
+        for row in transfusion_records
+        if _text(row.get("document_id"))
+    ]
+    if located_records:
+        _selected_row, document_id, _record_time = min(
+            located_records,
+            key=lambda item: (
+                item[2] is None,
+                abs((item[2] - transfusion_time).total_seconds())
+                if item[2] is not None
+                else float("inf"),
+                item[1],
+            ),
+        )
+        refs.append(("bloodtrans_record", document_id))
+    return tuple(refs)
+
+
 def evaluate_structured_pretransfusion_application(
     documents: Mapping[str, Any],
 ) -> AssessmentOutcome | None:
@@ -91,6 +182,7 @@ def evaluate_structured_pretransfusion_application(
         )
 
     transfusion_time = event_times[0]
+    transfusion_records = _rows(documents, "bloodtrans_record")
     evaluated = []
     for row in applications:
         application_time = _datetime(
@@ -102,11 +194,12 @@ def evaluate_structured_pretransfusion_application(
                 "reason_present": bool(
                     _text(row.get("reason_for_blood") or row.get("transfusion_reason"))
                 ),
-                "indicators": [
-                    field
-                    for field in INDICATOR_FIELDS
-                    if _text(row.get(field)) not in _EMPTY_VALUES
-                ],
+                "indicators": _indicators(row),
+                "source_document_refs": _source_document_refs(
+                    application=row,
+                    transfusion_records=transfusion_records,
+                    transfusion_time=transfusion_time,
+                ),
             }
         )
 
@@ -180,6 +273,55 @@ def evaluate_structured_pretransfusion_application(
     )
 
 
+def build_pretransfusion_reason_candidate(
+    documents: Mapping[str, Any],
+) -> PretransfusionReasonCandidate | None:
+    """只为“指标已确定、申请理由待语义确认”的及时申请单生成单次模型输入。"""
+
+    event_rows = _rows(documents, "mr_bloodtrans")
+    event_times = sorted(
+        {value for row in event_rows if (value := _event_time(row)) is not None}
+    )
+    if not event_times or len(event_times) != len(event_rows):
+        return None
+    transfusion_time = event_times[0]
+    transfusion_records = _rows(documents, "bloodtrans_record")
+    candidates: list[PretransfusionReasonCandidate] = []
+    for index, row in enumerate(_rows(documents, "blood_application"), start=1):
+        application_time = _datetime(row.get("request_datetime") or row.get("request_time"))
+        application_text = _application_text(row)
+        reason_present = bool(
+            _text(row.get("reason_for_blood") or row.get("transfusion_reason"))
+        )
+        indicators = tuple(_indicators(row))
+        if (
+            application_time is None
+            or application_time >= transfusion_time
+            or reason_present
+            or not indicators
+            or not application_text
+        ):
+            continue
+        candidates.append(
+            PretransfusionReasonCandidate(
+                application_ref=(
+                    _text(row.get("application_id") or row.get("document_id"))
+                    or f"blood_application-{index}"
+                ),
+                application_text=application_text[:1200],
+                application_time=application_time,
+                transfusion_time=transfusion_time,
+                indicators=indicators,
+                source_document_refs=_source_document_refs(
+                    application=row,
+                    transfusion_records=transfusion_records,
+                    transfusion_time=transfusion_time,
+                ),
+            )
+        )
+    return max(candidates, key=lambda item: item.application_time) if candidates else None
+
+
 def _outcome(
     *,
     status: str,
@@ -209,5 +351,11 @@ def _outcome(
                 else None
             ),
             "transfusion_time": transfusion_time.isoformat(sep=" "),
+            "source_document_refs": [
+                {"source_type": source_type, "source_document_id": document_id}
+                for source_type, document_id in selected.get(
+                    "source_document_refs", ()
+                )
+            ],
         },
     )

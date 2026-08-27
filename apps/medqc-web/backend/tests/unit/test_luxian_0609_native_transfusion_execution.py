@@ -2617,6 +2617,96 @@ async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_wi
 
 
 @pytest.mark.asyncio
+async def test_044_uses_one_bounded_llm_call_for_legacy_application_reason(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    application_text = "因血红蛋白65g/L申请输注悬浮红细胞2U。"
+    client = _Client(
+        [{
+            "reason_state": "present",
+            "evidence_quote": "因血红蛋白65g/L申请输注",
+            "application_ref": "BA-001",
+        }]
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[
+                {"transfution_datetime": "2026-08-20 14:00:00"}
+            ],
+            blood_application=[{
+                "application_id": "BA-001",
+                "request_datetime": "2026-08-20 09:00:00",
+                "reason_for_blood": "",
+                "hemoglobin": "",
+                "record_content": application_text,
+            }],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "pretransfusion_assessment_complete"
+    )
+    assert result.results[0]["metadata"]["executor_type"] == "llm"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
+    assert application_text in client.prompts[0]
+    assert "daily_course_record" not in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client(
+        [{
+            "reason_state": "present",
+            "evidence_quote": "原文中不存在的理由",
+            "application_ref": "BA-001",
+        }]
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[
+                {"transfution_datetime": "2026-08-20 14:00:00"}
+            ],
+            blood_application=[{
+                "application_id": "BA-001",
+                "request_datetime": "2026-08-20 09:00:00",
+                "reason_for_blood": "",
+                "hemoglobin": "",
+                "record_content": "因血红蛋白65g/L申请输注悬浮红细胞2U。",
+            }],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_llm_invalid_output"
+    )
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_048_does_not_claim_three_document_mismatch_before_comparison_contract(
     monkeypatch,
 ):

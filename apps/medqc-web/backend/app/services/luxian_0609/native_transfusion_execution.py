@@ -18,6 +18,8 @@ from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .pretransfusion_assessment import (
+    PretransfusionReasonCandidate,
+    build_pretransfusion_reason_candidate,
     evaluate_structured_pretransfusion_application,
 )
 from .source_evidence_reader import read_luxian_0609_native_source_rows
@@ -1332,6 +1334,63 @@ def _046_component_prompt(*, document_ref: str, record_text: str) -> str:
     )
 
 
+def _044_reason_prompt(candidate: PretransfusionReasonCandidate) -> str:
+    """044专用语义提取：只确认这一张申请单是否写明申请输血的临床理由。"""
+
+    return (
+        "你只核对下面这一张输血申请单是否明确写出申请输血的临床理由。\n"
+        "不得根据检验数值、拟输血成分、剂量或医学常识自行推断理由。\n"
+        "reason_state=present时，evidence_quote必须逐字摘自原文并直接表达申请理由；"
+        "无法确定时返回uncertain。\n"
+        "仅输出严格JSON，不要解释："
+        '{"reason_state":"present|absent|uncertain","evidence_quote":"",'
+        '"application_ref":""}\n'
+        f"application_ref: {candidate.application_ref}\n"
+        "输血申请单正文：\n"
+        f"{candidate.application_text}"
+    )
+
+
+def _parse_044_reason_response(
+    response: Mapping[str, Any],
+) -> Mapping[str, str] | None:
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>", "", _response_text(response), flags=re.IGNORECASE
+    ).strip()
+    try:
+        payload = json.loads(cleaned)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, Mapping) or set(payload) != {
+        "reason_state",
+        "evidence_quote",
+        "application_ref",
+    }:
+        return None
+    if any(not isinstance(value, str) for value in payload.values()):
+        return None
+    normalized = {key: payload[key].strip() for key in payload}
+    if normalized["reason_state"] not in {"present", "absent", "uncertain"}:
+        return None
+    return normalized
+
+
+def _validated_044_reason_state(
+    payload: Mapping[str, str],
+    *,
+    candidate: PretransfusionReasonCandidate,
+) -> str | None:
+    if payload.get("application_ref") != candidate.application_ref:
+        return None
+    state = payload.get("reason_state") or ""
+    quote = payload.get("evidence_quote") or ""
+    if state == "present":
+        return state if quote and quote in candidate.application_text else None
+    if state in {"absent", "uncertain"}:
+        return state if not quote or quote in candidate.application_text else None
+    return None
+
+
 def _parse_046_component_response(
     response: Mapping[str, Any],
 ) -> Mapping[str, str] | None:
@@ -2237,6 +2296,78 @@ async def execute_luxian_0609_native_transfusion_rules(
         # 只有不能定论时才检查日常病程等辅助投影并进入裁剪模型。
         if rule_id == "LX0609-044":
             programmatic_status = _programmatic_044_status(documents)
+            reason_candidate = build_pretransfusion_reason_candidate(documents)
+            needs_reason_semantics = (
+                programmatic_status is not None
+                and len(programmatic_status) == 3
+                and programmatic_status[0:2]
+                == (
+                    "non_compliant",
+                    "pretransfusion_assessment_incomplete",
+                )
+                and list(programmatic_status[2].get("missing_fields") or [])
+                == ["application_reason"]
+                and reason_candidate is not None
+            )
+            if needs_reason_semantics:
+                if llm_client is None:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "transfusion_llm_unavailable",
+                        executor_type="program",
+                    )
+                    continue
+                llm_call_count += 1
+                try:
+                    response = await llm_client.generate(
+                        _044_reason_prompt(reason_candidate)
+                    )
+                except Exception:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "transfusion_llm_failure",
+                        executor_type="llm",
+                    )
+                    continue
+                prompt, completion, total, elapsed = _usage(response)
+                prompt_tokens += prompt
+                completion_tokens += completion
+                total_tokens += total
+                api_time += elapsed
+                reason_payload = _parse_044_reason_response(response)
+                reason_state = (
+                    _validated_044_reason_state(
+                        reason_payload,
+                        candidate=reason_candidate,
+                    )
+                    if reason_payload is not None
+                    else None
+                )
+                if reason_state in {None, "uncertain"}:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "transfusion_llm_invalid_output",
+                        executor_type="llm",
+                    )
+                    continue
+                reason_present = reason_state == "present"
+                emit_outcome(
+                    rule_id,
+                    "compliant" if reason_present else "non_compliant",
+                    (
+                        "pretransfusion_assessment_complete"
+                        if reason_present
+                        else "pretransfusion_assessment_incomplete"
+                    ),
+                    executor_type="llm",
+                    display_facts=reason_candidate.display_facts(
+                        reason_present=reason_present
+                    ),
+                )
+                continue
             if programmatic_status is not None:
                 status, reason_code = programmatic_status[:2]
                 display_facts = (

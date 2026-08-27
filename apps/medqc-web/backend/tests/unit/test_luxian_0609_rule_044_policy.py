@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
 from app.services.luxian_0609_result_aggregator import (
+    _customer_evidence_from_display_facts,
     safe_luxian_0609_customer_display_facts,
 )
 
@@ -71,6 +72,23 @@ def test_044_requires_both_application_reason_and_objective_indicator() -> None:
         "pretransfusion_assessment_incomplete",
     )
     assert indicator_result[2]["missing_fields"] == ["laboratory_indicator"]
+
+
+def test_044_extracts_numeric_indicator_from_legacy_application_content() -> None:
+    application = _application(
+        reason_for_blood="",
+        hemoglobin="",
+        record_content="因血红蛋白65g/L申请输注悬浮红细胞2U。",
+    )
+
+    status, reason_code, facts = transfusion._programmatic_044_status(
+        _documents(applications=[application])
+    )
+
+    assert status == "non_compliant"
+    assert reason_code == "pretransfusion_assessment_incomplete"
+    assert facts["assessment_indicators"] == ["hemoglobin"]
+    assert facts["missing_fields"] == ["application_reason"]
 
 
 def test_044_rejects_application_completed_after_transfusion() -> None:
@@ -147,3 +165,32 @@ def test_044_customer_projection_preserves_controlled_times_and_conflict_delta()
         "transfusion_time": "2026-08-20 14:00:00",
         "elapsed_minutes": 60,
     }
+
+
+def test_044_projects_application_and_transfusion_record_locators() -> None:
+    raw = {
+        "verification_kind": "pretransfusion_assessment_complete",
+        "performed_transfusion_confirmed": True,
+        "checked_fields": ["application_reason", "laboratory_indicator"],
+        "missing_fields": [],
+        "application_time": "2026-08-20 09:00:00",
+        "transfusion_time": "2026-08-20 14:00:00",
+        "source_document_refs": [
+            {
+                "source_type": "blood_application",
+                "source_document_id": "BA-001",
+            },
+            {
+                "source_type": "bloodtrans_record",
+                "source_document_id": "BT-001",
+            },
+        ],
+    }
+
+    assert _customer_evidence_from_display_facts(
+        rule_id="LX0609-044", raw=raw
+    ) == raw["source_document_refs"]
+    assert "source_document_refs" not in (
+        safe_luxian_0609_customer_display_facts(rule_id="LX0609-044", raw=raw)
+        or {}
+    )
