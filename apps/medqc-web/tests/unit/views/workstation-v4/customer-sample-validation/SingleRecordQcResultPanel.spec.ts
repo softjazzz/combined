@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CriterionResultBlock from '@/views/workstation-v4/customer-sample-validation/CriterionResultBlock.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
@@ -185,6 +185,25 @@ const explainedDataGapItem = {
 }
 
 describe('SingleRecordQcResultPanel', () => {
+  it('一键复制全部质控结论和服务端判定依据用于调试', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
+
+    await wrapper.get('[data-testid="copy-qc-debug-results"]').trigger('click')
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+
+    const copied = String(writeText.mock.calls[0]?.[0] || '')
+    expect(copied).toContain('LX0609-018 主诉能导出第一诊断')
+    expect(copied).toContain('质控结论：主诉共14字')
+    expect(copied).toContain('受控子结论 criterion_results')
+    expect(copied).toContain('关键证据 evidence')
+    expect(copied).toContain('LX0609-003 手术记录：手术后24小时内是否完成')
+  })
+
   it('默认以紧凑摘要展示，客户可明确展开和收起完整详情', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [items[0]!] } })
     const trigger = wrapper.get('[data-testid="single-record-result-toggle"]')
