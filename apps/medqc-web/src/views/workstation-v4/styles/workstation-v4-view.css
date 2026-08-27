@@ -1068,6 +1068,58 @@
     var(--workstation-shadow-input) !important;
 }
 
+/* 病历池筛选条统一规格；放在工作台通用控件规则之后，避免 Ant large 尺寸重新覆盖。 */
+.workstation-shell .wv4-record-pool-hero .workbench-filter-toolbar {
+  font-family:
+    'Source Han Sans SC', 'SF Pro Text', Inter, 'PingFang SC', 'Microsoft YaHei UI', system-ui,
+    sans-serif;
+}
+
+.workstation-shell .wv4-record-pool-hero .ant-input-affix-wrapper,
+.workstation-shell .wv4-record-pool-hero .ant-select-selector,
+.workstation-shell .wv4-record-pool-hero .ant-picker,
+.workstation-shell .wv4-record-pool-hero .workbench-hosp-filter,
+.workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
+  height: 42px !important;
+  min-height: 42px !important;
+}
+
+.workstation-shell .wv4-record-pool-hero .ant-input,
+.workstation-shell .wv4-record-pool-hero .ant-input-affix-wrapper input,
+.workstation-shell .wv4-record-pool-hero .ant-select-selection-item,
+.workstation-shell .wv4-record-pool-hero .ant-select-selection-placeholder,
+.workstation-shell .wv4-record-pool-hero .ant-picker-input > input,
+.workstation-shell .wv4-record-pool-hero .ant-segmented-item-label,
+.workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
+  font-family: inherit !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+}
+
+.workstation-shell .wv4-record-pool-hero .workbench-hosp-filter__label {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.workstation-shell .wv4-record-pool-hero .workbench-hosp-segmented {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.workstation-shell .wv4-record-pool-hero .workbench-dept-select__name {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
+  padding-inline: 18px !important;
+}
+
 .workstation-shell :deep(.ant-pagination) {
   display: flex;
   align-items: center;
