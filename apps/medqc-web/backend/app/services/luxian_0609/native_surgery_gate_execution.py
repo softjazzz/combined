@@ -241,6 +241,22 @@ def _first_source_document_id(
     return ""
 
 
+def _source_document_refs(
+    rows: Sequence[Mapping[str, Any]], *, source_type: str
+) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        document_id = _clean(row.get("document_id") or row.get("id"))
+        if not document_id or document_id in seen:
+            continue
+        seen.add(document_id)
+        refs.append({"source_type": source_type, "source_document_id": document_id})
+        if len(refs) == 8:
+            break
+    return refs
+
+
 def _row_text(row: Mapping[str, Any]) -> str:
     approved_keys = (
         "content",
@@ -1986,6 +2002,10 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                             },
                         )
                     else:
+                        trigger_refs = _source_document_refs(
+                            rows_by_source["surgery_record"],
+                            source_type="surgery_record",
+                        )
                         pending_outcomes[rule_id] = _SurgeryTextOutcome(
                             rule_id,
                             "non_compliant",
@@ -1994,6 +2014,11 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                                 "failure_kind": "surgery_consent_document_missing",
                                 "consent_state": "missing",
                                 "performed_surgery_confirmed": True,
+                                **(
+                                    {"source_document_refs": trigger_refs}
+                                    if trigger_refs
+                                    else {}
+                                ),
                             },
                         )
                 elif consent_state != "available":

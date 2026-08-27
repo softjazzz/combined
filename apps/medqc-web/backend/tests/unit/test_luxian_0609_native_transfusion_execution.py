@@ -1870,6 +1870,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([])
     record_without_purpose = {
+        "document_id": "blood-record-1",
         "content": (
             "2026年6月5日14:20开始输注红细胞2U，"
             "2026年6月5日16:10输血结束。"
@@ -1923,6 +1924,12 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
                 "indication",
                 "laboratory_indicator",
             ],
+            "source_document_refs": [
+                {
+                    "source_type": "bloodtrans_record",
+                    "source_document_id": "blood-record-1",
+                }
+            ],
         },
         "LX0609-046": {
             "failure_kind": "transfusion_course_record_incomplete",
@@ -1939,6 +1946,7 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             ],
             "missing_fields": ["reason_or_indication"],
             "missing_field_record_counts": {"reason_or_indication": 1},
+            "source_document_ids": ["blood-record-1"],
         },
         "LX0609-047": {
             "failure_kind": "posttransfusion_evaluation_missing",
@@ -1946,11 +1954,44 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             "threshold_hours": 24,
             "checked_sources": ["bloodtrans_record", "daily_course_record"],
             "transfusion_end_time": "2026-06-05 16:10:00",
+            "source_document_refs": [
+                {
+                    "source_type": "bloodtrans_record",
+                    "source_document_id": "blood-record-1",
+                }
+            ],
         },
     }
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+def test_041_missing_consent_keeps_transfusion_trigger_reference() -> None:
+    status, reason, facts = transfusion._programmatic_041_status(
+        {
+            "bloodtrans_record": [
+                {
+                    "document_id": "blood-record-1",
+                    "record_content": "输注红细胞2U，过程平稳。",
+                }
+            ],
+            "consent_form": [],
+            "__logical_source_states__": {
+                "bloodtrans_record": "available",
+                "consent_form": "empty",
+            },
+        }
+    )
+
+    assert (status, reason) == ("non_compliant", "transfusion_consent_missing")
+    assert facts is not None
+    assert facts["source_document_refs"] == [
+        {
+            "source_type": "bloodtrans_record",
+            "source_document_id": "blood-record-1",
+        }
+    ]
 
 
 def test_045_explicit_missing_course_and_complete_empty_source_are_non_compliant():

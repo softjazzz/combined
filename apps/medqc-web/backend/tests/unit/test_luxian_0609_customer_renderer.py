@@ -1125,6 +1125,47 @@ def test_061_one_second_negative_interval_renders_a_time_conflict() -> None:
     )
 
 
+def test_061_missing_record_time_does_not_render_none_values() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-061",
+        facts={
+            "failure_kind": "discharge_record_timeliness_check",
+            "discharge_time": "2026-07-13 15:15:00",
+            "record_time": None,
+            "threshold_hours": 24,
+            "actual_interval_hours": None,
+        },
+    )
+
+    assert finding == (
+        "已取得权威出院时间 2026-07-13 15:15:00，但未取得出院记录完成时间，"
+        "暂无法判断是否在出院后 24 小时内完成。"
+    )
+    assert "None" not in finding
+
+
+def test_058_missing_drug_start_time_does_not_claim_expert_support_absent() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-058",
+        facts={
+            "failure_kind": "special_antimicrobial_expert_support_check",
+            "special_antimicrobials": ["美罗培南"],
+            "expert_support_present": False,
+            "first_antimicrobial_time": None,
+            "expert_support_time": None,
+            "support_before_use": False,
+            "unmatched_special_antimicrobials": [],
+            "association_ambiguous": False,
+        },
+    )
+
+    assert finding == (
+        "已识别特殊级抗菌药物 美罗培南 计划，但缺少计划开始/启用时间，"
+        "暂无法判断专家支持记录是否在用药前完成。"
+    )
+    assert "未找到专家" not in finding
+
+
 def test_020_customer_finding_lists_missing_recommendations_by_episode_and_action_type():
     facts = {
         "verification_kind": "consultation_execution_relation_check",
@@ -1457,7 +1498,7 @@ def test_renderer_explains_data_gap_as_system_evidence_condition(
     assert "请补充或同步所需数据" not in result["suggestion"]
 
 
-def test_029_missing_surgery_time_does_not_claim_summary_linkage_failure():
+def test_029_missing_surgery_time_explains_confirmed_trigger_and_linkage_gap():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
             rule_id="LX0609-029",
@@ -1474,10 +1515,9 @@ def test_029_missing_surgery_time_does_not_claim_summary_linkage_failure():
     result = render_luxian_0609_customer_result(decision=decision)
 
     assert result["findings"] == (
-        "当前缺少用于确认手术已实施的权威时间，暂时无法完成核对"
+        "已确认本次存在已实施手术，但缺少手术实施时间，"
+        "暂无法将术前小结与同一次手术准确关联"
     )
-    assert "术前小结" not in result["findings"]
-    assert "单台手术关联" not in result["findings"]
 
 
 def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> None:

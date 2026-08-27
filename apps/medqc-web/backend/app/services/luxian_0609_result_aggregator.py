@@ -4360,6 +4360,38 @@ def _customer_evidence_from_display_facts(
         )
 
     source_document_id = valid_document_id(raw.get("source_document_id"))
+    exact_trigger_sources = {
+        "LX0609-033": {"surgery_record"},
+        "LX0609-040": {"mr_surgery"},
+        "LX0609-041": {"bloodtrans_record"},
+        "LX0609-047": {"bloodtrans_record"},
+    }
+    allowed_exact_sources = exact_trigger_sources.get(rule_id)
+    if allowed_exact_sources is not None:
+        raw_refs = raw.get("source_document_refs")
+        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
+            located: list[dict[str, str]] = []
+            seen: set[tuple[str, str]] = set()
+            for item in raw_refs:
+                if not isinstance(item, Mapping) or set(item) != {
+                    "source_type",
+                    "source_document_id",
+                }:
+                    return []
+                source_type = str(item.get("source_type") or "").strip()
+                document_id = valid_document_id(item.get("source_document_id"))
+                key = (source_type, document_id)
+                if (
+                    source_type not in allowed_exact_sources
+                    or not document_id
+                    or key in seen
+                ):
+                    return []
+                seen.add(key)
+                located.append(
+                    {"source_type": source_type, "source_document_id": document_id}
+                )
+            return located
     if rule_id == "LX0609-044":
         allowed_source_types = {"blood_application", "bloodtrans_record"}
         raw_refs = raw.get("source_document_refs")

@@ -838,7 +838,10 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
 def _empty_033_consent_session(*, readiness_complete: bool):
     def reader(**kwargs):
         rows = (
-            ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            ({
+                "document_id": "surgery-trigger-1",
+                "surgery_begin_time": "2026-01-01 08:00:00+08",
+            },)
             if kwargs["source_key"] == "surgery_record"
             else ()
         )
@@ -937,6 +940,12 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
                 "failure_kind": "surgery_consent_document_missing",
                 "consent_state": "missing",
                 "performed_surgery_confirmed": True,
+                "source_document_refs": [
+                    {
+                        "source_type": "surgery_record",
+                        "source_document_id": "surgery-trigger-1",
+                    }
+                ],
             },
         ),
     )

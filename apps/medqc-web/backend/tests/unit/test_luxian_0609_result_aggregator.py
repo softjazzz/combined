@@ -26,12 +26,78 @@ from app.services.luxian_0609.decision_reducer import (
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609_result_aggregator import (
+    _customer_evidence_from_display_facts,
     aggregate_luxian_0609_results,
     safe_luxian_0609_customer_display_facts,
 )
 
 CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts", "expected"),
+    [
+        (
+            "LX0609-033",
+            {
+                "failure_kind": "surgery_consent_document_missing",
+                "consent_state": "missing",
+                "performed_surgery_confirmed": True,
+                "source_document_refs": [
+                    {"source_type": "surgery_record", "source_document_id": "surgery-1"}
+                ],
+            },
+            [{"source_type": "surgery_record", "source_document_id": "surgery-1"}],
+        ),
+        (
+            "LX0609-040",
+            {
+                "failure_kind": "level4_mdt_absent",
+                "performed_surgery_confirmed": True,
+                "procedure_kind": "surgery",
+                "effective_surgery_level": "四级",
+                "surgery_level_source": "national_catalog",
+                "procedure_name": "四级手术",
+                "mdt_discussion_state": "missing",
+                "source_document_refs": [
+                    {"source_type": "mr_surgery", "source_document_id": "surgery-event-1"}
+                ],
+            },
+            [{"source_type": "mr_surgery", "source_document_id": "surgery-event-1"}],
+        ),
+        (
+            "LX0609-041",
+            {
+                "failure_kind": "transfusion_consent_missing",
+                "performed_transfusion_confirmed": True,
+                "checked_source": "blood_transfusion_consent",
+                "source_document_refs": [
+                    {"source_type": "bloodtrans_record", "source_document_id": "blood-1"}
+                ],
+            },
+            [{"source_type": "bloodtrans_record", "source_document_id": "blood-1"}],
+        ),
+        (
+            "LX0609-047",
+            {
+                "failure_kind": "posttransfusion_evaluation_missing",
+                "performed_transfusion_confirmed": True,
+                "threshold_hours": 24,
+                "checked_sources": ["bloodtrans_record", "daily_course_record"],
+                "transfusion_end_time": "2026-08-20 10:00:00",
+                "source_document_refs": [
+                    {"source_type": "bloodtrans_record", "source_document_id": "blood-1"}
+                ],
+            },
+            [{"source_type": "bloodtrans_record", "source_document_id": "blood-1"}],
+        ),
+    ],
+)
+def test_determined_missing_results_keep_exact_trigger_evidence(
+    rule_id, facts, expected
+) -> None:
+    assert _customer_evidence_from_display_facts(rule_id=rule_id, raw=facts) == expected
 
 
 def test_058_safe_projection_keeps_only_timed_expert_support_facts() -> None:

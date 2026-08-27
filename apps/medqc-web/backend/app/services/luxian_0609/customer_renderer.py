@@ -441,6 +441,11 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-029", "authoritative_time_missing"): (
+        "已确认本次存在已实施手术，但缺少手术实施时间，暂无法将术前小结与同一次手术准确关联",
+        "已读取本次手术及术前小结资料；当前缺少可用于单台手术关联的实施时间，不能据此认定术前小结缺失。",
+        "请核对本次手术实施时间后重新评估。",
+    ),
     ("LX0609-050", "diagnosis_scope_uncertain"): (
         "病程出现局部待查表述，暂无法确认是否需要疑难病例讨论",
         "现有资料无法确认该表述是否表示本次住院整体诊断仍不明确，不能据此认定缺少疑难病例讨论。",
@@ -2310,6 +2315,11 @@ def customer_finding_from_controlled_facts(
             return f"已核对特殊级抗菌药物 {medicines}；现有专家支持记录未明确关联到具体药物计划开始/启用事件，暂无法逐项核对计划启用前支持。"
         if unmatched and len(facts.get("special_antimicrobials") or ()) > 1:
             return f"已核对特殊级抗菌药物 {medicines}；其中 {unmatched} 未找到可关联的计划启用前专家支持记录。"
+        if not planned_start_time:
+            return (
+                f"已识别特殊级抗菌药物 {medicines} 计划，但缺少计划开始/启用时间，"
+                "暂无法判断专家支持记录是否在用药前完成。"
+            )
         if facts.get("support_before_use") is True:
             return (
                 f"已确认特殊级抗菌药物 {medicines} 计划开始/启用时间为 "
@@ -2333,6 +2343,20 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-061" and kind == "discharge_record_timeliness_check":
         interval = facts.get("actual_interval_hours")
+        discharge_time = facts.get("discharge_time")
+        record_time = facts.get("record_time")
+        if discharge_time and not record_time:
+            return (
+                f"已取得权威出院时间 {discharge_time}，但未取得出院记录完成时间，"
+                "暂无法判断是否在出院后 24 小时内完成。"
+            )
+        if record_time and not discharge_time:
+            return (
+                f"已取得出院记录完成时间 {record_time}，但未取得权威出院时间，"
+                "暂无法判断是否在出院后 24 小时内完成。"
+            )
+        if not discharge_time and not record_time:
+            return "未取得权威出院时间和出院记录完成时间，暂无法核对 24 小时完成时限。"
         if isinstance(interval, (int, float)) and interval < 0:
             lead_duration = _format_exact_elapsed_duration(
                 started_at=facts.get("record_time"),

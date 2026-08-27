@@ -655,6 +655,22 @@ async def execute_luxian_0609_native_mdt_rule(
                 "not_applicable", "trigger_absent", "level4_surgery_absent"
             )
         )
+    trigger_refs: list[dict[str, str]] = []
+    seen_trigger_ids: set[str] = set()
+    for row in level4:
+        source_document_id = str(
+            row.get("surgery_id") or row.get("document_id") or row.get("id") or ""
+        ).strip()
+        if not source_document_id or source_document_id in seen_trigger_ids:
+            continue
+        seen_trigger_ids.add(source_document_id)
+        trigger_refs.append(
+            {"source_type": "mr_surgery", "source_document_id": source_document_id}
+        )
+        if len(trigger_refs) == 8:
+            break
+    if trigger_refs:
+        display_facts["source_document_refs"] = trigger_refs
     level4_session_times = {
         start
         for row in level4

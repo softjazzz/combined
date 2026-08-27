@@ -775,6 +775,29 @@ def _transfusion_consent_rows(
     return rows
 
 
+def _source_document_refs(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    source_type: str,
+    identity_fields: Sequence[str] = ("document_id",),
+) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        document_id = ""
+        for field in identity_fields:
+            document_id = _clean(row.get(field))
+            if document_id:
+                break
+        if not document_id or document_id in seen:
+            continue
+        seen.add(document_id)
+        refs.append({"source_type": source_type, "source_document_id": document_id})
+        if len(refs) == 8:
+            break
+    return refs
+
+
 def _programmatic_041_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str, Mapping[str, Any] | None]:
@@ -785,6 +808,10 @@ def _programmatic_041_status(
     if state == "error":
         return "technical_error", "source_query_error", None
     if not consent_rows:
+        trigger_refs = _source_document_refs(
+            _source_document_rows(documents, "bloodtrans_record"),
+            source_type="bloodtrans_record",
+        )
         return (
             "non_compliant",
             "transfusion_consent_missing",
@@ -792,6 +819,7 @@ def _programmatic_041_status(
                 "failure_kind": "transfusion_consent_missing",
                 "performed_transfusion_confirmed": True,
                 "checked_source": "blood_transfusion_consent",
+                **({"source_document_refs": trigger_refs} if trigger_refs else {}),
             },
         )
     return (
@@ -1893,6 +1921,18 @@ def _programmatic_transfusion_display_facts(
             "checked_fields": sorted(checked),
             "missing_fields": missing,
         }
+        source_refs = [
+            *_source_document_refs(
+                _source_document_rows(documents, "blood_application"),
+                source_type="blood_application",
+                identity_fields=("application_id", "document_id", "id"),
+            )[:1],
+            *_source_document_refs(
+                records, source_type="bloodtrans_record"
+            )[:1],
+        ]
+        if source_refs:
+            payload["source_document_refs"] = source_refs
         if status == "compliant":
             payload["verification_kind"] = "pretransfusion_assessment_complete"
         else:
@@ -2000,6 +2040,11 @@ def _programmatic_transfusion_display_facts(
             "threshold_hours": 24,
             "checked_sources": ["bloodtrans_record", "daily_course_record"],
         }
+        source_refs = _source_document_refs(
+            records, source_type="bloodtrans_record"
+        )
+        if source_refs:
+            facts["source_document_refs"] = source_refs
         if latest_end is not None:
             facts["transfusion_end_time"] = latest_end.isoformat(sep=" ")
         if evaluation_times:
