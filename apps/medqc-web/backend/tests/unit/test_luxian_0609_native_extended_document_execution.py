@@ -884,6 +884,35 @@ async def test_061_preserves_a_one_second_negative_interval_for_customer_display
 
 
 @pytest.mark.asyncio
+async def test_061_does_not_use_business_discharge_time_as_document_completion_time() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": (
+                {
+                    "patient_status": "出院",
+                    "discharge_datetime": "2026-07-01 15:15:00",
+                },
+            ),
+            "discharge_record": (
+                {
+                    "discharge_time": "2026-07-01 15:15:00",
+                    "record_time": None,
+                    "submit_datetime": None,
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+    facts = dict(result.customer_display_facts)["LX0609-061"]
+    assert facts["discharge_time"] == "2026-07-01 15:15:00"
+    assert facts["record_time"] is None
+    assert facts["actual_interval_hours"] is None
+
+
+@pytest.mark.asyncio
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-064",
@@ -906,6 +935,57 @@ async def test_064_requires_three_dates_and_surgeon_round() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
+
+
+@pytest.mark.asyncio
+async def test_064_fails_closed_when_surgeon_identity_is_anonymized() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E-anonymized",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-01 10:00:00+08",
+                    "surgeon": "陈某医师",
+                },
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-07-02 08:00:00", "author_name": "张医生"},
+                {"record_time": "2026-07-03 08:00:00", "author_name": "李医生"},
+                {"record_time": "2026-07-04 08:00:00", "author_name": "王医生"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+    assert "LX0609-064" not in dict(result.customer_display_facts)
+
+
+@pytest.mark.asyncio
+async def test_064_uses_comparable_surgeon_when_anonymized_alias_is_also_present() -> None:
+    _result, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E-mixed-identity",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-01 10:00:00+08",
+                    "surgeon": "陈某医师",
+                    "surgeon_sign": "张医生",
+                },
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-07-02 08:00:00", "author_name": "张医生"},
+                {"record_time": "2026-07-03 08:00:00", "author_name": "李医生"},
+                {"record_time": "2026-07-04 08:00:00", "author_name": "王医生"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
 
 
 @pytest.mark.asyncio

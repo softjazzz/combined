@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping, Sequence
 
-from .shared import _row_time
+from ..source_evidence_reader import authoritative_document_time_value
+from .shared import _parse_datetime
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,12 @@ def evaluate_discharge_documentation_timeliness(
         (
             candidate
             for row in discharge_rows
-            if (candidate := _row_time(row)) is not None
+            if (
+                candidate := _parse_datetime(
+                    authoritative_document_time_value(row)
+                )
+            )
+            is not None
         ),
         None,
     )

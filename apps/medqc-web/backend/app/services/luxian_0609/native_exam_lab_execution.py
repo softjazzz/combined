@@ -81,13 +81,6 @@ _PRESENT_FACT_STATES = frozenset({"present", "performed", "available", "positive
 _ABSENT_FACT_STATES = frozenset({"explicit_negative", "absent", "not_present"})
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _STRONG_SEMANTIC_PATTERNS = {
-    "LX0609-010": re.compile(
-        r"(?:"
-        r"(?:为明确|明确|鉴别|因.{0,24}).{0,24}(?:CT|MRI|计算机断层|磁共振)"
-        r"|(?:CT|MRI|计算机断层|磁共振).{0,30}(?:查明|明确|鉴别).{0,16}(?:原因|病因)"
-        r")",
-        re.IGNORECASE,
-    ),
     "LX0609-011": re.compile(
         r"(?:CT|MRI|计算机断层|磁共振|影像(?:报告|提示)?).{0,30}"
         r"(?:未见(?:明显)?异常|未见明确病变|占位|病变|梗死|出血|炎症|结节|肿块|积液|异常|突出|受压)",
@@ -183,7 +176,6 @@ _EXAM_ORDER_NAME_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 _CANCELLED_ORDER_PATTERN = re.compile(r"撤销|作废|取消")
-_REASON_COURSE_PATTERN = re.compile(r"因|为明确|为排除|评估|了解|复查|拟行|完善|目的")
 _RESULT_COURSE_PATTERN = re.compile(
     r"提示|显示|结果|结合|诊断意见|未见|发现|阳性|阴性|无生长|检出|分离|"
     r"血肿|出血|梗死|骨折|异常|菌|\d+\+|敏感|耐药"
@@ -463,14 +455,14 @@ def _effective_target_orders(
     )
 
 
-def _order_based_exam_reason_outcome(
+def _order_exam_structure_outcome(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> _ExamLabOutcome | None:
-    """按省手册顺序核对 010，全部关联只使用受控业务键或唯一时间关系。
+    """只校验010的结构化医嘱、检查与报告合同，语义交给受控LLM。
 
-    顺序为：病程—医嘱一致、已执行检查报告完整、检查前病程原因。一个
-    ``exam_master`` 必须由唯一 ``order_id`` 关联到一条目标医嘱；报告只允许
-    以 ``exam_id`` 关联。不能证明唯一关系时失败关闭，绝不按文字或数量猜测。
+    ``order_id`` 与 ``exam_id`` 是唯一允许的关联键。结构完整时返回 ``None``，
+    让后续事实投影按权威检查时间截取病程；关联不完整时失败关闭，模型不得
+    猜测事件归属或权威时间。
     """
 
     orders = _effective_target_orders(rows_by_source, fact_kind="exam")
@@ -501,15 +493,13 @@ def _order_based_exam_reason_outcome(
         # 已撤销的目标医嘱不产生检查触发；病程中的既往计划不能据此构成
         # “病程有检查、无医嘱”的缺陷。
         return None
-    if course_rows and not orders:
-        # 只有没有正式检查主表时，才可将病程中的明确检查记录判为无医嘱。
-        # 已有主表但关联键缺失时不得将其忽略并形成缺陷。
-        if not exam_rows:
-            return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_course_without_order")
-        return None
+    if course_rows and not orders and not exam_rows:
+        return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_course_without_order")
     if not orders:
-        # 只有结构化检查主表而病程未明确记录目标检查时，沿用既有文本事实
-        # 路径；不能仅因缺少订单行便认定“病程有检查、无医嘱”。
+        # 正式检查行若声明了order_id，则完整医嘱集中找不到该键属于关联冲突；
+        # 只有检查来源本身不提供order_id时，才按院方“仅报告”能力继续核对。
+        if any(_clean(row.get("order_id")) for row in exam_rows):
+            return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
         return None
 
     # 已识别到目标医嘱或检查主表，但其正式业务键缺失时，不能回退到仅按
@@ -532,81 +522,8 @@ def _order_based_exam_reason_outcome(
             return _ExamLabOutcome("LX0609-010", "data_gap", "authoritative_order_time_missing")
         orders_by_id[order_id] = (order_time, order)
 
-    def associate_course_rows(
-        order_events: Sequence[tuple[str, datetime]],
-    ) -> dict[str, tuple[Mapping[str, Any], ...]] | _ExamLabOutcome:
-        """为每条医嘱建立唯一病程关联，缺失主表时也不允许任意覆盖。"""
-
-        has_course_order_id = any(_clean(row.get("order_id")) for row in course_rows)
-        rows_by_order: dict[str, tuple[Mapping[str, Any], ...]] = {}
-        if has_course_order_id:
-            for order_id, _order_time in order_events:
-                linked_rows = tuple(
-                    row for row in course_rows if _clean(row.get("order_id")) == order_id
-                )
-                if not linked_rows:
-                    return _ExamLabOutcome(
-                        "LX0609-010", "non_compliant", "exam_order_course_missing"
-                    )
-                rows_by_order[order_id] = linked_rows
-            return rows_by_order
-        if len(order_events) == 1:
-            rows_by_order[order_events[0][0]] = course_rows
-            return rows_by_order
-
-        # 病程表没有 order_id 时，允许以“完整检查名称 + 检查前最近权威时间”
-        # 建立唯一关系。不同检查不得复用同一病程；无法唯一关联时失败关闭。
-        used_course_rows: set[int] = set()
-        for order_id, order_time in sorted(order_events, key=lambda item: item[1]):
-            order_name = _clean(orders_by_id[order_id][1].get("order_name"))
-            candidates: list[tuple[datetime, Mapping[str, Any]]] = []
-            for row in course_rows:
-                record_time = _parse_current_visit_time(
-                    authoritative_document_time_value(row)
-                )
-                if (
-                    not order_name
-                    or record_time is None
-                    or record_time > order_time
-                    or order_name.casefold() not in _row_text(row).casefold()
-                ):
-                    continue
-                candidates.append((record_time, row))
-            if not candidates:
-                return _ExamLabOutcome(
-                    "LX0609-010", "non_compliant", "exam_order_course_missing"
-                )
-            latest_time = max(item[0] for item in candidates)
-            latest_rows = [row for time, row in candidates if time == latest_time]
-            if len(latest_rows) != 1 or id(latest_rows[0]) in used_course_rows:
-                return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
-            used_course_rows.add(id(latest_rows[0]))
-            rows_by_order[order_id] = (latest_rows[0],)
-        return rows_by_order
-
-    # 没有对应检查主表时，仍需逐医嘱核对检查前原因，不能以最早医嘱的结果覆盖全部。
     if not exam_rows:
-        if not course_rows:
-            return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_reason_missing")
-        order_events = tuple(
-            (order_id, order_time)
-            for order_id, (order_time, _order) in orders_by_id.items()
-        )
-        course_rows_by_order = associate_course_rows(order_events)
-        if isinstance(course_rows_by_order, _ExamLabOutcome):
-            return course_rows_by_order
-        for order_id, order_time in order_events:
-            if not any(
-                (record_time := _parse_current_visit_time(authoritative_document_time_value(row)))
-                is not None
-                and record_time <= order_time
-                and _REASON_COURSE_PATTERN.search(_row_text(row))
-                for row in course_rows_by_order[order_id]
-            ):
-                return _ExamLabOutcome(
-                    "LX0609-010", "non_compliant", "exam_order_reason_missing"
-                )
-        return _ExamLabOutcome("LX0609-010", "compliant", "exam_order_reason_recorded")
+        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
 
     exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
     for exam in exam_rows:
@@ -623,24 +540,14 @@ def _order_based_exam_reason_outcome(
     ):
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
 
-    executed = tuple(
-        (order_id, orders_by_id[order_id][0], exams[0])
-        for order_id, exams in exams_by_order.items()
-    )
-    if not course_rows:
-        return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_course_missing")
-    course_rows_by_order = associate_course_rows(
-        tuple((order_id, order_time) for order_id, order_time, _exam in executed)
-    )
-    if isinstance(course_rows_by_order, _ExamLabOutcome):
-        return course_rows_by_order
+    executed = tuple(exams[0] for exams in exams_by_order.values())
 
     report_rows = tuple(
         row
         for row in rows_by_source.get("exam_item_report", ())
         if isinstance(row, Mapping)
     )
-    for _order_id, _order_time, exam in executed:
+    for exam in executed:
         exam_id = _clean(exam.get("exam_id"))
         has_report = any(_clean(row.get("exam_id")) == exam_id for row in report_rows)
         has_master_report_time = _parse_current_visit_time(
@@ -648,18 +555,7 @@ def _order_based_exam_reason_outcome(
         ) is not None
         if not has_report and not has_master_report_time:
             return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_report_missing")
-
-    for order_id, order_time, _exam in executed:
-        candidates = course_rows_by_order[order_id]
-        if not any(
-            (record_time := _parse_current_visit_time(authoritative_document_time_value(row)))
-            is not None
-            and record_time <= order_time
-            and _REASON_COURSE_PATTERN.search(_row_text(row))
-            for row in candidates
-        ):
-            return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_reason_missing")
-    return _ExamLabOutcome("LX0609-010", "compliant", "exam_order_reason_recorded")
+    return None
 
 
 def _order_exam_association_summary(
@@ -985,7 +881,10 @@ def _single_text_fact_outcome(
         return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_missing", refs)
     intervals = tuple(item - event_time for item in course_times if item is not None)
     if rule_id == "LX0609-010":
-        compliant = any(interval.total_seconds() <= 0 for interval in intervals)
+        compliant = any(
+            -timedelta(hours=48) <= interval <= timedelta(0)
+            for interval in intervals
+        )
         if not compliant and projection.course_projection_truncated:
             return _ExamLabOutcome(
                 rule_id, "data_gap", "course_projection_incomplete", refs
@@ -1153,6 +1052,9 @@ def _strong_semantic_fact(
 ) -> ExamLabEventFact | None:
     """提取可由明确短语验证的病程语义；灰区返回 None 交给一次 LLM。"""
 
+    if rule_id == "LX0609-010":
+        # 检查原因依赖整段病程语义，禁止恢复关键词快速判定。
+        return None
     events = events_for_family(
         projection, "exam" if rule_id in EXAM_RULE_IDS else "culture"
     )
@@ -1446,10 +1348,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 rows_by_source[source_key] = material.rows
         if eligible_rule_ids:
             if "LX0609-010" in eligible_rule_ids:
-                # 010 的三项省手册子判定均是结构化、确定性事实，必须在任何
-                # 文本/模型分支之前完成。这样报告缺失和业务键歧义不会被旧的
-                # “检查前原因”语义路径覆盖。
-                order_outcome = _order_based_exam_reason_outcome(rows_by_source)
+                # 医嘱—检查—报告关联先由结构化键完成；只有结构可靠时，
+                # 检查前原因才进入后续48小时病程语义抽取。
+                order_outcome = _order_exam_structure_outcome(rows_by_source)
                 if order_outcome is not None:
                     emit_typed(
                         order_outcome.rule_id,
@@ -1459,22 +1360,6 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             order_outcome,
                             rows_by_source=rows_by_source,
                         ),
-                    )
-                    typed_processed.add("LX0609-010")
-                    eligible_rule_ids.remove("LX0609-010")
-            structured_exam_present = any(
-                _EXAM_TRIGGER_PATTERN.search(_clean(value))
-                for source_key in _TYPED_TRIGGER_SOURCES["exam"]
-                for row in rows_by_source.get(source_key, ())
-                for value in row.values()
-            )
-            if "LX0609-010" in eligible_rule_ids and not structured_exam_present:
-                order_outcome = _order_based_exam_reason_outcome(rows_by_source)
-                if order_outcome is not None:
-                    emit_typed(
-                        order_outcome.rule_id,
-                        order_outcome.status,
-                        order_outcome.reason_code,
                     )
                     typed_processed.add("LX0609-010")
                     eligible_rule_ids.remove("LX0609-010")
@@ -1582,6 +1467,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
                 for rule_id in tuple(eligible_rule_ids):
+                    if rule_id == "LX0609-010":
+                        # 检查原因依赖整段病程语义，不再用关键词提前收口。
+                        continue
                     fact = _strong_semantic_fact(
                         rule_id=rule_id,
                         projection=projection,

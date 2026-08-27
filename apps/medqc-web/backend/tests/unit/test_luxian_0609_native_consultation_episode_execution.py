@@ -2555,6 +2555,174 @@ async def test_020_display_facts_bind_selected_opinion_and_execution_documents(
 
 
 @pytest.mark.asyncio
+async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opinion_document(
+    monkeypatch,
+):
+    """已沟通且有明确暂不执行原因属于该次会诊的闭环决策。"""
+
+    source_rows = {
+        "consultation_record": _rows(
+            "会诊意见：可请消化内科评估；家属强烈要求时建议上级医院。"
+            "已与家属沟通，家属决定暂不处理痔疮。",
+            action_suffix=False,
+        ),
+        "daily_course_record": [],
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "inpat_nondrug_order": [],
+        "exam_master": [],
+        "exam_item_report": [],
+        "labtest_master": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+    source_rows["consultation_record"][0]["document_id"] = "CONSULT-DECISION-1"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    recommendations = [
+        {
+            "source_quote": "可请消化内科评估",
+            "normalized_action": "请消化内科评估",
+            "action_type": "transfer",
+        },
+        {
+            "source_quote": "家属强烈要求时建议上级医院",
+            "normalized_action": "必要时转上级医院",
+            "action_type": "transfer",
+        },
+    ]
+    client = _SequentialClient(
+        _document_payload(
+            _document_fact(
+                "consultation_record-1",
+                application="absent",
+                recommendations=recommendations,
+            )
+        ),
+        {
+            "executions": [
+                {
+                    "recommendation_ref": f"consultation_record-1#r{index}",
+                    "execution_record_state": "specific_trace",
+                    "trace_refs": ["consultation_record-1"],
+                    "confidence": "high",
+                }
+                for index in (1, 2)
+            ]
+        },
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    assert "同一会诊文书" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_023_rechecks_high_generic_label_that_conflicts_with_concrete_action_trace(
+    monkeypatch,
+):
+    """具体执行原文被模型标成笼统时先复核，不能直接形成确定问题。"""
+
+    source_rows = {
+        "consultation_record": _rows(
+            "会诊意见：建议行腕肘CT、冰敷并石膏固定。",
+            action_suffix=False,
+        ),
+        "daily_course_record": _rows(
+            "已安排腕肘CT检查并完成；已给予冰敷及石膏固定，持续观察末梢循环。",
+            hour_start=2,
+            action_suffix=False,
+        ),
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "inpat_nondrug_order": [],
+        "exam_master": [],
+        "exam_item_report": [],
+        "labtest_master": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+    source_rows["consultation_record"][0]["document_id"] = "CONSULT-ACTION-1"
+    source_rows["daily_course_record"][0]["document_id"] = "COURSE-ACTION-1"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    recommendations = [
+        {
+            "source_quote": "行腕肘CT",
+            "normalized_action": "腕肘CT检查",
+            "action_type": "test",
+        },
+        {
+            "source_quote": "冰敷",
+            "normalized_action": "冰敷",
+            "action_type": "procedure",
+        },
+        {
+            "source_quote": "石膏固定",
+            "normalized_action": "石膏固定并观察末梢循环",
+            "action_type": "procedure",
+        },
+    ]
+    client = _SequentialClient(
+        _document_payload(
+            _document_fact("consultation_record-1", recommendations=recommendations)
+        ),
+        {
+            "executions": [
+                {
+                    "recommendation_ref": f"consultation_record-1#r{index}",
+                    "execution_record_state": (
+                        "generic_trace" if index == 1 else "specific_trace"
+                    ),
+                    "trace_refs": ["daily_course_record-1"],
+                    "confidence": "high",
+                }
+                for index in (1, 2, 3)
+            ]
+        },
+        {
+            "executions": [
+                {
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "execution_record_state": "specific_trace",
+                    "trace_refs": ["daily_course_record-1"],
+                    "confidence": "high",
+                }
+            ]
+        },
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 3
+    assert "consultation_record-1#r1" in client.prompts[2]
+    assert "consultation_record-1#r2" not in client.prompts[2]
+
+
+@pytest.mark.asyncio
 async def test_020_023_include_each_authorized_execution_evidence_category_once(monkeypatch):
     """病程为主证据，医嘱、检查、检验、手术均可作为同次执行的结构化佐证。"""
 

@@ -652,6 +652,7 @@ _TITLE_ROUND_MARKER_PATTERN = re.compile(r"(?:查房|巡诊)")
 _TITLE_ROUND_ROLE_DESCRIPTION_PATTERN = re.compile(
     r"(?:术者\s*[:：]|手术由[^，,；;。]*完成)"
 )
+_MASKED_PHYSICIAN_IDENTITY_PATTERN = re.compile(r"(?:某|匿名|脱敏|[*＊×])")
 
 
 def _normalized_physician_token(value: Any) -> str:
@@ -661,6 +662,12 @@ def _normalized_physician_token(value: Any) -> str:
             token = token[: -len(suffix)]
             break
     return token
+
+
+def _physician_identity_is_masked(value: Any) -> bool:
+    """脱敏姓名不能用于证明或否定术者与查房医师是同一人。"""
+
+    return bool(_MASKED_PHYSICIAN_IDENTITY_PATTERN.search(_clean(value)))
 
 
 def _surgery_event_surgeon_tokens(row: Mapping[str, Any]) -> frozenset[str]:
@@ -1872,6 +1879,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     if rule_id == "LX0609-064"
                     else senior_error
                 )
+            elif rule_id == "LX0609-064" and any(
+                event.surgeon_names
+                and all(
+                    _physician_identity_is_masked(name)
+                    for name in event.surgeon_names
+                )
+                for event in surgery_events
+            ):
+                final_state, reason_code = "data_gap", "association_failed"
             else:
                 if rule_id == "LX0609-065":
                     event_facts: list[dict[str, Any]] = []

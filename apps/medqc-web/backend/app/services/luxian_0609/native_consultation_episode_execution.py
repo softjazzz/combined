@@ -88,11 +88,14 @@ _EXECUTION_SOURCE_KEYS = (
     "surgery_record",
 )
 _SNAPSHOT_EXECUTION_SOURCE_KEYS = _EXECUTION_SOURCE_KEYS
-_CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
+_COURSE_EXECUTION_SOURCE_KEYS = frozenset((
     "daily_course_record",
     "senior_course_record",
 ))
-_COURSE_EXECUTION_SOURCE_KEYS = _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+_CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
+    *_COURSE_EXECUTION_SOURCE_KEYS,
+    "consultation_record",
+))
 _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS = frozenset(
     source_key
     for source_key in _EXECUTION_SOURCE_KEYS
@@ -154,6 +157,15 @@ _EXPLICIT_OPINION_CLEAR_PATTERN = re.compile(
 _EXPLICIT_EXECUTION_TRACE_PATTERN = re.compile(
     r"(?:已归纳.{0,12}会诊意见|执行会诊意见|按(?:会诊)?建议|"
     r"根据会诊意见|落实会诊意见|按意见.{0,12}(?:执行|处理|治疗))"
+)
+_EXPLICIT_COMPLETED_ACTION_PATTERN = re.compile(
+    r"(?:已(?:安排|完成|给予|实施|行)|予以|给予|实施|完成|冰敷|石膏固定|观察末梢循环)"
+)
+_EMBEDDED_DECISION_COMMUNICATION_PATTERN = re.compile(
+    r"(?:(?:已|经).{0,8})?(?:与)?(?:患者(?:家属)?|家属).{0,8}(?:沟通|告知|说明)"
+)
+_EMBEDDED_DECISION_DEFER_PATTERN = re.compile(
+    r"(?:患者|家属).{0,16}(?:拒绝|不同意|暂不|暂缓|放弃|决定不|要求不)"
 )
 _EVALUATOR_VERSION = "consultation-episode-v2"
 _SIGNATURE_LABEL = (
@@ -1967,10 +1979,10 @@ def _execution_prompt(
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
     documents_by_ref: dict[str, dict[str, object]] = {}
-    course_candidates = tuple(
+    trace_candidates = tuple(
         candidate
         for candidate in candidates
-        if candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+        if candidate.source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
     )
     # 4.20.4 的主核对对象仍是会诊后的病程记录，但正式资料链已明确：医嘱、
     # 检查、检验和手术可作为同次执行的结构化佐证。不能因为存在病程候选就
@@ -1983,9 +1995,15 @@ def _execution_prompt(
             frozenset((*_EXECUTION_SOURCE_KEYS, "inpat_nondrug_order")),
         )
         for candidate in prompt_candidates:
-            if candidate.source_key not in eligible_sources:
+            embedded_same_episode = (
+                candidate.source_key == "consultation_record"
+                and candidate.ref == item.recommendation.opinion_ref
+            )
+            if candidate.source_key not in eligible_sources and not embedded_same_episode:
                 continue
-            if candidate.observed_time.day > item.opinion_time.day:
+            if embedded_same_episode:
+                include = True
+            elif candidate.observed_time.day > item.opinion_time.day:
                 include = True
             elif candidate.observed_time.day < item.opinion_time.day:
                 include = False
@@ -2020,17 +2038,18 @@ def _execution_prompt(
     }, ensure_ascii=False)
     if len(payload) > _MAX_EXECUTION_PROMPT_CHARS:
         raise _SourceGap()
-    if course_candidates and not any(
+    if trace_candidates and not any(
         candidate.source_key in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS
         for candidate in prompt_candidates
     ):
         return (
-            "你只核对每条会诊建议在后续病程或查房记录中的执行痕迹，不得补充病历之外的信息。"
+            "你只核对每条会诊建议在后续病程、查房或同一会诊文书内明确闭环决策中的执行痕迹，不得补充病历之外的信息。"
             "execution_record_state只能是specific_trace/generic_trace/copied_opinion/no_trace/unknown："
             "specific_trace=明确写出按会诊意见采取的具体措施；generic_trace=仅写遵会诊意见执行或已按建议处理；"
             "copied_opinion=照抄意见但没有归纳执行情况；no_trace=未见该建议的执行记录痕迹；unknown=无法判断。"
             "病程明确记载已经给予、已行、已实施的具体治疗、检查、固定、制动或监测措施，可判specific_trace；"
             "属于specific_trace时必须能由所引病程原文直接核实具体执行动作。"
+            "病程明确写出已安排并完成检查、已给予治疗或已实施固定/冰敷等动作，绝不是generic_trace。"
             "同一治疗类别的多个细项建议，若病程明确记载该治疗类别已经实施、但未逐项重复细项，"
             "可以分别判定已有执行痕迹；不得把跨类别措施合并推断。"
             "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
@@ -2055,6 +2074,8 @@ def _execution_prompt(
         "第二步可辅助判断结构化医嘱/操作候选是否与该建议存在动作对应关系，"
         "但结构化匹配不是020或023的合规硬条件。"
         "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
+        "同一会诊文书仅可关联该文书自身意见中的建议；只有文书在建议后又明确记载已沟通、"
+        "患者或家属拒绝/暂缓执行及具体原因，才属于specific_trace；建议原文本身绝不是执行。"
         "execution_state只描述结构化动作匹配：linked_specific=结构化候选明确落实同一条建议，"
         "linked_vague=结构化候选仅笼统相关，absent=无结构化动作匹配，unknown=无法判断。"
         "daily_course_record和senior_course_record只允许进入trace_refs，不能进入structured_action_refs；"
@@ -2081,6 +2102,47 @@ def _execution_prompt(
     return prompt, allowed_refs
 
 
+def _generic_trace_conflicts_with_completed_action(
+    assessment: _ExecutionAssessment,
+    candidates: Sequence[_CandidateDocument],
+) -> bool:
+    if assessment.execution_record_state not in {"generic_trace", "copied_opinion"}:
+        return False
+    by_ref = {item.ref: item for item in candidates}
+    return any(
+        ref in by_ref and _EXPLICIT_COMPLETED_ACTION_PATTERN.search(by_ref[ref].text)
+        for ref in assessment.trace_refs
+    )
+
+
+def _apply_embedded_decision_traces(
+    assessments: Sequence[_ExecutionAssessment],
+    *,
+    completed: Sequence[_CompletedRecommendation],
+    embedded_refs: frozenset[str],
+) -> tuple[_ExecutionAssessment, ...]:
+    """同次会诊内明确沟通并暂缓/拒绝的决定是可核验闭环事实。"""
+
+    opinion_ref_by_recommendation = {
+        item.recommendation.recommendation_ref: item.recommendation.opinion_ref
+        for item in completed
+    }
+    return tuple(
+        replace(
+            item,
+            confidence="high",
+            execution_record_state="specific_trace",
+            trace_refs=(opinion_ref,),
+            context_only_refs=(opinion_ref,),
+        )
+        if (
+            opinion_ref := opinion_ref_by_recommendation.get(item.recommendation_ref)
+        ) in embedded_refs
+        else item
+        for item in assessments
+    )
+
+
 def _parse_executions(
     payload: Mapping[str, Any],
     *,
@@ -2096,7 +2158,7 @@ def _parse_executions(
     }
     compact_course_only = bool(prompt_candidate_refs) and all(
         ref in candidate_by_ref
-        and candidate_by_ref[ref].source_key in _COURSE_EXECUTION_SOURCE_KEYS
+        and candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
         for ref in prompt_candidate_refs
     )
     if not isinstance(raw, list) or len(raw) != len(expected_refs):
@@ -2176,7 +2238,7 @@ def _parse_executions(
             for ref in structured_refs
             if ref in trace_refs
             and ref in candidate_by_ref
-            and candidate_by_ref[ref].source_key in _COURSE_EXECUTION_SOURCE_KEYS
+            and candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
         }
         if duplicated_course_refs:
             structured_refs = [
@@ -2789,6 +2851,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     context_only_candidate_present = False
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
+    embedded_decision_refs: frozenset[str] = frozenset()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
             for rule_id in stage_two_rule_ids:
@@ -2829,6 +2892,41 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     evidence_snapshot=evidence_snapshot,
                     stay_window=execution_stay_window,
                 )
+                documents_by_ref = {
+                    _clean(item.get("ref")): item for item in documents
+                }
+                embedded_decision_refs = frozenset({
+                    ref
+                    for item in episodes
+                    for ref in item.opinion_refs
+                    if ref in documents_by_ref
+                    and _EMBEDDED_DECISION_COMMUNICATION_PATTERN.search(
+                        _clean(documents_by_ref[ref].get("text"))
+                    )
+                    and _EMBEDDED_DECISION_DEFER_PATTERN.search(
+                        _clean(documents_by_ref[ref].get("text"))
+                    )
+                })
+                embedded_candidates = tuple(
+                    _CandidateDocument(
+                        ref,
+                        "consultation_record",
+                        observed_time,
+                        _clean(documents_by_ref[ref].get("text")),
+                        _clean(documents_by_ref[ref].get("document_id")),
+                    )
+                    for ref in embedded_decision_refs
+                    if (
+                        observed_time := _parse_observed_time(
+                            documents_by_ref[ref].get("time")
+                        )
+                    ) is not None
+                )
+                if embedded_candidates:
+                    projection = replace(
+                        projection,
+                        candidates=projection.candidates + embedded_candidates,
+                    )
                 execution_candidate_projection = projection
                 execution_source_technical = projection.source_technical
                 execution_source_incomplete_keys = projection.source_incomplete_keys
@@ -2935,6 +3033,23 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 allowed_refs=allowed_refs,
                                 candidates=projection.candidates,
                             )
+                            conflict_refs = {
+                                item.recommendation_ref
+                                for item in execution_assessments
+                                if item.confidence == "high"
+                                and _generic_trace_conflicts_with_completed_action(
+                                    item, projection.candidates
+                                )
+                            }
+                            if conflict_refs:
+                                # 具体执行原文与“笼统记录”标签冲突时只复核该建议；
+                                # 复核失败保留中置信事实，由状态机收敛为 uncertain。
+                                execution_assessments = tuple(
+                                    replace(item, confidence="medium")
+                                    if item.recommendation_ref in conflict_refs
+                                    else item
+                                    for item in execution_assessments
+                                )
                             low_confidence_refs = {
                                 item.recommendation_ref
                                 for item in execution_assessments
@@ -3021,6 +3136,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         assessments=None,
                     )
         if execution_assessments is not None:
+            execution_assessments = _apply_embedded_decision_traces(
+                execution_assessments,
+                completed=completed_recommendations,
+                embedded_refs=embedded_decision_refs,
+            )
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
                     rule_id,

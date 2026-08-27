@@ -1200,7 +1200,7 @@ def test_fact_parser_maps_model_course_positions_to_real_evidence_refs():
         }
     )
     payload = _fact_response(("LX0609-010",))
-    payload["facts"][0]["course_doc_positions"] = [1]
+    payload["facts"][0]["course_doc_positions"] = [2]
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
         selected_rule_ids=("LX0609-010",),
@@ -1336,127 +1336,36 @@ def test_fact_parser_no_course_normalizes_impossible_present_to_absent():
     assert facts[0].course_doc_refs == ()
 
 
-def test_010_accepts_pre_order_reason_from_first_course_record_datetime():
-    """010 不能因源库只填 record_datetime 而漏掉医嘱前首次病程原因。"""
+def test_010_projects_first_course_time_and_reason_fields_for_llm():
+    """首次病程的权威时间、病例特点和诊疗计划均进入模型材料。"""
 
-    outcome = exam_lab._order_based_exam_reason_outcome(
-        {
-            CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
                 {
-                    "order_id": "ORD-1",
-                    "order_name": "颅脑螺旋CT平扫",
-                    "order_status": "新开",
-                    "prescribed_datetime": "2026-07-08 09:05:49",
-                },
-            ),
-            "first_course_record": (
-                {
-                    "record_datetime": "2026-07-07 18:00:41",
-                    "case_characteristic": (
-                        "因头面部外伤伴意识障碍，拟复查头颅CT明确颅脑损伤情况。"
-                    ),
-                },
-            ),
-        }
-    )
-
-    assert outcome is not None
-    assert outcome.status == "compliant"
-    assert outcome.reason_code == "exam_order_reason_recorded"
-
-
-def test_010_reads_exam_reason_from_first_course_treatment_plan():
-    """病例特点非空时，010仍必须读取诊疗计划中的检查原因。"""
-
-    outcome = exam_lab._order_based_exam_reason_outcome(
-        {
-            CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
-                {
-                    "order_id": "ORD-1",
-                    "order_name": "胸部CT平扫",
-                    "order_status": "新开",
-                    "prescribed_datetime": "2026-08-18 10:00:00",
+                    "exam_id": "EX-1",
+                    "exam_name": "胸部CT平扫",
+                    "exam_time": "2026-08-18 10:00:00",
                 },
             ),
             "first_course_record": (
                 {
                     "record_datetime": "2026-08-18 09:00:00",
-                    "case_characteristic": "患者高龄，急性起病。",
+                    "case_characteristic": "患者高龄，急性起病，伴发热咳嗽。",
                     "treatment_plan": "行胸部CT了解胸部情况及有无肺部感染。",
                 },
             ),
         }
     )
 
-    assert outcome is not None
-    assert outcome.status == "compliant"
-    assert outcome.reason_code == "exam_order_reason_recorded"
-
-
-def test_010_does_not_allow_one_course_reason_to_cover_distinct_ct_mri_orders():
-    """多条可区分医嘱必须各自有检查前原因，不能被任一病程整体覆盖。"""
-
-    outcome = exam_lab._order_based_exam_reason_outcome(
-        {
-            CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
-                {
-                    "order_id": "ORD-CT",
-                    "order_name": "头颅CT平扫",
-                    "order_status": "新开",
-                    "prescribed_datetime": "2026-08-18 09:00:00",
-                },
-                {
-                    "order_id": "ORD-MRI",
-                    "order_name": "腰椎MRI平扫",
-                    "order_status": "新开",
-                    "prescribed_datetime": "2026-08-18 10:00:00",
-                },
-            ),
-            "first_course_record": (
-                {
-                    "record_datetime": "2026-08-18 08:00:00",
-                    "case_characteristic": "因头部外伤，拟行头颅CT平扫明确颅脑损伤。",
-                },
-            ),
-        }
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-010",), projection=projection
     )
-
-    assert outcome is not None
-    assert outcome.status == "non_compliant"
-    assert outcome.reason_code == "exam_order_course_missing"
-
-
-def test_010_returns_data_gap_when_multiple_orders_cannot_be_uniquely_linked_to_course():
-    """无业务键且同一病程可覆盖多条同名医嘱时，不能猜测逐事件关联。"""
-
-    outcome = exam_lab._order_based_exam_reason_outcome(
-        {
-            CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
-                {
-                    "order_id": "ORD-1",
-                    "order_name": "头颅CT平扫",
-                    "order_status": "新开",
-                    "prescribed_datetime": "2026-08-18 09:00:00",
-                },
-                {
-                    "order_id": "ORD-2",
-                    "order_name": "头颅CT平扫",
-                    "order_status": "新开",
-                    "prescribed_datetime": "2026-08-18 09:00:00",
-                },
-            ),
-            "first_course_record": (
-                {
-                    "record_datetime": "2026-08-18 08:00:00",
-                    "case_characteristic": "因头部外伤，拟行头颅CT平扫明确颅脑损伤。",
-                },
-            ),
-        }
+    assert "患者高龄，急性起病，伴发热咳嗽" in prompt
+    assert "了解胸部情况及有无肺部感染" in prompt
+    assert tuple(projection.course_times.values()) == (
+        datetime(2026, 8, 18, 9, 0),
     )
-
-    assert outcome is not None
-    assert outcome.status == "data_gap"
-    assert outcome.reason_code == "association_failed"
 
 
 def test_010_source_reader_keeps_full_first_course_reason_fields():
@@ -1501,6 +1410,7 @@ async def _run_010_public_native(
     order_rows: tuple[dict, ...] = (),
     course_rows: tuple[dict, ...] = (),
     rescue_rows: tuple[dict, ...] = (),
+    llm_outputs: tuple[object, ...] = (),
 ):
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -1510,7 +1420,7 @@ async def _run_010_public_native(
         course_rows=course_rows,
         rescue_rows=rescue_rows,
     )
-    client = _Client([])
+    client = _Client(list(llm_outputs))
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-010",),
         wrapper_rules=[_wrapper("LX0609-010")],
@@ -1538,6 +1448,443 @@ async def _run_010_public_native(
     return result, reduced[0], canonical[0], client
 
 
+def test_010_prompt_exposes_all_and_only_preceding_48h_course_candidates():
+    """模型可读检查前48小时内全部病程，窗口外或检查后病程不得供010引用。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "order_id": "ORD-1",
+                    "exam_name": "头颅CT平扫",
+                    "exam_time": "2026-08-18 12:00:00",
+                    "report_time": "2026-08-18 13:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-08-16 13:00:00",
+                    "record_content": "窗口内较早病程：头痛待查。",
+                },
+                {
+                    "record_time": "2026-08-18 10:00:00",
+                    "record_content": "窗口内最近病程：拟行头颅CT明确出血。",
+                },
+                {
+                    "record_time": "2026-08-16 11:59:59",
+                    "record_content": "窗口外旧病程：既往头颅CT正常。",
+                },
+                {
+                    "record_time": "2026-08-18 12:30:00",
+                    "record_content": "检查后病程：检查已经完成。",
+                },
+            ),
+        }
+    )
+
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-010",),
+        projection=projection,
+    )
+
+    assert "窗口内较早病程" in prompt
+    assert "窗口内最近病程" in prompt
+    assert "窗口外旧病程" not in prompt
+    assert "检查后病程" not in prompt
+
+
+def test_rule_scoped_course_catalog_keeps_010_expansion_out_of_011():
+    """010可看全部检查前48小时病程，但011仍只看旧有结果记录窗口。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "exam_name": "头颅CT平扫",
+                    "exam_time": "2026-08-18 12:00:00",
+                    "report_time": "2026-08-18 13:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-08-16 13:00:00",
+                    "record_content": "较早的检查前病程。",
+                },
+                {
+                    "record_time": "2026-08-18 10:00:00",
+                    "record_content": "最近的检查前病程。",
+                },
+                {
+                    "record_time": "2026-08-18 14:00:00",
+                    "record_content": "报告后24小时内病程。",
+                },
+                {
+                    "record_time": "2026-08-19 14:00:00",
+                    "record_content": "首份超时病程。",
+                },
+            ),
+        }
+    )
+
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        projection=projection,
+    )
+    catalog = json.loads(
+        prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
+    )
+
+    assert catalog["LX0609-010"][0]["course_doc_positions"] == [1, 2]
+    assert catalog["LX0609-011"][0]["course_doc_positions"] == [2, 3, 4]
+
+    payload = _fact_response(("LX0609-011",))
+    payload["facts"][0]["course_doc_positions"] = [1]
+    with pytest.raises(ValueError, match="evidence ref mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(payload)},
+            selected_rule_ids=("LX0609-011",),
+            projection=projection,
+        )
+
+
+def test_non_010_keeps_nearest_pre_exam_course_outside_010_48h_window():
+    """011保留旧有最近检查前病程，010仍不得引用48小时外病程。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "exam_name": "头颅CT平扫",
+                    "exam_time": "2026-08-18 12:00:00",
+                    "report_time": "2026-08-18 13:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-08-15 12:00:00",
+                    "record_content": "检查前72小时的最近病程。",
+                },
+                {
+                    "record_time": "2026-08-18 14:00:00",
+                    "record_content": "报告后病程。",
+                },
+            ),
+        }
+    )
+
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        projection=projection,
+    )
+    catalog = json.loads(
+        prompt.split("逐规则事件目录=", 1)[1].split("。010目录", 1)[0]
+    )
+
+    assert catalog["LX0609-010"][0]["course_doc_positions"] == []
+    assert catalog["LX0609-011"][0]["course_doc_positions"] == [1, 2]
+    assert "检查前72小时的最近病程" in prompt
+
+    payload = _fact_response(("LX0609-010",))
+    payload["facts"][0]["course_doc_positions"] = [1]
+    with pytest.raises(ValueError, match="evidence ref mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(payload)},
+            selected_rule_ids=("LX0609-010",),
+            projection=projection,
+        )
+
+
+def test_010_parser_rejects_post_exam_course_reference():
+    """即使同批其他规则需要检查后病程，010也不能引用该位置。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "exam_name": "头颅CT平扫",
+                    "exam_time": "2026-08-18 08:00:00",
+                    "report_time": "2026-08-18 09:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-08-18 07:00:00",
+                    "record_content": "检查前病程。",
+                },
+                {
+                    "record_time": "2026-08-18 10:00:00",
+                    "record_content": "检查后记录结果。",
+                },
+            ),
+        }
+    )
+    payload = _fact_response(("LX0609-010",))
+    payload["facts"][0]["course_doc_positions"] = [2]
+
+    with pytest.raises(ValueError, match="evidence ref mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(payload)},
+            selected_rule_ids=("LX0609-010",),
+            projection=projection,
+        )
+
+
+def test_010_prompt_example_uses_position_allowed_by_current_rule_catalog():
+    """混合批次的示例不能诱导010引用只属于报告后规则的位置。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EX-1",
+                    "exam_name": "头颅CT平扫",
+                    "exam_time": "2026-08-18 08:00:00",
+                    "report_time": "2026-08-18 09:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-08-18 10:00:00",
+                    "record_content": "检查后记录结果。",
+                },
+                {
+                    "record_time": "2026-08-18 07:00:00",
+                    "record_content": "检查前记录原因。",
+                },
+            ),
+        }
+    )
+
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        projection=projection,
+    )
+
+    assert '"LX0609-010":[{"event_position":1' in prompt
+    assert '"course_doc_positions":[2]' in prompt
+    assert (
+        '"rule_id":"LX0609-010","applicability":"applicable",'
+        '"semantic_state":"present","positive_state":"not_relevant",'
+        '"course_doc_positions":[2]'
+    ) in prompt
+
+
+@pytest.mark.asyncio
+async def test_010_fails_closed_when_grouped_ct_reason_is_after_order_without_exam_time(
+    monkeypatch,
+):
+    """只有医嘱后病程且缺检查时间时，不能猜测病程早于实际检查。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        order_rows=(
+            {
+                "order_id": "ORD-HEAD-1",
+                "order_name": "颅脑螺旋CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-08 09:05:49",
+            },
+            {
+                "order_id": "ORD-ORBIT",
+                "order_name": "眼眶螺旋CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-08 09:05:50",
+            },
+            {
+                "order_id": "ORD-HEAD-2",
+                "order_name": "颅脑螺旋CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-11 09:43:25",
+            },
+            {
+                "order_id": "ORD-WRIST",
+                "order_name": "右腕关节螺旋CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-11 09:43:25",
+            },
+            {
+                "order_id": "ORD-ELBOW",
+                "order_name": "右肘关节螺旋CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-11 09:43:25",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "COURSE-PRIOR-COPY",
+                "record_time": "2026-07-08 08:01:55",
+                "record_content": (
+                    "既往头颅CT及眼眶CT检查结果已阅，继续观察病情。"
+                ),
+            },
+            {
+                "document_id": "COURSE-0708",
+                "record_time": "2026-07-08 10:01:55",
+                "record_content": (
+                    "拟复查头颅CT评估颅脑出血及水肿情况；患者右侧眼球破裂，"
+                    "完善眼眶CT后联系眼科评估病情。"
+                ),
+            },
+            {
+                "document_id": "COURSE-0711",
+                "record_time": "2026-07-11 10:03:29",
+                "record_content": (
+                    "拟复查头颅CT评估颅脑出血、水肿情况；患者右上肢肿胀，"
+                    "完善右腕关节、肘关节CT评估骨折。"
+                ),
+            },
+        ),
+    )
+
+    assert result.llm_call_count == 0
+    assert decision.final_state.value == "data_gap"
+    assert decision.reason_code == "association_failed"
+    assert canonical["status"] == "data_gap"
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_010_missing_authoritative_exam_time_does_not_call_llm(monkeypatch):
+    """模型只能判断语义，不能补造或猜测检查发生时间。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-1",
+                "order_id": "ORD-1",
+                "exam_name": "头颅CT平扫",
+                "report_time": "2026-08-18 13:00:00",
+            },
+        ),
+        order_rows=(
+            {
+                "order_id": "ORD-1",
+                "order_name": "头颅CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-08-18 09:00:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-08-18 10:00:00",
+                "record_content": "因头痛拟行头颅CT明确有无颅内出血。",
+            },
+        ),
+    )
+
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert decision.final_state.value == "data_gap"
+    assert decision.reason_code == "authoritative_time_missing"
+    assert canonical["status"] == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_010_orphan_exam_order_id_fails_before_llm(monkeypatch):
+    """检查行声明的医嘱号不在完整医嘱集中时，不能绕过关联门。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-1",
+                "order_id": "ORD-MISSING",
+                "exam_name": "头颅CT平扫",
+                "exam_time": "2026-08-18 12:00:00",
+                "report_time": "2026-08-18 13:00:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-08-18 10:00:00",
+                "record_content": "因头痛拟行头颅CT明确有无颅内出血。",
+            },
+        ),
+    )
+
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert decision.final_state.value == "data_gap"
+    assert decision.reason_code == "association_failed"
+    assert canonical["status"] == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monkeypatch):
+    """同一病程逐项说明多次检查原因时，模型可分别引用该文书。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-HEAD",
+                "order_id": "ORD-HEAD",
+                "exam_name": "颅脑螺旋CT平扫",
+                "exam_time": "2026-07-08 10:00:00",
+                "report_time": "2026-07-08 11:00:00",
+            },
+            {
+                "exam_id": "EX-ORBIT",
+                "order_id": "ORD-ORBIT",
+                "exam_name": "眼眶螺旋CT平扫",
+                "exam_time": "2026-07-08 10:00:00",
+                "report_time": "2026-07-08 11:00:00",
+            },
+        ),
+        order_rows=(
+            {
+                "order_id": "ORD-HEAD",
+                "order_name": "颅脑螺旋CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-08 09:05:49",
+            },
+            {
+                "order_id": "ORD-ORBIT",
+                "order_name": "眼眶螺旋CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-08 09:05:50",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "COURSE-1",
+                "record_time": "2026-07-08 08:01:55",
+                "record_content": (
+                    "拟复查头颅CT评估颅脑出血及水肿情况；患者右侧眼球破裂，"
+                    "完善眼眶CT后联系眼科评估病情。"
+                ),
+            },
+        ),
+        llm_outputs=(
+            {
+                "schema_version": "lx0609-exam-lab-text-facts-v4",
+                "facts": [
+                    {
+                        "rule_id": "LX0609-010",
+                        "event_position": event_position,
+                        "applicability": "applicable",
+                        "semantic_state": "present",
+                        "positive_state": "not_relevant",
+                        "course_doc_positions": [1],
+                    }
+                    for event_position in (1, 2)
+                ],
+            },
+        ),
+    )
+
+    assert result.llm_call_count == 1
+    assert decision.final_state.value == "compliant"
+    assert decision.reason_code == "requirement_satisfied"
+    assert canonical["status"] == "compliant"
+    assert len(client.prompts) == 1
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "exam_rows,exam_report_rows,order_rows,course_rows,expected_state,expected_failure_kind",
@@ -1563,7 +1910,7 @@ async def _run_010_public_native(
             ),
             (),
             "non_compliant",
-            "exam_order_course_missing",
+            "exam_lab_requirement_not_documented",
         ),
         (
             (),
@@ -1667,17 +2014,23 @@ async def test_010_public_native_uses_order_exam_report_contract(
         exam_report_rows=exam_report_rows,
         order_rows=order_rows,
         course_rows=course_rows,
+        llm_outputs=(
+            (_fact_response(("LX0609-010",)),)
+            if expected_state == "compliant"
+            else ()
+        ),
     )
 
     assert decision.reason_code == (
         "requirement_satisfied" if expected_state == "compliant" else "requirement_violated"
     )
     assert canonical["status"] == expected_state
-    facts = dict(result.customer_display_facts)["LX0609-010"]
-    assert facts["verification_kind" if expected_state == "compliant" else "failure_kind"] == expected_failure_kind
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.prompts == []
+    if expected_state == "non_compliant":
+        facts = dict(result.customer_display_facts)["LX0609-010"]
+        assert facts["failure_kind"] == expected_failure_kind
+    assert result.llm_call_count == (1 if expected_state == "compliant" else 0)
+    assert result.total_tokens == (110 if expected_state == "compliant" else 0)
+    assert len(client.prompts) == result.llm_call_count
 
 
 @pytest.mark.asyncio
@@ -1800,15 +2153,36 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
                 "record_content": "为明确腰痛原因，拟行腰椎MRI平扫。",
             },
         ),
+        llm_outputs=(
+            {
+                "schema_version": "lx0609-exam-lab-text-facts-v4",
+                "facts": [
+                    {
+                        "rule_id": "LX0609-010",
+                        "event_position": 1,
+                        "applicability": "applicable",
+                        "semantic_state": "present",
+                        "positive_state": "not_relevant",
+                        "course_doc_positions": [1],
+                    },
+                    {
+                        "rule_id": "LX0609-010",
+                        "event_position": 2,
+                        "applicability": "applicable",
+                        "semantic_state": "present",
+                        "positive_state": "not_relevant",
+                        "course_doc_positions": [2],
+                    },
+                ],
+            },
+        ),
     )
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert dict(result.customer_display_facts)["LX0609-010"]["verification_kind"] == (
-        "exam_order_course_report_consistent"
-    )
-    assert result.llm_call_count == result.total_tokens == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -2969,7 +3343,7 @@ async def test_typed_all_empty_complete_sources_are_not_applicable_in_requested_
 @pytest.mark.asyncio
 async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
 ):
-    """医嘱可证明触发和检查前原因，但不能伪装实际检查/报告时间。"""
+    """只有医嘱时缺少权威检查时间，010同样必须失败关闭。"""
     rows_by_source = {
         CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
             {
@@ -3059,12 +3433,13 @@ async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
     )
 
     assert [item.final_state.value for item in reduced] == [
-        "compliant",
+        "data_gap",
         "data_gap",
         "data_gap",
         "data_gap",
         "data_gap",
     ]
+    assert result.decisions[0].reason_code == "association_failed"
     assert [item.reason_code for item in result.decisions[1:]] == [
         "target_report_missing",
         "target_report_missing",
