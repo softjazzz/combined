@@ -1000,7 +1000,17 @@ def test_022_mixed_opinions_name_each_problematic_episode() -> None:
                 "verification_kind": "pretransfusion_assessment_complete",
                 "missing_fields": [],
             },
-            "输血前评估已记录输血指征、相关检验，以及输血风险、既往输血情况或患者当前情况。",
+            "输血申请单已记录申请理由及输血前客观指标，且在实际输血前完成。",
+        ),
+        (
+            "LX0609-044",
+            {
+                "failure_kind": "pretransfusion_assessment_time_conflict",
+                "application_time": "2026-08-20 15:00:00",
+                "transfusion_time": "2026-08-20 14:00:00",
+                "elapsed_minutes": 60,
+            },
+            "输血申请时间 2026-08-20 15:00:00 晚于实际输血时间 2026-08-20 14:00:00 60 分钟，时间顺序存在冲突。",
         ),
         (
             "LX0609-044",

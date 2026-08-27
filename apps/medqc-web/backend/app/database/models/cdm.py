@@ -1604,6 +1604,17 @@ class BloodApplication(AuditMixin, Base):
     transfuse_volume_unit = Column(String(100), comment="输血剂量单位")
     request_datetime = Column(DateTime, comment="申请时间")
     physician_name = Column(String(100), comment="申请医师")
+    reason_for_blood = Column(Text, comment="输血申请理由")
+    hemoglobin = Column(String(100), comment="血红蛋白")
+    hematocrit = Column(String(100), comment="红细胞压积")
+    rbc = Column(String(100), comment="红细胞计数")
+    prothrombin_time = Column(String(100), comment="凝血酶原时间")
+    partial_thromboplastin_time = Column(String(100), comment="部分凝血活酶时间")
+    fibrinogen = Column(String(100), comment="纤维蛋白原")
+    albumin = Column(String(100), comment="白蛋白")
+    teg = Column(String(100), comment="血栓弹力图")
+    platelet_antibody = Column(String(100), comment="血小板抗体")
+    rbc_antibody = Column(String(100), comment="红细胞抗体")
     record_content = Column(Text, comment="记录内容")
 
 

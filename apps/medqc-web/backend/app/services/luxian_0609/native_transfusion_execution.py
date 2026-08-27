@@ -17,6 +17,9 @@ from .decision_model import (
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
+from .pretransfusion_assessment import (
+    evaluate_structured_pretransfusion_application,
+)
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
@@ -1112,8 +1115,14 @@ def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
     return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
 
 
-def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | None:
-    """仅收口明确的输血前评估事实；灰区仍交给裁剪模型。"""
+def _programmatic_044_status(
+    documents: Mapping[str, Any],
+) -> tuple[str, str] | tuple[str, str, Mapping[str, Any]] | None:
+    """输血申请单的理由、客观指标及时序直接构成输血前评估。"""
+
+    structured = evaluate_structured_pretransfusion_application(documents)
+    if structured is not None:
+        return structured
 
     entries = tuple(
         entry
@@ -2229,18 +2238,23 @@ async def execute_luxian_0609_native_transfusion_rules(
         if rule_id == "LX0609-044":
             programmatic_status = _programmatic_044_status(documents)
             if programmatic_status is not None:
-                status, reason_code = programmatic_status
+                status, reason_code = programmatic_status[:2]
+                display_facts = (
+                    programmatic_status[2]
+                    if len(programmatic_status) == 3
+                    else _programmatic_transfusion_display_facts(
+                        rule_id=rule_id,
+                        status=status,
+                        reason_code=reason_code,
+                        documents=documents,
+                    )
+                )
                 emit_outcome(
                     rule_id,
                     status,
                     reason_code,
                     executor_type="program",
-                    display_facts=_programmatic_transfusion_display_facts(
-                        rule_id=rule_id,
-                        status=status,
-                        reason_code=reason_code,
-                        documents=documents,
-                    ),
+                    display_facts=display_facts,
                 )
                 continue
         if rule_id == "LX0609-045":

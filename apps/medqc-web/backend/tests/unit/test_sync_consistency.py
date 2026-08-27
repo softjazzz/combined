@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 
 from app.database.models.cdm import (
     AdmissionRecord,
+    BloodApplication,
     ConsultationRecord,
     ExamMaster,
     FirstCourseRecord,
@@ -2838,6 +2839,17 @@ def test_upsert_to_local_maps_blood_application_source_identity_and_facts(monkey
                 "transfuse_volume_unit",
                 "request_datetime",
                 "physician_name",
+                "reason_for_blood",
+                "hemoglobin",
+                "hematocrit",
+                "rbc",
+                "prothrombin_time",
+                "partial_thromboplastin_time",
+                "fibrinogen",
+                "albumin",
+                "teg",
+                "platelet_antibody",
+                "rbc_antibody",
                 "record_content",
             ],
             ["institute_id", "patient_id", "visit_id", "application_id"],
@@ -2858,6 +2870,9 @@ def test_upsert_to_local_maps_blood_application_source_identity_and_facts(monkey
                 "blood_unit": "U",
                 "apply_datetime": "2026-08-19 09:00:00+08",
                 "apply_doctor": "李医生",
+                "reason_for_blood": "纠正贫血",
+                "hemoglobin": "68",
+                "fibrinogen": "1.2",
             }
         ],
         primary_keys=["patient_id", "visit_id", "application_id"],
@@ -2872,6 +2887,34 @@ def test_upsert_to_local_maps_blood_application_source_identity_and_facts(monkey
     assert saved["transfuse_volume_unit"] == "U"
     assert saved["request_datetime"] == "2026-08-19 09:00:00+08"
     assert saved["physician_name"] == "李医生"
+    assert saved["reason_for_blood"] == "纠正贫血"
+    assert saved["hemoglobin"] == "68"
+    assert saved["fibrinogen"] == "1.2"
+
+
+def test_blood_application_model_and_migration_preserve_044_assessment_facts():
+    required = {
+        "reason_for_blood",
+        "hemoglobin",
+        "hematocrit",
+        "rbc",
+        "prothrombin_time",
+        "partial_thromboplastin_time",
+        "fibrinogen",
+        "albumin",
+        "teg",
+        "platelet_antibody",
+        "rbc_antibody",
+    }
+    assert required.issubset(BloodApplication.__table__.columns.keys())
+    assert required.issubset(set(_SNAPSHOT_SOURCE_FIELDS["blood_application"]))
+
+    migration = _load_migration_module(
+        "20260827_000039_preserve_pretransfusion_assessment_facts.py"
+    )
+    assert migration.revision == "20260827_000039"
+    assert migration.down_revision == "20260824_000038"
+    assert {name for name, _ in migration._ASSESSMENT_COLUMNS} == required
 
 
 def test_exam_master_sync_uses_the_actual_exam_id_contract():

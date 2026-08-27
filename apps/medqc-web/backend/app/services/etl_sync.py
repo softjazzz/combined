@@ -149,6 +149,11 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "request_time",
         ),
         "physician_name": ("physician_name", "apply_doctor", "request_physician"),
+        "reason_for_blood": (
+            "reason_for_blood",
+            "transfusion_reason",
+            "transfusion_indication",
+        ),
     },
     "consent_form": {
         # 输血治疗同意书等专用同意书的标准字段需映射到通用同意书投影。

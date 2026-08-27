@@ -312,6 +312,7 @@ def _validate_lx0609_003_044_fact_status(
         ("LX0609-044", "pretransfusion_assessment_complete"): "compliant",
         ("LX0609-044", "pretransfusion_assessment_incomplete"): "non_compliant",
         ("LX0609-044", "pretransfusion_assessment_missing"): "non_compliant",
+        ("LX0609-044", "pretransfusion_assessment_time_conflict"): "non_compliant",
     }.get((rule_id, kind))
     if expected_status is not None and status != expected_status:
         raise ValueError("invalid customer display fact status")
@@ -1664,34 +1665,74 @@ def safe_luxian_0609_customer_display_facts(
             "pretransfusion_assessment_complete",
             "pretransfusion_assessment_incomplete",
             "pretransfusion_assessment_missing",
+            "pretransfusion_assessment_time_conflict",
+            "pretransfusion_assessment_time_unavailable",
         }:
-            allowed_fields = {
+            legacy_fields = {
                 "indication",
                 "laboratory_indicator",
                 "risk_history_or_status",
             }
+            application_fields = {"application_reason", "laboratory_indicator"}
+            allowed_fields = legacy_fields | application_fields
             checked = controlled_list(raw.get("checked_fields"), allowed=allowed_fields)
             missing = controlled_list(raw.get("missing_fields"), allowed=allowed_fields)
+            expected_fields = sorted(
+                application_fields
+                if checked == sorted(application_fields)
+                else legacy_fields
+            )
             if (
-                checked != sorted(allowed_fields)
-                or missing is None
+                missing is None
                 or raw.get("performed_transfusion_confirmed") is not True
+                or (
+                    kind != "pretransfusion_assessment_time_unavailable"
+                    and checked != expected_fields
+                )
                 or (
                     kind == "pretransfusion_assessment_complete"
                     and missing
                 )
                 or (
-                    kind != "pretransfusion_assessment_complete"
+                    kind in {
+                        "pretransfusion_assessment_incomplete",
+                        "pretransfusion_assessment_missing",
+                    }
                     and not missing
                 )
             ):
                 return None
-            return {
+            result = {
                 "verification_kind" if kind == "pretransfusion_assessment_complete" else "failure_kind": kind,
                 "performed_transfusion_confirmed": True,
-                "checked_fields": checked,
+                "checked_fields": checked or [],
                 "missing_fields": missing,
             }
+            for time_key in ("application_time", "transfusion_time"):
+                value = raw.get(time_key)
+                if value is None:
+                    continue
+                if not isinstance(value, str):
+                    return None
+                try:
+                    datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    return None
+                result[time_key] = value
+            elapsed_minutes = raw.get("elapsed_minutes")
+            if elapsed_minutes is not None:
+                if type(elapsed_minutes) not in {int, float} or not (
+                    0 <= elapsed_minutes <= 525600
+                ):
+                    return None
+                result["elapsed_minutes"] = elapsed_minutes
+            missing_time_fields = controlled_list(
+                raw.get("missing_time_fields"),
+                allowed={"application_time", "transfusion_time"},
+            )
+            if missing_time_fields is not None:
+                result["missing_time_fields"] = missing_time_fields
+            return result
         if rule_id == "LX0609-045" and kind in {
             "transfusion_course_record_present", "transfusion_course_record_missing",
         }:

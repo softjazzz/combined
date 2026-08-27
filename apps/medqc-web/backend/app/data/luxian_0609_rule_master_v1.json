@@ -356,7 +356,7 @@
       "qc_point": "无输血前评估记录或记录不完整",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "输血前评估、输血病程、输血后评价细分规则保持独立；汇总仅提示三项未同时齐备，不改单条状态。"
+      "policy_summary": "已实施输血时，输血申请单在实际输血前记录申请理由及至少一项客观评估指标，即认定完成输血前评估，不强制另写病程；缺任一项为不完整，申请晚于输血为时间冲突，关键时间不可读为资料不足。"
     },
     {
       "rule_id": "LX0609-045",

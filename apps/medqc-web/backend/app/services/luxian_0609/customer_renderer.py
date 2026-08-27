@@ -638,9 +638,9 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "请按结果列出的缺失或超时项目完善输血前检查。",
     ),
     "LX0609-044": (
-        "本次输血未见输血前评估记录",
-        "已核对输血相关记录，未检出可确认适应证、风险或用血必要性的输血前评估。",
-        "请在输血前补充完整的评估记录。",
+        "本次输血前评估不完整或时间顺序存在冲突",
+        "已核对输血申请理由、客观指标、申请时间及实际输血时间。",
+        "请核对并补全输血申请资料，确保评估在实际输血前完成。",
     ),
     "LX0609-045": (
         "已确认本次实施输血，但未见输血病程记录",
@@ -1242,6 +1242,7 @@ _TRANSFUSION_FIELD_LABELS = {
     "physician_signature": "医师签名",
     "signed_time": "精确到分钟的签署时间",
     "laboratory_indicator": "输血前检验指标",
+    "application_reason": "输血申请理由",
     "risk_history_or_status": "输血风险、既往输血情况或患者当前情况",
     "transfusion_history_or_reaction": "既往输血史或输血反应史",
     "patient_status": "患者当前情况",
@@ -2617,7 +2618,14 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-044":
         if kind == "pretransfusion_assessment_complete":
-            return "输血前评估已记录输血指征、相关检验，以及输血风险、既往输血情况或患者当前情况。"
+            application_time = str(facts.get("application_time") or "")
+            transfusion_time = str(facts.get("transfusion_time") or "")
+            timing = (
+                f"申请时间 {application_time}，实际输血时间 {transfusion_time}。"
+                if application_time and transfusion_time
+                else ""
+            )
+            return f"输血申请单已记录申请理由及输血前客观指标，且在实际输血前完成。{timing}"
         if kind in {
             "pretransfusion_assessment_missing",
             "pretransfusion_assessment_incomplete",
@@ -2626,6 +2634,23 @@ def customer_finding_from_controlled_facts(
             if kind == "pretransfusion_assessment_missing":
                 return "已确认实施输血，但未找到可核对的输血前评估记录。"
             return f"输血前评估缺少：{missing}。" if missing else ""
+        if kind == "pretransfusion_assessment_time_conflict":
+            application_time = str(facts.get("application_time") or "")
+            transfusion_time = str(facts.get("transfusion_time") or "")
+            elapsed = facts.get("elapsed_minutes")
+            return (
+                f"输血申请时间 {application_time} 晚于实际输血时间 {transfusion_time}"
+                f" {elapsed} 分钟，时间顺序存在冲突。"
+            )
+        if kind == "pretransfusion_assessment_time_unavailable":
+            missing = labels(
+                "missing_time_fields",
+                {
+                    "application_time": "输血申请时间",
+                    "transfusion_time": "实际输血时间",
+                },
+            )
+            return f"缺少{missing}，暂无法核对输血前评估时序。" if missing else ""
 
     if rule_id == "LX0609-045":
         if kind == "transfusion_course_record_present":

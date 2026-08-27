@@ -18,6 +18,8 @@ def test_blood_application_should_use_application_id_and_real_structured_fields(
             "transfuse_volume_unit": "U",
             "request_datetime": "2026-06-16 12:00:00",
             "physician_name": "申请医师",
+            "reason_for_blood": "纠正贫血",
+            "hemoglobin": "68 g/L",
             "record_content": "",
         },
     )
@@ -38,4 +40,6 @@ def test_blood_application_should_use_application_id_and_real_structured_fields(
         ("剂量单位", "U"),
         ("申请时间", "2026-06-16 12:00:00"),
         ("申请医师", "申请医师"),
+        ("输血申请理由", "纠正贫血"),
+        ("血红蛋白", "68 g/L"),
     ]
