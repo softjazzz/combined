@@ -1,35 +1,16 @@
 <template>
-  <aside
-    class="readonly-medical-document-directory"
-    aria-label="病历文书目录"
-  >
+  <aside class="readonly-medical-document-directory" aria-label="病历文书目录">
     <div class="readonly-medical-document-directory-head">
       <strong>文书目录</strong>
       <span>{{ filteredDocuments.length }} / {{ documents.length }}</span>
     </div>
 
-    <div
-      v-if="loading"
-      class="readonly-medical-document-state"
-    >
-      正在读取病历文书…
-    </div>
-    <div
-      v-else-if="error"
-      class="readonly-medical-document-state is-error"
-    >
+    <div v-if="loading" class="readonly-medical-document-state">正在读取病历文书…</div>
+    <div v-else-if="error" class="readonly-medical-document-state is-error">
       <span>{{ error }}</span>
-      <button
-        type="button"
-        @click="emit('retry')"
-      >
-        重新读取
-      </button>
+      <button type="button" @click="emit('retry')">重新读取</button>
     </div>
-    <div
-      v-else-if="!documents.length"
-      class="readonly-medical-document-state"
-    >
+    <div v-else-if="!documents.length" class="readonly-medical-document-state">
       当前未返回可查看的病历原文
     </div>
     <template v-else>
@@ -39,7 +20,7 @@
         class="readonly-medical-document-search"
         data-testid="record-document-search"
         placeholder="搜索标题、正文或医嘱"
-      >
+      />
       <div class="readonly-medical-document-filter">
         <button
           type="button"
@@ -80,22 +61,64 @@
             type="button"
             class="readonly-medical-document-group-title record-document-group-title"
             :aria-expanded="isGroupExpanded(group.key)"
-            :data-testid="`record-document-group-toggle-${group.key}`"
+            :data-testid="`record-document-group-toggle-${group.key === 'orders' ? 'order' : group.key}`"
             @click="toggleGroup(group.key)"
           >
             <span>
               <i />
-              <b
-                class="readonly-medical-document-group-chevron"
-                aria-hidden="true"
-              >{{
+              <b class="readonly-medical-document-group-chevron" aria-hidden="true">{{
                 isGroupExpanded(group.key) ? '⌄' : '›'
               }}</b>
               {{ group.label }}
             </span>
             <em>{{ group.items.length }}</em>
           </button>
-          <template v-if="isGroupExpanded(group.key) && group.key === 'order'">
+          <template v-if="isGroupExpanded(group.key) && group.subgroups?.length">
+            <section
+              v-for="subgroup in group.subgroups"
+              :key="subgroup.key"
+              class="readonly-medical-document-subgroup"
+            >
+              <button
+                type="button"
+                class="readonly-medical-document-group-title readonly-medical-document-subgroup-title"
+                :aria-expanded="isGroupExpanded(subgroup.key)"
+                :data-testid="`record-document-group-toggle-${subgroup.key}`"
+                @click="toggleGroup(subgroup.key)"
+              >
+                <span>
+                  <i />
+                  <b class="readonly-medical-document-group-chevron" aria-hidden="true">{{
+                    isGroupExpanded(subgroup.key) ? '⌄' : '›'
+                  }}</b>
+                  {{ subgroup.label }}
+                </span>
+                <em>{{ subgroup.items.length }}</em>
+              </button>
+              <template v-if="isGroupExpanded(subgroup.key)">
+                <button
+                  v-for="document in subgroup.items"
+                  :key="document.key"
+                  type="button"
+                  class="readonly-medical-document-item record-document-item"
+                  :class="{
+                    'is-active': document.key === selectedKey,
+                    'is-empty': !medicalDocumentHasContent(document),
+                  }"
+                  :disabled="!medicalDocumentHasContent(document)"
+                  @click="emit('select', document.key)"
+                >
+                  <strong>{{ resolveMedicalDocumentTitle(document) }}</strong>
+                  <small
+                    class="readonly-medical-document-meta record-document-time"
+                    :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
+                    >{{ formatDocumentMeta(document) }}</small
+                  >
+                </button>
+              </template>
+            </section>
+          </template>
+          <template v-else-if="isGroupExpanded(group.key) && group.key === 'orders'">
             <button
               type="button"
               data-testid="record-document-order-group"
@@ -133,12 +156,7 @@
           </template>
         </section>
       </div>
-      <div
-        v-else
-        class="readonly-medical-document-state"
-      >
-        没有匹配的文书
-      </div>
+      <div v-else class="readonly-medical-document-state">没有匹配的文书</div>
     </template>
   </aside>
 </template>
@@ -180,6 +198,13 @@ const query = ref('')
 const filter = ref<DocumentFilter>('all')
 const expandedGroupKeys = ref(new Set<string>())
 
+type DirectoryGroup = {
+  key: string
+  label: string
+  items: EditableMedicalRecordDocument[]
+  subgroups?: DirectoryGroup[]
+}
+
 const filteredDocuments = computed(() => {
   const keyword = query.value.trim().toLowerCase()
   return props.documents.filter((document) => {
@@ -200,38 +225,63 @@ const filteredDocuments = computed(() => {
 })
 
 const documentGroups = computed(() => {
-  const groups = new Map<
-    string,
-    { key: string; label: string; items: EditableMedicalRecordDocument[] }
-  >()
+  const groups = new Map<string, DirectoryGroup>()
+  const nestedGroups = new Map<string, Map<string, DirectoryGroup>>()
   filteredDocuments.value.forEach((document) => {
-    const group = isMedicalOrderDocument(document)
-      ? { key: 'order', label: '医嘱' }
-      : resolveMedicalDocumentGroup(document)
-    const current = groups.get(group.key) || { ...group, items: [] }
+    const group = resolveMedicalDocumentGroup(document)
+    if (group.parentKey) {
+      const parentGroups = nestedGroups.get(group.parentKey) || new Map<string, DirectoryGroup>()
+      const subgroup = parentGroups.get(group.key) || {
+        key: group.key,
+        label: group.label,
+        items: [],
+      }
+      subgroup.items.push(document)
+      parentGroups.set(group.key, subgroup)
+      nestedGroups.set(group.parentKey, parentGroups)
+      return
+    }
+    const current = groups.get(group.key) || { key: group.key, label: group.label, items: [] }
     current.items.push(document)
     groups.set(group.key, current)
   })
+  for (const [parentKey, parentGroups] of nestedGroups) {
+    const subgroupOrder =
+      parentKey === 'admission'
+        ? ['admission.record', 'admission.first']
+        : ['course.senior', 'course.ordinary', 'course.other']
+    const subgroups = subgroupOrder
+      .map((key) => parentGroups.get(key))
+      .filter((group): group is DirectoryGroup => Boolean(group))
+    if (subgroups.length) {
+      groups.set(parentKey, {
+        key: parentKey,
+        label: parentKey === 'admission' ? '入院与首次病程' : '日常病程与查房',
+        items: subgroups.flatMap((subgroup) => subgroup.items),
+        subgroups,
+      })
+    }
+  }
   const order = [
+    'frontpage',
     'admission',
     'course',
     'consultation',
     'surgery',
-    'exam-lab',
-    'order',
+    'transfusion',
+    'exam_lab',
+    'orders',
     'discharge',
+    'handoff',
     'other',
   ]
   return order
     .map((key) => groups.get(key))
-    .filter(
-      (group): group is { key: string; label: string; items: EditableMedicalRecordDocument[] } =>
-        Boolean(group),
-    )
+    .filter((group): group is DirectoryGroup => Boolean(group))
 })
 
 function resolveGroupKey(document: EditableMedicalRecordDocument): string {
-  return isMedicalOrderDocument(document) ? 'order' : resolveMedicalDocumentGroup(document).key
+  return resolveMedicalDocumentGroup(document).key
 }
 
 function isGroupExpanded(groupKey: string): boolean {
@@ -246,7 +296,10 @@ function toggleGroup(groupKey: string) {
 }
 
 function syncExpandedGroups() {
-  const groupKeys = documentGroups.value.map((group) => group.key)
+  const groupKeys = documentGroups.value.flatMap((group) => [
+    group.key,
+    ...(group.subgroups || []).map((subgroup) => subgroup.key),
+  ])
   const keyword = query.value.trim()
   if (keyword) {
     expandedGroupKeys.value = new Set(groupKeys)
@@ -256,12 +309,21 @@ function syncExpandedGroups() {
   const selectedDocument = props.documents.find((document) => document.key === props.selectedKey)
   const selectedGroupKey = selectedDocument ? resolveGroupKey(selectedDocument) : ''
   if (selectedGroupKey && groupKeys.includes(selectedGroupKey)) {
-    expandedGroupKeys.value = new Set([selectedGroupKey])
+    const selectedParent = documentGroups.value.find((group) =>
+      (group.subgroups || []).some((subgroup) => subgroup.key === selectedGroupKey),
+    )
+    expandedGroupKeys.value = new Set(
+      selectedParent ? [selectedParent.key, selectedGroupKey] : [selectedGroupKey],
+    )
     return
   }
 
   if (!expandedGroupKeys.value.size && groupKeys[0]) {
-    expandedGroupKeys.value = new Set([groupKeys[0]])
+    const firstGroup = documentGroups.value[0]
+    expandedGroupKeys.value = new Set([
+      groupKeys[0],
+      ...(firstGroup?.subgroups || []).map((subgroup) => subgroup.key),
+    ])
   }
 }
 
@@ -270,7 +332,10 @@ watch(
     () => props.selectedKey,
     query,
     filter,
-    () => documentGroups.value.map((group) => group.key).join('|'),
+    () =>
+      documentGroups.value
+        .flatMap((group) => [group.key, ...(group.subgroups || []).map((subgroup) => subgroup.key)])
+        .join('|'),
   ],
   syncExpandedGroups,
   { immediate: true },
@@ -377,6 +442,17 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 
 .readonly-medical-document-group + .readonly-medical-document-group {
   margin-top: 4px;
+}
+
+.readonly-medical-document-subgroup {
+  margin-left: 10px;
+  border-left: 1px solid rgba(0, 102, 204, 0.12);
+  padding-left: 6px;
+}
+
+.readonly-medical-document-subgroup-title {
+  padding-top: 8px;
+  color: rgba(29, 29, 31, 0.62);
 }
 
 .readonly-medical-document-group-title {

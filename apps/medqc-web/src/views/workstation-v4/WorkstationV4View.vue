@@ -396,7 +396,11 @@ import {
   getFrontpageDraftDisabledReason,
 } from './frontpageAvailability'
 import { normalizeWorklistItem } from './normalize'
-import { parseDocSortTime, resolveDocDisplayTitle } from './utils/documentDisplay'
+import {
+  parseDocSortTime,
+  resolveDocDisplayTitle,
+  resolveDocGroupKey,
+} from './utils/documentDisplay'
 import type {
   PatientRecord,
   DeptInfo,
@@ -1526,7 +1530,7 @@ function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
     doc_key: docKey,
     doc_type: docType,
     document_id: String(doc.document_id || doc.id || doc.doc_id || '') || undefined,
-    title: String(doc.label || doc.doc_name || doc.document_title || docType || '未命名文书'),
+    title: resolveDocDisplayTitle(doc),
     record_time: String(doc.record_time || doc.sort_time || ''),
     source_table: String(doc.source_table || ''),
     group_key: String(doc.group_key || ''),
@@ -1538,26 +1542,7 @@ function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
 }
 
 function inferGroupKey(doc: DocItem): string {
-  const explicit = String(doc.group_key || '').trim()
-  const docType = String(doc.doc_type || doc.type || '').toLowerCase()
-  const sourceTable = String(doc.source_table || '').toLowerCase()
-  const title = String(doc.label || doc.doc_name || doc.document_title || '').toLowerCase()
-  const identity = `${explicit} ${docType} ${sourceTable} ${title}`
-  if (['mr', 'mr_surgery', 'mr_cost'].includes(docType)) return 'frontpage'
-  if (docType.includes('admission')) return 'admission'
-  if (isRoundCourseIdentity(identity)) return 'round_course'
-  if (isDailyCourseIdentity(identity)) return 'daily_course'
-  if (explicit && explicit !== 'course') return explicit
-  if (docType.includes('course')) return 'course'
-  if (
-    docType.includes('surgery') ||
-    docType.includes('operation') ||
-    docType.includes('anesthesia')
-  )
-    return 'surgery'
-  if (docType.includes('discharge') || docType.includes('terminal')) return 'terminal'
-  if (docType.includes('order')) return 'orders'
-  return 'course'
+  return resolveDocGroupKey(doc)
 }
 
 function isRoundCourseIdentity(identity: string): boolean {
@@ -1572,32 +1557,71 @@ function isDailyCourseIdentity(identity: string): boolean {
 
 function buildFallbackTreeFromDocs(docs: DocItem[]): DocTreeGroup[] {
   const groups: Array<{ key: string; label: string }> = [
-    { key: 'all', label: '全部' },
-    { key: 'frontpage', label: '病案首页(临床医生)' },
-    { key: 'admission', label: '入院记录' },
-    { key: 'round_course', label: '查房记录' },
-    { key: 'daily_course', label: '日常病程记录' },
-    { key: 'course', label: '其他病程记录' },
-    { key: 'surgery', label: '手术相关单据' },
-    { key: 'terminal', label: '出院记录' },
-    { key: 'orders', label: '医嘱' },
+    { key: 'frontpage', label: '病案首页' },
+    { key: 'admission', label: '入院与首次病程' },
+    { key: 'consultation', label: '会诊与讨论' },
+    { key: 'surgery', label: '手术与麻醉' },
+    { key: 'transfusion', label: '输血相关' },
+    { key: 'exam_lab', label: '检查与检验' },
+    { key: 'orders', label: '医嘱与用药' },
+    { key: 'discharge', label: '出院与死亡' },
+    { key: 'handoff', label: '交接与转科' },
+    { key: 'other', label: '其他文书' },
   ]
   const byGroup = new Map<string, DocTreeNode[]>()
   for (const doc of docs) {
     const node = buildTreeNodeFromDoc(doc)
     const groupKey = inferGroupKey(doc)
     byGroup.set(groupKey, [...(byGroup.get(groupKey) || []), node])
-    byGroup.set('all', [...(byGroup.get('all') || []), node])
   }
-  return groups.map((group) => {
-    const children = byGroup.get(group.key) || []
-    return {
-      key: group.key,
-      label: group.label,
-      count: children.length,
-      children,
-    }
-  })
+  const nestedGroupOrders: Record<string, string[]> = {
+    admission: ['admission.record', 'admission.first'],
+    course: ['course.senior', 'course.ordinary', 'course.other'],
+  }
+  const nestedGroupLabels: Record<string, string> = {
+    admission: '入院与首次病程',
+    course: '日常病程与查房',
+    'admission.record': '入院记录',
+    'admission.first': '首次病程记录',
+    'course.senior': '上级医师查房记录',
+    'course.ordinary': '普通查房记录',
+    'course.other': '其他日常病程记录',
+  }
+  const nestedGroups = Object.entries(nestedGroupOrders)
+    .map(([parentKey, subgroupKeys]) => ({
+      parentKey,
+      subgroups: subgroupKeys
+        .map((key) => ({
+          key,
+          label: nestedGroupLabels[key],
+          children: byGroup.get(key) || [],
+        }))
+        .filter((group) => group.children.length > 0),
+    }))
+    .filter((group) => group.subgroups.length > 0)
+  const result: DocTreeGroup[] = groups
+    .map((group) => {
+      const children = byGroup.get(group.key) || []
+      return { key: group.key, label: group.label, count: children.length, children }
+    })
+    .filter((group) => group.children.length > 0)
+  for (const nested of nestedGroups) {
+    const insertBefore = nested.parentKey === 'admission' ? 'consultation' : 'consultation'
+    const index = result.findIndex((group) => group.key === insertBefore)
+    result.splice(index >= 0 ? index : result.length, 0, {
+      key: nested.parentKey,
+      label: nestedGroupLabels[nested.parentKey],
+      count: nested.subgroups.reduce((sum, group) => sum + group.children.length, 0),
+      children: [],
+      subgroups: nested.subgroups.map((group) => ({
+        key: group.key,
+        label: group.label,
+        count: group.children.length,
+        children: group.children,
+      })),
+    })
+  }
+  return result
 }
 
 function shouldSplitCourseGroup(group: DocTreeGroup): boolean {
@@ -1733,8 +1757,8 @@ function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup
   const hasUsefulGroup = normalized.some(
     (group) => group.key !== 'all' && Array.isArray(group.children) && group.children.length > 0,
   )
-  if (hasUsefulGroup) return splitCourseGroups(normalized, docs)
   if (docs.length > 0) return buildFallbackTreeFromDocs(docs)
+  if (hasUsefulGroup) return splitCourseGroups(normalized, docs)
   return normalized
 }
 

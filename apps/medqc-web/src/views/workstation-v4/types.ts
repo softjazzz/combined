@@ -142,6 +142,7 @@ export interface DocTreeGroup {
   label: string
   count: number
   children: DocTreeNode[]
+  subgroups?: DocTreeGroup[]
 }
 
 export type FrontpageFocusTarget = 'basic' | 'admission' | 'diagnosis' | 'procedure'

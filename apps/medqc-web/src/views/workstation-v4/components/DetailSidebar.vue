@@ -2,25 +2,14 @@
   <aside
     class="detail-apple-sidebar custom-scrollbar w-[220px] min-w-[220px] max-w-[220px] basis-[220px] shrink-0 overflow-y-auto border-r"
   >
-    <div
-      v-if="record"
-      class="flex h-full flex-col"
-    >
+    <div v-if="record" class="flex h-full flex-col">
       <div class="flex-1 px-2.5 pb-4 pt-3">
         <div class="mb-3 flex items-center justify-between px-1">
           <div>
-            <h3 class="m-0 text-[13px] font-semibold text-slate-900">
-              病历文书
-            </h3>
-            <p class="m-0 mt-0.5 text-[11px] font-semibold text-slate-400">
-              按文书类型分组
-            </p>
+            <h3 class="m-0 text-[13px] font-semibold text-slate-900">病历文书</h3>
+            <p class="m-0 mt-0.5 text-[11px] font-semibold text-slate-400">按文书类型分组</p>
           </div>
-          <SyncOutlined
-            v-if="documentsLoading"
-            spin
-            class="text-[12px] text-[#0066cc]"
-          />
+          <SyncOutlined v-if="documentsLoading" spin class="text-[12px] text-[#0066cc]" />
         </div>
 
         <button
@@ -69,13 +58,86 @@
                 </span>
                 <span
                   class="ml-2 shrink-0 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-slate-500 shadow-[0_1px_0_rgba(148,163,184,0.18)]"
-                >{{ group.count }}</span>
+                  >{{ group.count }}</span
+                >
               </button>
 
-              <div
-                v-if="isGroupExpanded(group.key)"
-                class="ml-1 mt-0.5 space-y-1 pl-1"
-              >
+              <template v-if="isGroupExpanded(group.key) && group.subgroups?.length">
+                <section
+                  v-for="subgroup in group.subgroups"
+                  :key="`${group.key}:${subgroup.key}`"
+                  class="detail-doc-subgroup ml-2 mt-1 border-l border-blue-100/60 pl-1"
+                >
+                  <button
+                    type="button"
+                    class="detail-doc-group flex w-full items-center justify-between rounded-[10px] border border-transparent px-2 py-1.5 text-left text-[11px] font-semibold text-slate-600 transition-all duration-150"
+                    @click="toggleGroup(subgroup.key)"
+                  >
+                    <span class="flex min-w-0 items-center gap-1.5">
+                      <CaretRightOutlined
+                        class="text-[9px] text-slate-400 transition-transform duration-150"
+                        :class="isGroupExpanded(subgroup.key) ? 'rotate-90' : ''"
+                      />
+                      <span class="truncate">{{ subgroup.label }}</span>
+                    </span>
+                    <span
+                      class="ml-2 shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500"
+                      >{{ subgroup.count }}</span
+                    >
+                  </button>
+                  <div v-if="isGroupExpanded(subgroup.key)" class="ml-1 mt-0.5 space-y-1 pl-1">
+                    <button
+                      v-for="node in subgroup.children"
+                      :key="`${subgroup.key}:${node.id}`"
+                      type="button"
+                      class="group relative flex w-full items-start gap-2 rounded-[10px] border px-2 py-2 text-left transition-all duration-150"
+                      :class="
+                        hasDocContent(resolveDocByNode(node))
+                          ? isActiveNode(node)
+                            ? 'detail-doc-entry--active'
+                            : 'detail-doc-entry--idle'
+                          : 'cursor-default border-transparent bg-transparent text-slate-400/70'
+                      "
+                      @click="handleNodeClick(node)"
+                    >
+                      <span
+                        class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] text-[12px]"
+                        :class="
+                          hasDocContent(resolveDocByNode(node))
+                            ? isActiveNode(node)
+                              ? 'detail-doc-icon--active'
+                              : 'bg-white text-slate-400 group-hover:bg-blue-50 group-hover:text-[#0066cc]'
+                            : 'bg-slate-100 text-slate-300'
+                        "
+                      >
+                        <FileTextOutlined />
+                      </span>
+                      <span class="min-w-0 flex-1 overflow-hidden">
+                        <span class="mb-0.5 block text-[10px] font-semibold text-slate-400">
+                          {{ resolveNodeDateLabel(node) || '未标注时间' }}
+                        </span>
+                        <span class="block truncate text-[12px] font-bold leading-[1.45]">
+                          {{ renderTreeNodePrimary(node) }}
+                        </span>
+                        <span
+                          v-if="!hasDocContent(resolveDocByNode(node))"
+                          class="mt-0.5 block text-[10px] font-semibold text-slate-300"
+                        >
+                          暂无正文
+                        </span>
+                        <span
+                          v-else-if="node.projection_incomplete"
+                          class="mt-0.5 block text-[10px] font-semibold text-amber-600"
+                          :title="node.projection_notice || ''"
+                        >
+                          更多文书待查看
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+                </section>
+              </template>
+              <div v-else-if="isGroupExpanded(group.key)" class="ml-1 mt-0.5 space-y-1 pl-1">
                 <button
                   v-for="node in group.children"
                   :key="`${group.key}:${node.id}`"
@@ -177,17 +239,11 @@
                 </span>
               </span>
 
-              <span
-                v-if="hasDocContent(doc)"
-                class="ml-2 flex shrink-0 items-center gap-1.5"
-              >
+              <span v-if="hasDocContent(doc)" class="ml-2 flex shrink-0 items-center gap-1.5">
                 <span class="text-[10px] font-semibold text-slate-400">{{ doc.length }}字</span>
                 <EyeOutlined class="text-[11px] text-slate-300 group-hover:text-[#0066cc]" />
               </span>
-              <span
-                v-else
-                class="text-[11px] text-slate-200"
-              >-</span>
+              <span v-else class="text-[11px] text-slate-200">-</span>
             </div>
 
             <div
@@ -212,7 +268,7 @@ import {
   CaretRightOutlined,
 } from '@ant-design/icons-vue'
 import type { PatientRecord, DocItem, DocTreeGroup, DocTreeNode } from '../types'
-import { formatDocSortTime } from '../utils/documentDisplay'
+import { formatDocSortTime, resolveDocDisplayTitle } from '../utils/documentDisplay'
 
 const props = defineProps<{
   record: PatientRecord | undefined
@@ -229,7 +285,10 @@ const emit = defineEmits<{
 
 const displayTree = computed(() =>
   (props.documentsTree || []).filter(
-    (group) => group.key !== 'all' && (group.children || []).length > 0,
+    (group) =>
+      group.key !== 'all' &&
+      ((group.children || []).length > 0 ||
+        (group.subgroups || []).some((subgroup) => (subgroup.children || []).length > 0)),
   ),
 )
 const totalDocCount = computed(
@@ -241,7 +300,12 @@ const isAllNodeActive = computed(() => !String(props.activeDocType || '').trim()
 watch(
   [displayTree, () => props.activeDocType],
   ([groups]) => {
-    const keys = (groups || []).map((group) => String(group.key || '')).filter(Boolean)
+    const keys = (groups || [])
+      .flatMap((group) => [
+        String(group.key || ''),
+        ...(group.subgroups || []).map((subgroup) => String(subgroup.key || '')),
+      ])
+      .filter(Boolean)
     if (!keys.length) {
       expandedGroupKeys.value = []
       return
@@ -251,6 +315,10 @@ watch(
     if (activeGroup && !kept.includes(activeGroup)) {
       kept.push(activeGroup)
     }
+    const activeParent = (groups || []).find((group) =>
+      (group.subgroups || []).some((subgroup) => subgroup.key === activeGroup),
+    )
+    if (activeParent && !kept.includes(activeParent.key)) kept.push(activeParent.key)
     if (!kept.length) {
       expandedGroupKeys.value = keys
       return
@@ -278,14 +346,7 @@ function hasDocContent(doc?: DocItem): boolean {
 }
 
 function resolveDocLabel(doc: DocItem): string {
-  return (
-    String(doc.label || '').trim() ||
-    String(doc.doc_name || '').trim() ||
-    String(doc.document_title || '').trim() ||
-    String(doc.doc_type || doc.type || '').trim() ||
-    String(doc.id || doc.document_id || '').trim() ||
-    '未命名文书'
-  )
+  return resolveDocDisplayTitle(doc)
 }
 
 function normalizeMatchText(value: string | null | undefined): string {
@@ -397,6 +458,10 @@ function findActiveGroupKey(groups: DocTreeGroup[]): string {
     if ((group.children || []).some((node) => isActiveNode(node))) {
       return String(group.key || '')
     }
+    const activeSubgroup = (group.subgroups || []).find((subgroup) =>
+      (subgroup.children || []).some((node) => isActiveNode(node)),
+    )
+    if (activeSubgroup) return String(activeSubgroup.key || '')
   }
   return ''
 }

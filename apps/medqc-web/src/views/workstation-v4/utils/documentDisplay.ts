@@ -1,4 +1,5 @@
 import type { DocItem } from '../types'
+import { resolveMedicalDocumentGroup, resolveMedicalDocumentTitle } from './medicalDocumentTaxonomy'
 
 export const DOC_TYPE_LABELS: Record<string, string> = {
   admission_record: '入院记录',
@@ -56,20 +57,38 @@ export function formatDocSortTime(value: string | null | undefined): string {
 export function resolveDocBaseTitle(
   doc: Pick<DocItem, 'document_title' | 'label' | 'type'>,
 ): string {
-  return (
-    normalizeDocTitle(doc.document_title) ||
-    normalizeDocTitle(doc.label) ||
-    DOC_TYPE_LABELS[doc.type] ||
-    '病历文书'
-  )
+  return resolveMedicalDocumentTitle({
+    document_title: doc.document_title,
+    label: doc.label,
+    type: doc.type,
+  })
 }
 
 export function resolveDocDisplayTitle(
-  doc: Pick<DocItem, 'document_title' | 'label' | 'type' | 'sort_time'>,
+  doc: Pick<
+    DocItem,
+    | 'document_title'
+    | 'label'
+    | 'type'
+    | 'sort_time'
+    | 'doc_type'
+    | 'source_table'
+    | 'record_time'
+    | 'content'
+  >,
   includeTime = false,
 ): string {
-  const title = resolveDocBaseTitle(doc)
+  const title = resolveMedicalDocumentTitle(doc)
   const time = formatDocSortTime(doc.sort_time)
   if (includeTime && time) return `${time} ${title}`
   return title
+}
+
+export function resolveDocGroupKey(
+  doc: Pick<
+    DocItem,
+    'doc_type' | 'type' | 'source_table' | 'label' | 'document_title' | 'content' | 'group_key'
+  >,
+): string {
+  return resolveMedicalDocumentGroup(doc).key
 }
