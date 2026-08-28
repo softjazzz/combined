@@ -3406,18 +3406,67 @@ watch(
 }
 
 .review-issue-card {
+  position: relative;
+  overflow: hidden;
   border: 1px solid #e8edf5;
   border-radius: 18px;
   background: #fff;
   padding: 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease,
+    box-shadow 220ms ease;
 }
 
-.review-issue-card:hover,
+.review-issue-card::before {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #0066cc;
+  content: '';
+  opacity: 0;
+  transform: scaleY(0.35);
+  transform-origin: center;
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.review-issue-card:hover {
+  border-color: #60a5fa;
+  background: #f8fbff;
+  box-shadow:
+    0 4px 14px rgba(0, 102, 204, 0.12),
+    0 8px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.review-issue-card:hover::before,
+.review-issue-card--active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
 .review-issue-card--active {
-  border-color: #93c5fd;
-  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+  border-color: #3b82f6;
+  background: #f5f9ff;
+  box-shadow:
+    0 4px 14px rgba(0, 102, 204, 0.14),
+    0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-issue-card,
+  .review-issue-card::before {
+    transition: none;
+  }
+
+  .review-issue-card:hover {
+    transform: none;
+  }
 }
 
 .review-issue-card__top {
