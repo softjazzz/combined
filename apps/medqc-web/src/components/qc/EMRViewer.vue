@@ -37,7 +37,7 @@
         <div class="emr-struct__meta-row">
           <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
           <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
-          <span v-if="authorSummary">作者：{{ authorSummary }}</span>
+          <span v-if="authorSummary">录入/修改人：{{ authorSummary }}</span>
           <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
         </div>
         <div v-if="projectionNotice" class="emr-struct__projection-notice">
@@ -118,7 +118,7 @@
       <div class="emr-content-meta">
         <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
         <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
-        <span v-if="authorSummary">作者：{{ authorSummary }}</span>
+        <span v-if="authorSummary">录入/修改人：{{ authorSummary }}</span>
         <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
         <span v-if="projectionNotice" class="emr-content-meta__projection-notice">{{
           projectionNotice
