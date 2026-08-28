@@ -827,6 +827,9 @@ const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter
 const issueDetailOpen = ref(false)
 const issueDetailRecord = ref<StructuredQCIssue | null>(null)
 const subitemAnchorDetailOpen = ref(false)
+const fullDocumentsVisitKey = ref('')
+const fullDocumentsCache = ref<DocItem[]>([])
+let fullDocumentsRequest: Promise<DocItem[]> | null = null
 
 const detailPagination = ref({
   current: 1,
@@ -1081,6 +1084,48 @@ function applyGroupFilter(group: { key: string; kind: string; label: string }) {
 function openIssueDetail(issue: StructuredQCIssue) {
   issueDetailRecord.value = issue
   issueDetailOpen.value = true
+}
+
+async function loadFullDocumentsForAnalysis(): Promise<DocItem[]> {
+  const patientId = String(props.patientId || '').trim()
+  const visitId = String(props.visitId || '').trim()
+  if (!patientId || !visitId) return []
+  const visitKey = `${patientId}::${String(props.instituteId || '').trim()}::${visitId}`
+  if (fullDocumentsVisitKey.value === visitKey) return fullDocumentsCache.value
+  if (fullDocumentsRequest) return fullDocumentsRequest
+
+  fullDocumentsRequest = (async () => {
+    try {
+      const response = await axios.get(`/api/v1/emr/${encodeURIComponent(visitId)}/documents`, {
+        params: {
+          patient_id: patientId,
+          ...(props.instituteId ? { institute_id: props.instituteId } : {}),
+          visit_id: visitId,
+          view: 'full',
+        },
+        timeout: 120000,
+      })
+      const payload = response.data?.data || response.data || {}
+      const rawDocuments = Array.isArray(payload.documents) ? payload.documents : []
+      const documents = rawDocuments.filter(
+        (doc: unknown): doc is DocItem =>
+          !!doc && typeof doc === 'object' && 'content' in doc && Boolean((doc as DocItem).content),
+      )
+      const currentVisitKey = `${String(props.patientId || '').trim()}::${String(props.instituteId || '').trim()}::${String(props.visitId || '').trim()}`
+      if (currentVisitKey !== visitKey) return []
+      if (documents.length) {
+        fullDocumentsCache.value = documents
+        fullDocumentsVisitKey.value = visitKey
+      }
+      return documents
+    } catch (error) {
+      console.warn('内涵质控按需加载完整文书失败:', error)
+      return []
+    } finally {
+      fullDocumentsRequest = null
+    }
+  })()
+  return fullDocumentsRequest
 }
 
 async function copyIssueEvidence(issue: StructuredQCIssue) {
@@ -1378,7 +1423,11 @@ async function runContentQC() {
     return
   }
 
-  const docs = (props.documents || []).filter((d) => d.has_content && d.content)
+  let docs = (props.documents || []).filter((d) => d.has_content && d.content)
+  // summary 目录只包含长度和身份信息；真正逐文书分析前按需读取 full 视图。
+  if (!docs.length || (props.documents || []).some((d) => d.has_content && !d.content)) {
+    docs = await loadFullDocumentsForAnalysis()
+  }
   if (docs.length === 0) {
     message.warning('该患者暂无病历文书内容，请先加载文书')
     return
@@ -1401,8 +1450,11 @@ async function runContentQC() {
 
 // 切换患者时重置
 watch(
-  () => props.patientId,
+  () => [props.patientId, props.visitId, props.instituteId],
   () => {
+    fullDocumentsVisitKey.value = ''
+    fullDocumentsCache.value = []
+    fullDocumentsRequest = null
     analyzed.value = false
     issues.value = []
     summary.value = null

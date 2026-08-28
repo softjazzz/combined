@@ -1063,6 +1063,8 @@ const documentsLoading = ref(false)
 const activeDocType = ref<string>('')
 const docPreviewTitle = ref('')
 const docPreviewContent = ref('')
+const fullDocumentsVisitKey = ref('')
+let fullDocumentsRequest: Promise<void> | null = null
 
 // ========== 详情主 Tab ==========
 type DetailMainTab = 'records' | 'frontpage' | 'settlement' | 'completeness'
@@ -1415,8 +1417,12 @@ const profileAnalyzing = ref(false)
 const drgDetailModalVisible = ref(false)
 
 function openAiProfilePanel() {
-  aiProfileModalVisible.value = true
-  profileAnalyzed.value = true
+  profileAnalyzing.value = true
+  void ensureFullDocumentsLoaded().finally(() => {
+    profileAnalyzing.value = false
+    aiProfileModalVisible.value = true
+    profileAnalyzed.value = true
+  })
 }
 
 function pickText(source: Record<string, unknown>, keys: string[]): string {
@@ -1788,6 +1794,7 @@ function applyDocumentSummaryPayload(payload: Record<string, unknown>, requestSe
   const docsRaw = Array.isArray(payload.documents) ? payload.documents : []
   const docs = docsRaw.map((item, index) => normalizeDocItem(item, index))
   documentsList.value = docs
+  fullDocumentsVisitKey.value = ''
   documentsTree.value = normalizeDocumentsTree(payload.documents_tree, docs)
   concatText.value = ''
   if (!activeDocType.value && docs.length > 0) {
@@ -1862,6 +1869,64 @@ async function loadDocuments(visitId: string) {
   }
 }
 
+/**
+ * 摘要目录只携带文书元数据，正文由查看、画像和拼接全文等按需场景加载。
+ * 这里一次请求 full 视图并合并回目录，避免启动时传输全部正文，同时保证
+ * 需要跨文书阅读的功能不会把 summary.content 当成完整病历。
+ */
+async function ensureFullDocumentsLoaded(): Promise<void> {
+  const record = selectedRecord.value
+  const visitId = record?.visitId || record?.id || selectedId.value
+  if (!record || !visitId) return
+  const visitKey = `${record.patientId || ''}::${record.instituteId || ''}::${visitId}`
+  if (fullDocumentsVisitKey.value === visitKey) return
+  if (fullDocumentsRequest) return fullDocumentsRequest
+
+  fullDocumentsRequest = (async () => {
+    try {
+      const { data } = await apiClient.get(`/api/v1/emr/${visitId}/documents`, {
+        params: buildDocumentRequestParams(visitId, 'full'),
+      })
+      const payload = (data?.data || data || {}) as Record<string, unknown>
+      const docsRaw = Array.isArray(payload.documents) ? payload.documents : []
+      if (!docsRaw.length) return
+      const currentRecord = selectedRecord.value
+      const currentVisitKey = currentRecord
+        ? `${currentRecord.patientId || ''}::${currentRecord.instituteId || ''}::${currentRecord.visitId || currentRecord.id || selectedId.value}`
+        : ''
+      if (currentVisitKey !== visitKey) return
+      const fullDocs = docsRaw.map((item, index) => normalizeDocItem(item, index))
+      const byKey = new Map(fullDocs.map((doc) => [docIdentityKey(doc), doc]))
+      const merged = documentsList.value.map((summary) => {
+        const full = byKey.get(docIdentityKey(summary))
+        if (!full) return summary
+        return {
+          ...summary,
+          ...full,
+          // summary 的业务展示字段优先，full 只负责补齐正文和结构化字段。
+          label: summary.label || full.label,
+          doc_name: summary.doc_name || full.doc_name,
+        }
+      })
+      const existingKeys = new Set(merged.map((doc) => docIdentityKey(doc)))
+      for (const full of fullDocs) {
+        if (!existingKeys.has(docIdentityKey(full))) {
+          merged.push(full)
+          existingKeys.add(docIdentityKey(full))
+        }
+      }
+      documentsList.value = merged
+      documentsTree.value = normalizeDocumentsTree([], merged)
+      fullDocumentsVisitKey.value = visitKey
+    } catch (err) {
+      console.warn('按需加载完整病历文书失败:', err)
+    } finally {
+      fullDocumentsRequest = null
+    }
+  })()
+  return fullDocumentsRequest
+}
+
 function docIdentityKey(doc: DocItem) {
   return String(
     doc.doc_key ||
@@ -1870,9 +1935,11 @@ function docIdentityKey(doc: DocItem) {
 }
 
 function openDocPreview(doc: DocItem) {
+  emrRenderState.value = 'loading'
   activeDocType.value = docIdentityKey(doc)
   docPreviewTitle.value = resolveDocDisplayTitle(doc, true)
-  docPreviewContent.value = doc.content || '暂无内容'
+  // 目录为 summary，正文由 EMRViewer 根据 activeDocType 请求 render。
+  docPreviewContent.value = ''
   detailMainTab.value = 'records'
 }
 
@@ -1881,13 +1948,17 @@ function selectDocumentByKey(key: string) {
   if (!normalizedKey) return
   const doc = documentsList.value.find((item) => docIdentityKey(item) === normalizedKey)
   if (!doc) return
+  emrRenderState.value = 'loading'
   activeDocType.value = normalizedKey
   docPreviewTitle.value = resolveDocDisplayTitle(doc, true)
-  docPreviewContent.value = doc.content || ''
+  docPreviewContent.value = ''
   detailMainTab.value = 'records'
 }
 
-function showConcatRecord() {
+async function showConcatRecord() {
+  await ensureFullDocumentsLoaded()
+  concatText.value = buildConcatTextFromDocuments(documentsList.value)
+  emrRenderState.value = 'fallback'
   activeDocType.value = ''
   docPreviewTitle.value = ''
   docPreviewContent.value = ''
@@ -1919,7 +1990,6 @@ const {
   handleAssistIssuesChange,
   touchCodingRefresh,
   findEvidenceDoc,
-  findEvidenceSnippet,
 } = useQcPipeline()
 
 const {
@@ -2070,6 +2140,8 @@ watch(selectedRecordKey, (newKey) => {
   activeDocType.value = ''
   docPreviewTitle.value = ''
   docPreviewContent.value = ''
+  fullDocumentsVisitKey.value = ''
+  fullDocumentsRequest = null
   expandedConcatSectionIndexes.value = new Set()
   settlementQcReport.value = null
   detailMainTab.value = pendingDetailMainTab.value || 'records'
@@ -2391,9 +2463,11 @@ function handleJumpEvidenceFromQC(issue: QCIssueLike) {
     message.warning('暂无可跳转的文书依据')
     return
   }
+  emrRenderState.value = 'loading'
   activeDocType.value = docIdentityKey(doc)
   docPreviewTitle.value = `依据文书：${doc.label}`
-  docPreviewContent.value = findEvidenceSnippet(issue, doc.content) || doc.content || '暂无内容'
+  // evidence 只负责选中文书；正文和结构化章节由 EMRViewer 的 render 请求提供。
+  docPreviewContent.value = ''
   detailMainTab.value = 'records'
 }
 

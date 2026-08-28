@@ -63,10 +63,16 @@ export function useQcPipeline() {
   function findEvidenceDoc(issue: QCIssueLike, docs: DocItem[]) {
     const preferredType = inferDocType(issue)
     if (preferredType) {
-      const hit = docs.find((d) => d.type === preferredType && d.has_content && d.content)
+      // 文书目录接口是 summary 视图，正文按需由 EMRViewer 的 render 接口加载；
+      // 不能因为摘要没有 content 就丢弃可定位的文书。
+      const hit = docs.find(
+        (d) =>
+          (d.type === preferredType || d.doc_type === preferredType) &&
+          (d.has_content || d.length > 0),
+      )
       if (hit) return hit
     }
-    return docs.find((d) => d.has_content && d.content) || null
+    return docs.find((d) => d.has_content || d.length > 0) || null
   }
 
   function findEvidenceSnippet(issue: QCIssueLike, content: string | null) {
