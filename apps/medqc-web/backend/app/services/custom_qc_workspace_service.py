@@ -16,6 +16,7 @@ from sqlalchemy import (
     Table,
     and_,
     asc,
+    case,
     desc,
     func,
     or_,
@@ -2984,37 +2985,53 @@ class CustomQCWorkspaceService:
         # 规则集身份仍由 Python 做精确校验；这里仅以文本预筛掉与当前 LX0609
         # 代次无关的历史任务，避免全院首页解析大批无关 filters/summary JSON。
         # 两处都保留，是为了维持读取模型“filters 优先、summary 兼容回退”的合同。
-        rule_set_candidate = or_(
-            self._batch_job_table.c.filters_json.ilike(f"%{normalized_rule_set_key}%"),
-            self._batch_job_table.c.summary_json.ilike(f"%{normalized_rule_set_key}%"),
+        filters_rule_set_candidate = self._batch_job_table.c.filters_json.ilike(
+            f"%{normalized_rule_set_key}%"
         )
-        rule_version_candidate = or_(
-            self._batch_job_table.c.filters_json.ilike(f"%{normalized_rule_set_version}%"),
-            self._batch_job_table.c.summary_json.ilike(f"%{normalized_rule_set_version}%"),
+        filters_rule_version_candidate = self._batch_job_table.c.filters_json.ilike(
+            f"%{normalized_rule_set_version}%"
         )
+        summary_rule_set_candidate = self._batch_job_table.c.summary_json.ilike(
+            f"%{normalized_rule_set_key}%"
+        )
+        summary_rule_version_candidate = self._batch_job_table.c.summary_json.ilike(
+            f"%{normalized_rule_set_version}%"
+        )
+        rule_set_candidate = or_(filters_rule_set_candidate, summary_rule_set_candidate)
+        rule_version_candidate = or_(filters_rule_version_candidate, summary_rule_version_candidate)
         session = (session_factory or _session)()
         try:
+            base_job_predicate = and_(
+                self._batch_job_table.c.status == "completed",
+                or_(
+                    self._batch_job_table.c.parent_job_id.is_(None),
+                    self._batch_job_table.c.parent_job_id == "",
+                ),
+                or_(*record_id_conditions),
+            )
+            job_columns = (
+                self._batch_job_table.c.id,
+                self._batch_job_table.c.status,
+                self._batch_job_table.c.created_at,
+                self._batch_job_table.c.finished_at,
+                self._batch_job_table.c.filters_json,
+                self._batch_job_table.c.record_ids_json,
+                # filters_json 已包含当前规则集身份时，避免读取可能很大的
+                # summary_json TOAST 值；旧任务才保留摘要兼容回退。
+                case(
+                    (
+                        and_(filters_rule_set_candidate, filters_rule_version_candidate),
+                        None,
+                    ),
+                    else_=self._batch_job_table.c.summary_json,
+                ).label("summary_json"),
+            )
+            # 新任务的规则集身份保存在 filters_json。病历池只需要选择字段，
+            # 只有 filters_json 不完整的旧任务才会通过 CASE 读取 summary_json。
             job_rows = (
                 session.execute(
-                    select(
-                        self._batch_job_table.c.id,
-                        self._batch_job_table.c.status,
-                        self._batch_job_table.c.created_at,
-                        self._batch_job_table.c.finished_at,
-                        self._batch_job_table.c.filters_json,
-                        self._batch_job_table.c.record_ids_json,
-                        self._batch_job_table.c.summary_json,
-                    ).where(
-                        and_(
-                            self._batch_job_table.c.status == "completed",
-                            or_(
-                                self._batch_job_table.c.parent_job_id.is_(None),
-                                self._batch_job_table.c.parent_job_id == "",
-                            ),
-                            or_(*record_id_conditions),
-                            rule_set_candidate,
-                            rule_version_candidate,
-                        )
+                    select(*job_columns).where(
+                        and_(base_job_predicate, rule_set_candidate, rule_version_candidate)
                     )
                 )
                 .mappings()
