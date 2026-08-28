@@ -2698,6 +2698,12 @@ def load_domain_bundle_document_index(
                        'record_time', item -> 'record_time',
                        'has_content', LENGTH(BTRIM(COALESCE(item ->> 'content', ''))) > 0,
                        'length', LENGTH(COALESCE(item ->> 'content', '')),
+                       'source_fields', CASE
+                         WHEN COALESCE(item ->> 'document_type', item ->> 'source_table', '')
+                              IN ('inpat_drug_order', 'inpat_nondrug_order')
+                         THEN COALESCE(item -> 'source_fields', '[]'::jsonb)
+                         ELSE '[]'::jsonb
+                       END,
                        'projection_incomplete', item -> 'projection_incomplete',
                        'projection_notice', item -> 'projection_notice'
                      ) ORDER BY ordinal

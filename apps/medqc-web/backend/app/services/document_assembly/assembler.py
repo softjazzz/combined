@@ -1304,6 +1304,26 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
             )
             texts.append(text_value)
         assembled_text = "\n".join(texts).strip()
+        if document_type in {"inpat_drug_order", "inpat_nondrug_order"}:
+            # 医嘱表的展示列不一定属于正文拼接字段，但必须随领域包保留，
+            # 供病历查看和质控结果使用同一份结构化医嘱事实。
+            source_field_names = {field.source_field for field in source_fields}
+            for field_name in _SPECIAL_SELECT_FIELDS.get(document_type, ()):
+                if field_name in source_field_names:
+                    continue
+                raw_value = _normalize_text(payload.get(field_name))
+                if not raw_value:
+                    continue
+                source_fields.append(
+                    DocumentSourceField(
+                        source_table=document_type,
+                        source_field=field_name,
+                        source_path=None,
+                        used=False,
+                        raw_value_preview=raw_value[:120],
+                    )
+                )
+                source_field_names.add(field_name)
         if not assembled_text:
             source_field, assembled_text = _extract_direct_text(payload)
             if source_field:

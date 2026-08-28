@@ -101,6 +101,7 @@
               @emr-defect-click="handleEmrDefectClick"
               @toggle-expand-all-sections="toggleExpandAllSections"
               @toggle-section="toggleConcatSection"
+              @select-document="selectDocumentByKey"
             />
           </template>
           <template #frontpage>
@@ -1872,6 +1873,17 @@ function openDocPreview(doc: DocItem) {
   activeDocType.value = docIdentityKey(doc)
   docPreviewTitle.value = resolveDocDisplayTitle(doc, true)
   docPreviewContent.value = doc.content || '暂无内容'
+  detailMainTab.value = 'records'
+}
+
+function selectDocumentByKey(key: string) {
+  const normalizedKey = String(key || '').trim()
+  if (!normalizedKey) return
+  const doc = documentsList.value.find((item) => docIdentityKey(item) === normalizedKey)
+  if (!doc) return
+  activeDocType.value = normalizedKey
+  docPreviewTitle.value = resolveDocDisplayTitle(doc, true)
+  docPreviewContent.value = doc.content || ''
   detailMainTab.value = 'records'
 }
 

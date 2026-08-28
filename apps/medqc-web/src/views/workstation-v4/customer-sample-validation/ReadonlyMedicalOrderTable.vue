@@ -1,8 +1,5 @@
 <template>
-  <section
-    class="readonly-medical-order-table"
-    data-testid="readonly-medical-order-table"
-  >
+  <section class="readonly-medical-order-table" data-testid="readonly-medical-order-table">
     <div class="editable-copy-order-type-switch">
       <button
         type="button"
@@ -26,8 +23,14 @@
             <th>开始时间</th>
             <th>医嘱类型</th>
             <th>医嘱项目</th>
+            <th>规格</th>
+            <th>剂量</th>
+            <th>频次</th>
+            <th>用法</th>
+            <th>数量</th>
             <th>停止时间</th>
             <th>医嘱状态</th>
+            <th>下达医生</th>
           </tr>
         </thead>
         <tbody>
@@ -42,14 +45,29 @@
             <td :title="row.item">
               {{ row.item }}
             </td>
+            <td :title="row.specification">
+              {{ row.specification || '-' }}
+            </td>
+            <td :title="row.dosage">
+              {{ row.dosage || '-' }}
+            </td>
+            <td :title="row.frequency">
+              {{ row.frequency || '-' }}
+            </td>
+            <td :title="row.route">
+              {{ row.route || '-' }}
+            </td>
+            <td :title="row.quantity">
+              {{ row.quantity || '-' }}
+            </td>
             <td>{{ row.stopTime || '-' }}</td>
             <td>{{ row.status }}</td>
+            <td :title="row.prescribedDoctor">
+              {{ row.prescribedDoctor || '-' }}
+            </td>
           </tr>
           <tr v-if="!visibleRows.length">
-            <td
-              colspan="5"
-              class="editable-copy-order-empty"
-            >
+            <td colspan="11" class="editable-copy-order-empty">
               暂无{{ activeType === 'long' ? '长期医嘱' : '临时医嘱' }}
             </td>
           </tr>
@@ -171,6 +189,7 @@ watch(
 
 .editable-copy-order-table {
   width: 100%;
+  min-width: 1120px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -195,27 +214,57 @@ watch(
 
 .editable-copy-order-table th:nth-child(1),
 .editable-copy-order-table td:nth-child(1) {
-  width: 23%;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(2),
 .editable-copy-order-table td:nth-child(2) {
-  width: 15%;
+  width: 88px;
 }
 
 .editable-copy-order-table th:nth-child(3),
 .editable-copy-order-table td:nth-child(3) {
-  width: 29%;
+  width: 240px;
 }
 
 .editable-copy-order-table th:nth-child(4),
 .editable-copy-order-table td:nth-child(4) {
-  width: 20%;
+  width: 130px;
 }
 
 .editable-copy-order-table th:nth-child(5),
 .editable-copy-order-table td:nth-child(5) {
-  width: 13%;
+  width: 100px;
+}
+
+.editable-copy-order-table th:nth-child(6),
+.editable-copy-order-table td:nth-child(6) {
+  width: 100px;
+}
+
+.editable-copy-order-table th:nth-child(7),
+.editable-copy-order-table td:nth-child(7) {
+  width: 100px;
+}
+
+.editable-copy-order-table th:nth-child(8),
+.editable-copy-order-table td:nth-child(8) {
+  width: 90px;
+}
+
+.editable-copy-order-table th:nth-child(9),
+.editable-copy-order-table td:nth-child(9) {
+  width: 160px;
+}
+
+.editable-copy-order-table th:nth-child(10),
+.editable-copy-order-table td:nth-child(10) {
+  width: 100px;
+}
+
+.editable-copy-order-table th:nth-child(11),
+.editable-copy-order-table td:nth-child(11) {
+  width: 100px;
 }
 
 .editable-copy-order-table td {

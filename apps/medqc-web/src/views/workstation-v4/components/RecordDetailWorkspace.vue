@@ -28,8 +28,15 @@
         }}
       </div>
 
+      <ReadonlyMedicalOrderTable
+        v-if="activeOrderDocument"
+        :documents="orderDocuments"
+        :selected-key="activeDocType"
+        @select="emit('select-document', $event)"
+      />
+
       <AsyncEMRViewer
-        v-if="selectedRecord && emrRenderState !== 'fallback'"
+        v-else-if="selectedRecord && emrRenderState !== 'fallback'"
         :record-id="selectedRecord.id"
         :visit-id="selectedRecord.visitId || selectedRecord.id"
         :patient-id="selectedRecord.patientId"
@@ -46,14 +53,9 @@
       />
 
       <template v-else>
-        <div
-          v-if="concatLoading"
-          class="flex flex-col items-center py-20"
-        >
+        <div v-if="concatLoading" class="flex flex-col items-center py-20">
           <a-spin size="large" />
-          <div class="text-sm text-slate-400 mt-4">
-            加载病历文书中...
-          </div>
+          <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
         </div>
 
         <div
@@ -112,26 +114,19 @@
             >
               <pre
                 class="medical-record-document__content m-0 whitespace-pre-wrap rounded-[6px] bg-transparent px-0 py-0 font-sans text-[14px] leading-[2.05] text-slate-700"
-              >{{ section.content }}</pre>
+                >{{ section.content }}</pre>
             </div>
           </div>
         </div>
 
-        <div
-          v-else
-          class="flex flex-col items-center justify-center py-20 text-slate-300"
-        >
+        <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
           <div
             class="w-20 h-20 rounded-full bg-white/74 flex items-center justify-center mb-4 border-2 border-dashed border-black/10"
           >
             <FileTextOutlined class="text-3xl" />
           </div>
-          <div class="text-sm font-medium mb-1">
-            暂无病历文书
-          </div>
-          <div class="text-xs text-slate-400">
-            该患者当前暂无可展示的病历文书内容。
-          </div>
+          <div class="text-sm font-medium mb-1">暂无病历文书</div>
+          <div class="text-xs text-slate-400">该患者当前暂无可展示的病历文书内容。</div>
         </div>
       </template>
     </div>
@@ -139,6 +134,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { defineAsyncComponent } from 'vue'
 import {
   CheckCircleOutlined,
@@ -147,13 +143,16 @@ import {
   WarningOutlined,
 } from '@ant-design/icons-vue'
 import type { PatientRecord } from '../types'
+import type { EditableMedicalRecordDocument } from '../customer-sample-validation/types'
+import { isMedicalOrderDocument } from '../customer-sample-validation/medicalDocumentDisplay'
+import ReadonlyMedicalOrderTable from '../customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 
 interface ConcatSection {
   title: string
   content: string
 }
 
-defineProps<{
+const props = defineProps<{
   selectedRecord?: PatientRecord
   emrRenderState: 'idle' | 'loading' | 'ready' | 'fallback'
   concatLoading: boolean
@@ -172,10 +171,42 @@ defineProps<{
     doc_key?: string
     execution_domain?: string
     has_content?: boolean
+    order_start_time?: string
+    order_stop_time?: string
+    order_category?: string
+    order_item?: string
+    order_specification?: string
+    order_dosage?: string
+    order_frequency?: string
+    order_route?: string
+    order_quantity?: string
+    order_prescribed_doctor?: string
+    order_status?: string
   }>
   documentsLoading: boolean
   isSectionExpanded: (index: number) => boolean
 }>()
+
+const orderDocuments = computed<EditableMedicalRecordDocument[]>(() =>
+  (props.documents || [])
+    .filter((document) =>
+      isMedicalOrderDocument(document as unknown as EditableMedicalRecordDocument),
+    )
+    .map((document, index) => {
+      const key = String(document.doc_key || document.id || `order-${index + 1}`)
+      return {
+        ...(document as unknown as EditableMedicalRecordDocument),
+        key,
+        document_type: String(document.doc_type || 'inpat_nondrug_order'),
+        title: String(document.doc_name || document.doc_type || '医嘱'),
+        content: String((document as { content?: string | null }).content || ''),
+      }
+    }),
+)
+
+const activeOrderDocument = computed(() =>
+  orderDocuments.value.find((document) => document.key === String(props.activeDocType || '')),
+)
 
 const emit = defineEmits<{
   'emr-loaded': [payload: any]
@@ -183,6 +214,7 @@ const emit = defineEmits<{
   'emr-defect-click': [payload: any]
   'toggle-expand-all-sections': []
   'toggle-section': [index: number]
+  'select-document': [key: string]
 }>()
 
 const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRViewer.vue'))

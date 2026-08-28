@@ -8,6 +8,12 @@ export type MedicalOrderRow = {
   stopTime: string
   orderType: string
   item: string
+  specification: string
+  dosage: string
+  frequency: string
+  route: string
+  quantity: string
+  prescribedDoctor: string
   status: string
   orderTypeKey: MedicalOrderTypeKey
 }
@@ -104,6 +110,20 @@ function resolveOrderStatus(document: EditableMedicalRecordDocument): string {
   return '新开'
 }
 
+function resolveOrderField(document: EditableMedicalRecordDocument, ...keys: string[]): string {
+  const source = document as unknown as Record<string, unknown>
+  for (const key of keys) {
+    const value = String(source[key] || '').trim()
+    if (value) return value
+  }
+  return ''
+}
+
+function joinOrderValue(value: string, unit: string): string {
+  if (value && unit) return `${value}${unit}`
+  return value || unit
+}
+
 function orderTimeValue(document: EditableMedicalRecordDocument): number {
   const raw = String(
     document.order_start_time || document.record_time || document.submit_time || '',
@@ -113,6 +133,14 @@ function orderTimeValue(document: EditableMedicalRecordDocument): number {
 }
 
 export function buildMedicalOrderRow(document: EditableMedicalRecordDocument): MedicalOrderRow {
+  const dosage = joinOrderValue(
+    resolveOrderField(document, 'order_dosage', 'dosage', 'dose', 'single_dose'),
+    resolveOrderField(document, 'dose_unit', 'single_dose_unit'),
+  )
+  const quantity = joinOrderValue(
+    resolveOrderField(document, 'order_quantity', 'quantity'),
+    resolveOrderField(document, 'quantity_unit'),
+  )
   return {
     document,
     startTime: normalizeOrderTime(
@@ -121,6 +149,22 @@ export function buildMedicalOrderRow(document: EditableMedicalRecordDocument): M
     stopTime: normalizeOrderTime(document.order_stop_time, ''),
     orderType: resolveOrderCategory(document),
     item: resolveOrderItem(document),
+    specification: resolveOrderField(
+      document,
+      'order_specification',
+      'specification',
+      'drug_specification',
+    ),
+    dosage,
+    frequency: resolveOrderField(document, 'order_frequency', 'drug_frequency', 'frequency'),
+    route: resolveOrderField(document, 'order_route', 'drug_apply_method', 'route'),
+    quantity,
+    prescribedDoctor: resolveOrderField(
+      document,
+      'order_prescribed_doctor',
+      'prescribed_doctor',
+      'doctor_name',
+    ),
     status: resolveOrderStatus(document),
     orderTypeKey: resolveOrderTypeKey(document),
   }

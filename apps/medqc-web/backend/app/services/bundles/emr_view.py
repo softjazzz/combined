@@ -364,7 +364,7 @@ def _normalize_source_document(
 
     sections = list(raw_doc.get("sections") or [])
     source_fields = list(raw_doc.get("source_fields") or [])
-    return {
+    normalized = {
         "id": normalized_id,
         "doc_id": normalized_id,
         "doc_key": doc_key,
@@ -398,6 +398,14 @@ def _normalize_source_document(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    if doc_type in _ORDER_DOC_TYPES:
+        normalized.update(
+            {
+                f"order_{key}" if key not in {"order_type", "order_item", "order_status"} else key: value
+                for key, value in _order_display_values(raw_doc).items()
+            }
+        )
+    return normalized
 
 
 def _lab_application_subject(document: dict[str, Any]) -> str:
@@ -845,7 +853,7 @@ def _normalize_source_document_summary(
     can_use_display_time_as_record_time = doc_type in _RECORD_TIME_FALLBACK_DOC_TYPES
     length = max(0, int(raw_doc.get("length") or 0))
     has_content = raw_doc.get("has_content") is True or length > 0
-    return {
+    summary = {
         "id": doc_id or _build_doc_key(doc_type, doc_id, index),
         "doc_id": doc_id or _build_doc_key(doc_type, doc_id, index),
         "doc_key": _build_doc_key(doc_type, doc_id, index),
@@ -866,6 +874,14 @@ def _normalize_source_document_summary(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    if doc_type in _ORDER_DOC_TYPES:
+        summary.update(
+            {
+                f"order_{key}" if key not in {"order_type", "order_item", "order_status"} else key: value
+                for key, value in _order_display_values(raw_doc).items()
+            }
+        )
+    return summary
 
 
 def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1186,18 +1202,8 @@ def _extract_kv_fields(document: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def _build_order_table_block(document: dict[str, Any]) -> dict[str, Any]:
-    rows_payload = list(document.get("order_rows") or [])
-    rows: list[dict[str, str]] = []
-    for row in rows_payload:
-        if not isinstance(row, dict):
-            continue
-        rows.append(
-            {
-                "start_time": _safe_text(row.get("start_time") or row.get("order_time")),
-                "order_type": _safe_text(row.get("order_type") or row.get("type")),
-                "order_item": _safe_text(row.get("order_item") or row.get("item_name")),
-            }
-        )
+    values = _order_display_values(document)
+    rows = [values] if any(values.values()) else []
     return {
         "block_id": f"{_safe_text(document.get('doc_key'))}:order_table",
         "block_type": "order_table",
@@ -1206,11 +1212,90 @@ def _build_order_table_block(document: dict[str, Any]) -> dict[str, Any]:
             {"key": "start_time", "label": "开始时间"},
             {"key": "order_type", "label": "医嘱类型"},
             {"key": "order_item", "label": "医嘱项目"},
+            {"key": "specification", "label": "规格"},
+            {"key": "dosage", "label": "剂量"},
+            {"key": "frequency", "label": "频次"},
+            {"key": "route", "label": "用法"},
+            {"key": "quantity", "label": "数量"},
+            {"key": "stop_time", "label": "停止时间"},
+            {"key": "order_status", "label": "医嘱状态"},
+            {"key": "prescribed_doctor", "label": "下达医生"},
         ],
         "rows": rows,
         "order_mode": "long_term" if _safe_text(document.get("doc_type")) == "inpat_drug_order" else "temporary",
         "empty": len(rows) == 0,
         "empty_text": "暂无医嘱数据",
+    }
+
+
+def _order_source_values(document: dict[str, Any]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for field in list(document.get("source_fields") or []):
+        if not isinstance(field, dict):
+            continue
+        key = _safe_text(field.get("source_field")).lower()
+        value = _safe_text(field.get("raw_value_preview"))
+        if key and value and key not in values:
+            values[key] = value
+    return values
+
+
+def _order_value(document: dict[str, Any], source_values: dict[str, str], *names: str) -> str:
+    for name in names:
+        direct = _safe_text(document.get(name))
+        if direct:
+            return direct
+        source = source_values.get(name)
+        if source:
+            return source
+    return ""
+
+
+def _join_order_value(value: str, unit: str) -> str:
+    if value and unit:
+        return f"{value}{unit}"
+    return value or unit
+
+
+def _order_display_values(document: dict[str, Any]) -> dict[str, str]:
+    source_values = _order_source_values(document)
+    order_type = _order_value(document, source_values, "order_type", "order_class")
+    order_item = _order_value(
+        document,
+        source_values,
+        "order_item",
+        "order_item_name",
+        "drug_name",
+        "generic_name",
+        "brand_name",
+        "item_name",
+        "order_name",
+    )
+    dosage = _order_value(document, source_values, "order_dosage", "dosage", "dose", "single_dose")
+    dosage = _join_order_value(
+        dosage,
+        _order_value(document, source_values, "dose_unit", "single_dose_unit"),
+    )
+    quantity = _order_value(document, source_values, "order_quantity", "quantity")
+    quantity = _join_order_value(quantity, _order_value(document, source_values, "quantity_unit"))
+    return {
+        "start_time": _order_value(
+            document, source_values, "order_start_time", "start_time", "order_time", "prescribed_datetime"
+        ),
+        "order_type": order_type,
+        "order_item": order_item,
+        "specification": _order_value(
+            document, source_values, "order_specification", "specification", "drug_specification"
+        ),
+        "dosage": dosage,
+        "frequency": _order_value(document, source_values, "order_frequency", "drug_frequency", "frequency"),
+        "route": _order_value(document, source_values, "order_route", "drug_apply_method", "route"),
+        "quantity": quantity,
+        "stop_time": _order_value(document, source_values, "order_stop_time", "stop_time"),
+        "order_status": _order_value(document, source_values, "order_status", "status"),
+        "prescribed_doctor": _order_value(
+            document, source_values, "order_prescribed_doctor", "prescribed_doctor", "doctor_name"
+        ),
     }
 
 

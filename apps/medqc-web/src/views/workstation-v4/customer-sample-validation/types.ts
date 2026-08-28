@@ -81,10 +81,7 @@ export type ManualSamplePoolRecord = {
 }
 
 export type ManualSampleValidationMode =
-  | 'customer'
-  | 'sc'
-  | 'programmatic'
-  | 'formal_fast_screen_full'
+  'customer' | 'sc' | 'programmatic' | 'formal_fast_screen_full'
 
 export type ManualSampleValidationRuleSet = {
   rule_set_key: string
@@ -414,6 +411,12 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   order_stop_time?: string
   order_category?: string
   order_item?: string
+  order_specification?: string
+  order_dosage?: string
+  order_frequency?: string
+  order_route?: string
+  order_quantity?: string
+  order_prescribed_doctor?: string
   order_status?: string
   is_new?: boolean
 }
@@ -434,11 +437,7 @@ export type EditableMedicalRecordDocumentsResult = {
 }
 
 export type SyntheticCaseExpectedStatus =
-  | 'non_compliant'
-  | 'compliant'
-  | 'not_applicable'
-  | 'data_gap'
-  | 'uncertain'
+  'non_compliant' | 'compliant' | 'not_applicable' | 'data_gap' | 'uncertain'
 
 export type SyntheticCaseGoldenAnswer = {
   id?: string

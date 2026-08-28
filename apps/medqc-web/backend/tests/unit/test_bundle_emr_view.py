@@ -298,6 +298,31 @@ def test_build_documents_should_restore_order_display_time_from_persisted_source
     assert order_node["record_time"] == "2025-10-07 08:53:16"
 
 
+def test_build_documents_should_preserve_order_display_fields_from_source_fields():
+    documents = build_documents_from_domain_bundles(
+        {
+            "course": {
+                "source_documents": [
+                    {
+                        "document_type": "inpat_nondrug_order",
+                        "document_id": "order-2",
+                        "document_title": "临时医嘱",
+                        "source_fields": [
+                            {"source_field": "order_name", "raw_value_preview": "床旁心电图"},
+                            {"source_field": "frequency", "raw_value_preview": "st"},
+                            {"source_field": "prescribed_doctor", "raw_value_preview": "李医生"},
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+
+    assert documents[0]["order_item"] == "床旁心电图"
+    assert documents[0]["order_frequency"] == "st"
+    assert documents[0]["order_prescribed_doctor"] == "李医生"
+
+
 def test_build_documents_should_merge_only_named_admission_diagnoses():
     domain_bundles = {
         "admission": {
@@ -879,6 +904,61 @@ def test_build_render_view_order_table_empty_state():
     assert payload["layout_version"] == "bundle_struct_v1"
     assert payload["render_blocks"][0]["block_type"] == "order_table"
     assert payload["render_blocks"][0]["empty"] is True
+
+
+def test_order_document_projects_complete_display_fields():
+    order_doc = {
+        "id": "order-2",
+        "doc_key": "inpat_drug_order::order-2",
+        "doc_type": "inpat_drug_order",
+        "doc_name": "长期医嘱",
+        "group_key": "orders",
+        "source_fields": [
+            {"source_field": "prescribed_datetime", "raw_value_preview": "2026-08-28 08:00:00"},
+            {"source_field": "order_type", "raw_value_preview": "长期"},
+            {"source_field": "generic_name", "raw_value_preview": "注射用药品甲"},
+            {"source_field": "drug_specification", "raw_value_preview": "1g/瓶"},
+            {"source_field": "single_dose", "raw_value_preview": "1"},
+            {"source_field": "single_dose_unit", "raw_value_preview": "瓶"},
+            {"source_field": "drug_frequency", "raw_value_preview": "qd"},
+            {"source_field": "drug_apply_method", "raw_value_preview": "静滴"},
+            {"source_field": "stop_time", "raw_value_preview": "2026-08-30 08:00:00"},
+            {"source_field": "order_status", "raw_value_preview": "执行中"},
+            {"source_field": "prescribed_doctor", "raw_value_preview": "张医生"},
+        ],
+    }
+
+    payload = build_render_view(order_doc)
+    block = payload["render_blocks"][0]
+
+    assert [column["key"] for column in block["columns"]] == [
+        "start_time",
+        "order_type",
+        "order_item",
+        "specification",
+        "dosage",
+        "frequency",
+        "route",
+        "quantity",
+        "stop_time",
+        "order_status",
+        "prescribed_doctor",
+    ]
+    assert block["rows"] == [
+        {
+            "start_time": "2026-08-28 08:00:00",
+            "order_type": "长期",
+            "order_item": "注射用药品甲",
+            "specification": "1g/瓶",
+            "dosage": "1瓶",
+            "frequency": "qd",
+            "route": "静滴",
+            "quantity": "",
+            "stop_time": "2026-08-30 08:00:00",
+            "order_status": "执行中",
+            "prescribed_doctor": "张医生",
+        }
+    ]
 
 
 def test_build_render_view_preserves_multiline_surgery_process():
