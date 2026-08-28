@@ -337,8 +337,6 @@ const isStructuredLayout = computed(
   () => layoutVersion.value === 'bundle_struct_v1' && renderBlocks.value.length > 0,
 )
 
-const GENERIC_CONTENT_FIELD_LABELS = new Set(['正文', '记录内容', '文书内容', 'content', 'text'])
-
 function normalizeDisplayText(value: unknown): string {
   return String(value || '').replace(/\s+/gu, '').trim()
 }
@@ -358,13 +356,18 @@ const displayRenderBlocks = computed<EmrRenderBlock[]>(() => {
   return renderBlocks.value.flatMap((block) => {
     if (block.block_type === 'kv_section') {
       const fields = (block.fields || []).filter((field) => {
-        const label = normalizeLabelKey(field.label || field.key)
-        if (!GENERIC_CONTENT_FIELD_LABELS.has(label)) return true
+        const displayLabel = normalizeDisplayText(field.label || field.key)
         const value = normalizeDisplayText(field.value)
         if (!value) return true
-        return !paragraphs.some(
-          (paragraph) => paragraph === value || paragraph.startsWith(value),
+        const fieldWithTitle = `${displayLabel}:${value}`
+        const isDuplicatedByParagraph = paragraphs.some(
+          (paragraph) =>
+            paragraph === value ||
+            paragraph.startsWith(value) ||
+            paragraph.startsWith(fieldWithTitle) ||
+            paragraph.startsWith(`${displayLabel}：${value}`),
         )
+        return !isDuplicatedByParagraph
       })
       if ((block.fields || []).length > 0 && fields.length === 0) return []
       return [{ ...block, fields }]
