@@ -1241,6 +1241,19 @@ def _build_paragraph_blocks(document: dict[str, Any]) -> list[dict[str, Any]]:
     return blocks
 
 
+def _structured_fields_cover_content(fields: list[dict[str, str]], content: str) -> bool:
+    """判断结构化字段是否已经完整表达正文，避免同一内容渲染两次。"""
+    if not fields or not content:
+        return False
+    structured = "\n".join(
+        f"{_safe_text(field.get('label'))}：{_safe_text(field.get('value'))}"
+        for field in fields
+        if _safe_text(field.get("label")) and _safe_text(field.get("value"))
+    )
+    normalize = lambda value: re.sub(r"\s+", "", _safe_text(value))
+    return bool(structured) and normalize(structured) == normalize(content)
+
+
 def _build_highlight_anchors(
     *,
     content: str,
@@ -1343,7 +1356,11 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
         )
 
     should_append_paragraph = not (
-        doc_type in _SURGERY_STRUCT_DOC_TYPES and len(kv_fields) >= 6
+        doc_type in _SURGERY_STRUCT_DOC_TYPES
+        and (
+            len(kv_fields) >= 6
+            or _structured_fields_cover_content(kv_fields, content)
+        )
     )
     if should_append_paragraph:
         render_blocks.extend(_build_paragraph_blocks(document))

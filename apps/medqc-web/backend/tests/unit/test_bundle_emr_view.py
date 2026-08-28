@@ -913,6 +913,28 @@ def test_build_render_view_preserves_multiline_surgery_process():
     assert fields["手术开始时间"] == "2026-08-18 09:05:00"
 
 
+def test_build_render_view_does_not_repeat_presurgery_summary_content():
+    content = (
+        "手术适应症：诊断明确，手术指征具备。    手术风险：详见手术同意书。\n"
+        "手术名称：开颅血肿清除术。\n手术时间：今日急诊。\n麻醉方式：气管插管全麻。"
+    )
+    document = {
+        "id": "PRESURG-001",
+        "doc_key": "presurg_summary::PRESURG-001",
+        "doc_type": "presurg_summary",
+        "doc_name": "术前小结",
+        "group_key": "surgery",
+        "content": content,
+        "sections": [],
+        "source_fields": [],
+    }
+
+    payload = build_render_view(document)
+
+    assert [block["block_type"] for block in payload["render_blocks"]] == ["kv_section"]
+    assert payload["render_blocks"][0]["title"] == "术前小结"
+
+
 def test_build_documents_tree_should_group_exam_and_lab_documents():
     documents = [
         {
