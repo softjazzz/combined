@@ -45,7 +45,7 @@
         </div>
       </div>
 
-      <section v-for="block in renderBlocks" :key="block.block_id" class="emr-struct__block">
+      <section v-for="block in displayRenderBlocks" :key="block.block_id" class="emr-struct__block">
         <template v-if="block.block_type === 'kv_section'">
           <h4 class="emr-struct__block-title">
             {{ displayBlockTitle(block.title || '基础信息') }}
@@ -336,6 +336,48 @@ const renderedContent = computed(() => {
 const isStructuredLayout = computed(
   () => layoutVersion.value === 'bundle_struct_v1' && renderBlocks.value.length > 0,
 )
+
+const GENERIC_CONTENT_FIELD_LABELS = new Set(['正文', '记录内容', '文书内容', 'content', 'text'])
+
+function normalizeDisplayText(value: unknown): string {
+  return String(value || '').replace(/\s+/gu, '').trim()
+}
+
+/**
+ * 同一份文书可能同时返回 record_content 字段和同内容的 paragraph 投影。
+ * 结构化视图只保留一份：优先保留更完整的正文段落，避免“基础信息/记录内容”
+ * 后面又重复渲染“正文”。这是展示层处理，不修改质控输入或接口原始数据。
+ */
+const displayRenderBlocks = computed<EmrRenderBlock[]>(() => {
+  const paragraphs = renderBlocks.value
+    .filter((block) => block.block_type === 'paragraph')
+    .map((block) => normalizeDisplayText(block.text))
+    .filter(Boolean)
+  const seenParagraphs = new Set<string>()
+
+  return renderBlocks.value.flatMap((block) => {
+    if (block.block_type === 'kv_section') {
+      const fields = (block.fields || []).filter((field) => {
+        const label = normalizeLabelKey(field.label || field.key)
+        if (!GENERIC_CONTENT_FIELD_LABELS.has(label)) return true
+        const value = normalizeDisplayText(field.value)
+        if (!value) return true
+        return !paragraphs.some(
+          (paragraph) => paragraph === value || paragraph.startsWith(value),
+        )
+      })
+      if ((block.fields || []).length > 0 && fields.length === 0) return []
+      return [{ ...block, fields }]
+    }
+
+    if (block.block_type === 'paragraph') {
+      const text = normalizeDisplayText(block.text)
+      if (text && seenParagraphs.has(text)) return []
+      if (text) seenParagraphs.add(text)
+    }
+    return [block]
+  })
+})
 
 const displayMetadataTitle = computed(() =>
   displayDocName({
