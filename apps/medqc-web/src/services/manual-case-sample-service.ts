@@ -17,6 +17,7 @@ import type {
   ManualSampleValidationRuleSetListResult,
   Sheet2ExactReviewAcceptancePackage,
 } from '@/views/workstation-v4/customer-sample-validation/types'
+import { deduplicateMedicalDocumentSections } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 
 type ServiceResult<T> = {
   success: boolean
@@ -156,7 +157,7 @@ function readStringField(source: Record<string, unknown>, keys: string[], fallba
 
 function readDocumentSections(source: Record<string, unknown>) {
   const sectionsSource = Array.isArray(source.sections) ? source.sections : []
-  return sectionsSource
+  const sections = sectionsSource
     .map((item, index) => {
       if (!item || typeof item !== 'object') return null
       const row = item as Record<string, unknown>
@@ -177,6 +178,7 @@ function readDocumentSections(source: Record<string, unknown>) {
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
     .sort((left, right) => left.order_index - right.order_index)
+  return deduplicateMedicalDocumentSections(sections)
 }
 
 function normalizeEditableDocumentsResponse(
@@ -373,33 +375,35 @@ function normalizeEditableDocumentRender(
         Boolean(block && typeof block === 'object'),
       )
     : []
-  const sections = renderBlocks
-    .map((block, index) => {
-      const blockType = readStringField(block, ['block_type'])
-      let text = readStringField(block, ['text'])
-      if (!text && blockType === 'kv_section' && Array.isArray(block.fields)) {
-        text = block.fields
-          .filter((field): field is Record<string, unknown> =>
-            Boolean(field && typeof field === 'object'),
-          )
-          .map((field) => {
-            const label = readStringField(field, ['label', 'key'])
-            const fieldValue = readStringField(field, ['value'])
-            return label && fieldValue ? `${label}：${fieldValue}` : ''
-          })
-          .filter(Boolean)
-          .join('\n')
-      }
-      if (!text) return null
-      return {
-        key: readStringField(block, ['block_id'], `section-${index + 1}`),
-        label: readStringField(block, ['title'], '文书内容'),
-        text,
-        source_field: readStringField(block, ['source_field']),
-        order_index: index,
-      }
-    })
-    .filter((section): section is NonNullable<typeof section> => Boolean(section))
+  const sections = deduplicateMedicalDocumentSections(
+    renderBlocks
+      .map((block, index) => {
+        const blockType = readStringField(block, ['block_type'])
+        let text = readStringField(block, ['text'])
+        if (!text && blockType === 'kv_section' && Array.isArray(block.fields)) {
+          text = block.fields
+            .filter((field): field is Record<string, unknown> =>
+              Boolean(field && typeof field === 'object'),
+            )
+            .map((field) => {
+              const label = readStringField(field, ['label', 'key'])
+              const fieldValue = readStringField(field, ['value'])
+              return label && fieldValue ? `${label}：${fieldValue}` : ''
+            })
+            .filter(Boolean)
+            .join('\n')
+        }
+        if (!text) return null
+        return {
+          key: readStringField(block, ['block_id'], `section-${index + 1}`),
+          label: readStringField(block, ['title'], '文书内容'),
+          text,
+          source_field: readStringField(block, ['source_field']),
+          order_index: index,
+        }
+      })
+      .filter((section): section is NonNullable<typeof section> => Boolean(section)),
+  )
   const orderRow = renderBlocks
     .filter((block) => readStringField(block, ['block_type']) === 'order_table')
     .flatMap((block) => (Array.isArray(block.rows) ? block.rows : []))

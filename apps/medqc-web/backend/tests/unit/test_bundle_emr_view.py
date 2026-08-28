@@ -935,6 +935,42 @@ def test_build_render_view_does_not_repeat_presurgery_summary_content():
     assert payload["render_blocks"][0]["title"] == "术前小结"
 
 
+def test_build_render_view_deduplicates_repeated_structured_paragraph_projection():
+    text = "手术时间：2026年07月07日 15:55；麻醉方式：静吸复合全麻。"
+    document = {
+        "id": "POSTSURG-001",
+        "doc_key": "postsurg_firstcourse_record::POSTSURG-001",
+        "doc_type": "daily_course_record",
+        "doc_name": "日常病程记录",
+        "group_key": "course",
+        "content": text,
+        "sections": [
+            {
+                "section_key": "new_s_section",
+                "section_label": "新建S章节",
+                "text": text,
+                "source_field": "new_s_section",
+                "order_index": 0,
+            },
+            {
+                "section_key": "record_content",
+                "section_label": "正文",
+                "text": text,
+                "source_field": "record_content",
+                "order_index": 1,
+            },
+        ],
+    }
+
+    payload = build_render_view(document)
+
+    paragraph_blocks = [
+        block for block in payload["render_blocks"] if block["block_type"] == "paragraph"
+    ]
+    assert [block["title"] for block in paragraph_blocks] == ["新建S章节"]
+    assert [block["text"] for block in paragraph_blocks] == [text]
+
+
 def test_build_documents_tree_should_group_exam_and_lab_documents():
     documents = [
         {

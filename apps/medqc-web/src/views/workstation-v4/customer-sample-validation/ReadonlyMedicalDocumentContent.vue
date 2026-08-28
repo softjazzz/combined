@@ -1,26 +1,13 @@
 <template>
-  <div
-    class="readonly-medical-document-content"
-    data-testid="readonly-medical-document-content"
-  >
+  <div class="readonly-medical-document-content" data-testid="readonly-medical-document-content">
     <template v-if="isReportDocument">
-      <section
-        v-if="reportMetadataRows.length"
-        class="readonly-report-metadata"
-      >
-        <div
-          v-for="item in reportMetadataRows"
-          :key="item.key"
-          class="readonly-report-meta-item"
-        >
+      <section v-if="reportMetadataRows.length" class="readonly-report-metadata">
+        <div v-for="item in reportMetadataRows" :key="item.key" class="readonly-report-meta-item">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
         </div>
       </section>
-      <section
-        v-if="isLabReport"
-        class="readonly-report-results"
-      >
+      <section v-if="isLabReport" class="readonly-report-results">
         <h5>检验结果</h5>
         <div class="readonly-report-table-wrap">
           <table class="readonly-report-table">
@@ -34,10 +21,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="(item, index) in reportItems"
-                :key="item.item_id || item.item_no || index"
-              >
+              <tr v-for="(item, index) in reportItems" :key="item.item_id || item.item_no || index">
                 <td>{{ item.item_name || '未命名项目' }}</td>
                 <td class="readonly-report-result-value">
                   {{ item.result || '—' }}
@@ -52,10 +36,7 @@
           </table>
         </div>
       </section>
-      <section
-        v-else
-        class="readonly-report-results"
-      >
+      <section v-else class="readonly-report-results">
         <h5>检查结果</h5>
         <div class="readonly-exam-items">
           <article
@@ -90,10 +71,7 @@
         <pre class="readonly-medical-document-section-text">{{ section.text }}</pre>
       </section>
     </template>
-    <pre
-      v-else
-      class="readonly-medical-document-fallback"
-    >{{ document.content || '未记录' }}</pre>
+    <pre v-else class="readonly-medical-document-fallback">{{ document.content || '未记录' }}</pre>
   </div>
 </template>
 
@@ -104,6 +82,7 @@ import type {
   EditableMedicalRecordSection,
   EditableMedicalReportItem,
 } from './types'
+import { deduplicateMedicalDocumentSections } from './medicalDocumentDisplay'
 
 const props = defineProps<{
   document: EditableMedicalRecordDocument
@@ -160,7 +139,7 @@ function removeDuplicateSectionTitle(section: EditableMedicalRecordSection): str
 }
 
 const sectionViews = computed<SectionView[]>(() =>
-  (props.document.sections || [])
+  deduplicateMedicalDocumentSections(props.document.sections || [])
     .map((section, sourceIndex) => ({
       key: section.key || `section-${sourceIndex}`,
       label: String(section.label || '').trim() || '未命名章节',

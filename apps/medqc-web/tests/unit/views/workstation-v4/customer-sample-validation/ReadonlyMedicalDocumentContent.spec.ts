@@ -68,4 +68,25 @@ describe('ReadonlyMedicalDocumentContent report rendering', () => {
     expect(wrapper.text()).toContain('双肺纹理增多')
     expect(wrapper.text()).toContain('双肺炎症可能')
   })
+
+  it('does not render the same structured section twice when the source also returns a 正文 projection', () => {
+    const text = '手术时间：2026年07月07日 15:55；麻醉方式：静吸复合全麻。'
+    const wrapper = mount(ReadonlyMedicalDocumentContent, {
+      props: {
+        document: {
+          key: 'postsurg_firstcourse_record::5038135||15',
+          document_type: 'postsurg_firstcourse_record',
+          title: '术后首次病程记录',
+          content: text,
+          sections: [
+            { key: 'new_s_section', label: '新建S章节', text, order_index: 0 },
+            { key: 'record_content', label: '正文', text, order_index: 1 },
+          ],
+        },
+      },
+    })
+
+    expect(wrapper.findAll('.readonly-medical-document-section')).toHaveLength(1)
+    expect(wrapper.findAll('h5').map((node) => node.text())).toEqual(['新建S章节'])
+  })
 })

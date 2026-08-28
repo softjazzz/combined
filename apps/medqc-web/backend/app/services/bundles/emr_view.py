@@ -1212,10 +1212,18 @@ def _build_paragraph_blocks(document: dict[str, Any]) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     sections = list(document.get("sections") or [])
     if sections:
+        seen_text: dict[str, int] = {}
         for idx, section in enumerate(sections):
             if not isinstance(section, dict):
                 continue
             text = _safe_text(section.get("text"))
+            normalized_text = re.sub(r"\s+", "", text)
+            if normalized_text and normalized_text in seen_text:
+                # 部分源系统同时返回结构化章节和“正文”投影；两者可能是同一段正文。
+                # 只保留一次，避免查看病历时把同一文书显示成两份。
+                continue
+            if normalized_text:
+                seen_text[normalized_text] = idx
             blocks.append(
                 {
                     "block_id": f"{_safe_text(document.get('doc_key'))}:paragraph:{idx}",
