@@ -102,6 +102,35 @@ def test_documents_summary_view_projects_customer_safe_source_ref(monkeypatch):
     )
 
 
+def test_documents_summary_view_forwards_initial_execution_domain(monkeypatch):
+    received: list[str | None] = []
+
+    def load_summaries(**kwargs):
+        received.append(kwargs.get("execution_domain"))
+        return {"documents": [], "documents_tree": [], "domain_bundle_hits": {}}
+
+    monkeypatch.setattr(
+        emr_router_module,
+        "_load_document_summaries_from_bundle",
+        load_summaries,
+        raising=False,
+    )
+
+    response = _client().get(
+        "/api/v1/emr/V1/documents",
+        params={
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "view": "summary",
+            "execution_domain": "admission",
+        },
+    )
+
+    assert response.status_code == 200
+    assert received == ["admission"]
+
+
 def test_render_with_execution_domain_loads_only_the_selected_domain(monkeypatch):
     calls: list[tuple[str, str]] = []
 
@@ -192,6 +221,45 @@ def test_bundle_document_summary_projection_keeps_metadata_but_drops_heavy_field
     assert "content" not in document
     assert "source_fields" not in document
     assert payload["documents_tree"] == []
+
+
+def test_bundle_document_summary_can_load_one_domain_for_initial_render(monkeypatch):
+    calls: list[str] = []
+
+    def load_index(*, execution_domain: str, **_kwargs):
+        calls.append(execution_domain)
+        return {
+            "source_documents": [
+                {
+                    "document_type": f"{execution_domain}_record",
+                    "document_id": f"{execution_domain}-1",
+                    "document_title": execution_domain,
+                    "display_time": "2026-08-01 09:00:00",
+                    "record_time": "2026-08-01 09:00:00",
+                    "has_content": True,
+                    "length": 12,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        emr_view_module,
+        "load_domain_bundle_document_index",
+        load_index,
+        raising=False,
+    )
+
+    payload = emr_view_module.load_bundle_document_summaries(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        bundle_schema="public",
+        execution_domain="admission",
+    )
+
+    assert calls == ["admission"]
+    assert [doc["execution_domain"] for doc in payload["documents"]] == ["admission"]
+    assert payload["domain_bundle_hits"] == {"admission": True}
 
 
 def test_direct_bundle_document_read_uses_one_domain_bundle(monkeypatch):

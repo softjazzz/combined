@@ -905,11 +905,17 @@ def load_bundle_document_summaries(
     patient_id: str,
     visit_id: str,
     bundle_schema: str = "public",
+    execution_domain: str | None = None,
 ) -> dict[str, Any]:
     documents: list[dict[str, Any]] = []
     domain_hits: dict[str, bool] = {}
     seen_keys: set[str] = set()
-    for domain in _DOMAIN_LOAD_ORDER:
+    domains = (
+        (execution_domain,)
+        if execution_domain in _DOMAIN_LOAD_ORDER
+        else _DOMAIN_LOAD_ORDER
+    )
+    for domain in domains:
         bundle = load_domain_bundle_document_index(
             execution_domain=domain,
             institute_id=institute_id,

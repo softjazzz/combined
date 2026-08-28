@@ -93,6 +93,7 @@ def _load_document_summaries_from_bundle(
     institute_id: Optional[str],
     patient_id: Optional[str],
     visit_id: Optional[str],
+    execution_domain: Optional[str] = None,
 ) -> Dict[str, Any]:
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
@@ -106,6 +107,7 @@ def _load_document_summaries_from_bundle(
                 patient_id=normalized_patient_id,
                 visit_id=normalized_visit_id,
                 bundle_schema="public",
+                execution_domain=execution_domain,
             )
         )
     except Exception as exc:
@@ -147,6 +149,10 @@ async def get_record_documents(
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     view: str = Query("full", pattern="^(full|summary)$", description="目录视图或完整文书"),
+    execution_domain: Optional[str] = Query(
+        None,
+        description="摘要优先加载的文书领域；仅 view=summary 时生效",
+    ),
 ):
     """获取病历文书列表（BundleOnly）。"""
     loader = _load_document_summaries_from_bundle if view == "summary" else _load_documents_from_bundle
@@ -156,6 +162,7 @@ async def get_record_documents(
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=visit_id,
+        execution_domain=execution_domain if view == "summary" else None,
     )
     documents = list(payload.get("documents") or [])
     return success_response(

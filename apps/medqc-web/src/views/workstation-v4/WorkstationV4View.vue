@@ -1764,6 +1764,75 @@ function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup
 
 let documentsRequestSequence = 0
 
+function buildDocumentRequestParams(
+  visitId: string,
+  view: 'summary' | 'full',
+  executionDomain?: string,
+) {
+  const record = selectedRecord.value
+  const params: Record<string, string> = {
+    patient_id: record?.patientId || '',
+    institute_id: record?.instituteId || '',
+    visit_id: record?.visitId || visitId,
+    view,
+  }
+  if (!params.patient_id) delete params.patient_id
+  if (!params.institute_id) delete params.institute_id
+  if (executionDomain) params.execution_domain = executionDomain
+  return params
+}
+
+function applyDocumentSummaryPayload(payload: Record<string, unknown>, requestSequence: number) {
+  if (requestSequence !== documentsRequestSequence) return
+  const docsRaw = Array.isArray(payload.documents) ? payload.documents : []
+  const docs = docsRaw.map((item, index) => normalizeDocItem(item, index))
+  documentsList.value = docs
+  documentsTree.value = normalizeDocumentsTree(payload.documents_tree, docs)
+  concatText.value = ''
+  if (!activeDocType.value && docs.length > 0) {
+    const defaultDoc = docs.find((item) => item.has_content) || docs[0]
+    activeDocType.value = docIdentityKey(defaultDoc)
+    docPreviewTitle.value = resolveDocDisplayTitle(defaultDoc, true)
+    docPreviewContent.value = ''
+  }
+}
+
+async function loadRemainingDocuments(visitId: string, requestSequence: number): Promise<void> {
+  // 让首份入院文书先触发渲染请求，完整目录在后台静默补齐。
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  try {
+    const { data } = await apiClient.get(`/api/v1/emr/${visitId}/documents`, {
+      params: buildDocumentRequestParams(visitId, 'summary'),
+    })
+    if (requestSequence !== documentsRequestSequence) return
+    const payload = (data?.data || data || {}) as Record<string, unknown>
+    const docsRaw = Array.isArray(payload.documents) ? payload.documents : []
+    const existingKeys = new Set(documentsList.value.map((doc) => docIdentityKey(doc)))
+    for (const [index, item] of docsRaw.entries()) {
+      const doc = normalizeDocItem(item, index)
+      const key = docIdentityKey(doc)
+      if (!existingKeys.has(key)) {
+        documentsList.value.push(doc)
+        existingKeys.add(key)
+      }
+    }
+    documentsTree.value = normalizeDocumentsTree(payload.documents_tree, documentsList.value)
+    if (!activeDocType.value && documentsList.value.length > 0) {
+      const defaultDoc =
+        documentsList.value.find((item) => item.has_content) || documentsList.value[0]
+      activeDocType.value = docIdentityKey(defaultDoc)
+      docPreviewTitle.value = resolveDocDisplayTitle(defaultDoc, true)
+    }
+  } catch (err) {
+    // 首屏已经可用，后台目录失败只记录日志，不阻塞病历阅读。
+    console.warn('后台补充病历文书目录失败:', err)
+  } finally {
+    if (requestSequence === documentsRequestSequence) {
+      documentsLoading.value = false
+    }
+  }
+}
+
 async function loadDocuments(visitId: string) {
   const requestSequence = ++documentsRequestSequence
   documentsLoading.value = true
@@ -1771,43 +1840,22 @@ async function loadDocuments(visitId: string) {
   documentsList.value = []
   documentsTree.value = []
   concatText.value = ''
+  let backgroundLoadingStarted = false
   try {
-    const record = selectedRecord.value
-    const params: Record<string, string> = {}
-    if (record?.patientId) params.patient_id = record.patientId
-    if (record?.instituteId) params.institute_id = record.instituteId
-    if (record?.visitId) {
-      params.visit_id = record.visitId
-    } else {
-      params.visit_id = visitId
-    }
-
-    params.view = 'summary'
-    const { data } = await apiClient.get(`/api/v1/emr/${visitId}/documents`, { params })
+    const { data } = await apiClient.get(`/api/v1/emr/${visitId}/documents`, {
+      params: buildDocumentRequestParams(visitId, 'summary', 'admission'),
+    })
     if (requestSequence !== documentsRequestSequence) return
     const payload = data?.data || data || {}
-    const docsRaw = Array.isArray(payload.documents)
-      ? payload.documents
-      : Array.isArray(payload)
-        ? payload
-        : []
-    const docs = docsRaw.map((item, index) => normalizeDocItem(item, index))
-    const tree: DocTreeGroup[] = normalizeDocumentsTree(payload.documents_tree, docs)
-    documentsList.value = docs
-    documentsTree.value = tree
-    concatText.value = ''
-    if (docs.length > 0) {
-      const defaultDoc = docs.find((item) => item.has_content) || docs[0]
-      activeDocType.value = docIdentityKey(defaultDoc)
-      docPreviewTitle.value = resolveDocDisplayTitle(defaultDoc, true)
-      docPreviewContent.value = ''
-    }
+    applyDocumentSummaryPayload(payload, requestSequence)
+    backgroundLoadingStarted = true
+    void loadRemainingDocuments(visitId, requestSequence)
   } catch (err) {
     if (requestSequence !== documentsRequestSequence) return
     console.error('加载病历文书失败:', err)
   } finally {
     if (requestSequence === documentsRequestSequence) {
-      documentsLoading.value = false
+      if (!backgroundLoadingStarted) documentsLoading.value = false
       concatLoading.value = false
     }
   }

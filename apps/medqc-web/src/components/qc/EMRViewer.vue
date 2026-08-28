@@ -1,12 +1,6 @@
 <template>
-  <div
-    ref="viewerRef"
-    class="emr-viewer"
-  >
-    <div
-      v-if="!hideDocTabs && documentItems.length > 1"
-      class="mb-5"
-    >
+  <div ref="viewerRef" class="emr-viewer">
+    <div v-if="!hideDocTabs && documentItems.length > 1" class="mb-5">
       <div
         class="inline-flex items-center gap-1 rounded-xl border border-gray-100/50 bg-gray-100/80 p-1"
       >
@@ -26,10 +20,7 @@
       </div>
     </div>
 
-    <div
-      v-if="loading"
-      class="flex h-64 items-center justify-center"
-    >
+    <div v-if="loading" class="flex h-64 items-center justify-center">
       <a-spin tip="正在加载文书内容..." />
     </div>
 
@@ -49,27 +40,17 @@
           <span v-if="authorSummary">作者：{{ authorSummary }}</span>
           <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
         </div>
-        <div
-          v-if="projectionNotice"
-          class="emr-struct__projection-notice"
-        >
+        <div v-if="projectionNotice" class="emr-struct__projection-notice">
           {{ projectionNotice }}
         </div>
       </div>
 
-      <section
-        v-for="block in renderBlocks"
-        :key="block.block_id"
-        class="emr-struct__block"
-      >
+      <section v-for="block in renderBlocks" :key="block.block_id" class="emr-struct__block">
         <template v-if="block.block_type === 'kv_section'">
           <h4 class="emr-struct__block-title">
             {{ displayBlockTitle(block.title || '基础信息') }}
           </h4>
-          <div
-            v-if="(block.fields || []).length > 0"
-            class="emr-struct__field-list"
-          >
+          <div v-if="(block.fields || []).length > 0" class="emr-struct__field-list">
             <article
               v-for="field in block.fields || []"
               :key="`${block.block_id}:${field.key}`"
@@ -84,29 +65,18 @@
               </div>
             </article>
           </div>
-          <div
-            v-else
-            class="emr-struct__empty"
-          >
-            暂无结构化字段
-          </div>
+          <div v-else class="emr-struct__empty">暂无结构化字段</div>
         </template>
 
         <template v-else-if="block.block_type === 'order_table'">
           <h4 class="emr-struct__block-title">
             {{ displayBlockTitle(block.title || '医嘱') }}
           </h4>
-          <div
-            v-if="(block.rows || []).length > 0"
-            class="emr-struct__table-wrap"
-          >
+          <div v-if="(block.rows || []).length > 0" class="emr-struct__table-wrap">
             <table class="emr-struct__table">
               <thead>
                 <tr>
-                  <th
-                    v-for="col in block.columns || []"
-                    :key="col.key"
-                  >
+                  <th v-for="col in block.columns || []" :key="col.key">
                     {{ displayColumnLabel(col) }}
                   </th>
                 </tr>
@@ -126,10 +96,7 @@
               </tbody>
             </table>
           </div>
-          <div
-            v-else
-            class="emr-struct__empty"
-          >
+          <div v-else class="emr-struct__empty">
             {{ block.empty_text || '暂无医嘱数据' }}
           </div>
         </template>
@@ -153,10 +120,7 @@
         <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
         <span v-if="authorSummary">作者：{{ authorSummary }}</span>
         <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
-        <span
-          v-if="projectionNotice"
-          class="emr-content-meta__projection-notice"
-        >{{
+        <span v-if="projectionNotice" class="emr-content-meta__projection-notice">{{
           projectionNotice
         }}</span>
       </div>
@@ -168,15 +132,10 @@
       />
     </template>
 
-    <div
-      v-else
-      class="flex h-64 flex-col items-center justify-center text-gray-400"
-    >
+    <div v-else class="flex h-64 flex-col items-center justify-center text-gray-400">
       <FileTextOutlined class="mb-3 text-4xl" />
       <p>暂无文书内容</p>
-      <p class="text-xs">
-        请在左侧选择病历
-      </p>
+      <p class="text-xs">请在左侧选择病历</p>
     </div>
 
     <div
@@ -333,6 +292,7 @@ const metadata = ref<EmrDocumentMetadata>({})
 const annotations = ref<DefectAnnotation[]>([])
 const documentItems = ref<EmrDocumentSummary[]>([])
 const loadedDocKey = ref('')
+const loadedRecordId = ref('')
 const showAnnotationPanel = ref(false)
 const layoutVersion = ref('')
 const renderBlocks = ref<EmrRenderBlock[]>([])
@@ -587,6 +547,7 @@ function resetViewerState() {
   annotations.value = []
   documentItems.value = []
   loadedDocKey.value = ''
+  loadedRecordId.value = ''
   layoutVersion.value = ''
   renderBlocks.value = []
 }
@@ -638,6 +599,7 @@ async function fetchDocuments() {
       return
     }
     loadedDocKey.value = docIdentityKey(target)
+    loadedRecordId.value = effectiveRecordId.value
     await loadDocument(target)
     return
   }
@@ -680,6 +642,7 @@ async function fetchDocuments() {
       return
     }
     loadedDocKey.value = docIdentityKey(target)
+    loadedRecordId.value = effectiveRecordId.value
     await loadDocument(target)
   } catch (err) {
     if (isAbortError(err)) return
@@ -843,6 +806,17 @@ watch(
     props.documentsLoading,
   ],
   () => {
+    // 受控目录后台补齐时 documents 数组会追加项目，但当前文书仍然有效，
+    // 不应因为目录变化再次请求同一份正文；切换病历/文书时 loadedDocKey 会失效。
+    if (
+      props.documentsManaged &&
+      loadedRecordId.value === effectiveRecordId.value &&
+      loadedDocKey.value &&
+      documentItems.value.some((doc) => docIdentityKey(doc) === loadedDocKey.value) &&
+      (!props.activeDocKey || props.activeDocKey === loadedDocKey.value)
+    ) {
+      return
+    }
     if (effectiveRecordId.value || hasTripletContext.value) {
       void fetchDocuments()
     } else {
