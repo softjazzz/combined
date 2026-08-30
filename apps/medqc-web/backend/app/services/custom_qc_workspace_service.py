@@ -72,6 +72,7 @@ from .qc_workspace.canonical_result_store import (
     validated_customer_explanation as _validated_customer_explanation,
 )
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
+from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
@@ -2766,6 +2767,20 @@ class CustomQCWorkspaceService:
         normalized_visit_id = _safe_text(visit_id)
         normalized_rule_set_key = _safe_text(rule_set_key)
         normalized_rule_set_version = _safe_text(rule_set_version)
+        expected_rule_ids_for_count = [
+            _safe_text(rule_id).upper()
+            for rule_id in list(expected_rule_ids or [])
+            if _safe_text(rule_id)
+            and _safe_text(rule_id).upper() not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+        ]
+        if not expected_rule_ids_for_count:
+            expected_rule_ids_for_count = [
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                for item in load_luxian_0609_rules()
+                if _safe_text(item.get("rule_id") or item.get("rule_code"))
+                and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            ]
         if not all(
             (
                 normalized_institute_id,
@@ -2832,9 +2847,7 @@ class CustomQCWorkspaceService:
                     "record_ref": "",
                     "job_id": "",
                     "items": [],
-                    "expected_rule_count": len(
-                        list(expected_rule_ids or []) or load_luxian_0609_rules()
-                    ),
+                    "expected_rule_count": len(expected_rule_ids_for_count),
                     "result_rule_count": 0,
                     "is_complete": False,
                 }
@@ -2859,9 +2872,7 @@ class CustomQCWorkspaceService:
                     "record_ref": "",
                     "job_id": _safe_text(selected_job.get("id")),
                     "items": [],
-                    "expected_rule_count": len(
-                        list(expected_rule_ids or []) or load_luxian_0609_rules()
-                    ),
+                    "expected_rule_count": len(expected_rule_ids_for_count),
                     "result_rule_count": 0,
                     "is_complete": False,
                 }
@@ -2869,7 +2880,7 @@ class CustomQCWorkspaceService:
             resolved_expected_rule_ids = list(
                 dict.fromkeys(
                     _safe_text(rule_id).upper()
-                    for rule_id in list(expected_rule_ids or [])
+                    for rule_id in expected_rule_ids_for_count
                     if _safe_text(rule_id)
                 )
             )
@@ -2878,6 +2889,8 @@ class CustomQCWorkspaceService:
                     _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
                     for item in load_luxian_0609_rules()
                     if _safe_text(item.get("rule_id") or item.get("rule_code"))
+                    and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                    not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
                 ]
             if not _canonical_envelope_items_are_consistent(raw_items):
                 return {
@@ -2892,7 +2905,12 @@ class CustomQCWorkspaceService:
                     "result_rule_count": 0,
                     "is_complete": False,
                 }
-            items = [dict(item) for item in raw_items]
+            items = [
+                dict(item)
+                for item in raw_items
+                if _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            ]
             delivered_rule_ids = [
                 _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
                 for item in items
@@ -3324,6 +3342,8 @@ class CustomQCWorkspaceService:
             _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
             for item in load_luxian_0609_rules()
             if _safe_text(item.get("rule_id") or item.get("rule_code"))
+            and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+            not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
         ]
         results: Dict[tuple[str, str, str], Dict[str, Any]] = {}
         for identity, projection in projections.items():
@@ -3344,6 +3364,8 @@ class CustomQCWorkspaceService:
                 dict(item)
                 for item in projection.get("items") or []
                 if isinstance(item, dict)
+                and _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
             ]
             delivered_rule_ids = {
                 _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
