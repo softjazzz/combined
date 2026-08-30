@@ -52,3 +52,14 @@ py -3.10 -m pytest backend/tests/unit/test_luxian_0609_result_aggregator.py back
 ## 前端冒烟
 
 Playwright 已实际登录本机前端（`admin@medqc.com`），进入 `/workstation-v4/customer-sample-validation`，页面正常加载样本池、病例操作按钮和规则族列表。当前样本池没有已保存的可展示结果，故该次冒烟未产生证据按钮，不能据此宣称“定位原文”点击已完成；客户机仍需用一条有质控结果的病例执行最终点击验收。
+
+## 保存结果链路复核（08:17）
+
+使用本机 `0728` 样本池选取 1 个已同步病例执行正式 `luxian_0609_qc_v1`，任务
+`ecadc4ab-7850-4d7b-bc91-b543617f0142` 已保存并完成。任务详情及单病历最新结果接口均返回
+75/75 条规则、无重复/缺失规则，`is_complete=true`，技术错误为 0。保存结果中的客户证据已包含
+真实文书时间和字段路径（例如 `source_type=admission_record`、`record_time=2026-07-07 14:14:55`、
+`field_path=chief_complaint`）。
+
+该复核同时确认：历史任务的批量结果抽屉尚未接入 `locate-evidence` 事件，因此可以读取保存结果，
+但不能从该抽屉直接跳转病历原文；这属于前端交互缺口，不影响后端结果保存完整性。
