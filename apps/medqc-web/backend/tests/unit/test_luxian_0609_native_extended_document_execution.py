@@ -5481,6 +5481,7 @@ async def test_067_valid_window_course_wins_over_another_course_without_time() -
     assert canonical["customer_evidence"] == [{
         "source_type": "daily_course_record",
         "source_document_id": "DAILY-WINDOW-067",
+        "record_time": "2026-07-02 09:00:00",
     }]
     assert result.llm_call_count == result.total_tokens == 0
 
@@ -5512,6 +5513,7 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
     assert canonical["customer_evidence"] == [{
         "source_type": "daily_course_record",
         "source_document_id": "DAILY-WINDOW",
+        "record_time": "2026-07-02 09:00:00",
     }]
     assert result.llm_call_count == result.total_tokens == 0
 
@@ -5547,6 +5549,7 @@ async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> 
     assert canonical["customer_evidence"] == [{
         "source_type": "senior_course_record",
         "source_document_id": "SENIOR-WINDOW",
+        "record_time": "2026-07-03 08:00:00",
     }]
 
 
