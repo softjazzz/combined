@@ -85,6 +85,19 @@ def _pair_separate_rows(
         if request_id or record_id:
             if not request_id or not record_id or request_id != record_id:
                 return None
+        else:
+            # 无业务 ID 时只能接受同一时限窗口内的唯一角色配对；
+            # 跨越 24 小时无法证明属于同一次会诊，不能把历史记录
+            # 静默配成本次会诊并据此判定超时。
+            request_time = _request_time(request_rows[0])
+            completion_time = _completion_time(record_rows[0], allow_record_time=True)
+            if (
+                request_time is None
+                or completion_time is None
+                or completion_time < request_time
+                or (completion_time - request_time).total_seconds() > 24 * 60 * 60
+            ):
+                return None
         return ((request_rows[0], record_rows[0]),)
 
     requests_by_id: dict[str, Mapping[str, Any]] = {}

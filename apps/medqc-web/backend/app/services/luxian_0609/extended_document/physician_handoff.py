@@ -53,6 +53,18 @@ def _shift_time(row: Mapping[str, Any]) -> datetime | None:
     return _parse_datetime(row.get("shift_time"))
 
 
+def _handoff_record_time(
+    row: Mapping[str, Any], *, field: str
+) -> datetime | None:
+    """返回交班/接班业务完成时间，缺失时才回退文书书写时间。"""
+
+    raw_value = row.get(field)
+    if _clean(raw_value):
+        # 显式业务时间解析失败时不能偷偷消费 record_time，避免时间字段错位。
+        return _parse_datetime(raw_value)
+    return _row_time(row)
+
+
 def _evaluate_explicit_order_events(
     *,
     change_times: Sequence[datetime],
@@ -106,13 +118,13 @@ def _evaluate_explicit_order_events(
             "handoff_times": [
                 value.isoformat(sep=" ")
                 for row in handoff_rows
-                if (value := _row_time(row)) is not None
+                if (value := _handoff_record_time(row, field="handoff_time")) is not None
             ],
             "handover_record_count": len(handover_rows),
             "handover_times": [
                 value.isoformat(sep=" ")
                 for row in handover_rows
-                if (value := _row_time(row)) is not None
+                if (value := _handoff_record_time(row, field="handover_time")) is not None
             ],
             "handover_threshold_hours": 24,
             "source_document_refs": all_refs,
@@ -186,7 +198,7 @@ def _evaluate_structured_change_events(
     handoff_data = tuple(
         (
             _shift_time(row),
-            _row_time(row),
+            _handoff_record_time(row, field="handoff_time"),
             _identity_tokens(row, _HANDOFF_PHYSICIAN_FIELDS),
             row,
         )
@@ -195,7 +207,7 @@ def _evaluate_structured_change_events(
     handover_data = tuple(
         (
             _shift_time(row),
-            _row_time(row),
+            _handoff_record_time(row, field="handover_time"),
             _identity_tokens(row, _HANDOVER_PHYSICIAN_FIELDS),
             row,
         )
@@ -435,12 +447,12 @@ def evaluate_physician_handoff(
     handoff_times = tuple(
         parsed
         for row in handoff_rows
-        if (parsed := _row_time(row)) is not None
+        if (parsed := _handoff_record_time(row, field="handoff_time")) is not None
     )
     handover_times = tuple(
         parsed
         for row in handover_rows
-        if (parsed := _row_time(row)) is not None
+        if (parsed := _handoff_record_time(row, field="handover_time")) is not None
     )
     all_document_refs = _document_refs(
         (

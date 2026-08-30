@@ -2206,6 +2206,31 @@ async def test_072_does_not_treat_a_prior_admission_transfer_record_as_this_tran
 
 
 @pytest.mark.asyncio
+async def test_072_transfer_date_excludes_historical_record_even_when_recorded_later() -> None:
+    """历史转科补录时间较新时，仍不能满足本次转科医嘱。"""
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
+            ),
+            "transfer_in_record": (
+                {
+                    "transfer_date": "2026-06-30",
+                    "record_time": "2026-07-01 09:00:00",
+                },
+            ),
+            "transfer_out_record": (
+                {"record_time": "2026-07-01 10:00:00"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
 async def test_072_date_only_transfer_record_is_not_used_to_prove_24_hour_timeliness() -> None:
     _, reduced = await _evaluate(
         "LX0609-072",
@@ -2259,6 +2284,30 @@ async def test_073_accepts_one_current_transfer_in_and_out_record() -> None:
         "transfer_in_associated": True,
         "transfer_out_associated": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_073_transfer_date_prevents_historical_record_from_satisfying_presence() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-073",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
+            ),
+            "transfer_in_record": (
+                {
+                    "transfer_date": "2026-06-30",
+                    "record_time": "2026-07-01 09:00:00",
+                },
+            ),
+            "transfer_out_record": (
+                {"record_time": "2026-07-01 10:00:00"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
 
 
 @pytest.mark.asyncio

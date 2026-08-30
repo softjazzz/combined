@@ -197,7 +197,7 @@ async def test_071_explicit_change_order_uses_exact_shared_shift_time() -> None:
 
 
 @pytest.mark.asyncio
-async def test_071_explicit_change_order_without_shift_time_reports_time_gap() -> None:
+async def test_071_explicit_change_order_without_shift_time_reports_association_gap() -> None:
     result = await _execute(
         {
             "inpat_nondrug_order": (
@@ -226,7 +226,8 @@ async def test_071_explicit_change_order_without_shift_time_reports_time_gap() -
     assert decision.applicability is ApplicabilityState.UNKNOWN
     assert decision.evidence_state is EvidenceState.DATA_GAP
     assert decision.qc_direction is QcDirection.UNKNOWN
-    assert decision.reason_code == "authoritative_time_missing"
+    # 交班/接班文书有书写时间，但没有所属班次时间，不能证明属于这次变更。
+    assert decision.reason_code == "association_failed"
 
 
 @pytest.mark.asyncio
@@ -317,3 +318,76 @@ async def test_071_structured_change_matches_shift_and_physician_identity() -> N
     ]
     assert facts["handoff_times"] == ["2026-08-20 07:40:00"]
     assert facts["handover_times"] == ["2026-08-20 10:00:00"]
+
+
+@pytest.mark.asyncio
+async def test_071_uses_business_handoff_times_over_document_record_times() -> None:
+    result = await _execute(
+        {
+            "physician_change_event": (
+                {
+                    "change_datetime": "2026-08-20 08:00:00",
+                    "old_physician_name": "张甲",
+                    "new_physician_name": "李乙",
+                },
+            ),
+            "handoff_record": (
+                {
+                    "document_id": "HANDOFF-BUSINESS-TIME",
+                    "shift_time": "2026-08-20 08:00:00",
+                    "handoff_doctor": "张甲",
+                    "handoff_time": "2026-08-20 07:50:00",
+                    "record_time": "2026-08-20 09:00:00",
+                },
+            ),
+            "handover_record": (
+                {
+                    "document_id": "HANDOVER-BUSINESS-TIME",
+                    "shift_time": "2026-08-20 08:00:00",
+                    "handover_doctor": "李乙",
+                    "handover_time": "2026-08-20 14:00:00",
+                    "record_time": "2026-08-20 15:00:00",
+                },
+            ),
+        }
+    )
+
+    decision = result.decisions[0]
+    assert decision.qc_direction is QcDirection.SATISFIED
+    facts = dict(result.customer_display_facts)["LX0609-071"]
+    assert facts["handoff_times"] == ["2026-08-20 07:50:00"]
+    assert facts["handover_times"] == ["2026-08-20 14:00:00"]
+
+
+@pytest.mark.asyncio
+async def test_071_invalid_business_handoff_time_does_not_fall_back_to_record_time() -> None:
+    result = await _execute(
+        {
+            "physician_change_event": (
+                {
+                    "change_datetime": "2026-08-20 08:00:00",
+                    "old_physician_name": "张甲",
+                    "new_physician_name": "李乙",
+                },
+            ),
+            "handoff_record": (
+                {
+                    "shift_time": "2026-08-20 08:00:00",
+                    "handoff_doctor": "张甲",
+                    "handoff_time": "invalid-time",
+                    "record_time": "2026-08-20 07:50:00",
+                },
+            ),
+            "handover_record": (
+                {
+                    "shift_time": "2026-08-20 08:00:00",
+                    "handover_doctor": "李乙",
+                    "handover_time": "2026-08-20 14:00:00",
+                },
+            ),
+        }
+    )
+
+    decision = result.decisions[0]
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.reason_code == "authoritative_time_missing"

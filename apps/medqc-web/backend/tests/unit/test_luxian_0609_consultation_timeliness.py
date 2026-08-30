@@ -206,6 +206,27 @@ async def test_069_unique_unidentified_request_and_record_can_pair_by_role_and_t
 
 
 @pytest.mark.asyncio
+async def test_069_unidentified_cross_day_rows_do_not_form_an_event() -> None:
+    """无业务 ID 的跨天记录无法证明属于同一次会诊，必须失败关闭。"""
+    result = await _execute(
+        (
+            {
+                "document_title": "会诊申请单",
+                "record_time": "2026-08-01 08:00:00",
+            },
+            {
+                "document_title": "会诊记录单",
+                "record_time": "2026-08-03 10:00:00",
+            },
+        )
+    )
+
+    decision = result.decisions[0]
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
 async def test_069_one_sided_business_id_does_not_form_an_event() -> None:
     result = await _execute(
         (

@@ -65,6 +65,13 @@ def _date_value(value: Any) -> date | None:
 def _candidate_for_order(
     row: Mapping[str, Any], *, order_time: datetime
 ) -> _TransferRecordCandidate:
+    # transfer_date 描述转科事件发生日期，优先用于排除既往住院转科。
+    # 即使文书后来补录、record_time 较新，也不能让历史事件满足本次医嘱。
+    transfer_date_value = row.get("transfer_date")
+    transfer_date = _date_value(transfer_date_value)
+    if transfer_date is not None and transfer_date < order_time.date():
+        return _TransferRecordCandidate("historical")
+
     document_value = authoritative_document_time_value(row)
     document_time = _precise_datetime(document_value)
     if document_time is not None:
@@ -75,16 +82,12 @@ def _candidate_for_order(
 
     # transfer_date 是兼容字段。仅日期不能证明同日先后及24小时边界；
     # 但明确早于医嘱日期的记录可排除为历史记录。
-    transfer_date_value = row.get("transfer_date")
     transfer_date_time = _precise_datetime(transfer_date_value)
     if transfer_date_time is not None:
         return _TransferRecordCandidate(
             "historical" if transfer_date_time < order_time else "current",
             transfer_date_time,
         )
-    transfer_date = _date_value(transfer_date_value)
-    if transfer_date is not None and transfer_date < order_time.date():
-        return _TransferRecordCandidate("historical")
     return _TransferRecordCandidate("time_unknown")
 
 
