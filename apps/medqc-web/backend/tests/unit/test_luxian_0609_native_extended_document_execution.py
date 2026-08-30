@@ -5167,6 +5167,49 @@ async def test_058_expert_support_at_special_antimicrobial_use_time_is_compliant
 
 
 @pytest.mark.asyncio
+async def test_058_cross_timezone_late_support_is_non_compliant() -> None:
+    """Offset-bearing timestamps compare by instant, not wall-clock text."""
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01T10:00:00+08:00",
+            },),
+            "consultation_record": ({
+                # 03:00 UTC == 11:00 Asia/Shanghai, after planned use.
+                "record_time": "2026-06-01T03:00:00+00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
+
+
+@pytest.mark.asyncio
+async def test_058_cross_timezone_same_instant_support_is_compliant() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01T10:00:00+08:00",
+            },),
+            "consultation_record": ({
+                # 02:00 UTC == 10:00 Asia/Shanghai, exactly at planned use.
+                "record_time": "2026-06-01T02:00:00+00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+
+
+@pytest.mark.asyncio
 async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-063",

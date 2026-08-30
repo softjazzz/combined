@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from .decision_model import (
     ApplicabilityState,
@@ -49,6 +50,7 @@ from .extended_document_critical_value import (
     evaluate_critical_value_rules,
 )
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     parse_strict_performed_time,
     trusted_performed_surgery_times,
 )
@@ -151,6 +153,7 @@ _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN = re.compile(
     r"(?:感染专家|专家会诊|专家查房|会诊意见).{0,12}"
     r"(?:未(?:行|完成|进行)|尚未|缺失|不存在|无)",
 )
+_LX0609_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 _INVASIVE_PROCEDURES = (
     "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
     "气管插管", "支气管镜", "动脉置管",
@@ -427,6 +430,39 @@ def _antimicrobial_names_in(
 ) -> tuple[str, ...]:
     text = _material_text(row)
     return tuple(name for name in names if name in text)
+
+
+def _parse_lx0609_058_datetime(value: Any) -> datetime | None:
+    """Parse LX058 timestamps while preserving offsets in hospital local time.
+
+    Untagged source values are already hospital-local and retain the historical
+    naive comparison behavior.  Offset-bearing values are converted to the
+    hospital timezone before dropping tzinfo so mixed representations compare
+    by the same instant.
+    """
+
+    text = _clean(value)
+    if not text:
+        return None
+    normalized = text.replace("T", " ").replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(_LX0609_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+    return parsed
+
+
+def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
+    value = authoritative_document_time_value(row)
+    return _parse_lx0609_058_datetime(
+        value
+        or row.get("death_datetime")
+        or row.get("death_time")
+        or row.get("discharge_datetime")
+        or row.get("discharge_time")
+    )
 
 
 def _is_antimicrobial_effect_evaluation(row: Mapping[str, Any]) -> bool:
@@ -1413,7 +1449,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     }))
             elif rule_id == "LX0609-058":
                 special_events = tuple(
-                    (row, name, _parse_datetime(row.get("planned_start_datetime")))
+                    (row, name, _parse_lx0609_058_datetime(row.get("planned_start_datetime")))
                     for row in antimicrobial_orders
                     for name in _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
                 )
@@ -1428,7 +1464,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 timed_expert_supports = tuple(
                     value
                     for row in expert_support_rows
-                    if (value := _row_time(row)) is not None
+                    if (value := _lx0609_058_row_time(row)) is not None
                 )
                 first_order_time = min(
                     (start for _, _, start in special_events if start is not None),
@@ -1478,14 +1514,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                         )
                         matching_times = tuple(
                             value for row in matching_rows
-                            if (value := _row_time(row)) is not None
+                            if (value := _lx0609_058_row_time(row)) is not None
                         )
                         if any(value <= start for value in matching_times):
                             continue
                         unmatched_names.append(name)
                         late_support = late_support or bool(matching_times)
                         untimed_support = untimed_support or any(
-                            _row_time(row) is None for row in matching_rows
+                            _lx0609_058_row_time(row) is None for row in matching_rows
                         )
                     if not unmatched_names:
                         final_state, reason_code = "compliant", "requirement_satisfied"
