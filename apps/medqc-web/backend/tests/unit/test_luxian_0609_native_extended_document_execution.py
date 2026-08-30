@@ -939,6 +939,33 @@ async def test_061_does_not_use_business_discharge_time_as_document_completion_t
 
 
 @pytest.mark.asyncio
+async def test_061_prefers_record_or_submit_time_over_business_discharge_time() -> None:
+    """业务出院字段不能掩盖真实文书完成时间。"""
+
+    _, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": (
+                {
+                    "patient_status": "出院",
+                    "discharge_datetime": "2026-07-01 15:15:00",
+                },
+            ),
+            "discharge_record": (
+                {
+                    "discharge_time": "2026-07-01 15:15:00",
+                    "record_time": None,
+                    "submit_datetime": "2026-07-02 16:00:00",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "threshold_exceeded"
+
+
+@pytest.mark.asyncio
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-064",
