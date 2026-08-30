@@ -78,7 +78,7 @@ class QCRuleSet:
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "rule_set_key": self.key,
             "rule_set_name": self.name,
             "rule_set_version": self.version,
@@ -94,6 +94,31 @@ class QCRuleSet:
             "max_refine_candidates": self.max_refine_candidates,
             "description": self.description,
         }
+        if self.key == "luxian_0609_qc_v1":
+            # 客户交付范围的排除项与执行冻结范围分别由既有权威模块维护；
+            # 这里仅做规则集目录的只读投影，不能改变 rule_ids/rule_count 兼容语义。
+            from .sample_validation_rule_sets import (
+                get_luxian_0609_customer_delivery_rule_ids,
+                get_luxian_0609_customer_execution_scope,
+            )
+
+            customer_rule_ids = get_luxian_0609_customer_delivery_rule_ids()
+            execution_rule_ids, withheld_rule_ids = (
+                get_luxian_0609_customer_execution_scope()
+            )
+            payload.update(
+                {
+                    "catalog_rule_ids": list(self.rule_ids),
+                    "catalog_rule_count": len(self.rule_ids),
+                    "customer_rule_ids": list(customer_rule_ids),
+                    "customer_rule_count": len(customer_rule_ids),
+                    "execution_rule_ids": list(execution_rule_ids),
+                    "execution_rule_count": len(execution_rule_ids),
+                    "withheld_rule_ids": list(withheld_rule_ids),
+                    "withheld_rule_count": len(withheld_rule_ids),
+                }
+            )
+        return payload
 
 
 SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {

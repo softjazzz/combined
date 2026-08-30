@@ -28,6 +28,23 @@ def test_luxian_0609_rule_set_should_persist_exact_customer_ids():
     assert all(rule_id.startswith("LX0609-") for rule_id in rule_set.rule_ids)
 
 
+def test_luxian_0609_rule_set_should_expose_explicit_scope_counts():
+    item = next(
+        item
+        for item in list_sichuan_rule_sets()
+        if item["rule_set_key"] == "luxian_0609_qc_v1"
+    )
+
+    assert item["catalog_rule_count"] == 75
+    assert item["customer_rule_count"] == 70
+    assert item["execution_rule_count"] == 64
+    assert item["withheld_rule_count"] == 6
+    assert len(item["catalog_rule_ids"]) == 75
+    assert len(item["customer_rule_ids"]) == 70
+    assert len(item["execution_rule_ids"]) == 64
+    assert len(item["withheld_rule_ids"]) == 6
+
+
 def test_sc_content_v1_rule_set_should_be_fixed_first_batch():
     rule_set = get_sichuan_rule_set("sc_content_v1")
 
