@@ -438,6 +438,7 @@ def test_010_ignores_historical_mri_mention_in_non_target_exam_master():
                     "order_id": "US-1",
                     "exam_id": "US-1",
                     "exam_name": "腹部超声",
+                    "exam_impression": "与既往MRI片比较，未见明显变化。",
                     "record_content": "与既往MRI片比较，未见明显变化。",
                 },
             ),

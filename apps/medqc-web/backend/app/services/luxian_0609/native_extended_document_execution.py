@@ -429,7 +429,9 @@ def _is_antimicrobial_effect_evaluation(row: Mapping[str, Any]) -> bool:
     has_antimicrobial_context = any(
         marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS
     ) or any(name in text for name in _ANTIMICROBIALS)
-    return has_evaluation_anchor or has_antimicrobial_context
+    # “治疗效果/疗效评价”本身可能描述镇痛、补液等非抗菌治疗；必须同时
+    # 出现抗菌/抗感染语境或具体抗菌药名，才能作为本规则的疗效评价。
+    return has_antimicrobial_context
 
 
 def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> bool:

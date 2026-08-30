@@ -189,17 +189,29 @@ def _is_exam_master_target(row: Mapping[str, Any]) -> bool:
     扫描会把这类历史比较误当作当前 CT/MRI 事件并破坏医嘱关联。
     """
 
-    structural_fields = tuple(
+    identity_fields = (
+        "exam_type",
+        "modality",
+        "exam_name",
+        "item_name",
+        "exam_item_name",
+        "performed_dept",
+    )
+    if any(_clean(row.get(field)) for field in identity_fields):
+        return any(
+            _EXAM_TRIGGER_PATTERN.search(_clean(row.get(field)))
+            for field in identity_fields
+        )
+    # 身份字段完全缺失时，才允许结果/结论或正文作为保守兜底信号。
+    fallback_fields = tuple(
         field
         for field in _EXAM_CONTROLLED_FIELDS
         if field != "record_content"
+    ) + ("record_content",)
+    return any(
+        _EXAM_TRIGGER_PATTERN.search(_clean(row.get(field)))
+        for field in fallback_fields
     )
-    if any(_clean(row.get(field)) for field in structural_fields):
-        return any(
-            _EXAM_TRIGGER_PATTERN.search(_clean(row.get(field)))
-            for field in structural_fields
-        )
-    return bool(_EXAM_TRIGGER_PATTERN.search(_clean(row.get("record_content"))))
 
 _CONTROLLED_MESSAGES = {
     "compliant": ("检查检验相关记录满足该项要求。", ""),
