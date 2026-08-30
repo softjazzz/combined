@@ -4459,6 +4459,7 @@ def _customer_evidence_from_display_facts(
     if safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw) is None:
         return []
 
+
     def valid_document_id(value: Any) -> str:
         candidate = str(value or "").strip()
         return (
@@ -5060,6 +5061,37 @@ def _customer_evidence_from_copy_pair_facts(
     return located
 
 
+def _customer_evidence_from_course_display_facts(
+    *, rule_id: str, facts: Any, evidence_materials: Any
+) -> list[dict[str, str]]:
+    """为查房时限缺口补出已记录日期对应的精确病程文书引用。"""
+    if rule_id not in {"LX0609-008", "LX0609-009"} or not isinstance(facts, Mapping):
+        return []
+    dates = set(facts.get("recorded_dates") or facts.get("covered_dates") or [])
+    if not dates or evidence_materials is None:
+        return []
+    located: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for source_type in ("daily_course_record", "senior_course_record"):
+        try:
+            rows = evidence_materials.rows(source_type)
+        except Exception:
+            continue
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            value = authoritative_document_time_value(row)
+            date_text = str(value or "")[:10]
+            document_id = str(row.get("document_id") or row.get("id") or "").strip()
+            if date_text not in dates or not document_id or document_id in seen:
+                continue
+            seen.add(document_id)
+            located.append({"source_type": source_type, "source_document_id": document_id})
+            if len(located) >= 8:
+                return located
+    return located
+
+
 def _customer_evidence_from_reduced_decision(
     *,
     decision: ReducedRuleDecision,
@@ -5544,9 +5576,15 @@ def aggregate_luxian_0609_results(
                 if wrapper_id == "LX0609-017"
                 else []
             )
+            course_evidence = _customer_evidence_from_course_display_facts(
+                rule_id=wrapper_id,
+                facts=display_facts_by_rule.get(wrapper_id),
+                evidence_materials=(audit_context or {}).get("evidence_materials"),
+            )
             customer_evidence = _merge_customer_evidence(
                 customer_evidence_by_rule.get(wrapper_id, []),
                 copy_pair_evidence,
+                course_evidence,
                 decision_evidence,
             )
             customer_evidence = enrich_customer_evidence(
