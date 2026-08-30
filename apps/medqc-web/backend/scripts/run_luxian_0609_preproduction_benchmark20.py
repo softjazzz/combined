@@ -25,8 +25,11 @@ from app.services.luxian_0609.preproduction_bundle_reader import (
 from app.services.luxian_0609.preproduction_runner import (
     run_luxian_0609_preproduction,
 )
-from app.services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
+from app.services.sample_validation_rule_sets import (
+    get_luxian_0609_customer_delivery_rule_ids,
+    get_luxian_0609_customer_execution_scope,
+)
 from scripts.build_luxian_0609_golden_ledger import (
     API_BATCH_SCHEMA_VERSION,
     build_candidate_ledger,
@@ -75,13 +78,14 @@ class BenchmarkContractError(ValueError):
 
 def _rule_attestations() -> tuple[tuple[str, ...], dict[str, str]]:
     all_contracts = tuple(load_luxian_0609_rule_contracts())
-    all_rule_ids = tuple(
-        str(getattr(item, "rule_id", "") or "") for item in all_contracts
-    )
-    rule_ids, _withheld_rule_ids = partition_luxian_0609_rule_scope(all_rule_ids)
+    customer_rule_ids = get_luxian_0609_customer_delivery_rule_ids()
+    rule_ids, withheld_rule_ids = get_luxian_0609_customer_execution_scope()
     contracts_by_rule_id = {str(item.rule_id): item for item in all_contracts}
     if (
-        not rule_ids
+        len(customer_rule_ids) != 70
+        or len(rule_ids) != 64
+        or len(withheld_rule_ids) != 6
+        or not rule_ids
         or len(rule_ids) != len(set(rule_ids))
         or any(rule_id not in contracts_by_rule_id for rule_id in rule_ids)
     ):

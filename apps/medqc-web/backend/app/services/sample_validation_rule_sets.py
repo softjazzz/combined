@@ -14,7 +14,10 @@ from .luxian_0609_rule_catalog import (
     load_luxian_0609_rules,
 )
 from .qc_rule_sets import QCRuleSet, get_sichuan_rule_set
-from .luxian_0609.phase_scope import load_luxian_0609_phase_scope
+from .luxian_0609.phase_scope import (
+    load_luxian_0609_phase_scope,
+    partition_luxian_0609_rule_scope,
+)
 
 
 FORMAL_FAST_SCREEN_FULL_MODE = "formal_fast_screen_full"
@@ -330,6 +333,22 @@ def get_luxian_0609_sample_validation_rule_set() -> QCRuleSet:
         max_refine_candidates=0,
         description="泸县0609客户质控点完整执行规则集。",
     )
+
+
+@lru_cache(maxsize=1)
+def get_luxian_0609_customer_delivery_rule_ids() -> tuple[str, ...]:
+    """返回客户交付范围（70条），保持目录顺序并排除客户明确无来源的规则。"""
+
+    return tuple(get_luxian_0609_sample_validation_rule_set().rule_ids)
+
+
+@lru_cache(maxsize=1)
+def get_luxian_0609_customer_execution_scope() -> tuple[
+    tuple[str, ...], tuple[str, ...]
+]:
+    """将客户交付范围拆为可执行64条与冻结6条。"""
+
+    return partition_luxian_0609_rule_scope(get_luxian_0609_customer_delivery_rule_ids())
 
 
 def list_sample_validation_rule_sets() -> list[dict[str, Any]]:

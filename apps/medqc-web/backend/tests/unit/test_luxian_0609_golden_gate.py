@@ -375,16 +375,16 @@ def test_v2_release_gate_requires_current_runtime_identity() -> None:
 
 
 def _current_rule_scope() -> tuple[tuple[str, ...], tuple[str, ...]]:
-    contracts = golden_gate.load_luxian_0609_rule_contracts()
-    return golden_gate.partition_luxian_0609_rule_scope(
-        contract.rule_id for contract in contracts
-    )
+    return golden_gate.get_luxian_0609_customer_execution_scope()
 
 
-def test_v2_default_gate_requires_exact_current_69_rule_matrix() -> None:
+def test_v2_default_gate_requires_exact_customer_64_rule_matrix() -> None:
     executable, pending = _current_rule_scope()
-    assert len(executable) == 69
+    assert len(golden_gate.get_luxian_0609_customer_delivery_rule_ids()) == 70
+    assert len(executable) == 64
     assert len(pending) == 6
+    assert len(golden_gate.load_luxian_0609_rule_contracts()) == 75
+    assert golden_gate._validate_runtime_contract_identity(_runtime_manifest()) == executable
     batch, candidate, ledger = _v2_candidate_and_ledger(rule_ids=executable)
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
@@ -395,7 +395,17 @@ def test_v2_default_gate_requires_exact_current_69_rule_matrix() -> None:
     )
 
     assert exit_code == golden_gate.EXIT_PASSED
-    assert summary["accepted_count"] == 69
+    assert summary["accepted_count"] == 64
+
+
+def test_v2_gate_rejects_customer_excluded_consent_rules() -> None:
+    excluded = ("LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042")
+    for rule_id in excluded:
+        with pytest.raises(ValueError, match="invalid Golden rule scope"):
+            golden_gate._resolve_golden_rule_ids(
+                (rule_id,),
+                executable_rule_ids=golden_gate.get_luxian_0609_customer_execution_scope()[0],
+            )
 
 
 def test_v2_default_gate_rejects_legacy_49_even_when_count_matches() -> None:

@@ -1,8 +1,13 @@
 from app.services.luxian_0609 import phase_scope as phase_scope_module
+from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609.phase_scope import (
     Luxian0609PhaseScopeEntry,
     load_luxian_0609_phase_scope,
     partition_luxian_0609_rule_scope,
+)
+from app.services.sample_validation_rule_sets import (
+    get_luxian_0609_customer_delivery_rule_ids,
+    get_luxian_0609_customer_execution_scope,
 )
 
 
@@ -67,6 +72,39 @@ def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
 
     assert executable == ("LX0609-001", "LX0609-017")
     assert pending == ("LX0609-049", "LX0609-059")
+
+
+def test_customer_delivery_scope_is_70_with_64_executable_and_6_withheld() -> None:
+    delivery = get_luxian_0609_customer_delivery_rule_ids()
+    executable, withheld = get_luxian_0609_customer_execution_scope()
+
+    assert len(delivery) == 70
+    assert len(executable) == 64
+    assert len(withheld) == 6
+    assert set(executable).isdisjoint(withheld)
+    assert set(executable) | set(withheld) == set(delivery)
+    catalog_ids = {
+        str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        for item in load_luxian_0609_rules()
+    }
+    assert set(delivery) == catalog_ids - {
+        "LX0609-033",
+        "LX0609-034",
+        "LX0609-035",
+        "LX0609-041",
+        "LX0609-042",
+    }
+    assert delivery == tuple(
+        entry.rule_id
+        for entry in load_luxian_0609_phase_scope()
+        if entry.rule_id not in {
+            "LX0609-033",
+            "LX0609-034",
+            "LX0609-035",
+            "LX0609-041",
+            "LX0609-042",
+        }
+    )
 
 
 def test_phase_scope_fails_closed_for_partial_rule_until_criterion_projection_exists(

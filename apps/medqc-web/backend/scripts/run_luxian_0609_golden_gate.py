@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 try:
-    from app.services.luxian_0609.phase_scope import (
-        partition_luxian_0609_rule_scope,
+    from app.services.sample_validation_rule_sets import (
+        get_luxian_0609_customer_delivery_rule_ids,
+        get_luxian_0609_customer_execution_scope,
     )
     from app.services.luxian_0609.rule_contracts import (
         Luxian0609RuleContract,
@@ -19,8 +20,9 @@ try:
     )
 except ModuleNotFoundError:  # 从仓库根目录直接执行 backend/scripts/*.py。
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from app.services.luxian_0609.phase_scope import (  # type: ignore[no-redef]
-        partition_luxian_0609_rule_scope,
+    from app.services.sample_validation_rule_sets import (  # type: ignore[no-redef]
+        get_luxian_0609_customer_delivery_rule_ids,
+        get_luxian_0609_customer_execution_scope,
     )
     from app.services.luxian_0609.rule_contracts import (  # type: ignore[no-redef]
         Luxian0609RuleContract,
@@ -149,11 +151,13 @@ DEFAULT_RUNS = tuple(
 def _authoritative_rule_scope() -> tuple[
     tuple[Luxian0609RuleContract, ...], tuple[str, ...], tuple[str, ...]
 ]:
-    """读取唯一规则合同，并按 phase_scope 拆分可执行与冻结范围。"""
+    """读取完整合同，并按客户交付范围拆分可执行与冻结范围。"""
 
     contracts = load_luxian_0609_rule_contracts()
-    contract_rule_ids = tuple(contract.rule_id for contract in contracts)
-    executable, withheld = partition_luxian_0609_rule_scope(contract_rule_ids)
+    customer_rule_ids = get_luxian_0609_customer_delivery_rule_ids()
+    executable, withheld = get_luxian_0609_customer_execution_scope()
+    if len(customer_rule_ids) != 70 or len(executable) != 64 or len(withheld) != 6:
+        raise ValueError("invalid LX0609 customer scope counts")
     return contracts, executable, withheld
 
 
