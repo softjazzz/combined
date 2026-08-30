@@ -4569,6 +4569,30 @@ async def test_058_expert_support_after_special_antimicrobial_use_is_non_complia
 
 
 @pytest.mark.asyncio
+async def test_058_explicitly_refused_expert_consultation_is_not_support() -> None:
+    """拒绝/未完成会诊的否定句不能充当特殊级用药前支持。"""
+    result, reduced = await _evaluate(
+        "LX0609-058",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": ({
+                "record_time": "2026-06-01 09:00:00",
+                "record_content": "患者拒绝专家会诊，继续使用美罗培南。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+    facts = dict(result.customer_display_facts)["LX0609-058"]
+    assert facts["expert_support_present"] is False
+    assert facts["support_before_use"] is False
+
+
+@pytest.mark.asyncio
 async def test_058_does_not_use_prescribed_or_update_time_as_planned_start() -> None:
     _, reduced = await _evaluate(
         "LX0609-058",
