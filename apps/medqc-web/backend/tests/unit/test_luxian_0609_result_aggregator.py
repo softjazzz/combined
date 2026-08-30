@@ -5530,6 +5530,23 @@ def test_017_native_compliant_without_fingerprints_allows_missing_context():
     assert result["customer_display_facts"] == facts
 
 
+def test_017_native_compliant_semantic_template_override_allows_high_similarity_without_pairs():
+    facts = _017_fingerprint_facts()
+    facts.update(
+        {
+            "failure_kind": "copy_similarity_within_threshold",
+            "copy_similarity": 0.9714,
+        }
+    )
+    facts.pop("copy_match_pairs")
+    facts.pop("copy_match_document_fingerprints")
+
+    result = _017_native_result(facts=facts, status="compliant")
+
+    assert result["status"] == "compliant"
+    assert result["customer_display_facts"]["copy_similarity"] == 0.9714
+
+
 @pytest.mark.parametrize(
     ("status", "failure_kind", "similarity"),
     [

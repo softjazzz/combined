@@ -3774,6 +3774,7 @@ def safe_luxian_0609_customer_display_facts(
             or (
                 failure_kind == "copy_similarity_within_threshold"
                 and float(similarity) >= float(threshold)
+                and (raw_pairs or raw.get("copy_match_document_fingerprints"))
             )
         ):
             return None
