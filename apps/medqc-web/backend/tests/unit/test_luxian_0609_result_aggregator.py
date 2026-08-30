@@ -2948,6 +2948,29 @@ def test_064_multievent_facts_expose_only_customer_safe_surgery_details():
     assert projected_again == result
 
 
+def test_064_missing_surgery_end_time_is_a_safe_data_gap_fact():
+    safe = safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-064",
+        raw={
+            "verification_kind": "postoperative_surgery_event_time_check",
+            "performed_surgery_count": 1,
+            "surgery_events": [{
+                "document_id": "PRIVATE_DOCUMENT_ID",
+                "surgery_name": "手术",
+                "surgeon_names": [],
+                "surgery_end_time": None,
+            }],
+            "missing_surgery_end_events": ["PRIVATE_DOCUMENT_ID"],
+        },
+    )
+
+    assert safe == {
+        "verification_kind": "postoperative_surgery_event_time_check",
+        "performed_surgery_count": 1,
+        "missing_surgery_end_events": ["PRIVATE_DOCUMENT_ID"],
+    }
+
+
 def test_reduced_decision_preserves_surgery_record_present_facts():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",

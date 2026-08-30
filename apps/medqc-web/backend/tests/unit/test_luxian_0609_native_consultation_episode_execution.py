@@ -3181,6 +3181,10 @@ async def test_020_course_source_incomplete_is_data_gap_even_when_order_exists(m
 
     assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
     assert result.llm_call_count == 1
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    # 受控展示事实中的建议数量必须与逐项投影一致，避免来源不完整时
+    # 把未进入二阶段核对的语义提取数量冒充 recommendation_count。
+    assert facts["recommendation_count"] == len(facts["recommendation_results"])
 
 
 @pytest.mark.asyncio

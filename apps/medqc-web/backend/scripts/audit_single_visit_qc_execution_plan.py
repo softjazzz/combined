@@ -348,6 +348,16 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
     token_usage = dict(result.get("token_usage") or {})
     eval_rows = list(result.get("evaluation_results") or result.get("parsed_evaluation_results") or [])
     status_counts = Counter(str(item.get("status") or "unknown") for item in eval_rows if isinstance(item, dict))
+    result_rule_ids = [
+        _normalize_rule_id(item.get("rule_id") or item.get("rule_code"))
+        for item in eval_rows
+        if isinstance(item, dict)
+    ]
+    selected_rule_id_set = set(selected_rule_ids)
+    result_rule_id_set = set(result_rule_ids)
+    duplicate_rule_ids = sorted(
+        rule_id for rule_id, count in Counter(result_rule_ids).items() if count > 1
+    )
     pack_breakdown = _build_actual_pack_breakdown(
         args=args,
         eval_rows=eval_rows,
@@ -378,10 +388,19 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
             "total_api_time": float(result.get("api_time") or 0.0),
             "first_result_latency": float(result.get("first_result_latency") or 0.0),
             "issues_found": int(summary.get("issues_found") or status_counts.get("non_compliant") or 0),
+            "result_row_count": len(eval_rows),
+            "distinct_rule_count": len(result_rule_id_set),
+            "missing_rule_ids": sorted(selected_rule_id_set - result_rule_id_set),
+            "unexpected_rule_ids": sorted(result_rule_id_set - selected_rule_id_set),
+            "duplicate_rule_ids": duplicate_rule_ids,
             "uncertain_count": status_counts.get("uncertain", 0),
             "non_compliant_count": status_counts.get("non_compliant", 0),
             "compliant_count": status_counts.get("compliant", 0),
             "not_applicable_count": status_counts.get("not_applicable", 0),
+            "data_gap_count": status_counts.get("data_gap", 0),
+            "not_executed_count": status_counts.get("not_executed", 0),
+            "technical_error_count": status_counts.get("technical_error", 0),
+            "unknown_status_count": status_counts.get("unknown", 0),
             "execution_strategy": str(result.get("execution_strategy") or pack_metrics.get("execution_strategy") or ""),
             "execution_mode": str(pack_metrics.get("execution_mode") or ""),
             "configured_concurrency": int(pack_metrics.get("configured_concurrency") or args.pack_concurrency or 0),

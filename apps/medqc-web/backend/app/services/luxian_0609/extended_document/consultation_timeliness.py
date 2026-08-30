@@ -148,9 +148,17 @@ def evaluate_consultation_timeliness(
         if not _REQUEST_TITLE_PATTERN.search(_clean(row.get("document_title")))
         and _RECORD_TITLE_PATTERN.search(_clean(row.get("document_title")))
     )
-    if len(request_rows) + len(record_rows) != len(remaining_rows):
+    # Some source rows are historical consultation fragments without a title,
+    # request/completion time, or any role marker.  They cannot form an event
+    # and must not poison a valid request-record pair from the same visit.
+    recognized_row_ids = {id(row) for row in (*request_rows, *record_rows)}
+    unclassified_rows = tuple(
+        row for row in remaining_rows if id(row) not in recognized_row_ids
+    )
+    recognized_rows = len(request_rows) + len(record_rows)
+    if unclassified_rows and not recognized_rows and not direct_events:
         return ConsultationTimelinessOutcome("data_gap", "association_failed")
-    if remaining_rows:
+    if recognized_rows:
         pairs = _pair_separate_rows(request_rows, record_rows)
         if pairs is None:
             return ConsultationTimelinessOutcome("data_gap", "association_failed")

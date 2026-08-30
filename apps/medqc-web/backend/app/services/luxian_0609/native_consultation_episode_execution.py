@@ -1876,8 +1876,12 @@ def _consultation_execution_display_facts(
             }
         ),
         "recommendation_count": (
+            # 只有通过权威时间和住院窗口校验的建议才进入二阶段执行核对。
+            # 当来源不完整时，episodes 仍可能包含语义上提取出的建议，
+            # 但 completed_recommendations 为空；此时不能把未进入核对的
+            # 数量写入 recommendation_count，否则 recommendation_results
+            # 无法逐项投影，聚合器会把本病例错误升级为技术异常。
             len(completed_recommendations)
-            or sum(len(episode.recommendations) for episode in episodes)
         ),
         "specific_execution_count": sum(
             item.execution_record_state == "specific_trace"

@@ -308,3 +308,33 @@ async def test_069_multiple_events_pair_by_business_id_and_keep_each_outcome() -
             "outcome": "threshold_exceeded",
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_069_ignores_unclassified_empty_rows_when_a_valid_pair_exists() -> None:
+    """无标题、无权威申请/完成时间的历史脏行不能污染有效会诊事件。"""
+
+    result = await _execute(
+        (
+            {
+                "document_title": None,
+                "record_time": "2026-07-01 11:35:02",
+            },
+            {
+                "document_title": "会诊申请单",
+                "application_id": "A",
+                "record_time": "2026-06-21 21:19:08",
+            },
+            {
+                "document_title": "会诊记录单",
+                "consultation_id": "A",
+                "record_time": "2026-06-22 01:19:08",
+            },
+        )
+    )
+
+    decision = result.decisions[0]
+    assert decision.qc_direction is QcDirection.SATISFIED
+    facts = dict(result.customer_display_facts)["LX0609-069"]
+    assert len(facts["event_results"]) == 1
+    assert facts["event_results"][0]["interval_seconds"] == 14400

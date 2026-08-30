@@ -795,8 +795,14 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-061": {"discharge_record_timeliness_check"},
         "LX0609-062": {"discharge_medication_completeness_check"},
         "LX0609-063": {"discharge_diagnosis_consistency_check"},
-        "LX0609-064": {"postoperative_three_day_coverage_check"},
-        "LX0609-065": {"postoperative_senior_round_check"},
+        "LX0609-064": {
+            "postoperative_three_day_coverage_check",
+            "postoperative_surgery_event_time_check",
+        },
+        "LX0609-065": {
+            "postoperative_senior_round_check",
+            "postoperative_surgery_event_time_check",
+        },
         "LX0609-066": {"postoperative_first_course_presence_check"},
         "LX0609-067": {"predischarge_course_presence_check"},
         "LX0609-068": {
@@ -890,6 +896,9 @@ def safe_luxian_0609_customer_display_facts(
             "surgery_time", "required_postop_dates", "covered_postop_dates",
             "surgeon_round_present",
         },
+        "postoperative_surgery_event_time_check": {
+            "performed_surgery_count", "missing_surgery_end_events",
+        },
         "postoperative_senior_round_check": {
             "surgery_time", "threshold_hours", "senior_round_times",
         },
@@ -965,6 +974,32 @@ def safe_luxian_0609_customer_display_facts(
         kind = raw.get(kind_key)
         if kind not in extended_kinds_by_rule[rule_id]:
             return None
+        if kind == "postoperative_surgery_event_time_check":
+            # 手术结束时间缺失是可解释的资料缺口，不应因原生逐台事件
+            # 携带 document_id/surgery_name 等内部字段而让整个病例变成技术异常。
+            performed_count = raw.get("performed_surgery_count")
+            missing_events = raw.get("missing_surgery_end_events")
+            if (
+                set(raw) - {"surgery_events"}
+                != {"verification_kind", "performed_surgery_count", "missing_surgery_end_events"}
+                or type(performed_count) is not int
+                or not 0 <= performed_count <= 100
+                or not isinstance(missing_events, (list, tuple))
+                or not 1 <= len(missing_events) <= performed_count
+                or any(
+                    not isinstance(value, str)
+                    or not value.strip()
+                    or len(value) > 160
+                    or "\n" in value
+                    for value in missing_events
+                )
+            ):
+                return None
+            return {
+                "verification_kind": kind,
+                "performed_surgery_count": performed_count,
+                "missing_surgery_end_events": list(dict.fromkeys(missing_events)),
+            }
         if kind == "critical_value_result_detail_missing" and (
             raw.get("missing_source") != "labtest_item_report"
             or not isinstance(raw.get("lab_report_count"), int)
