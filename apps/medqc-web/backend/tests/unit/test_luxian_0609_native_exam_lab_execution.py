@@ -415,6 +415,41 @@ async def test_typed_exam_department_can_prove_non_target_without_model(monkeypa
     assert result.llm_call_count == 0
 
 
+def test_010_ignores_historical_mri_mention_in_non_target_exam_master():
+    """非 CT/MRI 主表正文引用既往 MRI 时，不应破坏当前 CT 事件关联。"""
+
+    outcome = exam_lab._order_exam_structure_outcome(
+        {
+            "inpat_nondrug_order.exam_lab_order": (
+                {
+                    "order_id": "CT-1",
+                    "order_name": "胸部CT平扫",
+                    "order_time": "2026-08-18T09:00:00",
+                },
+            ),
+            "exam_master": (
+                {
+                    "order_id": "CT-1",
+                    "exam_id": "CT-1",
+                    "exam_type": "CT",
+                    "exam_time": "2026-08-18T10:00:00",
+                },
+                {
+                    "order_id": "US-1",
+                    "exam_id": "US-1",
+                    "exam_name": "腹部超声",
+                    "record_content": "与既往MRI片比较，未见明显变化。",
+                },
+            ),
+            "exam_item_report": (
+                {"exam_id": "CT-1", "document_id": "ct-report-1"},
+            ),
+        }
+    )
+
+    assert outcome is None
+
+
 @pytest.mark.asyncio
 async def test_explicit_absent_current_visit_facts_are_not_applicable_without_model():
     client = _Client([])

@@ -181,6 +181,26 @@ _RESULT_COURSE_PATTERN = re.compile(
     r"血肿|出血|梗死|骨折|异常|菌|\d+\+|敏感|耐药"
 )
 
+
+def _is_exam_master_target(row: Mapping[str, Any]) -> bool:
+    """按结构化检查字段识别当前影像，正文仅在字段全空时兜底。
+
+    超声等非 CT/MRI 报告正文常会引用既往 MRI 片；将正文与检查名称混合
+    扫描会把这类历史比较误当作当前 CT/MRI 事件并破坏医嘱关联。
+    """
+
+    structural_fields = tuple(
+        field
+        for field in _EXAM_CONTROLLED_FIELDS
+        if field != "record_content"
+    )
+    if any(_clean(row.get(field)) for field in structural_fields):
+        return any(
+            _EXAM_TRIGGER_PATTERN.search(_clean(row.get(field)))
+            for field in structural_fields
+        )
+    return bool(_EXAM_TRIGGER_PATTERN.search(_clean(row.get("record_content"))))
+
 _CONTROLLED_MESSAGES = {
     "compliant": ("检查检验相关记录满足该项要求。", ""),
     "non_compliant": ("检查检验相关记录未满足该项要求。", "请按该质控点要求补充或修正相关记录。"),
@@ -362,6 +382,17 @@ def _controlled_trigger_from_rows(
         for row in source.rows:
             if _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status"))):
                 continue
+            if fact_kind == "exam" and _is_exam_master_target(row):
+                return True
+            if fact_kind == "exam":
+                # 已有结构化检查字段但明确是其它模态时，正文中的既往 CT/MRI
+                # 不应重新触发本规则。
+                if any(
+                    _clean(row.get(field))
+                    for field in fields
+                    if field != "record_content"
+                ):
+                    continue
             for field in (*fields, "order_name"):
                 value = _clean(row.get(field))
                 if value and pattern.search(value):
@@ -482,10 +513,7 @@ def _order_exam_structure_outcome(
         row
         for row in rows_by_source.get("exam_master", ())
         if isinstance(row, Mapping)
-        and any(
-            _EXAM_TRIGGER_PATTERN.search(_clean(row.get(field)))
-            for field in _EXAM_CONTROLLED_FIELDS
-        )
+        and _is_exam_master_target(row)
     )
     if not orders and not course_rows and not exam_rows:
         return None
@@ -568,10 +596,7 @@ def _order_exam_association_summary(
         row
         for row in rows_by_source.get("exam_master", ())
         if isinstance(row, Mapping)
-        and any(
-            _EXAM_TRIGGER_PATTERN.search(_clean(row.get(field)))
-            for field in _EXAM_CONTROLLED_FIELDS
-        )
+        and _is_exam_master_target(row)
     )
     order_ids = tuple(_clean(row.get("order_id")) for _time, row in orders)
     exam_order_ids = tuple(_clean(row.get("order_id")) for row in exam_rows)
