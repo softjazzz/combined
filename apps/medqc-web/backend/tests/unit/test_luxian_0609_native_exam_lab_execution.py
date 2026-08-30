@@ -1878,7 +1878,7 @@ async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monk
         ),
     )
 
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == (2 if expected_failure_kind == "value" else 1)
     assert decision.final_state.value == "compliant"
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
@@ -2183,7 +2183,7 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == (2 if expected_failure_kind == "value" else 1)
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
 
@@ -4855,7 +4855,7 @@ async def test_typed_parse_failures_keep_same_public_status_and_budget(
         "model_invalid_output",
         "model_invalid_output",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == (2 if expected_failure_kind == "value" else 1)
     assert result.total_tokens == 110
     assert result.parse_failure_kinds == (expected_failure_kind,)
 

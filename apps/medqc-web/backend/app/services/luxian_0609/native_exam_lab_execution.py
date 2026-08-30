@@ -1670,20 +1670,44 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             selected_rule_ids=eligible_rule_ids,
                             projection=projection,
                         )
-                    except ExamLabFactParseError as exc:
-                        parse_failure_kinds.append(exc.failure_kind)
+                    except (ExamLabFactParseError, ValueError) as exc:
+                        # 保持严格解析合同；仅对模型偶发的 value/schema 输出重试一次，
+                        # 避免单次非法响应让整批检查检验规则永久技术失败。
+                        failure_kind = getattr(exc, "failure_kind", "value")
+                        parse_failure_kinds.append(failure_kind)
                         logger.warning(
                             "exam_lab_fact_parse_failed parse_failure_kind=%s",
-                            exc.failure_kind,
+                            failure_kind,
                         )
-                        text_facts = None
-                    except ValueError:
-                        # 防御性兜底：解析器以外的 ValueError 也不得泄露正文。
-                        parse_failure_kinds.append("value")
-                        logger.warning(
-                            "exam_lab_fact_parse_failed parse_failure_kind=value"
-                        )
-                        text_facts = None
+                        if failure_kind == "value" and isinstance(exc, ExamLabFactParseError):
+                            logger.warning(
+                                "exam_lab_fact_parse_failed parse_failure_kind=%s; retrying once",
+                                failure_kind,
+                            )
+                            llm_call_count += 1
+                            try:
+                                retry_response = await llm_client.generate(
+                                    build_exam_lab_fact_prompt(
+                                        selected_rule_ids=eligible_rule_ids,
+                                        projection=projection,
+                                    )
+                                )
+                                retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
+                                prompt_tokens += retry_prompt
+                                completion_tokens += retry_completion
+                                total_tokens += retry_total
+                                api_time += retry_elapsed
+                                text_facts = parse_exam_lab_fact_response(
+                                    response=retry_response,
+                                    selected_rule_ids=eligible_rule_ids,
+                                    projection=projection,
+                                )
+                            except Exception as retry_exc:  # noqa: BLE001
+                                parse_failure_kinds.append(getattr(retry_exc, "failure_kind", "value"))
+                                logger.warning("exam_lab_fact_retry_failed")
+                                text_facts = None
+                        else:
+                            text_facts = None
                     for rule_id in eligible_rule_ids:
                         outcome = (
                             _ExamLabOutcome(rule_id, "technical_error", "exam_lab_llm_invalid_output")
