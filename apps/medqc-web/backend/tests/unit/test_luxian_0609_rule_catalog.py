@@ -250,8 +250,16 @@ def test_luxian_0609_rules_endpoint_returns_customer_rule_view(client):
     payload = _assert_success_shell(resp.json())
     rules = payload["rules"]
     assert payload["rule_set_key"] == LUXIAN_0609_RULE_SET_KEY
-    assert payload["total_rules"] == 75
-    assert len(rules) == 75
+    # 客户当前没有同意书来源，033/034/035/041/042 不进入客户运行范围。
+    assert payload["total_rules"] == 70
+    assert len(rules) == 70
+    assert not {
+        "LX0609-033",
+        "LX0609-034",
+        "LX0609-035",
+        "LX0609-041",
+        "LX0609-042",
+    }.intersection(rule["rule_id"] for rule in rules)
     assert rules[0]["rule_id"] == "LX0609-001"
     assert rules[0]["positive_example"]
     assert rules[0]["negative_example"]
