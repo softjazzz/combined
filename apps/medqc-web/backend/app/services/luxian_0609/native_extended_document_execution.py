@@ -344,17 +344,9 @@ def _death_context(
         return "conflict", None
 
     if death_rows:
-        death_time = next(iter(explicit_death_times), None)
-        if death_time is None:
-            death_time = next(
-                (
-                    candidate
-                    for row in death_rows
-                    if (candidate := _row_time(row)) is not None
-                ),
-                None,
-            )
-        return "present", death_time
+        # 文书 record_time/submit_time 只表示记录完成时间，不能替代实际死亡时间。
+        # 死亡记录存在仍足以确认死亡状态；时限规则会因缺少死亡时刻而数据缺口关闭。
+        return "present", next(iter(explicit_death_times), None)
 
     status = _registration_status(registration_rows)
     death_time = next(iter(explicit_death_times), None)

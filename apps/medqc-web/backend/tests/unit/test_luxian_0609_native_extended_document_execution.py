@@ -329,6 +329,35 @@ async def test_051_active_inpatient_keeps_data_gap_when_death_source_is_unavaila
 
 
 @pytest.mark.asyncio
+async def test_051_death_record_document_time_without_death_time_is_data_gap() -> None:
+    """死亡记录的归档时间不能替代记录正文中的实际死亡时间。"""
+
+    result, reduced = await _evaluate(
+        "LX0609-051",
+        {
+            "death_record": (
+                {
+                    "document_id": "death-without-death-time",
+                    "record_time": "2026-07-01 12:00:00",
+                },
+            ),
+            "evaluation_context.horizon": (
+                {
+                    "horizon_date": "2026-07-10",
+                    "horizon_datetime": "2026-07-10T12:00:00",
+                    "basis": "evaluation_as_of",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_060_active_inpatient_with_complete_empty_death_source_is_not_applicable() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-060",),
