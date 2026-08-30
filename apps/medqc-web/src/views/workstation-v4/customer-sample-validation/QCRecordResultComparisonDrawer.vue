@@ -217,6 +217,23 @@ watch(
 </script>
 
 <style scoped>
+.customer-record-result-drawer :deep(.ant-drawer-close) {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  margin: 0 8px 0 0;
+  place-items: center;
+  border-radius: 10px;
+  color: rgba(29, 29, 31, 0.68);
+  transition: 180ms ease;
+}
+
+.customer-record-result-drawer :deep(.ant-drawer-close:hover) {
+  background: rgba(0, 0, 0, 0.07);
+  color: #1d1d1f;
+  transform: scale(1.03);
+}
+
 .customer-record-result-title {
   width: 100%;
   display: grid;
