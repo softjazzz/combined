@@ -17,15 +17,17 @@ class FakeObservation:
 
 
 class FakeSnapshot:
-    snapshot_schema_version = "snap-v1"
-    snapshot_hash = "s" * 64
-    observations = (FakeObservation(),)
-    facts = ()
+    def __init__(self):
+        self.snapshot_schema_version = "snap-v1"
+        self.snapshot_hash = "s" * 64
+        self.observations = (FakeObservation(),)
+        self.facts = ()
 
 
 class FakeSession:
-    snapshot = FakeSnapshot()
-    materials = object()
+    def __init__(self):
+        self.snapshot = FakeSnapshot()
+        self.materials = object()
 
 
 def test_report_does_not_leak_sensitive_values_and_hash_is_stable():
@@ -127,8 +129,66 @@ def test_api_non_ready_is_api_gap_after_canonical_ready():
     report = audit_case_rule_chain(
         institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
         evidence_session=FakeSession(), rule_contract={"family_key": "basic_timeliness"},
-        bundle={"bundle_schema_version": "bundle-v6", "document_hits": {}, "data_quality_flags": []},
+        bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": True}, "data_quality_flags": []},
         envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
         api_summary={"status": "pending", "ready": False},
     )
     assert report["checks"] == {"status": "blocked", "reason_code": "api_gap", "failure_stage": "api"}
+
+
+def test_empty_source_observations_are_blocked_source_gap():
+    session = FakeSession()
+    session.snapshot.observations = ()
+    report = audit_case_rule_chain(
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
+        evidence_session=session, rule_contract={"family_key": "basic_timeliness"},
+        bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": True}},
+        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": []},
+    )
+    assert report["checks"] == {"status": "blocked", "reason_code": "source_gap", "failure_stage": "source"}
+
+
+def test_expected_bundle_document_coverage_is_required():
+    report = audit_case_rule_chain(
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-054",
+        evidence_session=FakeSession(), rule_contract={"family_key": "extended_document"},
+        bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"discharge_record": True}},
+        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": []},
+    )
+    assert report["checks"] == {
+        "status": "technical_error",
+        "reason_code": "bundle_source_coverage_missing",
+        "failure_stage": "bundle",
+    }
+    assert "inpat_drug_order" in report["cross_layer"]["missing_bundle_keys"]
+
+
+def test_canonical_envelope_identity_must_match_requested_job_and_record():
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "job_id": "other-job",
+        "record_id": "other-record",
+        "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}],
+    }
+    report = audit_case_rule_chain(
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
+        evidence_session=FakeSession(), rule_contract={"family_key": "basic_timeliness"},
+        bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": True}},
+        envelope=envelope, expected_job_id="requested-job", expected_record_id="v",
+    )
+    assert report["checks"] == {
+        "status": "technical_error",
+        "reason_code": "canonical_envelope_identity_mismatch",
+        "failure_stage": "canonical_envelope",
+    }
+
+
+def test_cli_scope_explicitly_excludes_api_and_ui():
+    report = audit_case_rule_chain(
+        institute_id="i", patient_id="p", visit_id="v", rule_id="LX0609-001",
+        evidence_session=FakeSession(), rule_contract={"family_key": "basic_timeliness"},
+        bundle={"bundle_schema_version": "bundle-v6", "document_hits": {"admission_record": True}},
+        envelope={"schema_version": "lx0609-record-result-envelope-v1", "items": [{"rule_id": "LX0609-001", "status": "compliant", "result_status": "compliant", "is_compliant": True, "reason_code": "ok", "evidence": []}]},
+    )
+    assert report["verification_scope"]["api"] == "not_verified_by_cli"
+    assert report["verification_scope"]["ui"] == "not_verified_by_cli"

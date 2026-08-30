@@ -95,7 +95,10 @@ def _source_summary(session: Any) -> dict[str, Any]:
         "hash": _hash({"observations": rows, "snapshot_hash": _attr(snapshot, "snapshot_hash", "")}),
         "snapshot_hash": _attr(snapshot, "snapshot_hash", ""),
         "created_at": str(_attr(snapshot, "created_at", "")),
-        "blocked": blocked,
+        # 没有任何 observation 不是“没有病例资料”，而是本次读取链没有
+        # 形成可审计的来源快照；必须阻断后续 ready 判断。
+        "blocked": blocked or not rows,
+        "empty_observations": not rows,
     }
 
 
@@ -107,6 +110,7 @@ def _bundle_summary(bundle: Any) -> dict[str, Any]:
             "hits": 0,
             "flags": 0,
             "count": 0,
+            "hit_keys": [],
             "table_counts": {},
             "hash": _hash(None),
         }
@@ -133,14 +137,46 @@ def _bundle_summary(bundle: Any) -> dict[str, Any]:
         "hits": len(hits),
         "flags": len(flags),
         "count": sum(int(v) for v in hits.values() if isinstance(v, (int, float)) and not isinstance(v, bool)),
+        "hit_keys": sorted(str(key) for key in hits),
         "table_counts": table_counts,
         "hash": _hash({"schema": bundle.get("bundle_schema_version"), "hits": hits, "flags": flags}),
     }
 
 
-def _envelope_summary(envelope: Any, rule_id: str) -> tuple[dict[str, Any], bool]:
+def _expected_bundle_keys(rule_id: str, rule_contract: Any) -> tuple[str, ...]:
+    """返回 Bundle 应覆盖的文书类型，而不是把物理表别名直接当作 Bundle key。"""
+
+    if isinstance(rule_contract, Mapping):
+        explicit = rule_contract.get("bundle_source_keys") or rule_contract.get(
+            "physical_source_keys"
+        )
+        if isinstance(explicit, (list, tuple, set)):
+            return tuple(sorted({str(item).strip() for item in explicit if str(item).strip()}))
+        applicable = rule_contract.get("applicable_documents")
+        if isinstance(applicable, (list, tuple, set)):
+            return tuple(sorted({str(item).strip() for item in applicable if str(item).strip()}))
+    try:
+        from app.services.luxian_0609.source_registry import resolve_luxian_0609_rule_sources
+
+        entries = resolve_luxian_0609_rule_sources((rule_id.upper(),)).get(rule_id.upper(), ())
+        return tuple(sorted({str(entry.document_type).strip() for entry in entries if entry.document_type}))
+    except Exception:
+        return ()
+
+
+def _envelope_summary(
+    envelope: Any,
+    rule_id: str,
+    *,
+    expected_job_id: str | None = None,
+    expected_record_id: str | None = None,
+) -> tuple[dict[str, Any], bool]:
     if not isinstance(envelope, Mapping) or envelope.get("schema_version") != "lx0609-record-result-envelope-v1":
         return ({"present": False, "status": None, "reason_code": "canonical_envelope_missing", "evidence_count": 0, "hash": _hash(None)}, False)
+    if expected_job_id is not None and str(envelope.get("job_id") or "") != str(expected_job_id):
+        return ({"present": False, "status": None, "reason_code": "canonical_envelope_identity_mismatch", "evidence_count": 0, "hash": _hash(envelope.get("job_id"))}, False)
+    if expected_record_id is not None and str(envelope.get("record_id") or "") != str(expected_record_id):
+        return ({"present": False, "status": None, "reason_code": "canonical_envelope_identity_mismatch", "evidence_count": 0, "hash": _hash(envelope.get("record_id"))}, False)
     items = envelope.get("items")
     if not isinstance(items, list):
         return ({"present": False, "status": None, "reason_code": "canonical_result_envelope_invalid", "evidence_count": 0, "hash": _hash(envelope.get("schema_version"))}, False)
@@ -175,7 +211,9 @@ def _envelope_summary(envelope: Any, rule_id: str) -> tuple[dict[str, Any], bool
 def audit_case_rule_chain(*, institute_id: str, patient_id: str, visit_id: str, rule_id: str,
                           evidence_session: Any, rule_contract: Any, bundle: Any,
                           envelope: Any, api_summary: Mapping[str, Any] | None = None,
-                          git_commit: str | None = None) -> dict[str, Any]:
+                          git_commit: str | None = None,
+                          expected_job_id: str | None = None,
+                          expected_record_id: str | None = None) -> dict[str, Any]:
     """把已读取的三层对象投影为无敏感字段审计产物。"""
     rule_id = str(rule_id).strip().upper()
     source = _source_summary(evidence_session)
@@ -183,7 +221,15 @@ def audit_case_rule_chain(*, institute_id: str, patient_id: str, visit_id: str, 
         "family_key": _attr(rule_contract, "family_key", ""), "rule_version": _attr(rule_contract, "rule_version", "")
     }
     bundle_info = _bundle_summary(bundle)
-    envelope_info, envelope_ok = _envelope_summary(envelope, rule_id)
+    envelope_info, envelope_ok = _envelope_summary(
+        envelope,
+        rule_id,
+        expected_job_id=expected_job_id,
+        expected_record_id=expected_record_id,
+    )
+    expected_bundle_keys = _expected_bundle_keys(rule_id, rule_contract)
+    bundle_keys = set(bundle_info.get("hit_keys", ())) | set(bundle_info.get("table_counts", {}))
+    missing_bundle_keys = [key for key in expected_bundle_keys if key not in bundle_keys]
     source_count_by_key = {
         str(item.get("source_key")): item.get("record_count")
         for item in source.get("observations", [])
@@ -201,7 +247,10 @@ def audit_case_rule_chain(*, institute_id: str, patient_id: str, visit_id: str, 
         if source_key in bundle_info.get("table_counts", {})
         and int(record_count) != int(bundle_info["table_counts"][source_key])
     ]
-    if source["blocked"]:
+    if source.get("empty_observations"):
+        status, reason = "blocked", "source_gap"
+        stage = "source"
+    elif source["blocked"]:
         status, reason = "blocked", "data_gap"
         stage = "source"
     elif not bundle_info["present"]:
@@ -209,6 +258,9 @@ def audit_case_rule_chain(*, institute_id: str, patient_id: str, visit_id: str, 
         stage = "bundle"
     elif bundle_count_mismatches:
         status, reason = "technical_error", "bundle_source_count_mismatch"
+        stage = "bundle"
+    elif missing_bundle_keys:
+        status, reason = "technical_error", "bundle_source_coverage_missing"
         stage = "bundle"
     elif not envelope_ok:
         status, reason = "technical_error", envelope_info["reason_code"]
@@ -229,9 +281,18 @@ def audit_case_rule_chain(*, institute_id: str, patient_id: str, visit_id: str, 
         "checks": {"status": status, "reason_code": reason, "failure_stage": stage},
         "cross_layer": {
             "bundle_source_count_mismatches": bundle_count_mismatches,
+            "expected_bundle_keys": list(expected_bundle_keys),
+            "missing_bundle_keys": missing_bundle_keys,
             "count_comparison": "direct_source_key_only",
         },
         "transaction": {"isolation": "REPEATABLE READ", "read_only": True, "scope": "audit-read", "layer_snapshot_consistency": "best_effort"},
+        "verification_scope": {
+            "source_cdm": "verified_by_snapshot_reader",
+            "bundle": "verified_by_bundle_row",
+            "canonical": "verified_by_envelope_row",
+            "api": "not_verified_by_cli",
+            "ui": "not_verified_by_cli",
+        },
     }
     if api_summary is not None:
         report["api"] = {"status": str(api_summary.get("status", "")), "count": int(api_summary.get("count", 0) or 0), "ready": bool(api_summary.get("ready", False))}
@@ -304,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
             domain = {"basic_timeliness": "admission", "course_quality": "course", "surgery_anesthesia": "surgery", "consultation_quality": "consult_discussion", "extended_document": "terminal", "exam_lab": "course", "transfusion": "course", "tumor_pathology": "course"}.get(contract.family_key, contract.family_key)
             bundle = load_domain_bundle(execution_domain=domain, institute_id=args.institute_id, patient_id=args.patient_id, visit_id=args.visit_id, schema=bundle_schema)
             envelope = _load_envelope(conn, schema=canonical_schema, institute_id=args.institute_id, patient_id=args.patient_id, visit_id=args.visit_id, job_id=args.job_id)
-            report = audit_case_rule_chain(institute_id=args.institute_id, patient_id=args.patient_id, visit_id=args.visit_id, rule_id=args.rule_id, evidence_session=session, rule_contract=contract, bundle=bundle, envelope=envelope)
+            report = audit_case_rule_chain(institute_id=args.institute_id, patient_id=args.patient_id, visit_id=args.visit_id, rule_id=args.rule_id, evidence_session=session, rule_contract=contract, bundle=bundle, envelope=envelope, expected_job_id=args.job_id, expected_record_id=args.visit_id)
             conn.rollback()
         text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
         if args.output:
