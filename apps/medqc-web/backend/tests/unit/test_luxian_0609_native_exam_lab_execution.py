@@ -1878,7 +1878,7 @@ async def test_010_allows_one_course_to_cover_multiple_explicit_exam_events(monk
         ),
     )
 
-    assert result.llm_call_count == (2 if expected_failure_kind == "value" else 1)
+    assert result.llm_call_count == 1
     assert decision.final_state.value == "compliant"
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
@@ -2183,7 +2183,7 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
 
     assert decision.reason_code == "requirement_satisfied"
     assert canonical["status"] == "compliant"
-    assert result.llm_call_count == (2 if expected_failure_kind == "value" else 1)
+    assert result.llm_call_count == 1
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
 
@@ -4707,7 +4707,10 @@ async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkey
             },
         ),
     )
-    client = _Client(["not-json Bearer_secret_13800138000"])
+    client = _Client([
+        "not-json Bearer_secret_13800138000",
+        "not-json Bearer_secret_13800138000",
+    ])
     caplog.set_level(logging.WARNING, logger=exam_lab.__name__)
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -4724,12 +4727,16 @@ async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkey
         "model_invalid_output",
         "model_invalid_output",
     ]
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 110
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 220
     assert result.parse_failure_kinds == ("not_json",)
     assert "Bearer_secret_13800138000" not in repr(result)
     messages = [record.getMessage() for record in caplog.records]
-    assert messages == ["exam_lab_fact_parse_failed parse_failure_kind=not_json"]
+    assert messages == [
+        "exam_lab_fact_parse_failed parse_failure_kind=not_json",
+        "exam_lab_fact_parse_failed parse_failure_kind=not_json; retrying once",
+        "exam_lab_fact_retry_failed",
+    ]
     assert "Bearer_secret_13800138000" not in caplog.text
 
 
@@ -4758,7 +4765,10 @@ async def test_typed_unexpected_value_error_logs_safe_parse_failure_kind(monkeyp
         rule_ids=("LX0609-014", "LX0609-015"),
         wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
         evidence_payload=None,
-        llm_client=_Client([_fact_response(("LX0609-014", "LX0609-015"))]),
+        llm_client=_Client([
+            _fact_response(("LX0609-014", "LX0609-015")),
+            _fact_response(("LX0609-014", "LX0609-015")),
+        ]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         decision_rule_ids=("LX0609-014", "LX0609-015"),
@@ -4768,10 +4778,12 @@ async def test_typed_unexpected_value_error_logs_safe_parse_failure_kind(monkeyp
         "model_invalid_output",
         "model_invalid_output",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
     assert result.parse_failure_kinds == ("value",)
     assert [record.getMessage() for record in caplog.records] == [
-        "exam_lab_fact_parse_failed parse_failure_kind=value"
+        "exam_lab_fact_parse_failed parse_failure_kind=value",
+        "exam_lab_fact_parse_failed parse_failure_kind=value; retrying once",
+        "exam_lab_fact_retry_failed",
     ]
     assert secret not in caplog.text
 
@@ -4845,7 +4857,7 @@ async def test_typed_parse_failures_keep_same_public_status_and_budget(
         rule_ids=("LX0609-014", "LX0609-015"),
         wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
         evidence_payload=None,
-        llm_client=_Client([response]),
+        llm_client=_Client([response, response]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         decision_rule_ids=("LX0609-014", "LX0609-015"),
@@ -4855,8 +4867,8 @@ async def test_typed_parse_failures_keep_same_public_status_and_budget(
         "model_invalid_output",
         "model_invalid_output",
     ]
-    assert result.llm_call_count == (2 if expected_failure_kind == "value" else 1)
-    assert result.total_tokens == 110
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 220
     assert result.parse_failure_kinds == (expected_failure_kind,)
 
 

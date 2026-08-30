@@ -12,15 +12,16 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 
 
 class _SequenceClient:
-    def __init__(self, *payloads: dict):
+    def __init__(self, *payloads: object):
         self.payloads = list(payloads)
         self.calls: list[str] = []
 
     async def generate(self, prompt: str) -> dict:
         self.calls.append(prompt)
         payload = self.payloads.pop(0)
+        content = payload if isinstance(payload, str) else json.dumps(payload)
         return {
-            "choices": [{"message": {"content": json.dumps(payload)}}],
+            "choices": [{"message": {"content": content}}],
             "usage": {
                 "prompt_tokens": 10,
                 "completion_tokens": 5,
@@ -183,6 +184,127 @@ async def test_four_rules_use_two_bounded_fact_calls_and_return_controlled_resul
     assert execution.total_tokens == 30
     assert [item["status"] for item in execution.results] == ["compliant"] * 4
     assert all("record_content" not in repr(item) for item in execution.results)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_semantic_parse_failure_retries_once_then_uses_valid_payload(monkeypatch):
+    session = _material_session(
+        {
+            "consultation_record": [
+                {
+                    "document_title": "会诊记录",
+                    "record_time": "2026-07-01 10:00:00",
+                    "record_content": "因持续胸闷请心内科会诊。会诊意见：调整药物剂量。",
+                }
+            ]
+        }
+    )
+    client = _SequenceClient(
+        "not-json",
+        {"documents": [["C01", ["application", "opinion"], "clear", "clear", "high"]]},
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("完整证据材料不得回退实时查询")
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+    )
+
+    assert len(client.calls) == 2
+    assert execution.llm_call_count == 2
+    assert execution.total_tokens == 30
+    assert [item["status"] for item in execution.results] == ["compliant", "compliant"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_semantic_parse_failure_after_retry_is_technical_error(monkeypatch):
+    session = _material_session(
+        {
+            "consultation_record": [
+                {
+                    "document_title": "会诊记录",
+                    "record_time": "2026-07-01 10:00:00",
+                    "record_content": "因持续胸闷请心内科会诊。会诊意见：调整药物剂量。",
+                }
+            ]
+        }
+    )
+    client = _SequenceClient("not-json", "still-not-json")
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+    )
+
+    assert execution.llm_call_count == 2
+    assert [item["status"] for item in execution.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert {
+        item["metadata"]["reason_code"] for item in execution.results
+    } == {"model_invalid_output"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execution_parse_failure_retries_once_and_fails_closed(monkeypatch):
+    session = _material_session(
+        {
+            "consultation_record": [
+                {
+                    "document_title": "会诊记录",
+                    "record_time": "2026-07-01 10:00:00",
+                    "record_content": "因持续胸闷请心内科会诊。会诊意见：调整药物剂量。",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "document_title": "日常病程",
+                    "record_time": "2026-07-01 12:00:00",
+                    "record_content": "遵会诊意见调整药物剂量。",
+                }
+            ],
+        }
+    )
+    client = _SequenceClient("not-json", "still-not-json")
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+    )
+
+    assert execution.llm_call_count == 2
+    assert [item["status"] for item in execution.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert {
+        item["metadata"]["reason_code"] for item in execution.results
+    } == {"model_invalid_output"}
 
 
 def test_fact_prompts_keep_semantic_and_execution_boundaries_separate():

@@ -1679,7 +1679,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             "exam_lab_fact_parse_failed parse_failure_kind=%s",
                             failure_kind,
                         )
-                        if failure_kind == "value" and isinstance(exc, ExamLabFactParseError):
+                        if isinstance(exc, (ExamLabFactParseError, ValueError)):
                             logger.warning(
                                 "exam_lab_fact_parse_failed parse_failure_kind=%s; retrying once",
                                 failure_kind,

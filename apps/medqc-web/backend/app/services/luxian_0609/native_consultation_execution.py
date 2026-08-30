@@ -2193,7 +2193,8 @@ async def execute_luxian_0609_native_consultation_rules(
     semantic_opinion_refs: frozenset[str] = frozenset()
     execution_all_coverage_unproven = False
     execution_missing_has_unresolved_candidates = False
-    for (kind, rule_ids, fact_projection, _prompt_text), response in zip(
+    llm_call_count = len(call_specs)
+    for (kind, rule_ids, fact_projection, prompt_text), response in zip(
         call_specs, responses
     ):
         if isinstance(response, BaseException):
@@ -2214,70 +2215,86 @@ async def execute_luxian_0609_native_consultation_rules(
         completion_tokens += usage[1]
         total_tokens += usage[2]
         api_time += usage[3]
-        try:
-            payload = _restore_projection_refs(
-                _parse_consultation_fact_payload(response),
-                fact_projection,
-            )
-            if kind == "semantic":
-                semantic_facts = validate_consultation_semantic_payload(
-                    payload,
-                    fact_projection.documents,
+        parse_succeeded = False
+        for attempt in range(2):
+            try:
+                payload = _restore_projection_refs(
+                    _parse_consultation_fact_payload(response),
+                    fact_projection,
                 )
-                semantic_opinion_refs = frozenset(
-                    fact.ref
-                    for fact in semantic_facts.facts
-                    if "opinion" in fact.roles
-                )
-                states = synthesize_consultation_semantic_states(
-                    semantic_facts,
-                    consultation_source_complete=source_complete[
-                        "consultation_record"
-                    ],
-                )
-            else:
-                execution_facts = validate_consultation_rule_fact_payload(
-                    payload,
-                    fact_projection.documents,
-                    selected_rule_ids=rule_ids,
-                )
-                execution_020 = execution_facts.get("LX0609-020")
-                execution_all_coverage_unproven = bool(
-                    execution_020 is not None
-                    and execution_020.fact == "execution_all_present"
-                    and semantic_opinion_refs
-                    and not semantic_opinion_refs.issubset(
-                        execution_020.evidence_refs
+                if kind == "semantic":
+                    semantic_facts = validate_consultation_semantic_payload(
+                        payload,
+                        fact_projection.documents,
                     )
-                )
-                execution_missing_has_unresolved_candidates = bool(
-                    execution_020 is not None
-                    and execution_020.fact == "execution_missing"
-                    and any(
-                        document.source
-                        in {"daily_course_record", "senior_course_record"}
-                        for document in fact_projection.documents
+                    semantic_opinion_refs = frozenset(
+                        fact.ref
+                        for fact in semantic_facts.facts
+                        if "opinion" in fact.roles
                     )
-                )
-                states = synthesize_consultation_rule_fact_states(
-                    execution_facts,
-                    consultation_source_complete=source_complete[
-                        "consultation_record"
-                    ],
-                    course_source_complete=all(
-                        source_complete[source_key]
-                        for source_key in _EXECUTION_CANDIDATE_SOURCE_KEYS
-                    ),
-                )
-        except (FactContractError, TypeError, ValueError):
+                    states = synthesize_consultation_semantic_states(
+                        semantic_facts,
+                        consultation_source_complete=source_complete[
+                            "consultation_record"
+                        ],
+                    )
+                else:
+                    execution_facts = validate_consultation_rule_fact_payload(
+                        payload,
+                        fact_projection.documents,
+                        selected_rule_ids=rule_ids,
+                    )
+                    execution_020 = execution_facts.get("LX0609-020")
+                    execution_all_coverage_unproven = bool(
+                        execution_020 is not None
+                        and execution_020.fact == "execution_all_present"
+                        and semantic_opinion_refs
+                        and not semantic_opinion_refs.issubset(
+                            execution_020.evidence_refs
+                        )
+                    )
+                    execution_missing_has_unresolved_candidates = bool(
+                        execution_020 is not None
+                        and execution_020.fact == "execution_missing"
+                        and any(
+                            document.source
+                            in {"daily_course_record", "senior_course_record"}
+                            for document in fact_projection.documents
+                        )
+                    )
+                    states = synthesize_consultation_rule_fact_states(
+                        execution_facts,
+                        consultation_source_complete=source_complete[
+                            "consultation_record"
+                        ],
+                        course_source_complete=all(
+                            source_complete[source_key]
+                            for source_key in _EXECUTION_CANDIDATE_SOURCE_KEYS
+                        ),
+                    )
+                parse_succeeded = True
+                break
+            except (FactContractError, TypeError, ValueError):
+                if attempt == 1:
+                    break
+                llm_call_count += 1
+                try:
+                    response = await llm_client.generate(prompt_text)
+                except BaseException:
+                    break
+                retry_usage = _usage(response)
+                prompt_tokens += retry_usage[0]
+                completion_tokens += retry_usage[1]
+                total_tokens += retry_usage[2]
+                api_time += retry_usage[3]
+        if not parse_succeeded:
             outcomes_by_rule.update(
                 {
                     rule_id: _ConsultationRuleOutcome(
                         rule_id,
-                        "evaluation_unknown",
-                        "consultation_llm_invalid_output",
+                        "technical_error",
+                        "model_invalid_output",
                         "llm",
-                        "low",
                     )
                     for rule_id in rule_ids
                 }
@@ -2339,7 +2356,7 @@ async def execute_luxian_0609_native_consultation_rules(
         )
     return finalize(
         outcomes,
-        llm_call_count=len(call_specs),
+        llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
