@@ -1012,6 +1012,7 @@ watch([departmentFilter, keyword], () => {
   white-space: nowrap;
 }
 .qc-home-priority-row__time span {
+  display: none;
   color: rgba(29, 29, 31, 0.42);
   font-size: 11px;
   line-height: 16px;
@@ -1436,6 +1437,9 @@ button.qc-home-defect-analysis__row:focus-visible {
   .qc-home-priority-row__time {
     grid-row: 4;
     text-align: left;
+  }
+  .qc-home-priority-row__time span {
+    display: block;
   }
   .qc-home-priority-row__action {
     grid-column: 3;
