@@ -1036,6 +1036,36 @@ def _opinion_state_from_record(content: str) -> str | None:
     compact = re.sub(r"[\s,，;；。:：!?！？、()（）\[\]【】]+", "", compact)
     if not compact or _OPINION_EXECUTION_ONLY_RE.fullmatch(compact):
         return "opinion_missing"
+    # 明确记录患者/家属已沟通后的拒绝、暂缓或暂不处理决定，属于可核对的
+    # 会诊处置意见；仅有“建议/拟/计划”时仍交给模型，不得提前判清晰。
+    decision_clauses = re.split(r"[。；;\n]+", normalized)
+    def _is_explicit_decision(clause: str) -> bool:
+        decision = re.search(r"(?:暂不处理|拒绝|不同意|暂缓)", clause)
+        if decision is None:
+            return False
+        prefix = clause[max(0, decision.start() - 8) : decision.start()]
+        suffix = clause[decision.end() : decision.end() + 8]
+        if re.search(r"(?:未|并未|尚未|不曾).{0,4}$", prefix) or re.search(
+            r"(?:尚未确定|尚未明确|未确定|不确定)", suffix
+        ):
+            return False
+        return bool(
+            re.search(
+                r"(?:已|已经|经).{0,8}(?:与患者|与家属).{0,8}沟通",
+                clause,
+            )
+            or re.search(
+                r"(?:患者|家属).{0,8}(?:拒绝|不同意|暂不处理|暂缓)"
+                r".{0,20}(?:处理|治疗|检查|手术|会诊|干预)",
+                clause,
+            )
+        )
+
+    has_explicit_decision = any(
+        _is_explicit_decision(clause) for clause in decision_clauses
+    )
+    if has_explicit_decision:
+        return "opinion_clear"
     assessment_count = len(_EXPLICIT_OPINION_ASSESSMENT_RE.findall(normalized))
     dispositions = set(_EXPLICIT_OPINION_DISPOSITION_RE.findall(normalized))
     if assessment_count >= 2 and len(dispositions) >= 2 and "必要时" not in normalized:

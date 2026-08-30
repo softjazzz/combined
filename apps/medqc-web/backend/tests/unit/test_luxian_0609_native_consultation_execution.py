@@ -321,3 +321,29 @@ def test_fact_prompts_keep_semantic_and_execution_boundaries_separate():
     assert "execution_all_present" not in semantic_prompt
     assert "execution_all_present" in execution_prompt
     assert "execution_specific" in execution_prompt
+
+
+def test_022_explicit_family_decision_not_to_treat_is_not_missing_opinion():
+    """真实会诊中“已沟通、家属暂不处理”属于明确处置意见。"""
+
+    reason = consultation._opinion_state_from_record(
+        "会诊意见：可请消化内科评估；家属强烈要求时建议上级医院。"
+        "已与家属沟通，家属暂不处理痔疮。"
+    )
+
+    assert reason == "opinion_clear"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "会诊意见：建议家属暂不处理痔疮。",
+        "会诊意见：拟与家属沟通，暂不处理。",
+        "会诊意见：必要时可暂缓手术。",
+        "会诊意见：已与家属沟通，家属未拒绝处理痔疮。",
+        "会诊意见：家属并未不同意手术。",
+        "会诊意见：家属暂不处理尚未确定。",
+    ],
+)
+def test_opinion_state_does_not_promote_suggestion_or_plan_to_clear(content):
+    assert consultation._opinion_state_from_record(content) is None
