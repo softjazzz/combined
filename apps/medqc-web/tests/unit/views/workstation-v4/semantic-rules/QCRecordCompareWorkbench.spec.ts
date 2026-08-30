@@ -268,6 +268,91 @@ describe('QCRecordCompareWorkbench', () => {
     expect(wrapper.find('mark').exists()).toBe(false)
   })
 
+  it('检验申请汇总通过原始文书安全别名加载并定位证据', async () => {
+    getDocumentsMock.mockResolvedValue({
+      success: true,
+      data: {
+        visit_id: 'visit-1',
+        documents: [
+          {
+            key: 'labtest_master::summary',
+            source_document_id: 'labtest-master-summary',
+            source_ref: 'src_labtest_summary',
+            source_table: 'labtest_master',
+            document_type: 'labtest_master',
+            title: '检验申请汇总（2）',
+            execution_domain: 'course',
+            has_content: true,
+            content_loaded: false,
+            content: '',
+            source_document_aliases: [
+              {
+                source_document_id: 'LAB-M-2',
+                source_ref: 'src_labtest_m2',
+                source_document_type: 'labtest_master',
+              },
+            ],
+          },
+        ],
+      },
+    })
+    getDocumentMock.mockResolvedValue({
+      success: true,
+      data: {
+        key: 'labtest_master::summary',
+        source_document_id: 'LAB-M-2',
+        source_table: 'labtest_master',
+        document_type: 'labtest_master',
+        title: '检验申请单',
+        execution_domain: 'course',
+        has_content: true,
+        content_loaded: true,
+        content: '检验项目：肝功能；申请原因：评估肝功能。',
+      },
+    })
+
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-1',
+        instituteId: 'inst-1',
+        patientId: 'patient-1',
+        issues: [
+          {
+            ...issues[1]!,
+            key: 'issue-lab-alias',
+            target_document_type: 'labtest_master',
+            evidences: [
+              {
+                key: 'lab-alias-evidence',
+                source_ref: 'src_labtest_m2',
+                source_document_type: 'labtest_master',
+                quote: '检验项目：肝功能；申请原因：评估肝功能。',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await flushPromises()
+
+    expect(getDocumentMock).toHaveBeenCalledWith(
+      'visit-1',
+      expect.objectContaining({
+        key: 'labtest_master::summary',
+        source_document_id: 'LAB-M-2',
+        source_ref: 'src_labtest_m2',
+      }),
+      {
+        institute_id: 'inst-1',
+        patient_id: 'patient-1',
+        visit_id: 'visit-1',
+      },
+    )
+    expect(wrapper.find('mark').text()).toBe('检验项目：肝功能；申请原因：评估肝功能。')
+    expect(wrapper.text()).toContain('已定位到证据段落')
+  })
+
   it('单病历固定结果模型只使用安全证据引用定位原文，不走批量结果旧卡片', async () => {
     getDocumentsMock.mockResolvedValue({
       success: true,

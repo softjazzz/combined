@@ -458,6 +458,11 @@ def _collapse_labtest_master_documents(documents: list[dict[str, Any]]) -> list[
         "doc_key": "labtest_master::summary",
         "doc_name": f"检验申请汇总（{len(ordered)}）",
         "document_id": "labtest-master-summary",
+        "source_document_ids": [
+            _safe_text(item.get("document_id"))
+            for item in ordered
+            if _safe_text(item.get("document_id"))
+        ],
         "document_title": f"检验申请汇总（{len(ordered)}）",
         "sort_time": latest_time,
         "record_time": latest_time,
@@ -908,6 +913,11 @@ def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[di
         "doc_key": "labtest_master::summary",
         "doc_name": f"检验申请汇总（{len(applications)}）",
         "document_id": "labtest-master-summary",
+        "source_document_ids": [
+            _safe_text(item.get("document_id"))
+            for item in applications
+            if _safe_text(item.get("document_id"))
+        ],
         "document_title": f"检验申请汇总（{len(applications)}）",
         "has_content": True,
         "length": sum(int(item.get("length") or 0) for item in applications),

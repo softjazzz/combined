@@ -8,6 +8,8 @@ from app.services.bundles.emr_view import (
     load_bundle_documents,
     pick_document,
 )
+from app.routers.emr_render import _project_customer_safe_source_refs
+from app.services.custom_qc_workspace_service import build_customer_safe_source_ref
 
 
 def test_old_course_bundle_without_exam_lab_coverage_requires_refresh():
@@ -130,6 +132,60 @@ def test_build_documents_should_collapse_unmatched_lab_applications_into_one_sum
     )
     assert "2026-04-03 17:43:59 · 临检实验室 · 血常规" in lab_applications[0]["content"]
     assert "2026-04-03 18:06:47 · 生化实验室 · 肝功能" in lab_applications[0]["content"]
+
+
+def test_collapsed_lab_application_summary_preserves_source_ids_for_exact_location():
+    documents = build_documents_from_domain_bundles(
+        {
+            "course": {
+                "source_documents": [
+                    {
+                        "document_type": "labtest_master",
+                        "document_id": "LAB-M-1",
+                        "display_time": "2026-04-03 17:43:59",
+                        "content": "检验项目：血常规",
+                    },
+                    {
+                        "document_type": "labtest_master",
+                        "document_id": "LAB-M-2",
+                        "display_time": "2026-04-03 18:06:47",
+                        "content": "检验项目：肝功能",
+                    },
+                ]
+            }
+        }
+    )
+
+    summary = next(doc for doc in documents if doc["doc_type"] == "labtest_master")
+
+    assert summary["document_id"] == "labtest-master-summary"
+    assert summary["source_document_ids"] == ["LAB-M-1", "LAB-M-2"]
+
+
+def test_customer_safe_projection_exposes_lab_application_aliases_with_safe_refs():
+    payload = {
+        "documents": [
+            {
+                "document_id": "labtest-master-summary",
+                "source_document_ids": ["LAB-M-1", "LAB-M-2"],
+            }
+        ]
+    }
+
+    projected = _project_customer_safe_source_refs(payload)
+    document = projected["documents"][0]
+
+    assert document["source_ref"] == build_customer_safe_source_ref("labtest-master-summary")
+    assert document["source_document_aliases"] == [
+        {
+            "source_document_id": "LAB-M-1",
+            "source_ref": build_customer_safe_source_ref("LAB-M-1"),
+        },
+        {
+            "source_document_id": "LAB-M-2",
+            "source_ref": build_customer_safe_source_ref("LAB-M-2"),
+        },
+    ]
 
 
 def test_build_documents_tree_from_domain_bundles():

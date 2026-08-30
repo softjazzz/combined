@@ -1,18 +1,11 @@
 <template>
-  <section
-    class="record-compare-shell"
-    :data-mobile-tab="mobileTab"
-  >
+  <section class="record-compare-shell" :data-mobile-tab="mobileTab">
     <header class="record-compare-head">
       <div>
         <strong>病历原文对照</strong>
         <span>点击质控结果，核对对应文书与证据片段</span>
       </div>
-      <div
-        class="record-compare-mobile-tabs"
-        role="tablist"
-        aria-label="病历与结果切换"
-      >
+      <div class="record-compare-mobile-tabs" role="tablist" aria-label="病历与结果切换">
         <button
           type="button"
           :class="{ 'is-active': mobileTab === 'record' }"
@@ -56,50 +49,27 @@
               <b>{{ formatDocumentTime(resolveDocumentTime(selectedDocument)) }}</b>
             </time>
           </div>
-          <label
-            v-if="documents.length"
-            class="record-document-select"
-          >
+          <label v-if="documents.length" class="record-document-select">
             <span>选择文书</span>
-            <select
-              :value="selectedDocumentKey"
-              @change="handleDocumentSelect"
-            >
-              <option
-                v-for="document in documents"
-                :key="document.key"
-                :value="document.key"
-              >
+            <select :value="selectedDocumentKey" @change="handleDocumentSelect">
+              <option v-for="document in documents" :key="document.key" :value="document.key">
                 {{ resolveDocumentDisplayTitle(document) }}
               </option>
             </select>
           </label>
-          <span
-            class="record-location-chip"
-            :class="`is-${locationState}`"
-          >
+          <span class="record-location-chip" :class="`is-${locationState}`">
             {{ locationMessage }}
           </span>
         </div>
 
-        <div
-          v-if="contentLoading"
-          class="record-content-empty"
-        >
+        <div v-if="contentLoading" class="record-content-empty">
           <strong>正在读取当前文书</strong>
           <span>文书目录已经就绪，正文正在按需加载。</span>
         </div>
-        <div
-          v-else-if="contentLoadError"
-          class="record-content-empty"
-        >
+        <div v-else-if="contentLoadError" class="record-content-empty">
           <strong>当前文书读取失败</strong>
           <span>{{ contentLoadError }}</span>
-          <button
-            type="button"
-            class="record-content-retry"
-            @click="retrySelectedDocument"
-          >
+          <button type="button" class="record-content-retry" @click="retrySelectedDocument">
             重新读取
           </button>
         </div>
@@ -115,10 +85,7 @@
             :selected-key="selectedDocumentKey"
             @select="selectDocument"
           />
-          <div
-            v-else-if="documentSectionViews.length"
-            class="record-content-sections"
-          >
+          <div v-else-if="documentSectionViews.length" class="record-content-sections">
             <section
               v-for="section in documentSectionViews"
               :key="section.key"
@@ -130,21 +97,20 @@
                 {{ displaySectionLabel(section.label) }}
               </h3>
               <p class="record-content-section-text">
-                <span>{{ section.parts.before }}</span><mark
+                <span>{{ section.parts.before }}</span
+                ><mark
                   v-if="section.parts.match"
                   :ref="setHighlightElement"
                   class="record-evidence-highlight"
                   tabindex="0"
                   @click="emitSelectedIssue"
                   @keydown.enter="emitSelectedIssue"
-                >{{ section.parts.match }}</mark><span>{{ section.parts.after }}</span>
+                  >{{ section.parts.match }}</mark
+                ><span>{{ section.parts.after }}</span>
               </p>
             </section>
           </div>
-          <pre
-            v-else
-            class="record-content-text"
-          ><span>{{ documentTextParts.before }}</span><mark
+          <pre v-else class="record-content-text"><span>{{ documentTextParts.before }}</span><mark
                 v-if="documentTextParts.match"
                 :ref="setHighlightElement"
                 class="record-evidence-highlight"
@@ -153,19 +119,13 @@
                 @keydown.enter="emitSelectedIssue"
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
         </div>
-        <div
-          v-else
-          class="record-content-empty"
-        >
+        <div v-else class="record-content-empty">
           <strong>暂无可对照的病历原文</strong>
           <span>质控结果仍可查看，但当前无法定位到来源文书。</span>
         </div>
       </main>
 
-      <aside
-        class="record-result-column"
-        aria-label="质控结果"
-      >
+      <aside class="record-result-column" aria-label="质控结果">
         <SingleRecordQcResultPanel
           v-if="hasSingleRecordResult"
           :items="singleRecordItems || []"
@@ -188,16 +148,10 @@
             </div>
             <span class="record-result-count">{{ sortedIssues.length }} 条</span>
           </div>
-          <div
-            v-if="!sortedIssues.length"
-            class="record-compare-state"
-          >
+          <div v-if="!sortedIssues.length" class="record-compare-state">
             当前没有可展示的质控结果
           </div>
-          <div
-            v-else
-            class="record-result-list"
-          >
+          <div v-else class="record-result-list">
             <article
               v-for="issue in sortedIssues"
               :key="issue.key"
@@ -223,10 +177,7 @@
                     </span>
                     <span class="record-result-code">{{ issue.rule_code }}</span>
                   </span>
-                  <span
-                    class="record-result-toggle"
-                    aria-hidden="true"
-                  >
+                  <span class="record-result-toggle" aria-hidden="true">
                     <ChevronDown
                       :size="15"
                       :class="{ 'is-open': issue.key === expandedIssueKey }"
@@ -234,27 +185,15 @@
                   </span>
                 </span>
                 <strong :title="issue.rule_name">{{ issue.rule_name }}</strong>
-                <small
-                  v-if="resolveIssueSummary(issue)"
-                  class="record-result-summary-line"
-                >
+                <small v-if="resolveIssueSummary(issue)" class="record-result-summary-line">
                   {{ resolveIssueSummary(issue) }}
                 </small>
               </button>
 
-              <div
-                v-if="issue.key === expandedIssueKey"
-                class="record-result-detail"
-              >
-                <section
-                  v-if="issue.detail"
-                  class="record-result-analysis"
-                >
+              <div v-if="issue.key === expandedIssueKey" class="record-result-detail">
+                <section v-if="issue.detail" class="record-result-analysis">
                   <div class="record-result-section-heading">
-                    <ClipboardCheck
-                      :size="15"
-                      aria-hidden="true"
-                    />
+                    <ClipboardCheck :size="15" aria-hidden="true" />
                     <span>完整判定说明</span>
                   </div>
                   <div class="record-result-narrative">
@@ -274,34 +213,22 @@
                 >
                   <section v-if="issue.actual_value">
                     <div class="record-result-section-heading">
-                      <Scale
-                        :size="15"
-                        aria-hidden="true"
-                      />
+                      <Scale :size="15" aria-hidden="true" />
                       <span>实际情况</span>
                     </div>
                     <p>{{ issue.actual_value }}</p>
                   </section>
                   <section v-if="issue.requirement">
                     <div class="record-result-section-heading">
-                      <Target
-                        :size="15"
-                        aria-hidden="true"
-                      />
+                      <Target :size="15" aria-hidden="true" />
                       <span>核对标准</span>
                     </div>
                     <p>{{ issue.requirement }}</p>
                   </section>
                 </div>
-                <section
-                  v-if="issue.evidences.length"
-                  class="record-result-evidence"
-                >
+                <section v-if="issue.evidences.length" class="record-result-evidence">
                   <div class="record-result-section-heading">
-                    <FileSearch
-                      :size="15"
-                      aria-hidden="true"
-                    />
+                    <FileSearch :size="15" aria-hidden="true" />
                     <span>关键证据</span>
                   </div>
                   <button
@@ -317,10 +244,7 @@
                     <time v-if="evidence.record_time">
                       记录时间 {{ formatDocumentTime(evidence.record_time) }}
                     </time>
-                    <small
-                      v-if="resolveEvidenceExcerpt(evidence)"
-                      class="record-evidence-excerpt"
-                    >
+                    <small v-if="resolveEvidenceExcerpt(evidence)" class="record-evidence-excerpt">
                       <span>{{ resolveEvidenceExcerpt(evidence)?.label }}</span>
                       {{ resolveEvidenceExcerpt(evidence)?.text }}
                     </small>
@@ -329,10 +253,7 @@
                 </section>
                 <section class="record-result-guidance">
                   <div class="record-result-section-heading">
-                    <Lightbulb
-                      :size="15"
-                      aria-hidden="true"
-                    />
+                    <Lightbulb :size="15" aria-hidden="true" />
                     <span>处理建议</span>
                   </div>
                   <p>{{ issue.suggestion || '请结合病历原文确认。' }}</p>
@@ -535,9 +456,7 @@ const locationMessage = computed(() => {
     const section = selectedDocument.value?.sections?.find(
       (item) => item.key === matchedSectionKey.value,
     )
-    return section?.label
-      ? `已定位到${displaySectionLabel(section.label)}章节`
-      : '已定位到对应章节'
+    return section?.label ? `已定位到${displaySectionLabel(section.label)}章节` : '已定位到对应章节'
   }
   if (locationState.value === 'document') return '已定位到文书，未定位到具体片段'
   if (locationState.value === 'missing') return '未找到对应文书，请手动核对'
@@ -713,6 +632,16 @@ function resolveEvidenceExcerpt(evidence: QCRecordCompareEvidence): EvidenceExce
 }
 
 function matchDocumentById(evidence: QCRecordCompareEvidence) {
+  return matchDocumentByIdWithOverride(evidence)?.document || null
+}
+
+type DocumentMatch = {
+  document: EditableMedicalRecordDocument
+  renderSourceDocumentId?: string
+  renderSourceRef?: string
+}
+
+function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): DocumentMatch | null {
   const sourceRef = normalizeReference(evidence.source_ref)
   if (sourceRef) {
     const referencedDocuments = documents.value.filter(
@@ -727,22 +656,43 @@ function matchDocumentById(evidence: QCRecordCompareEvidence) {
           .map(normalizeReference)
           .some((documentType) => documentType && sourceTypes.includes(documentType)),
       )
-      if (typedDocuments.length === 1) return typedDocuments[0]
+      if (typedDocuments.length === 1) return { document: typedDocuments[0] }
       if (typedDocuments.length > 1) return null
     }
     // 同一安全引用对应多种投影视图时，不允许仅凭引用顺序猜测文书。
-    if (referencedDocuments.length === 1) return referencedDocuments[0]
+    if (referencedDocuments.length === 1) return { document: referencedDocuments[0] }
     if (referencedDocuments.length > 1) return null
+
+    const aliasMatches = documents.value.flatMap((document) =>
+      (document.source_document_aliases || [])
+        .filter((alias) => normalizeReference(alias.source_ref) === sourceRef)
+        .map((alias) => ({ document, alias })),
+    )
+    const typedAliasMatches = sourceTypes.length
+      ? aliasMatches.filter(({ document, alias }) =>
+          [alias.source_document_type, document.document_type, document.source_table]
+            .map(normalizeReference)
+            .some((documentType) => documentType && sourceTypes.includes(documentType)),
+        )
+      : aliasMatches
+    if (typedAliasMatches.length === 1) {
+      const { document, alias } = typedAliasMatches[0]
+      return {
+        document,
+        renderSourceDocumentId: alias.source_document_id,
+        renderSourceRef: alias.source_ref,
+      }
+    }
+    if (typedAliasMatches.length > 1) return null
   }
   const sourceId = normalizeReference(evidence.source_document_id)
   if (!sourceId) return null
-  return (
-    documents.value.find(
-      (document) =>
-        normalizeReference(document.source_document_id) === sourceId ||
-        normalizeReference(document.key) === sourceId,
-    ) || null
+  const sourceDocument = documents.value.find(
+    (document) =>
+      normalizeReference(document.source_document_id) === sourceId ||
+      normalizeReference(document.key) === sourceId,
   )
+  return sourceDocument ? { document: sourceDocument } : null
 }
 
 function isDocumentLoaded(document: EditableMedicalRecordDocument) {
@@ -760,10 +710,13 @@ function replaceDocument(document: EditableMedicalRecordDocument) {
   )
 }
 
-async function ensureDocumentLoaded(documentKey: string) {
+async function ensureDocumentLoaded(
+  documentKey: string,
+  renderOverride?: { sourceDocumentId: string; sourceRef?: string },
+) {
   const summary = documents.value.find((document) => document.key === documentKey)
   if (!summary) return null
-  if (isDocumentLoaded(summary)) return summary
+  if (!renderOverride && isDocumentLoaded(summary)) return summary
   if (!summary.execution_domain) {
     if (selectedDocumentKey.value === documentKey) {
       contentLoadError.value = '当前文书缺少按需读取标识，请刷新页面后重试。'
@@ -776,17 +729,27 @@ async function ensureDocumentLoaded(documentKey: string) {
     contentLoadingKey.value = documentKey
     contentLoadError.value = ''
   }
-  let request = documentRequests.get(documentKey)
+  const requestKey = renderOverride?.sourceDocumentId
+    ? `${documentKey}::${renderOverride.sourceDocumentId}`
+    : documentKey
+  let request = documentRequests.get(requestKey)
   if (!request) {
-    request = getEditableMedicalRecordDocument(props.visitId, summary, {
+    const renderSummary = renderOverride
+      ? {
+          ...summary,
+          source_document_id: renderOverride.sourceDocumentId,
+          ...(renderOverride.sourceRef ? { source_ref: renderOverride.sourceRef } : {}),
+        }
+      : summary
+    request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
       institute_id: String(props.instituteId || '').trim() || undefined,
       patient_id: String(props.patientId || '').trim() || undefined,
       visit_id: String(props.visitId || '').trim(),
     })
-    documentRequests.set(documentKey, request)
+    documentRequests.set(requestKey, request)
   }
   const result = await request
-  if (documentRequests.get(documentKey) === request) documentRequests.delete(documentKey)
+  if (documentRequests.get(requestKey) === request) documentRequests.delete(requestKey)
   if (generation !== loadGeneration) return null
   if (contentLoadingKey.value === documentKey) contentLoadingKey.value = ''
   if (!result.success || !result.data) {
@@ -795,7 +758,16 @@ async function ensureDocumentLoaded(documentKey: string) {
     }
     return null
   }
-  const loadedDocument = { ...summary, ...result.data, content_loaded: true }
+  const loadedDocument = {
+    ...summary,
+    ...result.data,
+    // 仅使用 override 作为渲染请求参数，目录仍保留汇总项身份与安全引用。
+    key: summary.key,
+    source_document_id: summary.source_document_id,
+    source_ref: summary.source_ref,
+    source_document_aliases: summary.source_document_aliases,
+    content_loaded: true,
+  }
   replaceDocument(loadedDocument)
   return loadedDocument
 }
@@ -865,10 +837,19 @@ async function tryLocateEvidence(
   evidence: QCRecordCompareEvidence,
   allowMetadataFallback: boolean,
 ) {
-  const exactSummary = matchDocumentById(evidence)
-  if (exactSummary) {
+  const exactMatch = matchDocumentByIdWithOverride(evidence)
+  if (exactMatch) {
+    const exactSummary = exactMatch.document
     selectedDocumentKey.value = exactSummary.key
-    const exactDocument = await ensureDocumentLoaded(exactSummary.key)
+    const exactDocument = await ensureDocumentLoaded(
+      exactSummary.key,
+      exactMatch.renderSourceDocumentId
+        ? {
+            sourceDocumentId: exactMatch.renderSourceDocumentId,
+            sourceRef: exactMatch.renderSourceRef,
+          }
+        : undefined,
+    )
     if (!exactDocument) return false
     const range = findQuoteRange(exactDocument, evidence.quote)
     await applyLocatedDocument(

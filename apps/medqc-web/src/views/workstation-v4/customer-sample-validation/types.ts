@@ -403,6 +403,11 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   content_loaded?: boolean
   source_ref?: string
   source_document_id?: string
+  source_document_aliases?: Array<{
+    source_document_id: string
+    source_ref: string
+    source_document_type?: string
+  }>
   source_table?: string
   sections?: EditableMedicalRecordSection[]
   report_items?: EditableMedicalReportItem[]

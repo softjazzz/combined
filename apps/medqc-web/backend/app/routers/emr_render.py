@@ -58,6 +58,28 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
         source_document_id = str(document.get("document_id") or "").strip()
         if source_document_id:
             document["source_ref"] = build_customer_safe_source_ref(source_document_id)
+        source_document_ids = document.get("source_document_ids")
+        if isinstance(source_document_ids, list):
+            source_document_type = str(
+                document.get("document_type")
+                or document.get("doc_type")
+                or document.get("source_table")
+                or ""
+            ).strip()
+            aliases = []
+            for raw_id in source_document_ids:
+                alias_id = str(raw_id or "").strip()
+                if not alias_id:
+                    continue
+                alias = {
+                    "source_document_id": alias_id,
+                    "source_ref": build_customer_safe_source_ref(alias_id),
+                }
+                if source_document_type:
+                    alias["source_document_type"] = source_document_type
+                aliases.append(alias)
+            if aliases:
+                document["source_document_aliases"] = aliases
     return payload
 
 

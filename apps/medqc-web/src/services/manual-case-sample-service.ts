@@ -275,6 +275,34 @@ function normalizeEditableDocumentsResponse(
           .map(([key, fieldValue]) => [key, String(fieldValue ?? '').trim()])
           .filter(([, fieldValue]) => Boolean(fieldValue)),
       )
+      const sourceDocumentAliases = Array.isArray(row.source_document_aliases)
+        ? row.source_document_aliases
+            .filter((entry): entry is Record<string, unknown> =>
+              Boolean(entry && typeof entry === 'object'),
+            )
+            .map((entry) => {
+              const sourceDocumentId = readStringField(entry, [
+                'source_document_id',
+                'document_id',
+                'doc_id',
+                'id',
+              ])
+              const sourceRef = readStringField(entry, ['source_ref'])
+              if (!sourceDocumentId || !sourceRef) return null
+              const sourceDocumentType = readStringField(entry, [
+                'source_document_type',
+                'document_type',
+                'doc_type',
+                'source_table',
+              ])
+              return {
+                source_document_id: sourceDocumentId,
+                source_ref: sourceRef,
+                ...(sourceDocumentType ? { source_document_type: sourceDocumentType } : {}),
+              }
+            })
+            .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        : []
       return {
         key: readStringField(
           row,
@@ -283,6 +311,7 @@ function normalizeEditableDocumentsResponse(
         ),
         source_document_id: readStringField(row, ['document_id', 'doc_id', 'id']),
         source_ref: readStringField(row, ['source_ref']),
+        source_document_aliases: sourceDocumentAliases,
         source_table: readStringField(row, ['source_table', 'table_name', 'doc_type']),
         document_type: documentType,
         execution_domain: readStringField(row, ['execution_domain']),
