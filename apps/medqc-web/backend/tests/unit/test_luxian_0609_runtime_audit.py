@@ -4,7 +4,18 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services.luxian_0609.native_package import load_luxian_0609_dependency_inventory
+from app.services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
+from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
+from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
+from app.services.sample_validation_rule_sets import (
+    get_luxian_0609_customer_delivery_rule_ids,
+    get_luxian_0609_customer_execution_scope,
+)
+from scripts.build_luxian_0609_runtime_manifest import build_runtime_manifest
 from scripts.audit_luxian_0609_runtime_manifest import build_runtime_audit
+
+from test_luxian_0609_runtime_manifest import _settings
 
 
 def _manifest() -> dict[str, object]:
@@ -142,3 +153,33 @@ def test_runtime_audit_rejects_contract_or_scope_drift() -> None:
             approved_formal_target=1,
             approved_temporary_target=1,
         )
+
+
+def test_runtime_audit_reports_exact_customer_scope_partition() -> None:
+    manifest = build_runtime_manifest(
+        git_head="a" * 40,
+        settings=_settings(),
+        rule_catalog=load_luxian_0609_rules(),
+        inventory=load_luxian_0609_dependency_inventory(),
+        generated_at="2026-07-23T18:00:00Z",
+    )
+    audit = build_runtime_audit(
+        runtime_manifest=manifest,
+        contracts=load_luxian_0609_rule_contracts(),
+        phase_scope=load_luxian_0609_phase_scope(),
+    )
+    executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
+    delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
+
+    assert audit["customer_delivery_count"] == 70
+    assert audit["executable_count"] == 64
+    assert audit["withheld_count"] == 6
+    assert audit["approved_definition_target"] == {"formal": 69, "temporary": 6}
+    assert audit["definition_target_reconciled"] is True
+    assert audit["customer_delivery_rule_ids"] == list(delivery_ids)
+    assert audit["executable_rule_ids"] == list(executable_ids)
+    assert audit["withheld_rule_ids"] == list(withheld_ids)
+    assert set(audit["executable_rule_ids"]) | set(audit["withheld_rule_ids"]) == set(
+        audit["customer_delivery_rule_ids"]
+    )
+    assert not set(audit["executable_rule_ids"]) & set(audit["withheld_rule_ids"])

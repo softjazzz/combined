@@ -21,6 +21,10 @@ from app.services.luxian_0609.rule_contracts import (  # noqa: E402
     load_luxian_0609_rule_contracts,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules  # noqa: E402
+from app.services.sample_validation_rule_sets import (  # noqa: E402
+    get_luxian_0609_customer_delivery_rule_ids,
+    get_luxian_0609_customer_execution_scope,
+)
 from scripts.build_luxian_0609_runtime_manifest import (  # noqa: E402
     build_runtime_manifest,
     current_git_head,
@@ -28,8 +32,8 @@ from scripts.build_luxian_0609_runtime_manifest import (  # noqa: E402
 
 
 SCHEMA_VERSION = "lx0609-engine-convergence-audit-v1"
-APPROVED_FORMAL_TARGET = 67
-APPROVED_TEMPORARY_TARGET = 8
+APPROVED_FORMAL_TARGET = 69
+APPROVED_TEMPORARY_TARGET = 6
 
 
 def _ordered_ids(items: Iterable[Any]) -> tuple[str, ...]:
@@ -64,6 +68,53 @@ def build_runtime_audit(
         raise ValueError("LX0609 approved definition targets must be non-negative")
     if approved_formal_target + approved_temporary_target != len(manifest_ids):
         raise ValueError("LX0609 approved definition targets must cover the manifest")
+
+    delivery_ids = tuple(
+        str(item or "").strip().upper()
+        for item in runtime_manifest.get("customer_delivery_rule_ids") or ()
+    )
+    executable_ids = tuple(
+        str(item or "").strip().upper()
+        for item in runtime_manifest.get("executable_rule_ids") or ()
+    )
+    withheld_ids = tuple(
+        str(item or "").strip().upper()
+        for item in runtime_manifest.get("withheld_rule_ids") or ()
+    )
+    scope_fields_present = any(
+        key in runtime_manifest
+        for key in (
+            "customer_delivery_count",
+            "executable_count",
+            "withheld_count",
+            "customer_delivery_rule_ids",
+            "executable_rule_ids",
+            "withheld_rule_ids",
+        )
+    )
+    if scope_fields_present:
+        if (
+            runtime_manifest.get("customer_delivery_count") != len(delivery_ids)
+            or runtime_manifest.get("executable_count") != len(executable_ids)
+            or runtime_manifest.get("withheld_count") != len(withheld_ids)
+            or len(delivery_ids) != len(set(delivery_ids))
+            or len(executable_ids) != len(set(executable_ids))
+            or len(withheld_ids) != len(set(withheld_ids))
+            or set(executable_ids) | set(withheld_ids) != set(delivery_ids)
+            or set(executable_ids) & set(withheld_ids)
+            or not set(delivery_ids).issubset(set(manifest_ids))
+        ):
+            raise ValueError("invalid LX0609 customer scope partition")
+    if len(manifest_ids) == 75:
+        expected_delivery = tuple(get_luxian_0609_customer_delivery_rule_ids())
+        expected_executable, expected_withheld = get_luxian_0609_customer_execution_scope()
+        if (
+            not scope_fields_present
+            or delivery_ids != expected_delivery
+            or executable_ids != expected_executable
+            or withheld_ids != expected_withheld
+        ):
+            raise ValueError("LX0609 runtime audit customer scope drift")
 
     contract_by_id = {item.rule_id: item for item in contract_items}
     scope_by_id = {item.rule_id: item for item in scope_items}
@@ -105,7 +156,7 @@ def build_runtime_audit(
             }
         )
 
-    return {
+    result = {
         "schema_version": SCHEMA_VERSION,
         "runtime_manifest_schema_version": runtime_manifest.get("schema_version"),
         "git_head": runtime_manifest.get("git_head"),
@@ -128,6 +179,18 @@ def build_runtime_audit(
         },
         "rules": rules,
     }
+    if scope_fields_present:
+        result.update(
+            {
+                "customer_delivery_count": len(delivery_ids),
+                "executable_count": len(executable_ids),
+                "withheld_count": len(withheld_ids),
+                "customer_delivery_rule_ids": list(delivery_ids),
+                "executable_rule_ids": list(executable_ids),
+                "withheld_rule_ids": list(withheld_ids),
+            }
+        )
+    return result
 
 
 def main() -> int:

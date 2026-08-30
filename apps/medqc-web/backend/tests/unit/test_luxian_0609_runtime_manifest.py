@@ -10,6 +10,10 @@ from app.services.luxian_0609.native_package import (
     load_luxian_0609_dependency_inventory,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
+from app.services.sample_validation_rule_sets import (
+    get_luxian_0609_customer_delivery_rule_ids,
+    get_luxian_0609_customer_execution_scope,
+)
 from scripts.build_luxian_0609_runtime_manifest import build_runtime_manifest
 
 
@@ -63,6 +67,19 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert manifest["rule_set"]["rule_ids"] == expected_rule_ids
     assert len(manifest["rules"]) == 75
     assert len({item["rule_id"] for item in manifest["rules"]}) == 75
+
+    executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
+    delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
+    assert manifest["customer_delivery_count"] == 70
+    assert manifest["executable_count"] == 64
+    assert manifest["withheld_count"] == 6
+    assert manifest["customer_delivery_rule_ids"] == list(delivery_ids)
+    assert manifest["executable_rule_ids"] == list(executable_ids)
+    assert manifest["withheld_rule_ids"] == list(withheld_ids)
+    assert set(manifest["executable_rule_ids"]) | set(manifest["withheld_rule_ids"]) == set(
+        manifest["customer_delivery_rule_ids"]
+    )
+    assert not set(manifest["executable_rule_ids"]) & set(manifest["withheld_rule_ids"])
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
     assert by_rule["LX0609-020"]["active_path"] == "compatibility"

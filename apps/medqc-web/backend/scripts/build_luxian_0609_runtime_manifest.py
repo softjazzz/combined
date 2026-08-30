@@ -29,6 +29,10 @@ from app.services.luxian_0609.rule_decision_settings import (  # noqa: E402
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules  # noqa: E402
 from app.services.qc_rule_sets import get_sichuan_rule_set  # noqa: E402
+from app.services.sample_validation_rule_sets import (  # noqa: E402
+    get_luxian_0609_customer_delivery_rule_ids,
+    get_luxian_0609_customer_execution_scope,
+)
 
 
 SCHEMA_VERSION = "lx0609-runtime-manifest-v1"
@@ -212,6 +216,17 @@ def build_runtime_manifest(
     )
     flags = _safe_flags(runtime_settings)
     normalized_head = str(git_head or "").strip().lower() or "unknown"
+    customer_delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
+    executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
+    if (
+        len(customer_delivery_ids) != 70
+        or len(executable_ids) != 64
+        or len(withheld_ids) != 6
+        or not set(customer_delivery_ids).issubset(set(rule_ids))
+        or set(executable_ids) | set(withheld_ids) != set(customer_delivery_ids)
+        or set(executable_ids) & set(withheld_ids)
+    ):
+        raise ValueError("invalid LX0609 customer scope partition")
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -219,6 +234,12 @@ def build_runtime_manifest(
         or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "git_head": normalized_head,
         "customer_rule_count": len(rule_ids),
+        "customer_delivery_count": len(customer_delivery_ids),
+        "executable_count": len(executable_ids),
+        "withheld_count": len(withheld_ids),
+        "customer_delivery_rule_ids": list(customer_delivery_ids),
+        "executable_rule_ids": list(executable_ids),
+        "withheld_rule_ids": list(withheld_ids),
         "flags": flags,
         "rule_set": {
             "key": rule_set.key,
