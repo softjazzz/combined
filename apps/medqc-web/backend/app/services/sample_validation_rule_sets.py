@@ -14,12 +14,13 @@ from .luxian_0609_rule_catalog import (
     load_luxian_0609_rules,
 )
 from .qc_rule_sets import QCRuleSet, get_sichuan_rule_set
+from .luxian_0609.phase_scope import load_luxian_0609_phase_scope
 
 
 FORMAL_FAST_SCREEN_FULL_MODE = "formal_fast_screen_full"
 FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = "sc_content_full_v1"
 LUXIAN_0609_QC_RULE_SET_KEY = "luxian_0609_qc_v1"
-# 客户源库未提供这些知情同意书文书；客户专项质控不纳入对应质控点。
+# 客户已明确排除缺失同意书/收费资料的五条规则；阶段冻结规则另由 worker 以 not_executed 投影。
 LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS: frozenset[str] = frozenset(
     {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042"}
 )
@@ -300,15 +301,19 @@ def get_sample_programmatic_rule_set() -> QCRuleSet:
 
 @lru_cache(maxsize=1)
 def get_luxian_0609_sample_validation_rule_set() -> QCRuleSet:
-    """返回客户样本验证实际可执行的完整 LX0609 规则集。"""
+    """返回按阶段目录与客户排除项生成的 LX0609 客户样本规则集。"""
     if CATALOG_LUXIAN_0609_RULE_SET_KEY != LUXIAN_0609_QC_RULE_SET_KEY:
         raise RuntimeError("LX0609 规则集 key 不一致")
-    rule_ids = tuple(
+    catalog_ids = {
         str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
         for item in load_luxian_0609_rules()
         if str(item.get("rule_id") or item.get("rule_code") or "").strip()
-        and str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
-        not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+    }
+    rule_ids = tuple(
+        entry.rule_id
+        for entry in load_luxian_0609_phase_scope()
+        if entry.rule_id in catalog_ids
+        and entry.rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
     )
     return QCRuleSet(
         key=LUXIAN_0609_QC_RULE_SET_KEY,

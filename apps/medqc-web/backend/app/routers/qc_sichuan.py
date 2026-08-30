@@ -1528,6 +1528,8 @@ async def create_workspace_batch_job(
             for rule_id in requested_rule_set_rule_ids
             if str(rule_id).strip().upper() not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
         ]
+        if requested_payload_rule_ids and not requested_rule_set_rule_ids:
+            raise HTTPException(status_code=422, detail="所选规则不在当前客户运行范围")
     try:
         direct_native_rule_ids = _assert_luxian_0609_formal_customer_rule_ids(
             rule_set_key=(requested_rule_set.key if requested_rule_set else ""),
@@ -1550,7 +1552,7 @@ async def create_workspace_batch_job(
 
     if requested_rule_set:
         rule_ids = (
-            list(direct_native_rule_ids)
+            list(active_customer_rule_ids)
             if is_direct_native_selection
             else list(requested_rule_set.rule_ids)
         )
@@ -1699,6 +1701,15 @@ async def create_workspace_batch_job(
         "record_scene_snapshot": record_scene_snapshot,
         "rule_set_key": rule_set_key,
         "rule_ids": sorted({str(rule_id).strip().upper() for rule_id in rule_ids if str(rule_id).strip()}),
+        **(
+            {
+                "customer_rule_ids": sorted(
+                    {str(rule_id).strip().upper() for rule_id in direct_native_rule_ids if str(rule_id).strip()}
+                )
+            }
+            if is_direct_native_selection
+            else {}
+        ),
         "execution_strategy": execution_strategy,
         "quality_profile": quality_profile,
         "bucket_strategy": bucket_strategy,
@@ -1768,6 +1779,7 @@ async def create_workspace_batch_job(
             "record_refs": effective_record_ref_payload,
             "query_scope": normalized_scope,
             "rule_ids": rule_ids,
+            "paused_customer_rule_ids": list(pending_customer_rule_ids),
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,

@@ -20,6 +20,7 @@ from app.services.llm_observability import current_llm_observation_context
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.luxian_0609 import runtime_shadow_input_provider
+from app.services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -2410,6 +2411,11 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
         "LX0609-059",
         "LX0609-075",
     ]
+    customer_rule_ids = [
+        rule_id
+        for rule_id in customer_rule_ids
+        if rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+    ]
     executable_rule_ids = [
         rule_id for rule_id in customer_rule_ids if rule_id not in pending_rule_ids
     ]
@@ -2454,13 +2460,14 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
     assert response["success"] is True
     assert workspace.created_job is not None
     filters = dict(workspace.created_job.get("filters") or {})
-    assert filters["rule_ids"] == customer_rule_ids
+    assert filters["rule_ids"] == executable_rule_ids
     assert filters["selected_rule_ids"] == customer_rule_ids
     assert filters["scoped_customer_rule_ids"] == customer_rule_ids
     assert filters["active_customer_rule_ids"] == executable_rule_ids
     assert filters["pending_customer_rule_ids"] == pending_rule_ids
-    assert filters["customer_rule_count"] == 75
-    assert filters["execution_rule_count"] == 69
+    assert filters["idempotency_payload"]["customer_rule_ids"] == customer_rule_ids
+    assert filters["customer_rule_count"] == 70
+    assert filters["execution_rule_count"] == 64
     assert filters["pending_rule_count"] == 6
     assert {"LX0609-051", "LX0609-061", "LX0609-067", "LX0609-071"}.issubset(
         filters["active_customer_rule_ids"]
@@ -2470,8 +2477,51 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_current_customer_
         selected == customer_rule_ids
         for selected in dict(filters["record_rule_map"]).values()
     )
-    assert workspace.created_job["draft_ids"] == customer_rule_ids
+    assert workspace.created_job["draft_ids"] == executable_rule_ids
     assert len(submitted_tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_idempotency_separates_pending_delivery_scope(
+    monkeypatch,
+):
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: _luxian_native_settings())
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args: None)
+
+    async def _create(selected_rule_ids: List[str]) -> Dict[str, Any]:
+        workspace = _WorkspaceStub()
+        monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+        response = await qc_sichuan.create_workspace_batch_job(
+            request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+                rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+                rule_ids=selected_rule_ids,
+                scope="all",
+                date_field="admission",
+                record_refs=[
+                    {
+                        "institute_id": "HOSP-001",
+                        "patient_id": "PAT-visit-001",
+                        "visit_id": "visit-001",
+                    }
+                ],
+            ),
+            qc_service=_ServiceStub(),  # type: ignore[arg-type]
+            current_user={"id": "tester"},
+        )
+        assert response["success"] is True
+        return dict(workspace.created_job["filters"])
+
+    active_filters = await _create(["LX0609-020"])
+    pending_filters = await _create(["LX0609-020", "LX0609-049"])
+
+    assert active_filters["rule_ids"] == pending_filters["rule_ids"] == ["LX0609-020"]
+    assert active_filters["idempotency_payload"]["customer_rule_ids"] == ["LX0609-020"]
+    assert pending_filters["idempotency_payload"]["customer_rule_ids"] == [
+        "LX0609-020",
+        "LX0609-049",
+    ]
+    assert active_filters["idempotency_key"] != pending_filters["idempotency_key"]
 
 
 @pytest.mark.asyncio
@@ -2530,7 +2580,11 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
     validation_mode: str,
 ):
     workspace = _WorkspaceStub()
-    customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    customer_rule_ids = [
+        f"LX0609-{index:03d}"
+        for index in range(1, 50)
+        if f"LX0609-{index:03d}" not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+    ]
     workspace.job["filters"] = {
         "rule_ids": customer_rule_ids,
         "selected_rule_ids": customer_rule_ids,
@@ -2605,7 +2659,7 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
     assert all(item["rule_ids"] == customer_rule_ids for item in captured)
     assert all(item["scene"] == "final" for item in captured)
     assert all("text_unavailable" in item["data_quality_flags"] for item in captured)
-    assert len(workspace.items) == 98
+    assert len(workspace.items) == 88
     assert {str(item.get("rule_id") or "") for item in workspace.items} == set(
         customer_rule_ids
     )

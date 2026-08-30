@@ -63,6 +63,7 @@ from .sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
 )
+from .luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from .sichuan_qc_service import RuleSourceGuardError, SichuanQCService
 
 
@@ -1507,6 +1508,15 @@ async def run_sichuan_workspace_batch_job(
             for rule_id in list(filters.get("paused_customer_rule_ids") or [])
             if str(rule_id or "").strip()
         }
+        if use_luxian_customer_results:
+            _, phase_pending_rule_ids = partition_luxian_0609_rule_scope(
+                tuple(
+                    str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+                    for wrapper in load_luxian_0609_rules()
+                    if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip()
+                )
+            )
+            paused_customer_rule_ids.update(phase_pending_rule_ids)
         output_rule_states: Dict[str, Dict[str, Any]] = rule_states
         output_rule_ids: List[str] = list(valid_rule_ids)
         if use_luxian_customer_results:

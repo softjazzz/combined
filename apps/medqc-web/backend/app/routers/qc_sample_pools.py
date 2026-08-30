@@ -49,6 +49,7 @@ from ..services.sample_validation_rule_sets import (
     resolve_sample_validation_rule_set_by_key,
     resolve_sample_validation_pseudo_draft,
 )
+from ..services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
 from ..services.qc_rule_sets import get_sichuan_rule_set
 
 
@@ -73,10 +74,11 @@ _LUXIAN_0609_REPORT_FILES = {
 }
 _SAMPLE_VALIDATION_DEDUP_WINDOW = timedelta(minutes=2)
 _SAMPLE_VALIDATION_DEDUP_STATUSES = {"queued", "running"}
-# 当前 LX0609 目标病例缺少可核验的同意书或收费资料。规则仍保留在目录和历史结果中，
-# 仅暂停新建样本池 LX0609 任务的执行，避免把系统资料能力缺口伪装成医疗质控结论。
+# 阶段冻结规则保留在客户结果集合中，由 worker 统一投影为 not_executed。
 _LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS = frozenset(
-    {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042", "LX0609-049"}
+    entry.rule_id
+    for entry in load_luxian_0609_phase_scope()
+    if entry.phase_status != "phase_1_target"
 )
 
 
@@ -1011,6 +1013,7 @@ async def run_sample_pool_intrinsic_validation(
     explicit_fields = set(getattr(payload, "model_fields_set", set()) or set())
     if "selected_rule_ids" in explicit_fields and not requested_selected_rule_ids:
         raise HTTPException(status_code=422, detail="所选质控点不能为空")
+    selected_customer_delivery_rule_ids = list(requested_selected_rule_ids)
     if requested_selected_rule_ids and validation_mode != "customer":
         raise HTTPException(status_code=422, detail="selected_rule_ids 仅支持客户专项规则验证模式")
     requested_record_ref_values = [
@@ -1228,9 +1231,9 @@ async def run_sample_pool_intrinsic_validation(
     if not rule_ids and not gate_only_customer_rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
     customer_rule_count = (
-        len(requested_selected_rule_ids)
-        if requested_selected_rule_ids
-        else len(rule_ids)
+        len(selected_customer_delivery_rule_ids)
+        if selected_customer_delivery_rule_ids
+        else len(rule_ids) + len(paused_customer_rule_ids)
         if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
         else len(rule_ids)
     )
@@ -1355,7 +1358,7 @@ async def run_sample_pool_intrinsic_validation(
         "sample_pool_id": pool_id,
         "selected_rule_ids": requested_selected_rule_ids,
         "selected_record_ids": record_ids if selected_record_count else [],
-        "scoped_customer_rule_ids": requested_selected_rule_ids,
+        "scoped_customer_rule_ids": selected_customer_delivery_rule_ids,
         "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
         "selected_sample_count": len(runnable_items),
         "dedup_record_count": len(record_refs),
@@ -1383,7 +1386,7 @@ async def run_sample_pool_intrinsic_validation(
     luxian_family_scopes: list[dict[str, Any]] = []
     paused_rule_ids_by_family: dict[str, list[str]] = {}
     if payload.group_by_luxian_family and rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
-        luxian_scope_rule_ids = requested_selected_rule_ids
+        luxian_scope_rule_ids = selected_customer_delivery_rule_ids
         if not luxian_scope_rule_ids:
             luxian_scope_rule_ids = _normalize_rule_id_list(rule_ids)
         luxian_family_scopes = _build_luxian_0609_family_scopes(luxian_scope_rule_ids)
@@ -1401,7 +1404,11 @@ async def run_sample_pool_intrinsic_validation(
         if str(item.get("id") or "").strip()
     ]
     if rule_set_key in {CUSTOMER_LUXIAN_RULE_SET_KEY, LUXIAN_0609_QC_RULE_SET_KEY}:
-        identity_rule_ids = requested_selected_rule_ids or _normalize_rule_id_list(rule_ids)
+        identity_rule_ids = selected_customer_delivery_rule_ids or (
+            _normalize_rule_id_list(rule_ids + paused_customer_rule_ids)
+            if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+            else _normalize_rule_id_list(rule_ids)
+        )
     else:
         identity_rule_ids = list(rule_ids)
     created_by = _current_user_id(current_user)
@@ -1455,7 +1462,7 @@ async def run_sample_pool_intrinsic_validation(
                 "gate_only_customer_rule_ids": gate_only_customer_rule_ids,
                 "gate_only_customer_rule_count": len(gate_only_customer_rule_ids),
                 "selected_rule_ids": requested_selected_rule_ids,
-                "scoped_customer_rule_ids": requested_selected_rule_ids,
+                "scoped_customer_rule_ids": selected_customer_delivery_rule_ids,
                 "record_rule_map": record_rule_map,
                 "record_ids": record_ids,
                 "rule_ids": rule_ids,
@@ -1676,7 +1683,7 @@ async def run_sample_pool_intrinsic_validation(
             "gate_only_customer_rule_ids": gate_only_customer_rule_ids,
             "gate_only_customer_rule_count": len(gate_only_customer_rule_ids),
             "selected_rule_ids": requested_selected_rule_ids,
-            "scoped_customer_rule_ids": requested_selected_rule_ids,
+            "scoped_customer_rule_ids": selected_customer_delivery_rule_ids,
             "record_rule_map": record_rule_map,
             "record_ids": record_ids,
             "rule_ids": rule_ids,
