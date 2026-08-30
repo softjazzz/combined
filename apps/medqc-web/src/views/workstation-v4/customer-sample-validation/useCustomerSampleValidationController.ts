@@ -407,7 +407,7 @@ export function useCustomerSampleValidationController() {
     () =>
       luxianRuleFamilies.value.filter((family) => luxianRuleFamilySelectedCount(family) > 0).length,
   )
-  const luxianDefaultRuleCount = computed(() => Number(selectedRuleSet.value?.rule_count || 75))
+  const luxianDefaultRuleCount = computed(() => Number(selectedRuleSet.value?.rule_count || 71))
   const luxianScopeModeText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
       ? isAllLuxianRulesSelected.value

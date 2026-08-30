@@ -109,7 +109,7 @@ export const LUXIAN_0609_RULE_FAMILY_DEFINITIONS = [
   {
     key: 'surgery_anesthesia',
     name: '手术麻醉',
-    description: '覆盖手术记录、术前小结、知情同意、核查表、麻醉记录和术前讨论。',
+    description: '覆盖手术记录、术前小结、核查表、麻醉记录和术前讨论。',
     ruleIds: [
       'LX0609-003',
       'LX0609-024',
@@ -119,8 +119,6 @@ export const LUXIAN_0609_RULE_FAMILY_DEFINITIONS = [
       'LX0609-030',
       'LX0609-031',
       'LX0609-032',
-      'LX0609-033',
-      'LX0609-034',
       'LX0609-035',
       'LX0609-036',
       'LX0609-037',
@@ -132,10 +130,8 @@ export const LUXIAN_0609_RULE_FAMILY_DEFINITIONS = [
   {
     key: 'transfusion',
     name: '输血',
-    description: '覆盖输血知情同意、输血前检查、输血前后评价和医嘱收费一致性。',
+    description: '覆盖输血前检查、输血前后评价和医嘱收费一致性。',
     ruleIds: [
-      'LX0609-041',
-      'LX0609-042',
       'LX0609-043',
       'LX0609-044',
       'LX0609-045',

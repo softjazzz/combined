@@ -1600,7 +1600,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
             "LX0609-049",
         }
     ]
-    assert len(luxian_rule_set.rule_ids) == 75
+    assert len(luxian_rule_set.rule_ids) == 71
     assert luxian_rule_set.rule_ids[-1] == "LX0609-075"
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
     assert created["draft_ids"] == expected_task_rule_ids
@@ -1681,8 +1681,8 @@ async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalo
     assert paused.isdisjoint(created["filters"]["rule_ids"])
     assert created["filters"]["rule_count"] == 70
     assert response["data"]["rule_count"] == 70
-    # 规则目录仍是完整75条；只改变本次任务执行范围。
-    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 75
+    # 客户专项规则集已排除源库不存在的知情同意书质控点；规则目录仍独立保留完整目录。
+    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 71
 
 
 @pytest.mark.asyncio
