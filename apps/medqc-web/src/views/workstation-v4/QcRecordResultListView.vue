@@ -327,9 +327,10 @@ const metricCards = computed(() =>
   })),
 )
 
-const rows = computed<QcRecordResultRow[]>(() =>
-  allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow),
-)
+const rows = computed<QcRecordResultRow[]>(() => {
+  const resultRows = allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow)
+  return resultRows.sort(compareLatestQcTimeDesc)
+})
 const selectedCount = computed(() => selectedRecordKeys.value.length)
 
 const emptyMessage = computed(() => {
@@ -345,6 +346,17 @@ function statusCount(statusCounts: Record<string, number>, status: string): numb
 
 function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
+}
+
+function qcTimeSortValue(value?: string): number {
+  const text = String(value || '').trim()
+  if (!text || text === '—') return 0
+  const timestamp = Date.parse(`${text.replace(' ', 'T')}+08:00`)
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+function compareLatestQcTimeDesc(left: QcRecordResultRow, right: QcRecordResultRow): number {
+  return qcTimeSortValue(right.latestQcTime) - qcTimeSortValue(left.latestQcTime)
 }
 
 function toResultRow(record: PatientRecord): QcRecordResultRow {

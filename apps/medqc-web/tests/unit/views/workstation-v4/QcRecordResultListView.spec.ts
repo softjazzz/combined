@@ -224,7 +224,7 @@ describe('QcRecordResultListView', () => {
       '资料待核实',
     ])
     expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
-    expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
+    expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者乙头像')
     expect(wrapper.text()).not.toContain('不得展示')
     expect(wrapper.text()).not.toContain('来源未知')
     expect(wrapper.text()).not.toContain('资料完整')
@@ -375,7 +375,7 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     const rows = wrapper.findAll('tbody tr[data-record-key]')
-    await rows[1]!.find('button').trigger('click')
+    await rows[0]!.find('button').trigger('click')
 
     const drawer = wrapper.getComponent(ResultDrawerStub)
     expect(drawer.props('open')).toBe(true)
