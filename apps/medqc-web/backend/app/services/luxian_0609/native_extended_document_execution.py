@@ -374,6 +374,27 @@ def _discharge_time(
     return None
 
 
+def _registration_discharge_times(
+    registration_rows: Sequence[Mapping[str, Any]],
+) -> tuple[datetime, ...]:
+    """收集登记来源中的唯一权威出院时间，供061冲突关闭使用。"""
+
+    return tuple(
+        sorted(
+            {
+                parsed
+                for row in registration_rows
+                if (
+                    parsed := _parse_datetime(
+                        row.get("discharge_datetime") or row.get("discharge_time")
+                    )
+                )
+                is not None
+            }
+        )
+    )
+
+
 def _row_text(row: Mapping[str, Any]) -> str:
     return "\n".join(
         _clean(row.get(key))
@@ -1752,13 +1773,26 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-061":
+            registration_discharge_times = _registration_discharge_times(
+                registration_rows
+            )
+            registration_time_conflicts = (
+                registration_discharge_times
+                if len(registration_discharge_times) > 1
+                else ()
+            )
             outcome = evaluate_discharge_documentation_timeliness(
                 death_state=death_state,
                 death_error=death_error,
                 registration_error=registration_error,
                 discharge_error=discharge_error,
-                discharge_time=_discharge_time(registration_rows, discharge_rows),
+                discharge_time=(
+                    None
+                    if registration_time_conflicts
+                    else _discharge_time(registration_rows, discharge_rows)
+                ),
                 discharge_rows=discharge_rows,
+                registration_time_conflicts=registration_time_conflicts,
             )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))

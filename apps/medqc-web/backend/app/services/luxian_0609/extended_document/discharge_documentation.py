@@ -25,6 +25,7 @@ def evaluate_discharge_documentation_timeliness(
     discharge_error: str,
     discharge_time: datetime | None,
     discharge_rows: Sequence[Mapping[str, Any]],
+    registration_time_conflicts: Sequence[datetime] = (),
 ) -> DischargeDocumentationOutcome:
     """按权威出院时间核对出院记录是否在24小时内完成。"""
 
@@ -40,6 +41,23 @@ def evaluate_discharge_documentation_timeliness(
             "data_gap",
             registration_error or discharge_error,
         )
+    if registration_time_conflicts:
+        conflict_times = tuple(sorted(set(registration_time_conflicts)))
+        return DischargeDocumentationOutcome(
+            "data_gap",
+            "authoritative_time_conflict",
+            {
+                "verification_kind": "discharge_record_timeliness_check",
+                "discharge_time": None,
+                "record_time": None,
+                "threshold_hours": 24,
+                "actual_interval_hours": None,
+                "conflicting_discharge_times": [
+                    value.isoformat(sep=" ") for value in conflict_times
+                ],
+            },
+        )
+
     if discharge_time is None:
         return DischargeDocumentationOutcome(
             "not_applicable",

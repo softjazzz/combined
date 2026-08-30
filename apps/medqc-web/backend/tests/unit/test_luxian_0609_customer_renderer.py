@@ -1144,6 +1144,28 @@ def test_061_missing_record_time_does_not_render_none_values() -> None:
     assert "None" not in finding
 
 
+def test_061_conflicting_authoritative_discharge_times_are_explicit() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-061",
+        facts={
+            "verification_kind": "discharge_record_timeliness_check",
+            "discharge_time": None,
+            "record_time": None,
+            "threshold_hours": 24,
+            "actual_interval_hours": None,
+            "conflicting_discharge_times": [
+                "2026-07-01 12:00:00",
+                "2026-07-02 12:00:00",
+            ],
+        },
+    )
+
+    assert finding == (
+        "发现多条权威出院时间：2026-07-01 12:00:00、2026-07-02 12:00:00；"
+        "时间依据相互冲突，暂无法判断出院记录是否在出院后 24 小时内完成，请核对住院登记时间。"
+    )
+
+
 def test_058_missing_drug_start_time_does_not_claim_expert_support_absent() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-058",

@@ -887,6 +887,7 @@ def safe_luxian_0609_customer_display_facts(
         "death_record_presence_check": {"death_confirmed", "death_time", "death_record_count"},
         "discharge_record_timeliness_check": {
             "discharge_time", "record_time", "threshold_hours", "actual_interval_hours",
+            "conflicting_discharge_times",
         },
         "discharge_medication_completeness_check": {
             "medication_count", "required_fields", "missing_fields",
@@ -1271,6 +1272,10 @@ def safe_luxian_0609_customer_display_facts(
             }
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
+            # 061 的冲突列表只在确有多条权威时间时出现；保持普通结果的
+            # 既有字段形状，避免把一个不存在的字段投影成 null。
+            if key == "conflicting_discharge_times" and key not in raw:
+                continue
             if key == "event_results":
                 controlled_events = (
                     controlled_consultation_events(raw.get(key))
@@ -1311,6 +1316,40 @@ def safe_luxian_0609_customer_display_facts(
                 safe[key] = list(value)
             else:
                 return None
+        if kind == "discharge_record_timeliness_check" and "conflicting_discharge_times" in raw:
+            conflict_times = raw.get("conflicting_discharge_times")
+            if (
+                not isinstance(conflict_times, (list, tuple))
+                or not 2 <= len(conflict_times) <= 100
+                or any(
+                    not isinstance(value, str)
+                    or not value
+                    or len(value) > 40
+                    or "\n" in value
+                    or "\r" in value
+                    for value in conflict_times
+                )
+            ):
+                return None
+            try:
+                parsed_conflicts = tuple(
+                    datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    for value in conflict_times
+                )
+                is_sorted_unique = (
+                    len(set(parsed_conflicts)) == len(parsed_conflicts)
+                    and tuple(sorted(parsed_conflicts)) == parsed_conflicts
+                )
+            except (TypeError, ValueError):
+                return None
+            if (
+                not is_sorted_unique
+                or raw.get("discharge_time") is not None
+                or raw.get("record_time") is not None
+                or raw.get("actual_interval_hours") is not None
+            ):
+                return None
+            safe["conflicting_discharge_times"] = list(conflict_times)
         if kind in {"antimicrobial_reason_documentation_check",
                     "antimicrobial_effect_evaluation_check"}:
             medicines = safe.get("antimicrobials")

@@ -1031,6 +1031,40 @@ async def test_061_uses_latest_authoritative_completion_when_discharge_rows_are_
 
 
 @pytest.mark.asyncio
+async def test_061_fails_closed_when_registration_discharge_times_conflict() -> None:
+    """多条登记出院时间冲突时，不得依赖返回顺序选取时间。"""
+
+    rows = {
+        "inpat_registration": (
+            {
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-01 12:00:00",
+            },
+            {
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-02 12:00:00",
+            },
+        ),
+        "discharge_record": ({"record_time": "2026-07-03 11:00:00"},),
+    }
+
+    reversed_rows = dict(rows)
+    reversed_rows["inpat_registration"] = tuple(
+        reversed(rows["inpat_registration"])
+    )
+    for candidate_rows in (rows, reversed_rows):
+        result, reduced = await _evaluate("LX0609-061", candidate_rows)
+
+        assert reduced.final_state is CustomerFinalState.DATA_GAP
+        assert reduced.reason_code == "authoritative_time_conflict"
+        facts = dict(result.customer_display_facts)["LX0609-061"]
+        assert facts["conflicting_discharge_times"] == [
+            "2026-07-01 12:00:00",
+            "2026-07-02 12:00:00",
+        ]
+
+
+@pytest.mark.asyncio
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-064",

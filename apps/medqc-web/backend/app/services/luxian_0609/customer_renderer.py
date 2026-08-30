@@ -2349,6 +2349,14 @@ def customer_finding_from_controlled_facts(
         )
 
     if rule_id == "LX0609-061" and kind == "discharge_record_timeliness_check":
+        conflict_times = facts.get("conflicting_discharge_times")
+        if isinstance(conflict_times, list) and conflict_times:
+            return (
+                "发现多条权威出院时间："
+                f"{'、'.join(str(value) for value in conflict_times)}；"
+                "时间依据相互冲突，暂无法判断出院记录是否在出院后 24 小时内完成，"
+                "请核对住院登记时间。"
+            )
         interval = facts.get("actual_interval_hours")
         discharge_time = facts.get("discharge_time")
         record_time = facts.get("record_time")

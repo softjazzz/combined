@@ -3016,6 +3016,50 @@ def test_extended_document_facts_are_whitelisted_and_rendered_in_backend():
     assert "raw_record_content" not in result["customer_display_facts"]
 
 
+def test_061_conflicting_discharge_times_are_preserved_and_rendered():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    raw_facts = {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": None,
+        "record_time": None,
+        "threshold_hours": 24,
+        "actual_interval_hours": None,
+        "conflicting_discharge_times": [
+            "2026-07-01 12:00:00",
+            "2026-07-02 12:00:00",
+        ],
+    }
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-061", "name": "出院记录时限"}],
+        execution_results=[],
+        reduced_decisions=(
+            reduce_luxian_0609_rule_decision(
+                RuleDecision(
+                    rule_id="LX0609-061",
+                    snapshot_hash="a" * 64,
+                    applicability=ApplicabilityState.APPLICABLE,
+                    evidence_state=EvidenceState.DATA_GAP,
+                    qc_direction=QcDirection.UNKNOWN,
+                    reason_code="authoritative_time_conflict",
+                    fact_refs=("b" * 64,),
+                    evaluator_version="aggregator-test-v1",
+                    confidence=None,
+                )
+            ),
+        ),
+        customer_display_facts=(("LX0609-061", raw_facts),),
+    )[0]
+
+    assert result["customer_display_facts"] == raw_facts
+    assert result["findings"] == (
+        "发现多条权威出院时间：2026-07-01 12:00:00、2026-07-02 12:00:00；"
+        "时间依据相互冲突，暂无法判断出院记录是否在出院后 24 小时内完成，请核对住院登记时间。"
+    )
+
+
 def test_extended_document_list_facts_are_normalized_without_raw_text():
     safe = __import__(
         "app.services.luxian_0609_result_aggregator",
