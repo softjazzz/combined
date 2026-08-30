@@ -32,6 +32,7 @@ LX018_DIAGNOSTIC_REASON_DIMENSIONS = frozenset(
 
 _COMPLAINT_VALUE_PATTERN = re.compile(r"主诉\s*[:：]\s*([^；;。\r\n]{1,160})")
 _ADMISSION_FIRST_DIAGNOSIS_TYPES = frozenset({"初步诊断", "入院诊断"})
+_DIAGNOSIS_TYPE_SEPARATOR_PATTERN = re.compile(r"[\s/／,，、;；+＋|｜]+")
 _LX018_DIAGNOSIS_ORDER_FIELDS = (
     "diagnosis_no",
     "diagnosis_sequence",
@@ -43,7 +44,8 @@ _LX018_DIAGNOSIS_ORDER_FIELDS = (
 )
 _LX018_SEQUENCE_VALUE_PATTERN = re.compile(r"^(?:.*\|\|)?([1-9]\d*)$")
 _NUMBERED_DIAGNOSIS_ITEM_PATTERN = re.compile(
-    r"(?:^|[，,；;\s]+)\d+\s*[、.．]\s*([^，,；;\n\r]+)"
+    r"(?:^|(?=\d+\s*[、.．,，]))\d+\s*[、.．,，]\s*"
+    r"(.*?)(?=\d+\s*[、.．,，]|$)"
 )
 _DIAGNOSTIC_RATIONALE_CODES = frozenset(
     {
@@ -127,7 +129,19 @@ def _split_numbered_diagnosis_items(value: Any) -> tuple[str, ...]:
         for item in _NUMBERED_DIAGNOSIS_ITEM_PATTERN.findall(text)
         if item.strip()
     )
-    return items if len(items) >= 2 else ()
+    return items
+
+
+def _is_admission_first_diagnosis_type(value: Any) -> bool:
+    """接受精确类型或明确分隔的入院/初步诊断复合值。"""
+
+    normalized = _clean(value)
+    if normalized in _ADMISSION_FIRST_DIAGNOSIS_TYPES:
+        return True
+    tokens = tuple(
+        token for token in _DIAGNOSIS_TYPE_SEPARATOR_PATTERN.split(normalized) if token
+    )
+    return bool(tokens) and set(tokens).issubset(_ADMISSION_FIRST_DIAGNOSIS_TYPES)
 
 
 def _lx018_structured_order(row: Mapping[str, Any]) -> int | None:
@@ -160,21 +174,35 @@ def _lx018_primary_diagnosis_resolution(
 
     ordered_candidates: list[tuple[int, str]] = []
     saw_admission_candidate = False
+    saw_unordered_candidate = False
     for source_key in LX018_DIAGNOSIS_SOURCES:
         for row in _source_rows(documents, source_key, limit=None):
             diagnosis_type = _clean(row.get("diagnosis_type"))
-            if diagnosis_type not in _ADMISSION_FIRST_DIAGNOSIS_TYPES:
+            if not _is_admission_first_diagnosis_type(diagnosis_type):
                 continue
             saw_admission_candidate = True
             order = _lx018_structured_order(row)
             label = _lx018_diagnosis_label(row)
-            # 缺少序号的“入院诊断”无法确认是否是第一诊断，不能按数据库返回顺序猜。
+            numbered_items = _split_numbered_diagnosis_items(
+                row.get("diagnosis_name") or row.get("diagnosis")
+            )
+            # 客户 admission_record_diagnosis 的诊断类别没有 diagnosis_no，
+            # 但同一字段中的“1、...2、...”仍是明确的行内权威顺序。
+            if order is None and numbered_items:
+                order = 1
+            # 无序号/空内容候选不能覆盖另一来源的有效候选；只有没有任何有效
+            # 候选时才以 unknown 结束，避免重复投影把结论锁死为资料不足。
             if order is None or not label:
-                return "unknown", ""
+                saw_unordered_candidate = True
+                continue
             ordered_candidates.append((order, label))
 
     if not ordered_candidates:
-        return ("unknown", "") if saw_admission_candidate else ("missing", "")
+        return (
+            ("unknown", "")
+            if saw_admission_candidate or saw_unordered_candidate
+            else ("missing", "")
+        )
     first_order = min(order for order, _ in ordered_candidates)
     first_labels = {
         label for order, label in ordered_candidates if order == first_order

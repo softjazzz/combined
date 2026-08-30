@@ -2275,6 +2275,70 @@ async def test_010_ambiguous_order_exam_linkage_stays_data_gap(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_010_reused_exam_id_across_orders_stays_data_gap(monkeypatch):
+    """同一 exam_id 不能被两个不同医嘱复用，避免一份报告覆盖多事件。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-SAME",
+                "order_id": "ORD-1",
+                "exam_name": "胸部CT平扫",
+                "exam_time": "2026-07-07 09:00:00",
+                "report_time": "2026-07-07 10:00:00",
+            },
+            {
+                "exam_id": "EX-SAME",
+                "order_id": "ORD-2",
+                "exam_name": "头颅MRI平扫",
+                "exam_time": "2026-07-07 09:00:00",
+                "report_time": "2026-07-07 10:00:00",
+            },
+        ),
+        order_rows=(
+            {
+                "order_id": "ORD-1",
+                "order_name": "胸部CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 08:00:00",
+            },
+            {
+                "order_id": "ORD-2",
+                "order_name": "头颅MRI平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 10:00:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-07-07 07:30:00",
+                "record_content": "分别因胸痛和头痛安排影像检查。",
+            },
+        ),
+        llm_outputs=(
+            {
+                "schema_version": "lx0609-exam-lab-text-facts-v3",
+                "facts": [
+                    {
+                        "rule_id": "LX0609-010",
+                        "applicability": "applicable",
+                        "semantic_state": "present",
+                        "positive_state": "not_relevant",
+                        "course_doc_positions": [1],
+                    },
+                ],
+            },
+        ),
+    )
+
+    assert decision.reason_code == "association_failed"
+    assert canonical["status"] == "data_gap"
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
 async def test_010_effective_order_without_exam_master_stays_data_gap(monkeypatch):
     """O1 已完整关联而 O2 缺主表时，不得把整条010误判合规。"""
 
@@ -3852,6 +3916,107 @@ def test_multi_event_parser_localizes_course_outside_the_event_window():
     assert facts[1].event_position == 2
     assert facts[1].semantic_state == "present"
     assert len(facts[1].course_doc_refs) == 1
+
+
+def test_010_shared_course_only_mentioning_first_event_does_not_cover_second():
+    """010不能因两个检查窗口重叠而把只提及首个检查的病程复制给次个事件。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_name": "胸部CT",
+                    "exam_time": "2026-04-01 08:00:00",
+                    "report_time": "2026-04-01 12:00:00",
+                },
+                {
+                    "exam_id": "EXAM-2",
+                    "exam_name": "头颅MRI",
+                    "exam_time": "2026-04-02 08:00:00",
+                    "report_time": "2026-04-02 12:00:00",
+                },
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-03-31 09:00:00",
+                "record_content": "因咳嗽拟行胸部CT明确肺部病因。",
+            },),
+        }
+    )
+    response = {
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-010",
+                "event_position": event_position,
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "not_relevant",
+                "course_doc_positions": [1],
+            }
+            for event_position in (1, 2)
+        ],
+    }
+
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(response, ensure_ascii=False)},
+        selected_rule_ids=("LX0609-010",),
+        projection=projection,
+    )
+
+    assert facts[0].semantic_state == "present"
+    assert facts[1].semantic_state == "unknown"
+    assert facts[1].course_doc_refs == ()
+
+
+def test_010_shared_course_different_same_modality_body_does_not_cover_second():
+    """同模态不同部位不能靠共享“CT”字样完成事件绑定。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-CHEST",
+                    "exam_name": "胸部CT",
+                    "exam_time": "2026-04-01 08:00:00",
+                    "report_time": "2026-04-01 12:00:00",
+                },
+                {
+                    "exam_id": "EXAM-ABDOMEN",
+                    "exam_name": "腹部CT",
+                    "exam_time": "2026-04-02 08:00:00",
+                    "report_time": "2026-04-02 12:00:00",
+                },
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-03-31 09:00:00",
+                "record_content": "因咳嗽拟行胸部CT明确肺部病因。",
+            },),
+        }
+    )
+    response = {
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-010",
+                "event_position": event_position,
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "not_relevant",
+                "course_doc_positions": [1],
+            }
+            for event_position in (1, 2)
+        ],
+    }
+
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(response, ensure_ascii=False)},
+        selected_rule_ids=("LX0609-010",),
+        projection=projection,
+    )
+
+    assert facts[0].semantic_state == "present"
+    assert facts[1].semantic_state == "unknown"
 
 
 def test_multi_event_parser_does_not_treat_imaging_result_restatement_as_analysis():

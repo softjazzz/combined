@@ -67,6 +67,9 @@ _IMAGING_CLINICAL_ANALYSIS_PATTERN = re.compile(
 )
 _CULTURE_NEGATIVE_PATTERN = re.compile(r"无生长|未检出|培养阴性|阴性")
 _CULTURE_POSITIVE_PATTERN = re.compile(r"培养阳性|检出.{0,12}菌|分离出.{0,12}菌|药敏结果")
+_EVENT_BODY_ALIASES = {
+    "颅脑": ("头颅",),
+}
 
 
 @dataclass(frozen=True, repr=False)
@@ -80,6 +83,8 @@ class ExamLabSingleEvent:
     target_confirmed: bool = True
     target_explicitly_absent: bool = False
     readable_text: bool = True
+    # 用于多事件病程复用校验的最小事件身份文本（不作为对外证据）。
+    identity_text: str = ""
 
     def __repr__(self) -> str:
         return (
@@ -225,6 +230,38 @@ def _uses_multi_event_schema(projection: ExamLabTextProjection) -> bool:
         len(events_for_family(projection, family)) > 1
         for family in ("exam", "culture")
     )
+
+
+def _event_identity_mentions_course(
+    event: ExamLabSingleEvent, course_text: str
+) -> bool:
+    """判断病程是否包含该事件的最小身份锚点，避免跨事件复用。"""
+
+    identity = _clean(event.identity_text)
+    text = _clean(course_text)
+    if not identity:
+        return True
+    if not text:
+        return False
+    modalities = re.findall(r"CT|MRI|计算机断层|磁共振", identity, flags=re.I)
+    if modalities and not any(item.lower() in text.lower() for item in modalities):
+        return False
+    # 仅接受完整部位短语/连续子串；不能用单字符集合重叠或通用模态词归属。
+    body_tokens = tuple(
+        token
+        for token in (
+            re.sub(r"检查|报告|平扫|增强|螺旋|影像", "", raw)
+            for raw in re.findall(r"[\u4e00-\u9fff]{2,}", identity)
+        )
+        if len(token) >= 2
+    )
+    if not body_tokens:
+        return False
+    for token in body_tokens:
+        variants = (token, *_EVENT_BODY_ALIASES.get(token, ()))
+        if any(variant in text for variant in variants):
+            return True
+    return False
 
 
 class ExamLabFactParseError(ValueError):
@@ -438,6 +475,20 @@ def build_exam_lab_text_projection(
         if conflict:
             conflicts.add("report_time")
         material = " ".join(_row_text(row) for row in rows)
+        identity_text = " ".join(
+            dict.fromkeys(
+                _clean(row.get(field))
+                for row in rows
+                for field in (
+                    "exam_type",
+                    "modality",
+                    "exam_name",
+                    "item_name",
+                    "exam_item_name",
+                )
+                if _clean(row.get(field))
+            )
+        )
         negative_pattern = (
             _IMAGING_NEGATIVE_PATTERN
             if family == "exam"
@@ -511,6 +562,7 @@ def build_exam_lab_text_projection(
                 and bool(explicit_non_target_pattern.search(material))
             ),
             readable_text=bool(material),
+            identity_text=identity_text,
         )
 
     def build_events(family: str) -> tuple[ExamLabSingleEvent, ...]:
@@ -1000,6 +1052,23 @@ def parse_exam_lab_fact_response(
             )) + 1,
         )
     }
+    # 记录模型对同一 COURSE_DOC 的跨事件复用声明；010仅在病程文本同时
+    # 明确提及各事件时允许复用，否则将该事件收口为 unknown。
+    shared_course_events: dict[int, set[int]] = {}
+    if multi_event_schema:
+        for raw in payload["facts"]:
+            if (
+                not isinstance(raw, Mapping)
+                or str(raw.get("rule_id") or "").strip().upper() != "LX0609-010"
+            ):
+                continue
+            event_position = raw.get("event_position")
+            positions = raw.get("course_doc_positions")
+            if not isinstance(event_position, int) or not isinstance(positions, list):
+                continue
+            for position in positions:
+                if isinstance(position, int) and not isinstance(position, bool):
+                    shared_course_events.setdefault(position, set()).add(event_position)
     covered: set[tuple[str, int]] = set()
     for raw in payload["facts"]:
         if (
@@ -1052,6 +1121,24 @@ def parse_exam_lab_fact_response(
         )
         family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
         event = events_for_family(projection, family)[event_position - 1]
+        if rule_id == "LX0609-010" and multi_event_schema and normalized_course:
+            cross_event_positions = {
+                position
+                for position in course_positions
+                if len(shared_course_events.get(position, ())) > 1
+            }
+            if any(
+                not _event_identity_mentions_course(
+                    event,
+                    (projection.course_texts or {}).get(
+                        course_refs_in_position_order[position - 1], ""
+                    ),
+                )
+                for position in cross_event_positions
+            ):
+                normalized_course = ()
+                semantic = "unknown"
+                applicability = "unknown"
         allowed_event_course = set(_course_refs_for_rule_event(
             projection,
             rule_id=rule_id,

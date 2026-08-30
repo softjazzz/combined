@@ -572,6 +572,11 @@ def _order_exam_structure_outcome(
         if not order_id or not exam_id or order_id not in orders_by_id:
             return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
         exams_by_order.setdefault(order_id, []).append(exam)
+    # exam_id 是检查主表的报告级唯一键；同一检查被不同医嘱复用时，
+    # 不能把一份报告当作多个事件的证据。
+    exam_ids = [_clean(exam.get("exam_id")) for exam in exam_rows]
+    if len(exam_ids) != len(set(exam_ids)):
+        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
     # 关联是双向完整合同：不能只确认“已有主表的医嘱”唯一，还必须确认每条
     # 有效 CT/MRI 医嘱都有且仅有一条检查主表。缺少主表时不能擅自视为未执行。
     if (

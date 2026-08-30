@@ -4622,6 +4622,62 @@ async def test_typed_018_reads_admission_first_diagnosis():
     assert typed.results == ()
 
 
+def test_lx018_uses_numbered_items_when_source_row_has_only_category_id():
+    """真实 admission_record_diagnosis 用 diagnosis_id 表示类别，诊断顺序在名称编号中。"""
+    documents = {
+        "admission_record_diagnosis": [
+            {
+                "diagnosis_type": "初步诊断",
+                "diagnosis_id": "2",
+                "diagnosis_name": "1、急性阑尾炎2、腹膜炎",
+            }
+        ]
+    }
+
+    assert course._lx018_primary_diagnosis_resolution(documents) == (
+        "available",
+        "急性阑尾炎",
+    )
+
+
+def test_lx018_normalizes_single_explicit_composite_diagnosis_type():
+    documents = {
+        "diagnosis": [
+            {
+                "diagnosis_type": "入院诊断/初步诊断",
+                "diagnosis_no": "1",
+                "diagnosis_name": "急性阑尾炎",
+            }
+        ]
+    }
+
+    assert course._lx018_primary_diagnosis_resolution(documents) == (
+        "available",
+        "急性阑尾炎",
+    )
+
+
+def test_lx018_ignores_unordered_duplicate_when_ordered_candidate_exists():
+    documents = {
+        "diagnosis": [
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_no": "1",
+                "diagnosis_name": "急性阑尾炎",
+            },
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": "急性阑尾炎",
+            },
+        ]
+    }
+
+    assert course._lx018_primary_diagnosis_resolution(documents) == (
+        "available",
+        "急性阑尾炎",
+    )
+
+
 @pytest.mark.asyncio
 async def test_typed_018_accepts_structured_complaint_when_record_content_is_empty():
     rows_by_source = {
