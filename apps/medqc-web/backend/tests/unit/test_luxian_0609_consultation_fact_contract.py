@@ -218,6 +218,55 @@ def test_linked_vague_execution_is_present_for_020_but_defective_for_023():
     assert result["LX0609-023"].reason_code == "execution_vague_or_copied"
 
 
+def test_one_course_execution_claimed_by_two_consultations_is_ambiguous():
+    """同一病程不能同时覆盖两次独立会诊；具体执行应保守降级。"""
+    documents = [
+        doc("consultation_record-1"),
+        doc("consultation_record-2", time="2026-06-01 10:00:00"),
+        doc(
+            "daily_course_record-1",
+            "daily_course_record",
+            "2026-06-01 12:00:00",
+        ),
+    ]
+    parsed = validate(
+        documents,
+        [
+            fact("consultation_record-1", role="opinion"),
+            fact(
+                "consultation_record-2",
+                role="opinion",
+                episode_ref="consultation_record-2",
+            ),
+            fact(
+                "daily_course_record-1",
+                source="daily_course_record",
+                role="course_execution",
+                episode_ref=None,
+                opinion_state="unknown",
+            ),
+        ],
+        [
+            {
+                "episode_ref": "consultation_record-1",
+                "execution_ref": "daily_course_record-1",
+                "quality": "specific",
+                "confidence": "high",
+            },
+            {
+                "episode_ref": "consultation_record-2",
+                "execution_ref": "daily_course_record-1",
+                "quality": "specific",
+                "confidence": "high",
+            },
+        ],
+    )
+    result = states(parsed)
+    assert result["LX0609-020"].status == "evaluation_unknown"
+    assert result["LX0609-020"].reason_code == "semantic_low_confidence"
+    assert result["LX0609-023"].status == "evaluation_unknown"
+
+
 def test_021_clear_application_fact_is_stable_without_purpose_heading():
     parsed = validate_consultation_semantic_payload(
         {
@@ -339,7 +388,7 @@ def test_unknown_duplicate_and_low_confidence_reused_refs_fail_closed():
         )
     ]
     parsed = validate(documents, facts, links)
-    assert states(parsed)["LX0609-020"].status == "compliant"
+    assert states(parsed)["LX0609-020"].status == "evaluation_unknown"
 
     links[1]["confidence"] = "low"
     parsed = validate(documents, facts, links)

@@ -1198,10 +1198,31 @@ def synthesize_consultation_rule_states(
         for link in relevant_links
         if link.confidence != "high" or link.quality == "unknown"
     )
+    # 同一执行材料被模型同时归属于多个会诊时，不能把它复制计入每个
+    # episode；这种跨会诊归属本身是不确定事实。保留链接供 023 的
+    # “明确空泛”判定使用，但对具体执行应降级为 evaluation_unknown。
+    execution_owners: dict[str, set[str]] = {}
+    for link in relevant_links:
+        execution_owners.setdefault(link.execution_ref, set()).add(link.episode_ref)
+    ambiguous_execution_refs = {
+        execution_ref
+        for execution_ref, owners in execution_owners.items()
+        if len(owners) > 1
+    }
+    if ambiguous_execution_refs:
+        uncertain_links = tuple(
+            link
+            for link in relevant_links
+            if link.execution_ref in ambiguous_execution_refs
+            or link.confidence != "high"
+            or link.quality == "unknown"
+        )
     covered_episodes = frozenset(
         link.episode_ref
         for link in relevant_links
-        if link.confidence == "high" and link.quality in {"specific", "vague"}
+        if link.execution_ref not in ambiguous_execution_refs
+        and link.confidence == "high"
+        and link.quality in {"specific", "vague"}
     )
     if not opinion_episodes:
         outcomes["LX0609-020"] = _state(
