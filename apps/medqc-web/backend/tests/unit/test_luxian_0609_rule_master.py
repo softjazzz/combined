@@ -192,7 +192,7 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
     assert "影子核心已实现但尚未接入影子入口" in treatment_order.policy_summary
     assert "真实病例金标" in treatment_order.pending_definition_note
     assert "院内绩效优先国家目录" in entries["LX0609-040"].policy_summary
-    assert "未同时齐备" in entries["LX0609-044"].policy_summary
+    assert "缺任一项" in entries["LX0609-044"].policy_summary
     assert "暂不执行" in entries["LX0609-049"].policy_summary
     assert "不得因收费资料缺失" in entries["LX0609-049"].policy_summary
     assert "乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶" in entries["LX0609-070"].policy_summary
