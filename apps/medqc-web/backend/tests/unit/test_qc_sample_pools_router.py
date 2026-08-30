@@ -1600,7 +1600,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
             "LX0609-049",
         }
     ]
-    assert len(luxian_rule_set.rule_ids) == 71
+    assert len(luxian_rule_set.rule_ids) == 70
     assert luxian_rule_set.rule_ids[-1] == "LX0609-075"
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
     assert created["draft_ids"] == expected_task_rule_ids
@@ -1614,11 +1614,12 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert created["filters"]["paused_customer_rule_ids"] == [
         "LX0609-033",
         "LX0609-034",
+        "LX0609-035",
         "LX0609-041",
         "LX0609-042",
         "LX0609-049",
     ]
-    assert created["filters"]["paused_customer_rule_count"] == 5
+    assert created["filters"]["paused_customer_rule_count"] == 6
     assert created["filters"]["selected_rule_ids"] == []
     assert created["filters"]["scoped_customer_rule_ids"] == []
     assert "record_rule_map" not in created["filters"]
@@ -1676,13 +1677,13 @@ async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalo
         current_user={"id": "tester"},
     )
 
-    paused = {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042", "LX0609-049"}
+    paused = {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042", "LX0609-049"}
     created = workspace_service.create_batch_job_calls[0]
     assert paused.isdisjoint(created["filters"]["rule_ids"])
-    assert created["filters"]["rule_count"] == 70
-    assert response["data"]["rule_count"] == 70
+    assert created["filters"]["rule_count"] == 69
+    assert response["data"]["rule_count"] == 69
     # 客户专项规则集已排除源库不存在的知情同意书质控点；规则目录仍独立保留完整目录。
-    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 71
+    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 70
 
 
 @pytest.mark.asyncio
@@ -2319,7 +2320,6 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         "LX0609-030",
         "LX0609-031",
         "LX0609-032",
-        "LX0609-035",
         "LX0609-036",
         "LX0609-037",
         "LX0609-038",
@@ -2330,9 +2330,10 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         *surgery["rule_ids"][:8],
         "LX0609-033",
         "LX0609-034",
+        "LX0609-035",
         *surgery["rule_ids"][8:],
     ]
-    assert surgery["paused_customer_rule_ids"] == ["LX0609-033", "LX0609-034"]
+    assert surgery["paused_customer_rule_ids"] == ["LX0609-033", "LX0609-034", "LX0609-035"]
 
     transfusion = children_by_family["transfusion"]["filters"]
     assert transfusion["rule_ids"] == [
@@ -2366,7 +2367,7 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         for rule_id in child["filters"]["rule_ids"]
     }
     assert len(all_delivery_rule_ids) == 75
-    assert len(all_execution_rule_ids) == 70
+    assert len(all_execution_rule_ids) == 69
     assert set(qc_sample_pools._LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS).isdisjoint(
         all_execution_rule_ids
     )

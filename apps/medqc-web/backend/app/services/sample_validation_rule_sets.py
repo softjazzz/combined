@@ -21,7 +21,7 @@ FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = "sc_content_full_v1"
 LUXIAN_0609_QC_RULE_SET_KEY = "luxian_0609_qc_v1"
 # 客户源库未提供这些知情同意书文书；客户专项质控不纳入对应质控点。
 LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS: frozenset[str] = frozenset(
-    {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"}
+    {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042"}
 )
 SAMPLE_PROGRAMMATIC_RULE_SET_KEY = "sample_programmatic_gate_v1"
 SAMPLE_PROGRAMMATIC_RULE_SET_NAME = "样本硬门槛程序规则包 v1"
