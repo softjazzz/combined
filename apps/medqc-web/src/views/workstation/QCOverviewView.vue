@@ -46,7 +46,7 @@
 
         <template v-else-if="clinicalQc">
           <QcMetricCardStrip
-            class="workstation-surface-enter"
+            class="qc-home-kpi-strip workstation-surface-enter"
             data-testid="home-kpis"
             aria-label="质控指标汇总"
             :cards="kpiCards"
@@ -972,30 +972,33 @@ watch([departmentFilter, keyword], () => {
   min-width: 0;
   white-space: nowrap;
 }
-.qc-home-priority-row__metric.is-defect {
-  padding: 5px 7px;
-  border: 1px solid rgba(194, 65, 58, 0.16);
-  border-radius: 8px;
-  background: rgba(194, 65, 58, 0.065);
-  color: #b14b43;
-}
+.qc-home-priority-row__metric.is-defect,
 .qc-home-priority-row__metric.is-gap {
   padding: 5px 7px;
-  border: 1px solid rgba(183, 121, 31, 0.18);
+  border: 1px solid rgba(29, 29, 31, 0.09);
   border-radius: 8px;
-  background: rgba(183, 121, 31, 0.075);
-  color: #946200;
+  background: rgba(29, 29, 31, 0.035);
+  color: rgba(29, 29, 31, 0.68);
 }
 .qc-home-priority-row__metric span,
 .qc-home-priority-row__metric small {
-  color: inherit;
+  color: rgba(29, 29, 31, 0.5);
   font-size: 11px;
-  opacity: 0.82;
 }
 .qc-home-priority-row__metric strong {
+  color: #1d1d1f;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   line-height: 20px;
+}
+
+/* 首页 KPI 仅保留统一的中性卡片色；结论图表继续使用状态语义色。 */
+.qc-home-kpi-strip :deep(.qc-metric-card-strip__card .qc-metric-card-strip__value) {
+  color: #1d1d1f;
+}
+.qc-home-kpi-strip :deep(.qc-metric-card-strip__card .qc-metric-card-strip__icon) {
+  background: rgba(0, 102, 204, 0.065);
+  color: #486581;
 }
 .qc-home-priority-row__time {
   min-width: 0;
