@@ -48,3 +48,7 @@ py -3.10 -m pytest backend/tests/unit/test_luxian_0609_result_aggregator.py back
 - 客户机源库的表覆盖、同步增量完整性和真实源端字段映射仍需在客户机执行源库—CDM—Bundle 对账脚本。
 - 依赖院方资料目录或真实语义口径的规则，不能仅凭本机病例回归宣称业务口径已冻结。
 - LLM 上游偶发无效输出、超时或限流仍应按运行监控单独统计；本报告只证明本轮病例没有技术错误。
+
+## 前端冒烟
+
+Playwright 已实际登录本机前端（`admin@medqc.com`），进入 `/workstation-v4/customer-sample-validation`，页面正常加载样本池、病例操作按钮和规则族列表。当前样本池没有已保存的可展示结果，故该次冒烟未产生证据按钮，不能据此宣称“定位原文”点击已完成；客户机仍需用一条有质控结果的病例执行最终点击验收。
