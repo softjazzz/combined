@@ -27,6 +27,10 @@ from app.services.fast_screen_qc import (  # noqa: E402
     get_fast_screen_pack_definitions,
 )
 from app.services.bundles import assemble_final_record_bundle  # noqa: E402
+from app.services.luxian_0609_rule_catalog import (  # noqa: E402
+    LUXIAN_0609_RULE_SET_KEY,
+    load_luxian_0609_rules,
+)
 from app.services.programmatic_rule_executor import ProgrammaticRuleExecutor  # noqa: E402
 from app.services.qc_rule_orchestrator import DEFAULT_PACK_CANDIDATES, resolve_rule_execution_meta  # noqa: E402
 from app.services.sichuan_qc_service import SichuanQCService  # noqa: E402
@@ -104,8 +108,13 @@ def _infer_visit_keys(visit_id: str) -> dict[str, str]:
 
 def _select_rule_ids(rule_set: str) -> list[str]:
     normalized = str(rule_set or "").strip().lower()
-    if normalized in {"fast_screen_full", "customer_luxian_full_v1"}:
+    if normalized == "fast_screen_full":
         return list(get_fast_screen_full_rule_ids())
+    if normalized == "customer_luxian_full_v1":
+        return [
+            _normalize_rule_id(item.get("rule_id") or item.get("rule_code"))
+            for item in load_luxian_0609_rules()
+        ]
     if normalized == "sc146":
         return [_normalize_rule_id(item.get("rule_id") or item.get("rule_code")) for item in _load_rules()]
     raise ValueError(f"Unsupported rule_set: {rule_set}")
@@ -150,8 +159,12 @@ def _build_dry_run_plan(args: argparse.Namespace) -> dict[str, Any]:
     patient_id = str(args.patient_id or visit_keys.get("patient_id") or "").strip()
     institute_id = str(args.institute_id or visit_keys.get("institute_id") or "").strip()
     selected_rule_ids = _select_rule_ids(args.rule_set)
-    rules_by_id = {_normalize_rule_id(item.get("rule_id")): item for item in _load_rules()}
-    selected_rules = [rules_by_id[rid] for rid in selected_rule_ids if rid in rules_by_id]
+    normalized_rule_set = str(args.rule_set).strip().lower()
+    if normalized_rule_set == "customer_luxian_full_v1":
+        selected_rules = [dict(item) for item in load_luxian_0609_rules()]
+    else:
+        rules_by_id = {_normalize_rule_id(item.get("rule_id")): item for item in _load_rules()}
+        selected_rules = [rules_by_id[rid] for rid in selected_rule_ids if rid in rules_by_id]
 
     program_executor = ProgrammaticRuleExecutor()
     program_rules = [
@@ -162,7 +175,7 @@ def _build_dry_run_plan(args: argparse.Namespace) -> dict[str, Any]:
     ]
     llm_rules = [rule for rule in selected_rules if rule not in program_rules]
 
-    if str(args.rule_set).strip().lower() in {"fast_screen_full", "customer_luxian_full_v1"} and args.scene == "final":
+    if normalized_rule_set == "fast_screen_full" and args.scene == "final":
         pack_rows = []
         for pack in get_fast_screen_pack_definitions(selected_rule_ids):
             pack_rows.append(
@@ -298,7 +311,8 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
             bundle = {}
             bundle_documents = []
 
-    if args.scene == "final" and str(args.rule_set).strip().lower() in {"fast_screen_full", "customer_luxian_full_v1"}:
+    normalized_rule_set = str(args.rule_set).strip().lower()
+    if args.scene == "final" and normalized_rule_set == "fast_screen_full":
         from app.services.fast_screen_qc import run_final_fast_screen
 
         result = await run_final_fast_screen(
@@ -323,9 +337,11 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
             visit_id=args.visit_id,
             rule_ids=selected_rule_ids,
             schema="public",
+            bundle_input=bundle or None,
             quality_profile=args.quality_profile,
             batch_output_mode=args.batch_output_mode,
             use_execution_cache=True,
+            rule_set_key=LUXIAN_0609_RULE_SET_KEY if normalized_rule_set == "customer_luxian_full_v1" else "",
         )
     summary = dict(result.get("evaluation_summary") or {})
     pack_metrics = dict(result.get("pack_metrics") or summary.get("pack_metrics") or {})
