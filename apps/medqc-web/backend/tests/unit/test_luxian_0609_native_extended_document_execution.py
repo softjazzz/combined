@@ -1024,6 +1024,34 @@ async def test_064_requires_three_dates_and_surgeon_round() -> None:
 
 
 @pytest.mark.asyncio
+async def test_064_does_not_count_dated_course_rows_with_empty_body() -> None:
+    """有权威日期但正文明确为空的病程行不能充当术后三日记录。"""
+
+    _, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "mr_surgery": (
+                {
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "硬脑膜外血肿清除术",
+                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "surgeon": "张医生",
+                },
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-07-02 08:00:00", "author_name": "李医生", "record_content": ""},
+                {"record_time": "2026-07-03 08:00:00", "author_name": "张医生", "record_content": "   "},
+                {"record_time": "2026-07-04 08:00:00", "author_name": "李医生", "record_content": None},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "required_field_missing"
+
+
+@pytest.mark.asyncio
 async def test_064_fails_closed_when_surgeon_identity_is_anonymized() -> None:
     result, reduced = await _evaluate(
         "LX0609-064",

@@ -557,6 +557,17 @@ def _course_dates(
     }
 
 
+def _course_row_has_body(row: Mapping[str, Any]) -> bool:
+    """正文列明确为空时，不把日期本身当作有效病程记录。"""
+
+    # Evidence Snapshot 的病程投影固定保留 record_content。对旧的最小测试
+    # 夹具保留“未提供该列”的兼容语义，但一旦来源明确给出空列，必须按资料
+    # 不完整处理，不能仅凭 record_time/标题或作者计入覆盖日期。
+    if "record_content" not in row:
+        return True
+    return bool(_clean(row.get("record_content")))
+
+
 def _qualified_surgery_rows(
     mr_surgery_rows: Sequence[Mapping[str, Any]],
     surgery_record_rows: Sequence[Mapping[str, Any]],
@@ -2040,19 +2051,35 @@ async def execute_luxian_0609_native_extended_document_rules(
                     event_facts = []
                     unmet_events = []
                     missing_surgeon_events = []
+                    empty_body_events = []
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
                         required_dates = {
                             (event.surgery_end_time + timedelta(days=offset)).date()
                             for offset in (1, 2, 3)
                         }
-                        postop_rows = tuple(
+                        dated_postop_rows = tuple(
                             row
                             for row in (*daily_rows, *senior_rows)
                             if (record_time := _row_time(row)) is not None
                             and record_time.date() in required_dates
                         )
+                        empty_body_dates = {
+                            record_time.date()
+                            for row in dated_postop_rows
+                            if not _course_row_has_body(row)
+                            for record_time in (_row_time(row),)
+                            if record_time is not None
+                        }
+                        postop_rows = tuple(
+                            row
+                            for row in dated_postop_rows
+                            if _course_row_has_body(row)
+                        )
                         covered_dates = _course_dates(postop_rows)
+                        unresolved_empty_body_dates = empty_body_dates.difference(
+                            covered_dates
+                        )
                         surgeon_round = bool(event.surgeon_tokens) and any(
                             bool(
                                 event.surgeon_tokens.intersection(
@@ -2081,13 +2108,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                         })
                         if not event.surgeon_tokens:
                             missing_surgeon_events.append(event.document_id)
+                        if unresolved_empty_body_dates:
+                            empty_body_events.append(event.document_id)
                         if missing_dates or not surgeon_round:
                             unmet_events.append({
                                 "document_id": event.document_id,
                                 "missing_postop_dates": missing_dates,
                                 "surgeon_round_present": surgeon_round,
                             })
-                    if missing_surgeon_events:
+                    if missing_surgeon_events or empty_body_events:
                         final_state, reason_code = (
                             "data_gap",
                             "required_field_missing",
