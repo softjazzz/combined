@@ -55,11 +55,11 @@ function Install-BundledProductActivation {
     return $true
 }
 
-function Test-PortInUse([int]$p) {
-    $line = (netstat -ano | Select-String (":$p\\s") | Select-String "LISTENING" | Select-Object -First 1).Line
+function Test-PortInUse([int]$port) {
+    $line = (netstat -ano | Select-String (":$port\s") | Select-String "LISTENING" | Select-Object -First 1).Line
     if (-not $line) { return $null }
-    $pid = ($line -split "\\s+")[-1]
-    return $pid
+    $portPid = ($line -split '\s+')[-1]
+    return $portPid
 }
 
 if (-not (Test-Path $logDir)) {
