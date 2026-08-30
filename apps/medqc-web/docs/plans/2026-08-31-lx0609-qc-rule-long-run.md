@@ -12,8 +12,8 @@
 
 ## 一、当前基线（开始任务前先复核）
 
-1. 运行时规则目录有 75 条 LX0609 规则。此前“客户样本验证展示 70 条”的口径已被当前 manifest/API 证据推翻：当前 manifest 为 69 条 `phase_1_target` + 6 条 `pending_definition`（`025/028/049/056/059/075`），客户缺失资料的 `033/034/035/041/042` 仍需在范围合同中明确排除方式。范围未统一前，结果数不得作为发布依据。
-2. 当前新任务 `697d0696-f416-455a-9c87-190b9a266936` 已使用新版本；其 Canonical 有 70 条，而认证 API 仅返回 68 条，且冻结规则投影不同。旧任务 `13ece704-2ad8-483c-92e8-512cce2c2ed8` 是历史 71 条结果，不能作为修复后的验收依据。
+1. 目录仍有 75 条 LX0609 规则，但客户运行合同固定为 70 条：排除客户没有资料的 `033/034/035/041/042`；`025/059` 保持 `not_executed`，`049` 保持暂停。`phase_scope`、实现状态和真实验收状态是不同维度，不能用目录数量代替客户运行数量。
+2. 历史任务结果不能作为修复后的验收依据。每次验收必须记录本次任务的代码 SHA、Alembic head、运行规则集合和 Canonical/API 版本；同一病历的新任务不得被旧任务或当前规则目录重新解释。
 3. 本机本地库连接正常，但远端源库 PostgreSQL 握手被关闭，`remote_connected=false`、同步状态为 `never`。因此本地缺失资料只能证明“当前本地链路没有资料”，不能证明源库没有资料。
 4. 已观察到的高风险问题集中在：评价时点、逐事件业务键关联、来源缺失与不适用混淆、技术错误伪装成数据不足、Canonical/API 结果数量不一致、证据定位失效，以及 Bundle 更新时间落后于最近同步。
 5. 已有审计可复现的优先误判包括 `010/020/023/061/064`；它们先作为第一轮闭环对象，不因单元测试通过而视为已关闭。
@@ -25,6 +25,14 @@
 - `technical_error`、来源不可达、关联不确定、尚未成熟不能被降级为确定问题或合规。
 - API、页面、HTML、Excel 的状态、原因码、事实和证据必须来自同一 Canonical Envelope。
 - 规则总数、执行规则数、结果数和未执行数必须可解释且相互一致。
+
+### 唯一验收台账（机器可验收）
+
+每条规则只保留一行台账，至少包含以下字段：
+
+`rule_id`、`definition_phase`、`implementation_status`、`source_readiness`、`golden_gate_state`、适用性输入、权威时间、来源表/字段、事件业务键、预期状态与 `reason_code`、证据 `source_ref/document_id/field_path`、fixture/真实病例标签、测试节点、commit SHA、运行 manifest hash、源库/CDM/Bundle 对账状态、UI 定位状态、`last_verified_at`、阻断原因和下一门禁。
+
+其中状态必须使用受控枚举：`code_fixed`、`local_verified`、`real_data_blocked`、`not_executed`、`accepted`。`phase_1_target` 或“代码存在”不得直接写成 `accepted`；缺少源库、资料或院方口径时只能进入 `real_data_blocked`。
 
 ## 二、任务边界
 
@@ -65,8 +73,9 @@
 1. 记录后端 `/api/v1/health` 的 git SHA、前端进程模式、Alembic head 和数据库连接状态。
 2. 读取当前规则目录、客户运行范围、冻结规则和排除规则，生成一张唯一范围表。
 3. 对一个病例记录源表行数、文书 ID、权威时间、正文长度/哈希、本地 CDM、Bundle、Canonical/API 结果数量。
-4. 若远端 PostgreSQL 不可达，账本标记 `BLOCKED_SOURCE_CONNECTIVITY`，不得用本地空表替代源库结论。
-5. 运行合同测试；范围表、版本、冻结状态不一致时停止后续实现。
+4. 生成脱敏的逐层摘要：记录键、文书 ID 集合和内容哈希、同步游标/时间、Bundle snapshot digest、Canonical envelope digest、API payload digest；证据引用必须能在对应 Bundle snapshot 中解析到唯一文书和字段。
+5. 若远端 PostgreSQL 不可达，账本标记 `BLOCKED_SOURCE_CONNECTIVITY`，不得用本地空表替代源库结论。
+6. 运行合同测试；范围表、版本、冻结状态或任一层摘要不一致时停止后续实现。
 
 **验收：** 能明确回答“这次任务运行了哪个版本、哪些规则、哪些资料、哪个结果”，且旧任务不会混入新验收。
 
@@ -180,11 +189,12 @@
 **Steps:**
 
 1. 先选 10 例做快速回归，覆盖在院/出院、手术/输血、死亡/非死亡、多次事件和资料缺失。
-2. 快速回归无阻断后扩展到至少 20–30 例；每例记录适用性、状态、原因、关键事实、证据位置和建议。
-3. 对确定性规则要求金标 100% 一致；语义规则每个差异必须人工复核并关闭高风险误判。
-4. 记录 P50/P95 耗时、LLM 调用数、Token、重试数和失败率，与基线比较，性能回退超过 20% 时停止。
-5. 运行前后端必要检查：`npm run check:encoding`、`npm run lint`、`npm run type-check`、`npm run test:unit`，以及后端 LX0609 全量测试。
-6. 只有所有放行条件通过后才编译打包；发布包记录 git SHA、Alembic head、规则范围、冻结规则和对账报告。
+2. 快速回归无阻断后扩展到至少 20–30 例；每例记录适用性、状态、原因、关键事实、证据位置和建议。病例总数不能替代逐规则覆盖。
+3. 确定性规则至少要有正例、负例或边界例各 1 个；语义规则至少要有 3 个正例、3 个负例和 1 个边界例。样本不足的规则只能标记 `real_data_blocked`，不参加总体通过率。
+4. 对确定性规则要求金标 100% 一致；语义规则每个差异必须人工复核并关闭高风险误判。将 `data_gap`、`not_applicable`、`evaluation_unknown` 单独报告并计入覆盖率分母。
+5. 生成独立性能产物，记录固定硬件/并发/选择器下的 wall-clock、每病例/规则延迟 P50/P95、逻辑调用数、HTTP 尝试数、重试数和 Token；相对基线回退超过 20% 或超过绝对上限时标记 `performance_blocked`。
+6. 运行前后端必要检查：`npm run check:encoding`、`npm run lint`、`npm run type-check`、`npm run test:unit`，以及后端 LX0609 全量测试。
+7. 只有所有放行条件通过后才编译打包；发布包记录 git SHA、Alembic head、规则范围、冻结规则和对账报告。
 
 **最终放行条件：**
 
