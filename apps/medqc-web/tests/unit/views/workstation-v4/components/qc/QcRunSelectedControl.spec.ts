@@ -51,9 +51,13 @@ describe('QcRunSelectedControl', () => {
     })
 
     await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-    expect(wrapper.text()).toContain('使用本地已同步资料')
-    expect(wrapper.text()).toContain('2 份')
-    await wrapper.get('[data-testid="run-selected-qc-confirm"]').trigger('click')
+    expect(document.body.textContent).toContain('使用本地已同步资料')
+    expect(document.body.textContent).toContain('2 份')
+    const confirmButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="run-selected-qc-confirm"]',
+    )
+    expect(confirmButton).not.toBeNull()
+    confirmButton?.click()
     await flushPromises()
 
     expect(mocks.createJob).toHaveBeenCalledWith({
@@ -76,12 +80,16 @@ describe('QcRunSelectedControl', () => {
     })
 
     await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-    await wrapper.get('[data-testid="run-selected-qc-confirm"]').trigger('click')
+    const confirmButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="run-selected-qc-confirm"]',
+    )
+    expect(confirmButton).not.toBeNull()
+    confirmButton?.click()
     await flushPromises()
 
     expect(mocks.createJob).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('当前筛选条件下没有可执行病历')
-    expect(wrapper.text()).toContain('系统设置')
+    expect(document.body.textContent).toContain('当前筛选条件下没有可执行病历')
+    expect(document.body.textContent).toContain('系统设置')
     expect(mocks.getJob).not.toHaveBeenCalled()
   })
 })

@@ -11,108 +11,112 @@
       质控所选
     </button>
 
-    <div v-if="confirmationOpen" class="qc-run-selected-control__backdrop">
-      <section
-        class="qc-run-selected-control__dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="run-selected-qc-confirm-title"
-      >
-        <header class="qc-run-selected-control__header">
-          <div>
-            <p>所选病历质控</p>
-            <h2 id="run-selected-qc-confirm-title">确认执行质控</h2>
-          </div>
-          <button
-            class="qc-run-selected-control__icon-button"
-            type="button"
-            aria-label="关闭质控确认"
-            @click="confirmationOpen = false"
-          >
-            <X :size="18" aria-hidden="true" />
-          </button>
-        </header>
+    <Teleport to="body">
+      <div v-if="confirmationOpen" class="qc-run-selected-control__backdrop">
+        <section
+          class="qc-run-selected-control__dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="run-selected-qc-confirm-title"
+        >
+          <header class="qc-run-selected-control__header">
+            <div>
+              <p>所选病历质控</p>
+              <h2 id="run-selected-qc-confirm-title">确认执行质控</h2>
+            </div>
+            <button
+              class="qc-run-selected-control__icon-button"
+              type="button"
+              aria-label="关闭质控确认"
+              @click="confirmationOpen = false"
+            >
+              <X :size="18" aria-hidden="true" />
+            </button>
+          </header>
 
-        <dl class="qc-run-selected-control__scope-list">
-          <div>
-            <dt>病历范围</dt>
-            <dd>{{ sceneLabel }} · 已勾选 {{ frozenRecordRefs.length }} 份</dd>
-          </div>
-          <div>
-            <dt>资料来源</dt>
-            <dd>使用本地已同步资料</dd>
-          </div>
-        </dl>
+          <dl class="qc-run-selected-control__scope-list">
+            <div>
+              <dt>病历范围</dt>
+              <dd>{{ sceneLabel }} · 已勾选 {{ frozenRecordRefs.length }} 份</dd>
+            </div>
+            <div>
+              <dt>资料来源</dt>
+              <dd>使用本地已同步资料</dd>
+            </div>
+          </dl>
 
-        <p class="qc-run-selected-control__description">
-          本次只对勾选病历执行质控，不重新查询源库，也不会扩大到当前筛选范围。
-        </p>
-
-        <footer class="qc-run-selected-control__actions">
-          <button
-            class="qc-run-selected-control__secondary-button"
-            type="button"
-            @click="confirmationOpen = false"
-          >
-            取消
-          </button>
-          <button
-            class="qc-run-selected-control__primary-button"
-            type="button"
-            data-testid="run-selected-qc-confirm"
-            @click="startSelectedQc"
-          >
-            开始质控
-          </button>
-        </footer>
-      </section>
-    </div>
-
-    <div v-if="progressOpen" class="qc-run-selected-control__backdrop">
-      <section
-        class="qc-run-selected-control__dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="run-selected-qc-progress-title"
-      >
-        <header class="qc-run-selected-control__header">
-          <div>
-            <p>所选病历质控</p>
-            <h2 id="run-selected-qc-progress-title">
-              {{ progressTitle }}
-            </h2>
-          </div>
-          <button
-            v-if="!isBusy"
-            class="qc-run-selected-control__icon-button"
-            type="button"
-            aria-label="关闭质控进度"
-            @click="progressOpen = false"
-          >
-            <X :size="18" aria-hidden="true" />
-          </button>
-        </header>
-
-        <div class="qc-run-selected-control__status" :class="`is-${state}`">
-          <LoaderCircle v-if="isBusy" :size="22" class="is-spinning" aria-hidden="true" />
-          <CheckCircle2 v-else-if="state === 'completed'" :size="22" aria-hidden="true" />
-          <TriangleAlert v-else :size="22" aria-hidden="true" />
-          <p role="status">
-            {{ progressMessage }}
+          <p class="qc-run-selected-control__description">
+            本次只对勾选病历执行质控，不重新查询源库，也不会扩大到当前筛选范围。
           </p>
-        </div>
 
-        <footer v-if="!isBusy" class="qc-run-selected-control__actions">
-          <button
-            class="qc-run-selected-control__primary-button"
-            type="button"
-            @click="progressOpen = false"
-          >
-            完成
-          </button>
-        </footer>
-      </section>
-    </div>
+          <footer class="qc-run-selected-control__actions">
+            <button
+              class="qc-run-selected-control__secondary-button"
+              type="button"
+              @click="confirmationOpen = false"
+            >
+              取消
+            </button>
+            <button
+              class="qc-run-selected-control__primary-button"
+              type="button"
+              data-testid="run-selected-qc-confirm"
+              @click="startSelectedQc"
+            >
+              开始质控
+            </button>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="progressOpen" class="qc-run-selected-control__backdrop">
+        <section
+          class="qc-run-selected-control__dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="run-selected-qc-progress-title"
+        >
+          <header class="qc-run-selected-control__header">
+            <div>
+              <p>所选病历质控</p>
+              <h2 id="run-selected-qc-progress-title">
+                {{ progressTitle }}
+              </h2>
+            </div>
+            <button
+              v-if="!isBusy"
+              class="qc-run-selected-control__icon-button"
+              type="button"
+              aria-label="关闭质控进度"
+              @click="progressOpen = false"
+            >
+              <X :size="18" aria-hidden="true" />
+            </button>
+          </header>
+
+          <div class="qc-run-selected-control__status" :class="`is-${state}`">
+            <LoaderCircle v-if="isBusy" :size="22" class="is-spinning" aria-hidden="true" />
+            <CheckCircle2 v-else-if="state === 'completed'" :size="22" aria-hidden="true" />
+            <TriangleAlert v-else :size="22" aria-hidden="true" />
+            <p role="status">
+              {{ progressMessage }}
+            </p>
+          </div>
+
+          <footer v-if="!isBusy" class="qc-run-selected-control__actions">
+            <button
+              class="qc-run-selected-control__primary-button"
+              type="button"
+              @click="progressOpen = false"
+            >
+              完成
+            </button>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -381,13 +385,18 @@ button {
   z-index: 1200;
   inset: 0;
   display: grid;
-  place-items: center;
+  place-items: start center;
+  overflow-y: auto;
   padding: 20px;
+  padding-top: clamp(72px, 12vh, 132px);
+  padding-bottom: 32px;
   background: rgb(15 23 42 / 34%);
 }
 
 .qc-run-selected-control__dialog {
   width: min(460px, 100%);
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
   border: 1px solid #dbe5ef;
   border-radius: 14px;
   background: #fff;
