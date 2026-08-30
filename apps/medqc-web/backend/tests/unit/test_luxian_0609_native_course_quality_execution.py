@@ -5690,16 +5690,15 @@ async def test_typed_017_keeps_exact_evidence_when_record_time_is_ambiguous():
         for value in raw_facts["copy_match_document_fingerprints"][0]
     )
     assert canonical["status"] == "non_compliant"
-    assert canonical["customer_evidence"] == [
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "copy-left",
-        },
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "copy-right-selected",
-        },
+    evidence = canonical["customer_evidence"]
+    assert [item["source_document_id"] for item in evidence] == [
+        "copy-left",
+        "copy-right-selected",
     ]
+    assert all(item["source_type"] == "daily_course_record" for item in evidence)
+    assert all(item.get("record_time") for item in evidence)
+    assert all(item.get("field_path") == "record_content" for item in evidence)
+    assert all(item.get("evidence_excerpt") for item in evidence)
     assert "copy_match_document_fingerprints" not in canonical["customer_display_facts"]
     assert "copy-right-selected" not in repr(native)
 

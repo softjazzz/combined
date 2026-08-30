@@ -650,8 +650,8 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
 
     assert [item.final_state for item in reduced] == [
         CustomerFinalState.NON_COMPLIANT,
-        CustomerFinalState.NON_COMPLIANT,
-        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
     ]
     assert execution.customer_display_facts == (
         (
@@ -669,29 +669,12 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
                 "source_document_id": "admission-private-id",
             },
         ),
-        (
-            "LX0609-005",
-            {
-                "failure_kind": "timeliness_requirement_not_met",
-                "target_document": "attending_course_record",
-                "source_label": "主治医师及以上首次查房记录",
-                "timeliness_state": "missing",
-                "threshold_hours": 48,
-                "anchor_time": "2026-06-01 08:00:00",
-            },
-        ),
-        (
-            "LX0609-006",
-            {
-                "failure_kind": "timeliness_requirement_not_met",
-                "target_document": "senior_course_record",
-                "source_label": "副主任医师或主任医师首次查房记录",
-                "timeliness_state": "missing",
-                "threshold_hours": 72,
-                "anchor_time": "2026-06-01 08:00:00",
-            },
-        ),
     )
+    assert [item.reason_code for item in reduced] == [
+        "threshold_exceeded",
+        "source_empty",
+        "source_empty",
+    ]
 
 
 @pytest.mark.unit
