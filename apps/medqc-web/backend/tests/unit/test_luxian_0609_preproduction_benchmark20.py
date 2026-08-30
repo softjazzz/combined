@@ -142,6 +142,17 @@ def _runtime_manifest(*, git_head: str = "a" * 40) -> dict:
     }
 
 
+def test_default_benchmark_output_exposes_full_customer_rule_scope() -> None:
+    # The benchmark builder is exercised through its normal default scope helper;
+    # the output must distinguish the 75-rule internal catalog from 70/64/6 customer tiers.
+    assert benchmark20._rule_scope_summary() == {
+        "catalog_count": 75,
+        "customer_delivery_count": 70,
+        "executable_count": 64,
+        "withheld_count": 6,
+    }
+
+
 _build_benchmark_batch_impl = build_benchmark_batch
 
 
@@ -361,6 +372,13 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         "rule_decision_count": 64,
         "typed_shadow_adapter_count": 0,
         "legacy_projection_count": 0,
+    }
+    assert batch["summary"]["rule_scope"] == {
+        "mode": "full_customer",
+        "catalog_count": 75,
+        "customer_delivery_count": 70,
+        "executable_count": 64,
+        "withheld_count": 6,
     }
     assert len(batch["selector_digest"]) == 64
     assert len(batch["rule_set_digest"]) == 64

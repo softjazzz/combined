@@ -103,6 +103,22 @@ def _rule_attestations() -> tuple[tuple[str, ...], dict[str, str]]:
     return rule_ids, executor_types
 
 
+def _rule_scope_summary() -> dict[str, int]:
+    """返回 Benchmark 默认范围的四层计数，供账本和 CLI 明确展示。"""
+
+    contracts = tuple(load_luxian_0609_rule_contracts())
+    delivery = tuple(get_luxian_0609_customer_delivery_rule_ids())
+    executable, withheld = get_luxian_0609_customer_execution_scope()
+    if set(executable) | set(withheld) != set(delivery) or set(executable) & set(withheld):
+        raise BenchmarkContractError("invalid LX0609 customer scope partition")
+    return {
+        "catalog_count": len(contracts),
+        "customer_delivery_count": len(delivery),
+        "executable_count": len(executable),
+        "withheld_count": len(withheld),
+    }
+
+
 def _select_rule_attestations(
     selected_rule_ids: Sequence[str] | None,
 ) -> tuple[tuple[str, ...], dict[str, str]]:
@@ -732,6 +748,11 @@ async def build_benchmark_batch(
     }
     if is_selected_subset:
         summary["selected_rule_count"] = len(selected_rule_ids)
+    else:
+        summary["rule_scope"] = {
+            "mode": "full_customer",
+            **_rule_scope_summary(),
+        }
     batch: dict[str, Any] = {
         "schema_version": API_BATCH_SCHEMA_VERSION,
         "selector_version": selector_version,
@@ -749,6 +770,8 @@ async def build_benchmark_batch(
             "mode": "selected_subset",
             "selected_rule_ids": list(selected_rule_ids),
         }
+    else:
+        batch["rule_scope"] = dict(summary["rule_scope"])
 
     # 复用Golden候选构建器的完整递归隐私、响应形状和980行唯一性校验。
     build_candidate_ledger(

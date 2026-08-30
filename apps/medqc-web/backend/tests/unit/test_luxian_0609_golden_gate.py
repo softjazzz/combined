@@ -396,6 +396,12 @@ def test_v2_default_gate_requires_exact_customer_64_rule_matrix() -> None:
 
     assert exit_code == golden_gate.EXIT_PASSED
     assert summary["accepted_count"] == 64
+    assert summary["rule_scope"] == {
+        "catalog_count": 75,
+        "customer_delivery_count": 70,
+        "executable_count": 64,
+        "withheld_count": 6,
+    }
 
 
 def test_v2_gate_rejects_customer_excluded_consent_rules() -> None:

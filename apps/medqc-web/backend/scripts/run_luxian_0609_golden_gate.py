@@ -161,6 +161,21 @@ def _authoritative_rule_scope() -> tuple[
     return contracts, executable, withheld
 
 
+def _rule_scope_summary() -> dict[str, int]:
+    """返回发布门禁使用的完整范围计数，避免把内部75条误读为执行数。"""
+
+    contracts, executable, withheld = _authoritative_rule_scope()
+    delivery = get_luxian_0609_customer_delivery_rule_ids()
+    if set(executable) | set(withheld) != set(delivery) or set(executable) & set(withheld):
+        raise ValueError("invalid LX0609 customer scope partition")
+    return {
+        "catalog_count": len(contracts),
+        "customer_delivery_count": len(delivery),
+        "executable_count": len(executable),
+        "withheld_count": len(withheld),
+    }
+
+
 def _validate_runtime_contract_identity(
     runtime_manifest: Mapping[str, Any],
 ) -> tuple[str, ...]:
@@ -1167,7 +1182,7 @@ def run_luxian_0609_golden_gate(
         or current_policy_version != str(ledger.get("policy_version") or "")
     ):
         return _configuration_failure("stale_release_artifacts")
-    return _run_luxian_0609_golden_gate_diagnostic(
+    summary, exit_code = _run_luxian_0609_golden_gate_diagnostic(
         ledger=ledger,
         candidate=candidate,
         run_batches=run_batches,
@@ -1183,6 +1198,8 @@ def run_luxian_0609_golden_gate(
         high_risk_nc_precision_min=high_risk_nc_precision_min,
         semantic_token_budget_per_rule=semantic_token_budget_per_rule,
     )
+    summary["rule_scope"] = _rule_scope_summary()
+    return summary, exit_code
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
