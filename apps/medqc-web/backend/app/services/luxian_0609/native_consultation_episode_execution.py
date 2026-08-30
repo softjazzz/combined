@@ -1845,17 +1845,75 @@ def _consultation_execution_display_facts(
         for document_id in source_document_ids
     ]
     if not (rule_id == "LX0609-020" and status == "non_compliant"):
+        offending_refs: list[dict[str, str]] = []
+        recommendations_by_ref = {
+            item.recommendation.recommendation_ref: item.recommendation
+            for item in completed_recommendations
+        }
         for assessment in assessment_rows:
+            is_offending = (
+                rule_id == "LX0609-023"
+                and status == "non_compliant"
+                and assessment.execution_record_state
+                in {"generic_trace", "copied_opinion"}
+            )
+            recommendation = recommendations_by_ref.get(assessment.recommendation_ref)
+            if (
+                recommendation is not None
+                and recommendation.opinion_ref in documents_by_ref
+            ):
+                opinion_document_id = _clean(
+                    documents_by_ref[recommendation.opinion_ref].get("document_id")
+                )
+                if opinion_document_id:
+                    opinion_ref = {
+                        "source_type": "consultation_record",
+                        "source_document_id": opinion_document_id,
+                    }
+                    if is_offending:
+                        offending_refs.append(opinion_ref)
             for ref in (*assessment.trace_refs, *assessment.execution_refs):
                 candidate = candidate_by_ref.get(ref)
                 if candidate is None or not candidate.document_id:
                     continue
-                source_document_refs.append(
-                    {
-                        "source_type": candidate.source_key,
-                        "source_document_id": candidate.document_id,
-                    }
-                )
+                candidate_ref = {
+                    "source_type": candidate.source_key,
+                    "source_document_id": candidate.document_id,
+                }
+                source_document_refs.append(candidate_ref)
+                if is_offending:
+                    offending_refs.append(candidate_ref)
+        if offending_refs:
+            # 非合规证据最多保留 8 条，但实际笼统/照抄的会诊及执行文书
+            # 必须优先保留；其余上下文按原顺序填充，避免末次缺陷被截掉。
+            deduplicated: list[dict[str, str]] = []
+            seen_refs: set[tuple[str, str]] = set()
+            for item in source_document_refs:
+                key = (item["source_type"], item["source_document_id"])
+                if key not in seen_refs:
+                    seen_refs.add(key)
+                    deduplicated.append(item)
+            offending_unique: list[dict[str, str]] = []
+            seen_offending: set[tuple[str, str]] = set()
+            offending_keys = {
+                (item["source_type"], item["source_document_id"])
+                for item in offending_refs
+            }
+            for item in offending_refs:
+                key = (item["source_type"], item["source_document_id"])
+                if key not in seen_offending:
+                    seen_offending.add(key)
+                    offending_unique.append(item)
+            context_refs = [
+                item
+                for item in deduplicated
+                if (item["source_type"], item["source_document_id"])
+                not in offending_keys
+            ]
+            source_document_refs = (
+                context_refs[: max(0, 8 - len(offending_unique))]
+                + offending_unique[:8]
+            )[:8]
     source_document_refs = list(
         {
             (item["source_type"], item["source_document_id"]): item

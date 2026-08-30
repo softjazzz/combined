@@ -3152,6 +3152,88 @@ async def test_020_non_compliant_facts_list_each_recommendation_and_only_locate_
     ]
 
 
+def test_023_non_compliant_keeps_late_offending_episode_and_execution_reference():
+    """多于8次会诊时，023的非合规证据不能因通用截断丢掉末次缺陷。"""
+
+    episodes = tuple(
+        episode._Episode(
+            episode_ref=f"consultation_record-{index}",
+            member_refs=(f"consultation_record-{index}",),
+            application_refs=(f"consultation_record-{index}",),
+            opinion_refs=(f"consultation_record-{index}",),
+            application_state="clear",
+            opinion_state="clear",
+            confidence="high",
+            recommendations=(
+                episode._Recommendation(
+                    recommendation_ref=f"consultation_record-{index}#r1",
+                    action_type="test",
+                    source_quote="复查血常规",
+                    normalized_action="复查血常规",
+                    opinion_ref=f"consultation_record-{index}",
+                ),
+            ),
+        )
+        for index in range(1, 10)
+    )
+    completed = tuple(
+        episode._CompletedRecommendation(
+            episode_ref=item.episode_ref,
+            recommendation=item.recommendations[0],
+            opinion_time=episode._ObservedTime(
+                datetime(2026, 7, index, 10), precise=True
+            ),
+        )
+        for index, item in enumerate(episodes, start=1)
+    )
+    assessments = tuple(
+        episode._ExecutionAssessment(
+            recommendation_ref=item.recommendation.recommendation_ref,
+            execution_state="linked_vague" if index == 9 else "linked_specific",
+            execution_refs=(f"daily_course_record-{index}",),
+            confidence="high",
+            execution_quotes=("遵会诊意见执行",),
+            execution_record_state="generic_trace" if index == 9 else "specific_trace",
+            trace_refs=(f"daily_course_record-{index}",),
+        )
+        for index, item in enumerate(completed, start=1)
+    )
+    documents = tuple(
+        {
+            "ref": f"consultation_record-{index}",
+            "document_id": f"CONSULT-{index}",
+        }
+        for index in range(1, 10)
+    )
+    candidates = tuple(
+        episode._CandidateDocument(
+            ref=f"daily_course_record-{index}",
+            source_key="daily_course_record",
+            observed_time=episode._ObservedTime(
+                datetime(2026, 7, index, 12), precise=True
+            ),
+            text="遵会诊意见执行",
+            document_id=f"COURSE-{index}",
+        )
+        for index in range(1, 10)
+    )
+
+    facts = episode._consultation_execution_display_facts(
+        rule_id="LX0609-023",
+        status="non_compliant",
+        episodes=episodes,
+        completed_recommendations=completed,
+        assessments=assessments,
+        documents=documents,
+        candidates=candidates,
+    )
+
+    assert facts["source_document_refs"][-2:] == [
+        {"source_type": "consultation_record", "source_document_id": "CONSULT-9"},
+        {"source_type": "daily_course_record", "source_document_id": "COURSE-9"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_020_course_source_incomplete_is_data_gap_even_when_order_exists(monkeypatch):
     """病程来源不完整时，医嘱不能替代 4.20.4 要求的病程记录。"""
