@@ -467,8 +467,9 @@ const CONCLUSION_STATUS_META = [
   { status: 'data_gap', label: '资料待核实', color: '#f59e0b' },
   { status: 'uncertain', label: '待判断', color: '#64748b' },
   { status: 'compliant', label: '合规', color: '#10b981' },
-  { status: 'not_applicable', label: '不适用', color: '#cbd5e1' },
-  { status: 'not_executed', label: '未执行', color: '#94a3b8' },
+  // 与质控分析页保持同一套语义色，避免同一状态在不同首页模块变色。
+  { status: 'not_applicable', label: '不适用', color: '#94a3b8' },
+  { status: 'not_executed', label: '未执行', color: '#cbd5e1' },
 ] as const
 
 const router = useRouter()
@@ -973,22 +974,23 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-priority-row__metric.is-defect {
   padding: 5px 7px;
-  border: 1px solid rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(194, 65, 58, 0.16);
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.055);
-  color: #b42318;
+  background: rgba(194, 65, 58, 0.065);
+  color: #b14b43;
 }
 .qc-home-priority-row__metric.is-gap {
   padding: 5px 7px;
-  border: 1px solid rgba(0, 102, 204, 0.1);
+  border: 1px solid rgba(183, 121, 31, 0.18);
   border-radius: 8px;
-  background: rgba(0, 102, 204, 0.045);
-  color: #a16207;
+  background: rgba(183, 121, 31, 0.075);
+  color: #946200;
 }
 .qc-home-priority-row__metric span,
 .qc-home-priority-row__metric small {
-  color: rgba(29, 29, 31, 0.48);
+  color: inherit;
   font-size: 11px;
+  opacity: 0.82;
 }
 .qc-home-priority-row__metric strong {
   font-size: 14px;
