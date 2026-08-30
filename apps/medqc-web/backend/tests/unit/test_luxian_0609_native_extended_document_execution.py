@@ -551,10 +551,12 @@ async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidenc
         {
             "source_type": "death_record",
             "source_document_id": "death-record-051",
+            "record_time": "2026-07-01 13:00:00",
         },
         {
             "source_type": "death_discussion",
             "source_document_id": "timely-discussion-051",
+            "record_time": "2026-07-02 12:00:00",
         },
     ]
     assert "late-discussion-051" not in repr(canonical)
@@ -601,6 +603,7 @@ async def test_051_only_predated_discussion_is_missing_after_maturity_window() -
         {
             "source_type": "death_record",
             "source_document_id": "death-record-051",
+            "record_time": "2026-07-01 12:00:00",
         }
     ]
     assert "predated-discussion-051" not in repr(canonical)
@@ -810,6 +813,7 @@ async def test_051_does_not_fall_back_to_an_unselected_discussion_document_id() 
         {
             "source_type": "death_record",
             "source_document_id": "death-record-051",
+            "record_time": "2026-07-01 12:00:00",
         }
     ]
     assert "unselected-discussion-051" not in repr(canonical)
@@ -1571,8 +1575,16 @@ async def test_071_physician_change_requires_handoff_and_handover() -> None:
         reduced=reduced,
     )
     assert canonical["customer_evidence"] == [
-        {"source_type": "handoff_record", "source_document_id": "HANDOFF-071"},
-        {"source_type": "handover_record", "source_document_id": "HANDOVER-071"},
+        {
+            "source_type": "handoff_record",
+            "source_document_id": "HANDOFF-071",
+            "record_time": "2026-07-01 07:50:00",
+        },
+        {
+            "source_type": "handover_record",
+            "source_document_id": "HANDOVER-071",
+            "record_time": "2026-07-02 07:59:00",
+        },
     ]
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert result.llm_call_count == result.total_tokens == 0
@@ -1653,10 +1665,12 @@ async def test_071_missing_shift_time_keeps_deliverable_association_facts() -> N
         {
             "source_type": "handoff_record",
             "source_document_id": "HANDOFF-071-NO-SHIFT",
+            "record_time": "2026-07-10 15:45:17",
         },
         {
             "source_type": "handover_record",
             "source_document_id": "HANDOVER-071-NO-SHIFT",
+            "record_time": "2026-07-10 16:55:17",
         },
     ]
 
@@ -1706,8 +1720,16 @@ async def test_071_multiple_change_events_report_association_gap_with_existing_r
     assert "无法将交班、接班记录逐次唯一对应" in canonical["findings"]
     assert "未读取到" not in canonical["findings"]
     assert canonical["customer_evidence"] == [
-        {"source_type": "handoff_record", "source_document_id": "HANDOFF-MULTI-071"},
-        {"source_type": "handover_record", "source_document_id": "HANDOVER-MULTI-071"},
+        {
+            "source_type": "handoff_record",
+            "source_document_id": "HANDOFF-MULTI-071",
+            "record_time": "2026-07-01 07:50:00",
+        },
+        {
+            "source_type": "handover_record",
+            "source_document_id": "HANDOVER-MULTI-071",
+            "record_time": "2026-07-01 14:00:00",
+        },
     ]
     assert result.llm_call_count == result.total_tokens == 0
 
@@ -1764,10 +1786,26 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
         },
     ]
     assert canonical["customer_evidence"] == [
-        {"source_type": "handoff_record", "source_document_id": "HANDOFF-1"},
-        {"source_type": "handover_record", "source_document_id": "HANDOVER-1"},
-        {"source_type": "handoff_record", "source_document_id": "HANDOFF-2"},
-        {"source_type": "handover_record", "source_document_id": "HANDOVER-2"},
+        {
+            "source_type": "handoff_record",
+            "source_document_id": "HANDOFF-1",
+            "record_time": "2026-07-01 07:50:00",
+        },
+        {
+            "source_type": "handover_record",
+            "source_document_id": "HANDOVER-1",
+            "record_time": "2026-07-01 14:00:00",
+        },
+        {
+            "source_type": "handoff_record",
+            "source_document_id": "HANDOFF-2",
+            "record_time": "2026-07-03 07:50:00",
+        },
+        {
+            "source_type": "handover_record",
+            "source_document_id": "HANDOVER-2",
+            "record_time": "2026-07-03 14:00:00",
+        },
     ]
     assert "第1次变更" in canonical["findings"]
     assert "第2次变更" in canonical["findings"]
@@ -4420,6 +4458,27 @@ async def test_055_bare_inflammatory_markers_at_48_hours_are_not_effect_evaluati
             "daily_course_record": ({
                 "record_time": "2026-06-03 10:00:00",
                 "record_content": "复查白细胞、CRP较前下降。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "threshold_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_055_non_antimicrobial_treatment_effect_is_not_antibiotic_evaluation() -> None:
+    """非抗菌治疗的“治疗效果”不能覆盖抗菌药物48～72小时评价。"""
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "疼痛治疗效果佳，患者一般情况好转。",
             },),
         },
     )
