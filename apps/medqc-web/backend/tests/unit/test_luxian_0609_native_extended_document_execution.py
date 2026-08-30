@@ -2438,6 +2438,71 @@ async def test_074_changed_diagnosis_requires_reason_and_basis() -> None:
 
 
 @pytest.mark.asyncio
+async def test_074_single_change_requires_changed_diagnosis_reference() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": (
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-02 08:00:00",
+                    "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-07-02 09:00:00",
+                "record_content": (
+                    "修正诊断：高血压。修改理由为病情变化，"
+                    "诊断依据为既往资料。"
+                ),
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
+
+
+@pytest.mark.asyncio
+async def test_074_single_change_with_changed_diagnosis_reference_is_compliant() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": (
+                {
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "diagnosis_datetime": "2026-07-02 08:00:00",
+                    "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-07-02 09:00:00",
+                "record_content": (
+                    "补充诊断：细菌性肺炎。修改理由为培养结果，"
+                    "诊断依据为培养结果。"
+                ),
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
 async def test_074_reason_written_before_diagnosis_change_does_not_pass() -> None:
     _, reduced = await _evaluate(
         "LX0609-074",

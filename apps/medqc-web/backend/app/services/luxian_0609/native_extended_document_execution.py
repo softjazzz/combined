@@ -2497,12 +2497,28 @@ async def execute_luxian_0609_native_extended_document_rules(
                         and any(marker in text for marker in basis_markers)
                     )
                     if len(change_events) == 1:
-                        has_reason_and_basis = any(
-                            record_time is not None and record_time >= change_events[0][0]
-                            for record_time, _ in candidate_rows
+                        changed_diagnosis_name = change_events[0][1]
+                        has_changed_diagnosis_reference = any(
+                            changed_diagnosis_name in text
+                            for _, text in candidate_rows
                         )
+                        if not has_changed_diagnosis_reference:
+                            # 有带时间的理由/依据候选，但未提及本次变更后的
+                            # 诊断名称时，不能把其他诊断的记录当作本次变更
+                            # 的证明；按既有规则合同保留为确定问题。
+                            final_state, reason_code = (
+                                "non_compliant",
+                                "requirement_violated",
+                            )
+                            has_reason_and_basis = False
+                        else:
+                            has_reason_and_basis = any(
+                                record_time is not None and record_time >= change_events[0][0]
+                                for record_time, _ in candidate_rows
+                            )
                         if (
-                            not has_reason_and_basis
+                            has_changed_diagnosis_reference
+                            and not has_reason_and_basis
                             and candidate_rows
                             and all(record_time is None for record_time, _ in candidate_rows)
                         ):
@@ -2516,7 +2532,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 "untimed_document_count": len(candidate_rows),
                                 "issue": "candidate_document_time_missing",
                             }))
-                        else:
+                        elif has_changed_diagnosis_reference:
                             final_state = (
                                 "compliant" if has_reason_and_basis else "non_compliant"
                             )
