@@ -498,6 +498,31 @@ def evaluate_rule_007_typed(
             or (horizon_time is not None and record_time <= horizon_time)
         )
     )
+    # 评价窗口已超过成熟期但完全没有可定位病程记录时，不能输出无证据的
+    # 确定问题；72 小时内仍按边界合规处理。
+    if not ordered_times and horizon_time is not None:
+        elapsed = (
+            horizon_time - admission_time
+            if horizon_time is not None
+            else datetime.combine(horizon_date, datetime.min.time()) - admission_time
+        )
+        if elapsed <= _MAX_INTERVAL:
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.SUFFICIENT,
+                qc_direction=QcDirection.SATISFIED,
+                reason_code="requirement_within_threshold",
+                refs=refs,
+                confidence=1.0,
+            )
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            refs=refs,
+            confidence=None,
+        )
     exact_boundary_times = (admission_time, *ordered_times)
     interval_over_72h = any(
         current - previous > _MAX_INTERVAL
@@ -520,6 +545,15 @@ def evaluate_rule_007_typed(
         tail_time_ambiguous = horizon_date == deadline_date
         if not same_day_horizon_candidate:
             interval_over_72h = interval_over_72h or horizon_date > deadline_date
+    if not ordered_times and horizon_time is None and interval_over_72h:
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            refs=refs,
+            confidence=None,
+        )
     if interval_over_72h and substantive_record_without_time:
         return decision(
             applicability=ApplicabilityState.APPLICABLE,

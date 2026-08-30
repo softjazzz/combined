@@ -894,7 +894,7 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
     ("horizon", "expected_state", "expected_reason"),
     [
         ("2026-01-04 07:59:59", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
-        ("2026-01-04 08:00:01", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+        ("2026-01-04 08:00:01", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
     ],
 )
 async def test_course_007_uses_admission_to_first_record_maturity_boundary(
@@ -960,7 +960,7 @@ async def test_course_007_uses_admission_to_first_record_maturity_boundary(
     [
         ("2026-01-03", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
         ("2026-01-04", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
-        ("2026-01-05", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+        ("2026-01-05", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
     ],
 )
 async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
