@@ -148,7 +148,7 @@ def test_missing_timeliness_document_before_maturity_is_not_non_compliant(
         ("LX0609-006", "2026-06-05"),
     ],
 )
-def test_missing_timeliness_document_after_maturity_is_non_compliant(
+def test_missing_timeliness_document_after_maturity_is_data_gap(
     rule_id: str,
     evaluation_as_of_date: str,
 ):
@@ -164,8 +164,12 @@ def test_missing_timeliness_document_after_maturity_is_non_compliant(
 
     _, reduced = _reduce_typed_basic(session, (rule_id,))
 
-    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced[0].reason_code == "required_document_missing"
+    if rule_id in {"LX0609-005", "LX0609-006"}:
+        assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+        assert reduced[0].reason_code == "source_empty"
+    else:
+        assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+        assert reduced[0].reason_code == "required_document_missing"
 
 
 @pytest.mark.unit

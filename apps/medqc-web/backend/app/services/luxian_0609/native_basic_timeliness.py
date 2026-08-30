@@ -1444,6 +1444,11 @@ def _typed_basic_decisions(
             if missing_decision is not None:
                 decisions.append(missing_decision)
                 continue
+            # 005/006 只有“目标文书缺失”而没有可定位文书，不能交付为确定问题。
+            # 在来源已读为空时保守标记资料待核实，避免页面出现无证据的确定问题。
+            if rule_id in {"LX0609-005", "LX0609-006"}:
+                decisions.append(gap(rule_id, "source_empty"))
+                continue
             decision = conclusive(
                 rule_id,
                 QcDirection.DEFECT,
