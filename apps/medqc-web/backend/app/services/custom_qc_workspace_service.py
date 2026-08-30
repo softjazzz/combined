@@ -101,6 +101,20 @@ _REASON_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _SAFE_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 
+def _luxian_0609_catalog_rule_ids() -> frozenset[str]:
+    """返回当前 LX0609 的完整 75 条目录，供历史 Envelope 做身份校验。
+
+    客户交付层会过滤明确排除的来源规则，但这些规则仍属于已知历史目录。
+    因此身份校验必须针对完整目录，不能把“客户不展示”误当成“未知规则”。
+    """
+
+    return frozenset(
+        _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+        for item in load_luxian_0609_rules()
+        if _safe_text(item.get("rule_id") or item.get("rule_code"))
+    )
+
+
 _GENERIC_CUSTOMER_TEXT = {
     "compliant": ("未发现该质控点对应的明确问题。", "无需处理。"),
     "non_compliant": ("发现该质控点对应的明确问题。", "请按质控要求补充或修正。"),
@@ -2905,6 +2919,27 @@ class CustomQCWorkspaceService:
                     "result_rule_count": 0,
                     "is_complete": False,
                 }
+            raw_rule_ids = [
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                for item in raw_items
+            ]
+            if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+                unexpected_rule_ids = sorted(
+                    set(raw_rule_ids) - _luxian_0609_catalog_rule_ids()
+                )
+                if unexpected_rule_ids:
+                    return {
+                        "schema_version": "lx0609-single-record-result-v1",
+                        "state": "technical_error",
+                        "reason_code": "canonical_result_envelope_invalid",
+                        "data_origin": "canonical_result_envelope",
+                        "record_ref": "",
+                        "job_id": _safe_text(selected_job.get("id")),
+                        "items": [],
+                        "expected_rule_count": len(resolved_expected_rule_ids),
+                        "result_rule_count": 0,
+                        "is_complete": False,
+                    }
             items = [
                 dict(item)
                 for item in raw_items
@@ -3230,6 +3265,7 @@ class CustomQCWorkspaceService:
                         envelope_row=selected_envelopes[0],
                         completed_at=ready_selection.job.get("finished_at"),
                         include_items=include_items,
+                        rule_set_key=normalized_rule_set_key,
                     )
                     continue
 
@@ -3263,6 +3299,7 @@ class CustomQCWorkspaceService:
         envelope_row: Mapping[str, Any],
         completed_at: Any,
         include_items: bool = False,
+        rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
     ) -> Dict[str, Any]:
         """把一份通过结构校验的 Canonical Envelope 缩减为病历池摘要。"""
 
@@ -3284,8 +3321,31 @@ class CustomQCWorkspaceService:
                 "reason_code": "canonical_result_envelope_invalid",
             }
 
+        if _safe_text(rule_set_key) == LUXIAN_0609_RULE_SET_KEY:
+            envelope_rule_ids = {
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                for item in envelope["items"]
+            }
+            if envelope_rule_ids - _luxian_0609_catalog_rule_ids():
+                return {
+                    "status": "technical_error",
+                    "reason_code": "canonical_result_envelope_invalid",
+                }
+
+        excluded_rule_ids = (
+            LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            if _safe_text(rule_set_key) == LUXIAN_0609_RULE_SET_KEY
+            else frozenset()
+        )
+        visible_items = [
+            item
+            for item in envelope["items"]
+            if _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+            not in excluded_rule_ids
+        ]
+
         status_counts: Dict[str, int] = {}
-        for item in envelope["items"]:
+        for item in visible_items:
             status = _safe_text(item.get("status"))
             status_counts[status] = status_counts.get(status, 0) + 1
         if isinstance(completed_at, datetime):
@@ -3295,7 +3355,7 @@ class CustomQCWorkspaceService:
         result: Dict[str, Any] = {
             "status": "ready",
             "completed_at": completed_at_value or None,
-            "total_rule_count": len(envelope["items"]),
+            "total_rule_count": len(visible_items),
             "status_counts": dict(sorted(status_counts.items())),
         }
         if include_items:
@@ -3303,7 +3363,7 @@ class CustomQCWorkspaceService:
                 entry.rule_id: entry for entry in load_luxian_0609_rule_master()
             }
             projected_items: List[Dict[str, Any]] = []
-            for item in envelope["items"]:
+            for item in visible_items:
                 projected_item = dict(item)
                 rule_id = _safe_text(
                     projected_item.get("rule_id") or projected_item.get("rule_code")

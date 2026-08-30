@@ -272,6 +272,143 @@ def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(m
     assert selector_calls <= 4
 
 
+def test_completed_projection_rejects_removed_rule_from_current_catalog(monkeypatch):
+    """病历池摘要也不能把旧规则目录项混入当前代次。"""
+
+    identity = ("inst-1", "patient-1", "visit-1")
+    job = {
+        "id": "job-current",
+        "status": "completed",
+        "created_at": "2026-08-08T10:00:00",
+        "finished_at": "2026-08-08T10:01:00",
+        "filters_json": json.dumps(
+            {
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+            }
+        ),
+        "record_ids_json": json.dumps([identity[2]]),
+        "summary_json": "{}",
+    }
+    envelope = {
+        "root_job_id": job["id"],
+        "job_id": job["id"],
+        "institute_id": identity[0],
+        "patient_id": identity[1],
+        "visit_id": identity[2],
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(
+            {
+                "schema_version": "lx0609-record-result-envelope-v1",
+                "delivery_mode": "canonical_straight_through",
+                "items": [
+                    {
+                        "rule_id": "LX0609-001",
+                        "status": "compliant",
+                        "result_status": "compliant",
+                        "is_compliant": True,
+                    },
+                    {
+                        "rule_id": "LX0609-999",
+                        "status": "compliant",
+                        "result_status": "compliant",
+                        "is_compliant": True,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+    }
+    session = _ReadSession([[job], [envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+            }
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+        include_items=True,
+    )
+
+    assert result[identity] == {
+        "status": "technical_error",
+        "reason_code": "canonical_result_envelope_invalid",
+    }
+
+
+def test_completed_projection_filters_known_customer_excluded_rule(monkeypatch):
+    """已知但不在客户交付范围的历史规则应过滤，而不是被当成未知规则。"""
+
+    identity = ("inst-1", "patient-1", "visit-1")
+    job = {
+        "id": "job-current",
+        "status": "completed",
+        "created_at": "2026-08-08T10:00:00",
+        "finished_at": "2026-08-08T10:01:00",
+        "filters_json": json.dumps(
+            {"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09"}
+        ),
+        "record_ids_json": json.dumps([identity[2]]),
+        "summary_json": "{}",
+    }
+    envelope = {
+        "root_job_id": job["id"],
+        "job_id": job["id"],
+        "institute_id": identity[0],
+        "patient_id": identity[1],
+        "visit_id": identity[2],
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(
+            {
+                "schema_version": "lx0609-record-result-envelope-v1",
+                "delivery_mode": "canonical_straight_through",
+                "items": [
+                    {
+                        "rule_id": "LX0609-033",
+                        "status": "not_executed",
+                        "result_status": "not_executed",
+                        "is_compliant": None,
+                    },
+                    {
+                        "rule_id": "LX0609-001",
+                        "status": "compliant",
+                        "result_status": "compliant",
+                        "is_compliant": True,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+    }
+    session = _ReadSession([[job], [envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+            }
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+        include_items=True,
+    )
+
+    projection = result[identity]
+    assert projection["status"] == "ready"
+    assert projection["total_rule_count"] == 1
+    assert projection["items"][0]["rule_id"] == "LX0609-001"
+
+
 def test_bulk_record_result_dtos_read_complete_canonical_items_in_one_batch(monkeypatch):
     job = {
         "id": "job-1",
@@ -821,6 +958,52 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
         master_entry = master_by_id[item["rule_id"]]
         assert item["source_document"] == master_entry.source_document
         assert item["qc_point"] == master_entry.qc_point
+
+
+def test_single_record_result_rejects_rule_id_removed_from_current_catalog(monkeypatch):
+    """同一规则集版本的旧 Envelope 不能把已移除规则混入当前结果页。"""
+
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": [
+            {
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            },
+            {
+                "rule_id": "LX0609-999",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            },
+        ],
+    }
+    session = _ReadSession(
+        [[_selected_job()], [{"envelope_json": json.dumps(envelope)}]]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService,
+        "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+
+    result = CustomQCWorkspaceService().build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "canonical_result_envelope_invalid"
+    assert result["items"] == []
 
 
 @pytest.mark.parametrize(
