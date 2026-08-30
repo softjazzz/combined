@@ -35,6 +35,9 @@ from app.services.luxian_0609.rule_decision_settings import (
     RULE_DECISION_ROLLOUT_GROUPS,
 )
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+from app.services.sample_validation_rule_sets import (
+    LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
+)
 from app.services.qc_workspace.canonical_result_store import (
     envelope_item_from_rule_result,
 )
@@ -765,7 +768,12 @@ def test_single_record_result_adds_authoritative_presentation_metadata_without_m
 
 def test_single_record_result_projects_all_rule_master_metadata_in_envelope_order(monkeypatch):
     master_entries = load_luxian_0609_rule_master()
-    rule_ids = [entry.rule_id for entry in master_entries]
+    customer_entries = [
+        entry
+        for entry in master_entries
+        if entry.rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+    ]
+    rule_ids = [entry.rule_id for entry in customer_entries]
     canonical_items = [
         {
             "rule_id": entry.rule_id,
@@ -774,7 +782,7 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
             "is_compliant": True,
             "reason_code": "requirement_satisfied",
         }
-        for entry in reversed(master_entries)
+        for entry in reversed(customer_entries)
     ]
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
@@ -808,7 +816,7 @@ def test_single_record_result_projects_all_rule_master_metadata_in_envelope_orde
     assert result["state"] == "ready"
     assert result["is_complete"] is True
     assert [item["rule_id"] for item in result["items"]] == list(reversed(rule_ids))
-    master_by_id = {entry.rule_id: entry for entry in master_entries}
+    master_by_id = {entry.rule_id: entry for entry in customer_entries}
     for item in result["items"]:
         master_entry = master_by_id[item["rule_id"]]
         assert item["source_document"] == master_entry.source_document
