@@ -131,7 +131,7 @@
 
 **Files:**
 
-- Modify: `backend/app/services/luxian_0609/course_quality/rule_018.py`
+- Modify only when a failing red test proves the defect: `backend/app/services/luxian_0609/course_quality/rule_018.py`
 - Modify only for proven cases: `backend/app/services/luxian_0609/native_exam_lab_execution.py`
 - Modify only for proven cases: `backend/app/services/luxian_0609/native_extended_document_execution.py`
 - Modify only for proven cases: `backend/app/services/luxian_0609/native_treatment_order_consistency.py`
@@ -246,6 +246,16 @@
 - 测试通过但真实病例不一致：以真实病例为准，回到对应规则闭环，不做公共引擎重构。
 - 每次真实验收必须创建新任务/新样本池，不覆盖客户历史结果；失败时保留诊断工件，回退只能回到上一个已验证 commit 和 manifest，并先确认 `alembic current` 后重启服务。规则目录或范围配置改变后，恢复前必须重新启动长驻后端（或显式清除上述缓存），再核对实际任务的范围快照，不能把旧进程结果当作新版本结果。
 - 任何新方案需要新增通用层、巨型文件或第二套结果所有者时，立即暂停并重新评审。
+
+### 长程运行的停止与证据保全
+
+为避免长期任务在资料阻断或重复运行时无限循环，每次 checkpoint 还必须遵守以下最小门禁：
+
+1. 每次运行生成不可变的 `run_id`、代码 SHA、Alembic head、runtime manifest hash、job/root_job、输入快照和产物路径；审计 JSON/Markdown 不覆盖已有文件。三方对账同时记录查询版本、筛选条件、时区/排序规则、归一化规则和源行主键，便于重放“源库→CDM”差异。
+2. 远端源库或 LLM 失败只允许按本轮约定次数重试；同一阻断连续三次仍未改变时暂停当前 Goal，标记 `real_data_blocked` 并列出需要用户/院方提供的最小动作，不自动跳过阻断继续宣称完成。
+3. 源库—CDM 对账必须输出逐行 `missing/duplicate/normalized/time_precision` 差异；只有缺行、重复业务键或未解释时间差为零时才进入 `ready`。空白、编码和时区标准化差异要在报告中显式列出，不能只比较总数或整体哈希。
+4. Golden/UI 放行矩阵固定到“规则 × 适用性 × 状态 × 单病历/批量/导出/定位”维度：确定性规则至少正例、负例、边界各 1 个；语义规则至少 3/3/1；缺少 `data_gap`、`not_applicable`、`evaluation_unknown`、`technical_error` 的必要覆盖或任一定位工件时，保持 `real_data_blocked`。客户金标需记录口径版本和复核人/仲裁结果。
+5. 脱敏审计产物在归档前执行一次自动 PII 扫描；未通过时只保留本地受控工件，不进入发布包。
 
 ## 五、第一轮实际顺序
 
