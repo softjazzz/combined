@@ -59,6 +59,7 @@ from .qc_result_postprocessor import postprocess_qc_result, summarize_postproces
 from .product_activation import get_product_activation_service
 from .sample_programmatic_evidence import build_programmatic_evidence_payload
 from .sample_validation_rule_sets import (
+    LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
 )
@@ -1514,6 +1515,8 @@ async def run_sichuan_workspace_batch_job(
             for wrapper in load_luxian_0609_rules():
                 customer_rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
                 if not customer_rule_id:
+                    continue
+                if customer_rule_id in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS:
                     continue
                 if scoped_customer_rule_ids and customer_rule_id not in scoped_customer_rule_ids:
                     continue

@@ -78,6 +78,7 @@ from ..services.luxian_0609.native_package import (
 )
 from ..services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from ..services.sample_validation_rule_sets import (
+    LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
     is_workspace_batch_draft_id,
 )
 from ..services.sichuan_workspace_batch_worker import (
@@ -1521,6 +1522,12 @@ async def create_workspace_batch_job(
         requested_payload_rule_ids
         or (requested_rule_set.rule_ids if requested_rule_set else ())
     )
+    if requested_rule_set and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY:
+        requested_rule_set_rule_ids = [
+            rule_id
+            for rule_id in requested_rule_set_rule_ids
+            if str(rule_id).strip().upper() not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+        ]
     try:
         direct_native_rule_ids = _assert_luxian_0609_formal_customer_rule_ids(
             rule_set_key=(requested_rule_set.key if requested_rule_set else ""),
@@ -2738,6 +2745,12 @@ async def rules(
             load_luxian_0609_rules(),
             wanted_docs=wanted_docs,
         )
+        data = [
+            rule
+            for rule in data
+            if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+            not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+        ]
         data = attach_luxian_0609_customer_policy(data)
 
         if grouped:
