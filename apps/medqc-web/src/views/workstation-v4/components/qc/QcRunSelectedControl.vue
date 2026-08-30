@@ -390,17 +390,21 @@ button {
   padding: 20px;
   padding-top: clamp(72px, 12vh, 132px);
   padding-bottom: 32px;
-  background: rgb(15 23 42 / 34%);
+  background: rgb(15 23 42 / 42%);
+  backdrop-filter: blur(4px);
 }
 
 .qc-run-selected-control__dialog {
-  width: min(460px, 100%);
+  width: min(520px, 100%);
   max-height: calc(100vh - 104px);
   overflow-y: auto;
-  border: 1px solid #dbe5ef;
-  border-radius: 14px;
+  border: 1px solid rgb(255 255 255 / 72%);
+  border-radius: 18px;
   background: #fff;
-  box-shadow: 0 20px 55px rgb(15 23 42 / 20%);
+  box-shadow:
+    0 24px 70px rgb(15 23 42 / 28%),
+    0 4px 18px rgb(15 23 42 / 12%);
+  animation: qc-run-selected-dialog-in 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .qc-run-selected-control__header,
@@ -409,11 +413,12 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 20px;
+  padding: 20px 24px;
 }
 
 .qc-run-selected-control__header {
   border-bottom: 1px solid #edf2f7;
+  background: linear-gradient(180deg, #fbfdff 0%, #fff 100%);
 }
 
 .qc-run-selected-control__header p,
@@ -423,14 +428,18 @@ button {
 }
 
 .qc-run-selected-control__header p {
-  color: #64748b;
+  color: #6b7f95;
   font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .qc-run-selected-control__header h2 {
-  margin-top: 3px;
+  margin-top: 6px;
   color: #0f2740;
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .qc-run-selected-control__icon-button {
@@ -438,65 +447,108 @@ button {
   width: 32px;
   height: 32px;
   place-items: center;
-  border-radius: 8px;
-  color: #64748b;
-  background: #f4f7fa;
+  border: 1px solid #e3ebf3;
+  border-radius: 10px;
+  color: #58708a;
+  background: #f7fafd;
+  transition: 180ms ease;
+}
+
+.qc-run-selected-control__icon-button:hover {
+  color: #0f5fae;
+  border-color: #c9dff3;
+  background: #edf6ff;
 }
 
 .qc-run-selected-control__scope-list {
   display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 18px 20px 8px;
+  gap: 0;
+  margin: 18px 24px 14px;
+  padding: 4px 16px;
+  border: 1px solid #e7eef5;
+  border-radius: 12px;
+  background: #f8fafc;
 }
 
 .qc-run-selected-control__scope-list div {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: 18px;
+  padding: 12px 0;
+}
+
+.qc-run-selected-control__scope-list div + div {
+  border-top: 1px solid #e8eef4;
 }
 
 .qc-run-selected-control__scope-list dt {
-  color: #64748b;
+  flex: 0 0 auto;
+  color: #718399;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .qc-run-selected-control__scope-list dd {
   margin: 0;
-  color: #16324f;
+  color: #173653;
+  font-size: 14px;
   font-weight: 600;
+  text-align: right;
 }
 
 .qc-run-selected-control__description {
-  margin: 10px 20px 0;
-  padding: 12px;
-  border-radius: 8px;
-  color: #415a73;
-  background: #f4f8fc;
-  line-height: 1.6;
+  margin: 0 24px 4px;
+  padding: 13px 16px;
+  border: 1px solid #e3edf7;
+  border-radius: 11px;
+  color: #45627d;
+  background: #f3f8fd;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .qc-run-selected-control__actions {
   justify-content: flex-end;
+  margin-top: 16px;
+  border-top: 1px solid #edf2f7;
 }
 
 .qc-run-selected-control__secondary-button {
-  min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid #cbd8e6;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid #cfdeec;
   border-radius: 8px;
-  color: #26445f;
+  color: #35536e;
   background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.qc-run-selected-control__secondary-button:hover {
+  border-color: #a9c9e5;
+  background: #f6faff;
+}
+
+.qc-run-selected-control__primary-button {
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: 9px;
+  font-size: 13px;
+  box-shadow: 0 5px 14px rgb(0 102 204 / 22%);
 }
 
 .qc-run-selected-control__status {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 20px;
-  padding: 16px;
-  border-radius: 10px;
+  margin: 24px;
+  padding: 18px 16px;
+  border: 1px solid #deebf7;
+  border-radius: 12px;
   color: #28567d;
   background: #f1f7fc;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -517,6 +569,38 @@ button {
 @keyframes qc-run-selected-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes qc-run-selected-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 560px) {
+  .qc-run-selected-control__backdrop {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .qc-run-selected-control__header,
+  .qc-run-selected-control__actions {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .qc-run-selected-control__scope-list,
+  .qc-run-selected-control__description,
+  .qc-run-selected-control__status {
+    margin-right: 18px;
+    margin-left: 18px;
   }
 }
 </style>
