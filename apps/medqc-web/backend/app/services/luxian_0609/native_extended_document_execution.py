@@ -136,10 +136,6 @@ _ANTIMICROBIALS = _SPECIAL_ANTIMICROBIALS + (
     "阿米卡星", "阿奇霉素", "莫西沙星", "左氧氟沙星", "环丙沙星",
     "甲硝唑", "替硝唑", "奥硝唑", "克林霉素", "氟康唑",
 )
-_ANTIMICROBIAL_EFFECT_EVALUATION_ANCHORS = (
-    "抗菌药物效果评价", "抗菌治疗效果评价", "抗感染效果评价",
-    "疗效评价", "治疗效果", "抗感染效果", "抗菌治疗效果",
-)
 _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
     "有效", "好转", "改善", "感染控制", "疗效不佳", "效果不佳",
     "无改善", "未改善", "无效", "治疗失败", "感染未控制", "病情加重",
@@ -421,9 +417,6 @@ def _is_antimicrobial_effect_evaluation(row: Mapping[str, Any]) -> bool:
     )
     if not has_outcome:
         return False
-    has_evaluation_anchor = any(
-        marker in text for marker in _ANTIMICROBIAL_EFFECT_EVALUATION_ANCHORS
-    )
     has_antimicrobial_context = any(
         marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS
     ) or any(name in text for name in _ANTIMICROBIALS)
