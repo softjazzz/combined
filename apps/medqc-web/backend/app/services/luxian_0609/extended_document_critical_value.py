@@ -87,24 +87,27 @@ def _events(
 ) -> tuple[tuple[_CriticalValueEvent, ...], bool]:
     """按检验报告/危急值事件归并项目；多事件不能靠时间猜测。"""
 
-    keyed: dict[str, list[CriticalValueItem]] = {}
+    keyed: dict[str, dict[datetime | None, list[CriticalValueItem]]] = {}
     unkeyed: list[CriticalValueItem] = []
     for item in critical_items:
         if item.event_key:
-            keyed.setdefault(item.event_key, []).append(item)
+            keyed.setdefault(item.event_key, {}).setdefault(item.report_time, []).append(item)
         else:
             unkeyed.append(item)
 
     events: list[_CriticalValueEvent] = []
-    for event_key, grouped_items in keyed.items():
-        report_times = {item.report_time for item in grouped_items}
-        events.append(
-            _CriticalValueEvent(
-                items=tuple(grouped_items),
-                event_key=event_key,
-                report_time=(next(iter(report_times)) if len(report_times) == 1 else None),
+    conflicting_keys = set()
+    for event_key, grouped_by_time in keyed.items():
+        if len(grouped_by_time) > 1:
+            conflicting_keys.add(event_key)
+        for report_time, grouped_items in grouped_by_time.items():
+            events.append(
+                _CriticalValueEvent(
+                    items=tuple(grouped_items),
+                    event_key=event_key,
+                    report_time=report_time,
+                )
             )
-        )
     if len(critical_items) == 1 and unkeyed:
         events.append(
             _CriticalValueEvent(
@@ -124,7 +127,7 @@ def _events(
         )
 
     # 同一业务键下报告时间冲突，或多事件缺业务键，均不能安全关联处置。
-    association_unproven = any(
+    association_unproven = bool(conflicting_keys) or any(
         event.event_key is None for event in events
     ) and len(events) > 1
     association_unproven = association_unproven or any(

@@ -3513,6 +3513,56 @@ async def test_critical_value_same_report_items_can_share_one_disposition() -> N
 
 
 @pytest.mark.asyncio
+async def test_critical_value_same_test_id_different_report_times_refuse_cross_event_match() -> None:
+    """同项目不同报告时间不能因共用 test_id 而把一次处置覆盖到两次报告。"""
+
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "test_id": "K",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 08:00:00",
+                },
+                {
+                    "test_id": "K",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 09:00:00",
+                },
+            ),
+            "crisis_value_record": ({
+                "test_id": "K",
+                "record_time": "2026-06-01 10:00:00",
+            },),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "association_failed",
+        "association_failed",
+    ]
+    for rule_id in ("LX0609-052", "LX0609-053"):
+        facts = dict(result.customer_display_facts)[rule_id]
+        assert [item["report_time"] for item in facts["event_results"]] == [
+            "2026-06-01 08:00:00",
+            "2026-06-01 09:00:00",
+        ]
+        assert [item["outcome"] for item in facts["event_results"]] == [
+            "association_failed",
+            "association_failed",
+        ]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_critical_value_report_id_overrides_shared_test_id_for_association() -> None:
     """同一申请下多份报告必须优先按报告标识逐份核对。"""
 
