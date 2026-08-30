@@ -2818,9 +2818,84 @@ async def test_020_023_include_each_authorized_execution_evidence_category_once(
         "labtest_master",
         "surgery_record",
     }
+    for rule_id in ("LX0609-020", "LX0609-023"):
+        assert dict(result.customer_display_facts)[rule_id]["recommendation_evidence"][0][
+            "execution_refs"
+        ]
     assert "exam_master-1" in client.prompts[1]
     assert "labtest_master-1" in client.prompts[1]
     assert "surgery_record-1" in client.prompts[1]
+
+
+def test_020_recommendation_evidence_keeps_each_recommendation_refs():
+    """逐建议保留会诊意见与执行文书的精确绑定，不能只依赖顶层摘要。"""
+
+    episodes = []
+    assessments = []
+    documents = []
+    candidates = []
+    completed = []
+    for index in range(1, 10):
+        episode_ref = f"consultation_record-{index}"
+        opinion_ref = episode_ref
+        trace_ref = f"daily_course_record-{index}"
+        execution_ref = f"exam_master-{index}"
+        recommendation = episode._Recommendation(
+            f"{episode_ref}#r1", "test", "复查", "复查", opinion_ref
+        )
+        current_episode = episode._Episode(
+            episode_ref,
+            (opinion_ref,),
+            (opinion_ref,),
+            (opinion_ref,),
+            "clear",
+            "clear",
+            "high",
+            (recommendation,),
+        )
+        episodes.append(current_episode)
+        completed.append(
+            episode._CompletedRecommendation(episode_ref, recommendation, None)
+        )
+        assessments.append(
+            episode._ExecutionAssessment(
+                recommendation.recommendation_ref,
+                "linked_specific",
+                (execution_ref,),
+                "high",
+                (),
+                "specific_trace",
+                (trace_ref,),
+                (trace_ref,),
+            )
+        )
+        documents.append({"ref": opinion_ref, "document_id": f"CONSULT-{index}"})
+        candidates.extend(
+            (
+                episode._CandidateDocument(trace_ref, "daily_course_record", None, "", f"COURSE-{index}"),
+                episode._CandidateDocument(execution_ref, "exam_master", None, "", f"EXAM-{index}"),
+            )
+        )
+
+    facts = episode._consultation_execution_display_facts(
+        rule_id="LX0609-020",
+        status="compliant",
+        episodes=episodes,
+        completed_recommendations=completed,
+        assessments=assessments,
+        documents=documents,
+        candidates=candidates,
+    )
+
+    recommendation_evidence = facts["recommendation_evidence"]
+    assert len(recommendation_evidence) == 9
+    assert recommendation_evidence[0]["opinion_refs"] == [
+        {"source_type": "consultation_record", "source_document_id": "CONSULT-1"}
+    ]
+    assert recommendation_evidence[-1]["execution_refs"] == [
+        {"source_type": "daily_course_record", "source_document_id": "COURSE-9"},
+        {"source_type": "exam_master", "source_document_id": "EXAM-9"},
+    ]
 
 
 @pytest.mark.asyncio

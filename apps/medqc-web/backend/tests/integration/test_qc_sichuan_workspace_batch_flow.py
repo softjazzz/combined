@@ -11,6 +11,7 @@ from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers import qc_sichuan
 from app.services.sichuan_qc_service import RuleSourceGuardError
+from app.services.sichuan_workspace_batch_worker import _sanitize_trace_value
 
 
 def _now_iso() -> str:
@@ -23,6 +24,23 @@ class _ListResult:
     total: int
     page: int
     page_size: int
+
+
+def test_customer_display_facts_keep_96_recommendation_evidence_entries():
+    facts = {
+        "recommendation_evidence": [{"recommendation_index": index} for index in range(1, 97)],
+        "other_list": list(range(60)),
+    }
+
+    sanitized = _sanitize_trace_value(
+        facts,
+        set(),
+        max_text=120,
+        list_limits={"recommendation_evidence": 96},
+    )
+
+    assert len(sanitized["recommendation_evidence"]) == 96
+    assert len(sanitized["other_list"]) == 50
 
 
 class _InMemorySichuanWorkspaceService:

@@ -311,6 +311,8 @@ export interface SichuanBatchSafeEvidenceRef {
   source_ref: string
 }
 
+export type RecommendationEvidenceRole = 'opinion' | 'execution'
+
 export interface QCRecordCompareEvidence {
   key: string
   source_ref?: string
@@ -322,6 +324,9 @@ export interface QCRecordCompareEvidence {
   field_path?: string
   /** 仅由客户展示白名单生成的章节锚点；普通 evidence.field_path 无定位权限。 */
   section_field_path?: string
+  /** 020/023 逐建议安全引用的建议序号与引用角色。 */
+  recommendation_index?: number
+  evidence_role?: RecommendationEvidenceRole
   quote: string
 }
 

@@ -141,10 +141,10 @@
                 </span>
                 <span class="rule-code">{{ item.rule_id }}</span>
                 <span
-                  v-if="isGroupedPresentation && item.evidence?.length"
+                  v-if="isGroupedPresentation && displayEvidence(item).length"
                   class="result-evidence-count"
                 >
-                  {{ item.evidence.length }}处证据
+                  {{ displayEvidence(item).length }}处证据
                 </span>
               </span>
               <span
@@ -467,6 +467,7 @@ import {
   buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
+  recommendationEvidenceForSingleRecord,
   resolveSingleRecordQcResultTab,
   type SingleRecordQcEvidence,
   type SingleRecordQcResultItem,
@@ -946,7 +947,6 @@ function toggle(key: string) {
 }
 
 function evidenceLabel(evidence: SingleRecordQcEvidence) {
-  if (evidence.source_label) return evidence.source_label
   const labels: Record<string, string> = {
     admission_record: '入院记录',
     first_course_record: '首次病程记录',
@@ -962,7 +962,11 @@ function evidenceLabel(evidence: SingleRecordQcEvidence) {
     inpat_drug_order: '药物医嘱',
     inpat_nondrug_order: '医嘱',
   }
-  return labels[evidence.source_type || ''] || '来源文书'
+  const sourceLabel = evidence.source_label || labels[evidence.source_type || ''] || '来源文书'
+  if (evidence.recommendation_index && evidence.evidence_role) {
+    return `第${evidence.recommendation_index}条建议 · ${evidence.evidence_role === 'opinion' ? '会诊意见' : '执行证据'} · ${sourceLabel}`
+  }
+  return sourceLabel
 }
 
 const examLabCourseEvidenceTypes = new Set([
@@ -973,7 +977,7 @@ const examLabCourseEvidenceTypes = new Set([
 ])
 
 function displayEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence[] {
-  const evidence = Array.isArray(item.evidence) ? item.evidence : []
+  const evidence = recommendationEvidenceForSingleRecord(item)
   if (
     item.status !== 'non_compliant' ||
     !['LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'].includes(item.rule_id)
@@ -1005,7 +1009,7 @@ function hasCompliantNarrative(item: SingleRecordQcResultItem) {
 
 function hasCompliantSupportingDetails(item: SingleRecordQcResultItem) {
   return Boolean(
-    remainingDisplayFactRows(item).length || item.evidence?.length || item.model_analysis,
+    remainingDisplayFactRows(item).length || displayEvidence(item).length || item.model_analysis,
   )
 }
 
@@ -1377,7 +1381,8 @@ watch(
   opacity: 0;
   transform: scaleY(0.35);
   transform-origin: center;
-  transition: opacity 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+  transition:
+    opacity 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 

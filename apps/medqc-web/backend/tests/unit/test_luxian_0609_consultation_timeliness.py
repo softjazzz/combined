@@ -106,6 +106,56 @@ async def test_069_conflicting_business_ids_do_not_form_a_consultation_event() -
 
 
 @pytest.mark.asyncio
+async def test_069_conflicting_dual_business_ids_do_not_form_a_consultation_event() -> None:
+    """同一行的会诊ID与申请ID冲突时，不能静默选择其中一个完成配对。"""
+    result = await _execute(
+        (
+            {
+                "document_title": "会诊申请单",
+                "consultation_id": "CONSULT-1",
+                "application_id": "APPLICATION-1",
+                "request_time": "2026-08-20 08:00:00",
+            },
+            {
+                "document_title": "会诊记录单",
+                "consultation_id": "CONSULT-1",
+                "application_id": "APPLICATION-2",
+                "consultation_time": "2026-08-20 10:00:00",
+            },
+        )
+    )
+
+    decision = result.decisions[0]
+    assert decision.applicability is ApplicabilityState.UNKNOWN
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.qc_direction is QcDirection.UNKNOWN
+    assert decision.reason_code == "association_failed"
+    assert result.customer_display_facts == ()
+
+
+@pytest.mark.asyncio
+async def test_069_direct_row_with_conflicting_dual_business_ids_fails_closed() -> None:
+    """直接包含申请和完成时间的行也必须拒绝冲突的双业务ID。"""
+    result = await _execute(
+        (
+            {
+                "consultation_id": "CONSULT-1",
+                "application_id": "APPLICATION-1",
+                "request_time": "2026-08-20 08:00:00",
+                "consultation_time": "2026-08-20 10:00:00",
+            },
+        )
+    )
+
+    decision = result.decisions[0]
+    assert decision.applicability is ApplicabilityState.UNKNOWN
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.qc_direction is QcDirection.UNKNOWN
+    assert decision.reason_code == "association_failed"
+    assert result.customer_display_facts == ()
+
+
+@pytest.mark.asyncio
 async def test_069_single_source_row_uses_authoritative_consultation_times() -> None:
     result = await _execute(
         (

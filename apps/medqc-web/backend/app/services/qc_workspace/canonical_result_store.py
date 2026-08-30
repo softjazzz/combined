@@ -59,6 +59,18 @@ _CUSTOMER_STATUSES = {
     "technical_error",
     "uncertain",
 }
+_RECOMMENDATION_EVIDENCE_SOURCE_TYPES = {
+    "consultation_record",
+    "daily_course_record",
+    "senior_course_record",
+    "inpat_drug_order",
+    "inpat_nondrug_order",
+    "exam_master",
+    "exam_item_report",
+    "labtest_master",
+    "labtest_item_report",
+    "surgery_record",
+}
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -144,6 +156,64 @@ def sanitize_canonical_facts(value: Any) -> Any:
     if isinstance(value, list):
         return [sanitize_canonical_facts(item) for item in value]
     return value
+
+
+def _validate_recommendation_evidence_facts(value: Any) -> None:
+    """Canonical 只接受已签名的逐建议证据引用。"""
+
+    if not isinstance(value, dict) or "recommendation_evidence" not in value:
+        return
+    entries = value.get("recommendation_evidence")
+    recommendation_count = value.get("recommendation_count")
+    if (
+        not isinstance(entries, list)
+        or len(entries) > 96
+        or type(recommendation_count) is not int
+        or len(entries) != recommendation_count
+    ):
+        raise ValueError("invalid recommendation evidence")
+    seen: set[tuple[int, int]] = set()
+    for expected_index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict) or set(entry) != {
+            "episode_index",
+            "recommendation_index",
+            "execution_state",
+            "opinion_evidence",
+            "execution_evidence",
+        }:
+            raise ValueError("invalid recommendation evidence")
+        episode_index = entry.get("episode_index")
+        recommendation_index = entry.get("recommendation_index")
+        if (
+            type(episode_index) is not int
+            or type(recommendation_index) is not int
+            or episode_index < 1
+            or recommendation_index != expected_index
+            or (episode_index, recommendation_index) in seen
+        ):
+            raise ValueError("invalid recommendation evidence")
+        seen.add((episode_index, recommendation_index))
+        if entry.get("execution_state") not in {"specific", "generic", "missing", "unknown"}:
+            raise ValueError("invalid recommendation evidence")
+        for key in ("opinion_evidence", "execution_evidence"):
+            refs = entry.get(key)
+            if not isinstance(refs, list) or len(refs) > 8:
+                raise ValueError("invalid recommendation evidence")
+            seen_refs: set[tuple[str, str]] = set()
+            for ref in refs:
+                if not isinstance(ref, dict) or set(ref) != {"source_type", "source_ref"}:
+                    raise ValueError("invalid recommendation evidence")
+                source_type = _safe_text(ref.get("source_type"))
+                source_ref = _safe_text(ref.get("source_ref"))
+                identity = (source_type, source_ref)
+                if (
+                    not source_type
+                    or source_type not in _RECOMMENDATION_EVIDENCE_SOURCE_TYPES
+                    or re.fullmatch(r"src_[0-9a-f]{24}", source_ref) is None
+                    or identity in seen_refs
+                ):
+                    raise ValueError("invalid recommendation evidence")
+                seen_refs.add(identity)
 
 
 def customer_safe_projection_key() -> str:
@@ -462,6 +532,7 @@ def envelope_item_from_rule_result(item: Dict[str, Any]) -> Dict[str, Any]:
         for key in allowed_keys
         if key in item and (item.get(key) is not None or key == "is_compliant")
     }
+    _validate_recommendation_evidence_facts(result.get("customer_display_facts"))
     if not isinstance(result.get("decision_facts"), dict) and isinstance(
         result.get("customer_display_facts"), dict
     ):
@@ -470,6 +541,7 @@ def envelope_item_from_rule_result(item: Dict[str, Any]) -> Dict[str, Any]:
         result.get("decision_facts"), dict
     ):
         result["customer_display_facts"] = result["decision_facts"]
+    _validate_recommendation_evidence_facts(result.get("customer_display_facts"))
 
     if not _safe_text(result.get("conclusion")):
         for key in ("customer_conclusion", "findings"):

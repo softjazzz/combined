@@ -35,7 +35,22 @@ class ConsultationTimelinessOutcome:
 
 
 def _business_id(row: Mapping[str, Any]) -> str:
-    return _clean(row.get("consultation_id") or row.get("application_id"))
+    values = tuple(
+        value
+        for field in ("consultation_id", "application_id")
+        if (value := _clean(row.get(field)))
+    )
+    unique_values = tuple(dict.fromkeys(values))
+    return unique_values[0] if len(unique_values) == 1 else ""
+
+
+def _has_conflicting_business_ids(row: Mapping[str, Any]) -> bool:
+    values = tuple(
+        value
+        for field in ("consultation_id", "application_id")
+        if (value := _clean(row.get(field)))
+    )
+    return len(set(values)) > 1
 
 
 def _request_time(row: Mapping[str, Any]) -> datetime | None:
@@ -77,6 +92,11 @@ def _pair_separate_rows(
     record_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...] | None:
     if not request_rows or not record_rows or len(request_rows) != len(record_rows):
+        return None
+    if any(
+        _has_conflicting_business_ids(row)
+        for row in (*request_rows, *record_rows)
+    ):
         return None
 
     if len(request_rows) == len(record_rows) == 1:
@@ -136,6 +156,8 @@ def evaluate_consultation_timeliness(
     direct_events: list[tuple[datetime | None, datetime | None]] = []
     remaining_rows: list[Mapping[str, Any]] = []
     for row in consultation_rows:
+        if _has_conflicting_business_ids(row):
+            return ConsultationTimelinessOutcome("data_gap", "association_failed")
         title = _clean(row.get("document_title"))
         request_titled = bool(_REQUEST_TITLE_PATTERN.search(title))
         record_titled = bool(

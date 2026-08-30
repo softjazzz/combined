@@ -1129,7 +1129,14 @@ _TRACE_SENSITIVE_KEYS = {
 }
 
 
-def _sanitize_trace_value(value: Any, removed_keys: set[str], *, max_text: int = 1200) -> Any:
+def _sanitize_trace_value(
+    value: Any,
+    removed_keys: set[str],
+    *,
+    max_text: int = 1200,
+    list_limit: int = 50,
+    list_limits: Optional[Dict[str, int]] = None,
+) -> Any:
     if isinstance(value, dict):
         sanitized: Dict[str, Any] = {}
         for key, item in value.items():
@@ -1137,10 +1144,30 @@ def _sanitize_trace_value(value: Any, removed_keys: set[str], *, max_text: int =
             if normalized_key in _TRACE_SENSITIVE_KEYS:
                 removed_keys.add(str(key))
                 continue
-            sanitized[str(key)] = _sanitize_trace_value(item, removed_keys, max_text=max_text)
+            child_list_limit = (
+                list_limits.get(normalized_key, list_limit)
+                if list_limits is not None
+                else list_limit
+            )
+            sanitized[str(key)] = _sanitize_trace_value(
+                item,
+                removed_keys,
+                max_text=max_text,
+                list_limit=child_list_limit,
+                list_limits=list_limits,
+            )
         return sanitized
     if isinstance(value, list):
-        return [_sanitize_trace_value(item, removed_keys, max_text=max_text) for item in value[:50]]
+        return [
+            _sanitize_trace_value(
+                item,
+                removed_keys,
+                max_text=max_text,
+                list_limit=list_limit,
+                list_limits=list_limits,
+            )
+            for item in value[:list_limit]
+        ]
     if isinstance(value, str):
         text = value.strip()
         if len(text) > max_text:
@@ -2722,6 +2749,7 @@ async def run_sichuan_workspace_batch_job(
                             customer_display_facts,
                             set(),
                             max_text=120,
+                            list_limits={"recommendation_evidence": 96},
                         )
                     if use_luxian_customer_results:
                         customer_message = eval_item.get("customer_message")

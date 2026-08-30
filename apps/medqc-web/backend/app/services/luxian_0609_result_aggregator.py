@@ -4205,7 +4205,7 @@ def safe_luxian_0609_customer_display_facts(
             expected_keys.remove("source_document_ids")
         if rule_id == "LX0609-020" and "recommendation_results" in raw:
             expected_keys.add("recommendation_results")
-        allowed_internal_keys = {"source_document_refs"}
+        allowed_internal_keys = {"source_document_refs", "recommendation_evidence"}
         count_keys = (
             "completed_opinion_episode_count",
             "recommendation_count",
@@ -4317,6 +4317,120 @@ def safe_luxian_0609_customer_display_facts(
         }
         if recommendation_results is not None:
             safe_facts["recommendation_results"] = recommendation_results
+        raw_recommendation_evidence = raw.get("recommendation_evidence")
+        if raw_recommendation_evidence is not None:
+            if (
+                not isinstance(raw_recommendation_evidence, list)
+                or len(raw_recommendation_evidence) != raw["recommendation_count"]
+                or len(raw_recommendation_evidence) > 96
+            ):
+                return None
+            from .qc_workspace.canonical_result_store import (
+                customer_safe_projection_key,
+                keyed_ref,
+            )
+
+            safe_recommendation_evidence: list[dict[str, Any]] = []
+            seen_indexes: set[tuple[int, int]] = set()
+            allowed_execution_states = {"specific", "generic", "missing", "unknown"}
+            allowed_source_types = {
+                "consultation_record",
+                "daily_course_record",
+                "senior_course_record",
+                "inpat_drug_order",
+                "inpat_nondrug_order",
+                "exam_master",
+                "exam_item_report",
+                "labtest_master",
+                "labtest_item_report",
+                "surgery_record",
+            }
+            is_public_recommendation_evidence = is_public_projection
+            projection_key = customer_safe_projection_key() if is_public_recommendation_evidence is False else ""
+
+            def project_refs(value: Any, *, public: bool) -> list[dict[str, str]] | None:
+                if not isinstance(value, list) or len(value) > 8:
+                    return None
+                projected: list[dict[str, str]] = []
+                seen_refs: set[tuple[str, str]] = set()
+                for ref in value:
+                    if not isinstance(ref, Mapping):
+                        return None
+                    if public:
+                        if set(ref) != {"source_type", "source_ref"}:
+                            return None
+                        source_type = str(ref.get("source_type") or "").strip()
+                        source_ref = str(ref.get("source_ref") or "").strip()
+                        if (
+                            source_type not in allowed_source_types
+                            or re.fullmatch(r"src_[0-9a-f]{24}", source_ref) is None
+                        ):
+                            return None
+                        key = (source_type, source_ref)
+                        if key in seen_refs:
+                            return None
+                        seen_refs.add(key)
+                        projected.append({"source_type": source_type, "source_ref": source_ref})
+                    else:
+                        if set(ref) != {"source_type", "source_document_id"}:
+                            return None
+                        source_type = str(ref.get("source_type") or "").strip()
+                        document_id = str(ref.get("source_document_id") or "").strip()
+                        if source_type not in allowed_source_types or not document_id or len(document_id) > 256:
+                            return None
+                        key = (source_type, document_id)
+                        if key in seen_refs:
+                            return None
+                        seen_refs.add(key)
+                        projected.append({
+                            "source_type": source_type,
+                            "source_ref": keyed_ref("src", document_id, hmac_key=projection_key),
+                        })
+                return projected
+
+            for expected_index, item in enumerate(raw_recommendation_evidence, start=1):
+                if not isinstance(item, Mapping):
+                    return None
+                if is_public_recommendation_evidence:
+                    expected_item_keys = {"episode_index", "recommendation_index", "execution_state", "opinion_evidence", "execution_evidence"}
+                    opinion_key, execution_key = "opinion_evidence", "execution_evidence"
+                else:
+                    expected_item_keys = {"episode_index", "recommendation_index", "execution_state", "opinion_refs", "execution_refs"}
+                    opinion_key, execution_key = "opinion_refs", "execution_refs"
+                if set(item) != expected_item_keys:
+                    return None
+                episode_index = item.get("episode_index")
+                recommendation_index = item.get("recommendation_index")
+                if (
+                    type(episode_index) is not int
+                    or not 1 <= episode_index <= raw["completed_opinion_episode_count"]
+                    or type(recommendation_index) is not int
+                    or recommendation_index != expected_index
+                    or item.get("execution_state") not in allowed_execution_states
+                ):
+                    return None
+                if (
+                    recommendation_results is not None
+                    and item["execution_state"]
+                    != recommendation_results[expected_index - 1]["execution_state"]
+                ):
+                    return None
+                index_key = (episode_index, recommendation_index)
+                if index_key in seen_indexes:
+                    return None
+                seen_indexes.add(index_key)
+                opinion_evidence = project_refs(item.get(opinion_key), public=is_public_recommendation_evidence)
+                execution_evidence = project_refs(item.get(execution_key), public=is_public_recommendation_evidence)
+                if opinion_evidence is None or execution_evidence is None:
+                    return None
+                safe_recommendation_evidence.append({
+                    "episode_index": episode_index,
+                    "recommendation_index": recommendation_index,
+                    "execution_state": item["execution_state"],
+                    "opinion_evidence": opinion_evidence,
+                    "execution_evidence": execution_evidence,
+                })
+            safe_facts["recommendation_evidence"] = safe_recommendation_evidence
         return safe_facts
     if rule_id == "LX0609-023":
         missing_details = raw.get("missing_details")

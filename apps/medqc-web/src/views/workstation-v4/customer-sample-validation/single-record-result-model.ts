@@ -20,6 +20,100 @@ export interface SingleRecordQcEvidence {
   /** 单病历已授权读取时才会返回；由后端按 source_ref 精确解析。 */
   evidence_excerpt?: string
   excerpt_kind?: '字段级依据' | '文书级依据' | string
+  recommendation_index?: number
+  evidence_role?: 'opinion' | 'execution'
+}
+
+function isSafeRecommendationEvidenceRef(
+  value: unknown,
+): value is { source_type: string; source_ref: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const ref = value as Record<string, unknown>
+  return (
+    typeof ref.source_type === 'string' &&
+    ref.source_type.trim().length > 0 &&
+    typeof ref.source_ref === 'string' &&
+    /^src_[0-9a-f]{24}$/i.test(ref.source_ref.trim()) &&
+    !Object.prototype.hasOwnProperty.call(ref, 'source_document_id')
+  )
+}
+
+function isLegacySafeEvidenceRef(
+  value: unknown,
+): value is { source_type?: string; source_ref: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const evidence = value as Record<string, unknown>
+  return (
+    typeof evidence.source_ref === 'string' &&
+    /^[a-z0-9][a-z0-9:_-]{1,127}$/i.test(evidence.source_ref.trim()) &&
+    !Object.prototype.hasOwnProperty.call(evidence, 'source_document_id')
+  )
+}
+
+export function recommendationEvidenceForSingleRecord(
+  item: Pick<SingleRecordQcResultItem, 'rule_id' | 'customer_display_facts' | 'evidence'>,
+): SingleRecordQcEvidence[] {
+  if (
+    !['LX0609-020', 'LX0609-023'].includes(
+      String(item.rule_id || '')
+        .trim()
+        .toUpperCase(),
+    )
+  ) {
+    return Array.isArray(item.evidence) ? item.evidence.slice(0, 8) : []
+  }
+  const facts = item.customer_display_facts
+  const entries =
+    facts && typeof facts === 'object' && !Array.isArray(facts)
+      ? (facts as Record<string, unknown>).recommendation_evidence
+      : undefined
+  const rows: SingleRecordQcEvidence[] = []
+  const seen = new Set<string>()
+  if (Array.isArray(entries)) {
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const record = entry as Record<string, unknown>
+      const recommendationIndex = record.recommendation_index
+      if (
+        typeof recommendationIndex !== 'number' ||
+        !Number.isInteger(recommendationIndex) ||
+        recommendationIndex < 1
+      )
+        continue
+      for (const [evidenceRole, field] of [
+        ['opinion', 'opinion_evidence'],
+        ['execution', 'execution_evidence'],
+      ] as const) {
+        const refs = record[field]
+        if (!Array.isArray(refs)) continue
+        for (const ref of refs) {
+          if (!isSafeRecommendationEvidenceRef(ref)) continue
+          const sourceType = ref.source_type.trim()
+          const sourceRef = ref.source_ref.trim()
+          const identity = `${sourceType.toLowerCase()}|${sourceRef}|${recommendationIndex}|${evidenceRole}`
+          if (seen.has(identity)) continue
+          seen.add(identity)
+          rows.push({
+            source_ref: sourceRef,
+            source_type: sourceType,
+            recommendation_index: recommendationIndex,
+            evidence_role: evidenceRole,
+          })
+        }
+      }
+    }
+  }
+  for (const evidence of Array.isArray(item.evidence) ? item.evidence : []) {
+    if (!isLegacySafeEvidenceRef(evidence)) continue
+    const sourceRef = evidence.source_ref.trim()
+    if (rows.some((row) => row.source_ref === sourceRef)) continue
+    const sourceType = String(evidence.source_type || '').trim()
+    const identity = `${sourceType.toLowerCase()}|${sourceRef}`
+    if (seen.has(identity)) continue
+    seen.add(identity)
+    rows.push({ ...evidence, source_ref: sourceRef })
+  }
+  return rows.slice(0, 8)
 }
 
 /** 规则执行器已保存的受控子结论；用于解释多条件规则，不在浏览器重算质控结论。 */
@@ -115,11 +209,7 @@ export interface SingleRecordQcStatusSummary {
  * “待处理”统一承接需要人工关注、资料补充或技术排查的保守状态。
  */
 export type SingleRecordQcResultTabKey =
-  | 'all'
-  | 'non_compliant'
-  | 'pending'
-  | 'not_applicable'
-  | 'compliant'
+  'all' | 'non_compliant' | 'pending' | 'not_applicable' | 'compliant'
 
 export interface SingleRecordQcStatusTab {
   key: SingleRecordQcResultTabKey

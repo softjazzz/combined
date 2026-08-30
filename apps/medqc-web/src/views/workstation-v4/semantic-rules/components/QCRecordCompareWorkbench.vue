@@ -288,6 +288,7 @@ import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 import type { EditableMedicalRecordDocument } from '@/views/workstation-v4/customer-sample-validation/types'
 import {
   buildSingleRecordQcResultItems,
+  recommendationEvidenceForSingleRecord,
   type SingleRecordQcEvidence,
   type SingleRecordQcResultItem,
 } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
@@ -377,12 +378,16 @@ function resolveDocumentDisplayTitle(document: EditableMedicalRecordDocument) {
 }
 
 function resolveEvidenceSourceLabel(evidence: QCRecordCompareEvidence) {
-  return (
+  const sourceLabel =
     resolveMedicalDocumentTypeLabel(evidence.source_document_name) ||
     resolveMedicalDocumentTypeLabel(evidence.source_document_type) ||
     resolveMedicalDocumentTypeLabel(evidence.source_table) ||
     '来源文书'
-  )
+  if (evidence.recommendation_index && evidence.evidence_role) {
+    const roleLabel = evidence.evidence_role === 'opinion' ? '会诊意见' : '执行证据'
+    return `第${evidence.recommendation_index}条建议 · ${roleLabel} · ${sourceLabel}`
+  }
+  return sourceLabel
 }
 
 function resolveDocumentTime(document: EditableMedicalRecordDocument) {
@@ -901,6 +906,8 @@ function toCompareEvidence(evidence: SingleRecordQcEvidence): QCRecordCompareEvi
     source_document_name: evidence.source_label,
     record_time: evidence.record_time,
     section_field_path: evidence.field_path,
+    recommendation_index: evidence.recommendation_index,
+    evidence_role: evidence.evidence_role,
     quote: evidence.evidence_excerpt || '',
   }
 }
@@ -911,7 +918,7 @@ async function locateSingleRecordEvidence(evidence: SingleRecordQcEvidence) {
 
 async function selectSingleRecordResult(key: string) {
   const result = singleRecordViewItems.value.find((item) => item.key === key)
-  const evidence = result?.evidence?.[0]
+  const evidence = result ? recommendationEvidenceForSingleRecord(result)[0] : undefined
   if (!evidence) return
   await locateSingleRecordEvidence(evidence)
 }

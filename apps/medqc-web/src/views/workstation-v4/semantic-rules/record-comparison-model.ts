@@ -6,6 +6,7 @@ import type {
   SichuanBatchIssueItem,
   SichuanBatchJob,
   SichuanBatchSafeEvidenceRef,
+  RecommendationEvidenceRole,
 } from '@/views/workstation-v4/semantic-rules/types'
 
 export interface RecordComparisonScope {
@@ -112,9 +113,70 @@ function resolveControlledEvidenceFieldPath(
   return undefined
 }
 
+function isSafeRecommendationRef(value: unknown): value is SichuanBatchSafeEvidenceRef {
+  return (
+    isSafeEvidenceRef(value) && !Object.prototype.hasOwnProperty.call(value, 'source_document_id')
+  )
+}
+
+export function buildRecommendationEvidence(
+  item: SichuanBatchIssueItem,
+  key: string,
+): QCRecordCompareEvidence[] {
+  const ruleId = String(item.rule_id || item.rule_code || '')
+    .trim()
+    .toUpperCase()
+  if (!['LX0609-020', 'LX0609-023'].includes(ruleId)) return []
+  const facts = item.customer_display_facts
+  if (!facts || typeof facts !== 'object' || Array.isArray(facts)) return []
+  const entries = (facts as Record<string, unknown>).recommendation_evidence
+  if (!Array.isArray(entries)) return []
+  const rows: QCRecordCompareEvidence[] = []
+  const seen = new Set<string>()
+  const roleEntries: Array<[RecommendationEvidenceRole, string]> = [
+    ['opinion', 'opinion_evidence'],
+    ['execution', 'execution_evidence'],
+  ]
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const record = entry as Record<string, unknown>
+    const recommendationIndex = record.recommendation_index
+    if (
+      typeof recommendationIndex !== 'number' ||
+      !Number.isInteger(recommendationIndex) ||
+      recommendationIndex < 1
+    )
+      continue
+    for (const [evidenceRole, field] of roleEntries) {
+      const refs = record[field]
+      if (!Array.isArray(refs)) continue
+      for (const ref of refs) {
+        if (!isSafeRecommendationRef(ref)) continue
+        const sourceType = ref.source_type.trim()
+        const sourceRef = ref.source_ref.trim()
+        const identity = `${sourceType.toLowerCase()}|${sourceRef}|${recommendationIndex}|${evidenceRole}`
+        if (seen.has(identity)) continue
+        seen.add(identity)
+        rows.push({
+          key: `${key}-recommendation-${recommendationIndex}-${evidenceRole}-${rows.length}`,
+          source_ref: sourceRef,
+          source_document_type: sourceType,
+          source_table: sourceType,
+          source_document_name: resolveEvidenceSourceLabel(sourceType),
+          recommendation_index: recommendationIndex,
+          evidence_role: evidenceRole,
+          quote: '',
+        })
+      }
+    }
+  }
+  return rows
+}
+
 function buildEvidence(item: SichuanBatchIssueItem, key: string): QCRecordCompareEvidence[] {
   const normalized = normalizeCustomerQcResult(item as unknown as RawCustomerQcResult)
   const ruleId = String(item.rule_id || item.rule_code || '')
+  const recommendationEvidence = buildRecommendationEvidence(item, key)
   const seenRefs = new Set<string>()
   const refs = (Array.isArray(item.evidence) ? item.evidence.filter(isSafeEvidenceRef) : []).filter(
     (evidence) => {
@@ -126,24 +188,30 @@ function buildEvidence(item: SichuanBatchIssueItem, key: string): QCRecordCompar
       return true
     },
   )
-  if (refs.length) {
-    return refs.slice(0, 6).map((evidence, index) => ({
-      key: `${key}-evidence-${index}`,
-      // source_ref 是服务端授权文书的精确、安全引用；不能伪装成原文摘录。
-      source_ref: evidence.source_ref.trim(),
-      source_document_type: evidence.source_type,
-      source_table: evidence.source_type,
-      source_document_name: resolveEvidenceSourceLabel(evidence.source_type),
-      section_field_path: resolveControlledEvidenceFieldPath(
-        ruleId,
-        evidence.source_type,
-        normalized.display.evidenceSources.find(
-          (source) =>
-            source.kind.trim().toLowerCase() === evidence.source_type.trim().toLowerCase(),
-        )?.fieldPath,
-      ),
-      quote: '',
-    }))
+  if (recommendationEvidence.length || refs.length) {
+    const recommendationRefs = new Set(
+      recommendationEvidence.map((evidence) => evidence.source_ref || ''),
+    )
+    const regularEvidence = refs
+      .filter((evidence) => !recommendationRefs.has(evidence.source_ref.trim()))
+      .map((evidence, index) => ({
+        key: `${key}-evidence-${index}`,
+        // source_ref 是服务端授权文书的精确、安全引用；不能伪装成原文摘录。
+        source_ref: evidence.source_ref.trim(),
+        source_document_type: evidence.source_type,
+        source_table: evidence.source_type,
+        source_document_name: resolveEvidenceSourceLabel(evidence.source_type),
+        section_field_path: resolveControlledEvidenceFieldPath(
+          ruleId,
+          evidence.source_type,
+          normalized.display.evidenceSources.find(
+            (source) =>
+              source.kind.trim().toLowerCase() === evidence.source_type.trim().toLowerCase(),
+          )?.fieldPath,
+        ),
+        quote: '',
+      }))
+    return [...recommendationEvidence, ...regularEvidence].slice(0, 6)
   }
   return normalized.display.evidenceSources.map((source, index) => ({
     key: `${key}-controlled-evidence-${index}`,

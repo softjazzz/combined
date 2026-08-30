@@ -30,9 +30,148 @@ from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
     safe_luxian_0609_customer_display_facts,
 )
+from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
 
 CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
+
+
+def test_020_recommendation_evidence_projects_each_mapping_without_raw_ids():
+    facts = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 9,
+        "recommendation_count": 9,
+        "specific_execution_count": 9,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "all_linked",
+        "source_document_ids": [f"CONSULT-{index}" for index in range(1, 9)],
+        "source_document_refs": [
+            {"source_type": "consultation_record", "source_document_id": f"CONSULT-{index}"}
+            for index in range(1, 9)
+        ],
+        "recommendation_results": [
+            {
+                "episode_index": index,
+                "recommendation_index": index,
+                "action_type": "test",
+                "execution_state": "specific",
+            }
+            for index in range(1, 10)
+        ],
+        "recommendation_evidence": [
+            {
+                "episode_index": index,
+                "recommendation_index": index,
+                "execution_state": "specific",
+                "opinion_refs": [
+                    {"source_type": "consultation_record", "source_document_id": f"CONSULT-{index}"}
+                ],
+                "execution_refs": [
+                    {"source_type": "daily_course_record", "source_document_id": f"COURSE-{index}"}
+                ],
+            }
+            for index in range(1, 10)
+        ],
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-020"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-020"),),
+        customer_display_facts=(("LX0609-020", facts),),
+    )[0]
+
+    projected = result["customer_display_facts"]["recommendation_evidence"]
+    assert "recommendation_evidence" not in result
+    assert len(projected) == 9
+    assert projected[-1]["episode_index"] == 9
+    assert projected[-1]["opinion_evidence"][0]["source_ref"].startswith("src_")
+    assert projected[-1]["execution_evidence"][0]["source_ref"].startswith("src_")
+    assert "CONSULT-9" not in str(projected[-1])
+    assert "COURSE-9" not in str(projected[-1])
+    assert len(result["customer_evidence"]) <= 8
+
+
+def test_020_recommendation_evidence_rejects_duplicate_indexes_fail_closed():
+    raw = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 1,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "all_linked",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "action_type": "test",
+                "execution_state": "specific",
+            }
+        ],
+        "recommendation_evidence": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "execution_state": "specific",
+                "opinion_refs": [],
+                "execution_refs": [],
+            },
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "execution_state": "specific",
+                "opinion_refs": [],
+                "execution_refs": [],
+            },
+        ],
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-020", raw=raw
+    ) is None
+
+
+def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
+    item = {
+        "rule_id": "LX0609-020",
+        "status": "compliant",
+        "result_status": "compliant",
+        "is_compliant": True,
+        "customer_display_facts": {
+            "verification_kind": "consultation_execution_relation_check",
+            "completed_opinion_episode_count": 1,
+            "recommendation_count": 1,
+            "specific_execution_count": 1,
+            "generic_execution_count": 0,
+            "missing_execution_count": 0,
+            "relation_state": "all_linked",
+            "recommendation_results": [
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 1,
+                    "action_type": "test",
+                    "execution_state": "specific",
+                }
+            ],
+            "recommendation_evidence": [
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 1,
+                    "execution_state": "specific",
+                    "opinion_evidence": [
+                        {"source_type": "consultation_record", "source_ref": "CONSULT-1"}
+                    ],
+                    "execution_evidence": [],
+                }
+            ],
+        },
+    }
+
+    with pytest.raises(ValueError, match="invalid recommendation evidence"):
+        envelope_item_from_rule_result(item)
 
 
 @pytest.mark.parametrize(

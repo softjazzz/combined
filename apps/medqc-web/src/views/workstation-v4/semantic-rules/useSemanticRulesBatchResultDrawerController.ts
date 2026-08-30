@@ -33,6 +33,7 @@ import { buildCustomerQcDisplayModel } from '@/views/workstation-v4/semantic-rul
 import { normalizeCustomerQcResult } from '@/domain/customer-qc/result-normalizer'
 import { resolveIssueCanonicalStatus } from '@/views/workstation-v4/semantic-rules/batchResultStatus'
 import { createIssueEvidencePresentation } from '@/views/workstation-v4/semantic-rules/issueEvidencePresentation'
+import { buildRecommendationEvidence } from '@/views/workstation-v4/semantic-rules/record-comparison-model'
 
 export type SemanticRulesBatchResultDrawerProps = {
   open: boolean
@@ -1248,15 +1249,22 @@ export function useSemanticRulesBatchResultDrawerController(
     item: SichuanBatchIssueItem,
     itemKey: string,
   ): QCRecordCompareIssue['evidences'] {
+    const recommendationEvidence = buildRecommendationEvidence(item, itemKey)
     const evidenceRefs = Array.isArray(item.evidence) ? item.evidence.filter(isSafeEvidenceRef) : []
-    if (evidenceRefs.length) {
-      return evidenceRefs.slice(0, 6).map((evidence, index) => ({
-        key: `${itemKey}-evidence-${index}`,
-        source_document_type: evidence.source_type,
-        source_table: evidence.source_type,
-        source_document_name: resolveLuxianEvidenceSourceLabel(evidence.source_type),
-        quote: evidence.source_ref.trim(),
-      }))
+    if (recommendationEvidence.length || evidenceRefs.length) {
+      const recommendationRefs = new Set(
+        recommendationEvidence.map((evidence) => evidence.source_ref || ''),
+      )
+      const regularEvidence = evidenceRefs
+        .filter((evidence) => !recommendationRefs.has(evidence.source_ref.trim()))
+        .map((evidence, index) => ({
+          key: `${itemKey}-evidence-${index}`,
+          source_document_type: evidence.source_type,
+          source_table: evidence.source_type,
+          source_document_name: resolveLuxianEvidenceSourceLabel(evidence.source_type),
+          quote: evidence.source_ref.trim(),
+        }))
+      return [...recommendationEvidence, ...regularEvidence].slice(0, 6)
     }
     const evidenceText = resolveIssueEvidenceSummary(item)
     if (!evidenceText) return []
@@ -1622,10 +1630,10 @@ export function useSemanticRulesBatchResultDrawerController(
     const filters = (detail?.filters || {}) as Record<string, unknown>
     return Boolean(
       summary?.postprocess_summary ||
-        summary?.display_status_counts ||
-        filters.validation_mode === 'formal_fast_screen_full' ||
-        filters.rule_set_key === 'sc_content_full_v1' ||
-        summary?.rule_set_key === 'sc_content_full_v1',
+      summary?.display_status_counts ||
+      filters.validation_mode === 'formal_fast_screen_full' ||
+      filters.rule_set_key === 'sc_content_full_v1' ||
+      summary?.rule_set_key === 'sc_content_full_v1',
     )
   })
 

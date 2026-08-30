@@ -1959,8 +1959,9 @@ def _consultation_execution_display_facts(
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
         "source_document_refs": source_document_refs,
     }
-    if rule_id == "LX0609-020":
+    if rule_id in {"LX0609-020", "LX0609-023"}:
         recommendation_results: list[dict[str, Any]] = []
+        recommendation_evidence: list[dict[str, Any]] = []
         for recommendation_index, item in enumerate(
             completed_recommendations, start=1
         ):
@@ -1981,15 +1982,59 @@ def _consultation_execution_display_facts(
                     and not assessment.execution_refs
                 ):
                     execution_state = "missing"
-            recommendation_results.append(
+            opinion_evidence: list[dict[str, str]] = []
+            opinion_document = documents_by_ref.get(item.recommendation.opinion_ref)
+            opinion_document_id = _clean(
+                opinion_document.get("document_id") if opinion_document else ""
+            )
+            if opinion_document_id:
+                opinion_evidence.append(
+                    {
+                        "source_type": "consultation_record",
+                        "source_document_id": opinion_document_id,
+                    }
+                )
+            execution_evidence: list[dict[str, str]] = []
+            seen_execution_refs: set[tuple[str, str]] = set()
+            if assessment is not None:
+                for ref in (*assessment.trace_refs, *assessment.execution_refs):
+                    candidate = candidate_by_ref.get(ref)
+                    candidate_document_id = _clean(
+                        candidate.document_id if candidate is not None else ""
+                    )
+                    if candidate is None or not candidate_document_id:
+                        continue
+                    key = (candidate.source_key, candidate_document_id)
+                    if key in seen_execution_refs:
+                        continue
+                    seen_execution_refs.add(key)
+                    execution_evidence.append(
+                        {
+                            "source_type": candidate.source_key,
+                            "source_document_id": candidate_document_id,
+                        }
+                    )
+            if rule_id == "LX0609-020":
+                recommendation_results.append(
+                    {
+                        "episode_index": episode_indexes[item.episode_ref],
+                        "recommendation_index": recommendation_index,
+                        "action_type": item.recommendation.action_type,
+                        "execution_state": execution_state,
+                    }
+                )
+            recommendation_evidence.append(
                 {
                     "episode_index": episode_indexes[item.episode_ref],
                     "recommendation_index": recommendation_index,
-                    "action_type": item.recommendation.action_type,
                     "execution_state": execution_state,
+                    "opinion_refs": opinion_evidence,
+                    "execution_refs": execution_evidence,
                 }
             )
-        facts["recommendation_results"] = recommendation_results
+        if rule_id == "LX0609-020":
+            facts["recommendation_results"] = recommendation_results
+        facts["recommendation_evidence"] = recommendation_evidence[:96]
     return facts
 
 
