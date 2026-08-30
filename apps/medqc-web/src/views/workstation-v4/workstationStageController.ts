@@ -99,8 +99,8 @@ export function getStageMeta(currentStageFilter: WorkflowStageKey | '') {
     pageDesc: '先筛高优先病历，再进入单案详情。',
     tableTitle: '批量扫读',
     tableDesc: '按当前筛选条件展示病历列表。',
-    batchActionText: '批量处理',
-    singleActionText: '查看详情',
+    batchActionText: '',
+    singleActionText: '进入质控',
     action: 'open_record' as WorkstationLaunchAction,
   }
 }

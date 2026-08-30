@@ -223,18 +223,14 @@
                 :total="displayServerTotal"
                 :loading="displayLoading"
                 :title="isStageQueueMode ? stageMeta.tableTitle || '批量工作台' : '病历池列表'"
-                :primary-action-label="
-                  isStageQueueMode
-                    ? stageMeta.batchActionText
-                    : `质控所选（${selectedWorkbenchKeys.length}）`
-                "
+                :primary-action-label="stageMeta.batchActionText"
                 :primary-action-loading="batchActionLoading"
-                :show-filter-qc-action="!isStageQueueMode"
+                :show-filter-qc-action="isStageQueueMode"
                 :filter-qc-count="qcSummary.totalRecords"
                 :filter-qc-loading="batchActionLoading"
                 :row-action-label="stageMeta.singleActionText"
-                :show-primary-action="true"
-                :show-selection="true"
+                :show-primary-action="isStageQueueMode"
+                :show-selection="isStageQueueMode"
                 :record-pool-mode="!isStageQueueMode"
                 :show-defer-action="false"
                 :show-assign-action="false"

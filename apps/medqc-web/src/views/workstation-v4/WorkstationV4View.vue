@@ -2271,6 +2271,26 @@ async function ensureSettlementLoadedForSelectedRecord() {
 function handleRowOpen(recordId: string) {
   const record = findRecordById(listRecords.value, recordId)
   if (!record) return
+  // 病历池只负责分流，不在本页直接执行质控；按住院状态把病例带入对应质控页。
+  if (!currentStageFilter.value) {
+    const targetName = record.dischargeDate
+      ? 'WorkstationV4FinalRecords'
+      : 'WorkstationV4RunningRecords'
+    const recordKey = String(record.recordKey || '').trim()
+    const visitId = String(record.visitId || record.id || '').trim()
+    if (!recordKey || !visitId) {
+      message.warning('当前病历身份信息不完整，暂时无法进入质控')
+      return
+    }
+    void router.push({
+      name: targetName,
+      query: {
+        record_key: recordKey,
+        visit_id: visitId,
+      },
+    })
+    return
+  }
   openRecordForStage({
     stage: currentStageFilter.value,
     record,
