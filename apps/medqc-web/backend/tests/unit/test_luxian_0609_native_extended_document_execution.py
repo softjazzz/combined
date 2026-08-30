@@ -999,6 +999,38 @@ async def test_061_prefers_record_or_submit_time_over_business_discharge_time() 
 
 
 @pytest.mark.asyncio
+async def test_061_uses_latest_authoritative_completion_when_discharge_rows_are_repeated() -> None:
+    """同一就诊返回多条出院记录时，不能依赖数据库返回顺序。"""
+
+    result, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": (
+                {
+                    "patient_status": "出院",
+                    "discharge_datetime": "2026-07-01 12:00:00",
+                },
+            ),
+            "discharge_record": (
+                {
+                    "record_time": "2026-07-02 11:00:00",
+                    "record_content": "",
+                },
+                {
+                    "record_time": "2026-07-02 13:00:00",
+                    "record_content": "补录后的完整出院记录",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "threshold_exceeded"
+    facts = dict(result.customer_display_facts)["LX0609-061"]
+    assert facts["record_time"] == "2026-07-02 13:00:00"
+
+
+@pytest.mark.asyncio
 async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-064",

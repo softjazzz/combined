@@ -46,19 +46,20 @@ def evaluate_discharge_documentation_timeliness(
             "trigger_absent_complete",
         )
 
-    record_time = next(
-        (
-            candidate
-            for row in discharge_rows
-            if (
-                candidate := _parse_datetime(
-                    authoritative_document_time_value(row)
-                )
+    # 同一就诊可能返回初次书写、补录或修订后的多条出院记录。
+    # 出院记录完成时限应以该就诊最后一条权威文书时间为准，不能依赖
+    # 数据库返回顺序，否则同一批数据会因排序变化得到不同结论。
+    record_times = tuple(
+        candidate
+        for row in discharge_rows
+        if (
+            candidate := _parse_datetime(
+                authoritative_document_time_value(row)
             )
-            is not None
-        ),
-        None,
+        )
+        is not None
     )
+    record_time = max(record_times) if record_times else None
     actual_interval_hours: float | None = None
     if not discharge_rows:
         final_state, reason_code = (
