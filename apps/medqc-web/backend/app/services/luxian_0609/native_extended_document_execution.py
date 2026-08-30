@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
 
 from .decision_model import (
@@ -837,6 +837,87 @@ def _event_display_base(event: _PostoperativeSurgeryEvent) -> dict[str, Any]:
     }
 
 
+def _postoperative_window_gate(
+    *,
+    surgery_events: Sequence[_PostoperativeSurgeryEvent],
+    horizon_rows: Sequence[Mapping[str, Any]],
+    horizon_error: str,
+) -> tuple[str, str, Mapping[str, Any]] | None:
+    """在逐台核对前确认术后三日观察窗口已经成熟。
+
+    评价终点必须来自同一冻结 Evidence Session。只有日期时按保守口径，
+    评价日期严格晚于每台手术结束日后的第三个自然日，避免在窗口当天提前
+    把尚未发生的病程判为缺失。
+    """
+
+    def unavailable(issue: str) -> tuple[str, str, Mapping[str, Any]]:
+        return (
+            "data_gap",
+            issue,
+            {
+                "verification_kind": "postoperative_three_day_window_unavailable",
+                "issue": issue,
+            },
+        )
+
+    if horizon_error:
+        return unavailable(horizon_error)
+    if len(horizon_rows) != 1:
+        return unavailable("authoritative_time_missing")
+
+    row = horizon_rows[0]
+    horizon_time = _parse_datetime(row.get("horizon_datetime"))
+    raw_date = _clean(row.get("horizon_date"))
+    horizon_date: date | None = None
+    if raw_date:
+        try:
+            horizon_date = date.fromisoformat(raw_date)
+        except ValueError:
+            return unavailable("authoritative_time_missing")
+    if horizon_time is None and horizon_date is None:
+        return unavailable("authoritative_time_missing")
+    if horizon_time is not None and horizon_date is not None and horizon_time.date() != horizon_date:
+        return unavailable("authoritative_time_conflict")
+
+    deadlines = tuple(
+        event.surgery_end_time.date() + timedelta(days=3)
+        for event in surgery_events
+        if event.surgery_end_time is not None
+    )
+    if len(deadlines) != len(surgery_events):
+        return unavailable("authoritative_time_missing")
+    if any(
+        (horizon_time is not None and horizon_time < event.surgery_end_time)
+        or (horizon_time is None and horizon_date < event.surgery_end_time.date())
+        for event in surgery_events
+        if event.surgery_end_time is not None
+    ):
+        return unavailable("authoritative_time_conflict")
+
+    mature = (
+        all(horizon_time.date() > deadline for deadline in deadlines)
+        if horizon_time is not None
+        else all(horizon_date > deadline for deadline in deadlines)
+    )
+    if mature:
+        return None
+
+    facts: dict[str, Any] = {
+        "verification_kind": "postoperative_three_day_window_not_mature",
+        "surgery_times": [
+            event.surgery_end_time.isoformat(sep=" ")
+            for event in surgery_events
+            if event.surgery_end_time is not None
+        ],
+        "deadline_dates": [deadline.isoformat() for deadline in deadlines],
+    }
+    if horizon_time is not None:
+        facts["evaluation_time"] = horizon_time.isoformat(sep=" ")
+    else:
+        facts["evaluation_date"] = horizon_date.isoformat()
+    return "data_gap", "evaluation_window_not_mature", facts
+
+
 def _person_tokens(row: Mapping[str, Any]) -> set[str]:
     return {
         _clean(row.get(key)).lower()
@@ -903,7 +984,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     horizon_rows, horizon_error = (
         _source_rows(evidence_materials, "evaluation_context.horizon")
-        if "LX0609-051" in selected
+        if {"LX0609-051", "LX0609-064"}.intersection(selected)
         else ((), "")
     )
     discharge_rows, discharge_error = _source_rows(
@@ -1869,6 +1950,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if event.surgery_end_time is None
                     ],
                 }))
+            elif rule_id == "LX0609-064" and (
+                window_gate := _postoperative_window_gate(
+                    surgery_events=surgery_events,
+                    horizon_rows=horizon_rows,
+                    horizon_error=horizon_error,
+                )
+            ) is not None:
+                final_state, reason_code, window_facts = window_gate
+                display.append((rule_id, window_facts))
             elif (
                 (daily_error or senior_error)
                 if rule_id == "LX0609-064"
@@ -2054,6 +2144,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "surgery_record",
                             "daily_course_record",
                             "senior_course_record",
+                            "evaluation_context.horizon",
                         )
                     ),
                     final_state=final_state,

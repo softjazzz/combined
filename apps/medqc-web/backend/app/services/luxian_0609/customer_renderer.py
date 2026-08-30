@@ -2457,6 +2457,30 @@ def customer_finding_from_controlled_facts(
         surgeon = "有" if facts.get("surgeon_round_present") is True else "无"
         return f"手术时间 {facts.get('surgery_time')}；术后应记录日期为 {required}，实际覆盖 {covered}；{surgeon}术者查房记录。"
 
+    if rule_id == "LX0609-064" and kind == "postoperative_three_day_window_not_mature":
+        surgery_times = joined("surgery_times") or "未提供"
+        deadline_dates = joined("deadline_dates") or "未提供"
+        evaluation = (
+            f"当前评价时间 {facts.get('evaluation_time')}"
+            if facts.get("evaluation_time")
+            else f"当前评价日期 {facts.get('evaluation_date')}（无具体时刻）"
+        )
+        return (
+            f"术后连续3天评价窗口尚未结束：手术结束时间 {surgery_times}，"
+            f"各台手术最晚应覆盖至 {deadline_dates}；{evaluation}，"
+            "本次暂不判定病程记录缺失。"
+        )
+
+    if rule_id == "LX0609-064" and kind == "postoperative_three_day_window_unavailable":
+        issue = facts.get("issue")
+        if issue == "authoritative_time_conflict":
+            return "手术结束时间与评价时点顺序冲突，暂无法核对术后三日病程要求。"
+        if issue == "source_unavailable":
+            return "评价时点来源不可用，暂无法核对术后三日病程要求。"
+        if issue == "source_truncated":
+            return "评价时点资料读取不完整，暂无法核对术后三日病程要求。"
+        return "缺少唯一评价时点，暂无法核对术后三日病程要求。"
+
     if rule_id == "LX0609-065" and kind == "postoperative_senior_round_check":
         rounds = joined("senior_round_times")
         return f"手术时间 {facts.get('surgery_time')}；术后 72 小时内上级医师查房时间：{rounds or '未找到'}。"

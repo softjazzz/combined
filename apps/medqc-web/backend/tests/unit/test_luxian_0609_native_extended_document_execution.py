@@ -126,6 +126,17 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
 
 
 async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset()):
+    rows_by_source = dict(rows_by_source)
+    if (
+        rule_id == "LX0609-064"
+        and "evaluation_context.horizon" not in rows_by_source
+    ):
+        # 064 的既有行为测试都描述已完成的术后三日窗口；显式传入 horizon
+        # 的测试覆盖未成熟/缺失边界，避免测试夹具暗中回退 snapshot.created_at。
+        rows_by_source["evaluation_context.horizon"] = ({
+            "horizon_date": "2099-01-01",
+            "basis": "evaluation_as_of",
+        },)
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -144,6 +155,15 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
 
 
 async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=frozenset()):
+    rows_by_source = dict(rows_by_source)
+    if (
+        "LX0609-064" in rule_ids
+        and "evaluation_context.horizon" not in rows_by_source
+    ):
+        rows_by_source["evaluation_context.horizon"] = ({
+            "horizon_date": "2099-01-01",
+            "basis": "evaluation_as_of",
+        },)
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -183,6 +203,12 @@ def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sourc
     assert "mr_bloodtrans" in sources
     assert "inpat_registration" in sources
     assert "labtest_item_report" in sources
+
+
+def test_064_binds_evaluation_horizon_for_postoperative_window_maturity() -> None:
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-064",))
+
+    assert "evaluation_context.horizon" in sources
 
 
 def test_071_binds_authoritative_and_explicit_order_change_sources() -> None:
@@ -1011,6 +1037,71 @@ async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
+
+
+@pytest.mark.asyncio
+async def test_064_does_not_judge_missing_future_postoperative_days_before_window_matures() -> None:
+    """评价时点尚未覆盖术后第3日时，不应提前判定病程缺失。"""
+
+    _, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E-not-mature",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-30 10:00:00+08",
+                    "surgeon": "张医生",
+                },
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-07-31 08:00:00", "author_name": "李医生"},
+            ),
+            "evaluation_context.horizon": (
+                {"horizon_date": "2026-07-31", "basis": "evaluation_as_of"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.asyncio
+async def test_064_window_maturity_gap_survives_customer_projection() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-064",),
+        {
+            "surgery_record": ({
+                "document_id": "E-projection-gap",
+                "surgery_end_time": "2026-07-30 10:00:00+08",
+                "surgeon": "张医生",
+            },),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-08-02",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-064",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "evaluation_window_not_mature"
+    assert canonical["customer_display_facts"] == {
+        "verification_kind": "postoperative_three_day_window_not_mature",
+        "surgery_times": ["2026-07-30 10:00:00"],
+        "deadline_dates": ["2026-08-02"],
+        "evaluation_date": "2026-08-02",
+    }
+    assert "术后连续3天评价窗口尚未结束" in canonical["findings"]
+    assert "本次暂不判定病程记录缺失" in canonical["findings"]
 
 
 @pytest.mark.asyncio

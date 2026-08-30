@@ -798,6 +798,8 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-064": {
             "postoperative_three_day_coverage_check",
             "postoperative_surgery_event_time_check",
+            "postoperative_three_day_window_not_mature",
+            "postoperative_three_day_window_unavailable",
         },
         "LX0609-065": {
             "postoperative_senior_round_check",
@@ -896,6 +898,10 @@ def safe_luxian_0609_customer_display_facts(
             "surgery_time", "required_postop_dates", "covered_postop_dates",
             "surgeon_round_present",
         },
+        "postoperative_three_day_window_not_mature": {
+            "surgery_times", "deadline_dates", "evaluation_time", "evaluation_date",
+        },
+        "postoperative_three_day_window_unavailable": {"issue"},
         "postoperative_surgery_event_time_check": {
             "performed_surgery_count", "missing_surgery_end_events",
         },
@@ -1088,6 +1094,67 @@ def safe_luxian_0609_customer_display_facts(
                 "verification_kind": kind,
                 "death_time": raw["death_time"],
                 "issue": raw["issue"],
+            }
+        if kind == "postoperative_three_day_window_unavailable":
+            issue = raw.get("issue")
+            if set(raw) != {"verification_kind", "issue"} or issue not in {
+                "authoritative_time_missing",
+                "authoritative_time_conflict",
+                "source_unavailable",
+                "source_truncated",
+            }:
+                return None
+            return {"verification_kind": kind, "issue": issue}
+        if kind == "postoperative_three_day_window_not_mature":
+            surgery_times = raw.get("surgery_times")
+            deadline_dates = raw.get("deadline_dates")
+            evaluation_time = raw.get("evaluation_time")
+            evaluation_date = raw.get("evaluation_date")
+            timestamp_pattern = (
+                r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}"
+                r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?"
+            )
+            expected_keys = (
+                {"verification_kind", "surgery_times", "deadline_dates", "evaluation_time"}
+                if evaluation_time is not None
+                else {"verification_kind", "surgery_times", "deadline_dates", "evaluation_date"}
+            )
+            if (
+                set(raw) != expected_keys
+                or not isinstance(surgery_times, (list, tuple))
+                or not 1 <= len(surgery_times) <= 100
+                or any(
+                    not isinstance(value, str)
+                    or re.fullmatch(timestamp_pattern, value) is None
+                    for value in surgery_times
+                )
+                or not isinstance(deadline_dates, (list, tuple))
+                or len(deadline_dates) != len(surgery_times)
+                or any(
+                    not isinstance(value, str)
+                    or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
+                    for value in deadline_dates
+                )
+                or (evaluation_time is None and evaluation_date is None)
+                or (evaluation_time is not None and evaluation_date is not None)
+            ):
+                return None
+            try:
+                if evaluation_time is not None:
+                    datetime.fromisoformat(evaluation_time.replace("Z", "+00:00"))
+                else:
+                    datetime.fromisoformat(f"{evaluation_date}T00:00:00")
+            except (TypeError, ValueError):
+                return None
+            return {
+                "verification_kind": kind,
+                "surgery_times": list(surgery_times),
+                "deadline_dates": list(deadline_dates),
+                **(
+                    {"evaluation_time": evaluation_time}
+                    if evaluation_time is not None
+                    else {"evaluation_date": evaluation_date}
+                ),
             }
         if kind in {
             "uncertain_diagnosis_discussion_check",
