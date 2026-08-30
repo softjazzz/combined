@@ -149,6 +149,12 @@ _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
 )
+_SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN = re.compile(
+    r"(?:拒绝|不同意|未(?:行|完成|进行)|尚未|无).{0,12}"
+    r"(?:感染专家|专家会诊|专家查房|会诊意见)|"
+    r"(?:感染专家|专家会诊|专家查房|会诊意见).{0,12}"
+    r"(?:未(?:行|完成|进行)|尚未|缺失|不存在|无)",
+)
 _INVASIVE_PROCEDURES = (
     "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
     "气管插管", "支气管镜", "动脉置管",
@@ -432,6 +438,16 @@ def _is_antimicrobial_effect_evaluation(row: Mapping[str, Any]) -> bool:
     # “治疗效果/疗效评价”本身可能描述镇痛、补液等非抗菌治疗；必须同时
     # 出现抗菌/抗感染语境或具体抗菌药名，才能作为本规则的疗效评价。
     return has_antimicrobial_context
+
+
+def _is_special_antimicrobial_expert_support(row: Mapping[str, Any]) -> bool:
+    """排除明确拒绝/未完成的会诊文字，避免否定句充当支持证据。"""
+
+    text = _material_text(row)
+    return (
+        _has_any_text((row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
+        and not _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_NEGATED_PATTERN.search(text)
+    )
 
 
 def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> bool:
@@ -1390,9 +1406,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 expert_support_rows = tuple(
                     row
                     for row in (*consultation_rows, *senior_rows)
-                    if _has_any_text(
-                        (row,), _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS
-                    )
+                    if _is_special_antimicrobial_expert_support(row)
                 )
                 timed_expert_supports = tuple(
                     value
