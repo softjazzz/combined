@@ -9,7 +9,15 @@
   >
     <template #title>
       <div class="customer-record-result-title">
-        <strong>病历质控结果</strong>
+        <div class="customer-record-result-title__brand">
+          <span class="customer-record-result-title__icon" aria-hidden="true">
+            <ShieldCheck :size="18" />
+          </span>
+          <span class="customer-record-result-title__heading">
+            <small>质控工作台</small>
+            <strong>病历质控结果</strong>
+          </span>
+        </div>
         <div
           class="customer-record-result-title__context"
           :aria-label="`当前病历：${focus?.label || '病历原文与质控结果对照'}`"
@@ -57,6 +65,7 @@
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
+import { ShieldCheck } from 'lucide-vue-next'
 import {
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
@@ -211,13 +220,48 @@ watch(
 .customer-record-result-title {
   width: 100%;
   display: grid;
-  grid-template-columns: auto minmax(280px, 1fr) auto;
+  grid-template-columns: 180px minmax(280px, 1fr) auto;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
 }
-.customer-record-result-title strong {
+
+.customer-record-result-title__brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.customer-record-result-title__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 10px;
+  background: #edf5ff;
+  color: #0066cc;
+}
+
+.customer-record-result-title__heading {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.customer-record-result-title__heading small {
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.customer-record-result-title__heading strong {
   color: #1d1d1f;
-  font-size: 17px;
+  font-size: 16px;
+  line-height: 21px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -226,11 +270,12 @@ watch(
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px 8px 10px;
+  padding: 7px 12px 7px 10px;
   border: 1px solid rgba(0, 102, 204, 0.12);
   border-left: 3px solid #0066cc;
-  border-radius: 10px;
-  background: rgba(0, 102, 204, 0.055);
+  border-radius: 11px;
+  background: #f5f9ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 .customer-record-result-title__context-label {
   flex: none;
@@ -254,15 +299,22 @@ watch(
   white-space: nowrap;
 }
 .customer-record-result-title__export {
-  min-height: 34px;
-  padding: 0 13px;
+  min-height: 36px;
+  padding: 0 14px;
   border: 1px solid rgba(0, 102, 204, 0.22);
-  border-radius: 9px;
-  background: rgba(0, 102, 204, 0.07);
+  border-radius: 10px;
+  background: #f7fbff;
   color: #0066cc;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
+  transition: 180ms ease;
+}
+.customer-record-result-title__export:hover:not(:disabled) {
+  border-color: rgba(0, 102, 204, 0.38);
+  background: #edf5ff;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.1);
+  transform: translateY(-1px);
 }
 .customer-record-result-title__export:disabled {
   cursor: wait;
@@ -273,6 +325,10 @@ watch(
   .customer-record-result-title {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
+  }
+
+  .customer-record-result-title__brand {
+    grid-column: 1 / -1;
   }
 
   .customer-record-result-title__context {
