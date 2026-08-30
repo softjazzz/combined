@@ -203,6 +203,7 @@ import { FileTextOutlined } from '@ant-design/icons-vue'
 import { useDefectHighlight } from '@/composables/useDefectHighlight'
 import type { DefectAnnotation } from '@/composables/useDefectHighlight'
 import { getAccessToken } from '@/utils/auth-token'
+import { resolveMedicalFieldLabel } from '@/utils/medicalFieldLabels'
 
 interface EmrDocumentSummary {
   id: string
@@ -415,12 +416,29 @@ const projectionNotice = computed(() =>
 const DOC_TYPE_LABELS: Record<string, string> = {
   admission_record: '入院记录',
   admission_note: '入院记录',
+  first_course_record: '首次病程记录',
+  daily_course_record: '日常病程记录',
+  senior_course_record: '上级医师查房记录',
+  consultation_record: '会诊记录',
   discharge_record: '出院记录',
   progress_note: '病程记录',
   course_record: '病程记录',
   surgery_record: '手术记录',
   operation_record: '手术记录',
+  surgery_application: '手术申请单',
+  presurg_summary: '术前小结',
+  anesthesia_record: '麻醉记录',
+  postsurg_firstcourse_record: '术后首次病程记录',
+  blood_application: '输血申请单',
+  bloodtrans_record: '输血记录',
+  transfusion_record: '输血记录',
+  exam_master: '检查记录',
+  exam_item_report: '检查报告',
+  labtest_master: '检验申请单',
+  labtest_item_report: '检验报告',
   order_record: '医嘱',
+  inpat_drug_order: '药品医嘱',
+  inpat_nondrug_order: '非药品医嘱',
   orders: '医嘱',
 }
 
@@ -550,6 +568,8 @@ function displayFieldLabel(field: EmrKvField): string {
     FIELD_LABELS[rawLabel] ||
     EN_LABELS[normalizeLabelKey(rawLabel)] ||
     EN_LABELS[normalizeLabelKey(rawKey)] ||
+    resolveMedicalFieldLabel(rawLabel) ||
+    resolveMedicalFieldLabel(rawKey) ||
     rawLabel ||
     rawKey ||
     '字段'
@@ -564,6 +584,8 @@ function displayColumnLabel(col: EmrTableColumn): string {
     FIELD_LABELS[rawLabel] ||
     EN_LABELS[normalizeLabelKey(rawLabel)] ||
     EN_LABELS[normalizeLabelKey(rawKey)] ||
+    resolveMedicalFieldLabel(rawLabel) ||
+    resolveMedicalFieldLabel(rawKey) ||
     rawLabel ||
     rawKey ||
     '字段'

@@ -808,6 +808,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { ReloadOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import { getDefectList, getRecordDetail, type DefectItem } from '@/api/qcAdmin'
+import { resolveMedicalFieldLabel } from '@/utils/medicalFieldLabels'
 import QCReviewActionBar from './QCReviewActionBar.vue'
 import {
   ORDER_FILTER_LABELS,
@@ -964,6 +965,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   labtest_master: '检验申请单',
   labtest_item_report: '检验明细',
   surgery_record: '手术记录',
+  surgery_application: '手术申请单',
   anesthesia_record: '麻醉记录',
   presurg_summary: '术前小结',
   presurg_discussion: '术前讨论',
@@ -971,6 +973,14 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   postsurg_firstcourse_record: '术后首次病程记录',
   discharge_record: '出院记录',
   death_record: '死亡记录',
+  blood_application: '输血申请单',
+  bloodtrans_record: '输血记录',
+  transfusion_record: '输血记录',
+  nursing_record: '护理记录',
+  transfer_in_record: '转入记录',
+  transfer_out_record: '转出记录',
+  handoff_record: '交接记录',
+  handover_record: '交班记录',
   inpat_drug_order: '药品医嘱',
   inpat_nondrug_order: '非药品医嘱',
 }
@@ -1373,6 +1383,8 @@ function prettifyFieldLabel(fieldName?: string): string {
   const normalized = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
   if (FIELD_LABELS[normalized]) return FIELD_LABELS[normalized]
   if (EN_FIELD_LABELS[normalized]) return EN_FIELD_LABELS[normalized]
+  const sharedLabel = resolveMedicalFieldLabel(raw)
+  if (sharedLabel) return sharedLabel
   return raw
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())

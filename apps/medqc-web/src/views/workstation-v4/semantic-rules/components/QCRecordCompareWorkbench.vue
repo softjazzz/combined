@@ -127,7 +127,7 @@
               :data-section-key="section.key"
             >
               <h3 class="record-content-section-title">
-                {{ section.label }}
+                {{ displaySectionLabel(section.label) }}
               </h3>
               <p class="record-content-section-text">
                 <span>{{ section.parts.before }}</span><mark
@@ -363,6 +363,7 @@ import {
   resolveMedicalDocumentTitle,
   resolveMedicalDocumentTypeLabel,
 } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 import type { EditableMedicalRecordDocument } from '@/views/workstation-v4/customer-sample-validation/types'
 import {
   buildSingleRecordQcResultItems,
@@ -517,6 +518,10 @@ function resolveIssueDetailLines(issue: QCRecordCompareIssue) {
 const selectedDocument = computed(
   () => documents.value.find((document) => document.key === selectedDocumentKey.value) || null,
 )
+function displaySectionLabel(value?: string): string {
+  return resolveSafeMedicalSectionLabel(value)
+}
+
 const contentLoading = computed(
   () => Boolean(selectedDocumentKey.value) && contentLoadingKey.value === selectedDocumentKey.value,
 )
@@ -530,7 +535,9 @@ const locationMessage = computed(() => {
     const section = selectedDocument.value?.sections?.find(
       (item) => item.key === matchedSectionKey.value,
     )
-    return section?.label ? `已定位到${section.label}章节` : '已定位到对应章节'
+    return section?.label
+      ? `已定位到${displaySectionLabel(section.label)}章节`
+      : '已定位到对应章节'
   }
   if (locationState.value === 'document') return '已定位到文书，未定位到具体片段'
   if (locationState.value === 'missing') return '未找到对应文书，请手动核对'

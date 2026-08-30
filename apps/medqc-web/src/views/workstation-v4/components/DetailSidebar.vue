@@ -366,9 +366,19 @@ function resolveRawNodeTitle(node: DocTreeNode): string {
 
 function resolveNodeTitle(node: DocTreeNode): string {
   const byNode = resolveRawNodeTitle(node)
-  if (byNode) return byNode
+  if (byNode && /[\u3400-\u9fff]/u.test(byNode)) return byNode
   const matched = resolveDocByNode(node)
   if (matched) return resolveDocLabel(matched)
+  if (byNode) {
+    const translated = resolveDocDisplayTitle({
+      type: node.doc_type,
+      label: byNode,
+      doc_type: node.doc_type,
+      document_title: byNode,
+      content: null,
+    })
+    return translated || byNode
+  }
   return String(node.doc_type || '').trim() || '未命名文书'
 }
 

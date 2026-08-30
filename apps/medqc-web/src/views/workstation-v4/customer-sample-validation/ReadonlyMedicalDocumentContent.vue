@@ -83,6 +83,7 @@ import type {
   EditableMedicalReportItem,
 } from './types'
 import { deduplicateMedicalDocumentSections } from './medicalDocumentDisplay'
+import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 
 const props = defineProps<{
   document: EditableMedicalRecordDocument
@@ -142,7 +143,7 @@ const sectionViews = computed<SectionView[]>(() =>
   deduplicateMedicalDocumentSections(props.document.sections || [])
     .map((section, sourceIndex) => ({
       key: section.key || `section-${sourceIndex}`,
-      label: String(section.label || '').trim() || '未命名章节',
+      label: resolveSafeMedicalSectionLabel(section.label, '未命名章节'),
       text: removeDuplicateSectionTitle(section),
       orderIndex: Number.isFinite(section.order_index)
         ? Number(section.order_index)
