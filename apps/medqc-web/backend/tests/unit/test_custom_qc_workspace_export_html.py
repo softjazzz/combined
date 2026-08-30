@@ -470,14 +470,12 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
     assert [row[1] for row in all_rows[1:]] == [
         "LX0609-001",
         "LX0609-021",
-        "LX0609-033",
     ]
     csv_rows = list(csv.reader(StringIO(csv_text)))
     detail_start = csv_rows.index(["全部明细"])
     assert [row[1] for row in csv_rows[detail_start + 2 :]] == [
         "LX0609-001",
         "LX0609-021",
-        "LX0609-033",
     ]
     expected_status_reasons = [
         (item["status"], item["reason_code"])
@@ -513,9 +511,11 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
     assert [row[0] for row in csv_rows[detail_start + 2 :]] == [
         item["record_ref"] for item in projected_job["items"]
     ]
-    for rule_id in ("LX0609-001", "LX0609-021", "LX0609-033"):
+    for rule_id in ("LX0609-001", "LX0609-021"):
         assert html.find(rule_id) >= 0
         assert csv_text.find(rule_id) >= 0
+    assert "LX0609-033" not in html
+    assert "LX0609-033" not in csv_text
 
     summary_rows = dict(workbook["管理摘要"].iter_rows(min_row=2, values_only=True))
     assert summary_rows["确定问题病历数"] == 1
@@ -609,3 +609,178 @@ def test_non_luxian_export_keeps_legacy_business_columns() -> None:
     assert "病历号" in csv_text
     assert "患者姓名" in csv_text
     assert "技术信息" in workbook.sheetnames
+
+
+def _lx0609_export_job(*items: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": "job-lx-rule-isolation",
+        "status": "completed",
+        "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+        "summary": {"total_records": 1},
+        "items": list(items),
+    }
+
+
+def _lx0609_compliant_item(rule_id: str) -> dict[str, Any]:
+    return {
+        "record_id": "record-1",
+        "rule_id": rule_id,
+        "status": "compliant",
+        "is_compliant": True,
+        "reason_code": "within_deadline",
+    }
+
+
+def test_luxian_customer_projection_filters_excluded_rule_but_rejects_unknown_rule() -> None:
+    visible = project_customer_safe_batch_job(
+        _lx0609_export_job(
+            _lx0609_compliant_item("LX0609-001"),
+            _lx0609_compliant_item("LX0609-033"),
+        ),
+        hmac_key=customer_safe_projection_key(),
+    )
+
+    assert [item["rule_id"] for item in visible["items"]] == ["LX0609-001"]
+    assert visible["summary"]["result_count"] == 1
+    assert visible["summary"]["status_counts"] == {"compliant": 1}
+
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        project_customer_safe_batch_job(
+            _lx0609_export_job(
+                _lx0609_compliant_item("LX0609-001"),
+                _lx0609_compliant_item("LX0609-999"),
+            ),
+            hmac_key=customer_safe_projection_key(),
+        )
+
+    missing_rule_id = _lx0609_compliant_item("LX0609-001")
+    missing_rule_id.pop("rule_id")
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        project_customer_safe_batch_job(
+            _lx0609_export_job(missing_rule_id),
+            hmac_key=customer_safe_projection_key(),
+        )
+
+
+def test_luxian_customer_exports_share_rule_isolation_for_csv_xlsx_and_html() -> None:
+    service = _service()
+    visible_job = _lx0609_export_job(
+        _lx0609_compliant_item("LX0609-001"),
+        _lx0609_compliant_item("LX0609-033"),
+    )
+
+    csv_text = service.export_batch_job_csv(job=visible_job).getvalue()
+    workbook = load_workbook(
+        BytesIO(service.export_batch_job_workbook(job=visible_job).getvalue())
+    )
+    html = service.export_batch_job_html(job=visible_job)
+    for exported in (csv_text, html):
+        assert "LX0609-001" in exported
+        assert "LX0609-033" not in exported
+    workbook_text = "\n".join(
+        str(cell)
+        for sheet in workbook.worksheets
+        for row in sheet.iter_rows(values_only=True)
+        for cell in row
+        if cell is not None
+    )
+    assert "LX0609-001" in workbook_text
+    assert "LX0609-033" not in workbook_text
+
+    malformed_job = _lx0609_export_job(
+        _lx0609_compliant_item("LX0609-001"),
+        _lx0609_compliant_item("LX0609-999"),
+    )
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        service.export_batch_job_csv(job=malformed_job)
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        service.export_batch_job_workbook(job=malformed_job)
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        service.export_batch_job_html(job=malformed_job)
+
+
+def test_luxian_customer_projection_preserves_case_counts_and_filters_nested_results() -> None:
+    allowed_item = _lx0609_compliant_item("LX0609-001")
+    excluded_item = _lx0609_compliant_item("LX0609-033")
+    child = {
+        "id": "child-rule-isolation",
+        "status": "completed",
+        "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+        "summary": {"total_records": 9, "success_count": 8, "failed_count": 1},
+        "items": [allowed_item, excluded_item],
+        "rule_results": [
+            {
+                "rule_code": "LX0609-001",
+                "total_records": 9,
+                "success_count": 8,
+                "failed_count": 1,
+                "items": [allowed_item],
+            },
+            {
+                "rule_code": "LX0609-033",
+                "total_records": 9,
+                "success_count": 8,
+                "failed_count": 1,
+                "items": [excluded_item],
+            },
+        ],
+    }
+    projected = project_customer_safe_batch_job(
+        {
+            "id": "parent-rule-isolation",
+            "status": "completed",
+            "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+            "summary": {"total_records": 9, "success_count": 8, "failed_count": 1},
+            "child_jobs": [child],
+        },
+        hmac_key=customer_safe_projection_key(),
+    )
+
+    # total/success/failed 是病例处理范围计数，不因客户隐藏规则而改写。
+    assert projected["summary"]["total_records"] == 9
+    assert projected["summary"]["success_count"] == 8
+    assert projected["summary"]["failed_count"] == 1
+    child_projection = projected["child_jobs"][0]
+    assert child_projection["summary"]["total_records"] == 9
+    assert child_projection["summary"]["success_count"] == 8
+    assert child_projection["summary"]["failed_count"] == 1
+    assert [item["rule_id"] for item in child_projection["items"]] == ["LX0609-001"]
+    assert child_projection["rule_results"][0]["total_records"] == 9
+    assert child_projection["rule_results"][0]["success_count"] == 8
+    assert child_projection["rule_results"][0]["failed_count"] == 1
+    assert child_projection["rule_results"][0]["issue_records"] == 0
+    assert len(child_projection["rule_results"]) == 1
+
+
+@pytest.mark.parametrize(
+    "malformed_rule",
+    [
+        {"rule_code": "LX0609-999", "items": []},
+        {"items": []},
+    ],
+    ids=["unknown", "missing"],
+)
+def test_luxian_customer_projection_rejects_unknown_or_missing_rule_result_identity(
+    malformed_rule: dict[str, Any],
+) -> None:
+    job = _lx0609_export_job(_lx0609_compliant_item("LX0609-001"))
+    job["rule_results"] = [malformed_rule]
+
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        project_customer_safe_batch_job(
+            job,
+            hmac_key=customer_safe_projection_key(),
+        )
+
+
+def test_luxian_customer_projection_rejects_missing_review_finding_identity() -> None:
+    job = _lx0609_export_job(_lx0609_compliant_item("LX0609-001"))
+    job["summary"]["review_report"] = {
+        "findings": [{"severity": "P1", "suggested_status": "uncertain"}]
+    }
+
+    with pytest.raises(ValueError, match="LX0609 客户结果解释合同不完整"):
+        project_customer_safe_batch_job(
+            job,
+            hmac_key=customer_safe_projection_key(),
+        )

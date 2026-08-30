@@ -434,8 +434,16 @@ class WorkstationAggregationService:
         time_buckets: Dict[str, int] = {}
 
         from ..luxian_0609_rule_master import load_luxian_0609_rule_master
+        from ..sample_validation_rule_sets import (
+            get_luxian_0609_customer_delivery_rule_ids,
+        )
 
-        rule_names = {entry.rule_id: entry.title for entry in load_luxian_0609_rule_master()}
+        rule_entries = tuple(load_luxian_0609_rule_master())
+        all_rule_ids = {entry.rule_id for entry in rule_entries}
+        customer_delivery_rule_ids = frozenset(
+            get_luxian_0609_customer_delivery_rule_ids()
+        )
+        rule_names = {entry.rule_id: entry.title for entry in rule_entries}
         for event in events:
             identity = event["identity"]
             root_job_id = _safe_text(event.get("root_job_id")).strip()
@@ -457,7 +465,19 @@ class WorkstationAggregationService:
                     break
                 rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).strip().upper()
                 status = _safe_text(item.get("status")).strip()
-                if not rule_id or rule_id in delivered_rule_ids or status not in status_counts:
+                if (
+                    not rule_id
+                    or rule_id not in all_rule_ids
+                    or status not in status_counts
+                ):
+                    valid_event = False
+                    break
+                # 033/034/035/041/042 are explicitly outside customer delivery;
+                # they must not inflate customer analytics, while unknown IDs
+                # remain fail-closed above.
+                if rule_id not in customer_delivery_rule_ids:
+                    continue
+                if rule_id in delivered_rule_ids:
                     valid_event = False
                     break
                 delivered_rule_ids.add(rule_id)

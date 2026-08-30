@@ -223,3 +223,37 @@ def test_analytics_rejects_reverse_completed_range(monkeypatch):
         assert str(exc) == "completed_from 不能晚于 completed_to"
     else:  # pragma: no cover - assertion clarity
         raise AssertionError("反向完成时间范围必须失败")
+
+
+def test_luxian_analytics_filters_excluded_and_unknown_rule_ids(monkeypatch):
+    """客户统计只接纳 70 条交付规则，未知规则不能污染状态或规则分布。"""
+
+    records = [_record("inst-a", "patient-a", "visit-a", "ICU")]
+    event = {
+        "root_job_id": "job-1",
+        "identity": ("inst-a", "patient-a", "visit-a"),
+        "department": "ICU",
+        "finished_at": datetime(2026, 8, 1, 9),
+        "items": [
+            {"rule_id": "LX0609-001", "status": "non_compliant"},
+            {"rule_id": "LX0609-033", "status": "non_compliant"},
+        ],
+    }
+    unknown_event = {
+        **event,
+        "root_job_id": "job-2",
+        "identity": ("inst-a", "patient-a", "visit-a"),
+        "items": [
+            {"rule_id": "LX0609-001", "status": "non_compliant"},
+            {"rule_id": "LX0609-999", "status": "non_compliant"},
+        ],
+    }
+
+    payload = _service(monkeypatch, records, [event, unknown_event]).get_luxian_0609_analytics()
+
+    assert payload["kpis"]["completed_event_total"] == 1
+    assert payload["kpis"]["canonical_invalid_or_missing_total"] == 1
+    assert payload["status_distribution"][0]["count"] == 1
+    assert [item["rule_id"] for item in payload["rule_distribution"]] == [
+        "LX0609-001"
+    ]

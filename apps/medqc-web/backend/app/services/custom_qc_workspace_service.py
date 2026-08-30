@@ -115,6 +115,99 @@ def _luxian_0609_catalog_rule_ids() -> frozenset[str]:
     )
 
 
+def _customer_result_rule_id(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    return _safe_text(
+        item.get("customer_rule_id")
+        or item.get("qc_point_id")
+        or item.get("rule_id")
+        or item.get("rule_code")
+    ).upper()
+
+
+def _iter_luxian_batch_sources(job: Dict[str, Any]):
+    """遍历批量任务自身及子任务，供客户结果合同校验使用。"""
+
+    pending: List[Dict[str, Any]] = [job]
+    seen: set[int] = set()
+    while pending:
+        source = pending.pop()
+        if not isinstance(source, dict) or id(source) in seen:
+            continue
+        seen.add(id(source))
+        yield source
+        for child in list(source.get("child_jobs") or source.get("children") or []):
+            if isinstance(child, dict):
+                pending.append(child)
+
+
+def _iter_luxian_batch_result_items(job: Dict[str, Any]):
+    for source in _iter_luxian_batch_sources(job):
+        for item in list(source.get("items") or []):
+            if isinstance(item, dict):
+                yield item
+        for raw_rule in list(source.get("rule_results") or []):
+            if not isinstance(raw_rule, dict):
+                continue
+            for item in list(raw_rule.get("items") or []):
+                if isinstance(item, dict):
+                    yield item
+        summary = source.get("summary")
+        if not isinstance(summary, dict):
+            continue
+        for raw_rule in list(summary.get("rule_results") or []):
+            if not isinstance(raw_rule, dict):
+                continue
+            for item in list(raw_rule.get("items") or []):
+                if isinstance(item, dict):
+                    yield item
+
+
+def _validate_luxian_batch_rule_ids(job: Dict[str, Any]) -> None:
+    """LX 客户边界只接受当前完整 75 条目录中的规则身份。"""
+
+    catalog = _luxian_0609_catalog_rule_ids()
+    for item in _iter_luxian_batch_result_items(job):
+        rule_id = _customer_result_rule_id(item)
+        if not rule_id or rule_id not in catalog:
+            raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+    # 规则分组可能没有明细项；其身份仍然必须经过同一份完整目录校验，
+    # 否则空的旧/未知分组会绕过客户投影边界。
+    for source in _iter_luxian_batch_sources(job):
+        raw_rule_results = list(source.get("rule_results") or [])
+        summary = source.get("summary")
+        if isinstance(summary, dict):
+            raw_rule_results.extend(list(summary.get("rule_results") or []))
+        for raw_rule in raw_rule_results:
+            if not isinstance(raw_rule, dict):
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            rule_id = _customer_result_rule_id(raw_rule)
+            if rule_id:
+                if rule_id not in catalog:
+                    raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+                continue
+            # 旧复核快照可能省略分组级 rule_code，但明细项仍带有
+            # 可验证的 rule_id。只有“单一且非空”的明细身份可以安全继承；
+            # 空分组或多规则混合分组一律拒绝，避免模糊结果进入客户输出。
+            item_rule_ids = {
+                _customer_result_rule_id(item)
+                for item in list(raw_rule.get("items") or [])
+                if isinstance(item, dict) and _customer_result_rule_id(item)
+            }
+            if len(item_rule_ids) != 1 or not item_rule_ids.issubset(catalog):
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+
+
+def _is_visible_luxian_customer_item(item: Dict[str, Any], *, enabled: bool) -> bool:
+    if not enabled:
+        return True
+    rule_id = _customer_result_rule_id(item)
+    if not rule_id or rule_id not in _luxian_0609_catalog_rule_ids():
+        raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+    return rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+
+
 _GENERIC_CUSTOMER_TEXT = {
     "compliant": ("未发现该质控点对应的明确问题。", "无需处理。"),
     "non_compliant": ("发现该质控点对应的明确问题。", "请按质控要求补充或修正。"),
@@ -502,8 +595,17 @@ def iter_unique_customer_result_source_items(
     job: Dict[str, Any],
     *,
     hmac_key: str,
+    _validate_luxian: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
     """按统一优先级返回供 API、复核和导出共用的去重原始行集。"""
+
+    validate_luxian = (
+        _is_luxian_0609_export_job(job)
+        if _validate_luxian is None
+        else _validate_luxian
+    )
+    if validate_luxian:
+        _validate_luxian_batch_rule_ids(job)
 
     children = [
         child
@@ -526,6 +628,8 @@ def iter_unique_customer_result_source_items(
     # 不能因为状态或原因码不同而把旧、新结论并排展示。
     unique_by_rule: Dict[tuple[str, str], tuple[tuple[int, int], Dict[str, Any]]] = {}
     for index, item in enumerate(raw_items):
+        if not _is_visible_luxian_customer_item(item, enabled=validate_luxian):
+            continue
         if not _is_current_rule_contract_result(item):
             continue
         projected = project_customer_safe_result_item(item, hmac_key=hmac_key)
@@ -549,12 +653,17 @@ def flatten_customer_safe_result_items(
     job: Dict[str, Any],
     *,
     hmac_key: str,
+    _validate_luxian: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
     """按内部结果原顺序生成供 API、复核和全部导出共用的唯一行集。"""
 
     return [
         project_customer_safe_result_item(item, hmac_key=hmac_key)
-        for item in iter_unique_customer_result_source_items(job, hmac_key=hmac_key)
+        for item in iter_unique_customer_result_source_items(
+            job,
+            hmac_key=hmac_key,
+            _validate_luxian=_validate_luxian,
+        )
     ]
 
 
@@ -590,7 +699,12 @@ def _safe_operational_progress(value: Any) -> Dict[str, Any]:
     return projected
 
 
-def _safe_review_report(value: Any, *, hmac_key: str) -> Optional[Dict[str, Any]]:
+def _safe_review_report(
+    value: Any,
+    *,
+    hmac_key: str,
+    _validate_luxian: bool = False,
+) -> Optional[Dict[str, Any]]:
     if not isinstance(value, dict):
         return None
     findings: List[Dict[str, Any]] = []
@@ -599,7 +713,12 @@ def _safe_review_report(value: Any, *, hmac_key: str) -> Optional[Dict[str, Any]
             continue
         # 复核 finding 是审核元数据，不是规则执行结果。直接投影其受控身份和
         # 状态字段，避免为了生成引用而伪造一条缺少解释事实的规则结果。
-        rule_id = _safe_text(raw_finding.get("rule_id")).upper()
+        rule_id = _customer_result_rule_id(raw_finding)
+        if _validate_luxian:
+            if not rule_id or rule_id not in _luxian_0609_catalog_rule_ids():
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            if rule_id in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS:
+                continue
         rule = get_luxian_0609_rule(rule_id) or {}
         canonical_status = _canonical_customer_status(
             {
@@ -675,10 +794,22 @@ def project_customer_safe_batch_job(
     job: Dict[str, Any],
     *,
     hmac_key: str,
+    _validate_luxian: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """生成 API/复核共用的客户任务 DTO，不回传原始 filters/summary 技术对象。"""
 
-    items = flatten_customer_safe_result_items(job, hmac_key=hmac_key)
+    validate_luxian = (
+        _is_luxian_0609_export_job(job)
+        if _validate_luxian is None
+        else _validate_luxian
+    )
+    if validate_luxian:
+        _validate_luxian_batch_rule_ids(job)
+    items = flatten_customer_safe_result_items(
+        job,
+        hmac_key=hmac_key,
+        _validate_luxian=validate_luxian,
+    )
     status_counts: Dict[str, int] = {}
     for item in items:
         status = _safe_text(item.get("status"), "uncertain")
@@ -696,6 +827,7 @@ def project_customer_safe_batch_job(
     review_report = _safe_review_report(
         raw_summary.get("review_report"),
         hmac_key=hmac_key,
+        _validate_luxian=validate_luxian,
     )
     safe_summary: Dict[str, Any] = {
         "total_records": _to_int(raw_summary.get("total_records"), _to_int(job.get("total_records"))),
@@ -821,10 +953,18 @@ def project_customer_safe_batch_job(
     for raw_rule in list(job.get("rule_results") or []):
         if not isinstance(raw_rule, dict):
             continue
+        raw_rule_id = _customer_result_rule_id(raw_rule)
+        if validate_luxian:
+            if not raw_rule_id or raw_rule_id not in _luxian_0609_catalog_rule_ids():
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+            if raw_rule_id in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS:
+                continue
         raw_rule_items = [
             project_customer_safe_result_item(item, hmac_key=hmac_key)
             for item in list(raw_rule.get("items") or [])
-            if isinstance(item, dict) and _is_current_rule_contract_result(item)
+            if isinstance(item, dict)
+            and _is_visible_luxian_customer_item(item, enabled=validate_luxian)
+            and _is_current_rule_contract_result(item)
         ]
         safe_rule_results.append(
             {
@@ -848,7 +988,11 @@ def project_customer_safe_batch_job(
             }
         )
     safe_children = [
-        project_customer_safe_batch_job(child, hmac_key=hmac_key)
+        project_customer_safe_batch_job(
+            child,
+            hmac_key=hmac_key,
+            _validate_luxian=validate_luxian,
+        )
         for child in list(job.get("child_jobs") or job.get("children") or [])
         if isinstance(child, dict)
     ]
@@ -1774,7 +1918,11 @@ def _export_customer_safe_html(
     hmac_key: str,
     canonical_items: Sequence[Dict[str, Any]],
 ) -> str:
-    canonical_job = {"id": job.get("id"), "items": list(canonical_items)}
+    canonical_job = {
+        "id": job.get("id"),
+        "filters": {"rule_set_key": LUXIAN_0609_RULE_SET_KEY},
+        "items": list(canonical_items),
+    }
     items, rows, summary = _customer_export_rows(
         canonical_job,
         hmac_key=hmac_key,

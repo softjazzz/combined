@@ -255,8 +255,8 @@ def test_review_service_flags_transfusion_without_strong_fact() -> None:
         _job(
             items=[
                 {
-                    "rule_id": "LX0609-041",
-                    "rule_code": "LX0609-041",
+                    "rule_id": "LX0609-044",
+                    "rule_code": "LX0609-044",
                     "status": "data_gap",
                     "findings": "发现相关事件但缺少输血知情同意书。",
                     "evidence": "应包含证据要素：输血申请、输血医嘱、输血记录。",

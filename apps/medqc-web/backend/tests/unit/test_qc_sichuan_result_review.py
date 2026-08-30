@@ -105,6 +105,56 @@ def test_workspace_response_does_not_swallow_unrelated_projection_errors(
         )
 
 
+@pytest.mark.parametrize("compact", [False, True], ids=["detail", "list"])
+def test_workspace_response_filters_excluded_rule_and_rejects_unknown_rule(
+    compact: bool,
+) -> None:
+    base_job = {
+        "id": "job-lx-rule-isolation",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "status": "completed",
+        "summary": {"total_records": 1},
+        "items": [
+            {
+                "record_id": "record-1",
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "is_compliant": True,
+                "reason_code": "within_deadline",
+            },
+            {
+                "record_id": "record-1",
+                "rule_id": "LX0609-033",
+                "status": "compliant",
+                "is_compliant": True,
+                "reason_code": "within_deadline",
+            },
+        ],
+    }
+
+    response = qc_sichuan._workspace_batch_response_item(base_job, compact=compact)
+    assert [item["rule_id"] for item in response["items"]] == (
+        [] if compact else ["LX0609-001"]
+    )
+    assert response["summary"]["result_count"] == 1
+
+    malformed_job = {
+        **base_job,
+        "items": [
+            *base_job["items"],
+            {
+                "record_id": "record-1",
+                "rule_id": "LX0609-999",
+                "status": "compliant",
+                "is_compliant": True,
+            },
+        ],
+    }
+    with pytest.raises(HTTPException) as exc_info:
+        qc_sichuan._workspace_batch_response_item(malformed_job, compact=compact)
+    assert exc_info.value.status_code == 409
+
+
 def _request() -> Any:
     return SimpleNamespace(headers={}, state=SimpleNamespace(trace_id="test-trace-id"))
 
@@ -262,10 +312,9 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
     assert safe_job["retry_count"] == 1
     assert safe_job["summary"]["performance_profile"]["latency_p95_ms"] == 88.5
     assert "raw_debug" not in safe_job["summary"]["performance_profile"]
-    assert safe_job["summary"]["issue_records"] == 1
+    assert safe_job["summary"]["issue_records"] == 0
     assert [item["status"] for item in safe_job["items"]] == [
         "ai_suggested_non_compliant",
-        "non_compliant",
         "data_gap",
         "technical_error",
     ]

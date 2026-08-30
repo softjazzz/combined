@@ -92,7 +92,6 @@ from ..services.sichuan_workspace_batch_worker import (
     _normalize_batch_output_mode,
     _normalize_max_refine_candidates,
     _normalize_run_mode,
-    _build_record_status_counts,
     _build_result_performance_profile,
     _sanitize_trace_value,
     _result_diagnostic_trace,
@@ -2265,7 +2264,15 @@ async def review_workspace_batch_job(
     job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
-    review_report = review_luxian_0609_batch_job(job)
+    try:
+        review_report = review_luxian_0609_batch_job(job)
+    except ValueError as exc:
+        if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR:
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail="历史质控结果交付合同不完整，无法安全展示",
+        ) from exc
     if review_report.get("scope") != LUXIAN_0609_RULE_SET_KEY:
         raise HTTPException(status_code=422, detail="当前复核 Loop 仅支持泸县0609质控任务")
     updated_job = workspace.update_batch_job_review_report(
@@ -2426,14 +2433,20 @@ async def export_workspace_batch_job(
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
     if normalized_format == "csv":
-        content = workspace.export_batch_job_csv(job=job)
+        try:
+            content = workspace.export_batch_job_csv(job=job)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         filename = f"sichuan_rules_{job_id}_{timestamp}.csv"
         return StreamingResponse(
             iter([content.getvalue().encode("utf-8-sig")]),
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
-    workbook = workspace.export_batch_job_workbook(job=job)
+    try:
+        workbook = workspace.export_batch_job_workbook(job=job)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     filename = f"sichuan_rules_{job_id}_{timestamp}.xlsx"
     return StreamingResponse(
         workbook,
