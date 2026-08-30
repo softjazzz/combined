@@ -1090,7 +1090,8 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_empty"
     assert dict(result.customer_display_facts)["LX0609-068"] == {
         "failure_kind": "senior_discharge_approval_missing",
         "discharge_date": "2026-07-03",
@@ -1283,7 +1284,8 @@ async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_empty"
 
 
 @pytest.mark.asyncio
@@ -1306,7 +1308,8 @@ async def test_068_does_not_treat_senior_rejection_as_discharge_approval() -> No
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_empty"
 
 
 @pytest.mark.asyncio
@@ -5376,7 +5379,8 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
     )
 
     reduced_decision = reduced[0]
-    assert reduced_decision.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced_decision.final_state is CustomerFinalState.DATA_GAP
+    assert reduced_decision.reason_code == "source_empty"
     assert dict(result.customer_display_facts)["LX0609-067"] == {
         "verification_kind": "predischarge_course_presence_check",
         "discharge_date": "2026-07-03",
@@ -5391,7 +5395,7 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
         result=result,
         reduced=reduced,
     )
-    assert canonical["status"] == "non_compliant"
+    assert canonical["status"] == "data_gap"
     assert "customer_evidence" not in canonical
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert result.llm_call_count == result.total_tokens == 0

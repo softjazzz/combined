@@ -62,8 +62,8 @@ def evaluate_discharge_documentation_timeliness(
     actual_interval_hours: float | None = None
     if not discharge_rows:
         final_state, reason_code = (
-            "non_compliant",
-            "required_document_missing",
+            "data_gap",
+            "source_empty",
         )
     elif record_time is None:
         final_state, reason_code = "data_gap", "authoritative_time_missing"

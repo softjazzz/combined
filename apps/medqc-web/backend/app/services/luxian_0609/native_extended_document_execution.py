@@ -2156,11 +2156,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                         daily_error or senior_error,
                     )
                 else:
-                    final_state = "compliant" if present else "non_compliant"
+                    final_state = "compliant" if present else "data_gap"
                     reason_code = (
                         "requirement_satisfied"
                         if present
-                        else "required_document_missing"
+                        else "source_empty"
                     )
                     render_display = True
                 if render_display:
