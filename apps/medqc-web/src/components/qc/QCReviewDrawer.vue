@@ -1403,6 +1403,18 @@ function buildDocFieldList(doc?: ReviewDocItem | null) {
     }))
 }
 
+function buildDocDisplayFieldList(doc?: ReviewDocItem | null) {
+  const fullText = `${safeText(doc?.content)}${(doc?.sections || [])
+    .map((section) => safeText(section?.text))
+    .join('')}`.replace(/\s+/gu, '')
+  return buildDocFieldList(doc).filter((field) => {
+    const key = safeText(field.key).toLowerCase().replace(/[\s-]+/g, '_')
+    const isContentField = ['record_content', 'recordcontent', 'recordcontenttext', 'content', 'text'].includes(key)
+    const value = safeText(field.value).replace(/\s+/gu, '')
+    return !(isContentField && value && fullText.includes(value))
+  })
+}
+
 function shouldSuppressPlainContentFallback(doc?: ReviewDocItem | null): boolean {
   if (!doc) return false
   const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
@@ -1968,7 +1980,7 @@ const showOrderDoctorColumn = computed(() =>
   filteredOrderRows.value.some((row) => Boolean(row.doctor)),
 )
 
-const currentDocFieldList = computed(() => buildDocFieldList(currentDoc.value))
+const currentDocFieldList = computed(() => buildDocDisplayFieldList(currentDoc.value))
 
 const currentDocSectionList = computed(() => {
   const sections = currentDoc.value?.sections || []
