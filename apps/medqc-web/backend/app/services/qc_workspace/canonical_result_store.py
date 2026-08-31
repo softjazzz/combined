@@ -716,6 +716,10 @@ class CanonicalResultStore:
                     and candidate_rule_id.startswith("LX0609-")
                     and not record_item.get("customer_display_facts")
                     and not record_item.get("criterion_results")
+                    and (
+                        isinstance(record_item.get("diagnostic_trace"), dict)
+                        or isinstance(record_item.get("metadata"), dict)
+                    )
                 ):
                     record_item["status"] = "data_gap"
                     record_item["result_status"] = "data_gap"
