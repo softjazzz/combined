@@ -133,7 +133,6 @@
                 @click.stop="openResult(row.recordKey)"
               >
                 {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
-                <span v-if="row.resultStatus !== 'not-run'" aria-hidden="true">→</span>
               </button>
             </td>
           </tr>
