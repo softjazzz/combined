@@ -683,6 +683,70 @@ def _normalize_date_field(date_field: Optional[str]) -> str:
 
 
 
+def _debug_evidence_projection(item: Dict[str, Any]) -> Dict[str, Any]:
+    """为调试快照保留两种结构化证据字段，并避免投影时丢失定位信息。"""
+
+    projected = dict(item)
+    evidence_items = item.get("evidence_items")
+    customer_evidence = item.get("customer_evidence")
+    canonical = evidence_items if isinstance(evidence_items, list) else []
+    customer = customer_evidence if isinstance(customer_evidence, list) else []
+    generic_evidence = item.get("evidence")
+    if not canonical and not customer and isinstance(generic_evidence, list):
+        canonical = generic_evidence
+        customer = generic_evidence
+    # Canonical 结果和客户 Envelope 的历史任务可能只保存其中一侧；
+    # 调试快照补齐缺失侧，但不改写已有数组或业务状态。
+    if not canonical and customer:
+        canonical = customer
+    if not customer and canonical:
+        customer = canonical
+    removed_keys: set[str] = set()
+    projected["evidence_items"] = _sanitize_trace_value(canonical, removed_keys)
+    projected["customer_evidence"] = _sanitize_trace_value(customer, removed_keys)
+    return projected
+
+
+def _debug_snapshot_items(job: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """按批量任务真实结果来源收集调试条目（父任务优先使用子任务）。"""
+
+    children = [
+        child
+        for child in list(job.get("child_jobs") or job.get("children") or [])
+        if isinstance(child, dict)
+    ]
+    sources = children or [job]
+    items: List[Dict[str, Any]] = []
+    for source in sources:
+        items.extend(item for item in list(source.get("items") or []) if isinstance(item, dict))
+    if not items:
+        # 兼容尚未把 rule_results 展平到 items_json 的历史任务。
+        for source in sources:
+            for rule_result in list(source.get("rule_results") or []):
+                if isinstance(rule_result, dict):
+                    for raw_item in list(rule_result.get("items") or []):
+                        if not isinstance(raw_item, dict):
+                            continue
+                        item = dict(raw_item)
+                        item.setdefault("rule_job_id", rule_result.get("id"))
+                        item.setdefault("rule_code", rule_result.get("rule_code"))
+                        item.setdefault("rule_name", rule_result.get("rule_name"))
+                        items.append(item)
+    if not items:
+        summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+        for rule_result in list(summary.get("rule_results") or []):
+            if isinstance(rule_result, dict):
+                for raw_item in list(rule_result.get("items") or []):
+                    if not isinstance(raw_item, dict):
+                        continue
+                    item = dict(raw_item)
+                    item.setdefault("rule_job_id", rule_result.get("id"))
+                    item.setdefault("rule_code", rule_result.get("rule_code"))
+                    item.setdefault("rule_name", rule_result.get("rule_name"))
+                    items.append(item)
+    return [_debug_evidence_projection(item) for item in items]
+
+
 def _build_debug_snapshot(
     job: Dict[str, Any],
     *,
@@ -696,7 +760,7 @@ def _build_debug_snapshot(
         next((item for item in rules if str(item.get("status") or "").lower() == "running"), None)
         or (rules[0] if rules else None)
     )
-    all_items = list(job.get("items") or [])
+    all_items = _debug_snapshot_items(job)
     all_failed = list(job.get("failed_records") or [])
     if rule_job_id:
         all_items = [item for item in all_items if str(item.get("rule_job_id") or "") == str(rule_job_id)]

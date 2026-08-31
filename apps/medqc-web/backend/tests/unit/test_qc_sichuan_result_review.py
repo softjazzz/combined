@@ -325,3 +325,51 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
     assert "王某某" not in dumped
     assert "指标泄漏" not in dumped
     assert "原始正文不得回传" not in dumped
+
+
+def test_debug_snapshot_preserves_structured_evidence_fields_and_aliases_missing_side() -> None:
+    evidence = {
+        "source_ref": "src_0123456789abcdef01234567",
+        "source_document_id": "doc-1",
+        "record_time": "2026-08-31 10:20:00",
+        "evidence_excerpt": "术前讨论已完成",
+    }
+    snapshot = qc_sichuan._build_debug_snapshot(
+        {
+            "id": "job-1",
+            "status": "completed",
+            "items": [{"rule_job_id": "rule-1", "status": "non_compliant", "evidence_items": [evidence]}],
+        }
+    )
+
+    item = snapshot["recent_items"][0]
+    assert item["evidence_items"][0] == evidence
+    assert item["customer_evidence"][0] == evidence
+
+
+def test_debug_snapshot_collects_parent_child_items_without_changing_status() -> None:
+    evidence = {
+        "source_ref": "src_abcdefabcdefabcdefabcdef",
+        "source_document_id": "doc-2",
+        "record_time": "2026-08-30",
+        "evidence_excerpt": "病程记录摘录",
+    }
+    snapshot = qc_sichuan._build_debug_snapshot(
+        {
+            "id": "parent-1",
+            "status": "completed",
+            "job_kind": "parent",
+            "items": [],
+            "children": [
+                {
+                    "id": "child-1",
+                    "items": [{"rule_job_id": "rule-2", "status": "data_gap", "customer_evidence": [evidence]}],
+                }
+            ],
+        }
+    )
+
+    item = snapshot["recent_items"][0]
+    assert item["status"] == "data_gap"
+    assert item["evidence_items"][0]["source_ref"] == evidence["source_ref"]
+    assert item["customer_evidence"][0]["evidence_excerpt"] == evidence["evidence_excerpt"]
