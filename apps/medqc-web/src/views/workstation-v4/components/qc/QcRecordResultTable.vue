@@ -487,20 +487,20 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 
 .qc-record-result-table__result-button {
   display: inline-flex;
-  min-width: 92px;
-  height: 34px;
+  min-width: 84px;
+  height: 30px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 0 11px;
   border: 1px solid rgba(148, 163, 184, 0.32);
   border-radius: 8px;
   background: #fff;
   color: #5b6b84;
-  box-shadow: 0 2px 8px rgba(15, 42, 74, 0.06);
+  box-shadow: 0 1px 5px rgba(15, 42, 74, 0.05);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   transition:
     color 180ms ease,
@@ -514,13 +514,13 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
   border-color: #0066cc;
   background: #0066cc;
   color: #fff;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.2);
+  box-shadow: 0 3px 9px rgba(0, 102, 204, 0.16);
 }
 
 .qc-record-result-table__result-button:hover {
   color: #0066cc;
   border-color: #0066cc;
-  box-shadow: 0 6px 16px rgba(0, 102, 204, 0.18);
+  box-shadow: 0 4px 11px rgba(0, 102, 204, 0.15);
   transform: translateY(-1px);
 }
 
