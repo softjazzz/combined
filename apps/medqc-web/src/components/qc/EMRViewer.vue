@@ -339,7 +339,9 @@ const isStructuredLayout = computed(
 )
 
 function normalizeDisplayText(value: unknown): string {
-  return String(value || '').replace(/\s+/gu, '').trim()
+  return String(value || '')
+    .replace(/\s+/gu, '')
+    .trim()
 }
 
 /**
@@ -366,7 +368,14 @@ const displayRenderBlocks = computed<EmrRenderBlock[]>(() => {
             paragraph === value ||
             paragraph.startsWith(value) ||
             paragraph.startsWith(fieldWithTitle) ||
-            paragraph.startsWith(`${displayLabel}：${value}`),
+            paragraph.startsWith(`${displayLabel}：${value}`) ||
+            // record_content 常被结构化接口同时投影为“基础信息”和“正文”。
+            // 正文可能带有“新建S章节:”等前缀，不能只判断 startsWith(value)。
+            // 仅对正文类字段做包含判断，避免误删普通字段在长正文中的偶然引用。
+            (['record_content', 'recordContent', 'content', 'text'].includes(
+              String(field.key || ''),
+            ) &&
+              paragraph.includes(value)),
         )
         return !isDuplicatedByParagraph
       })
