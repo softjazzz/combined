@@ -24,6 +24,7 @@ from .native_execution import build_luxian_0609_native_result
 from .source_manifest import QueryStatus
 from .source_evidence_reader import (
     has_qualified_traditional_surgery_row,
+    has_trusted_performed_surgery,
 )
 from .surgery_event_association import count_associated_performed_surgery_events
 from .surgery_applicability import resolve_surgery_applicability
@@ -1348,6 +1349,65 @@ def _clean_presurg_body(value: Any) -> str:
     return candidate
 
 
+def _normalized_surgery_name(value: Any) -> str:
+    return re.sub(r"[\s、，,。；;：:（）()\[\]【】]+", "", str(value or "")).casefold()
+
+
+def _summary_surgery_name(value: Any) -> str:
+    text = _clean_presurg_body(value)
+    if not text:
+        return ""
+    match = re.search(
+        r"(?:手术名称|手术方式)\s*[:：]\s*(.*?)(?=\s*(?:手术时间|麻醉方式|手术医师|术者签名|医师签名)\s*[:：]|$)",
+        text,
+    )
+    return (match.group(1) if match else "").strip()
+
+
+def _summary_matches_surgery(summary_name: str, surgery_name: Any) -> bool:
+    left = _normalized_surgery_name(summary_name)
+    right = _normalized_surgery_name(surgery_name)
+    if not left or not right:
+        return False
+    if left == right or left in right:
+        return True
+    components = [part for part in re.split(r"[+＋、，,；;]", left) if len(part) >= 4]
+    if not components:
+        return False
+    matched = sum(1 for part in components if part in right)
+    # 允许源系统在完整术式中插入部位/入路修饰，但至少要命中两个
+    # 有辨识度的术式片段；单一短词不作为安全关联依据。
+    return matched >= 2 and matched * 2 >= len(components)
+
+
+def _try_associate_single_presurg_summary_to_surgeries(
+    *,
+    summary_rows: Sequence[Mapping[str, Any]],
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[int, int] | None:
+    """用术式名称将一份术前小结安全关联到手术记录；无法唯一匹配则返回 None。"""
+    if len(summary_rows) != 1:
+        return None
+    summary_name = _summary_surgery_name(summary_rows[0].get("record_content"))
+    if not summary_name:
+        return None
+    try:
+        surgery_rows = tuple(materials.rows("surgery_record"))
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return None
+    performed = [
+        row
+        for row in surgery_rows
+        if has_trusted_performed_surgery(source_key="surgery_record", row=row)
+    ]
+    if len(performed) < 2:
+        return None
+    matches = [row for row in performed if _summary_matches_surgery(summary_name, row.get("surgery_name"))]
+    if len(matches) != 1:
+        return None
+    return len(performed), 1
+
+
 async def _typed_029_outcome(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -1418,23 +1478,48 @@ async def _typed_029_outcome(
     performed_event_count, count_reason = count_associated_performed_surgery_events(
         materials
     )
-    if performed_event_count is None:
+    if performed_event_count is None and count_reason != "association_failed":
         return (
             _SurgeryDocumentOutcome(
                 "LX0609-029", "data_gap", count_reason, "program"
             ),
             0, 0, 0, 0, 0.0,
         )
-    if performed_event_count > 1:
-        # 当前资料合同没有稳定的“术前小结 ↔ 单台已实施手术”关联字段；
-        # 因而一份或多份非空小结都不能覆盖多台手术。完全无小结已在上方
-        # 由 complete-empty 来源明确证明为逐台缺失，才允许输出不合规。
-        return (
-            _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", "association_failed", "program"
-            ),
-            0, 0, 0, 0, 0.0,
+    if (
+        (performed_event_count is None and count_reason == "association_failed")
+        or (performed_event_count is not None and performed_event_count > 1)
+    ):
+        associated_counts = _try_associate_single_presurg_summary_to_surgeries(
+            summary_rows=summary_rows,
+            materials=materials,
         )
+        if associated_counts is not None:
+            performed_event_count, associated_summary_count = associated_counts
+            if associated_summary_count < performed_event_count:
+                return (
+                    _SurgeryDocumentOutcome(
+                        "LX0609-029",
+                        "non_compliant",
+                        "preop_summary_missing",
+                        "program",
+                        {
+                            "failure_kind": "surgery_document_missing",
+                            "target_document": "presurg_summary",
+                            "performed_surgery_confirmed": True,
+                        },
+                    ),
+                    0, 0, 0, 0, 0.0,
+                )
+        if performed_event_count is None or performed_event_count > 1:
+            # 当前资料合同没有稳定的“术前小结 ↔ 单台已实施手术”关联字段；
+            # 因而一份或多份非空小结都不能覆盖多台手术。完全无小结已在上方
+            # 由 complete-empty 来源明确证明为逐台缺失，才允许输出不合规。
+            return (
+                _SurgeryDocumentOutcome(
+                    "LX0609-029", "data_gap", "association_failed", "program"
+                ),
+                0, 0, 0, 0, 0.0,
+            )
     if any(_clean_presurg_body(row.get("record_content")) for row in summary_rows):
         return (
             _SurgeryDocumentOutcome(

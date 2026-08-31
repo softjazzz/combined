@@ -152,6 +152,21 @@ def _typed_029_session(
                     {"surgery_begin_time": "2026-01-01 08:00:00+08"},
                     {"surgery_begin_time": "2026-01-01 08:00:00+08"},
                 )
+            elif surgery_mode == "multi_named":
+                rows = (
+                    {
+                        "document_id": "surgery-document-a",
+                        "surgery_begin_time": "2026-01-01 08:00:00+08",
+                        "surgery_end_time": "2026-01-01 10:00:00+08",
+                        "surgery_name": "开颅右侧颅内血肿清除术+去骨瓣减压术+颅内压监测探头置入术",
+                    },
+                    {
+                        "document_id": "surgery-document-b",
+                        "surgery_begin_time": "2026-01-02 08:00:00+08",
+                        "surgery_end_time": "2026-01-02 09:00:00+08",
+                        "surgery_name": "右眼球破裂修补术",
+                    },
+                )
             elif surgery_mode == "nonexact":
                 rows = ({"surgery_begin_time": "2026-01-01 08:00"},)
             else:
@@ -370,6 +385,40 @@ async def test_typed_029_multiple_surgery_rows_with_one_summary_requires_associa
     assert reduced[0].final_state.value == "data_gap"
     assert reduced[0].reason_code == "association_failed"
     assert result.customer_display_facts == ()
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_matches_named_summary_and_reports_unmatched_surgery():
+    session = _typed_029_session(
+        surgery_mode="multi_named",
+        summary_rows=(
+            {
+                "record_content": (
+                    "手术名称：开颅右侧颅内血肿清除术+去骨瓣减压术+颅内压监测探头置入术。"
+                    "手术时间：今日急诊。手术医师签名：韩平"
+                )
+            },
+        ),
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "non_compliant"
+    assert reduced[0].reason_code == "required_document_missing"
     assert result.llm_call_count == result.total_tokens == 0
 
 
