@@ -312,6 +312,7 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "item_no",
     ),
     "inpat_drug_order": (
+        "order_id",
         "order_type",
         "order_class",
         "order_item_name",
@@ -339,6 +340,7 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "order_status",
     ),
     "inpat_nondrug_order": (
+        "order_id",
         "order_type",
         "order_class",
         "order_item_name",
@@ -1204,6 +1206,8 @@ def _resolve_document_id(document_type: str, payload: dict[str, Any]) -> str:
         return document_id or _normalize_text(payload.get("pathology_exam_id"))
     if document_type in {"surgery_application", "blood_application"}:
         return document_id or _merge_field_text(payload, "application_id", "order_id")
+    if document_type in {"inpat_drug_order", "inpat_nondrug_order"}:
+        return document_id or _normalize_text(payload.get("order_id"))
     if document_type == "exam_master":
         return document_id or _merge_field_text(payload, "exam_id", "order_id")
     if document_type == "labtest_master":

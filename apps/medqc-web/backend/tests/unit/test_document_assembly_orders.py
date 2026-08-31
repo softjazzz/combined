@@ -1,6 +1,9 @@
 import pytest
 
-from app.services.document_assembly.assembler import assemble_document
+from app.services.document_assembly.assembler import (
+    assemble_document,
+    build_document_select_columns,
+)
 
 
 @pytest.mark.parametrize(
@@ -68,3 +71,22 @@ def test_order_document_should_preserve_structured_display_fields() -> None:
     assert fields["start_time"] == "2026-08-28 08:00:00"
     assert fields["stop_time"] == "2026-08-30 08:00:00"
     assert fields["drug_specification"] == "1g/瓶"
+
+
+@pytest.mark.parametrize("document_type", ["inpat_drug_order", "inpat_nondrug_order"])
+def test_order_document_should_use_order_id_as_stable_document_identity(
+    document_type: str,
+) -> None:
+    document = assemble_document(
+        document_type,
+        {"order_id": "ORD-RED-1", "update_time": "2026-08-31 10:00:00"},
+    )
+
+    assert document.document_id == "ORD-RED-1"
+
+
+@pytest.mark.parametrize("document_type", ["inpat_drug_order", "inpat_nondrug_order"])
+def test_order_select_columns_should_include_order_id(document_type: str) -> None:
+    columns = build_document_select_columns(document_type, {"order_id", "update_time"})
+
+    assert "order_id" in columns
