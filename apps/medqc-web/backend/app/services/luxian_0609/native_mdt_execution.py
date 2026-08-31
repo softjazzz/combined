@@ -74,6 +74,15 @@ _TYPED_EVALUATOR_VERSION = "mdt-ruledecision-shadow-v2"
 _DECISION_SOURCE_KEYS = frozenset(
     {"mr_surgery", "presurg_discussion", "consultation_record"}
 )
+_EMERGENCY_SURGERY_PATTERN = re.compile(
+    r"(?:今日|本次|当日)?(?:急诊手术|急诊抢救|紧急手术|紧急抢救)|"
+    r"(?:为|因|系)?紧急.{0,12}(?:抢救|挽救生命|救命)|"
+    r"手术时间\s*[:：]?\s*今日急诊",
+    re.IGNORECASE,
+)
+_NON_EMERGENCY_SURGERY_PATTERN = re.compile(
+    r"(?:非|不是|不属于|排除).{0,8}(?:急诊|紧急|抢救)"
+)
 
 
 class MdtLLMClient(Protocol):
@@ -318,7 +327,7 @@ def _typed_source_blockers(
         )
 
     conditional: _MdtRuleOutcome | None = None
-    for source_key in ("presurg_discussion", "consultation_record"):
+    for source_key in ("presurg_summary", "presurg_discussion", "consultation_record"):
         observation = observations.get(source_key)
         if observation is None:
             return (
@@ -340,6 +349,31 @@ def _typed_source_blockers(
                 "data_gap", "data_gap", "source_truncated"
             )
     return None, conditional
+
+
+def _is_emergency_surgery_text(text: str) -> bool:
+    """只接受明确的急诊/紧急抢救表述，排除“非急诊”等否定语句。"""
+
+    normalized = _clean(text)
+    return bool(
+        normalized
+        and _EMERGENCY_SURGERY_PATTERN.search(normalized)
+        and not _NON_EMERGENCY_SURGERY_PATTERN.search(normalized)
+    )
+
+
+def _has_emergency_surgery_exception(
+    *,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> bool:
+    """从同一 Evidence Session 的术前小结/手术主表读取040豁免事实。"""
+
+    for source_key in ("presurg_summary", "mr_surgery"):
+        for row in materials.rows(source_key):
+            text = _document_text(row)
+            if _is_emergency_surgery_text(text):
+                return True
+    return False
 
 
 def _typed_decision_from_outcome(
@@ -533,6 +567,8 @@ async def execute_luxian_0609_native_mdt_rule(
                 facts["mdt_discussion_state"] = "missing"
             elif outcome.status == "data_gap":
                 facts["mdt_discussion_state"] = "unknown"
+            elif outcome.status == "not_applicable" and facts.get("mdt_exception"):
+                facts["mdt_discussion_state"] = "exempt"
         return _finalize(
             outcome=outcome,
             typed_requested=typed_requested,
@@ -598,6 +634,23 @@ async def execute_luxian_0609_native_mdt_rule(
             return finish(
                 _MdtRuleOutcome(
                     "not_applicable", "trigger_absent", "level4_surgery_absent"
+                )
+            )
+        # 规则口径明确豁免“以紧急抢救生命为目的的急诊手术”。
+        # 例外必须来自同一快照中的明确文本，不能仅凭急诊科室、麻醉方式
+        # 或手术名称推断；命中后直接返回不适用，不再要求术前 MDT。
+        if _has_emergency_surgery_exception(materials=evidence_materials):
+            display_facts.update(
+                {
+                    "emergency_surgery_confirmed": True,
+                    "mdt_exception": "emergency_lifesaving_surgery",
+                }
+            )
+            return finish(
+                _MdtRuleOutcome(
+                    "not_applicable",
+                    "trigger_absent",
+                    "emergency_surgery_mdt_exception",
                 )
             )
     if not all(

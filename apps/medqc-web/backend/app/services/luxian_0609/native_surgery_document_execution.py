@@ -1416,6 +1416,21 @@ def _summary_surgery_name(value: Any) -> str:
     return (match.group(1) if match else "").strip()
 
 
+def _summary_surgery_name_from_row(row: Mapping[str, Any]) -> str:
+    """优先读取结构化术式字段，正文没有可解析标题时再回退正文。"""
+
+    for field in (
+        "planned_surgery_name",
+        "surgery_name",
+        "planned_surgery",
+        "surgery_method",
+    ):
+        value = _clean_presurg_body(row.get(field))
+        if value:
+            return value
+    return _summary_surgery_name(row.get("record_content"))
+
+
 def _summary_matches_surgery(summary_name: str, surgery_name: Any) -> bool:
     left = _normalized_surgery_name(summary_name)
     right = _normalized_surgery_name(surgery_name)
@@ -1448,7 +1463,7 @@ def _try_associate_single_presurg_summary_to_surgeries(
     """用术式名称将一份术前小结安全关联到手术记录；无法唯一匹配则返回 None。"""
     if len(summary_rows) != 1:
         return None
-    summary_name = _summary_surgery_name(summary_rows[0].get("record_content"))
+    summary_name = _summary_surgery_name_from_row(summary_rows[0])
     if not summary_name:
         return None
     try:

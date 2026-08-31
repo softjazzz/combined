@@ -711,6 +711,43 @@ async def test_missing_mdt_document_is_programmatic_non_compliant(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "surgery_name": "开颅血肿清除术",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "presurg_summary": [
+                {
+                    "record_content": "手术名称：开颅血肿清除术。手术时间：今日急诊。麻醉方式：气管插管全麻。",
+                }
+            ],
+            "presurg_discussion": [],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
+    assert execution.decisions[0].reason_code == "trigger_absent_complete"
+    assert dict(execution.customer_display_facts)["LX0609-040"]["mdt_exception"] == "emergency_lifesaving_surgery"
+
+
+@pytest.mark.asyncio
 async def test_multiple_level4_sessions_without_operation_linkage_are_data_gap(
     monkeypatch,
 ):

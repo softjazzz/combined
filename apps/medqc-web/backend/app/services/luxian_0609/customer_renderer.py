@@ -2219,6 +2219,8 @@ def customer_finding_from_controlled_facts(
             "national_catalog": "国家临床版手术分级目录",
         }.get(str(facts.get("surgery_level_source") or ""), "受控手术分级目录")
         state = str(facts.get("mdt_discussion_state") or "")
+        if state == "exempt" and facts.get("mdt_exception") == "emergency_lifesaving_surgery":
+            return f"已确认实施四级手术 {procedure}，属于紧急抢救生命的急诊手术，按规则免除术前多学科讨论。"
         if state == "missing":
             return f"已确认实施四级手术 {procedure}（等级来源：{source}），未找到术前多学科讨论记录。"
         if state == "completed":
