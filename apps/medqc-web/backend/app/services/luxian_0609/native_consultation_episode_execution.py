@@ -2790,7 +2790,20 @@ def _finish_statuses(
                 _decision(
                     rule_id=rule_id,
                     status=status,
-                    reason_code=reason_code,
+                    # 020/023 的语义输出不完整属于可交付的
+                    # evaluation_unknown。保留普通结果的
+                    # model_invalid_output 原因，但 typed decision 必须使用
+                    # reducer 合同允许的 unknown 原因，避免被绑定层误判为
+                    # decision_contract_violation。
+                    reason_code=(
+                        "semantic_output_unknown"
+                        if (
+                            rule_id in {"LX0609-020", "LX0609-023"}
+                            and status == "evaluation_unknown"
+                            and reason_code == "model_invalid_output"
+                        )
+                        else reason_code
+                    ),
                     snapshot=evidence_snapshot,
                 )
             )
@@ -2844,7 +2857,15 @@ def _finish_explicit_statuses(
         _decision(
             rule_id=rule_id,
             status=statuses[rule_id][0],
-            reason_code=statuses[rule_id][1],
+            reason_code=(
+                "semantic_output_unknown"
+                if (
+                    rule_id in {"LX0609-020", "LX0609-023"}
+                    and statuses[rule_id][0] == "evaluation_unknown"
+                    and statuses[rule_id][1] == "model_invalid_output"
+                )
+                else statuses[rule_id][1]
+            ),
             snapshot=evidence_snapshot,
         )
         for rule_id in selected
@@ -3345,7 +3366,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         _decision(
             rule_id=rule_id,
             status=statuses[rule_id][0],
-            reason_code=statuses[rule_id][1],
+            reason_code=(
+                "semantic_output_unknown"
+                if (
+                    rule_id in {"LX0609-020", "LX0609-023"}
+                    and statuses[rule_id][0] == "evaluation_unknown"
+                    and statuses[rule_id][1] == "model_invalid_output"
+                )
+                else statuses[rule_id][1]
+            ),
             snapshot=evidence_snapshot,
         )
         for rule_id in selected

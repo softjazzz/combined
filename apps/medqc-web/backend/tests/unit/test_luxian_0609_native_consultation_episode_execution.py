@@ -4228,6 +4228,47 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
 
 
 @pytest.mark.asyncio
+async def test_020_023_semantic_contract_failure_keeps_typed_decision_uncertain():
+    """二阶段契约不完整时，绑定层不得把 020/023 降成技术错误。"""
+
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        "not-json",
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "semantic_output_unknown",
+        "semantic_output_unknown",
+    ]
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-020", "LX0609-023"),
+        snapshot=session.snapshot,
+    )
+    assert [item.final_state.value for item in reduced] == [
+        "evaluation_unknown",
+        "evaluation_unknown",
+    ]
+    assert all(item.reason_code == "semantic_output_unknown" for item in reduced)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("field_name", "invalid_ref"),
     (
