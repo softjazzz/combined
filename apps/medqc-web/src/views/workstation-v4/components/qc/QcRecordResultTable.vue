@@ -19,7 +19,6 @@
             <th scope="col">
               {{ timeColumnLabel }}
             </th>
-            <th scope="col">最新质控结果</th>
             <th scope="col">问题摘要</th>
             <th scope="col">最近质控</th>
             <th scope="col" class="qc-record-result-table__action-heading">查看结果</th>
@@ -81,14 +80,6 @@
               }}</span>
             </td>
             <td>{{ displayTime(row) }}</td>
-            <td>
-              <span
-                class="qc-record-result-table__result-tag"
-                :class="resultClass(row.resultStatus)"
-              >
-                {{ row.resultLabel }}
-              </span>
-            </td>
             <td class="qc-record-result-table__summary" :title="row.issueSummary">
               {{ row.issueSummary }}
             </td>
@@ -108,7 +99,7 @@
             </td>
           </tr>
           <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
-            <td colspan="8">
+            <td colspan="7">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -223,16 +214,6 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
     return female ? patientIconElderWoman : patientIconElderMan
   }
   return female ? patientIconWoman : patientIconMan
-}
-
-function resultClass(status: QcRecordResultRow['resultStatus']): string {
-  if (status === 'priority') return 'qc-record-result-table__result-tag--priority'
-  if (status === 'data-gap') return 'qc-record-result-table__result-tag--data-gap'
-  if (status === 'uncertain') return 'qc-record-result-table__result-tag--uncertain'
-  if (status === 'technical-error') return 'qc-record-result-table__result-tag--technical-error'
-  if (status === 'not-run') return 'qc-record-result-table__result-tag--not-run'
-  if (status === 'completed') return 'qc-record-result-table__result-tag--completed'
-  return 'qc-record-result-table__result-tag--unknown'
 }
 </script>
 
@@ -388,57 +369,11 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
   text-overflow: ellipsis;
 }
 
-.qc-record-result-table__result-tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.qc-record-result-table__result-tag--priority {
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-}
-
-.qc-record-result-table__result-tag--data-gap {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
-}
-
-.qc-record-result-table__result-tag--completed {
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
-}
-
-.qc-record-result-table__result-tag--uncertain {
-  background: rgba(37, 99, 235, 0.1);
-  color: #2563eb;
-}
-
-.qc-record-result-table__result-tag--technical-error {
-  background: rgba(148, 163, 184, 0.16);
-  color: #475569;
-}
-
-.qc-record-result-table__result-tag--not-run {
-  background: rgba(148, 163, 184, 0.1);
-  color: #64748b;
-}
-
 .qc-record-result-table__source-state {
   display: block;
   margin-top: 2px;
   color: #94a3b8;
   font-size: 11px;
-}
-
-.qc-record-result-table__result-tag--unknown {
-  background: rgba(100, 116, 139, 0.1);
-  color: #475569;
 }
 
 .qc-record-result-table__action-heading,
