@@ -454,6 +454,14 @@ def _parse_lx0609_058_datetime(value: Any) -> datetime | None:
     return parsed
 
 
+def _antimicrobial_start_datetime(row: Mapping[str, Any]) -> datetime | None:
+    """按院方口径读取抗菌药启用时间；计划时间缺失时回退医嘱下达时间。"""
+
+    return _parse_datetime(
+        row.get("planned_start_datetime") or row.get("prescribed_datetime")
+    )
+
+
 def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
     value = authoritative_document_time_value(row)
     return _parse_lx0609_058_datetime(
@@ -1314,7 +1322,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 }))
             elif rule_id == "LX0609-055":
                 order_events = tuple(
-                    (row, name, _parse_datetime(row.get("planned_start_datetime")))
+                    (row, name, _antimicrobial_start_datetime(row))
                     for row in antimicrobial_orders
                     for name in _antimicrobial_names_in(row)
                 )
@@ -1449,7 +1457,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     }))
             elif rule_id == "LX0609-058":
                 special_events = tuple(
-                    (row, name, _parse_lx0609_058_datetime(row.get("planned_start_datetime")))
+                    (row, name, _parse_lx0609_058_datetime(
+                        row.get("planned_start_datetime") or row.get("prescribed_datetime")
+                    ))
                     for row in antimicrobial_orders
                     for name in _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
                 )

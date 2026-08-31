@@ -4591,7 +4591,7 @@ async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
 
 
 @pytest.mark.asyncio
-async def test_055_does_not_use_prescribed_or_update_time_as_planned_start() -> None:
+async def test_055_falls_back_to_prescribed_time_when_planned_start_missing() -> None:
     _, reduced = await _evaluate(
         "LX0609-055",
         {
@@ -4607,8 +4607,8 @@ async def test_055_does_not_use_prescribed_or_update_time_as_planned_start() -> 
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "authoritative_time_missing"
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
 
 
 @pytest.mark.asyncio
@@ -4880,7 +4880,7 @@ async def test_058_explicitly_refused_expert_consultation_is_not_support() -> No
 
 
 @pytest.mark.asyncio
-async def test_058_does_not_use_prescribed_or_update_time_as_planned_start() -> None:
+async def test_058_falls_back_to_prescribed_time_when_planned_start_missing() -> None:
     _, reduced = await _evaluate(
         "LX0609-058",
         {
@@ -4896,8 +4896,8 @@ async def test_058_does_not_use_prescribed_or_update_time_as_planned_start() -> 
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "authoritative_time_missing"
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
 
 
 @pytest.mark.asyncio
