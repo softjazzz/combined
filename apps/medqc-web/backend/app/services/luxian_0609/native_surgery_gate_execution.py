@@ -586,8 +586,23 @@ def _resolve_surgery_signature_outcome(
         return "data_gap", "required_field_missing", None
     if len(surgery_master_rows) != len(surgery_record_rows):
         # mr_surgery 可能是按术式拆分的明细表，行数不必与手术记录一一相等。
-        # 只要主表本身能逐事件核对，就不再因跨表行数差异制造 association_failed；
-        # 两边都无法形成完整签名事实时，明确为字段缺失而非伪造关联失败。
+        # 当主表存在任何签名事实时，仍以主表为准，不能用一条手术记录覆盖
+        # 主表中的另一条未签名事件；只有主表所有签名字段都为空，才把正式
+        # 手术记录作为逐台签名事实源。这样兼容“主表按术式拆行但不落签名”
+        # 的真实数据形状，同时保留部分签名缺失的保守边界。
+        master_signature_fields = (
+            "main_surgery_sign",
+            "surgeon_sign",
+            "physician_sign",
+            "signer",
+        )
+        master_has_signature_fact = any(
+            _clean(row.get(field))
+            for row in surgery_master_rows
+            for field in master_signature_fields
+        )
+        if not master_has_signature_fact:
+            return _surgery_signature_outcome(surgery_record_rows)
         if master_outcome[0] in {"compliant", "non_compliant"}:
             return master_outcome
         return "data_gap", "required_field_missing", None

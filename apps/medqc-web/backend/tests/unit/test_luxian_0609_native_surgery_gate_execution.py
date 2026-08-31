@@ -1095,6 +1095,36 @@ def test_031_checks_each_multi_surgery_signature_without_cross_table_row_count()
     assert facts is not None and facts["surgeon_signature_matches"] is True
 
 
+def test_031_falls_back_to_surgery_records_when_master_rows_have_no_signature_fields() -> None:
+    status, reason, facts = surgery._resolve_surgery_signature_outcome(
+        surgery_master_rows=(
+            {"surgeon": "张医师", "main_surgery_sign": None},
+            {"surgeon": "李医师", "main_surgery_sign": None},
+            {"surgeon": "李医师", "main_surgery_sign": None},
+        ),
+        surgery_record_rows=(
+            {
+                "document_id": "surgery-1",
+                "surgeon": "张医师",
+                "surgeon_sign": "张医师",
+            },
+            {
+                "document_id": "surgery-2",
+                "surgeon": "李医师",
+                "surgeon_sign": "",
+            },
+        ),
+    )
+
+    assert (status, reason) == ("data_gap", "required_field_missing")
+    assert facts is not None
+    assert [item["document_id"] for item in facts["surgery_events"]] == [
+        "surgery-1",
+        "surgery-2",
+    ]
+    assert facts["surgery_events"][1]["missing_fields"] == ["surgeon_sign"]
+
+
 def test_031_single_event_fallback_requires_same_surgeon() -> None:
     status, reason, facts = surgery._resolve_surgery_signature_outcome(
         surgery_master_rows=({"surgeon": "张医师", "main_surgery_sign": ""},),
