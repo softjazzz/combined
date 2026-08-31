@@ -4346,14 +4346,26 @@ def safe_luxian_0609_customer_display_facts(
                 for state in ("specific", "generic", "missing")
             }
             if (
-                state_counts["specific"] != raw["specific_execution_count"]
-                or state_counts["generic"] != raw["generic_execution_count"]
-                or state_counts["missing"] != raw["missing_execution_count"]
+                sum(state_counts.values()) > raw["recommendation_count"]
             ):
                 return None
+            # recommendation_results 是逐条事实，优先用它重建摘要计数；
+            # 原始摘要可能未包含 unknown 条目，不能因此拒绝整批投影。
+            validated_count_values = {
+                "specific_execution_count": state_counts["specific"],
+                "generic_execution_count": state_counts["generic"],
+                "missing_execution_count": state_counts["missing"],
+            }
+        else:
+            validated_count_values = {
+                key: raw[key]
+                for key in ("specific_execution_count", "generic_execution_count", "missing_execution_count")
+            }
         safe_facts = {
             "verification_kind": expected_verification_kind,
-            **{key: raw[key] for key in count_keys},
+            "completed_opinion_episode_count": raw["completed_opinion_episode_count"],
+            "recommendation_count": raw["recommendation_count"],
+            **validated_count_values,
             "relation_state": raw["relation_state"],
         }
         if recommendation_results is not None:
