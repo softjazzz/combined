@@ -1074,7 +1074,25 @@ def test_031_does_not_hide_unsigned_surgery_behind_single_signed_record() -> Non
         ),
     )
 
-    assert (status, reason, facts) == ("data_gap", "association_failed", None)
+    assert (status, reason, facts) == ("data_gap", "required_field_missing", None)
+
+
+def test_031_checks_each_multi_surgery_signature_without_cross_table_row_count() -> None:
+    status, reason, facts = surgery._resolve_surgery_signature_outcome(
+        surgery_master_rows=(
+            {"surgeon": "张医师", "main_surgery_sign": "张医师"},
+            {"surgeon": "李医师", "main_surgery_sign": "李医师"},
+        ),
+        # mr_surgery 是术式明细表，可能拆成多行；不能因行数不同而放弃逐事件核对。
+        surgery_record_rows=(
+            {"surgeon": "张医师", "surgeon_sign": "张医师"},
+            {"surgeon": "李医师", "surgeon_sign": "李医师"},
+            {"surgeon": "李医师", "surgeon_sign": "李医师"},
+        ),
+    )
+
+    assert (status, reason) == ("compliant", "surgery_signature_confirmed")
+    assert facts is not None and facts["surgeon_signature_matches"] is True
 
 
 def test_031_single_event_fallback_requires_same_surgeon() -> None:

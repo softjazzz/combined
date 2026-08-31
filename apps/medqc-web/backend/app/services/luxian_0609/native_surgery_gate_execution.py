@@ -552,9 +552,14 @@ def _resolve_surgery_signature_outcome(
     if master_outcome[0] == "non_compliant":
         return master_outcome
     if not surgery_record_rows:
-        return "data_gap", "association_failed", None
+        return "data_gap", "required_field_missing", None
     if len(surgery_master_rows) != len(surgery_record_rows):
-        return "data_gap", "association_failed", None
+        # mr_surgery 可能是按术式拆分的明细表，行数不必与手术记录一一相等。
+        # 只要主表本身能逐事件核对，就不再因跨表行数差异制造 association_failed；
+        # 两边都无法形成完整签名事实时，明确为字段缺失而非伪造关联失败。
+        if master_outcome[0] in {"compliant", "non_compliant"}:
+            return master_outcome
+        return "data_gap", "required_field_missing", None
     if len(surgery_master_rows) != 1:
         return master_outcome
     if master_outcome[0] != "data_gap":
