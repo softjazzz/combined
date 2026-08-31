@@ -4391,9 +4391,14 @@ def safe_luxian_0609_customer_display_facts(
             # 这种受控公开形态，避免把 opinion_evidence 误当成 opinion_refs。
             evidence_shape_is_public = bool(
                 isinstance(raw_recommendation_evidence, list)
-                and raw_recommendation_evidence
-                and isinstance(raw_recommendation_evidence[0], Mapping)
-                and "opinion_evidence" in raw_recommendation_evidence[0]
+                and any(
+                    isinstance(item, Mapping)
+                    and (
+                        "opinion_evidence" in item
+                        or "execution_evidence" in item
+                    )
+                    for item in raw_recommendation_evidence
+                )
             )
             is_public_recommendation_evidence = (
                 is_public_projection or evidence_shape_is_public
