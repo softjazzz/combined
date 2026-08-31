@@ -178,13 +178,17 @@ async def get_record_documents(
 ):
     """获取病历文书列表（BundleOnly）。"""
     loader = _load_document_summaries_from_bundle if view == "summary" else _load_documents_from_bundle
+    loader_kwargs = {
+        "record_id": record_id,
+        "institute_id": institute_id,
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+    }
+    if view == "summary":
+        loader_kwargs["execution_domain"] = execution_domain
     payload = await run_in_threadpool(
         loader,
-        record_id=record_id,
-        institute_id=institute_id,
-        patient_id=patient_id,
-        visit_id=visit_id,
-        execution_domain=execution_domain if view == "summary" else None,
+        **loader_kwargs,
     )
     documents = list(payload.get("documents") or [])
     return success_response(
