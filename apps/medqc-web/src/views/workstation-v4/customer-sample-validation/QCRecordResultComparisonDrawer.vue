@@ -7,10 +7,25 @@
     class="customer-record-result-drawer"
     @close="emit('close')"
   >
+    <template #closeIcon>
+      <span
+        class="customer-record-result-drawer__close-icon"
+        title="关闭病历质控结果"
+        aria-hidden="true"
+      >
+        <X
+          :size="20"
+          :stroke-width="2.35"
+        />
+      </span>
+    </template>
     <template #title>
       <div class="customer-record-result-title">
         <div class="customer-record-result-title__brand">
-          <span class="customer-record-result-title__icon" aria-hidden="true">
+          <span
+            class="customer-record-result-title__icon"
+            aria-hidden="true"
+          >
             <ShieldCheck :size="18" />
           </span>
           <span class="customer-record-result-title__heading">
@@ -65,7 +80,7 @@
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
-import { ShieldCheck } from 'lucide-vue-next'
+import { ShieldCheck, X } from 'lucide-vue-next'
 import {
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
@@ -219,19 +234,34 @@ watch(
 <style scoped>
 .customer-record-result-drawer :deep(.ant-drawer-close) {
   display: grid;
-  width: 36px;
-  height: 36px;
-  margin: 0 8px 0 0;
+  width: 38px;
+  height: 38px;
+  margin: 0 12px 0 0;
   place-items: center;
-  border-radius: 10px;
-  color: rgba(29, 29, 31, 0.68);
+  border: 1px solid rgba(0, 102, 204, 0.18);
+  border-radius: 11px;
+  background: #f3f8ff;
+  color: #31597f;
+  box-shadow: 0 1px 2px rgba(28, 76, 120, 0.08);
   transition: 180ms ease;
 }
 
+.customer-record-result-drawer :deep(.ant-drawer-close:focus-visible) {
+  outline: 3px solid rgba(0, 102, 204, 0.24);
+  outline-offset: 2px;
+}
+
 .customer-record-result-drawer :deep(.ant-drawer-close:hover) {
-  background: rgba(0, 0, 0, 0.07);
-  color: #1d1d1f;
-  transform: scale(1.03);
+  border-color: rgba(0, 102, 204, 0.38);
+  background: #e7f1ff;
+  color: #005eb8;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.14);
+  transform: translateY(-1px);
+}
+
+.customer-record-result-drawer__close-icon {
+  display: grid;
+  place-items: center;
 }
 
 .customer-record-result-title {
