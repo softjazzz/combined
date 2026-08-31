@@ -882,10 +882,67 @@ def test_build_render_view_with_sections_and_kv():
     assert payload["document_meta"]["signatures"][0]["name"] == "李医生"
     assert payload["document_meta"]["projection_incomplete"] is True
     assert payload["document_meta"]["projection_notice"] == "已展示20条，仍有更多。"
-    assert len(payload["render_blocks"]) >= 2
-    assert payload["render_blocks"][0]["block_type"] == "kv_section"
-    assert payload["render_blocks"][1]["block_type"] == "paragraph"
+    assert [block["block_type"] for block in payload["render_blocks"]] == [
+        "paragraph",
+        "paragraph",
+    ]
+    assert [block["title"] for block in payload["render_blocks"]] == ["主诉", "现病史"]
     assert len(payload["highlight_anchors"]) >= 1
+
+
+def test_build_render_view_does_not_repeat_discharge_sections_as_basic_info():
+    admission_condition = "入院时头面部外伤并意识障碍，急诊收入院。"
+    treatment_course = "入院后完善检查并行手术治疗，病情逐步稳定。"
+    discharge_order = "院外继续治疗，每两周电话随访。"
+    document = {
+        "id": "discharge-1",
+        "doc_key": "discharge_record::discharge-1",
+        "doc_type": "discharge_record",
+        "doc_name": "出院记录",
+        "group_key": "terminal",
+        "content": f"{admission_condition}\n{treatment_course}\n{discharge_order}",
+        "sections": [
+            {
+                "section_key": key,
+                "section_label": label,
+                "text": text,
+                "source_field": key,
+                "order_index": index,
+            }
+            for index, (key, label, text) in enumerate(
+                (
+                    ("admission_condition", "入院情况", admission_condition),
+                    ("treatment_course", "诊疗经过", treatment_course),
+                    ("discharge_order", "出院医嘱", discharge_order),
+                )
+            )
+        ],
+        "source_fields": [
+            {
+                "source_field": key,
+                "used": True,
+                "raw_value_preview": text[:20],
+            }
+            for key, text in (
+                ("admission_condition", admission_condition),
+                ("treatment_course", treatment_course),
+                ("discharge_order", discharge_order),
+            )
+        ],
+    }
+
+    payload = build_render_view(document)
+
+    assert [block["block_type"] for block in payload["render_blocks"]] == [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+    ]
+    assert [block["title"] for block in payload["render_blocks"]] == [
+        "入院情况",
+        "诊疗经过",
+        "出院医嘱",
+    ]
 
 
 def test_build_render_view_does_not_repeat_first_course_sections_as_basic_info():

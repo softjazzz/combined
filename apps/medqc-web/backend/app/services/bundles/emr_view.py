@@ -1450,9 +1450,19 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
 
     render_blocks: list[dict[str, Any]] = []
     kv_fields: list[dict[str, str]] = []
+    has_paragraph_sections = any(
+        isinstance(section, dict) and _safe_text(section.get("text"))
+        for section in list(document.get("sections") or [])
+    )
     if group_key == "orders" or doc_type in _ORDER_DOC_TYPES:
         render_blocks.append(_build_order_table_block(document))
-    elif doc_type not in _PARAGRAPH_ONLY_DOC_TYPES:
+    elif (
+        doc_type not in _PARAGRAPH_ONLY_DOC_TYPES
+        and (doc_type in _SURGERY_STRUCT_DOC_TYPES or not has_paragraph_sections)
+    ):
+        # 普通叙事文书的 sections 已包含完整字段正文；source_fields 只有截断预览。
+        # 二者同时渲染会形成“基础信息截断版 + 完整章节”的视觉重复。
+        # 手术类结构化文书仍保留专用字段视图。
         kv_fields = _extract_kv_fields(document)
         render_blocks.append(
             {
