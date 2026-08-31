@@ -1104,6 +1104,43 @@ def test_031_single_event_fallback_requires_same_surgeon() -> None:
     assert (status, reason, facts) == ("data_gap", "association_failed", None)
 
 
+def test_031_multi_surgery_projects_each_signature_gap() -> None:
+    status, reason, facts = surgery._surgery_signature_outcome(
+        (
+            {
+                "document_id": "surgery-1",
+                "surgery_name": "手术甲",
+                "surgeon": "张医师",
+                "surgeon_sign": "张医师",
+            },
+            {
+                "document_id": "surgery-2",
+                "surgery_name": "手术乙",
+                "surgeon": "李医师",
+                "surgeon_sign": "",
+            },
+        )
+    )
+    assert (status, reason) == ("data_gap", "required_field_missing")
+    assert facts is not None
+    assert facts["surgery_events"] == [
+        {
+            "document_id": "surgery-1",
+            "surgery_name": "手术甲",
+            "surgeon": "张",
+            "signer": "张",
+            "missing_fields": [],
+        },
+        {
+            "document_id": "surgery-2",
+            "surgery_name": "手术乙",
+            "surgeon": "李",
+            "signer": "",
+            "missing_fields": ["surgeon_sign"],
+        },
+    ]
+
+
 @pytest.mark.asyncio
 async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() -> None:
     selected = ("LX0609-024",)

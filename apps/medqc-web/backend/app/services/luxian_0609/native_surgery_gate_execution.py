@@ -480,6 +480,8 @@ def _surgery_signature_outcome(
         return "data_gap", "required_field_missing", None
     states: list[str] = []
     used_first_assistant_exception = False
+    # 仅在多台手术时投影逐台事实，保持单台旧结果 DTO 稳定。
+    event_facts: list[dict[str, Any]] = []
 
     def identity(value: Any) -> str:
         normalized = re.sub(r"[\s,，、;；:：]+", "", _clean(value))
@@ -498,6 +500,21 @@ def _surgery_signature_outcome(
             or row.get("signer")
         )
         first_assistant = identity(row.get("first_assistant"))
+        missing_fields = []
+        if not surgeon:
+            missing_fields.append("surgeon")
+        if not signer:
+            missing_fields.append("surgeon_sign")
+        if len(rows) > 1:
+            event_facts.append(
+                {
+                    "document_id": _clean(row.get("document_id") or row.get("sys_index_id")),
+                    "surgery_name": _clean(row.get("surgery_name") or row.get("surgery_project")),
+                    "surgeon": surgeon,
+                    "signer": signer,
+                    "missing_fields": missing_fields,
+                }
+            )
         if not surgeon or not signer:
             states.append("unknown")
             continue
@@ -523,10 +540,23 @@ def _surgery_signature_outcome(
                 "failure_kind": "surgery_signer_not_qualified",
                 "performed_surgery_confirmed": True,
                 "surgeon_signature_matches": False,
+                **({"surgery_events": event_facts} if event_facts else {}),
             },
         )
     if not states or "unknown" in states:
-        return "data_gap", "required_field_missing", None
+        return (
+            "data_gap",
+            "required_field_missing",
+            (
+                {
+                    "failure_kind": "surgery_signature_fields_missing",
+                    "performed_surgery_confirmed": True,
+                    "surgery_events": event_facts,
+                }
+                if event_facts
+                else None
+            ),
+        )
     return (
         "compliant",
         "surgery_signature_confirmed",
@@ -535,6 +565,7 @@ def _surgery_signature_outcome(
             "performed_surgery_confirmed": True,
             "surgeon_signature_matches": True,
             "first_assistant_exception_used": used_first_assistant_exception,
+            **({"surgery_events": event_facts} if event_facts else {}),
         },
     )
 

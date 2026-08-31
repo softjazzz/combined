@@ -69,7 +69,6 @@ _TYPED_RULE_SOURCE_KEYS = {
     "LX0609-039": (
         "surgery_record",
         "mr_surgery",
-        "rescue_record",
         "presurg_discussion",
     ),
 }
