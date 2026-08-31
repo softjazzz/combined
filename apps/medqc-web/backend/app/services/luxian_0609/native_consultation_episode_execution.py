@@ -2772,6 +2772,51 @@ def _finish(
     )
 
 
+def _finish_statuses(
+    *, selected: tuple[str, ...], statuses: Mapping[str, tuple[str, str]],
+    calls: int = 0, prompt_tokens: int = 0, completion_tokens: int = 0,
+    total_tokens: int = 0, api_time: float = 0.0,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: frozenset[str] = frozenset(),
+) -> NativeConsultationEpisodeExecutionResult:
+    """按规则分别收敛失败状态，同时保留同一证据快照引用。"""
+
+    results = []
+    decisions = []
+    for rule_id in selected:
+        status, reason_code = statuses[rule_id]
+        if rule_id in decision_rule_ids and evidence_snapshot is not None:
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    status=status,
+                    reason_code=reason_code,
+                    snapshot=evidence_snapshot,
+                )
+            )
+        elif rule_id not in decision_rule_ids:
+            results.append(
+                _result(
+                    rule_id=rule_id,
+                    status=status,
+                    reason_code=reason_code,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                )
+            )
+    return NativeConsultationEpisodeExecutionResult(
+        results=tuple(results),
+        planned_rule_ids=selected,
+        decisions=tuple(decisions),
+        llm_call_count=calls,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+    )
+
+
 def _finish_explicit_statuses(
     *,
     selected: tuple[str, ...],
@@ -2944,7 +2989,27 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     except _SemanticUnresolved:
         return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticInvalid:
-        return _finish(selected=selected, status="technical_error", reason_code="model_invalid_output", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+        # 模型结构化输出无效属于语义不可判定，不应把 020/023 阻断为
+        # 技术错误；对外投影为 uncertain，并保留 model_invalid_output
+        # 原因码及证据快照。021/022 仍沿用旧技术错误语义。
+        invalid_statuses = {
+            rule_id: (
+                "evaluation_unknown" if rule_id in stage_two_rule_ids else "technical_error",
+                "model_invalid_output",
+            )
+            for rule_id in selected
+        }
+        return _finish_statuses(
+            selected=selected,
+            statuses=invalid_statuses,
+            calls=calls,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+            evidence_snapshot=evidence_snapshot,
+            decision_rule_ids=typed,
+        )
     except Exception:
         return _finish(selected=selected, status="technical_error", reason_code="model_transport_error", calls=calls, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     statuses: dict[str, tuple[str, str]] = {
@@ -2978,7 +3043,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             except _SemanticInvalid:
                 completed_recommendations = ()
                 for rule_id in stage_two_rule_ids:
-                    statuses[rule_id] = ("technical_error", "model_invalid_output")
+                    statuses[rule_id] = ("evaluation_unknown", "model_invalid_output")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
             preliminary = _execution_outcome(
                 "LX0609-020",
@@ -3218,7 +3283,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         except _SemanticInvalid:
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = (
-                                    "technical_error",
+                                    "evaluation_unknown",
                                     "model_invalid_output",
                                 )
                         except Exception as error:

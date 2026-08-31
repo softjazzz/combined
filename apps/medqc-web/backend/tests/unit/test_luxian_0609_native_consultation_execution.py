@@ -266,7 +266,7 @@ async def test_semantic_parse_failure_after_retry_is_technical_error(monkeypatch
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_execution_parse_failure_retries_once_and_fails_closed(monkeypatch):
+async def test_execution_parse_failure_retries_once_and_returns_uncertain(monkeypatch):
     session = _material_session(
         {
             "consultation_record": [
@@ -299,8 +299,8 @@ async def test_execution_parse_failure_retries_once_and_fails_closed(monkeypatch
 
     assert execution.llm_call_count == 2
     assert [item["status"] for item in execution.results] == [
-        "technical_error",
-        "technical_error",
+        "uncertain",
+        "uncertain",
     ]
     assert {
         item["metadata"]["reason_code"] for item in execution.results

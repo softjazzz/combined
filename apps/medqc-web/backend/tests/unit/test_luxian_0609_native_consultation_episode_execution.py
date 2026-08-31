@@ -3618,7 +3618,7 @@ async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"technical_error"}
+    assert {item["status"] for item in result.results} == {"uncertain"}
     assert {item["metadata"]["reason_code"] for item in result.results} == {
         "model_invalid_output"
     }
@@ -4205,7 +4205,7 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
             "technical_error",
             "model_transport_error",
         ),
-        ("not-json", "technical_error", "model_invalid_output"),
+        ("not-json", "uncertain", "model_invalid_output"),
     ):
         client = _PlannedStageClient(
             _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
@@ -4267,7 +4267,7 @@ async def test_020_023_rejects_nested_stage_two_reference_values_as_technical_er
     )
 
     assert [item["status"] for item in result.results] == [
-        "technical_error", "compliant", "compliant", "technical_error",
+        "uncertain", "compliant", "compliant", "uncertain",
     ]
     assert [item["metadata"]["reason_code"] for item in result.results] == [
         "model_invalid_output", "requirement_satisfied", "requirement_satisfied", "model_invalid_output",

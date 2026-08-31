@@ -2318,13 +2318,21 @@ async def execute_luxian_0609_native_consultation_rules(
                 total_tokens += retry_usage[2]
                 api_time += retry_usage[3]
         if not parse_succeeded:
+            # 020/023 的执行事实无法解析时，模型输出本身不是业务技术故障。
+            # 收敛为 evaluation_unknown（对外投影为 uncertain），避免把规则
+            # 阻断为 technical_error；保留 model_invalid_output 原因码，便于
+            # 诊断和证据链追踪。语义阶段（021/022）维持原有错误语义。
+            fallback_status = (
+                "evaluation_unknown" if kind == "execution" else "technical_error"
+            )
             outcomes_by_rule.update(
                 {
                     rule_id: _ConsultationRuleOutcome(
                         rule_id,
-                        "technical_error",
+                        fallback_status,
                         "model_invalid_output",
                         "llm",
+                        "low" if fallback_status == "evaluation_unknown" else None,
                     )
                     for rule_id in rule_ids
                 }
