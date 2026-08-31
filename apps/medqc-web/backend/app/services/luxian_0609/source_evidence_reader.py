@@ -373,6 +373,9 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         "record_time",
+        # 泸县源表未提供 submit_datetime 时，以 update_time 保存文书完成时间；
+        # 061 的规则专用逻辑会在正式时间字段为空时使用该字段。
+        "update_time",
         "admission_date",
         "discharge_date",
         "discharge_time",
