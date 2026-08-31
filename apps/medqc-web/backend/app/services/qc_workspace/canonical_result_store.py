@@ -700,6 +700,29 @@ class CanonicalResultStore:
             if _safe_text(rule_id)
         }
         for record_items in grouped.values():
+            # 历史/兼容执行器可能只留下“确定问题”状态，却没有可审计事实。
+            # 在写入 Canonical 前安全降级为资料待核实，避免整批任务失败，
+            # 同时禁止无证据的确定问题进入客户结果。
+            for record_item in record_items:
+                candidate_rule_id = _safe_text(
+                    record_item.get("customer_rule_id")
+                    or record_item.get("qc_point_id")
+                    or record_item.get("rule_id")
+                    or record_item.get("rule_code")
+                ).upper()
+                candidate_status = canonical_customer_status(record_item)
+                if (
+                    candidate_status == "non_compliant"
+                    and candidate_rule_id.startswith("LX0609-")
+                    and not record_item.get("customer_display_facts")
+                    and not record_item.get("criterion_results")
+                ):
+                    record_item["status"] = "data_gap"
+                    record_item["result_status"] = "data_gap"
+                    record_item["display_status"] = "data_gap"
+                    record_item["is_compliant"] = None
+                    record_item["reason_code"] = "historical_evidence_missing"
+
             delivered_rule_ids = [
                 _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
                 for item in record_items
