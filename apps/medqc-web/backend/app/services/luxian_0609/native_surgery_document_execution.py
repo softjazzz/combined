@@ -1350,7 +1350,10 @@ def _clean_presurg_body(value: Any) -> str:
 
 
 def _normalized_surgery_name(value: Any) -> str:
-    return re.sub(r"[\s、，,。；;：:（）()\[\]【】]+", "", str(value or "")).casefold()
+    normalized = re.sub(r"[\s、，,。；;：:（）()\[\]【】]+", "", str(value or "")).casefold()
+    # 院方术式字典对“置入/植入”存在稳定同义写法；仅做术式名称规范化，
+    # 不把泛化的“手术/治疗”等词作为匹配依据。
+    return normalized.replace("置入术", "植入术")
 
 
 def _summary_surgery_name(value: Any) -> str:
@@ -1374,7 +1377,15 @@ def _summary_matches_surgery(summary_name: str, surgery_name: Any) -> bool:
     components = [part for part in re.split(r"[+＋、，,；;]", left) if len(part) >= 4]
     if not components:
         return False
-    matched = sum(1 for part in components if part in right)
+    def component_matches(part: str) -> bool:
+        if part in right:
+            return True
+        # 源系统可能省略部位/入路修饰（如“颅内血肿清除术”→“血肿清除术”）。
+        # 仅允许长度足够的术式后缀，避免短关键词造成错误关联。
+        suffixes = [part[index:] for index in range(1, len(part) - 4)]
+        return any(len(suffix) >= 5 and suffix in right for suffix in suffixes)
+
+    matched = sum(1 for part in components if component_matches(part))
     # 允许源系统在完整术式中插入部位/入路修饰，但至少要命中两个
     # 有辨识度的术式片段；单一短词不作为安全关联依据。
     return matched >= 2 and matched * 2 >= len(components)
