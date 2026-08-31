@@ -372,8 +372,10 @@ const displayRenderBlocks = computed<EmrRenderBlock[]>(() => {
             // record_content 常被结构化接口同时投影为“基础信息”和“正文”。
             // 正文可能带有“新建S章节:”等前缀，不能只判断 startsWith(value)。
             // 仅对正文类字段做包含判断，避免误删普通字段在长正文中的偶然引用。
-            (['record_content', 'recordContent', 'content', 'text'].includes(
-              String(field.key || ''),
+            (['record_content', 'recordcontent', 'recordcontenttext', 'content', 'text'].includes(
+              String(field.key || '')
+                .toLowerCase()
+                .replace(/[\s-]+/g, '_'),
             ) &&
               paragraph.includes(value)),
         )
