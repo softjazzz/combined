@@ -499,7 +499,10 @@ def _golden_response(
         reason_code = str(attestation.get("reason_code") or "").strip()
         if not re.fullmatch(r"[0-9a-f]{64}", evidence_attestation):
             raise BenchmarkContractError("missing rule evidence attestation")
-        if str(result.get("status") or "").strip().lower() != observed_state:
+        public_status = str(result.get("status") or "").strip().lower()
+        if public_status == "uncertain":
+            public_status = "evaluation_unknown"
+        if public_status != observed_state:
             raise BenchmarkContractError("attested result state mismatch")
         projected_result = {
                 "rule_id": rule_id,

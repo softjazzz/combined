@@ -945,6 +945,37 @@ async def test_benchmark20_rejects_attested_state_mismatch_without_echo():
     assert str(raised.value) == "attested result state mismatch"
 
 
+def test_golden_response_normalizes_public_uncertain_to_evaluation_unknown():
+    response = {"schema_version": "lx0609-preproduction-runner-v1"}
+    results = [{"rule_id": "LX0609-023", "status": "uncertain"}]
+    attestations = {
+        "LX0609-023": {
+            "evidence_hash": "a" * 64,
+            "observed_state": "evaluation_unknown",
+            "reason_code": "semantic_low_confidence",
+        }
+    }
+
+    projected = benchmark20._golden_response(
+        response,
+        results=results,
+        executor_types={"LX0609-023": "llm"},
+        evidence_attestations=attestations,
+    )
+
+    assert projected["results"] == [
+        {
+            "rule_id": "LX0609-023",
+            "status": "evaluation_unknown",
+            "metadata": {
+                "reason_code": "semantic_low_confidence",
+                "executor_type": "llm",
+            },
+            "evidence_items": [{"evidence_attestation": "a" * 64}],
+        }
+    ]
+
+
 def test_benchmark20_cli_requires_explicit_inputs_and_writes_only_safe_batch(
     monkeypatch, tmp_path, capsys
 ):
