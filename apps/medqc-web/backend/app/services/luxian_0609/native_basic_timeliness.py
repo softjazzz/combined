@@ -1677,6 +1677,7 @@ def _execute_luxian_0609_native_basic_timeliness(
 def _with_semantic_usage(
     result: NativeExecutionResult,
     *,
+    llm_call_count: int = 1,
     prompt_tokens: int,
     completion_tokens: int,
     total_tokens: int,
@@ -1689,7 +1690,7 @@ def _with_semantic_usage(
         customer_display_facts=result.customer_display_facts,
         execution_fingerprint=result.execution_fingerprint,
         terminal_reason_code=result.terminal_reason_code,
-        llm_call_count=1,
+        llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
@@ -1787,6 +1788,11 @@ def execute_luxian_0609_native_basic_timeliness(
         except Exception:
             return _with_semantic_usage(
                 baseline,
+                llm_call_count=(
+                    1
+                    if (prompt_tokens or completion_tokens or total_tokens)
+                    else 0
+                ),
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,

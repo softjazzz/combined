@@ -1721,6 +1721,45 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_006_unavailable_llm_does_not_report_unaccounted_call():
+    selected = ("LX0609-006",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-upper-round-ref",
+                    "document_title": "上级医师查房记录",
+                    "record_time": "2026-07-16 10:30:02",
+                    "record_content": "今日彭中主任医师联合神经疾病相关专业医师查房。",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+    )
+
+    execution = await execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        llm_client=object(),
+    )
+
+    assert execution.llm_call_count == 0
+    assert execution.prompt_tokens == 0
+    assert execution.completion_tokens == 0
+    assert execution.total_tokens == 0
+    assert execution.decisions[0].reason_code == "semantic_output_unknown"
+
+
+@pytest.mark.unit
 def test_course_reader_uses_exact_coordinates_stable_order_and_safe_refs(monkeypatch):
     captured: list[tuple[str, dict]] = []
 

@@ -4,7 +4,7 @@
   "rule_master_version": "2026-08-15-r2",
   "generated_from": {
     "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
-    "runtime_contract_hash": "fbe7e364de3a274d1c18cac55b1ec84c110a00e318b0df0cd24474687efc62ef",
+    "runtime_contract_hash": "2ee688bbe0c6285a288bf1e12d10c54e646753e8d2d38685634c276b4411d775",
     "synthetic_fixture_set": "0426-derived-v3"
   },
   "coverage_semantics": {
@@ -302,8 +302,8 @@
       "required_facts": ["入院时间", "查房时间", "医师层级"],
       "required_evidence": ["daily_course_record", "senior_course_record"],
       "expected_executor": "basic_timeliness",
-      "decision_authority": "program_only",
-      "max_llm_calls_per_rule": 0,
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
       "time_boundaries": {
         "before_threshold": {
           "coverage": "covered",
@@ -317,6 +317,22 @@
           "coverage": "covered",
           "fixture_refs": ["0426-v3:case-002"]
         }
+      },
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["daily_course_record", "senior_course_record"],
+          "facts": ["入院时间", "查房时间", "医师层级"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
       }
     },
     {
