@@ -490,11 +490,30 @@ def project_customer_safe_result_item(
         or raw.get("rule_id")
         or raw.get("rule_code")
     ).upper()
-    customer_display_facts, criterion_results = _validated_customer_explanation(
-        raw,
-        rule_id=rule_id,
-        status=status,
-    )
+    try:
+        customer_display_facts, criterion_results = _validated_customer_explanation(
+            raw,
+            rule_id=rule_id,
+            status=status,
+        )
+    except ValueError as exc:
+        # 历史任务可能保存了“确定问题”状态，却没有同步保存可审计事实。
+        # 不应让整批任务因一条旧结果返回 409；也不能继续向客户展示无证据的确定问题。
+        # 仅将该条安全降级为资料待核实，保留 fail-closed 边界。
+        if (
+            status == "non_compliant"
+            and rule_id.startswith("LX0609-")
+            and not raw.get("customer_display_facts")
+            and not raw.get("criterion_results")
+            and str(exc) == LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
+        ):
+            status = "data_gap"
+            raw["status"] = status
+            raw["result_status"] = status
+            raw["reason_code"] = "historical_evidence_missing"
+            customer_display_facts, criterion_results = {}, []
+        else:
+            raise
     generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     # 原始执行结果中的 customer_* 字段仍可能混入病历句子。只有已经通过本投影器
     # 生成的 DTO 才允许复用客户文案；首次投影一律按状态生成固定安全表述。
