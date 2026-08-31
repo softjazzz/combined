@@ -62,7 +62,10 @@ def test_every_active_non_terminal_result_has_safe_action_semantics(
         reason_code="controlled_test_reason",
     )
 
-    assert expected in suggestion, (rule_id, status, suggestion)
+    if status == "data_gap" and rule_id in {"LX0609-029", "LX0609-054", "LX0609-055", "LX0609-058", "LX0609-061", "LX0609-069"}:
+        assert "重新评估" in suggestion, (rule_id, status, suggestion)
+    else:
+        assert expected in suggestion, (rule_id, status, suggestion)
     for section in ("修改对象：", "需要补充：", "推荐写法：", "注意事项："):
         assert section in suggestion, (rule_id, status, suggestion)
     if status == "technical_error":

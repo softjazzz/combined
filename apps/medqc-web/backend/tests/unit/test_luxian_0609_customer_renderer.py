@@ -1559,9 +1559,73 @@ def test_029_association_gap_explains_confirmed_surgery_and_summary():
     result = render_luxian_0609_customer_result(decision=decision)
 
     assert result["findings"] == (
-        "已确认本次存在已实施手术且已读取术前小结，但缺少可用于单台手术关联的"
-        "手术实施时间，暂无法确认该术前小结是否对应同一次手术"
+        "已确认本次存在已实施手术且已读取术前小结，但现有资料无法确认术前小结"
+        "对应哪一台手术，暂无法逐台完成核对"
     )
+
+    assert "缺少可用于单台手术关联的实施时间" not in result["evidence"]
+    assert "术前小结与具体手术的单台对应关系未能确定" in result["evidence"]
+    assert "完整可读取的文书、权威时间及必要关联字段" not in result["suggestion"]
+    assert "术前小结与具体手术的单台关联信息" in result["suggestion"]
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "expected_required", "expected_recommendation"),
+    (
+        (
+            "LX0609-054",
+            "每条抗菌药物医嘱对应的使用或调整动作、理由及关联时间",
+            "逐条核对抗菌药物医嘱与病程",
+        ),
+        (
+            "LX0609-055",
+            "每条抗菌药物的计划开始/启用时间及对应的48至72小时效果评价",
+            "核对每条抗菌药物的计划开始/启用时间",
+        ),
+        (
+            "LX0609-058",
+            "特殊级抗菌药物计划开始/启用时间与专家查房或会诊支持记录的关联",
+            "核对特殊级抗菌药物计划开始/启用时间",
+        ),
+        (
+            "LX0609-061",
+            "权威出院时间与出院记录完成时间",
+            "核对住院登记中的权威出院时间",
+        ),
+        (
+            "LX0609-069",
+            "每次会诊申请与对应会诊记录的业务关联、申请时间及完成时间",
+            "逐次核对会诊申请与会诊记录",
+        ),
+    ),
+)
+def test_priority_data_gap_rules_explain_event_or_time_gap(
+    rule_id: str,
+    expected_required: str,
+    expected_recommendation: str,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=(
+                "association_failed"
+                if rule_id in {"LX0609-054", "LX0609-069"}
+                else "authoritative_time_missing"
+            ),
+            fact_refs=(FACT_REF,),
+            evaluator_version="customer-gap-copy-v1",
+        )
+    )
+
+    suggestion = render_luxian_0609_customer_result(decision=decision)["suggestion"]
+
+    assert f"需要补充：{expected_required}" in suggestion
+    assert expected_recommendation in suggestion
+    assert "完整可读取的文书、权威时间及必要关联字段" not in suggestion
 
 
 def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> None:
