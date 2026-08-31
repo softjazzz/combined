@@ -1376,6 +1376,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-026",
         "LX0609-027",
         "LX0609-029",
+        "LX0609-031",
         "LX0609-037",
         "LX0609-038",
         "LX0609-040",
@@ -1577,6 +1578,33 @@ def customer_finding_from_controlled_facts(
         ):
             return "已确认本次实施手术，但未找到对应的术前小结。"
         return ""
+
+    if rule_id == "LX0609-031":
+        events = facts.get("surgery_events")
+        if (
+            kind not in {"surgery_signature_fields_missing", "surgery_signer_not_qualified"}
+            or not isinstance(events, list)
+            or not events
+        ):
+            return ""
+        rows = []
+        labels = {"surgeon": "术者", "surgeon_sign": "手术医生签名"}
+        for index, event in enumerate(events, start=1):
+            if not isinstance(event, Mapping):
+                return ""
+            name = str(event.get("surgery_name") or "").strip() or f"第{index}台手术"
+            missing = event.get("missing_fields")
+            if isinstance(missing, list) and missing:
+                missing_text = "、".join(labels.get(str(value), str(value)) for value in missing)
+                rows.append(f"{name}缺少{missing_text}")
+            else:
+                surgeon = str(event.get("surgeon") or "").strip() or "未记录"
+                signer = str(event.get("signer") or "").strip() or "未记录"
+                rows.append(f"{name}术者为{surgeon}，签名医师为{signer}")
+        prefix = "已确认实施手术，逐台核对结果："
+        if kind == "surgery_signer_not_qualified":
+            prefix = "已确认实施手术，逐台签名核对结果："
+        return prefix + "；".join(rows) + "。"
 
     if rule_id == "LX0609-038":
         if (

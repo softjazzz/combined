@@ -36,6 +36,21 @@ CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
 
 
+def test_031_projects_multi_surgery_signature_gaps_per_event() -> None:
+    facts = {
+        "failure_kind": "surgery_signature_fields_missing",
+        "performed_surgery_confirmed": True,
+        "surgery_events": [
+            {"document_id": "5039223||1", "surgery_name": "手术A", "surgeon": "张医师", "signer": "", "missing_fields": ["surgeon_sign"]},
+            {"document_id": "5039223||2", "surgery_name": "手术B", "surgeon": "李医师", "signer": "", "missing_fields": ["surgeon_sign"]},
+        ],
+    }
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-031", raw=facts)
+    assert safe is not None
+    assert len(safe["surgery_events"]) == 2
+    assert all("document_id" not in event for event in safe["surgery_events"])
+
+
 def test_020_recommendation_evidence_projects_each_mapping_without_raw_ids():
     facts = {
         "verification_kind": "consultation_execution_relation_check",

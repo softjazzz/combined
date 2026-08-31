@@ -770,6 +770,11 @@ def safe_luxian_0609_customer_display_facts(
         return safe_events
 
     extended_kinds_by_rule = {
+        "LX0609-031": {
+            "surgery_signature_confirmed",
+            "surgery_signature_fields_missing",
+            "surgery_signer_not_qualified",
+        },
         "LX0609-050": {"uncertain_diagnosis_discussion_check", "uncertain_diagnosis_scope_unverified"},
         "LX0609-051": {
             "death_discussion_timeliness_check",
@@ -834,6 +839,13 @@ def safe_luxian_0609_customer_display_facts(
         },
     }
     extended_allowed_keys = {
+        "surgery_signature_fields_missing": {
+            "failure_kind", "performed_surgery_confirmed", "surgery_events",
+        },
+        "surgery_signer_not_qualified": {
+            "failure_kind", "performed_surgery_confirmed", "surgeon_signature_matches",
+            "surgery_events",
+        },
         "uncertain_diagnosis_discussion_check": {
             "admission_time", "uncertain_record_times", "discussion_count",
         },
@@ -983,6 +995,68 @@ def safe_luxian_0609_customer_display_facts(
         kind = raw.get(kind_key)
         if kind not in extended_kinds_by_rule[rule_id]:
             return None
+        if rule_id == "LX0609-031":
+            events = raw.get("surgery_events")
+            if kind == "surgery_signature_confirmed" and "surgery_events" not in raw:
+                allowed = {
+                    "verification_kind", "performed_surgery_confirmed",
+                    "surgeon_signature_matches", "first_assistant_exception_used",
+                }
+                if set(raw) != allowed or any(
+                    raw.get(key) is not True for key in (
+                        "performed_surgery_confirmed", "surgeon_signature_matches",
+                    )
+                ):
+                    return None
+                return dict(raw)
+            if (
+                raw.get("performed_surgery_confirmed") is not True
+                or not isinstance(events, (list, tuple))
+                or not events
+                or len(events) > 100
+                or set(raw) - {"failure_kind", "verification_kind",
+                               "performed_surgery_confirmed",
+                               "surgeon_signature_matches", "first_assistant_exception_used",
+                               "surgery_events"}
+            ):
+                return None
+            safe_events: list[dict[str, Any]] = []
+            for event in events:
+                if not isinstance(event, Mapping):
+                    return None
+                allowed = {"document_id", "surgery_name", "surgeon", "signer", "missing_fields"}
+                if set(event) - allowed:
+                    return None
+                surgery_name = event.get("surgery_name") or ""
+                surgeon = event.get("surgeon") or ""
+                signer = event.get("signer") or ""
+                missing = event.get("missing_fields")
+                if any(
+                    not isinstance(value, str) or len(value) > 160 or "\n" in value
+                    for value in (surgery_name, surgeon, signer)
+                ) or not isinstance(missing, list) or any(
+                    value not in {"surgeon", "surgeon_sign"} for value in missing
+                ):
+                    return None
+                safe_event = {
+                    "surgery_name": surgery_name,
+                    "surgeon": surgeon,
+                    "signer": signer,
+                    "missing_fields": list(dict.fromkeys(missing)),
+                }
+                safe_events.append(safe_event)
+            result = {
+                "verification_kind" if kind == "surgery_signature_confirmed" else "failure_kind": kind,
+                "performed_surgery_confirmed": True,
+                "surgery_events": safe_events,
+            }
+            if kind == "surgery_signer_not_qualified":
+                if raw.get("surgeon_signature_matches") is not False:
+                    return None
+                result["surgeon_signature_matches"] = False
+            elif raw.get("first_assistant_exception_used") is True:
+                result["first_assistant_exception_used"] = True
+            return result
         if kind == "postoperative_surgery_event_time_check":
             # 手术结束时间缺失是可解释的资料缺口，不应因原生逐台事件
             # 携带 document_id/surgery_name 等内部字段而让整个病例变成技术异常。
