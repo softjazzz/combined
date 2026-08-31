@@ -126,10 +126,14 @@
             <td class="qc-record-result-table__action-cell">
               <button
                 class="qc-record-result-table__result-button"
+                :class="{
+                  'qc-record-result-table__result-button--available': row.resultStatus !== 'not-run',
+                }"
                 type="button"
                 @click.stop="openResult(row.recordKey)"
               >
                 {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
+                <span v-if="row.resultStatus !== 'not-run'" aria-hidden="true">→</span>
               </button>
             </td>
           </tr>
@@ -282,7 +286,7 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 
 .qc-record-result-table__table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1120px;
   border-collapse: collapse;
   color: #1d1d1f;
   font-family:
@@ -292,7 +296,7 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 }
 
 .qc-record-result-table__table th {
-  height: 36px;
+  height: 42px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(226, 232, 240, 0.88);
   background: rgba(248, 250, 252, 0.92);
@@ -323,7 +327,7 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 
 .qc-record-result-table__table td {
   max-width: 230px;
-  padding: 8px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid rgba(241, 245, 249, 0.9);
   line-height: 20px;
   vertical-align: middle;
@@ -333,12 +337,15 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 .qc-record-result-table__row {
   cursor: pointer;
   outline: none;
-  transition: background-color 220ms ease;
+  transition:
+    background-color 220ms ease,
+    box-shadow 220ms ease;
 }
 
 .qc-record-result-table__row:hover,
 .qc-record-result-table__row:focus-visible {
   background: rgba(248, 250, 252, 0.88);
+  box-shadow: inset 3px 0 0 #0066cc;
 }
 
 .qc-record-result-table__row--selected {
@@ -474,32 +481,52 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 
 .qc-record-result-table__action-heading,
 .qc-record-result-table__action-cell {
+  width: 136px;
   text-align: right !important;
 }
 
 .qc-record-result-table__result-button {
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid transparent;
+  display: inline-flex;
+  min-width: 92px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  background: #fff;
   color: #5b6b84;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 8px 16px rgba(191, 207, 228, 0.12);
+  box-shadow: 0 2px 8px rgba(15, 42, 74, 0.06);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   transition:
     color 180ms ease,
     background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
     transform 180ms ease;
+}
+
+.qc-record-result-table__result-button--available {
+  border-color: #0066cc;
+  background: #0066cc;
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.2);
 }
 
 .qc-record-result-table__result-button:hover {
   color: #0066cc;
-  transform: translateX(1px);
+  border-color: #0066cc;
+  box-shadow: 0 6px 16px rgba(0, 102, 204, 0.18);
+  transform: translateY(-1px);
+}
+
+.qc-record-result-table__result-button--available:hover {
+  color: #fff;
+  background: #005bb8;
 }
 
 .qc-record-result-table__empty-row td {
