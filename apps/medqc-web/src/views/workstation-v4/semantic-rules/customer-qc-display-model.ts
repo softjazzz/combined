@@ -3,6 +3,7 @@ import {
   normalizeCustomerQcResult,
 } from '@/domain/customer-qc/result-normalizer'
 import type { RawCustomerQcResult } from '@/domain/customer-qc/result-model'
+import { resolveCustomerQcNotExecutedPresentation } from '@/domain/customer-qc/status-policy'
 
 /** 兼容现有调用点；只声明统一解释器真正读取的边界字段。 */
 export interface CustomerQcDisplaySource {
@@ -110,6 +111,18 @@ export function buildCustomerQcDisplayModel(
   source: CustomerQcDisplaySource,
 ): CustomerQcDisplayModel {
   const safeSource = normalizeSourceShape(source)
+  const notExecuted = resolveCustomerQcNotExecutedPresentation(safeSource)
+  if (notExecuted) {
+    return {
+      isEnhanced: true,
+      conclusion: notExecuted.summary,
+      detail: notExecuted.detail,
+      requirement: '',
+      actualValue: '',
+      evidenceSource: '',
+      suggestion: notExecuted.suggestion,
+    }
+  }
   const normalized = normalizeCustomerQcResult(safeSource)
   const isEnhanced = hasActionableCustomerExplanation(safeSource)
   if (!isEnhanced) {

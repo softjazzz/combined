@@ -3,6 +3,31 @@ import { buildRecordComparisonIssues } from '@/views/workstation-v4/semantic-rul
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 
 describe('buildRecordComparisonIssues', () => {
+  it('未执行质控点不应被解释为需要人工复核', () => {
+    const job = {
+      id: 'job-not-executed',
+      items: [
+        {
+          record_id: 'visit-1',
+          rule_id: 'LX0609-025',
+          rule_name: '植入物信息',
+          status: 'not_executed',
+        },
+      ],
+    } as unknown as SichuanBatchJob
+
+    const [issue] = buildRecordComparisonIssues(job, { recordId: 'visit-1' })
+
+    expect(issue).toMatchObject({
+      status: 'not_executed',
+      status_text: '未执行',
+      result_kind_text: '未执行',
+      summary: '当前阶段未执行，不纳入正式结论。',
+      suggestion: expect.stringContaining('无需按缺陷处理'),
+    })
+    expect(issue?.detail).not.toContain('人工复核')
+  })
+
   it('合并同一受控文书引用，保留不同文书引用', () => {
     const job = {
       id: 'job-1',

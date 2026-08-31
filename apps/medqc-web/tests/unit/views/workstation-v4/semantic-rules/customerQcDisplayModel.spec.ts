@@ -106,7 +106,7 @@ describe('customerQcDisplayModel', () => {
     expect(model.suggestion).toBe('请补充术前小结。')
   })
 
-  it('将 025 的缺失字段直接说明为本次手术记录未记录的内容', () => {
+  it('拒绝 025 的旧字段清单并保留安全回退文案', () => {
     const model = buildCustomerQcDisplayModel({
       rule_id: 'LX0609-025',
       status: 'non_compliant',
@@ -116,11 +116,29 @@ describe('customerQcDisplayModel', () => {
       },
     })
 
-    expect(model.conclusion).toBe(
-      '已确认本次手术使用植入物；手术记录未记录：条码/批号、数量（共2项）。',
-    )
-    expect(model.detail).toContain('本次不合规的直接原因')
-    expect(model.suggestion).toBe('请在本次手术记录中补录植入物条码/批号、数量。')
+    expect(model.isEnhanced).toBe(false)
+    expect(model.conclusion).toBe('执行器已判定发现质控问题，但当前客户解释资料不完整。')
+    expect(model.detail).toBe('')
+    expect(model.suggestion).toContain('补齐对应规则的受控事实和证据引用')
+  })
+
+  it.each([
+    ['status', { status: 'not_executed' }],
+    ['result_status', { result_status: 'not_run' }],
+    ['canonical_status', { canonical_status: 'unsupported' }],
+    ['display_status', { display_status: '未执行' }],
+  ] as const)('将 %s 字段的未执行状态显示为阶段性结果', (_field, status) => {
+    const model = buildCustomerQcDisplayModel({
+      rule_id: 'LX0609-025',
+      ...status,
+    })
+
+    expect(model).toMatchObject({
+      isEnhanced: true,
+      conclusion: '当前阶段未执行，不纳入正式结论。',
+      detail: expect.stringContaining('未纳入当前执行范围'),
+      suggestion: expect.stringContaining('无需按缺陷处理'),
+    })
   })
 
   it('将 016 的复制判定显示为客户可复核的百分比', () => {

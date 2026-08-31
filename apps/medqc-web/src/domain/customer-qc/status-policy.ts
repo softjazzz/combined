@@ -5,6 +5,13 @@ export interface CustomerQcStatusPresentation {
   tone: 'success' | 'danger' | 'warning' | 'muted' | 'info'
 }
 
+export interface CustomerQcNotExecutedPresentation {
+  status: 'not_executed'
+  summary: string
+  detail: string
+  suggestion: string
+}
+
 const STATUS_MAP: Record<string, CustomerQcDecisionStatus> = {
   compliant: 'compliant',
   pass: 'compliant',
@@ -46,8 +53,30 @@ const MISSING_EVIDENCE_CODES = new Set([
   'empty',
 ])
 
+const NOT_EXECUTED_STATUS_KEYS = new Set(['not_executed', 'not_run', 'unsupported', '未执行'])
+
 function normalizedKey(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+/** 读取阶段性执行状态；不把未执行结果塞进客户侧临床六态。 */
+export function resolveCustomerQcNotExecutedPresentation(
+  source: unknown,
+): CustomerQcNotExecutedPresentation | undefined {
+  const candidates =
+    source && typeof source === 'object' && !Array.isArray(source)
+      ? (['result_status', 'status', 'canonical_status', 'display_status'] as const).map(
+          (field) => (source as Record<string, unknown>)[field],
+        )
+      : [source]
+  const firstStatus = candidates.find((value) => normalizedKey(value))
+  if (!NOT_EXECUTED_STATUS_KEYS.has(normalizedKey(firstStatus))) return undefined
+  return {
+    status: 'not_executed',
+    summary: '当前阶段未执行，不纳入正式结论。',
+    detail: '该质控点尚未纳入当前执行范围，本次不形成合规、不合规或资料充分性判断。',
+    suggestion: '当前无需按缺陷处理；待该质控点纳入执行范围后再进行核对。',
+  }
 }
 
 /** 将所有候选状态映射到客户侧五态/技术错误，AI 建议态绝不等同于不合规。 */

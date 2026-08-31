@@ -1,5 +1,6 @@
 import { normalizeCustomerQcResult } from '@/domain/customer-qc/result-normalizer'
 import type { RawCustomerQcResult } from '@/domain/customer-qc/result-model'
+import { resolveCustomerQcNotExecutedPresentation } from '@/domain/customer-qc/status-policy'
 import type {
   QCRecordCompareEvidence,
   QCRecordCompareIssue,
@@ -271,6 +272,7 @@ export function buildRecordComparisonIssues(
       ].join('|')
       const status = resolveStatus(item)
       const normalized = normalizeCustomerQcResult(item as unknown as RawCustomerQcResult)
+      const notExecuted = resolveCustomerQcNotExecutedPresentation({ status })
       return {
         key,
         rule_code: String(item.rule_code || item.rule_id || '未知规则'),
@@ -278,12 +280,12 @@ export function buildRecordComparisonIssues(
         status,
         status_text: resolveStatusText(status),
         result_kind_text: resolveResultKindText(status),
-        conclusion: item.findings || item.conclusion || '未返回结论',
-        summary: normalized.display.summary,
-        detail: normalized.display.detail,
+        conclusion: notExecuted?.summary || item.findings || item.conclusion || '未返回结论',
+        summary: notExecuted?.summary || normalized.display.summary,
+        detail: notExecuted?.detail || normalized.display.detail,
         requirement: normalized.display.requirement,
         actual_value: normalized.display.actualValue,
-        suggestion: normalized.display.suggestion,
+        suggestion: notExecuted?.suggestion || normalized.display.suggestion,
         target_document_type: String(item.target_document_type || item.document_type || ''),
         evidences: buildEvidence(item, key),
       }
