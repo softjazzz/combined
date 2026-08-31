@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from datetime import datetime, timedelta
 from math import isfinite
@@ -42,6 +43,7 @@ _STATUS_PRIORITY = {
     "technical_error": 60,
 }
 _HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+logger = logging.getLogger(__name__)
 
 
 class Luxian0609CustomerDisplayFactsError(ValueError):
@@ -4111,7 +4113,7 @@ def safe_luxian_0609_customer_display_facts(
         if (
             not isinstance(episode_results, list)
             or len(episode_results) != raw["episode_count"]
-            or len(episode_results) > 12
+            or len(episode_results) > 100
         ):
             return None
         safe_episode_results: list[dict[str, Any]] = []
@@ -5453,7 +5455,9 @@ def _copy_native_customer_fields(
             "LX0609-022",
             "LX0609-023",
         }:
-            raise ValueError("invalid consultation customer display facts")
+            raise ValueError(
+                f"invalid consultation customer display facts [{wrapper_id}]"
+            )
         if wrapper_id == "LX0609-025":
             raise ValueError("lx0609_025_display_fact_status_mismatch")
         raise Luxian0609CustomerDisplayFactsError(wrapper_id)
@@ -5484,6 +5488,29 @@ def _copy_native_customer_fields(
     ):
         if supplied_safe_facts_item is not None:
             continue
+        if wrapper_id in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}:
+            compact = {
+                "keys": sorted(str(key) for key in supplied_facts)
+                if isinstance(supplied_facts, Mapping)
+                else [],
+                "episode_count": supplied_facts.get("episode_count")
+                if isinstance(supplied_facts, Mapping)
+                else None,
+                "document_count": supplied_facts.get("document_count")
+                if isinstance(supplied_facts, Mapping)
+                else None,
+                "source_document_ids_count": len(supplied_facts.get("source_document_ids") or [])
+                if isinstance(supplied_facts, Mapping)
+                else None,
+                "episode_results_count": len(supplied_facts.get("episode_results") or [])
+                if isinstance(supplied_facts, Mapping)
+                else None,
+            }
+            logger.warning(
+                "LX0609 consultation customer facts rejected: rule=%s facts=%s",
+                wrapper_id,
+                compact,
+            )
         is_strict_010_contract = (
             wrapper_id == "LX0609-010"
             and isinstance(supplied_facts, Mapping)
@@ -5697,7 +5724,20 @@ def aggregate_luxian_0609_results(
             "LX0609-022",
             "LX0609-023",
         }:
-            raise ValueError("invalid consultation customer display facts")
+            logger.warning(
+                "LX0609 consultation display facts rejected during aggregation: rule=%s facts=%s",
+                rule_id,
+                {
+                    "keys": sorted(str(key) for key in facts),
+                    "episode_count": facts.get("episode_count"),
+                    "document_count": facts.get("document_count"),
+                    "source_document_ids_count": len(facts.get("source_document_ids") or []),
+                    "episode_results_count": len(facts.get("episode_results") or []),
+                },
+            )
+            raise ValueError(
+                f"invalid consultation customer display facts [{rule_id}]"
+            )
         is_strict_display_contract = rule_id == "LX0609-025" or (
             rule_id == "LX0609-010"
             and facts.get("requirement") == "order_course_report_consistency"

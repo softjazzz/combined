@@ -1752,7 +1752,7 @@ def _consultation_semantic_display_facts(
     }
     if rule_id in {"LX0609-021", "LX0609-022"}:
         facts["source_document_ids"] = list(dict.fromkeys(source_document_ids))[
-            :_MAX_EPISODES
+            :100
         ]
         facts["episode_results"] = episode_results
     return facts

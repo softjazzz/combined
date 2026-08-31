@@ -1255,6 +1255,36 @@ def test_022_episode_results_are_strictly_validated_for_customer_delivery():
         safe_luxian_0609_customer_display_facts(rule_id="LX0609-022", raw=facts)
         is None
     )
+
+
+def test_021_customer_facts_allow_realistic_consultation_episode_count():
+    episode_results = [
+        {
+            "episode_index": index,
+            "semantic_state": "clear",
+            "source_document_id": f"CONSULT-{index}",
+            "record_time": f"2026-07-{(index % 28) + 1:02d} 10:00:00",
+            "document_title": "会诊申请单",
+        }
+        for index in range(1, 30)
+    ]
+    facts = {
+        "verification_kind": "consultation_application_quality_check",
+        "episode_count": 29,
+        "document_count": 29,
+        "semantic_state": "clear",
+        "checked_requirement": "说明具体临床问题、会诊理由或明确会诊目的",
+        "source_document_ids": [f"CONSULT-{index}" for index in range(1, 30)],
+        "episode_results": episode_results,
+    }
+
+    safe = safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-021", raw=facts
+    )
+
+    assert safe is not None
+    assert safe["episode_count"] == 29
+    assert len(safe["episode_results"]) == 29
     facts["episode_results"][1]["record_time"] = "2026-07-20 02:00:00"
     facts["episode_results"][1]["document_title"] = "PRIVATE_PATIENT_TITLE"
     assert (
