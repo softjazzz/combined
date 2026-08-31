@@ -134,6 +134,50 @@ def test_020_recommendation_evidence_rejects_duplicate_indexes_fail_closed():
     ) is None
 
 
+def test_020_recommendation_evidence_accepts_mixed_reference_shapes_per_episode():
+    """真实执行结果可能逐条混用内部文书 ID 和已投影 source_ref。"""
+    raw = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 2,
+        "recommendation_count": 2,
+        "specific_execution_count": 2,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "all_linked",
+        "source_document_ids": ["CONSULT-1", "CONSULT-2"],
+        "source_document_refs": [
+            {"source_type": "consultation_record", "source_document_id": "CONSULT-1"},
+            {"source_type": "consultation_record", "source_document_id": "CONSULT-2"},
+        ],
+        "recommendation_results": [
+            {"episode_index": i, "recommendation_index": i, "action_type": "test", "execution_state": "specific"}
+            for i in (1, 2)
+        ],
+        "recommendation_evidence": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "execution_state": "specific",
+                "opinion_evidence": [{"source_type": "consultation_record", "source_ref": "src_" + "a" * 24}],
+                "execution_evidence": [{"source_type": "daily_course_record", "source_ref": "src_" + "b" * 24}],
+            },
+            {
+                "episode_index": 2,
+                "recommendation_index": 2,
+                "execution_state": "specific",
+                "opinion_refs": [{"source_type": "consultation_record", "source_document_id": "CONSULT-2"}],
+                "execution_refs": [{"source_type": "daily_course_record", "source_document_id": "COURSE-2"}],
+            },
+        ],
+    }
+
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-020", raw=raw)
+
+    assert safe is not None
+    assert safe["recommendation_evidence"][0]["opinion_evidence"][0]["source_ref"] == "src_" + "a" * 24
+    assert safe["recommendation_evidence"][1]["execution_evidence"][0]["source_ref"].startswith("src_")
+
+
 def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
     item = {
         "rule_id": "LX0609-020",

@@ -4403,7 +4403,17 @@ def safe_luxian_0609_customer_display_facts(
             is_public_recommendation_evidence = (
                 is_public_projection or evidence_shape_is_public
             )
-            projection_key = customer_safe_projection_key() if is_public_recommendation_evidence is False else ""
+            has_internal_evidence_item = any(
+                isinstance(item, Mapping)
+                and "opinion_evidence" not in item
+                and "execution_evidence" not in item
+                for item in raw_recommendation_evidence
+            )
+            projection_key = (
+                customer_safe_projection_key()
+                if not is_public_recommendation_evidence or has_internal_evidence_item
+                else ""
+            )
 
             def project_refs(value: Any, *, public: bool) -> list[dict[str, str]] | None:
                 if not isinstance(value, list) or len(value) > 8:
@@ -4448,7 +4458,12 @@ def safe_luxian_0609_customer_display_facts(
             for expected_index, item in enumerate(raw_recommendation_evidence, start=1):
                 if not isinstance(item, Mapping):
                     return None
-                if is_public_recommendation_evidence:
+                # 真实病例可能在同一 facts 中混用两种受控引用格式；按条目识别，
+                # 不能用整批 evidence 的某一个条目决定其他条目的字段合同。
+                item_is_public = (
+                    "opinion_evidence" in item or "execution_evidence" in item
+                )
+                if item_is_public:
                     expected_item_keys = {"episode_index", "recommendation_index", "execution_state", "opinion_evidence", "execution_evidence"}
                     opinion_key, execution_key = "opinion_evidence", "execution_evidence"
                 else:
@@ -4476,8 +4491,8 @@ def safe_luxian_0609_customer_display_facts(
                 if index_key in seen_indexes:
                     return None
                 seen_indexes.add(index_key)
-                opinion_evidence = project_refs(item.get(opinion_key), public=is_public_recommendation_evidence)
-                execution_evidence = project_refs(item.get(execution_key), public=is_public_recommendation_evidence)
+                opinion_evidence = project_refs(item.get(opinion_key), public=item_is_public)
+                execution_evidence = project_refs(item.get(execution_key), public=item_is_public)
                 if opinion_evidence is None or execution_evidence is None:
                     return None
                 safe_recommendation_evidence.append({
