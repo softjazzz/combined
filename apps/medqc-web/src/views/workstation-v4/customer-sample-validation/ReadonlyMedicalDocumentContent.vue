@@ -77,12 +77,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type {
-  EditableMedicalRecordDocument,
-  EditableMedicalRecordSection,
-  EditableMedicalReportItem,
-} from './types'
-import { deduplicateMedicalDocumentSections } from './medicalDocumentDisplay'
+import type { EditableMedicalRecordDocument, EditableMedicalReportItem } from './types'
+import {
+  deduplicateMedicalDocumentSections,
+  displayMedicalDocumentSectionText,
+} from './medicalDocumentDisplay'
 import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 
 const props = defineProps<{
@@ -124,27 +123,12 @@ const reportMetadataRows = computed(() =>
     .map(([key, value]) => ({ key, label: REPORT_METADATA_LABELS[key], value })),
 )
 
-function normalizeLine(value: string): string {
-  return value.replace(/\s+/g, '').replace(/[：:]+$/u, '')
-}
-
-function removeDuplicateSectionTitle(section: EditableMedicalRecordSection): string {
-  const text = String(section.text || '').trim()
-  if (!text) return '未记录'
-
-  const lines = text.split(/\r?\n/u)
-  if (lines.length > 1 && normalizeLine(lines[0] || '') === normalizeLine(section.label)) {
-    return lines.slice(1).join('\n').trim() || '未记录'
-  }
-  return text
-}
-
 const sectionViews = computed<SectionView[]>(() =>
   deduplicateMedicalDocumentSections(props.document.sections || [])
     .map((section, sourceIndex) => ({
       key: section.key || `section-${sourceIndex}`,
       label: resolveSafeMedicalSectionLabel(section.label, '未命名章节'),
-      text: removeDuplicateSectionTitle(section),
+      text: displayMedicalDocumentSectionText(section),
       orderIndex: Number.isFinite(section.order_index)
         ? Number(section.order_index)
         : Number.MAX_SAFE_INTEGER,

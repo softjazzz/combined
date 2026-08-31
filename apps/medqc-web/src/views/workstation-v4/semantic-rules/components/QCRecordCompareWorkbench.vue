@@ -278,6 +278,8 @@ import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sa
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 import {
+  deduplicateMedicalDocumentSections,
+  displayMedicalDocumentSectionText,
   formatMedicalDocumentTime,
   isMedicalOrderDocument,
   resolveMedicalDocumentTime,
@@ -482,13 +484,13 @@ const documentTextParts = computed(() => {
 
 const documentSectionViews = computed(() => {
   const document = selectedDocument.value
-  const sections = document?.sections || []
+  const sections = deduplicateMedicalDocumentSections(document?.sections || [])
   if (!document || !sections.length) return []
   const content = document.content || ''
   const range = matchedRange.value
   let cursor = 0
   return sections.map((section) => {
-    const text = section.text
+    const text = displayMedicalDocumentSectionText(section)
     const sectionStart = content.indexOf(text, cursor)
     if (sectionStart >= 0) cursor = sectionStart + text.length
     const localStart =

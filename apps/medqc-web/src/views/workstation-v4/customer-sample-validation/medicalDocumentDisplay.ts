@@ -32,14 +32,42 @@ export function isMedicalOrderDocument(document: EditableMedicalRecordDocument):
   return resolveMedicalDocumentGroup(document).key === 'orders'
 }
 
-const GENERIC_SECTION_LABELS = new Set(['正文', '记录内容', '文书内容', 'content', 'text'])
+const GENERIC_SECTION_LABELS = new Set([
+  '正文',
+  '记录内容',
+  '文书内容',
+  '基础信息',
+  'content',
+  'text',
+  'recordcontent',
+])
 
 function normalizeSectionText(value: string): string {
   return value.normalize('NFKC').replace(/\s+/gu, '').trim()
 }
 
 function isGenericSectionLabel(value: string): boolean {
-  return GENERIC_SECTION_LABELS.has(value.trim().toLowerCase())
+  const normalized = value
+    .normalize('NFKC')
+    .replace(/[\s_-]+/gu, '')
+    .trim()
+    .toLowerCase()
+  return GENERIC_SECTION_LABELS.has(normalized)
+}
+
+/** 去掉源系统在章节正文首行重复输出的章节标题。 */
+export function displayMedicalDocumentSectionText(section: EditableMedicalRecordSection): string {
+  const text = String(section.text || '').trim()
+  if (!text) return '未记录'
+  const lines = text.split(/\r?\n/u)
+  const normalizeLine = (value: string) => value.replace(/\s+/gu, '').replace(/[：:]+$/u, '')
+  if (
+    lines.length > 1 &&
+    normalizeLine(lines[0] || '') === normalizeLine(String(section.label || ''))
+  ) {
+    return lines.slice(1).join('\n').trim() || '未记录'
+  }
+  return text
 }
 
 /**
