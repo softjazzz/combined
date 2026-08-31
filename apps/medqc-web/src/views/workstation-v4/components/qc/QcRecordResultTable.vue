@@ -1,16 +1,10 @@
 <template>
-  <div
-    class="qc-record-result-table"
-    data-testid="qc-record-result-table"
-  >
+  <div class="qc-record-result-table" data-testid="qc-record-result-table">
     <div class="qc-record-result-table__scroll">
       <table class="qc-record-result-table__table">
         <thead>
           <tr>
-            <th
-              scope="col"
-              class="qc-record-result-table__selection-heading"
-            >
+            <th scope="col" class="qc-record-result-table__selection-heading">
               <input
                 type="checkbox"
                 aria-label="选择当前页全部病历"
@@ -18,32 +12,17 @@
                 :disabled="rows.length === 0"
                 @click.stop
                 @change="togglePageSelection"
-              >
+              />
             </th>
-            <th scope="col">
-              患者 / 住院号
-            </th>
-            <th scope="col">
-              科室 / 床位
-            </th>
+            <th scope="col">患者 / 住院号</th>
+            <th scope="col">科室 / 床位</th>
             <th scope="col">
               {{ timeColumnLabel }}
             </th>
-            <th scope="col">
-              最新质控结果
-            </th>
-            <th scope="col">
-              问题摘要
-            </th>
-            <th scope="col">
-              最近质控
-            </th>
-            <th
-              scope="col"
-              class="qc-record-result-table__action-heading"
-            >
-              查看结果
-            </th>
+            <th scope="col">最新质控结果</th>
+            <th scope="col">问题摘要</th>
+            <th scope="col">最近质控</th>
+            <th scope="col" class="qc-record-result-table__action-heading">查看结果</th>
           </tr>
         </thead>
         <tbody>
@@ -68,7 +47,7 @@
                 :checked="selectedRecordKeys.includes(row.recordKey)"
                 @click.stop
                 @change="toggleRowSelection(row.recordKey, $event)"
-              >
+              />
             </td>
             <td>
               <div class="qc-record-result-table__patient-cell">
@@ -76,7 +55,7 @@
                   class="qc-record-result-table__avatar"
                   :src="patientAvatarSrc(row)"
                   :alt="`${row.patientName || '患者'}头像`"
-                >
+                />
                 <span class="qc-record-result-table__patient-meta">
                   <span class="qc-record-result-table__patient-name">
                     {{ row.patientName || '患者信息待接入' }}
@@ -87,10 +66,7 @@
                       row.visitId || '待接入'
                     }}</span>
                   </span>
-                  <span
-                    v-if="row.sourceLabel"
-                    class="qc-record-result-table__source-state"
-                  >{{
+                  <span v-if="row.sourceLabel" class="qc-record-result-table__source-state">{{
                     row.sourceLabel
                   }}</span>
                 </span>
@@ -100,10 +76,7 @@
               <span class="qc-record-result-table__department">
                 {{ row.department || '未分科室' }}
               </span>
-              <span
-                v-if="row.bedNumber"
-                class="qc-record-result-table__bed-number"
-              >{{
+              <span v-if="row.bedNumber" class="qc-record-result-table__bed-number">{{
                 row.bedNumber
               }}</span>
             </td>
@@ -116,10 +89,7 @@
                 {{ row.resultLabel }}
               </span>
             </td>
-            <td
-              class="qc-record-result-table__summary"
-              :title="row.issueSummary"
-            >
+            <td class="qc-record-result-table__summary" :title="row.issueSummary">
               {{ row.issueSummary }}
             </td>
             <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
@@ -127,7 +97,8 @@
               <button
                 class="qc-record-result-table__result-button"
                 :class="{
-                  'qc-record-result-table__result-button--available': row.resultStatus !== 'not-run',
+                  'qc-record-result-table__result-button--available':
+                    row.resultStatus !== 'not-run',
                 }"
                 type="button"
                 @click.stop="openResult(row.recordKey)"
@@ -136,10 +107,7 @@
               </button>
             </td>
           </tr>
-          <tr
-            v-if="rows.length === 0"
-            class="qc-record-result-table__empty-row"
-          >
+          <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
             <td colspan="8">
               {{ emptyMessage }}
             </td>
@@ -175,13 +143,7 @@ export interface QcRecordResultRow {
   admissionTime?: string
   dischargeTime?: string
   resultStatus:
-    | 'priority'
-    | 'data-gap'
-    | 'uncertain'
-    | 'technical-error'
-    | 'not-run'
-    | 'completed'
-    | 'unknown'
+    'priority' | 'data-gap' | 'uncertain' | 'technical-error' | 'not-run' | 'completed' | 'unknown'
   resultLabel: string
   issueSummary: string
   latestQcTime?: string
@@ -295,14 +257,15 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 }
 
 .qc-record-result-table__table th {
-  height: 42px;
+  height: 46px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(226, 232, 240, 0.88);
   background: rgba(248, 250, 252, 0.92);
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 20px;
   text-align: left;
   white-space: nowrap;
 }
