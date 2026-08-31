@@ -17,6 +17,15 @@ class DischargeDocumentationOutcome:
     display_facts: Mapping[str, Any] | None = None
 
 
+def _discharge_record_completion_time(row: Mapping[str, Any]) -> datetime | None:
+    """读取出院记录完成时间；泸县源表以 update_time 保存提交完成时间。"""
+
+    value = authoritative_document_time_value(row)
+    if value is None:
+        value = row.get("update_time")
+    return _parse_datetime(value)
+
+
 def evaluate_discharge_documentation_timeliness(
     *,
     death_state: str,
@@ -71,9 +80,7 @@ def evaluate_discharge_documentation_timeliness(
         candidate
         for row in discharge_rows
         if (
-            candidate := _parse_datetime(
-                authoritative_document_time_value(row)
-            )
+                candidate := _discharge_record_completion_time(row)
         )
         is not None
     )
