@@ -1896,16 +1896,21 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
         ),
     ],
 )
-def test_consultation_customer_facts_fail_closed_in_public_aggregation(
+def test_consultation_customer_facts_incomplete_yield_data_gap_with_evidence(
     rule_id, facts
 ):
-    with pytest.raises(ValueError, match="invalid consultation customer display facts"):
-        aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": rule_id}],
-            execution_results=[],
-            reduced_decisions=(_reduced_decision(rule_id),),
-            customer_display_facts=((rule_id, facts),),
-        )
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision(rule_id),),
+        customer_display_facts=((rule_id, facts),),
+    )[0]
+
+    assert result["status"] == "data_gap"
+    assert result["is_compliant"] is None
+    assert result["reason_code"] == "required_field_missing"
+    assert result["customer_evidence"]
+    assert "PRIVATE_UNKNOWN" not in repr(result)
 
 
 @pytest.mark.parametrize(
@@ -4018,6 +4023,39 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
             "source_document_id": "private-rescue-document-id",
         }]
     assert "PRIVATE_" not in repr(result)
+
+
+def test_consultation_native_incomplete_facts_do_not_fail_task():
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-020", "name": "LX0609-020"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-020",
+                "status": "non_compliant",
+                "findings": "规则要求未满足。",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "executor_type": "llm",
+                    "customer_display_facts": {
+                        "source_document_ids": ["CONSULT-REQUEST", "CONSULT-OPINION"],
+                        "consultation_assessment": "不符合要求",
+                        "execution_record_state": "未发现执行记录",
+                        "execution_candidate_count": 0,
+                        "PRIVATE_UNKNOWN": "PRIVATE-CONSULTATION-TEXT",
+                    },
+                },
+            }
+        ],
+    )[0]
+
+    assert result["status"] == "data_gap"
+    assert result["is_compliant"] is None
+    assert result["reason_code"] == "required_field_missing"
+    assert [item["source_document_id"] for item in result["customer_evidence"]] == [
+        "CONSULT-REQUEST",
+        "CONSULT-OPINION",
+    ]
+    assert "PRIVATE-CONSULTATION-TEXT" not in repr(result)
 
 
 _STRICT_CUSTOMER_FACT_RULES = (

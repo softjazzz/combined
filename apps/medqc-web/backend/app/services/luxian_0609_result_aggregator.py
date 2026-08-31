@@ -5114,6 +5114,58 @@ def _customer_evidence_from_display_facts(
     ]
 
 
+def _customer_evidence_from_incomplete_consultation_facts(
+    *, rule_id: str, raw: Any
+) -> list[dict[str, str]]:
+    """不完整会诊事实仍保留显式文书证据，但绝不投影业务事实。"""
+
+    if rule_id not in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}:
+        return []
+    if not isinstance(raw, Mapping):
+        return []
+    allowed_source_types = {
+        "consultation_record",
+        "daily_course_record",
+        "senior_course_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "exam_master",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "surgery_record",
+    }
+
+    def valid_document_id(value: Any) -> str:
+        candidate = str(value or "").strip()
+        return candidate if candidate and len(candidate) <= 256 and "\n" not in candidate and "\r" not in candidate else ""
+
+    refs = raw.get("source_document_refs")
+    if isinstance(refs, list):
+        rows: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in refs[:8]:
+            if not isinstance(item, Mapping):
+                continue
+            source_type = str(item.get("source_type") or "").strip()
+            document_id = valid_document_id(item.get("source_document_id"))
+            key = (source_type, document_id)
+            if source_type not in allowed_source_types or not document_id or key in seen:
+                continue
+            seen.add(key)
+            rows.append({"source_type": source_type, "source_document_id": document_id})
+        if rows:
+            return rows
+    raw_ids = raw.get("source_document_ids")
+    if not isinstance(raw_ids, list):
+        return []
+    return [
+        {"source_type": "consultation_record", "source_document_id": document_id}
+        for document_id in dict.fromkeys(valid_document_id(value) for value in raw_ids[:8])
+        if document_id
+    ]
+
+
 def _valid_customer_evidence_document_id(value: Any) -> str:
     """仅允许内部已验证的文书 ID 进入后续安全签名环节。"""
 
@@ -5488,16 +5540,18 @@ def _copy_native_customer_fields(
 ) -> dict[str, Any]:
     """原生结果不携带旧映射诊断，并保留程序/模型执行类型。"""
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
+    is_consultation_rule = wrapper_id in {
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-023",
+    }
+    consultation_facts_incomplete = False
 
     def reject_invalid_display_facts() -> None:
         if wrapper_id == "LX0609-017":
             raise ValueError("invalid copy customer display facts")
-        if wrapper_id in {
-            "LX0609-020",
-            "LX0609-021",
-            "LX0609-022",
-            "LX0609-023",
-        }:
+        if is_consultation_rule:
             raise ValueError(
                 f"invalid consultation customer display facts [{wrapper_id}]"
             )
@@ -5531,7 +5585,8 @@ def _copy_native_customer_fields(
     ):
         if supplied_safe_facts_item is not None:
             continue
-        if wrapper_id in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}:
+        if is_consultation_rule:
+            consultation_facts_incomplete = True
             compact = {
                 "keys": sorted(str(key) for key in supplied_facts)
                 if isinstance(supplied_facts, Mapping)
@@ -5554,6 +5609,7 @@ def _copy_native_customer_fields(
                 wrapper_id,
                 compact,
             )
+            continue
         is_strict_010_contract = (
             wrapper_id == "LX0609-010"
             and isinstance(supplied_facts, Mapping)
@@ -5561,11 +5617,16 @@ def _copy_native_customer_fields(
             == "order_course_report_consistency"
         )
         if not is_strict_010_contract:
-            reject_invalid_display_facts()
+            if is_consultation_rule:
+                consultation_facts_incomplete = True
+            else:
+                reject_invalid_display_facts()
     if len(supplied_display_facts) == 2:
         if all(item is not None for item in supplied_safe_facts):
             if supplied_safe_facts[0] != supplied_safe_facts[1]:
                 reject_invalid_display_facts()
+        elif is_consultation_rule:
+            consultation_facts_incomplete = True
         elif not (
             wrapper_id == "LX0609-010"
             and all(isinstance(item, Mapping) for item in supplied_display_facts)
@@ -5582,6 +5643,8 @@ def _copy_native_customer_fields(
     safe_display_facts = (
         supplied_safe_facts[0] if supplied_safe_facts else None
     )
+    if is_consultation_rule and consultation_facts_incomplete:
+        status = "data_gap"
     _validate_transfusion_system_gap_fact_status(
         rule_id=wrapper_id,
         status=status,
@@ -5653,6 +5716,8 @@ def _copy_native_customer_fields(
         else "native_programmatic"
     )
     metadata["customer_rule_id"] = wrapper_id
+    if is_consultation_rule and consultation_facts_incomplete:
+        metadata["reason_code"] = "required_field_missing"
     result = {
         **_strip_sensitive(selected),
         "rule_id": wrapper_id,
@@ -5669,6 +5734,18 @@ def _copy_native_customer_fields(
         "trigger_decision": {},
         "postprocess_reason": str(metadata.get("reason_code") or ""),
     }
+    if is_consultation_rule and consultation_facts_incomplete:
+        result.update(
+            {
+                "status": "data_gap",
+                "is_compliant": None,
+                "findings": "已读取会诊相关资料，但客户展示事实不完整，暂时无法完成本项质控。",
+                "evidence": "已保留可识别的会诊文书证据，未将不完整事实作为确定结论。",
+                "suggestion": "请补充完整会诊事实后重新评估。",
+                "reason_code": "required_field_missing",
+                "postprocess_reason": "required_field_missing",
+            }
+        )
     result.pop("customer_display_facts", None)
     if safe_display_facts:
         result["customer_display_facts"] = safe_display_facts
@@ -5679,6 +5756,15 @@ def _copy_native_customer_fields(
         ),
         copy_pair_evidence,
     )
+    if is_consultation_rule and consultation_facts_incomplete:
+        incomplete_evidence = _customer_evidence_from_incomplete_consultation_facts(
+            rule_id=wrapper_id,
+            raw=raw_display_facts,
+        )
+        customer_evidence = _merge_customer_evidence(
+            incomplete_evidence,
+            customer_evidence,
+        )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
     return result
@@ -5735,6 +5821,7 @@ def aggregate_luxian_0609_results(
     raw_copy_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     raw_025_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     customer_evidence_by_rule: dict[str, list[dict[str, str]]] = {}
+    incomplete_consultation_rules: set[str] = set()
     wrapper_rule_ids = {
         _norm_id(item.get("rule_id") or item.get("rule_code"))
         for item in wrapper_rules
@@ -5778,9 +5865,7 @@ def aggregate_luxian_0609_results(
                     "episode_results_count": len(facts.get("episode_results") or []),
                 },
             )
-            raise ValueError(
-                f"invalid consultation customer display facts [{rule_id}]"
-            )
+            incomplete_consultation_rules.add(rule_id)
         is_strict_display_contract = rule_id == "LX0609-025" or (
             rule_id == "LX0609-010"
             and facts.get("requirement") == "order_course_report_consistency"
@@ -5791,7 +5876,7 @@ def aggregate_luxian_0609_results(
                 raw_copy_facts_by_rule[rule_id] = facts
             if rule_id == "LX0609-025":
                 raw_025_facts_by_rule[rule_id] = facts
-        elif not is_strict_display_contract:
+        elif not is_strict_display_contract and rule_id not in incomplete_consultation_rules:
             raise Luxian0609CustomerDisplayFactsError(rule_id)
         elif rule_id == "LX0609-025":
             raw_025_facts_by_rule[rule_id] = facts
@@ -5799,6 +5884,11 @@ def aggregate_luxian_0609_results(
             rule_id=rule_id,
             raw=facts,
         )
+        if not customer_evidence and rule_id in incomplete_consultation_rules:
+            customer_evidence = _customer_evidence_from_incomplete_consultation_facts(
+                rule_id=rule_id,
+                raw=facts,
+            )
         if customer_evidence:
             customer_evidence_by_rule[rule_id] = customer_evidence
     result_by_rule: dict[str, list[dict[str, Any]]] = {}
@@ -5822,6 +5912,18 @@ def aggregate_luxian_0609_results(
                 safe_customer_display_facts=display_facts_by_rule.get(wrapper_id),
                 trace_sink=decision_trace_sink,
             )
+            if wrapper_id in incomplete_consultation_rules:
+                result.update(
+                    {
+                        "status": "data_gap",
+                        "result_status": "data_gap",
+                        "is_compliant": None,
+                        "findings": "已读取会诊相关资料，但客户展示事实不完整，暂时无法完成本项质控。",
+                        "evidence": "已保留可识别的会诊文书证据，未将不完整事实作为确定结论。",
+                        "suggestion": "请补充完整会诊事实后重新评估。",
+                        "reason_code": "required_field_missing",
+                    }
+                )
             _validate_lx0609_025_fact_status(
                 rule_id=wrapper_id,
                 status=str(result.get("status") or ""),
