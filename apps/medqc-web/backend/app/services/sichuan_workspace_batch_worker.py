@@ -3211,6 +3211,43 @@ async def run_sichuan_workspace_batch_job(
             first_failure_error = str(
                 all_failed_records[0].get("error") or ""
             ).strip()
+            # 正式客户结果在任一病例失败时必须停止进入 Canonical，但不能丢失
+            # 失败定位信息；否则任务只会留下一个无法调试的“执行失败”。
+            failure_diagnostics: list[dict[str, str]] = []
+            seen_failure_diagnostics: set[tuple[str, str, str]] = set()
+            for failed in all_failed_records:
+                diagnostic = {
+                    "record_id": str(failed.get("record_id") or "").strip(),
+                    "visit_id": str(failed.get("visit_id") or "").strip(),
+                    "rule_id": str(failed.get("rule_id") or "").strip().upper(),
+                    "error_phase": str(failed.get("error_phase") or "").strip(),
+                    "error": str(failed.get("error") or "").strip()[:240],
+                }
+                key = (
+                    diagnostic["record_id"],
+                    diagnostic["rule_id"],
+                    diagnostic["error"],
+                )
+                if key in seen_failure_diagnostics:
+                    continue
+                seen_failure_diagnostics.add(key)
+                failure_diagnostics.append(diagnostic)
+                if len(failure_diagnostics) >= 40:
+                    break
+            workspace.update_batch_job_progress(
+                job_id=job_id,
+                step_key="failed",
+                rule_index=len(output_rule_ids),
+                rule_count=total_rules,
+                processed_records=total_records,
+                total_records=total_records,
+                summary_patch={
+                    "failed_record_count": len(failed_record_ids),
+                    "failed_count": len(all_failed_records),
+                    "failure_diagnostics": failure_diagnostics,
+                },
+                progress_patch=_record_runtime_progress(total_records),
+            )
             logger.error(
                 "LX0609正式质控未形成可交付结果，停止进入Canonical: first_error=%s",
                 first_failure_error or "unknown",

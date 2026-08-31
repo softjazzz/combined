@@ -667,6 +667,15 @@ async def test_luxian_worker_preserves_first_evaluation_error_before_canonical(
     )
     assert workspace.complete_calls == 0
     assert workspace.items == []
+    failure_updates = [
+        item
+        for item in workspace.progress_updates
+        if item["step_key"] == "failed"
+    ]
+    assert failure_updates
+    diagnostics = failure_updates[-1]["summary_patch"]["failure_diagnostics"]
+    assert diagnostics[0]["rule_id"] == "LX0609-012"
+    assert diagnostics[0]["error"].startswith("invalid customer display facts")
 
 class _ServiceStub:
     def __init__(self, status_by_rule: Optional[Dict[str, str]] = None) -> None:
