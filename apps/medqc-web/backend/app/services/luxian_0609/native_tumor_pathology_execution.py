@@ -1628,17 +1628,20 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if rule_id == "LX0609-019" and all(
             state == "empty" for state in target_states
         ):
+            missing_sampling_facts = _lx019_missing_sampling_display_facts(
+                pathology_master=master,
+                pathology_report=report,
+                surgery_record=materials["surgery_record"],
+                daily_course_record=materials["daily_course_record"],
+            )
             emit_outcome(
                 rule_id,
-                "non_compliant",
-                "pathology_sampling_not_documented",
+                "non_compliant" if missing_sampling_facts else "data_gap",
+                "pathology_sampling_not_documented"
+                if missing_sampling_facts
+                else "tumor_target_projection_unavailable",
                 executor_type="program",
-                display_facts=_lx019_missing_sampling_display_facts(
-                    pathology_master=master,
-                    pathology_report=report,
-                    surgery_record=materials["surgery_record"],
-                    daily_course_record=materials["daily_course_record"],
-                ),
+                display_facts=missing_sampling_facts,
             )
             continue
         if rule_id in {"LX0609-013", "LX0609-019"}:
@@ -1740,17 +1743,20 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             materials["surgery_record"],
             materials["daily_course_record"],
         ):
+            missing_sampling_facts = _lx019_missing_sampling_display_facts(
+                pathology_master=master,
+                pathology_report=report,
+                surgery_record=materials["surgery_record"],
+                daily_course_record=materials["daily_course_record"],
+            )
             emit_outcome(
                 rule_id,
-                "non_compliant",
-                "pathology_sampling_not_documented",
+                "non_compliant" if missing_sampling_facts else "data_gap",
+                "pathology_sampling_not_documented"
+                if missing_sampling_facts
+                else "tumor_target_projection_unavailable",
                 executor_type="program",
-                display_facts=_lx019_missing_sampling_display_facts(
-                    pathology_master=master,
-                    pathology_report=report,
-                    surgery_record=materials["surgery_record"],
-                    daily_course_record=materials["daily_course_record"],
-                ),
+                display_facts=missing_sampling_facts,
             )
             continue
         context = "\n".join(
