@@ -1096,6 +1096,28 @@ def test_037_complete_visits_are_compliant(monkeypatch):
     assert missing == {}
 
 
+def test_037_merges_split_visit_rows_instead_of_reporting_association_gap(monkeypatch):
+    rows_by_source = {
+        "preane_surveil_record": (
+            {"document_id": "visit-1", "record_time": "2026-07-30 08:00:00", "record_content": "ASA III级，完成气道评估；麻醉史无。"},
+            {"document_id": "visit-1", "record_time": "2026-07-30 08:01:00", "record_content": "已核对禁食禁饮，已完成麻醉风险告知。", "anesthetist_sign": "陈某"},
+        ),
+        "postane_surveil_record": (
+            {"document_id": "visit-1", "record_time": "2026-07-31 08:00:00", "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。", "anesthetist_sign": "陈某"},
+        ),
+    }
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_visit_rows",
+        lambda _materials, source_key: rows_by_source[source_key],
+    )
+
+    state, missing = surgery_doc._anesthesia_visit_completeness(_RowsOnlyMaterials({}))
+
+    assert state == "complete"
+    assert missing == {}
+
+
 def test_037_explicitly_negated_preanesthesia_items_are_incomplete(monkeypatch):
     rows_by_source = {
         "preane_surveil_record": (
@@ -1493,6 +1515,29 @@ def test_typed_039_is_non_compliant_when_known_surgeon_is_not_in_discussion(monk
         "source_document_id": "surgery-1",
         "source_document_type": "surgery_record",
     }
+
+
+def test_typed_039_requires_all_surgeons_in_preop_discussion(monkeypatch):
+    _patch_typed_039_present_sources(monkeypatch)
+    materials = _RowsOnlyMaterials(
+        {
+            "surgery_record": (
+                {"document_id": "surgery-1", "surgeon": "韩平"},
+                {"document_id": "surgery-2", "surgeon": "曾亚丽"},
+            ),
+            "presurg_discussion": (
+                {"document_id": "discussion-1", "discuss_staff": "韩平"},
+            ),
+        }
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039", snapshot=object(), materials=materials
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.reason_code == "surgeon_not_in_preop_discussion"
+    assert outcome.customer_display_facts["matched_surgeons"] == ["韩平"]
 
 
 @pytest.mark.parametrize(

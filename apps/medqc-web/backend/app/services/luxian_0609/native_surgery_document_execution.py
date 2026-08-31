@@ -781,9 +781,44 @@ def _anesthesia_visit_completeness(
         rows = _anesthesia_visit_rows(materials, source_key)
         if rows is None:
             return "unavailable", {}
-        if len(rows) != 1:
+        if not rows:
             return "association_failed", {}
-        rows_by_source[source_key] = rows
+        # 仅当分段行明确共享同一文书/业务 ID 时才允许合并；不同手术事件
+        # 没有可靠关联键必须保持资料待核实，不能跨事件拼接字段。
+        identity_fields = ("application_id", "anesthesia_id", "surgery_id", "document_id")
+        identities = {
+            _clean(row.get(field))
+            for row in rows
+            for field in identity_fields
+            if _clean(row.get(field))
+        }
+        row_identity_sets = [
+            {
+                _clean(row.get(field))
+                for field in identity_fields
+                if _clean(row.get(field))
+            }
+            for row in rows
+        ]
+        common_identities = set.intersection(*row_identity_sets) if row_identity_sets else set()
+        if len(rows) > 1 and not identities:
+            return "association_failed", {}
+        if len(rows) > 1 and not common_identities:
+            return "association_failed", {}
+        merged: dict[str, Any] = {}
+        for row in sorted(rows, key=lambda item: len(_row_text(item)), reverse=True):
+            for key, value in row.items():
+                existing = _clean(merged.get(key))
+                if (
+                    existing
+                    and not _STRUCTURED_ABSENT_VALUE_PATTERN.fullmatch(existing)
+                ) or not _clean(value):
+                    continue
+                merged[key] = value
+        texts = [_row_text(row) for row in rows if _row_text(row)]
+        if texts:
+            merged["record_content"] = "；".join(dict.fromkeys(texts))
+        rows_by_source[source_key] = (merged,)
 
     pre = rows_by_source["preane_surveil_record"][0]
     post = rows_by_source["postane_surveil_record"][0]
@@ -875,6 +910,28 @@ def _source_row_count(
         return len(tuple(materials.rows(source_key)))
     except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
         return None
+
+
+def _anesthesia_record_association_state(
+    materials: Luxian0609EvidenceMaterialStore | None,
+) -> str:
+    """多条麻醉记录仅在共享同一业务/文书 ID 时视为同一事件。"""
+
+    if materials is None:
+        return "unknown"
+    try:
+        rows = tuple(materials.rows("anesthesia_record"))
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return "unknown"
+    if len(rows) <= 1:
+        return "unique"
+    identity_fields = ("application_id", "anesthesia_id", "surgery_id", "document_id")
+    identity_sets = [
+        {_clean(row.get(field)) for field in identity_fields if _clean(row.get(field))}
+        for row in rows
+    ]
+    common = set.intersection(*identity_sets) if identity_sets else set()
+    return "unique" if common else "ambiguous"
 
 
 def _typed_terminal_outcome(
@@ -1007,13 +1064,6 @@ def _typed_terminal_outcome(
                 "program",
                 facts,
             )
-        surgery_count = _source_row_count(materials, "surgery_record")
-        if surgery_count is not None and surgery_count > 1:
-            # 多次手术只在需要把术者与具体术前讨论关联时失败关闭；
-            # 权威来源完整且术前讨论为空时，缺失事实本身无需事件关联。
-            return _SurgeryDocumentOutcome(
-                rule_id, "data_gap", "association_failed", "program"
-            )
         people = _surgery_and_discussion_people(materials)
         if people is None:
             return _SurgeryDocumentOutcome(
@@ -1025,6 +1075,9 @@ def _typed_terminal_outcome(
                 rule_id, "data_gap", "surgeon_participation_unresolved", "program"
             )
         matched_surgeons = surgeons & discussion_participants
+        all_surgeons_matched = bool(surgeons) and surgeons.issubset(
+            discussion_participants
+        )
         identity_facts = {
             "surgeons": sorted(surgeons),
             "discussion_participants": sorted(discussion_participants),
@@ -1033,10 +1086,10 @@ def _typed_terminal_outcome(
             "emergency_rescue_exception_absent": True,
             "discussion_state": "present",
             "surgeon_participation_state": (
-                "confirmed" if matched_surgeons else "absent"
+                "confirmed" if all_surgeons_matched else "absent"
             ),
         }
-        if matched_surgeons:
+        if all_surgeons_matched:
             identity_facts["verification_kind"] = (
                 "preop_discussion_surgeon_participation_confirmed"
             )
@@ -1084,11 +1137,8 @@ def _typed_terminal_outcome(
         return _SurgeryDocumentOutcome(
             rule_id, "data_gap", "performed_anesthesia_fact_unavailable", "program"
         )
-    anesthesia_count = _source_row_count(materials, "anesthesia_record")
-    if anesthesia_count is not None and anesthesia_count > 1:
-        return _SurgeryDocumentOutcome(
-            rule_id, "data_gap", "association_failed", "program"
-        )
+    if _anesthesia_record_association_state(materials) == "ambiguous":
+        return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
     is_local = anesthesia_method in _LOCAL_ANESTHESIA_VALUES
     if rule_id in {"LX0609-036", "LX0609-037", "LX0609-038"} and is_local:
         return _SurgeryDocumentOutcome(
