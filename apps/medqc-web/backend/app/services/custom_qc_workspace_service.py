@@ -505,6 +505,10 @@ def project_customer_safe_result_item(
             and rule_id.startswith("LX0609-")
             and not raw.get("customer_display_facts")
             and not raw.get("criterion_results")
+            and (
+                isinstance(raw.get("diagnostic_trace"), dict)
+                or isinstance(raw.get("metadata"), dict)
+            )
             and str(exc) == LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
         ):
             status = "data_gap"
