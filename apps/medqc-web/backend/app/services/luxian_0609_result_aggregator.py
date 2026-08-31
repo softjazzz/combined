@@ -4386,7 +4386,18 @@ def safe_luxian_0609_customer_display_facts(
                 "labtest_item_report",
                 "surgery_record",
             }
-            is_public_recommendation_evidence = is_public_projection
+            # 某些原生执行结果已提前把文书ID投影为 src_ref，但仍保留
+            # source_document_ids 作为内部完整性索引。按证据条目形状识别
+            # 这种受控公开形态，避免把 opinion_evidence 误当成 opinion_refs。
+            evidence_shape_is_public = bool(
+                isinstance(raw_recommendation_evidence, list)
+                and raw_recommendation_evidence
+                and isinstance(raw_recommendation_evidence[0], Mapping)
+                and "opinion_evidence" in raw_recommendation_evidence[0]
+            )
+            is_public_recommendation_evidence = (
+                is_public_projection or evidence_shape_is_public
+            )
             projection_key = customer_safe_projection_key() if is_public_recommendation_evidence is False else ""
 
             def project_refs(value: Any, *, public: bool) -> list[dict[str, str]] | None:
