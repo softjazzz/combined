@@ -127,6 +127,18 @@ async def evaluate_running_final_bundle_input(
             rule = host.get_rule_by_id(str(rid or "").strip())
             if rule:
                 selected_rules.append(host._ensure_rule_execution_meta(rule))
+    elif selected_customer_rule_ids is not None:
+        # Native 客户规则没有 compatibility execution id，但仍必须保留
+        # wrapper 供统一引擎聚合、渲染客户结果；否则 native 事实会被丢弃，
+        # 工作台会退回成无逐事件事实的兼容/LLM 结果。
+        customer_rules = host_module.load_luxian_0609_rules()
+        selected_customer_ids = set(selected_customer_rule_ids)
+        selected_rules = [
+            host._ensure_rule_execution_meta(dict(rule))
+            for rule in customer_rules
+            if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+            in selected_customer_ids
+        ]
     elif selected_customer_rule_ids is None:
         selected_rules = await host._resolve_rules_for_document(
             document_type=document_type,
