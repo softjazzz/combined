@@ -701,7 +701,7 @@ function resultHeadline(item: SingleRecordQcResultViewItem) {
 
 function needsTextExpansion(item: SingleRecordQcResultViewItem) {
   const text = resultHeadline(item)
-  return text.length > 120 || text.includes('\n')
+  return text.length > 60 || text.includes('\n')
 }
 
 type DisplayFactRow = ReturnType<typeof displayFactRows>[number]
