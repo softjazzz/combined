@@ -827,7 +827,7 @@ function closeResultDrawer() {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 10px;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
 }
@@ -836,7 +836,7 @@ function closeResultDrawer() {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: 10px;
 }
 
 .qc-record-result-list-view__export-menu {
