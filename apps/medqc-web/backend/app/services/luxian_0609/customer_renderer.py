@@ -1159,7 +1159,11 @@ def _criterion_value(item: Any, field: str) -> Any:
 
 
 def _criterion_medical_analysis(item: Any) -> str:
-    """把已写入受控子结论的医学分析压缩为列表可读的一句话。"""
+    """返回已写入受控子结论的完整医学分析。
+
+    页面会负责折叠长文案；结果投影层不能用省略号替换判定依据，否则
+    客户端即使展开也无法恢复完整事实。
+    """
 
     value = _criterion_value(item, "medical_analysis")
     if not isinstance(value, str):
@@ -1169,7 +1173,7 @@ def _criterion_medical_analysis(item: Any) -> str:
         return ""
     text = re.sub(r"^(?:AI)?医学分析[：:]\s*", "", text)
     text = text.rstrip("。；; ")
-    return f"{text[:157]}…" if len(text) > 160 else text
+    return text
 
 
 def _lx018_criterion_finding(criterion_results: Any) -> str:

@@ -2142,6 +2142,49 @@ def test_lx018_non_compliant_result_names_failed_diagnostic_direction():
     )
 
 
+def test_lx018_customer_finding_preserves_full_medical_analysis():
+    analysis = "主诉提供的症状和病程线索需要结合第一诊断判断。" * 20
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-018",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-course-quality-v1",
+            criterion_results=(
+                CriterionResult(
+                    criterion_id="chief_complaint_length",
+                    status=CriterionStatus.PASSED,
+                    reason_code="requirement_satisfied",
+                    fact_refs=(FACT_REF,),
+                    actual_value=8,
+                    expected_value=20,
+                    operator="lte",
+                    unit="character",
+                ),
+                CriterionResult(
+                    criterion_id="diagnostic_direction",
+                    status=CriterionStatus.FAILED,
+                    reason_code="complaint_primary_diagnosis_mismatch",
+                    fact_refs=(FACT_REF,),
+                    actual_value="mismatch",
+                    rationale_code="diagnosis_mismatch",
+                    dimensions=("symptom_pattern",),
+                    medical_analysis=analysis,
+                ),
+            ),
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert analysis in result["findings"]
+    assert "…" not in result["findings"]
+
+
 def test_data_gap_uses_unknown_criterion_label_to_name_missing_data():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
