@@ -202,9 +202,26 @@
                 </span>
               </span>
             </span>
-            <span v-else class="rule-conclusion" data-testid="single-record-result-conclusion">{{
-              resultHeadline(item)
-            }}</span>
+            <span
+              v-else
+              class="rule-conclusion-block"
+              :class="{ 'is-text-expanded': expandedTextKey === item.key }"
+            >
+              <span class="rule-conclusion-label">判定说明</span>
+              <span class="rule-conclusion" data-testid="single-record-result-conclusion">{{
+                resultHeadline(item)
+              }}</span>
+              <span
+                v-if="needsTextExpansion(item)"
+                class="text-expand-action"
+                role="button"
+                tabindex="0"
+                @click.stop="toggleText(item.key)"
+                @keydown.enter.stop="toggleText(item.key)"
+              >
+                {{ expandedTextKey === item.key ? '收起说明' : '查看全文' }}
+              </span>
+            </span>
           </span>
         </button>
 
@@ -682,6 +699,11 @@ function resultHeadline(item: SingleRecordQcResultViewItem) {
   return examLabEventPresentation(item)?.headline || item.conclusionText
 }
 
+function needsTextExpansion(item: SingleRecordQcResultViewItem) {
+  const text = resultHeadline(item)
+  return text.length > 120 || text.includes('\n')
+}
+
 type DisplayFactRow = ReturnType<typeof displayFactRows>[number]
 
 function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
@@ -895,6 +917,7 @@ const documentGroupByItemKey = computed(() => {
 })
 const hasVisibleResults = computed(() => renderedItems.value.length > 0)
 const expandedKey = ref('')
+const expandedTextKey = ref('')
 const collapsedDocumentGroupKeys = ref<Set<string>>(new Set())
 
 function documentGroupForItem(itemKey: string) {
@@ -944,6 +967,10 @@ watch(
 function toggle(key: string) {
   expandedKey.value = expandedKey.value === key ? '' : key
   emit('select', key)
+}
+
+function toggleText(key: string) {
+  expandedTextKey.value = expandedTextKey.value === key ? '' : key
 }
 
 function evidenceLabel(evidence: SingleRecordQcEvidence) {
@@ -1547,7 +1574,6 @@ watch(
 
 .rule-conclusion {
   display: block;
-  margin-top: 7px;
   color: rgba(29, 29, 31, 0.76);
   font-size: 14px;
   font-weight: 520;
@@ -1555,6 +1581,47 @@ watch(
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
+}
+
+.rule-conclusion-block {
+  display: block;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.rule-conclusion-label {
+  display: block;
+  margin-bottom: 3px;
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.rule-conclusion-block:not(.is-text-expanded) .rule-conclusion {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.text-expand-action {
+  display: inline-block;
+  margin-top: 4px;
+  color: #0066cc;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.text-expand-action:hover,
+.text-expand-action:focus-visible {
+  color: #0055aa;
+  text-decoration: underline;
+  outline: none;
 }
 
 .copy-match-headline {
