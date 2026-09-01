@@ -1576,7 +1576,7 @@ watch(
   display: block;
   color: rgba(29, 29, 31, 0.76);
   font-size: 14px;
-  font-weight: 520;
+  font-weight: 400;
   line-height: 22px;
   overflow-wrap: anywhere;
   word-break: break-word;
