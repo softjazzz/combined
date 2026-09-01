@@ -15,11 +15,6 @@
       </div>
 
       <div class="record-pool-qc-status__content">
-        <div class="record-pool-qc-status__eyebrow">
-          <span>批量质控</span>
-          <span class="record-pool-qc-status__eyebrow-dot" aria-hidden="true" />
-          <span>实时任务进度</span>
-        </div>
         <div class="record-pool-qc-status__heading">
           <strong>{{ statusTitle }}</strong>
           <span>{{ statusBadge }}</span>
@@ -548,26 +543,6 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__content {
   min-width: 0;
   flex: 1;
-}
-
-.record-pool-qc-status__eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
-  color: rgba(29, 29, 31, 0.42);
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.record-pool-qc-status__eyebrow-dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
 }
 
 .record-pool-qc-status__heading,
