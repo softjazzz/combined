@@ -52,19 +52,6 @@
           >
         </div>
 
-        <div class="record-pool-qc-status__progress">
-          <a-progress
-            v-if="progressPercent !== null"
-            :percent="progressPercent"
-            :show-info="false"
-            :status="progressStatus"
-            size="small"
-          />
-          <div v-else class="record-pool-qc-status__indeterminate" aria-hidden="true">
-            <span />
-          </div>
-        </div>
-
         <ol
           class="record-pool-qc-status__stages"
           data-testid="record-pool-qc-task-stages"
@@ -80,6 +67,12 @@
             <span class="record-pool-qc-status__stage-copy">
               <strong>{{ stage.label }}</strong>
               <small>{{ stage.detail }}</small>
+            </span>
+            <span
+              v-if="stage.key === 'rules' && stage.state === 'active' && ruleProgressText"
+              class="record-pool-qc-status__stage-progress"
+            >
+              {{ processedRules }} / {{ totalRules }}
             </span>
           </li>
         </ol>
@@ -411,12 +404,6 @@ const tone = computed(() => {
   return 'active'
 })
 
-const progressStatus = computed(() => {
-  if (currentJob.value?.status === 'completed') return 'success'
-  if (currentJob.value?.status === 'failed') return 'exception'
-  return 'active'
-})
-
 function clearPollTimer() {
   if (!pollTimer) return
   clearTimeout(pollTimer)
@@ -632,20 +619,6 @@ onBeforeUnmount(() => {
   font-weight: 550;
 }
 
-.record-pool-qc-status__progress {
-  width: 100%;
-  margin-top: 11px;
-}
-
-.record-pool-qc-status__progress :deep(.ant-progress-inner) {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-.record-pool-qc-status__progress :deep(.ant-progress-bg) {
-  height: 6px !important;
-  border-radius: 999px;
-}
-
 .record-pool-qc-status__concurrency {
   display: flex;
   flex-wrap: wrap;
@@ -693,26 +666,10 @@ onBeforeUnmount(() => {
   color: #047857;
 }
 
-.record-pool-qc-status__indeterminate {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(0, 102, 204, 0.1);
-}
-
-.record-pool-qc-status__indeterminate span {
-  display: block;
-  width: 34%;
-  height: 100%;
-  border-radius: inherit;
-  background: #0066cc;
-  animation: record-pool-qc-progress 1.35s ease-in-out infinite;
-}
-
 .record-pool-qc-status__stages {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
+  gap: 10px;
   width: 100%;
   margin: 15px 0 0;
   padding: 0;
@@ -725,18 +682,12 @@ onBeforeUnmount(() => {
   min-width: 0;
   align-items: flex-start;
   gap: 8px;
-  padding: 7px 16px 7px 0;
+  min-height: 62px;
+  padding: 12px 12px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.74);
   color: rgba(29, 29, 31, 0.48);
-}
-
-.record-pool-qc-status__stages li:not(:last-child)::after {
-  position: absolute;
-  top: 14px;
-  right: 10px;
-  left: 17px;
-  height: 1px;
-  background: rgba(29, 29, 31, 0.1);
-  content: '';
 }
 
 .record-pool-qc-status__stage-marker {
@@ -774,7 +725,24 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.record-pool-qc-status__stage-progress {
+  position: absolute;
+  top: -11px;
+  right: 12px;
+  padding: 3px 8px;
+  border: 1px solid rgba(0, 102, 204, 0.2);
+  border-radius: 999px;
+  background: #fff;
+  color: #0066cc;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(0, 102, 204, 0.1);
+}
+
 .record-pool-qc-status__stages li.is-complete {
+  border-color: rgba(16, 185, 129, 0.22);
+  background: rgba(240, 253, 250, 0.74);
   color: #047857;
 }
 
@@ -784,6 +752,8 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__stages li.is-active {
+  border-color: rgba(0, 102, 204, 0.42);
+  background: rgba(239, 246, 255, 0.86);
   color: #0055aa;
 }
 
@@ -793,6 +763,8 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__stages li.is-error {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(254, 242, 242, 0.82);
   color: #b91c1c;
 }
 
@@ -841,15 +813,6 @@ onBeforeUnmount(() => {
   }
 }
 
-@keyframes record-pool-qc-progress {
-  from {
-    transform: translateX(-110%);
-  }
-  to {
-    transform: translateX(300%);
-  }
-}
-
 @media (max-width: 720px) {
   .record-pool-qc-status {
     padding: 12px;
@@ -863,10 +826,6 @@ onBeforeUnmount(() => {
   .record-pool-qc-status__stages {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 4px 0;
-  }
-
-  .record-pool-qc-status__stages li:not(:last-child)::after {
-    display: none;
   }
 }
 </style>
