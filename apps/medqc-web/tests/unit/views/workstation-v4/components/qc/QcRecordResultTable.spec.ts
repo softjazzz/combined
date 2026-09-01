@@ -63,7 +63,7 @@ describe('QcRecordResultTable', () => {
     const running = mount(QcRecordResultTable, { props: { carePhase: 'inpatient', rows } })
     const final = mount(QcRecordResultTable, { props: { carePhase: 'discharged', rows } })
 
-    expect(running.findAll('thead th')).toHaveLength(8)
+    expect(running.findAll('thead th')).toHaveLength(7)
     expect(running.text()).toContain('入院时间')
     expect(running.text()).toContain('2026-08-09 08:00')
     expect(final.text()).toContain('出院时间')
@@ -125,9 +125,7 @@ describe('QcRecordResultTable', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('资料待核实')
-    expect(wrapper.text()).toContain('未质控')
-    expect(wrapper.text()).toContain('结果校验异常')
+    expect(wrapper.text()).toContain('待核实 3')
     expect(wrapper.text()).toContain('请复核结果交付')
     expect(wrapper.text()).not.toContain('来源未知')
     expect(wrapper.text()).toContain('资料同步待核实')

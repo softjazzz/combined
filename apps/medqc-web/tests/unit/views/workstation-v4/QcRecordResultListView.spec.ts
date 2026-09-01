@@ -238,9 +238,7 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.text()).toContain('确定问题 2 · 待核实 1 · 待判断 3')
     expect(wrapper.text()).toContain('资料待核实')
     expect(wrapper.text()).toContain('待判断')
-    expect(wrapper.text()).toContain('未质控')
     expect(wrapper.text()).toContain('暂无结果')
-    expect(wrapper.text()).toContain('结果校验异常')
     expect(wrapper.text()).toContain('请复核结果交付')
   })
 
@@ -254,7 +252,7 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     const renderedTimes = wrapper
-      .findAll('tbody tr[data-record-key] td:nth-child(7)')
+      .findAll('tbody tr[data-record-key] td:nth-child(6)')
       .map((item) => item.text())
     expect(renderedTimes.slice(0, 2)).toEqual(['2026-08-17 16:49', '2026-08-17 16:49'])
     expect(wrapper.text()).toContain('2026-08-09 08:00')

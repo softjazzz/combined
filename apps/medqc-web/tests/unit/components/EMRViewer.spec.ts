@@ -78,7 +78,7 @@ describe('EMRViewer', () => {
     const text = wrapper.text()
     expect(text).toContain('文书ID：LAB-001')
     expect(text).toContain('记录时间：2026-08-01 09:00:00')
-    expect(text).toContain('作者：检验师')
+    expect(text).toContain('录入/修改人：检验师')
     expect(text).toContain('签名：审核医师')
     expect(text).toContain('已展示3条，仍有更多。')
     expect(text).not.toContain('资料缺失')
@@ -240,9 +240,7 @@ describe('EMRViewer', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(String(fetchMock.mock.calls[1]?.[0] || '')).toContain(
-      'doc_type=senior_course_record',
-    )
+    expect(String(fetchMock.mock.calls[1]?.[0] || '')).toContain('doc_type=senior_course_record')
     expect(wrapper.text()).toContain('第二份查房正文')
   })
 

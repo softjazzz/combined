@@ -1,8 +1,22 @@
 {
+  "schema_version": "lx0609-qc-eval-v2",
+  "generated_at": "2026-08-31T05:47:46Z",
+  "git_head": "918396ce8afa6d43a0ace39d0b5588c4920ec6ad",
+  "runtime_manifest_hash": "991698d7de11cdf6a915777e12fc981e5b1f5ab4e80dc5c5ec73f475a5a60cfc",
+  "evidence_scope": "mixed",
   "version": "2026-06-10",
   "rule_set_key": "luxian_0609_qc_v1",
-  "model": "qwen3.5-35b-a3b",
-  "prediction_source": "docs\\0602\\luxian_0609_formal_ready_min_predictions.json",
+  "model": "qwen3.7-flash",
+  "prediction_source": "",
+  "prediction_binding": {
+    "status": "not_provided",
+    "reason_codes": ["prediction_not_provided"]
+  },
+  "input_hashes": {
+    "catalog": "f34bc67f741a5abb04ee72005e1a910912133e13277c60dd427830edcfd006e0",
+    "golden_cases": "4ce76caa1c6dada52ab64370ddf73ceb65e349d71faa7bec5f1d8bf1e700202e",
+    "predictions": ""
+  },
   "summary": {
     "rule_count": 49,
     "launch_status": {

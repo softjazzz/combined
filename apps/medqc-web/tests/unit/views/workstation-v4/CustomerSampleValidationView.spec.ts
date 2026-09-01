@@ -1700,9 +1700,9 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('验收工件')
     expect(wrapper.text()).toContain('需刷新')
     expect(wrapper.text()).toContain('基础时限5 条')
-    expect(wrapper.text()).toContain('手术麻醉16 条')
-    expect(wrapper.text()).toContain('全选7个质控族')
-    expect(wrapper.text()).toContain('7个质控族')
+    expect(wrapper.text()).toContain('手术麻醉14 条')
+    expect(wrapper.text()).toContain('全选8个质控族')
+    expect(wrapper.text()).toContain('8个质控族')
     expect(wrapper.text()).toContain('49 个质控点')
     expect(wrapper.text()).toContain('查看质控点')
     expect(wrapper.text()).not.toContain('LX0609-041')
@@ -3518,7 +3518,7 @@ describe('CustomerSampleValidationView', () => {
 
     const selectAllButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('全选7个质控族'))
+      .find((node) => node.text().includes('全选8个质控族'))
     expect(selectAllButton).toBeTruthy()
     await selectAllButton!.trigger('click')
     await nextTick()
@@ -3545,7 +3545,7 @@ describe('CustomerSampleValidationView', () => {
     expect(submittedPayload.group_by_luxian_family).toBe(true)
     expect((submittedPayload.selected_rule_ids || []).sort()).toEqual(allRuleIds)
     expect(message.success).toHaveBeenCalledWith(
-      expect.objectContaining({ content: '已创建泸县0609总任务，7 个质控族已并发入队' }),
+      expect.objectContaining({ content: '已创建泸县0609总任务，8 个质控族已并发入队' }),
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('parent-job-1')
     const statusBar = wrapper.find('[data-testid="customer-sample-qc-task-status"]')
