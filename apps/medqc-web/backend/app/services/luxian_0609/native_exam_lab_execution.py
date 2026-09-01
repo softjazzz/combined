@@ -21,6 +21,7 @@ from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
     ExamLabTextProjection,
+    _event_identity_mentions_course,
     build_exam_lab_fact_prompt,
     build_exam_lab_text_projection,
     event_for_fact,
@@ -1196,6 +1197,13 @@ def _strong_semantic_fact(
                 continue
             if _UNCERTAIN_SEMANTIC_PATTERN.search(clause):
                 continue
+            if (
+                rule_id == "LX0609-015"
+                and not _event_identity_mentions_course(event, clause)
+            ):
+                # 仅有另一种标本（例如导管尖端培养）的抗感染动作，
+                # 不能直接归属于当前阳性培养事件。
+                continue
             if rule_id == "LX0609-015":
                 if (
                     _NEGATED_CULTURE_ACTION_PATTERN.search(clause)
@@ -1224,6 +1232,10 @@ def _strong_semantic_fact(
                 for ref, text in course_items
                 if any(
                     mention_pattern.search(clause)
+                    and (
+                        rule_id != "LX0609-015"
+                        or _event_identity_mentions_course(event, clause)
+                    )
                     and not _UNCERTAIN_SEMANTIC_PATTERN.search(clause)
                     for clause in _CLAUSE_SPLIT_PATTERN.split(text)
                 )

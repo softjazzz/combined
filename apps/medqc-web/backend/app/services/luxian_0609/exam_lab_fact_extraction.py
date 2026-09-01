@@ -243,6 +243,34 @@ def _event_identity_mentions_course(
         return True
     if not text:
         return False
+    if event.family == "culture":
+        # 培养/药敏病程不能仅凭“培养、药敏、抗感染”等通用词归属。
+        # 如果报告身份已经给出标本类型，则病程出现另一种明确标本时，
+        # 不能把该病程当作本次培养事件的处置证据（例如尿培养与导管尖端培养）。
+        specimen_tokens = (
+            "血",
+            "尿",
+            "痰",
+            "导管",
+            "脑脊液",
+            "胸水",
+            "腹水",
+            "分泌物",
+            "伤口",
+            "脓液",
+        )
+        event_specimens = {
+            token for token in specimen_tokens if token in identity
+        }
+        course_specimens = {
+            token for token in specimen_tokens if token in text
+        }
+        if event_specimens and course_specimens:
+            return bool(event_specimens & course_specimens)
+        # “据药敏调整某药”这类同一报告的明确处置，可能不重复写标本；
+        # 未出现相互冲突的标本时保留，避免过度收紧既有病程口径。
+        return True
+
     modalities = re.findall(r"CT|MRI|计算机断层|磁共振", identity, flags=re.I)
     if modalities and not any(item.lower() in text.lower() for item in modalities):
         return False
@@ -480,11 +508,23 @@ def build_exam_lab_text_projection(
                 _clean(row.get(field))
                 for row in rows
                 for field in (
-                    "exam_type",
-                    "modality",
-                    "exam_name",
-                    "item_name",
-                    "exam_item_name",
+                    (
+                        "exam_type",
+                        "modality",
+                        "exam_name",
+                        "item_name",
+                        "exam_item_name",
+                    )
+                    if family == "exam"
+                    else (
+                        "lab_type",
+                        "subject",
+                        "labtest_subject",
+                        "test_type",
+                        "item_name",
+                        "lab_item_name",
+                        "specimen",
+                    )
                 )
                 if _clean(row.get(field))
             )
@@ -983,7 +1023,7 @@ semantic_state=present时，course_doc_positions必须非空；semantic_state=ab
 若COURSE_DOC为空，所有规则都不得输出semantic_state=present；目标事件已实施但没有匹配病程时，010/011/014以及阳性的012/015应输出applicable+absent，不得虚构文书引用，也不得把“未记录”写成not_applicable。
 positive_state字段固定规则：010/011/014必须始终为not_relevant；只有012/015允许positive、negative或unknown。012中，只要本次CT/MRI报告检出任一明确异常病灶或异常征象，即为positive；炎症、结节、退变、陈旧灶等均属于异常，不要求原文出现“阳性”，也不等同于癌症或确诊某病。仅当报告整体明确未检出异常征象时为negative；报告同时含“未见急性病变”和明确陈旧灶等异常时仍为positive；只有待排、不除外、不能除外等不确定描述且没有任何明确异常时为unknown。012/015事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
 011/014只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；012/015再独立判断阳性结果是否有分析或处置。仅复述、摘抄或写明“查看/记录”报告结论，只能证明011结果已记录，不能证明012已分析；012=present必须出现针对该异常结果的临床意义、病因判断、与症状的关系、诊疗计划、处置或会诊等实质内容。
-同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。病程既复述阳性影像结论又给出考虑、计划或处理时，该事件的011和012都为present；既复述培养结果又据敏感性调整用药时，该事件的014和015都为present。
+同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。015必须确认处置针对同一培养事件的标本/菌种/药敏或该报告，明确写的是另一种标本（如导管尖端培养）的处置不得引用；既复述阳性影像结论又给出考虑、计划或处理时，该事件的011和012都为present；既复述培养结果又据敏感性调整用药时，该事件的014和015都为present。
 unknown只用于材料自身含混或互相冲突；完整投影里单纯未找到匹配病程应为absent。
 逐规则决策表（每条都必须独立作答）：010只看检查前原因；011只看报告结果是否记录；012只看阳性影像是否分析；014只看培养结果是否记录；015只看阳性菌或药敏是否被分析/处置。若同一 COURSE_DOC 同时满足多条，可为多条重复引用；不得因某一条不适用而省略其他条。
 当唯一目标 EVENT_DOC 和 COURSE_DOC 已明确对应上述事实时，填写 applicable+present 并引用该 COURSE_DOC 的位置；没有匹配病程且材料完整时填写 applicable+absent。unknown 不是默认答案：只在文本确实含混、冲突，或无法把文字与本次唯一事件关联时使用。
@@ -1241,6 +1281,25 @@ def parse_exam_lab_fact_response(
             # 含临床意义、病因判断或处置等内容的灰区仍保留模型事实。
             semantic = "absent"
             normalized_course = ()
+        if (
+            rule_id == "LX0609-015"
+            and semantic == "present"
+            and normalized_course
+        ):
+            # 015 的处置必须属于同一培养事件。若病程明确写的是另一种
+            # 标本（如导管尖端培养），只能证明另一事件，不能作为本次阳性
+            # 培养的证据。混合引用时保留同事件引用；全部引用均不匹配时，
+            # 由 Python 按阳性且无有效处置收口为不合规。
+            normalized_course = tuple(
+                ref
+                for ref in normalized_course
+                if _event_identity_mentions_course(
+                    event,
+                    (projection.course_texts or {}).get(ref, ""),
+                )
+            )
+            if not normalized_course:
+                semantic = "absent"
         normalized_evidence = tuple(sorted((*event_refs, *normalized_course)))
         if (
             not normalized_evidence

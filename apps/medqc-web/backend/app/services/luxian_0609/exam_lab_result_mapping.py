@@ -271,7 +271,14 @@ def build_text_outcome_display_facts(
         )
     source_document_refs = projection.source_document_refs or {}
     evidence_refs = tuple(fact.evidence_refs)
-    if status == "non_compliant" and not fact.course_doc_refs:
+    # 015 的病程证据必须经过同一培养事件绑定。若模型引用全部被
+    # 过滤，不能把当前投影中的其他培养文书（如导管尖端培养）整体
+    # 回填到客户证据，否则会制造跨事件的“关键证据”。
+    if (
+        status == "non_compliant"
+        and not fact.course_doc_refs
+        and rule_id != "LX0609-015"
+    ):
         evidence_refs = tuple((*evidence_refs, *projection.course_times.keys()))
     located_documents = [
         {"source_type": source_type, "source_document_id": source_document_id}

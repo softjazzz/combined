@@ -2906,6 +2906,155 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
 
 
 @pytest.mark.asyncio
+async def test_lx0609_015_does_not_bind_independent_catheter_culture_action(
+    monkeypatch,
+):
+    """尿培养阳性时，导管尖端培养的处置不能作为本次培养的分析证据。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=(
+            {
+                "test_id": "CULTURE-015-URINE",
+                "labtest_subject": "尿培养+药敏",
+                "report_datetime": "2026-04-26 12:00:00",
+                "record_content": "尿培养主记录。",
+            },
+        ),
+        culture_report_rows=(
+            {
+                "document_id": "culture-report-015-urine",
+                "test_id": "CULTURE-015-URINE",
+                "item_name": "尿培养+药敏",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "大肠埃希菌阳性；对头孢曲松敏感。",
+                "abnormal_indicator": "阳性",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "course-culture-015-urine-observation",
+                "record_time": "2026-04-26 16:00:00",
+                "record_content": (
+                    "已阅尿培养报告，记录大肠埃希菌阳性及药敏结果，"
+                    "待结合病情继续观察。"
+                ),
+            },
+            {
+                "document_id": "course-culture-015-catheter-action",
+                "record_time": "2026-04-26 18:00:00",
+                "record_content": (
+                    "导管尖端培养提示感染，继续头孢曲松抗感染，"
+                    "必要时据药敏调整抗生素。"
+                ),
+            },
+        ),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 12:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    response = {
+        "schema_version": "lx0609-exam-lab-text-facts-v3",
+        "facts": [
+            {
+                "rule_id": "LX0609-015",
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "positive",
+                # 按 COURSE_DOC 字典序，第二条是导管尖端培养处置。
+                "course_doc_positions": [2],
+            }
+        ],
+    }
+    # 强制走 native 链中的模型事实解析分支，验证模型误选另一标本时，
+    # parser 仍会在结果投影前安全收口，而不是仅依赖 Python 强短语分支。
+    monkeypatch.setattr(exam_lab, "_strong_semantic_fact", lambda **_kwargs: None)
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-015",),
+        wrapper_rules=[_wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=_Client([response]),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-015",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-015",),
+        snapshot=snapshot,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-015"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )[0]
+
+    assert canonical["status"] == "non_compliant"
+    assert canonical["reason_code"] == "requirement_violated"
+    evidence_ids = {
+        item["source_document_id"] for item in canonical["customer_evidence"]
+    }
+    assert "culture-report-015-urine" in evidence_ids
+    assert "course-culture-015-catheter-action" not in evidence_ids
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_lx0609_015_same_culture_action_remains_compliant(monkeypatch):
+    """同一尿培养报告明确据药敏调整用药时，015仍可判合规。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=(
+            {
+                "test_id": "CULTURE-015-SAME",
+                "labtest_subject": "尿培养+药敏",
+                "report_datetime": "2026-04-26 12:00:00",
+                "record_content": "尿培养主记录。",
+            },
+        ),
+        culture_report_rows=(
+            {
+                "document_id": "culture-report-015-same",
+                "test_id": "CULTURE-015-SAME",
+                "item_name": "尿培养+药敏",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "大肠埃希菌阳性；对头孢曲松敏感。",
+                "abnormal_indicator": "阳性",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "course-culture-015-same",
+                "record_time": "2026-04-26 16:00:00",
+                "record_content": "已阅尿培养报告，据药敏调整头孢曲松抗感染。",
+            },
+        ),
+    )
+    client = _Client([])
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-015",),
+        wrapper_rules=[_wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-015",),
+    )
+
+    assert result.decisions[0].qc_direction.value == "satisfied"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     (
         "imaging_conclusion",
