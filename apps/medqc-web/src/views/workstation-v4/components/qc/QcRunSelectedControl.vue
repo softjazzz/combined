@@ -9,6 +9,9 @@
     >
       <Play :size="15" aria-hidden="true" />
       质控所选
+      <span v-if="selectedCount > 0" class="qc-run-selected-control__count">
+        {{ selectedCount }}
+      </span>
     </button>
 
     <Teleport v-if="statusTarget" :to="statusTarget" defer>
@@ -91,6 +94,7 @@ type RunState = 'idle' | 'creating' | 'running' | 'completed' | 'failed'
 const props = defineProps<{
   carePhase: QcRecordCarePhase
   recordRefs: SelectedQcRecordRef[]
+  selectedCount?: number
   statusTarget?: string
 }>()
 
@@ -350,6 +354,21 @@ button {
 .qc-run-selected-control__trigger:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.qc-run-selected-control__count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 750;
 }
 
 .is-spinning {

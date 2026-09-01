@@ -67,9 +67,6 @@
           </button>
         </div>
         <div class="qc-record-result-list-view__toolbar-actions">
-          <span v-if="selectedCount > 0" class="qc-record-result-list-view__selection-count"
-            >已选 {{ selectedCount }} 份</span
-          >
           <div class="qc-record-result-list-view__export-menu" @focusout="handleExportMenuFocusOut">
             <button
               class="qc-record-result-list-view__export-trigger"
@@ -123,6 +120,7 @@
             <QcRunSelectedControl
               :care-phase="carePhase"
               :record-refs="selectedQcRecordRefs"
+              :selected-count="selectedCount"
               :status-target="`#qc-record-result-task-status-${carePhase}`"
               @completed="refreshAfterSelectedQc"
             />
@@ -911,13 +909,6 @@ function closeResultDrawer() {
   color: rgba(29, 29, 31, 0.5);
   font-size: 11px;
   line-height: 17px;
-}
-
-.qc-record-result-list-view__selection-count {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .qc-record-result-list-view__export-trigger:disabled {
