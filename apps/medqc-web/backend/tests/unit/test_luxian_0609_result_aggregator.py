@@ -4701,6 +4701,38 @@ def test_native_display_facts_create_only_whitelisted_internal_evidence_refs(
     assert "source_document_ids" not in result["customer_display_facts"]
 
 
+def test_native_045_display_facts_create_transfusion_evidence_refs():
+    raw_facts = {
+        "verification_kind": "transfusion_course_record_present",
+        "performed_transfusion_confirmed": True,
+        "checked_sources": ["bloodtrans_record", "daily_course_record"],
+        "record_count": 2,
+        "source_document_ids": ["bloodtrans-045-1", "bloodtrans-045-2"],
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-045", "name": "输血记录"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-045",
+                "status": "compliant",
+                "findings": "已找到可核对的输血病程记录。",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "executor_type": "program",
+                    "customer_display_facts": raw_facts,
+                },
+            }
+        ],
+    )[0]
+
+    assert result["customer_evidence"] == [
+        {"source_type": "bloodtrans_record", "source_document_id": "bloodtrans-045-1"},
+        {"source_type": "bloodtrans_record", "source_document_id": "bloodtrans-045-2"},
+    ]
+    assert "source_document_ids" not in result["customer_display_facts"]
+
+
 def test_native_018_invalid_customer_display_facts_fail_closed():
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",

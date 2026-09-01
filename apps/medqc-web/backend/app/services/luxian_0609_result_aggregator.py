@@ -5157,6 +5157,7 @@ def _customer_evidence_from_display_facts(
         "LX0609-021",
         "LX0609-022",
         "LX0609-046",
+        "LX0609-045",
     }:
         return []
     raw_ids = raw.get("source_document_ids")
@@ -5175,7 +5176,7 @@ def _customer_evidence_from_display_facts(
         "consultation_record"
         if rule_id in {"LX0609-020", "LX0609-021", "LX0609-022"}
         else "bloodtrans_record"
-        if rule_id == "LX0609-046"
+        if rule_id in {"LX0609-045", "LX0609-046"}
         else "exam_master"
         if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012"}
         else "labtest_item_report"

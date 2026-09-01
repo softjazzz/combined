@@ -1944,12 +1944,24 @@ def _programmatic_transfusion_display_facts(
         return payload
     if rule_id == "LX0609-045":
         if status == "compliant":
-            return {
+            payload: dict[str, Any] = {
                 "verification_kind": "transfusion_course_record_present",
                 "performed_transfusion_confirmed": True,
                 "record_count": len(records),
                 "checked_sources": ["bloodtrans_record", "daily_course_record"],
             }
+            # 045 的判定只使用专用输血记录；把同一批已核对的文书 ID
+            # 作为内部证据引用交给聚合器，避免合规结论没有可定位证据。
+            source_document_ids = [
+                document_id
+                for record in records
+                if (document_id := _clean(record.get("document_id") or record.get("id")))
+            ]
+            if source_document_ids:
+                payload["source_document_ids"] = list(
+                    dict.fromkeys(source_document_ids)
+                )[:8]
+            return payload
         if status == "non_compliant":
             return {
                 "failure_kind": "transfusion_course_record_missing",

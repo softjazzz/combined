@@ -1133,6 +1133,45 @@ async def test_045_substantive_dedicated_course_record_is_compliant_without_mode
 
 
 @pytest.mark.asyncio
+async def test_045_projects_the_checked_transfusion_document_ids_for_evidence(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-045",),
+        wrapper_rules=[_wrapper("LX0609-045")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "document_id": "bloodtrans-045-1",
+                    "content": (
+                        "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
+                        "结束时间16:10。输血过程中严密观察，生命体征平稳，"
+                        "未见寒战、发热及其他输血不良反应。"
+                    ),
+                },
+                {
+                    "document_id": "bloodtrans-045-2",
+                    "content": "输血记录：过程顺利，无输血不良反应。",
+                },
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=None,
+    )
+
+    facts = dict(result.customer_display_facts)["LX0609-045"]
+    assert facts["source_document_ids"] == [
+        "bloodtrans-045-1",
+        "bloodtrans-045-2",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
     monkeypatch,
 ):
