@@ -75,8 +75,17 @@ def _extract_documents(bundle: dict[str, Any], scene: str) -> list[dict[str, Any
         if not source_key:
             continue
         content = ""
+        resolved_document_id = ""
         inventory_rows = inventory_by_source.get(source_key) or []
         for item in inventory_rows:
+            # Bundle inventory 的文书 ID 是权威来源；即使正文为空也保留，
+            # 让证据引用仍能在已授权文书列表中精确定位。
+            if not resolved_document_id:
+                resolved_document_id = _safe_text(
+                    item.get("document_id")
+                    or item.get("source_document_id")
+                    or item.get("id")
+                )
             content = _safe_text(item.get("content") or item.get("assembled_text") or item.get("text_preview"))
             if content:
                 break
@@ -95,7 +104,7 @@ def _extract_documents(bundle: dict[str, Any], scene: str) -> list[dict[str, Any
                             break
         docs.append(
             {
-                "id": f"{_resolve_record_id(bundle)}:{source_key}",
+                "id": resolved_document_id or f"{_resolve_record_id(bundle)}:{source_key}",
                 "document_type": _resolve_document_type_from_source(source_key, scene),
                 "source_table": source_key,
                 "hit": bool(hit_map.get(source_key)),

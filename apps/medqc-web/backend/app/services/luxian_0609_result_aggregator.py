@@ -5492,9 +5492,9 @@ def _customer_evidence_from_reduced_decision(
 ) -> list[dict[str, str]]:
     """由 RuleDecision 的事实引用反查已存在的原始文书。
 
-    所有原生规则复用这一条路径：只接受 decision 已引用的 FactV2，且 FactV2
-    自身明确携带 ``source_document_id`` 时才输出。这里不猜标题、不以正文相似度
-    选文书；真正不可逆的 ``src_…`` 引用仍由客户安全投影统一生成。
+    所有原生规则复用这一条路径：只接受 decision 已引用的 FactV2；若事实未携带
+    单行 ID，仅在同一冻结材料中该来源唯一对应一份文书时补回。这里不猜标题、
+    不以正文相似度选文书；真正不可逆的 ``src_…`` 引用仍由客户安全投影统一生成。
     """
 
     facts = getattr(evidence_snapshot, "facts", ())
@@ -5518,6 +5518,33 @@ def _customer_evidence_from_reduced_decision(
             getattr(fact, "source_document_id", "")
         )
         source_type = str(getattr(fact, "source_key", "") or "").strip().lower()
+        # 部分确定性事实只绑定来源快照，不携带单行文书 ID。若本次冻结材料中
+        # 该来源恰好只有一份带 ID 的文书，可安全补回当前 Bundle 的真实 ID；
+        # 多行或无材料时保持无证据，避免以时间/正文猜测文书。
+        if (
+            not document_id
+            and evidence_materials is not None
+            and _SAFE_SOURCE_TYPE.fullmatch(source_type)
+        ):
+            try:
+                material_rows = tuple(evidence_materials.rows(source_type))
+            except Exception:
+                material_rows = ()
+            material_document_ids = tuple(
+                dict.fromkeys(
+                    candidate
+                    for row in material_rows
+                    if isinstance(row, Mapping)
+                    for candidate in (
+                        _valid_customer_evidence_document_id(
+                            row.get("document_id") or row.get("id")
+                        ),
+                    )
+                    if candidate
+                )
+            )
+            if len(material_document_ids) == 1:
+                document_id = material_document_ids[0]
         if (
             not document_id
             or document_id in seen_document_ids

@@ -91,6 +91,35 @@ def test_adapt_bundle_to_evidence_payload_should_fallback_to_structured_timeline
     ]
 
 
+def test_extract_bundle_documents_should_preserve_inventory_document_id():
+    bundle = {
+        "scene": "final",
+        "visit_id": "VISIT-1",
+        "source_doc_priority": ["labtest_item_report", "bloodtrans_record"],
+        "document_hits": {"labtest_item_report": True, "bloodtrans_record": True},
+        "structured_context": {
+            "document_inventory": [
+                {
+                    "source_table": "labtest_item_report",
+                    "document_id": "LAB-009",
+                    "content": "检验报告正文",
+                },
+                {
+                    "source_table": "bloodtrans_record",
+                    "document_id": "BT-001",
+                    "content": "输血记录正文",
+                },
+            ]
+        },
+    }
+
+    documents = extract_bundle_documents(bundle)
+
+    assert [item["id"] for item in documents] == ["LAB-009", "BT-001"]
+    payload = adapt_bundle_to_evidence_payload(bundle)
+    assert payload["supporting_documents"][0]["document_id"] == "BT-001"
+
+
 def test_extract_bundle_documents_should_include_attention_reports():
     bundle = {
         "scene": "running",

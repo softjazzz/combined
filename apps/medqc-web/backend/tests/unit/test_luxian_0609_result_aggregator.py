@@ -3461,6 +3461,80 @@ def test_reduced_decision_derives_evidence_from_uniquely_bound_source_material()
     ]
 
 
+def test_reduced_decision_fills_unique_document_id_from_frozen_materials():
+    """FactV2无单行ID时，仅唯一来源文书可回填当前Bundle ID。"""
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-018", fact_refs=("d" * 64,)),),
+        audit_context={
+            "evidence_snapshot": SimpleNamespace(
+                facts=(
+                    SimpleNamespace(
+                        fact_id="d" * 64,
+                        source_snapshot_hash="a" * 64,
+                        source_key="admission_record",
+                        source_document_id="",
+                    ),
+                ),
+                observations=(),
+            ),
+            "evidence_materials": SimpleNamespace(
+                rows=lambda source_key: (
+                    ({"document_id": "bundle-admission-1"},)
+                    if source_key == "admission_record"
+                    else ()
+                ),
+            ),
+        },
+    )[0]
+
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "admission_record",
+            "source_document_id": "bundle-admission-1",
+        }
+    ]
+
+
+def test_reduced_decision_does_not_guess_when_source_has_multiple_documents():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-018", fact_refs=("d" * 64,)),),
+        audit_context={
+            "evidence_snapshot": SimpleNamespace(
+                facts=(
+                    SimpleNamespace(
+                        fact_id="d" * 64,
+                        source_snapshot_hash="a" * 64,
+                        source_key="admission_record",
+                        source_document_id="",
+                    ),
+                ),
+                observations=(),
+            ),
+            "evidence_materials": SimpleNamespace(
+                rows=lambda source_key: (
+                    ({"document_id": "bundle-admission-1"}, {"document_id": "bundle-admission-2"})
+                    if source_key == "admission_record"
+                    else ()
+                ),
+            ),
+        },
+    )[0]
+
+    assert "customer_evidence" not in result
+
+
 def test_001_customer_evidence_excludes_discharge_anchor_source():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
