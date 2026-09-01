@@ -216,6 +216,38 @@ describe('SingleRecordQcResultPanel', () => {
     expect(copied).toContain('质控任务ID：job-safe-001')
   })
 
+  it('结果卡片精简时仍保留完整调试字段', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const analysis = '完整医学分析不得因卡片摘要而丢失。'
+    const item = {
+      ...items[0]!,
+      conclusion: `主诉共14字；不能据此导出第一诊断：${analysis}`,
+      criterion_results: [
+        ...(items[0]!.criterion_results || []),
+        {
+          criterion_id: 'diagnostic_direction',
+          status: 'failed',
+          medical_analysis: analysis,
+        },
+      ],
+    }
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [item] } })
+
+    expect(wrapper.get('[data-testid="single-record-result-conclusion"]').text()).not.toContain(
+      analysis,
+    )
+    await wrapper.get('[data-testid="copy-qc-debug-results"]').trigger('click')
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+
+    const copied = String(writeText.mock.calls[0]?.[0] || '')
+    expect(copied).toContain(`质控结论：${item.conclusion}`)
+    expect(copied).toContain(analysis)
+  })
+
   it('默认以紧凑摘要展示，客户可明确展开和收起完整详情', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [items[0]!] } })
     const trigger = wrapper.get('[data-testid="single-record-result-toggle"]')
