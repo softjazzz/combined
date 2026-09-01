@@ -1762,7 +1762,7 @@ watch(
 }
 
 .result-detail {
-  margin: 0 14px 14px;
+  margin: 0 10px 10px;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.07);
   border-radius: 10px;
@@ -1770,18 +1770,18 @@ watch(
 }
 
 .compliant-detail {
-  padding: 14px 16px 12px;
+  padding: 10px 12px 9px;
   background: rgba(255, 255, 255, 0.72);
 }
 
 .compliant-detail > :not(:first-child) {
-  margin-top: 11px;
-  padding-top: 11px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid rgba(0, 0, 0, 0.065);
 }
 
 .decision-summary {
-  padding: 13px 16px 12px;
+  padding: 10px 12px 9px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
   background: rgba(255, 255, 255, 0.54);
 }
@@ -1806,11 +1806,11 @@ watch(
 
 .detail-disclosure summary {
   display: flex;
-  min-height: 34px;
+  min-height: 30px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 0;
+  padding: 5px 0;
   color: rgba(29, 29, 31, 0.72);
   cursor: pointer;
   font-size: 12px;
@@ -1876,7 +1876,7 @@ watch(
 
 .detail-column {
   min-width: 0;
-  padding: 2px 14px 11px;
+  padding: 0 12px 8px;
 }
 
 .detail-column-evidence {
@@ -1885,11 +1885,11 @@ watch(
 
 .detail-column > .detail-block,
 .detail-column > .medical-analysis {
-  padding: 11px 0 0;
+  padding: 8px 0 0;
 }
 
 .detail-column > :not(:first-child) {
-  margin-top: 11px;
+  margin-top: 8px;
   border-top: 1px solid rgba(0, 0, 0, 0.065);
 }
 
@@ -2159,7 +2159,7 @@ watch(
 
 .suggestion-footer {
   display: flex;
-  padding: 8px 0 10px;
+  padding: 6px 0 8px;
 }
 
 .suggestion-footer p {
@@ -2195,7 +2195,7 @@ watch(
   }
 
   .result-detail {
-    margin: 0 12px 12px;
+    margin: 0 8px 8px;
   }
 
   .status-pill {
