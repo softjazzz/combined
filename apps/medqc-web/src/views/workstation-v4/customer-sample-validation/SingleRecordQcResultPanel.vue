@@ -468,7 +468,10 @@
             v-if="!isCompliantResult(item) && item.suggestion"
             class="detail-disclosure suggestion-disclosure"
           >
-            <summary>处理建议</summary>
+            <summary>
+              <span>处理建议</span>
+              <small>点击查看</small>
+            </summary>
             <div class="suggestion-footer">
               <p>{{ item.suggestion }}</p>
             </div>
