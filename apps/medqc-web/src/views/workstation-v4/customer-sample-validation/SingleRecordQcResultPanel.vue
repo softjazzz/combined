@@ -407,8 +407,16 @@
             </div>
 
             <div class="detail-column detail-column-evidence">
-              <section class="detail-block evidence-block">
-                <h4>关键证据</h4>
+              <details
+                class="detail-disclosure evidence-disclosure"
+                data-testid="single-record-evidence-disclosure"
+              >
+                <summary>
+                  <span>关键证据</span>
+                  <small v-if="displayEvidence(item).length">
+                    {{ displayEvidence(item).length }} 份，可定位原文
+                  </small>
+                </summary>
                 <div v-if="displayEvidence(item).length" class="evidence-list">
                   <button
                     v-for="evidence in displayEvidence(item)"
@@ -447,7 +455,7 @@
                 <p v-else class="muted">
                   {{ emptyEvidenceText(item) }}
                 </p>
-              </section>
+              </details>
 
               <details v-if="item.model_analysis" class="medical-analysis model-analysis">
                 <summary>模型分析 / 医学判断</summary>
@@ -456,10 +464,15 @@
             </div>
           </div>
 
-          <section v-if="!isCompliantResult(item) && item.suggestion" class="suggestion-footer">
-            <strong>处理建议</strong>
-            <p>{{ item.suggestion }}</p>
-          </section>
+          <details
+            v-if="!isCompliantResult(item) && item.suggestion"
+            class="detail-disclosure suggestion-disclosure"
+          >
+            <summary>处理建议</summary>
+            <div class="suggestion-footer">
+              <p>{{ item.suggestion }}</p>
+            </div>
+          </details>
 
           <QcResultFeedbackControl
             v-if="feedbackEnabled"
@@ -1782,6 +1795,46 @@ watch(
   margin: 0;
 }
 
+.detail-disclosure {
+  min-width: 0;
+  margin: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.065);
+}
+
+.detail-disclosure summary {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 0;
+  color: rgba(29, 29, 31, 0.72);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 20px;
+  list-style-position: inside;
+}
+
+.detail-disclosure summary small {
+  margin-left: auto;
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.detail-disclosure summary:hover {
+  color: #0066cc;
+}
+
+.detail-disclosure[open] summary {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.evidence-disclosure {
+  padding-top: 0 !important;
+}
+
 .detail-block h4,
 .medical-analysis summary {
   margin: 0 0 5px;
@@ -2103,18 +2156,7 @@ watch(
 
 .suggestion-footer {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 9px 14px 11px;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
-  background: rgba(255, 255, 255, 0.56);
-}
-
-.suggestion-footer strong {
-  flex: 0 0 auto;
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 12px;
-  line-height: 19px;
+  padding: 8px 0 10px;
 }
 
 .suggestion-footer p {

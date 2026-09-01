@@ -230,7 +230,9 @@ describe('SingleRecordQcResultPanel', () => {
         ...(items[0]!.criterion_results || []),
         {
           criterion_id: 'diagnostic_direction',
+          kind: 'semantic_relation',
           status: 'failed',
+          reason_code: 'complaint_primary_diagnosis_mismatch',
           medical_analysis: analysis,
         },
       ],
@@ -678,9 +680,12 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-compliant-detail"]').text()).toContain(
       '核对情况共核对3份输血病程记录，记录时间均在本次住院期间。',
     )
-    expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
-      '关键证据输血病程记录',
-    )
+    const detailGrid = wrapper.get('[data-testid="single-record-detail-grid"]')
+    expect(detailGrid.text()).toContain('关键证据1 份，可定位原文')
+    await detailGrid
+      .get('[data-testid="single-record-evidence-disclosure"] summary')
+      .trigger('click')
+    expect(detailGrid.text()).toContain('输血病程记录')
   })
 
   it('将输血证据显示为输血记录而不是泛化的来源文书', async () => {

@@ -19,10 +19,7 @@
     :class="['timeliness-timeline', `is-${variant}`]"
     data-testid="timeliness-timeline"
   >
-    <template
-      v-for="(row, index) in presentation.timeline"
-      :key="row.key"
-    >
+    <template v-for="(row, index) in presentation.timeline" :key="row.key">
       <span class="timeline-point">
         <small>{{ row.label }}</small>
         <strong>{{ row.value }}</strong>
@@ -32,10 +29,7 @@
         class="timeline-arrow"
         aria-hidden="true"
       >
-        <ArrowRight
-          :size="15"
-          :stroke-width="1.8"
-        />
+        <ArrowRight :size="15" :stroke-width="1.8" />
       </span>
     </template>
   </div>
@@ -63,7 +57,7 @@ const variant = computed(() => props.variant)
 .timeliness-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 13px;
+  margin-top: 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
@@ -80,7 +74,7 @@ const variant = computed(() => props.variant)
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding: 10px;
+  padding: 7px 8px;
   border-right: 1px solid rgba(0, 0, 0, 0.07);
   text-align: center;
 }
@@ -98,9 +92,9 @@ const variant = computed(() => props.variant)
 
 .timeliness-metric strong {
   color: rgba(29, 29, 31, 0.9);
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 650;
-  line-height: 23px;
+  line-height: 21px;
 }
 
 .timeliness-metric.is-overdue strong {
@@ -110,8 +104,8 @@ const variant = computed(() => props.variant)
 .timeliness-timeline {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-top: 10px;
+  gap: 8px;
+  padding-top: 7px;
   color: rgba(29, 29, 31, 0.64);
 }
 
@@ -147,8 +141,8 @@ const variant = computed(() => props.variant)
 
 .timeliness-metrics.is-compliant:not(:first-child),
 .timeliness-timeline.is-compliant:not(:first-child) {
-  margin-top: 11px;
-  padding-top: 11px;
+  margin-top: 9px;
+  padding-top: 9px;
   border-top: 1px solid rgba(0, 0, 0, 0.065);
 }
 
@@ -161,11 +155,11 @@ const variant = computed(() => props.variant)
 
 @container (max-width: 560px) {
   .timeliness-metric {
-    padding: 8px 4px;
+    padding: 6px 4px;
   }
 
   .timeliness-metric strong {
-    font-size: 14px;
+    font-size: 13px;
     line-height: 20px;
   }
 }
