@@ -696,7 +696,26 @@ function examLabEventPresentation(item: SingleRecordQcResultItem) {
 }
 
 function resultHeadline(item: SingleRecordQcResultViewItem) {
-  return examLabEventPresentation(item)?.headline || item.conclusionText
+  const examHeadline = examLabEventPresentation(item)?.headline
+  if (examHeadline) return examHeadline
+
+  // 018 的结论已包含完整医学分析；逐项判定区域会再次展示该分析。
+  // 列表摘要只保留判定结论，完整内容仍在下方“医学分析”中查看，避免重复。
+  if (
+    item.rule_id === 'LX0609-018' &&
+    item.criterion_results?.some(
+      (criterion) =>
+        criterion.criterion_id === 'diagnostic_direction' && criterion.medical_analysis,
+    )
+  ) {
+    const conclusion = item.conclusionText
+    const markers = ['不能据此导出第一诊断：', '第一诊断可导出：']
+    const marker = markers.find((value) => conclusion.includes(value))
+    if (marker) {
+      return `${conclusion.split(marker, 1)[0]}${marker.replace('：', '')}。`
+    }
+  }
+  return item.conclusionText
 }
 
 function needsTextExpansion(item: SingleRecordQcResultViewItem) {
