@@ -1380,7 +1380,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).not.toContain('历史数据不足结果未保存缺少的受控来源、字段或核对条件')
   })
 
-  it('已授权原文短摘录显示在对应证据下，并仍可点击定位', async () => {
+  it('字段级摘录显示在对应证据下，文书级依据只显示定位提示', async () => {
     const item = {
       ...items[2]!,
       evidence: [
@@ -1397,8 +1397,8 @@ describe('SingleRecordQcResultPanel', () => {
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
     const evidence = wrapper.get('[data-testid="single-record-evidence"]')
-    expect(evidence.text()).toContain('文书级依据')
-    expect(evidence.text()).toContain('置入人工关节假体')
+    expect(evidence.text()).toContain('已定位到文书，未定位到具体片段')
+    expect(evidence.text()).not.toContain('置入人工关节假体')
     await evidence.trigger('click')
     expect(wrapper.emitted('locate-evidence')).toEqual([[item.evidence[0]]])
   })

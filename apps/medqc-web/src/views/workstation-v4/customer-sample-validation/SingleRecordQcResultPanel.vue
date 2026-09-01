@@ -420,9 +420,18 @@
                   >
                     <span class="evidence-content">
                       <strong>{{ evidenceLabel(evidence) }}</strong>
-                      <span v-if="evidence.evidence_excerpt" class="evidence-excerpt">
+                      <span
+                        v-if="evidence.evidence_excerpt && evidence.excerpt_kind !== '文书级依据'"
+                        class="evidence-excerpt"
+                      >
                         <em>{{ evidence.excerpt_kind || '病历原文依据' }}</em>
                         <span>{{ evidence.evidence_excerpt }}</span>
+                      </span>
+                      <span
+                        v-else-if="evidence.excerpt_kind === '文书级依据'"
+                        class="evidence-path"
+                      >
+                        已定位到文书，未定位到具体片段
                       </span>
                       <span v-else-if="evidence.field_path" class="evidence-path">{{
                         evidence.field_path
