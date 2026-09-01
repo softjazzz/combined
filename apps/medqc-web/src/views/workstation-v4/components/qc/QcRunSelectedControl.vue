@@ -11,24 +11,58 @@
       质控所选
     </button>
 
-    <div
-      v-if="state === 'creating' || state === 'failed'"
-      class="qc-run-selected-control__inline-message"
-      :class="`is-${state}`"
-      role="status"
-      aria-live="polite"
-    >
-      <LoaderCircle v-if="state === 'creating'" :size="15" class="is-spinning" aria-hidden="true" />
-      <TriangleAlert v-else :size="15" aria-hidden="true" />
-      <span>{{ progressMessage }}</span>
-    </div>
-    <RecordPoolQcTaskStatusBar
-      v-if="taskJob"
-      :job="taskJob"
-      :auto-poll="false"
-      @dismiss="taskJob = null"
-      @completed="emit('completed')"
-    />
+    <Teleport v-if="statusTarget" :to="statusTarget" defer>
+      <div class="qc-run-selected-control__task-status">
+        <div
+          v-if="state === 'creating' || state === 'failed'"
+          class="qc-run-selected-control__inline-message"
+          :class="`is-${state}`"
+          role="status"
+          aria-live="polite"
+        >
+          <LoaderCircle
+            v-if="state === 'creating'"
+            :size="15"
+            class="is-spinning"
+            aria-hidden="true"
+          />
+          <TriangleAlert v-else :size="15" aria-hidden="true" />
+          <span>{{ progressMessage }}</span>
+        </div>
+        <RecordPoolQcTaskStatusBar
+          v-if="taskJob"
+          :job="taskJob"
+          :auto-poll="false"
+          @dismiss="taskJob = null"
+          @completed="emit('completed')"
+        />
+      </div>
+    </Teleport>
+    <template v-else>
+      <div
+        v-if="state === 'creating' || state === 'failed'"
+        class="qc-run-selected-control__inline-message"
+        :class="`is-${state}`"
+        role="status"
+        aria-live="polite"
+      >
+        <LoaderCircle
+          v-if="state === 'creating'"
+          :size="15"
+          class="is-spinning"
+          aria-hidden="true"
+        />
+        <TriangleAlert v-else :size="15" aria-hidden="true" />
+        <span>{{ progressMessage }}</span>
+      </div>
+      <RecordPoolQcTaskStatusBar
+        v-if="taskJob"
+        :job="taskJob"
+        :auto-poll="false"
+        @dismiss="taskJob = null"
+        @completed="emit('completed')"
+      />
+    </template>
   </div>
 </template>
 
@@ -57,6 +91,7 @@ type RunState = 'idle' | 'creating' | 'running' | 'completed' | 'failed'
 const props = defineProps<{
   carePhase: QcRecordCarePhase
   recordRefs: SelectedQcRecordRef[]
+  statusTarget?: string
 }>()
 
 const emit = defineEmits<{
@@ -79,6 +114,7 @@ const scene = computed<'running' | 'final'>(() =>
 )
 const isBusy = computed(() => state.value === 'creating' || state.value === 'running')
 const normalizedRecordRefs = computed(() => normalizeRecordRefs(props.recordRefs))
+const statusTarget = computed(() => String(props.statusTarget || '').trim())
 
 function normalizeRecordRefs(values: SelectedQcRecordRef[]): SelectedQcRecordRef[] {
   const unique = new Map<string, SelectedQcRecordRef>()
@@ -256,6 +292,16 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
+}
+
+.qc-run-selected-control__task-status {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.qc-run-selected-control__task-status :deep(.record-pool-qc-status) {
   width: 100%;
 }
 

@@ -123,11 +123,17 @@
             <QcRunSelectedControl
               :care-phase="carePhase"
               :record-refs="selectedQcRecordRefs"
+              :status-target="`#qc-record-result-task-status-${carePhase}`"
               @completed="refreshAfterSelectedQc"
             />
           </div>
         </div>
       </div>
+
+      <div
+        :id="`qc-record-result-task-status-${carePhase}`"
+        class="qc-record-result-list-view__task-status"
+      />
 
       <QcRecordResultTable
         :care-phase="carePhase"
@@ -1012,6 +1018,11 @@ function closeResultDrawer() {
   min-height: 38px;
   padding: 0 15px;
   border-radius: 10px;
+}
+
+.qc-record-result-list-view__task-status {
+  width: 100%;
+  padding: 0 20px;
 }
 
 .qc-record-result-list-view__query-button:disabled,
