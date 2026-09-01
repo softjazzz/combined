@@ -133,14 +133,17 @@ const props = withDefaults(
   defineProps<{
     job: SichuanBatchJob | null
     pollIntervalMs?: number
+    autoPoll?: boolean
   }>(),
   {
     pollIntervalMs: 2000,
+    autoPoll: true,
   },
 )
 
 const emit = defineEmits<{
   dismiss: []
+  completed: []
 }>()
 
 const currentJob = ref<SichuanBatchJob | null>(null)
@@ -432,8 +435,10 @@ async function refreshJob(sequence: number) {
   const result = await getSichuanWorkspaceBatchJob(jobId)
   if (sequence !== requestSequence) return
   if (result.success && result.data) {
+    const wasCompleted = currentJob.value?.status === 'completed'
     currentJob.value = result.data
     pollError.value = false
+    if (!wasCompleted && result.data.status === 'completed') emit('completed')
   } else {
     pollError.value = true
   }
@@ -447,7 +452,7 @@ watch(
     clearPollTimer()
     currentJob.value = job
     pollError.value = false
-    if (job && !terminalStatuses.has(job.status)) void refreshJob(requestSequence)
+    if (job && props.autoPoll && !terminalStatuses.has(job.status)) void refreshJob(requestSequence)
   },
   { immediate: true },
 )
