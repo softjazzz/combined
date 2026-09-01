@@ -469,15 +469,15 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 20px;
   overflow: hidden;
-  padding: 16px 18px 15px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.94);
+  padding: 18px 22px 16px;
+  border: 1px solid rgba(0, 102, 204, 0.13);
+  border-radius: 18px;
+  background: rgba(251, 253, 255, 0.98);
   box-shadow:
-    0 2px 10px rgba(29, 29, 31, 0.04),
-    0 8px 24px rgba(0, 70, 140, 0.045);
+    0 2px 8px rgba(29, 29, 31, 0.035),
+    0 12px 28px rgba(0, 70, 140, 0.055);
   color: #1d1d1f;
 }
 
@@ -509,7 +509,7 @@ onBeforeUnmount(() => {
   display: flex;
   min-width: 0;
   flex: 1;
-  gap: 12px;
+  gap: 14px;
 }
 
 .record-pool-qc-status__actions {
@@ -538,12 +538,12 @@ onBeforeUnmount(() => {
 
 .record-pool-qc-status__indicator {
   display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
   place-items: center;
   border: 1px solid rgba(0, 102, 204, 0.12);
-  border-radius: 11px;
+  border-radius: 12px;
   background: #f1f6ff;
   color: #0066cc;
 }
@@ -633,8 +633,8 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__progress {
-  max-width: 760px;
-  margin-top: 9px;
+  width: 100%;
+  margin-top: 11px;
 }
 
 .record-pool-qc-status__progress :deep(.ant-progress-inner) {
@@ -713,8 +713,8 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  max-width: 820px;
-  margin: 13px 0 0;
+  width: 100%;
+  margin: 15px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -725,7 +725,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 12px 8px 0;
+  padding: 7px 16px 7px 0;
   color: rgba(29, 29, 31, 0.48);
 }
 
