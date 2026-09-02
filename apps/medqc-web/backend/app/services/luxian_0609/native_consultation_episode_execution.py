@@ -154,6 +154,14 @@ _EXPLICIT_OPINION_CLEAR_PATTERN = re.compile(
     r"(?:今日|立即|继续|停用|改用|加用|行[A-Za-z0-9\u4e00-\u9fff]{2,24}|"
     r"完善[A-Za-z0-9\u4e00-\u9fff]{2,24}(?:检查|检验)|预约)"
 )
+# consultation_record 的真实正文常用“会诊后指出：”承载完整意见，
+# 不一定包含“会诊意见”字段标签。仅在同一段同时出现明确诊疗动作/结论时
+# 作为高置信正向事实；泛化“必要时/酌情”仍由下方模糊模式优先拦截。
+_EXPLICIT_EMBEDDED_OPINION_CLEAR_PATTERN = re.compile(
+    r"(?:会诊后(?:指出|建议|认为)|会诊(?:医师|医生)?(?:指出|建议|认为))"
+    r".{0,220}(?:考虑|诊断|建议|继续|予以|给予|调整|停用|改用|加用|"
+    r"复查|随访|治疗|监测|用药|检查|检验)"
+)
 _EXPLICIT_EXECUTION_TRACE_PATTERN = re.compile(
     r"(?:已归纳.{0,12}会诊意见|执行会诊意见|按(?:会诊)?建议|"
     r"根据会诊意见|落实会诊意见|按意见.{0,12}(?:执行|处理|治疗))"
@@ -1101,6 +1109,22 @@ def _strong_explicit_consultation_statuses(
         item for item in documents if "会诊意见" in _clean(item.get("text"))
     )
     if len(request_documents) != 1 or len(opinion_documents) != 1:
+        # consultation_record 的源字段本身就是会诊正文，真实数据常不带
+        # “会诊申请/会诊意见”标签。仅对每份正文都明确包含“会诊后指出/建议”
+        # 及具体诊疗动作的场景短路，避免让模型把明确意见误降级为 vague。
+        if "LX0609-022" in selected:
+            embedded_opinions = tuple(
+                item
+                for item in documents
+                if _EXPLICIT_EMBEDDED_OPINION_CLEAR_PATTERN.search(
+                    _evidence_text(_clean(item.get("text")))
+                )
+                and not _EXPLICIT_OPINION_VAGUE_PATTERN.search(
+                    _evidence_text(_clean(item.get("text")))
+                )
+            )
+            if embedded_opinions and len(embedded_opinions) == len(documents):
+                return {"LX0609-022": ("compliant", "requirement_satisfied")}
         return {}
 
     statuses: dict[str, tuple[str, str]] = {}
@@ -2926,10 +2950,39 @@ def _finish_explicit_statuses(
     display_facts: list[tuple[str, Mapping[str, Any]]] = []
     for rule_id in selected:
         status = statuses[rule_id][0]
-        facts: dict[str, Any] = {
-            "source_document_ids": list(source_document_ids),
-            "consultation_assessment": "明确" if status == "compliant" else "不符合要求",
-        }
+        facts: dict[str, Any]
+        if rule_id in {"LX0609-021", "LX0609-022"}:
+            facts = {
+                "verification_kind": (
+                    "consultation_application_quality_check"
+                    if rule_id == "LX0609-021"
+                    else "consultation_opinion_quality_check"
+                ),
+                "episode_count": len(documents),
+                "document_count": len(documents),
+                "semantic_state": "clear" if status == "compliant" else "mixed",
+                "checked_requirement": (
+                    "说明具体临床问题、会诊理由或明确会诊目的"
+                    if rule_id == "LX0609-021"
+                    else "给出针对当前病情的明确诊疗意见"
+                ),
+                "source_document_ids": list(source_document_ids),
+                "episode_results": [
+                    {
+                        "episode_index": index,
+                        "semantic_state": "clear" if status == "compliant" else "unknown",
+                        "source_document_id": _clean(document.get("document_id")),
+                        "record_time": _clean(document.get("time")),
+                        "document_title": "会诊申请单" if rule_id == "LX0609-021" else "会诊记录单",
+                    }
+                    for index, document in enumerate(documents, start=1)
+                ],
+            }
+        else:
+            facts = {
+                "source_document_ids": list(source_document_ids),
+                "consultation_assessment": "明确" if status == "compliant" else "不符合要求",
+            }
         if rule_id == "LX0609-020":
             facts["execution_record_state"] = (
                 "已发现明确执行记录" if status == "compliant" else "未发现执行记录"

@@ -161,6 +161,31 @@ def test_generic_monitor_and_adjust_wording_cannot_be_upgraded_to_clear_opinion(
     assert parsed[0].recommendations == ()
 
 
+def test_embedded_consultation_opinion_is_clear_without_field_label():
+    documents = (
+        {
+            "ref": "consultation_record-1",
+            "document_id": "4364109||4",
+            "time": "2026-02-03 18:41:45",
+            "text": "感染性疾病科会诊，胡强医师会诊后指出：肝功能不全，建议继续保肝治疗，复查肝功能。",
+        },
+        {
+            "ref": "consultation_record-2",
+            "document_id": "4364109||7",
+            "time": "2026-02-07 18:10:03",
+            "text": "患者复查肝功结果回示，胡强医师会诊后指出：考虑既往感染，继续保肝治疗，我科随访。",
+        },
+    )
+
+    statuses = episode._strong_explicit_consultation_statuses(
+        selected=("LX0609-022",),
+        documents=documents,
+        execution_projection=None,
+    )
+
+    assert statuses == {"LX0609-022": ("compliant", "requirement_satisfied")}
+
+
 def _rows(*contents: str, day: int = 20, hour_start: int = 1, action_suffix: bool = True):
     return [
         {

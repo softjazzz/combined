@@ -448,6 +448,61 @@ def _consultation_evidence_items_for_batch(
 
     existing_items = [item for item in list(eval_item.get("evidence_items") or []) if isinstance(item, dict)]
 
+    display_facts = eval_item.get("customer_display_facts")
+    if not isinstance(display_facts, dict):
+        display_facts = {}
+    episode_results = [
+        item
+        for item in list(display_facts.get("episode_results") or [])
+        if isinstance(item, dict)
+    ]
+    customer_evidence = [
+        item
+        for item in list(eval_item.get("customer_evidence") or [])
+        if isinstance(item, dict)
+        and str(item.get("source_type") or "").strip() == "consultation_record"
+    ]
+
+    def _existing_source(*roles: str) -> tuple[str, str]:
+        for item in existing_items:
+            if str(item.get("evidence_role") or "") not in roles:
+                continue
+            document_id = str(item.get("source_document_id") or "").strip()
+            record_time = str(item.get("record_time") or "").strip()
+            if document_id or record_time:
+                return document_id, record_time
+        return "", ""
+
+    def _display_source(*, semantic_role: str) -> tuple[str, str]:
+        """从已裁决的逐次事实恢复对应会诊文书坐标，不重新解释语义。"""
+
+        candidates = [
+            item
+            for item in episode_results
+            if str(item.get("semantic_state") or "").strip().lower()
+            in {"vague", "missing", "unknown"}
+        ]
+        if not candidates:
+            candidates = episode_results
+        if not candidates:
+            return "", ""
+        selected = candidates[0]
+        document_id = str(selected.get("source_document_id") or "").strip()
+        record_time = str(selected.get("record_time") or "").strip()
+        if document_id:
+            return document_id, record_time
+        matching_evidence = [
+            item
+            for item in customer_evidence
+            if not record_time
+            or str(item.get("record_time") or "").strip() == record_time
+        ]
+        if matching_evidence:
+            evidence = matching_evidence[0]
+            document_id = str(evidence.get("source_document_id") or "").strip()
+            record_time = str(evidence.get("record_time") or "").strip() or record_time
+        return document_id, record_time
+
     def _existing_quote(*roles: str, require_consultation_context: bool = False) -> str:
         execution_context_markers = ("遵会诊", "已遵会诊", "会诊意见", "按会诊", "采纳会诊", "执行会诊")
         for item in existing_items:
@@ -477,6 +532,17 @@ def _consultation_evidence_items_for_batch(
     if execution_quote and not any(marker in execution_quote for marker in ("遵会诊", "已遵会诊", "会诊意见", "采纳会诊", "按会诊")):
         execution_quote = ""
 
+    request_document_id, request_record_time = _existing_source("consultation_request")
+    opinion_document_id, opinion_record_time = _existing_source("consultation_opinion")
+    if normalized_rule_id == "LX0609-021" and not (request_document_id or request_record_time):
+        request_document_id, request_record_time = _display_source(
+            semantic_role="application"
+        )
+    if normalized_rule_id == "LX0609-022" and not (opinion_document_id or opinion_record_time):
+        opinion_document_id, opinion_record_time = _display_source(
+            semantic_role="opinion"
+        )
+
     items: List[Dict[str, Any]] = []
     if request_quote:
         items.append(
@@ -485,8 +551,8 @@ def _consultation_evidence_items_for_batch(
                 "source_table": "consultation_record",
                 "source_document_type": "会诊申请/会诊记录",
                 "source_document_name": "会诊申请/会诊记录",
-                "source_document_id": "",
-                "record_time": "",
+                "source_document_id": request_document_id,
+                "record_time": request_record_time,
                 "field_path": "会诊申请/目的",
                 "quote": request_quote,
                 "normalized_value": "",
@@ -500,8 +566,8 @@ def _consultation_evidence_items_for_batch(
                 "source_table": "consultation_record",
                 "source_document_type": "会诊记录",
                 "source_document_name": "会诊记录",
-                "source_document_id": "",
-                "record_time": "",
+                "source_document_id": opinion_document_id,
+                "record_time": opinion_record_time,
                 "field_path": "会诊意见",
                 "quote": " ".join(opinion_quote.split())[:260],
                 "normalized_value": "",
