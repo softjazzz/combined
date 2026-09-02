@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { recommendationEvidenceForSingleRecord } from '../single-record-result-model'
+import {
+  buildSingleRecordQcPresentation,
+  recommendationEvidenceForSingleRecord,
+} from '../single-record-result-model'
 
 describe('single-record recommendation evidence', () => {
   it('exposes signed nested refs with recommendation metadata', () => {
@@ -82,5 +85,37 @@ describe('single-record recommendation evidence', () => {
       'src_aaaaaaaaaaaaaaaaaaaaaaaa',
       'src_bbbbbbbbbbbbbbbbbbbbbbbb',
     ])
+  })
+})
+
+describe('grouped result presentation tabs', () => {
+  it('keeps compliant and not-applicable rules in separate report sections', () => {
+    const presentation = buildSingleRecordQcPresentation([
+      {
+        rule_id: 'LX0609-001',
+        rule_name: '入院记录规则',
+        status: 'compliant',
+        source_document: '入院记录',
+      },
+      {
+        rule_id: 'LX0609-002',
+        rule_name: '手术记录规则',
+        status: 'not_applicable',
+        source_document: '手术记录',
+      },
+      {
+        rule_id: 'LX0609-003',
+        rule_name: '会诊记录规则',
+        status: 'data_gap',
+        source_document: '会诊记录',
+      },
+    ])
+
+    expect(presentation.counts.compliant).toBe(1)
+    expect(presentation.counts.notApplicable).toBe(1)
+    expect(presentation.sectionsByTab.compliant).toHaveLength(1)
+    expect(presentation.sectionsByTab.not_applicable).toHaveLength(1)
+    expect(presentation.sectionsByTab.compliant[0].items[0].rule_id).toBe('LX0609-001')
+    expect(presentation.sectionsByTab.not_applicable[0].items[0].rule_id).toBe('LX0609-002')
   })
 })

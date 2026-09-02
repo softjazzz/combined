@@ -919,6 +919,12 @@ const reportTabs = computed(() => [
   },
   { key: 'data_gap' as const, label: '资料待核实', count: presentation.value.counts.dataGap },
   { key: 'uncertain' as const, label: '待判断', count: presentation.value.counts.uncertain },
+  { key: 'compliant' as const, label: '合规', count: presentation.value.counts.compliant },
+  {
+    key: 'not_applicable' as const,
+    label: '不适用',
+    count: presentation.value.counts.notApplicable,
+  },
   { key: 'all' as const, label: '全部规则', count: viewItems.value.length },
 ])
 const visibleItems = computed(() =>

@@ -217,7 +217,8 @@ export interface SingleRecordQcStatusTab {
   count: number
 }
 
-export type SingleRecordQcResultReportTab = 'non_compliant' | 'data_gap' | 'uncertain' | 'all'
+export type SingleRecordQcResultReportTab =
+  'non_compliant' | 'data_gap' | 'uncertain' | 'compliant' | 'not_applicable' | 'all'
 
 export interface SingleRecordQcResultDocumentGroup {
   key: string
@@ -230,6 +231,8 @@ export interface SingleRecordQcResultPresentation {
     nonCompliant: number
     dataGap: number
     uncertain: number
+    notApplicable: number
+    compliant: number
     technicalError: number
     other: number
   }
@@ -296,6 +299,8 @@ function resolveSingleRecordQcReportTab(
   if (item.status === 'non_compliant') return 'non_compliant'
   if (item.status === 'data_gap') return 'data_gap'
   if (REPORT_UNCERTAIN_STATUSES.has(item.status)) return 'uncertain'
+  if (item.status === 'compliant') return 'compliant'
+  if (item.status === 'not_applicable') return 'not_applicable'
   return null
 }
 
@@ -348,6 +353,12 @@ export function buildSingleRecordQcPresentation(
   const uncertainItems = viewItems.filter(
     (item) => resolveSingleRecordQcReportTab(item) === 'uncertain',
   )
+  const compliantItems = viewItems.filter(
+    (item) => resolveSingleRecordQcReportTab(item) === 'compliant',
+  )
+  const notApplicableItems = viewItems.filter(
+    (item) => resolveSingleRecordQcReportTab(item) === 'not_applicable',
+  )
   const technicalErrorCount = viewItems.filter((item) => item.status === 'technical_error').length
 
   return {
@@ -355,6 +366,8 @@ export function buildSingleRecordQcPresentation(
       nonCompliant: nonCompliantItems.length,
       dataGap: dataGapItems.length,
       uncertain: uncertainItems.length,
+      notApplicable: notApplicableItems.length,
+      compliant: compliantItems.length,
       technicalError: technicalErrorCount,
       other:
         viewItems.length -
@@ -367,6 +380,8 @@ export function buildSingleRecordQcPresentation(
       non_compliant: groupSingleRecordQcResultItems(nonCompliantItems),
       data_gap: groupSingleRecordQcResultItems(dataGapItems),
       uncertain: groupSingleRecordQcResultItems(uncertainItems),
+      compliant: groupSingleRecordQcResultItems(compliantItems),
+      not_applicable: groupSingleRecordQcResultItems(notApplicableItems),
       all: groupSingleRecordQcResultItems(viewItems),
     },
   }
