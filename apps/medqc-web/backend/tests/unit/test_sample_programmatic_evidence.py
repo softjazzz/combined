@@ -153,6 +153,33 @@ def test_fallback_lab_events_with_different_business_keys_are_not_merged():
     ]
 
 
+def test_fallback_lab_event_matches_bundle_document_id_when_bundle_key_is_nested():
+    """Bundle 仅保留真实报告 ID 时，仍应吸收同 ID 的 fallback 行。"""
+
+    merged = evidence_module._merge_fallback_items(
+        [
+            {
+                "source_table": "labtest_item_report",
+                "document_id": "LAB-009",
+                "report_items": [{"item_id": "LABITEM-009"}],
+                "content": "尿培养结果：大肠埃希菌阳性。",
+            }
+        ],
+        [
+            {
+                "source_table": "labtest_item_report",
+                "document_id": "VISIT-labtest_item_report-supp-001",
+                "test_id": "LAB-009",
+                "test_no": "LAB-009",
+                "content": "尿培养结果：大肠埃希菌阳性，补充完整结果。",
+            }
+        ],
+    )
+
+    assert len(merged) == 1
+    assert merged[0]["document_id"] == "LAB-009"
+
+
 def test_build_programmatic_evidence_payload_should_fallback_to_admission_record_timeline_record_time():
     payload = build_programmatic_evidence_payload(
         bundle={

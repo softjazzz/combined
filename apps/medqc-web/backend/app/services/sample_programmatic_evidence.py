@@ -225,6 +225,32 @@ def _fallback_business_identity(item: dict[str, Any]) -> tuple[str, ...] | None:
     return None
 
 
+def _fallback_business_identities(item: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
+    """Return the primary event key plus a controlled report-id alias.
+
+    Some assembled Bundles intentionally retain only the authoritative report
+    document ID (for example ``LAB-009``), while a fallback CDM row exposes
+    ``test_id``/``test_no``.  Treating those explicit identifiers as aliases
+    keeps the Bundle document ID authoritative without using free text.
+    """
+
+    identities: list[tuple[str, ...]] = []
+    primary = _fallback_business_identity(item)
+    if primary is not None:
+        identities.append(primary)
+    source_table = _item_source_table(item)
+    if source_table not in _REPORT_BUSINESS_KEY_FIELDS:
+        return tuple(identities)
+    document_id = _safe_text(item.get("document_id") or item.get("record_id") or item.get("id"))
+    if document_id:
+        identities.append(("event_business_key", source_table, "document_id", document_id))
+    for field in _REPORT_BUSINESS_KEY_FIELDS[source_table]:
+        value = _normalize_identity_text(item.get(field))
+        if value:
+            identities.append(("event_business_key", source_table, "document_id", value))
+    return tuple(dict.fromkeys(identities))
+
+
 def _merge_duplicate_document(existing: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     if len(_identity_content(candidate)) > len(_identity_content(existing)):
         primary, secondary = candidate, existing
@@ -264,8 +290,7 @@ def _merge_fallback_items(items: list[dict[str, Any]], fallback_items: list[dict
         if identity is not None:
             identity_indexes[identity] = len(merged)
         merged.append(item)
-        business_identity = _fallback_business_identity(item)
-        if business_identity is not None:
+        for business_identity in _fallback_business_identities(item):
             base_business_indexes.setdefault(business_identity, set()).add(len(merged) - 1)
 
     for item in fallback_items:
@@ -274,8 +299,9 @@ def _merge_fallback_items(items: list[dict[str, Any]], fallback_items: list[dict
             index = identity_indexes[identity]
             merged[index] = _merge_duplicate_document(merged[index], item)
             continue
-        business_identity = _fallback_business_identity(item)
-        matching_indexes = base_business_indexes.get(business_identity, set()) if business_identity else set()
+        matching_indexes: set[int] = set()
+        for business_identity in _fallback_business_identities(item):
+            matching_indexes.update(base_business_indexes.get(business_identity, set()))
         if len(matching_indexes) == 1:
             index = next(iter(matching_indexes))
             merged[index] = _merge_event_document(merged[index], item)
