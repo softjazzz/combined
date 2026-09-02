@@ -1,5 +1,8 @@
 from app.services import sample_programmatic_evidence as evidence_module
 from app.services.sample_programmatic_evidence import build_programmatic_evidence_payload
+from app.services.qc_input_adapters.running_final_bundle_adapter import (
+    adapt_bundle_to_evidence_payload,
+)
 
 
 def test_build_programmatic_evidence_payload_should_flatten_structured_documents_and_render_titles():
@@ -45,6 +48,44 @@ def test_build_programmatic_evidence_payload_should_flatten_structured_documents
     assert payload["primary_document_text"].count("首次病程记录") == 1
     assert "记录时间：2026-04-01 08:30:00" in payload["primary_document_text"]
     assert "出院时间：2026-04-05 08:00:00" in payload["primary_document_text"]
+
+
+def test_bundle_report_id_survives_evidence_projection_closed_loop(monkeypatch):
+    """Bundle真实报告ID应贯穿适配器和程序化证据，不回退成合成ID。"""
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: ([], {}),
+    )
+    bundle = {
+        "scene": "final",
+        "visit_id": "VISIT-043",
+        "source_doc_priority": ["admission_record", "labtest_item_report"],
+        "source_documents": [
+            {
+                "source_table": "admission_record",
+                "document_id": "ADMISSION-1",
+                "document_title": "入院记录",
+                "content": "主诉：腹痛。",
+            },
+            {
+                "source_table": "labtest_item_report",
+                "document_id": "LAB-009",
+                "test_id": "LAB-009",
+                "document_title": "尿培养报告",
+                "record_time": "2026-08-20 10:00:00",
+                "content": "尿培养：大肠埃希菌阳性。",
+            },
+        ],
+        "structured_context": {},
+    }
+
+    adapted = adapt_bundle_to_evidence_payload(bundle)
+    projected = build_programmatic_evidence_payload(bundle=bundle)
+
+    assert adapted["supporting_documents"][0]["document_id"] == "LAB-009"
+    lab_events = projected["programmatic_timeline"]["documents"]["labtest_item_report"]
+    assert [event["document_id"] for event in lab_events] == ["LAB-009"]
 
 
 def test_build_programmatic_evidence_payload_should_fallback_to_admission_record_timeline_record_time():
