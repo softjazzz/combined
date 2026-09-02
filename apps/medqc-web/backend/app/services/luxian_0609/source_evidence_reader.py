@@ -294,6 +294,7 @@ _NATIVE_SOURCE_FIELDS = {
     "labtest_item_report": (
         "document_id",
         "test_id",
+        "test_no",
         "report_id",
         "item_code",
         "item_name",
@@ -1442,6 +1443,36 @@ def read_luxian_0609_native_source_rows(
     return [dict(row) for row in rows]
 
 
+def _normalize_snapshot_source_row(
+    source_key: str,
+    row: Mapping[str, Any],
+) -> dict[str, Any]:
+    """仅把已知的补充报告合成 ID 回退到同一事件业务 ID。
+
+    部分同步数据会把检验报告落成 ``…-labtest_item_report-supp-NNN``，而
+    Bundle/病历文书使用报告的 ``test_id``（如 ``LAB-009``）作为真实文书 ID。
+    只有命中该明确合成格式且同一行存在业务 ID 时才回退；普通真实
+    ``document_id`` 永不改写，避免把业务键猜成文书 ID。
+    """
+
+    normalized = dict(row)
+    if source_key != "labtest_item_report":
+        return normalized
+    document_id = str(normalized.get("document_id") or "").strip()
+    if not document_id or "-labtest_item_report-supp-" not in document_id:
+        return normalized
+    fallback_id = next(
+        (
+            str(normalized.get(field) or "").strip()
+            for field in ("test_id", "test_no", "report_id")
+            if str(normalized.get(field) or "").strip()
+        ),
+    )
+    if fallback_id:
+        normalized["document_id"] = fallback_id
+    return normalized
+
+
 def read_luxian_0609_snapshot_source_rows(
     *,
     source_key: str,
@@ -1562,7 +1593,13 @@ def read_luxian_0609_snapshot_source_rows(
     truncated = len(raw_rows) > limit_rows
     return SnapshotSourceRows.create(
         source_key=normalized_source,
-        rows=[dict(row) for row in raw_rows[:limit_rows]],
+        rows=[
+            _normalize_snapshot_source_row(
+                normalized_source,
+                dict(row),
+            )
+            for row in raw_rows[:limit_rows]
+        ],
         truncated=truncated,
         limit_rows=limit_rows,
     )

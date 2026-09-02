@@ -2210,6 +2210,71 @@ def test_snapshot_reader_uses_bound_three_coordinates_stable_order_and_limit_plu
     }
 
 
+def test_snapshot_reader_maps_synthetic_lab_report_id_to_same_event_business_id(monkeypatch) -> None:
+    """native 快照应复用 Bundle 可定位的 LAB-009，而不是补充行合成 ID。"""
+
+    connection = _FakeConnection(
+        [
+            {
+                "document_id": "VISIT-labtest_item_report-supp-001",
+                "test_id": "LAB-009",
+                "test_no": "LAB-009",
+                "report_id": "REPORT-009",
+                "item_name": "尿培养",
+                "record_content": "大肠埃希菌阳性",
+            }
+        ]
+    )
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _FakeEngine(connection))
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm")
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _source: [
+            "institute_id", "patient_id", "visit_id", "document_id",
+            "test_id", "test_no", "report_id", "item_name", "record_content",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key="labtest_item_report",
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+    )
+
+    assert result.rows[0]["document_id"] == "LAB-009"
+
+
+def test_snapshot_reader_keeps_non_synthetic_lab_report_id(monkeypatch) -> None:
+    connection = _FakeConnection(
+        [
+            {
+                "document_id": "REPORT-REAL-1",
+                "test_id": "LAB-009",
+                "test_no": "LAB-009",
+                "item_name": "尿培养",
+                "record_content": "阴性",
+            }
+        ]
+    )
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _FakeEngine(connection))
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm")
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _source: [
+            "institute_id", "patient_id", "visit_id", "document_id",
+            "test_id", "test_no", "item_name", "record_content",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key="labtest_item_report",
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+    )
+
+    assert result.rows[0]["document_id"] == "REPORT-REAL-1"
+
+
 def test_snapshot_reader_converts_only_database_failure_to_controlled_query_error(monkeypatch) -> None:
     monkeypatch.setattr(
         source_evidence_reader.bundle_assembly,
