@@ -7,11 +7,17 @@
       :disabled="isBusy"
       @click="handleTriggerClick"
     >
-      <RefreshCw :size="15" aria-hidden="true" />
+      <RefreshCw
+        :size="15"
+        aria-hidden="true"
+      />
       {{ retryableQcPayload ? '重试创建质控' : '同步并质控' }}
     </button>
 
-    <div v-if="confirmationOpen" class="qc-sync-and-run-control__backdrop">
+    <div
+      v-if="confirmationOpen"
+      class="qc-sync-and-run-control__backdrop"
+    >
       <section
         class="qc-sync-and-run-control__dialog"
         role="dialog"
@@ -21,7 +27,9 @@
         <header class="qc-sync-and-run-control__dialog-header">
           <div>
             <p>病历同步</p>
-            <h2 id="sync-and-qc-confirm-title">同步并质控</h2>
+            <h2 id="sync-and-qc-confirm-title">
+              同步并质控
+            </h2>
           </div>
           <button
             type="button"
@@ -29,7 +37,10 @@
             aria-label="关闭同步并质控确认"
             @click="closeConfirmation"
           >
-            <X :size="18" aria-hidden="true" />
+            <X
+              :size="18"
+              aria-hidden="true"
+            />
           </button>
         </header>
 
@@ -50,7 +61,10 @@
 
         <fieldset class="qc-sync-and-run-control__department-selector">
           <legend>选择科室</legend>
-          <p v-if="departmentLoading" class="qc-sync-and-run-control__department-hint">
+          <p
+            v-if="departmentLoading"
+            class="qc-sync-and-run-control__department-hint"
+          >
             正在读取可选科室…
           </p>
           <p
@@ -66,7 +80,7 @@
                 aria-label="全部科室"
                 :checked="isAllDepartments"
                 @change="selectAllDepartments"
-              />
+              >
               <span>全部科室</span>
             </label>
             <label
@@ -79,13 +93,16 @@
                 :aria-label="departmentOption"
                 :checked="isDepartmentSelected(departmentOption)"
                 @change="toggleDepartment(departmentOption, $event)"
-              />
+              >
               <span>{{ departmentOption }}</span>
             </label>
           </div>
         </fieldset>
 
-        <fieldset v-if="scene === 'final'" class="qc-sync-and-run-control__date-selector">
+        <fieldset
+          v-if="scene === 'final'"
+          class="qc-sync-and-run-control__date-selector"
+        >
           <legend>同步日期范围</legend>
           <p class="qc-sync-and-run-control__date-hint">
             {{ finalDateRangeHint }}
@@ -98,9 +115,12 @@
                 type="date"
                 data-testid="sync-and-qc-start-date"
                 @change="onFinalDateRangeChange"
-              />
+              >
             </label>
-            <span class="qc-sync-and-run-control__date-separator" aria-hidden="true"> 至 </span>
+            <span
+              class="qc-sync-and-run-control__date-separator"
+              aria-hidden="true"
+            > 至 </span>
             <label>
               <span>结束日期</span>
               <input
@@ -108,10 +128,14 @@
                 type="date"
                 data-testid="sync-and-qc-end-date"
                 @change="onFinalDateRangeChange"
-              />
+              >
             </label>
           </div>
-          <p v-if="dateRangeError" class="qc-sync-and-run-control__date-hint is-error" role="alert">
+          <p
+            v-if="dateRangeError"
+            class="qc-sync-and-run-control__date-hint is-error"
+            role="alert"
+          >
             {{ dateRangeError }}
           </p>
         </fieldset>
@@ -140,7 +164,10 @@
       </section>
     </div>
 
-    <div v-if="progressVisible" class="qc-sync-and-run-control__backdrop">
+    <div
+      v-if="progressVisible"
+      class="qc-sync-and-run-control__backdrop"
+    >
       <section
         class="qc-sync-and-run-control__dialog qc-sync-and-run-control__dialog--progress"
         role="dialog"
@@ -161,14 +188,30 @@
             aria-label="关闭同步并质控进度"
             @click="closeProgress"
           >
-            <X :size="18" aria-hidden="true" />
+            <X
+              :size="18"
+              aria-hidden="true"
+            />
           </button>
         </header>
 
-        <ol class="qc-sync-and-run-control__steps" aria-label="同步并质控进度">
-          <li v-for="step in progressSteps" :key="step.key" :class="`is-${step.status}`">
-            <span class="qc-sync-and-run-control__step-mark" aria-hidden="true">
-              <CheckCircle2 v-if="step.status === 'completed'" :size="15" />
+        <ol
+          class="qc-sync-and-run-control__steps"
+          aria-label="同步并质控进度"
+        >
+          <li
+            v-for="step in progressSteps"
+            :key="step.key"
+            :class="`is-${step.status}`"
+          >
+            <span
+              class="qc-sync-and-run-control__step-mark"
+              aria-hidden="true"
+            >
+              <CheckCircle2
+                v-if="step.status === 'completed'"
+                :size="15"
+              />
               <span v-else>{{ step.order }}</span>
             </span>
             <span>{{ step.label }}</span>
@@ -184,7 +227,10 @@
           {{ progressSummary }}
         </p>
 
-        <footer v-if="!isBusy" class="qc-sync-and-run-control__dialog-actions">
+        <footer
+          v-if="!isBusy"
+          class="qc-sync-and-run-control__dialog-actions"
+        >
           <button
             v-if="retryableQcPayload"
             type="button"

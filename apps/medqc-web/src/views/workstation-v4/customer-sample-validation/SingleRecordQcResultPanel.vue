@@ -1,6 +1,12 @@
 <template>
-  <aside class="single-record-result-panel" aria-label="质控结果">
-    <header class="result-toolbar" data-testid="single-record-result-toolbar">
+  <aside
+    class="single-record-result-panel"
+    aria-label="质控结果"
+  >
+    <header
+      class="result-toolbar"
+      data-testid="single-record-result-toolbar"
+    >
       <div class="toolbar-top">
         <div class="toolbar-summary">
           <strong>质控结果</strong>
@@ -13,7 +19,11 @@
           :disabled="!viewItems.length || debugCopying"
           @click="copyDebugResults"
         >
-          <Copy aria-hidden="true" :size="14" :stroke-width="2" />
+          <Copy
+            aria-hidden="true"
+            :size="14"
+            :stroke-width="2"
+          />
           {{ debugCopying ? '复制中' : '复制调试信息' }}
         </button>
       </div>
@@ -70,11 +80,18 @@
       </template>
     </header>
 
-    <div v-if="!hasVisibleResults" class="empty-state">
+    <div
+      v-if="!hasVisibleResults"
+      class="empty-state"
+    >
       {{ viewItems.length ? '当前分类下没有质控结果' : '当前没有可展示的质控结果' }}
     </div>
 
-    <div v-else class="result-list" :class="{ 'is-grouped': isGroupedPresentation }">
+    <div
+      v-else
+      class="result-list"
+      :class="{ 'is-grouped': isGroupedPresentation }"
+    >
       <article
         v-for="item in renderedItems"
         v-show="shouldRenderDocumentGroupItem(item.key)"
@@ -114,7 +131,12 @@
               :stroke-width="2"
               aria-hidden="true"
             />
-            <ChevronRight v-else :size="17" :stroke-width="2" aria-hidden="true" />
+            <ChevronRight
+              v-else
+              :size="17"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
           </button>
         </div>
         <button
@@ -132,10 +154,16 @@
           @click="isExpandable(item) && toggle(item.key)"
         >
           <span class="result-main">
-            <span class="result-row-header" data-testid="single-record-result-row-header">
+            <span
+              class="result-row-header"
+              data-testid="single-record-result-row-header"
+            >
               <span class="result-row-meta">
                 <span class="status-cell">
-                  <span class="status-pill" :class="`is-${item.tone}`">{{
+                  <span
+                    class="status-pill"
+                    :class="`is-${item.tone}`"
+                  >{{
                     item.displayStatus
                   }}</span>
                 </span>
@@ -157,15 +185,19 @@
                   v-if="feedbackEnabled"
                   class="feedback-entry-hint"
                   data-testid="single-record-feedback-entry-hint"
-                  >可反馈</span
-                >
+                >可反馈</span>
                 <ChevronUp
                   v-if="expandedKey === item.key"
                   :size="17"
                   :stroke-width="2"
                   aria-hidden="true"
                 />
-                <ChevronRight v-else :size="17" :stroke-width="2" aria-hidden="true" />
+                <ChevronRight
+                  v-else
+                  :size="17"
+                  :stroke-width="2"
+                  aria-hidden="true"
+                />
               </span>
             </span>
             <strong class="rule-name">{{ item.rule_name }}</strong>
@@ -183,14 +215,21 @@
                   <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.leftTime }}</time>
                 </span>
-                <ArrowRight aria-hidden="true" :size="16" :stroke-width="2" />
+                <ArrowRight
+                  aria-hidden="true"
+                  :size="16"
+                  :stroke-width="2"
+                />
                 <span>
                   <strong>{{ copyMatchHeadline(item)?.rightLabel }}</strong>
                   <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.rightTime }}</time>
                 </span>
               </span>
-              <span class="copy-match-headline-metrics" data-testid="copy-match-headline-metrics">
+              <span
+                class="copy-match-headline-metrics"
+                data-testid="copy-match-headline-metrics"
+              >
                 <span class="is-primary">
                   相似度 <strong>{{ copyMatchHeadline(item)?.similarity }}</strong>
                 </span>
@@ -208,7 +247,10 @@
               :class="{ 'is-text-expanded': expandedTextKey === item.key }"
             >
               <span class="rule-conclusion-label">判定说明</span>
-              <span class="rule-conclusion" data-testid="single-record-result-conclusion">{{
+              <span
+                class="rule-conclusion"
+                data-testid="single-record-result-conclusion"
+              >{{
                 resultHeadline(item)
               }}</span>
               <span
@@ -228,24 +270,35 @@
         <section
           v-if="
             isDocumentGroupExpandedForItem(item.key) &&
-            expandedKey === item.key &&
-            isExpandable(item)
+              expandedKey === item.key &&
+              isExpandable(item)
           "
           class="result-detail"
         >
           <div
             v-if="
               isCompliantResult(item) &&
-              (hasTimelinessResult(item) ||
-                item.criterion_results?.length ||
-                hasCompliantNarrative(item))
+                (hasTimelinessResult(item) ||
+                  item.criterion_results?.length ||
+                  hasCompliantNarrative(item))
             "
             class="compliant-detail"
             data-testid="single-record-compliant-detail"
           >
-            <div v-if="hasCompliantNarrative(item)" class="summary-narrative compliant-narrative">
-              <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
-              <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
+            <div
+              v-if="hasCompliantNarrative(item)"
+              class="summary-narrative compliant-narrative"
+            >
+              <DetailBlock
+                v-if="item.detail"
+                :title="detailTitle(item)"
+                :content="item.detail"
+              />
+              <DetailBlock
+                v-if="item.actual"
+                :title="actualTitle(item)"
+                :content="item.actual"
+              />
               <DetailBlock
                 v-if="item.standard"
                 :title="standardTitle(item)"
@@ -267,13 +320,24 @@
           <div
             v-if="
               !isCompliantResult(item) &&
-              (item.detail || item.actual || item.standard || hasTimelinessResult(item))
+                (item.detail || item.actual || item.standard || hasTimelinessResult(item))
             "
             class="decision-summary"
           >
-            <div v-if="item.detail || item.actual || item.standard" class="summary-narrative">
-              <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
-              <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
+            <div
+              v-if="item.detail || item.actual || item.standard"
+              class="summary-narrative"
+            >
+              <DetailBlock
+                v-if="item.detail"
+                :title="detailTitle(item)"
+                :content="item.detail"
+              />
+              <DetailBlock
+                v-if="item.actual"
+                :title="actualTitle(item)"
+                :content="item.actual"
+              />
               <DetailBlock
                 v-if="item.standard"
                 :title="standardTitle(item)"
@@ -350,7 +414,10 @@
                   </span>
                 </header>
                 <dl class="fact-list">
-                  <template v-for="row in remainingDisplayFactRows(item)" :key="row.key">
+                  <template
+                    v-for="row in remainingDisplayFactRows(item)"
+                    :key="row.key"
+                  >
                     <dt>{{ row.label }}</dt>
                     <dd>{{ row.value }}</dd>
                   </template>
@@ -378,12 +445,19 @@
                     </div>
                     <div class="copy-pair-documents">
                       <span>{{ pair.leftLabel }} · {{ pair.leftTime }}</span>
-                      <ArrowRight aria-hidden="true" :size="14" :stroke-width="1.8" />
+                      <ArrowRight
+                        aria-hidden="true"
+                        :size="14"
+                        :stroke-width="1.8"
+                      />
                       <span>{{ pair.rightLabel }} · {{ pair.rightTime }}</span>
                     </div>
                   </article>
                 </div>
-                <p v-if="displayEvidence(item).length" class="copy-pair-hint">
+                <p
+                  v-if="displayEvidence(item).length"
+                  class="copy-pair-hint"
+                >
                   下方关键证据可分别定位这些病程原文。
                 </p>
               </section>
@@ -393,7 +467,10 @@
               >
                 <h4>待补资料</h4>
                 <dl class="fact-list">
-                  <template v-for="row in dataGapRows(item)" :key="row.key">
+                  <template
+                    v-for="row in dataGapRows(item)"
+                    :key="row.key"
+                  >
                     <dt>{{ row.label }}</dt>
                     <dd>{{ row.value }}</dd>
                   </template>
@@ -417,7 +494,10 @@
                     {{ displayEvidence(item).length }} 份，可定位原文
                   </small>
                 </summary>
-                <div v-if="displayEvidence(item).length" class="evidence-list">
+                <div
+                  v-if="displayEvidence(item).length"
+                  class="evidence-list"
+                >
                   <button
                     v-for="evidence in displayEvidence(item)"
                     :key="evidence.source_ref"
@@ -441,23 +521,39 @@
                       >
                         已定位到文书，未定位到具体片段
                       </span>
-                      <span v-else-if="evidence.field_path" class="evidence-path">{{
+                      <span
+                        v-else-if="evidence.field_path"
+                        class="evidence-path"
+                      >{{
                         evidence.field_path
                       }}</span>
-                      <span v-else class="evidence-path">点击定位原文核对</span>
+                      <span
+                        v-else
+                        class="evidence-path"
+                      >点击定位原文核对</span>
                     </span>
                     <span class="evidence-action">
                       定位原文
-                      <ChevronRight aria-hidden="true" :size="14" :stroke-width="2" />
+                      <ChevronRight
+                        aria-hidden="true"
+                        :size="14"
+                        :stroke-width="2"
+                      />
                     </span>
                   </button>
                 </div>
-                <p v-else class="muted">
+                <p
+                  v-else
+                  class="muted"
+                >
                   {{ emptyEvidenceText(item) }}
                 </p>
               </details>
 
-              <details v-if="item.model_analysis" class="medical-analysis model-analysis">
+              <details
+                v-if="item.model_analysis"
+                class="medical-analysis model-analysis"
+              >
                 <summary>模型分析 / 医学判断</summary>
                 <p>{{ item.model_analysis }}</p>
               </details>

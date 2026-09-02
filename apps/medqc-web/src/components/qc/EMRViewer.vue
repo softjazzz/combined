@@ -1,6 +1,12 @@
 <template>
-  <div ref="viewerRef" class="emr-viewer">
-    <div v-if="!hideDocTabs && documentItems.length > 1" class="mb-5">
+  <div
+    ref="viewerRef"
+    class="emr-viewer"
+  >
+    <div
+      v-if="!hideDocTabs && documentItems.length > 1"
+      class="mb-5"
+    >
       <div
         class="inline-flex items-center gap-1 rounded-xl border border-gray-100/50 bg-gray-100/80 p-1"
       >
@@ -20,7 +26,10 @@
       </div>
     </div>
 
-    <div v-if="loading" class="flex h-64 items-center justify-center">
+    <div
+      v-if="loading"
+      class="flex h-64 items-center justify-center"
+    >
       <a-spin tip="正在加载文书内容..." />
     </div>
 
@@ -40,17 +49,27 @@
           <span v-if="authorSummary">录入/修改人：{{ authorSummary }}</span>
           <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
         </div>
-        <div v-if="projectionNotice" class="emr-struct__projection-notice">
+        <div
+          v-if="projectionNotice"
+          class="emr-struct__projection-notice"
+        >
           {{ projectionNotice }}
         </div>
       </div>
 
-      <section v-for="block in displayRenderBlocks" :key="block.block_id" class="emr-struct__block">
+      <section
+        v-for="block in displayRenderBlocks"
+        :key="block.block_id"
+        class="emr-struct__block"
+      >
         <template v-if="block.block_type === 'kv_section'">
           <h4 class="emr-struct__block-title">
             {{ displayBlockTitle(block.title || '基础信息') }}
           </h4>
-          <div v-if="(block.fields || []).length > 0" class="emr-struct__field-list">
+          <div
+            v-if="(block.fields || []).length > 0"
+            class="emr-struct__field-list"
+          >
             <article
               v-for="field in block.fields || []"
               :key="`${block.block_id}:${field.key}`"
@@ -65,18 +84,29 @@
               </div>
             </article>
           </div>
-          <div v-else class="emr-struct__empty">暂无结构化字段</div>
+          <div
+            v-else
+            class="emr-struct__empty"
+          >
+            暂无结构化字段
+          </div>
         </template>
 
         <template v-else-if="block.block_type === 'order_table'">
           <h4 class="emr-struct__block-title">
             {{ displayBlockTitle(block.title || '医嘱') }}
           </h4>
-          <div v-if="(block.rows || []).length > 0" class="emr-struct__table-wrap">
+          <div
+            v-if="(block.rows || []).length > 0"
+            class="emr-struct__table-wrap"
+          >
             <table class="emr-struct__table">
               <thead>
                 <tr>
-                  <th v-for="col in block.columns || []" :key="col.key">
+                  <th
+                    v-for="col in block.columns || []"
+                    :key="col.key"
+                  >
                     {{ displayColumnLabel(col) }}
                   </th>
                 </tr>
@@ -96,7 +126,10 @@
               </tbody>
             </table>
           </div>
-          <div v-else class="emr-struct__empty">
+          <div
+            v-else
+            class="emr-struct__empty"
+          >
             {{ block.empty_text || '暂无医嘱数据' }}
           </div>
         </template>
@@ -120,7 +153,10 @@
         <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
         <span v-if="authorSummary">录入/修改人：{{ authorSummary }}</span>
         <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
-        <span v-if="projectionNotice" class="emr-content-meta__projection-notice">{{
+        <span
+          v-if="projectionNotice"
+          class="emr-content-meta__projection-notice"
+        >{{
           projectionNotice
         }}</span>
       </div>
@@ -132,10 +168,15 @@
       />
     </template>
 
-    <div v-else class="flex h-64 flex-col items-center justify-center text-gray-400">
+    <div
+      v-else
+      class="flex h-64 flex-col items-center justify-center text-gray-400"
+    >
       <FileTextOutlined class="mb-3 text-4xl" />
       <p>暂无文书内容</p>
-      <p class="text-xs">请在左侧选择病历</p>
+      <p class="text-xs">
+        请在左侧选择病历
+      </p>
     </div>
 
     <div

@@ -1,5 +1,8 @@
 <template>
-  <section class="readonly-medical-order-table" data-testid="readonly-medical-order-table">
+  <section
+    class="readonly-medical-order-table"
+    data-testid="readonly-medical-order-table"
+  >
     <div class="editable-copy-order-type-switch">
       <button
         type="button"
@@ -67,7 +70,10 @@
             </td>
           </tr>
           <tr v-if="!visibleRows.length">
-            <td colspan="11" class="editable-copy-order-empty">
+            <td
+              colspan="11"
+              class="editable-copy-order-empty"
+            >
               暂无{{ activeType === 'long' ? '长期医嘱' : '临时医嘱' }}
             </td>
           </tr>

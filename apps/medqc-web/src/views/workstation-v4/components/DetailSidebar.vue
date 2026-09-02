@@ -2,14 +2,25 @@
   <aside
     class="detail-apple-sidebar custom-scrollbar w-[220px] min-w-[220px] max-w-[220px] basis-[220px] shrink-0 overflow-y-auto border-r"
   >
-    <div v-if="record" class="flex h-full flex-col">
+    <div
+      v-if="record"
+      class="flex h-full flex-col"
+    >
       <div class="flex-1 px-2.5 pb-4 pt-3">
         <div class="mb-3 flex items-center justify-between px-1">
           <div>
-            <h3 class="m-0 text-[13px] font-semibold text-slate-900">病历文书</h3>
-            <p class="m-0 mt-0.5 text-[11px] font-semibold text-slate-400">按文书类型分组</p>
+            <h3 class="m-0 text-[13px] font-semibold text-slate-900">
+              病历文书
+            </h3>
+            <p class="m-0 mt-0.5 text-[11px] font-semibold text-slate-400">
+              按文书类型分组
+            </p>
           </div>
-          <SyncOutlined v-if="documentsLoading" spin class="text-[12px] text-[#0066cc]" />
+          <SyncOutlined
+            v-if="documentsLoading"
+            spin
+            class="text-[12px] text-[#0066cc]"
+          />
         </div>
 
         <button
@@ -58,8 +69,7 @@
                 </span>
                 <span
                   class="ml-2 shrink-0 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-slate-500 shadow-[0_1px_0_rgba(148,163,184,0.18)]"
-                  >{{ group.count }}</span
-                >
+                >{{ group.count }}</span>
               </button>
 
               <template v-if="isGroupExpanded(group.key) && group.subgroups?.length">
@@ -82,10 +92,12 @@
                     </span>
                     <span
                       class="ml-2 shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500"
-                      >{{ subgroup.count }}</span
-                    >
+                    >{{ subgroup.count }}</span>
                   </button>
-                  <div v-if="isGroupExpanded(subgroup.key)" class="ml-1 mt-0.5 space-y-1 pl-1">
+                  <div
+                    v-if="isGroupExpanded(subgroup.key)"
+                    class="ml-1 mt-0.5 space-y-1 pl-1"
+                  >
                     <button
                       v-for="node in subgroup.children"
                       :key="`${subgroup.key}:${node.id}`"
@@ -137,7 +149,10 @@
                   </div>
                 </section>
               </template>
-              <div v-else-if="isGroupExpanded(group.key)" class="ml-1 mt-0.5 space-y-1 pl-1">
+              <div
+                v-else-if="isGroupExpanded(group.key)"
+                class="ml-1 mt-0.5 space-y-1 pl-1"
+              >
                 <button
                   v-for="node in group.children"
                   :key="`${group.key}:${node.id}`"
@@ -239,11 +254,17 @@
                 </span>
               </span>
 
-              <span v-if="hasDocContent(doc)" class="ml-2 flex shrink-0 items-center gap-1.5">
+              <span
+                v-if="hasDocContent(doc)"
+                class="ml-2 flex shrink-0 items-center gap-1.5"
+              >
                 <span class="text-[10px] font-semibold text-slate-400">{{ doc.length }}字</span>
                 <EyeOutlined class="text-[11px] text-slate-300 group-hover:text-[#0066cc]" />
               </span>
-              <span v-else class="text-[11px] text-slate-200">-</span>
+              <span
+                v-else
+                class="text-[11px] text-slate-200"
+              >-</span>
             </div>
 
             <div

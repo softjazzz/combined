@@ -1,10 +1,16 @@
 <template>
-  <div class="qc-record-result-table" data-testid="qc-record-result-table">
+  <div
+    class="qc-record-result-table"
+    data-testid="qc-record-result-table"
+  >
     <div class="qc-record-result-table__scroll">
       <table class="qc-record-result-table__table">
         <thead>
           <tr>
-            <th scope="col" class="qc-record-result-table__selection-heading">
+            <th
+              scope="col"
+              class="qc-record-result-table__selection-heading"
+            >
               <input
                 type="checkbox"
                 aria-label="选择当前页全部病历"
@@ -12,16 +18,29 @@
                 :disabled="rows.length === 0"
                 @click.stop
                 @change="togglePageSelection"
-              />
+              >
             </th>
-            <th scope="col">患者 / 住院号</th>
-            <th scope="col">科室 / 床位</th>
+            <th scope="col">
+              患者 / 住院号
+            </th>
+            <th scope="col">
+              科室 / 床位
+            </th>
             <th scope="col">
               {{ timeColumnLabel }}
             </th>
-            <th scope="col">问题摘要</th>
-            <th scope="col">最近质控</th>
-            <th scope="col" class="qc-record-result-table__action-heading">查看结果</th>
+            <th scope="col">
+              问题摘要
+            </th>
+            <th scope="col">
+              最近质控
+            </th>
+            <th
+              scope="col"
+              class="qc-record-result-table__action-heading"
+            >
+              查看结果
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -46,7 +65,7 @@
                 :checked="selectedRecordKeys.includes(row.recordKey)"
                 @click.stop
                 @change="toggleRowSelection(row.recordKey, $event)"
-              />
+              >
             </td>
             <td>
               <div class="qc-record-result-table__patient-cell">
@@ -54,7 +73,7 @@
                   class="qc-record-result-table__avatar"
                   :src="patientAvatarSrc(row)"
                   :alt="`${row.patientName || '患者'}头像`"
-                />
+                >
                 <span class="qc-record-result-table__patient-meta">
                   <span class="qc-record-result-table__patient-name">
                     {{ row.patientName || '患者信息待接入' }}
@@ -65,7 +84,10 @@
                       row.visitId || '待接入'
                     }}</span>
                   </span>
-                  <span v-if="row.sourceLabel" class="qc-record-result-table__source-state">{{
+                  <span
+                    v-if="row.sourceLabel"
+                    class="qc-record-result-table__source-state"
+                  >{{
                     row.sourceLabel
                   }}</span>
                 </span>
@@ -75,12 +97,18 @@
               <span class="qc-record-result-table__department">
                 {{ row.department || '未分科室' }}
               </span>
-              <span v-if="row.bedNumber" class="qc-record-result-table__bed-number">{{
+              <span
+                v-if="row.bedNumber"
+                class="qc-record-result-table__bed-number"
+              >{{
                 row.bedNumber
               }}</span>
             </td>
             <td>{{ displayTime(row) }}</td>
-            <td class="qc-record-result-table__summary" :title="row.issueSummary">
+            <td
+              class="qc-record-result-table__summary"
+              :title="row.issueSummary"
+            >
               {{ row.issueSummary }}
             </td>
             <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
@@ -98,7 +126,10 @@
               </button>
             </td>
           </tr>
-          <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
+          <tr
+            v-if="rows.length === 0"
+            class="qc-record-result-table__empty-row"
+          >
             <td colspan="7">
               {{ emptyMessage }}
             </td>

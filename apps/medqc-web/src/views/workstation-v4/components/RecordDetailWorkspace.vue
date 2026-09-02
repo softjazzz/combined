@@ -53,9 +53,14 @@
       />
 
       <template v-else>
-        <div v-if="concatLoading" class="flex flex-col items-center py-20">
+        <div
+          v-if="concatLoading"
+          class="flex flex-col items-center py-20"
+        >
           <a-spin size="large" />
-          <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
+          <div class="text-sm text-slate-400 mt-4">
+            加载病历文书中...
+          </div>
         </div>
 
         <div
@@ -114,19 +119,26 @@
             >
               <pre
                 class="medical-record-document__content m-0 whitespace-pre-wrap rounded-[6px] bg-transparent px-0 py-0 font-sans text-[14px] leading-[2.05] text-slate-700"
-                >{{ section.content }}</pre>
+              >{{ section.content }}</pre>
             </div>
           </div>
         </div>
 
-        <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+        <div
+          v-else
+          class="flex flex-col items-center justify-center py-20 text-slate-300"
+        >
           <div
             class="w-20 h-20 rounded-full bg-white/74 flex items-center justify-center mb-4 border-2 border-dashed border-black/10"
           >
             <FileTextOutlined class="text-3xl" />
           </div>
-          <div class="text-sm font-medium mb-1">暂无病历文书</div>
-          <div class="text-xs text-slate-400">该患者当前暂无可展示的病历文书内容。</div>
+          <div class="text-sm font-medium mb-1">
+            暂无病历文书
+          </div>
+          <div class="text-xs text-slate-400">
+            该患者当前暂无可展示的病历文书内容。
+          </div>
         </div>
       </template>
     </div>

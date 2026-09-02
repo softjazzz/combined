@@ -218,7 +218,12 @@ export interface SingleRecordQcStatusTab {
 }
 
 export type SingleRecordQcResultReportTab =
-  'non_compliant' | 'data_gap' | 'uncertain' | 'compliant' | 'not_applicable' | 'all'
+  | 'non_compliant'
+  | 'data_gap'
+  | 'uncertain'
+  | 'compliant'
+  | 'not_applicable'
+  | 'all'
 
 export interface SingleRecordQcResultDocumentGroup {
   key: string

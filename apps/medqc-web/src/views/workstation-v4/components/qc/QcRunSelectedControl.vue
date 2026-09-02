@@ -7,14 +7,24 @@
       :disabled="isBusy || normalizedRecordRefs.length === 0"
       @click="startSelectedQc"
     >
-      <Play :size="15" aria-hidden="true" />
+      <Play
+        :size="15"
+        aria-hidden="true"
+      />
       质控所选
-      <span v-if="selectedCount > 0" class="qc-run-selected-control__count">
+      <span
+        v-if="selectedCount > 0"
+        class="qc-run-selected-control__count"
+      >
         {{ selectedCount }}
       </span>
     </button>
 
-    <Teleport v-if="statusTarget" :to="statusTarget" defer>
+    <Teleport
+      v-if="statusTarget"
+      :to="statusTarget"
+      defer
+    >
       <div class="qc-run-selected-control__task-status">
         <div
           v-if="state === 'creating' || state === 'failed'"
@@ -29,7 +39,11 @@
             class="is-spinning"
             aria-hidden="true"
           />
-          <TriangleAlert v-else :size="15" aria-hidden="true" />
+          <TriangleAlert
+            v-else
+            :size="15"
+            aria-hidden="true"
+          />
           <span>{{ progressMessage }}</span>
         </div>
         <RecordPoolQcTaskStatusBar
@@ -55,7 +69,11 @@
           class="is-spinning"
           aria-hidden="true"
         />
-        <TriangleAlert v-else :size="15" aria-hidden="true" />
+        <TriangleAlert
+          v-else
+          :size="15"
+          aria-hidden="true"
+        />
         <span>{{ progressMessage }}</span>
       </div>
       <RecordPoolQcTaskStatusBar

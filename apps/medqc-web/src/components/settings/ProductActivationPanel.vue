@@ -2,7 +2,9 @@
   <div class="ds-root product-activation-panel">
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">产品激活</h2>
+        <h2 class="ds-section-title">
+          产品激活
+        </h2>
         <p class="ds-section-desc">
           私有化部署使用离线激活码。激活过程不访问互联网，激活码只在本机验证和保存。
         </p>
@@ -49,11 +51,16 @@
                 allow-clear
                 placeholder="请粘贴发行方提供的离线激活码"
               />
-              <div class="activation-input__hint">激活码不会在页面中回显或展示完整内容。</div>
+              <div class="activation-input__hint">
+                激活码不会在页面中回显或展示完整内容。
+              </div>
             </div>
 
             <a-space>
-              <a-button :loading="loading" @click="loadStatus">
+              <a-button
+                :loading="loading"
+                @click="loadStatus"
+              >
                 <template #icon>
                   <ReloadOutlined />
                 </template>

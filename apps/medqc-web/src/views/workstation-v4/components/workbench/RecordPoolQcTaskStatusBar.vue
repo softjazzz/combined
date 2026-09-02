@@ -8,10 +8,23 @@
     data-testid="record-pool-qc-task-status"
   >
     <div class="record-pool-qc-status__main">
-      <div class="record-pool-qc-status__indicator" aria-hidden="true">
-        <LoaderCircle v-if="isActive" :size="18" class="record-pool-qc-status__spinner" />
-        <CircleCheckBig v-else-if="currentJob.status === 'completed'" :size="18" />
-        <CircleAlert v-else :size="18" />
+      <div
+        class="record-pool-qc-status__indicator"
+        aria-hidden="true"
+      >
+        <LoaderCircle
+          v-if="isActive"
+          :size="18"
+          class="record-pool-qc-status__spinner"
+        />
+        <CircleCheckBig
+          v-else-if="currentJob.status === 'completed'"
+          :size="18"
+        />
+        <CircleAlert
+          v-else
+          :size="18"
+        />
       </div>
 
       <div class="record-pool-qc-status__content">
@@ -33,18 +46,10 @@
           data-testid="record-pool-qc-concurrency"
           aria-label="多病历并发执行状态"
         >
-          <span
-            >并发 <strong>{{ multiRecordRuntime.parallel }}</strong> 份</span
-          >
-          <span class="is-active"
-            >执行中 <strong>{{ multiRecordRuntime.active }}</strong> 份</span
-          >
-          <span class="is-complete"
-            >已完成 <strong>{{ multiRecordRuntime.completed }}</strong> 份</span
-          >
-          <span
-            >排队 <strong>{{ multiRecordRuntime.queued }}</strong> 份</span
-          >
+          <span>并发 <strong>{{ multiRecordRuntime.parallel }}</strong> 份</span>
+          <span class="is-active">执行中 <strong>{{ multiRecordRuntime.active }}</strong> 份</span>
+          <span class="is-complete">已完成 <strong>{{ multiRecordRuntime.completed }}</strong> 份</span>
+          <span>排队 <strong>{{ multiRecordRuntime.queued }}</strong> 份</span>
         </div>
 
         <ol
@@ -58,7 +63,10 @@
             :class="`is-${stage.state}`"
             :data-stage-key="stage.key"
           >
-            <span class="record-pool-qc-status__stage-marker" aria-hidden="true" />
+            <span
+              class="record-pool-qc-status__stage-marker"
+              aria-hidden="true"
+            />
             <span class="record-pool-qc-status__stage-copy">
               <strong>{{ stage.label }}</strong>
               <small>{{ stage.detail }}</small>
@@ -75,13 +83,19 @@
         <p class="record-pool-qc-status__stage">
           {{ stageText }}
         </p>
-        <p v-if="pollError" class="record-pool-qc-status__refresh-note">
+        <p
+          v-if="pollError"
+          class="record-pool-qc-status__refresh-note"
+        >
           进度暂时未更新，系统将自动重试。
         </p>
       </div>
     </div>
 
-    <div v-if="!isActive" class="record-pool-qc-status__actions">
+    <div
+      v-if="!isActive"
+      class="record-pool-qc-status__actions"
+    >
       <button
         v-if="currentJob.status === 'completed'"
         type="button"

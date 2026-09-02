@@ -1,5 +1,8 @@
 <template>
-  <section class="qc-metric-card-strip" v-bind="$attrs">
+  <section
+    class="qc-metric-card-strip"
+    v-bind="$attrs"
+  >
     <article
       v-for="card in cards"
       :key="card.key"
@@ -7,8 +10,15 @@
     >
       <div class="qc-metric-card-strip__head">
         <span class="qc-metric-card-strip__label">{{ card.label }}</span>
-        <span class="qc-metric-card-strip__icon" aria-hidden="true">
-          <component :is="card.icon" :size="19" :stroke-width="2.1" />
+        <span
+          class="qc-metric-card-strip__icon"
+          aria-hidden="true"
+        >
+          <component
+            :is="card.icon"
+            :size="19"
+            :stroke-width="2.1"
+          />
         </span>
       </div>
       <strong class="qc-metric-card-strip__value">{{ card.value }}</strong>

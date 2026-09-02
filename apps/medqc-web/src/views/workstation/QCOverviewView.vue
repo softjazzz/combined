@@ -27,7 +27,12 @@
         >
           <strong>暂时无法加载质控首页</strong>
           <span>请稍后刷新；不会以旧任务或缓存数据替代当前结果。</span>
-          <a-button size="small" @click="void fetchHome()"> 重新加载 </a-button>
+          <a-button
+            size="small"
+            @click="void fetchHome()"
+          >
+            重新加载
+          </a-button>
         </section>
 
         <section
@@ -56,19 +61,29 @@
             class="qc-home-grid qc-home-workspace workstation-surface-enter"
             data-testid="home-workspace"
           >
-            <section class="qc-home-panel qc-home-panel--queue" data-testid="priority-queue">
+            <section
+              class="qc-home-panel qc-home-panel--queue"
+              data-testid="priority-queue"
+            >
               <header class="qc-home-panel__head">
                 <div>
                   <h2>病历质控队列</h2>
                   <p>优先展示需要复核的病历，直接进入对应的质控结果。</p>
                 </div>
-                <button type="button" class="qc-home-panel-link" @click="openRecordPool">
+                <button
+                  type="button"
+                  class="qc-home-panel-link"
+                  @click="openRecordPool"
+                >
                   全部病历
                   <ArrowRight :size="15" />
                 </button>
               </header>
 
-              <div class="qc-home-scope qc-home-priority-scope" data-testid="home-scope">
+              <div
+                class="qc-home-scope qc-home-priority-scope"
+                data-testid="home-scope"
+              >
                 <span class="qc-home-scope__label">当前范围</span>
                 <span>{{ scopeHospitalText }}</span>
                 <i />
@@ -77,13 +92,17 @@
                 <span>{{ scopeSceneText }}</span>
                 <i />
                 <span class="qc-home-scope__rule-set">泸县0609质控点</span>
-                <span class="qc-home-scope__time"
-                  >生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span
-                >
+                <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
               </div>
 
-              <div v-if="clinicalQc.priority_items.length" class="qc-home-priority-list">
-                <div class="qc-home-priority-columns" aria-hidden="true">
+              <div
+                v-if="clinicalQc.priority_items.length"
+                class="qc-home-priority-list"
+              >
+                <div
+                  class="qc-home-priority-columns"
+                  aria-hidden="true"
+                >
                   <span>患者 / 病历</span>
                   <span>科室</span>
                   <span>确定问题</span>
@@ -109,8 +128,7 @@
                   <span
                     class="qc-home-priority-row__department"
                     data-testid="priority-department"
-                    >{{ item.department || '未分科室' }}</span
-                  >
+                  >{{ item.department || '未分科室' }}</span>
                   <div
                     class="qc-home-priority-row__metric is-defect"
                     data-testid="priority-defect-count"
@@ -127,13 +145,22 @@
                     <strong>{{ countOf(item, 'data_gap') }}</strong>
                     <small>项</small>
                   </div>
-                  <div class="qc-home-priority-row__time" data-testid="priority-completed-at">
+                  <div
+                    class="qc-home-priority-row__time"
+                    data-testid="priority-completed-at"
+                  >
                     <span>最近质控</span>
                     <strong>{{ formatPriorityTime(item.completed_at) }}</strong>
                   </div>
-                  <span class="qc-home-priority-row__action" data-testid="priority-open-result">
+                  <span
+                    class="qc-home-priority-row__action"
+                    data-testid="priority-open-result"
+                  >
                     查看质控结果
-                    <ChevronRight :size="16" aria-hidden="true" />
+                    <ChevronRight
+                      :size="16"
+                      aria-hidden="true"
+                    />
                   </span>
                 </button>
               </div>
@@ -145,7 +172,10 @@
             </section>
 
             <aside class="qc-home-side-stack">
-              <section class="qc-home-panel qc-home-panel--health" data-testid="data-health">
+              <section
+                class="qc-home-panel qc-home-panel--health"
+                data-testid="data-health"
+              >
                 <header class="qc-home-panel__head">
                   <div>
                     <h2>运行与数据</h2>
@@ -173,7 +203,10 @@
                     </div>
                     <small>运行状态尚未接入首页</small>
                   </div>
-                  <div v-if="!isDemoPresentation" data-testid="health-status-item">
+                  <div
+                    v-if="!isDemoPresentation"
+                    data-testid="health-status-item"
+                  >
                     <span class="qc-home-health-list__icon is-danger">
                       <TriangleAlert :size="18" />
                     </span>
@@ -202,7 +235,10 @@
             </aside>
           </section>
 
-          <section class="qc-home-analysis workstation-surface-enter" data-testid="home-analysis">
+          <section
+            class="qc-home-analysis workstation-surface-enter"
+            data-testid="home-analysis"
+          >
             <section
               class="qc-home-panel qc-home-defect-analysis"
               data-testid="defect-analysis-chart"
@@ -210,14 +246,19 @@
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="defect-analysis-title">质控缺陷分析</h2>
+                  <h2 id="defect-analysis-title">
+                    质控缺陷分析
+                  </h2>
                   <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
                 </div>
               </header>
               <div class="qc-home-defect-analysis__toolbar">
                 <div class="qc-home-defect-analysis__control">
                   <span>统计对象</span>
-                  <div role="group" aria-label="统计对象">
+                  <div
+                    role="group"
+                    aria-label="统计对象"
+                  >
                     <button
                       type="button"
                       :class="{ 'is-active': analysisObject === 'department' }"
@@ -238,7 +279,10 @@
                 </div>
                 <div class="qc-home-defect-analysis__control">
                   <span>分析指标</span>
-                  <div role="group" aria-label="分析指标">
+                  <div
+                    role="group"
+                    aria-label="分析指标"
+                  >
                     <button
                       type="button"
                       :class="{ 'is-active': analysisMetric === 'total' }"
@@ -259,7 +303,10 @@
                 </div>
                 <div class="qc-home-defect-analysis__control">
                   <span>排序</span>
-                  <div role="group" aria-label="排序方式">
+                  <div
+                    role="group"
+                    aria-label="排序方式"
+                  >
                     <button
                       type="button"
                       :class="{ 'is-active': analysisSort === 'metric' }"
@@ -287,7 +334,10 @@
                   </div>
                 </div>
               </div>
-              <div v-if="defectAnalysisItems.length" class="qc-home-defect-analysis__list">
+              <div
+                v-if="defectAnalysisItems.length"
+                class="qc-home-defect-analysis__list"
+              >
                 <component
                   :is="analysisObject === 'department' ? 'button' : 'div'"
                   v-for="item in defectAnalysisItems"
@@ -308,12 +358,13 @@
                 >
                   <div class="qc-home-defect-analysis__meta">
                     <strong>{{ item.name }}</strong>
-                    <span
-                      >纳入 {{ item.recordsTotal }} 份 · 完成
-                      {{ item.completedRecordTotal }} 份</span
-                    >
+                    <span>纳入 {{ item.recordsTotal }} 份 · 完成
+                      {{ item.completedRecordTotal }} 份</span>
                   </div>
-                  <div class="qc-home-defect-analysis__metric" aria-hidden="true">
+                  <div
+                    class="qc-home-defect-analysis__metric"
+                    aria-hidden="true"
+                  >
                     <div class="qc-home-defect-analysis__track">
                       <i :style="{ width: `${defectAnalysisPercent(item)}%` }" />
                     </div>
@@ -329,7 +380,10 @@
                     aria-hidden="true"
                   />
                 </component>
-                <p v-if="hiddenDefectAnalysisCount" class="qc-home-defect-analysis__note">
+                <p
+                  v-if="hiddenDefectAnalysisCount"
+                  class="qc-home-defect-analysis__note"
+                >
                   仅展示前 8 项；其余 {{ hiddenDefectAnalysisCount }} 个{{
                     analysisObjectLabel
                   }}已收起。
@@ -349,11 +403,16 @@
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="qc-conclusion-title">结论结构</h2>
+                  <h2 id="qc-conclusion-title">
+                    结论结构
+                  </h2>
                   <p>已完成病历中的规则结论。</p>
                 </div>
               </header>
-              <div v-if="conclusionSegments.length" class="qc-home-conclusion__content">
+              <div
+                v-if="conclusionSegments.length"
+                class="qc-home-conclusion__content"
+              >
                 <div
                   class="qc-home-conclusion__ring"
                   role="img"
@@ -365,15 +424,28 @@
                     <span>规则结论</span>
                   </div>
                 </div>
-                <ul class="qc-home-conclusion__legend" aria-label="已完成病历中的规则结论图例">
-                  <li v-for="segment in conclusionSegments" :key="segment.status">
-                    <i :style="{ background: segment.color }" aria-hidden="true" />
+                <ul
+                  class="qc-home-conclusion__legend"
+                  aria-label="已完成病历中的规则结论图例"
+                >
+                  <li
+                    v-for="segment in conclusionSegments"
+                    :key="segment.status"
+                  >
+                    <i
+                      :style="{ background: segment.color }"
+                      aria-hidden="true"
+                    />
                     <span>{{ segment.label }} {{ segment.value }}</span>
                     <small>{{ segment.percent }}%</small>
                   </li>
                 </ul>
               </div>
-              <a-empty v-else description="暂无已完成质控结论" :image-style="{ height: '58px' }" />
+              <a-empty
+                v-else
+                description="暂无已完成质控结论"
+                :image-style="{ height: '58px' }"
+              />
             </section>
           </section>
 
@@ -400,7 +472,12 @@
             <template #description>
               <p>请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
             </template>
-            <a-button type="primary" @click="openRecordPool"> 进入病历池 </a-button>
+            <a-button
+              type="primary"
+              @click="openRecordPool"
+            >
+              进入病历池
+            </a-button>
           </a-empty>
         </section>
       </main>
