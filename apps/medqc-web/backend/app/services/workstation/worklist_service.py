@@ -1055,6 +1055,7 @@ class WorkstationAggregationService:
             # 首页当前范围始终包含全院在院与出院病历；公共筛选器的住院状态
             # 参数必须显式传入，避免新增筛选合同后首页运行时漏参。
             hospital_status="all",
+            sync_scope="all",
             include_department=True,
             include_doctor=False,
             discharge_summary=discharge_summary,
