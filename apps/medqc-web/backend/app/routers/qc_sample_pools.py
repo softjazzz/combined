@@ -1247,6 +1247,12 @@ async def run_sample_pool_intrinsic_validation(
     )
 
     workspace = _workspace_service()
+    # 病历级并发由前端运行选项传入；统一在任务创建时收敛到 worker 的安全上限，
+    # 规则族子任务沿用该值，避免拆分后意外退化为单病历串行。
+    effective_max_parallel_records = min(
+        4,
+        max(1, int(payload.max_parallel_records or 4)),
+    )
     requested_scope = "final" if is_formal_fast_screen_full else str(pool.get("scene") or "running").strip().lower() or "running"
     effective_scope = requested_scope
     selected_records = workspace.collect_records(
@@ -1368,7 +1374,7 @@ async def run_sample_pool_intrinsic_validation(
         "top_p": payload.top_p,
         "max_tokens": payload.max_tokens,
         "model_code": payload.model_code,
-        "max_parallel_records": payload.max_parallel_records,
+        "max_parallel_records": effective_max_parallel_records,
         "effective_scope": effective_scope,
         "query_scope": effective_scope,
         "validation_mode": validation_mode,
@@ -1428,7 +1434,7 @@ async def run_sample_pool_intrinsic_validation(
             "temperature": payload.temperature,
             "top_p": payload.top_p,
             "max_tokens": payload.max_tokens,
-            "max_parallel_records": payload.max_parallel_records,
+            "max_parallel_records": effective_max_parallel_records,
             "rule_set_version": rule_set_version,
             "record_scene_snapshot": record_scene_snapshot,
             **(
@@ -1571,7 +1577,7 @@ async def run_sample_pool_intrinsic_validation(
                 "parent_job_id": parent_job_id,
                 "family_key": family_key,
                 "family_name": str(family_scope.get("name") or "").strip(),
-                "max_parallel_records": 1,
+                "max_parallel_records": effective_max_parallel_records,
             }
             child_job = workspace.create_batch_job(
                 draft=pseudo_draft,

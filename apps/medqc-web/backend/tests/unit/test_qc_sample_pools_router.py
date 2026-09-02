@@ -2238,6 +2238,32 @@ async def test_family_jobs_should_share_safe_identity_and_keep_scope_order(monke
 
 
 @pytest.mark.asyncio
+async def test_family_jobs_inherit_requested_record_concurrency(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_refs=[_run_record_ref()],
+            sample_item_ids=["item-1"],
+            max_parallel_records=2,
+            rule_set_key="luxian_0609_qc_v1",
+            selected_rule_ids=["LX0609-001", "LX0609-020"],
+            group_by_luxian_family=True,
+        ),
+        current_user={"id": "tester"},
+    )
+
+    calls = workspace_service.create_batch_job_calls
+    assert calls[0]["filters"]["max_parallel_records"] == 2
+    assert all(call["filters"]["max_parallel_records"] == 2 for call in calls[1:])
+
+
+@pytest.mark.asyncio
 async def test_run_sample_pool_intrinsic_validation_should_execute_selected_luxian_0609_point(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
