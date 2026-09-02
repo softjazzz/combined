@@ -53,6 +53,53 @@ class _SequentialClient:
         }
 
 
+def test_diagnostic_semantic_snapshot_excludes_original_text():
+    recommendation = episode._Recommendation(
+        recommendation_ref="consultation_record-1",
+        action_type="medication",
+        source_quote="患者原始正文不应进入快照",
+        normalized_action="继续治疗",
+        opinion_ref="consultation_record-1",
+    )
+    model_episode = episode._Episode(
+        episode_ref="episode-1",
+        member_refs=("consultation_record-1",),
+        application_refs=(),
+        opinion_refs=("consultation_record-1",),
+        application_state="absent",
+        opinion_state="clear",
+        confidence="high",
+        recommendations=(recommendation,),
+    )
+
+    snapshot = episode._build_diagnostic_semantic_snapshot(
+        documents=(
+            {
+                "ref": "consultation_record-1",
+                "source": "consultation_record",
+                "document_id": "doc-1",
+                "time": "2026-02-07 18:10:03",
+                "text": "不得出现在诊断追踪中的病历正文",
+            },
+        ),
+        episodes=(model_episode,),
+        statuses={"LX0609-022": ("non_compliant", "requirement_violated")},
+    )
+
+    assert snapshot["schema_version"] == "consultation-semantic-snapshot-v1"
+    assert snapshot["semantic_documents"][0] == {
+        "source_ref": "consultation_record-1",
+        "source": "consultation_record",
+        "document_id": "doc-1",
+        "record_time": "2026-02-07 18:10:03",
+    }
+    assert snapshot["episodes"][0]["opinion_state"] == "clear"
+    serialized = json.dumps(snapshot, ensure_ascii=False)
+    assert "不得出现在诊断追踪中的病历正文" not in serialized
+    assert "source_quote" not in serialized
+    assert "prompt" not in serialized.lower()
+
+
 class _PlannedStageClient:
     """按调用顺序返回受控响应或抛出指定异常。"""
 
@@ -521,6 +568,11 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
     assert display["LX0609-021"]["document_count"] == 2
     assert display["LX0609-022"]["semantic_state"] == "clear"
     assert display["LX0609-022"]["checked_requirement"] == "给出针对当前病情的明确诊疗意见"
+    snapshot = result.diagnostic_semantic_snapshot
+    assert snapshot is not None
+    assert snapshot["schema_version"] == "consultation-semantic-snapshot-v1"
+    assert snapshot["synthesized_rule_states"]["LX0609-022"]["status"] == "compliant"
+    assert all("text" not in item for item in snapshot["semantic_documents"])
 
 
 @pytest.mark.asyncio

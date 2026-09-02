@@ -1260,6 +1260,9 @@ def _result_diagnostic_trace(
         ),
         "source_execution_results": source_results,
     }
+    semantic_snapshot = metadata.get("diagnostic_semantic_snapshot")
+    if isinstance(semantic_snapshot, dict):
+        trace["semantic_fact_snapshot"] = semantic_snapshot
     removed_keys: set[str] = set()
     return _sanitize_trace_value(trace, removed_keys)
 

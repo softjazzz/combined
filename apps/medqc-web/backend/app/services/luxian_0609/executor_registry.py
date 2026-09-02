@@ -342,6 +342,7 @@ def _to_envelope(
         planned_rule_ids=planned_rule_ids,
         decisions=getattr(raw, "decisions", ()),
         customer_display_facts=getattr(raw, "customer_display_facts", ()),
+        diagnostic_semantic_snapshot=getattr(raw, "diagnostic_semantic_snapshot", None),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

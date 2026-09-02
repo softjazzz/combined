@@ -118,6 +118,7 @@ class FamilyExecutionEnvelope:
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
     customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
+    diagnostic_semantic_snapshot: Mapping[str, Any] | None = None
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -157,6 +158,10 @@ class FamilyExecutionEnvelope:
             or any(rule_id not in self.planned_rule_ids for rule_id in display_rule_ids)
         ):
             raise ValueError("customer display facts outside planned scope")
+        if self.diagnostic_semantic_snapshot is not None and not isinstance(
+            self.diagnostic_semantic_snapshot, Mapping
+        ):
+            raise TypeError("diagnostic_semantic_snapshot must be a mapping")
         metrics = (
             self.llm_call_count,
             self.prompt_tokens,

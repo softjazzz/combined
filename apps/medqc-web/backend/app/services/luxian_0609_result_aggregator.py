@@ -5807,6 +5807,7 @@ def _copy_native_customer_fields(
             "maximum_similarity",
             "similarity_threshold",
             "best_match_source_types",
+            "diagnostic_semantic_snapshot",
         )
         if key in selected_metadata
     }

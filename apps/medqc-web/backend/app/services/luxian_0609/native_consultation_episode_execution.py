@@ -289,6 +289,7 @@ class NativeConsultationEpisodeExecutionResult:
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
     customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
+    diagnostic_semantic_snapshot: Mapping[str, Any] | None = None
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -1756,6 +1757,50 @@ def _consultation_semantic_display_facts(
         ]
         facts["episode_results"] = episode_results
     return facts
+
+
+def _build_diagnostic_semantic_snapshot(
+    *,
+    documents: Sequence[Mapping[str, str]],
+    episodes: Sequence[_Episode],
+    statuses: Mapping[str, tuple[str, str]],
+) -> Mapping[str, Any]:
+    """生成仅供诊断追踪使用的语义事实快照，不携带正文、Prompt 或引用摘录。"""
+
+    document_rows = []
+    for document in documents:
+        document_rows.append(
+            {
+                "source_ref": _clean(document.get("ref")),
+                "source": _clean(document.get("source")),
+                "document_id": _clean(document.get("document_id")),
+                "record_time": _clean(document.get("time")),
+            }
+        )
+    episode_rows = []
+    for episode in episodes:
+        episode_rows.append(
+            {
+                "episode_ref": episode.episode_ref,
+                "member_refs": list(episode.member_refs),
+                "application_refs": list(episode.application_refs),
+                "opinion_refs": list(episode.opinion_refs),
+                "application_state": episode.application_state,
+                "opinion_state": episode.opinion_state,
+                "confidence": episode.confidence,
+                "recommendation_count": len(episode.recommendations),
+            }
+        )
+    return {
+        "schema_version": "consultation-semantic-snapshot-v1",
+        "stage": "semantic",
+        "semantic_documents": document_rows,
+        "episodes": episode_rows,
+        "synthesized_rule_states": {
+            rule_id: {"status": status, "reason_code": reason_code}
+            for rule_id, (status, reason_code) in statuses.items()
+        },
+    }
 
 
 def _consultation_execution_display_facts(
@@ -3414,9 +3459,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 ),
             )
         )
+    diagnostic_semantic_snapshot = _build_diagnostic_semantic_snapshot(
+        documents=documents,
+        episodes=episodes,
+        statuses=statuses,
+    )
     return NativeConsultationEpisodeExecutionResult(
         results=tuple(item for item in results if item["rule_id"] not in typed), planned_rule_ids=selected,
         decisions=decisions, customer_display_facts=tuple(display_facts),
+        diagnostic_semantic_snapshot=diagnostic_semantic_snapshot,
         llm_call_count=calls,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
         total_tokens=total_tokens, api_time=api_time,

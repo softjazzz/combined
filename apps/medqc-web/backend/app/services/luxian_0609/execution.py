@@ -129,6 +129,7 @@ class Luxian0609ExecutionContext:
     unified_engine_used: bool = False
     reduced_decisions: tuple[ReducedRuleDecision, ...] = ()
     customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
+    diagnostic_semantic_snapshots: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     treatment_order_consistency_shadow: Mapping[str, Any] | None = None
     implant_information_shadow: Mapping[str, Any] | None = None
 
@@ -377,6 +378,7 @@ async def prepare_luxian_0609_execution(
     unified_engine_used = False
     native_rule_decisions: list[RuleDecision] = []
     native_customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
+    native_diagnostic_semantic_snapshots: list[tuple[str, Mapping[str, Any]]] = []
     reduced_decisions: tuple[ReducedRuleDecision, ...] = ()
     if (
         unified_engine_enabled
@@ -486,6 +488,11 @@ async def prepare_luxian_0609_execution(
                 native_results.extend(envelope.results)
                 native_rule_decisions.extend(envelope.decisions)
                 native_customer_display_facts.extend(envelope.customer_display_facts)
+                if envelope.diagnostic_semantic_snapshot is not None:
+                    native_diagnostic_semantic_snapshots.extend(
+                        (rule_id, envelope.diagnostic_semantic_snapshot)
+                        for rule_id in outcome.selected_rule_ids
+                    )
                 native_usage_attributions.append(
                     _build_execution_usage_attribution(
                         executor_key=outcome.executor_key,
@@ -633,6 +640,14 @@ async def prepare_luxian_0609_execution(
         native_customer_display_facts.extend(
             getattr(consultation_execution, "customer_display_facts", ())
         )
+        consultation_snapshot = getattr(
+            consultation_execution, "diagnostic_semantic_snapshot", None
+        )
+        if isinstance(consultation_snapshot, Mapping):
+            native_diagnostic_semantic_snapshots.extend(
+                (rule_id, consultation_snapshot)
+                for rule_id in consultation_rule_ids
+            )
         native_usage_attributions.append(
             _build_execution_usage_attribution(
                 executor_key=CONSULTATION_EXECUTOR_KEY,
@@ -936,6 +951,7 @@ async def prepare_luxian_0609_execution(
         unified_engine_used=unified_engine_used,
         reduced_decisions=reduced_decisions,
         customer_display_facts=tuple(native_customer_display_facts),
+        diagnostic_semantic_snapshots=tuple(native_diagnostic_semantic_snapshots),
         treatment_order_consistency_shadow=treatment_order_consistency_shadow,
         implant_information_shadow=implant_information_shadow,
     )
@@ -1017,6 +1033,21 @@ def aggregate_luxian_0609_orchestrated_results(
         customer_display_facts=context.customer_display_facts,
         decision_trace_sink=decision_trace_sink,
     )
+    semantic_snapshots = {
+        rule_id: snapshot
+        for rule_id, snapshot in context.diagnostic_semantic_snapshots
+        if isinstance(snapshot, Mapping)
+    }
+    for result in customer_results:
+        rule_id = str(result.get("rule_id") or result.get("rule_code") or "").strip().upper()
+        snapshot = semantic_snapshots.get(rule_id)
+        if snapshot is None:
+            continue
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            result["metadata"] = metadata
+        metadata["diagnostic_semantic_snapshot"] = snapshot
     orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
     orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
     orchestrated["results"] = customer_results

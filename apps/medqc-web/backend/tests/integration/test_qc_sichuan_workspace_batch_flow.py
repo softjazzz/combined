@@ -11,7 +11,10 @@ from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers import qc_sichuan
 from app.services.sichuan_qc_service import RuleSourceGuardError
-from app.services.sichuan_workspace_batch_worker import _sanitize_trace_value
+from app.services.sichuan_workspace_batch_worker import (
+    _result_diagnostic_trace,
+    _sanitize_trace_value,
+)
 
 
 def _now_iso() -> str:
@@ -41,6 +44,33 @@ def test_customer_display_facts_keep_96_recommendation_evidence_entries():
 
     assert len(sanitized["recommendation_evidence"]) == 96
     assert len(sanitized["other_list"]) == 50
+
+
+def test_diagnostic_trace_keeps_structured_semantic_snapshot_without_text():
+    trace = _result_diagnostic_trace(
+        {
+            "rule_id": "LX0609-022",
+            "status": "non_compliant",
+        },
+        {
+            "diagnostic_semantic_snapshot": {
+                "schema_version": "consultation-semantic-snapshot-v1",
+                "semantic_documents": [
+                    {
+                        "source_ref": "consultation_record-1",
+                        "source": "consultation_record",
+                        "document_id": "doc-1",
+                        "record_time": "2026-02-07 18:10:03",
+                    }
+                ],
+                "episodes": [],
+            }
+        },
+    )
+
+    snapshot = trace["semantic_fact_snapshot"]
+    assert snapshot["schema_version"] == "consultation-semantic-snapshot-v1"
+    assert "text" not in snapshot["semantic_documents"][0]
 
 
 class _InMemorySichuanWorkspaceService:
