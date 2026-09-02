@@ -5795,6 +5795,14 @@ def _copy_native_customer_fields(
         safe_facts=safe_display_facts,
     )
     selected_metadata = _strip_sensitive(dict(selected_metadata_mapping))
+    # 原生结果可能同时带有旧链写入的顶层 executor_type 和当前执行器
+    # 元数据。客户结果必须以当前元数据为准，并把同一个值投影到顶层，
+    # 避免出现“实际程序执行、页面仍显示 llm”的字段漂移。
+    selected_executor_type = str(
+        selected_metadata.get("executor_type")
+        or selected.get("executor_type")
+        or ""
+    ).strip().lower()
     metadata = {
         key: selected_metadata.get(key)
         for key in (
@@ -5813,6 +5821,9 @@ def _copy_native_customer_fields(
     }
 
     metadata["execution_source"] = "lx0609_native"
+    # 原生执行结果没有携带执行器字段时，默认按原生程序结果处理；
+    # 这样后续 canonical schema 不会再次退回客户规则目录中的 llm 默认值。
+    metadata["executor_type"] = selected_executor_type or "program"
     metadata["aggregation_source"] = (
         "native_llm"
         if str(metadata.get("executor_type") or "").strip().lower() == "llm"
@@ -5829,6 +5840,7 @@ def _copy_native_customer_fields(
         "status": status,
         "is_compliant": status in {"compliant", "not_applicable"},
         "metadata": metadata,
+        "executor_type": selected_executor_type or "program",
         "diagnostic_trace": {},
         "source_rule_id": "",
         "source_status": str(metadata.get("source_state") or ""),

@@ -5400,6 +5400,75 @@ def test_native_llm_result_keeps_native_source_without_legacy_diagnostics():
     assert "LXE-52" not in repr(result)
 
 
+def test_native_result_executor_type_is_projected_from_current_metadata():
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    result = aggregate(
+        wrapper_rules=[{
+            "rule_id": "LX0609-022",
+            "name": "会诊意见明确性",
+            "mapped_rule_ids": [],
+        }],
+        execution_results=[{
+            "rule_id": "LX0609-022",
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "已核对会诊意见。",
+            "metadata": {
+                "execution_source": "lx0609_native",
+                "executor_type": "program",
+            },
+            # 模拟旧链遗留的顶层字段；当前元数据应覆盖它。
+            "executor_type": "llm",
+            "customer_display_facts": {
+                "verification_kind": "consultation_opinion_quality_check",
+                "episode_count": 1,
+                "document_count": 1,
+                "semantic_state": "clear",
+                "checked_requirement": "给出针对当前病情的明确诊疗意见",
+                "source_document_ids": ["CONSULT-001"],
+                "episode_results": [{
+                    "episode_index": 1,
+                    "semantic_state": "clear",
+                    "source_document_id": "CONSULT-001",
+                    "record_time": "2026-02-03 18:41:45",
+                    "document_title": "会诊记录单",
+                }],
+            },
+        }],
+        format_evidence=False,
+    )[0]
+
+    assert result["executor_type"] == "program"
+    assert result["metadata"]["executor_type"] == "program"
+
+
+def test_native_result_without_executor_metadata_defaults_to_program():
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    result = aggregate(
+        wrapper_rules=[{
+            "rule_id": "LX0609-029",
+            "name": "术前小结",
+            "mapped_rule_ids": [],
+        }],
+        execution_results=[{
+            "rule_id": "LX0609-029",
+            "status": "compliant",
+            "is_compliant": True,
+            "metadata": {"execution_source": "lx0609_native"},
+        }],
+        format_evidence=False,
+    )[0]
+
+    assert result["executor_type"] == "program"
+    assert result["metadata"]["executor_type"] == "program"
+
+
 def test_native_copy_non_compliant_without_controlled_facts_fails_closed():
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",
