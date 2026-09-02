@@ -200,6 +200,31 @@ def _fallback_document_identity(item: dict[str, Any]) -> tuple[str, ...] | None:
     return ("content", source_table, identity_time, document_type, content_hash)
 
 
+_REPORT_BUSINESS_KEY_FIELDS: dict[str, tuple[str, str]] = {
+    "labtest_item_report": ("test_id", "test_no"),
+    "labtest_master": ("test_id", "test_no"),
+    "exam_item_report": ("exam_id", "exam_no"),
+    "exam_master": ("exam_id", "exam_no"),
+}
+
+
+def _fallback_business_identity(item: dict[str, Any]) -> tuple[str, ...] | None:
+    """Return a controlled event key for exam/lab rows, never based on free text."""
+
+    source_table = _item_source_table(item)
+    key_fields = _REPORT_BUSINESS_KEY_FIELDS.get(source_table)
+    if not key_fields:
+        return None
+    values = tuple(_normalize_identity_text(item.get(field)) for field in key_fields)
+    non_empty = tuple(value for value in values if value)
+    if len(non_empty) == len(values):
+        return ("event_business_key", source_table, *values)
+    if len(non_empty) == 1:
+        field = key_fields[values.index(non_empty[0])]
+        return ("event_business_key", source_table, field, non_empty[0])
+    return None
+
+
 def _merge_duplicate_document(existing: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     if len(_identity_content(candidate)) > len(_identity_content(existing)):
         primary, secondary = candidate, existing
@@ -212,16 +237,50 @@ def _merge_duplicate_document(existing: dict[str, Any], candidate: dict[str, Any
     return merged
 
 
+def _merge_event_document(existing: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    """Merge a fallback event while keeping the Bundle document identity authoritative."""
+
+    merged = _merge_duplicate_document(existing, candidate)
+    existing_document_id = _safe_text(
+        existing.get("document_id") or existing.get("record_id") or existing.get("id")
+    )
+    if existing_document_id:
+        merged["document_id"] = existing_document_id
+    return merged
+
+
 def _merge_fallback_items(items: list[dict[str, Any]], fallback_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not fallback_items:
         return items
     merged: list[dict[str, Any]] = []
     identity_indexes: dict[tuple[str, ...], int] = {}
-    for item in [*items, *fallback_items]:
+    base_business_indexes: dict[tuple[str, ...], set[int]] = {}
+    for item in items:
         identity = _fallback_document_identity(item)
         if identity is not None and identity in identity_indexes:
             index = identity_indexes[identity]
             merged[index] = _merge_duplicate_document(merged[index], item)
+            continue
+        if identity is not None:
+            identity_indexes[identity] = len(merged)
+        merged.append(item)
+        business_identity = _fallback_business_identity(item)
+        if business_identity is not None:
+            base_business_indexes.setdefault(business_identity, set()).add(len(merged) - 1)
+
+    for item in fallback_items:
+        identity = _fallback_document_identity(item)
+        if identity is not None and identity in identity_indexes:
+            index = identity_indexes[identity]
+            merged[index] = _merge_duplicate_document(merged[index], item)
+            continue
+        business_identity = _fallback_business_identity(item)
+        matching_indexes = base_business_indexes.get(business_identity, set()) if business_identity else set()
+        if len(matching_indexes) == 1:
+            index = next(iter(matching_indexes))
+            merged[index] = _merge_event_document(merged[index], item)
+            if identity is not None:
+                identity_indexes[identity] = index
             continue
         if identity is not None:
             identity_indexes[identity] = len(merged)
@@ -610,6 +669,10 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                         "source_table": table_name,
                         "document_type": table_name,
                         "document_id": _safe_text(item.get("document_id")),
+                        "test_id": _safe_text(item.get("test_id")),
+                        "test_no": _safe_text(item.get("test_no")),
+                        "exam_id": _safe_text(item.get("exam_id")),
+                        "exam_no": _safe_text(item.get("exam_no")),
                         "document_title": _safe_text(item.get("document_title") or table_name),
                         "record_time": _safe_text(item.get("record_time")),
                         "display_time": display_time,
@@ -697,6 +760,10 @@ def _fetch_detail_service_fallback_items(visit_id: str) -> list[dict[str, Any]]:
                 "source_table": source_table,
                 "document_type": source_table,
                 "document_id": _safe_text(doc.get("document_id")),
+                "test_id": _safe_text(doc.get("test_id")),
+                "test_no": _safe_text(doc.get("test_no")),
+                "exam_id": _safe_text(doc.get("exam_id")),
+                "exam_no": _safe_text(doc.get("exam_no")),
                 "document_title": _safe_text(doc.get("document_title") or doc.get("label") or source_table),
                 "record_time": _safe_text(doc.get("record_time") or doc.get("sort_time")),
                 "display_time": _safe_text(doc.get("sort_time") or doc.get("record_time")),

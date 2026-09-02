@@ -88,6 +88,71 @@ def test_bundle_report_id_survives_evidence_projection_closed_loop(monkeypatch):
     assert [event["document_id"] for event in lab_events] == ["LAB-009"]
 
 
+def test_fallback_lab_event_merges_into_bundle_report_id(monkeypatch):
+    """同一检验申请的 fallback 行必须复用 Bundle 的真实报告文书 ID。"""
+
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: (
+            [
+                {
+                    "source_table": "labtest_item_report",
+                    "document_id": "VISIT-labtest_item_report-supp-001",
+                    "test_id": "TEST-001",
+                    "test_no": "REQ-001",
+                    "document_title": "尿培养报告（补充）",
+                    "content": "尿培养结果：大肠埃希菌阳性，补充完整结果。",
+                }
+            ],
+            {},
+        ),
+    )
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "visit_id": "VISIT-043",
+            "source_documents": [
+                {
+                    "source_table": "labtest_item_report",
+                    "document_id": "LAB-009",
+                    "test_id": "TEST-001",
+                    "test_no": "REQ-001",
+                    "document_title": "尿培养报告",
+                    "content": "尿培养结果：大肠埃希菌阳性。",
+                }
+            ],
+        }
+    )
+
+    events = payload["programmatic_timeline"]["documents"]["labtest_item_report"]
+    assert len(events) == 1
+    assert events[0]["document_id"] == "LAB-009"
+
+
+def test_fallback_lab_events_with_different_business_keys_are_not_merged():
+    bundle_item = {
+        "source_table": "labtest_item_report",
+        "document_id": "LAB-009",
+        "test_id": "TEST-001",
+        "test_no": "REQ-001",
+        "content": "尿培养结果：大肠埃希菌阳性。",
+    }
+    fallback_item = {
+        "source_table": "labtest_item_report",
+        "document_id": "VISIT-labtest_item_report-supp-001",
+        "test_id": "TEST-002",
+        "test_no": "REQ-002",
+        "content": "血常规结果：白细胞升高。",
+    }
+
+    merged = evidence_module._merge_fallback_items([bundle_item], [fallback_item])
+
+    assert [item["document_id"] for item in merged] == [
+        "LAB-009",
+        "VISIT-labtest_item_report-supp-001",
+    ]
+
+
 def test_build_programmatic_evidence_payload_should_fallback_to_admission_record_timeline_record_time():
     payload = build_programmatic_evidence_payload(
         bundle={
