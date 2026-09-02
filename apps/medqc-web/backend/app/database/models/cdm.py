@@ -219,6 +219,8 @@ class MedicalRecordFrontpage(AuditMixin, PatientBasicMixin, Base):
 
     # 提交时间
     mr_datetime = Column(DateTime, comment="病案提交时间")
+    # 本地完整同步成功时间。与源系统 update_time 分开，专门用于工作台按同步批次筛选。
+    local_sync_completed_at = Column(DateTime, index=True, comment="本地完整同步完成时间")
     record_content = Column(Text, comment="非结构化全文")
 
     __table_args__ = (

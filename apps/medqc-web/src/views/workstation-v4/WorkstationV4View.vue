@@ -17,6 +17,7 @@
         :active-doctor="activeDoctor"
         :hosp-filter="hospFilter"
         :hosp-options="hospOptions"
+        :sync-scope="syncScope"
         :workbench-rows="workbenchRows"
         :selected-workbench-keys="selectedWorkbenchKeys"
         :table-summary-text="tableSummaryText"
@@ -42,7 +43,8 @@
         @priority-defer="handlePriorityDefer"
         @select-dept="selectDept"
         @select-doctor="selectDoctor"
-        @select-hosp-filter="selectHospFilter"
+        @select-hosp-filter="handleHospFilter"
+        @toggle-today-inpatient="toggleTodaySyncedInpatient"
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
         @filter-qc="handleFilterQc"
@@ -462,6 +464,7 @@ const {
   dateRange,
   dateField,
   hospFilter,
+  syncScope,
   hospOptions,
   filteredRecords,
   fetchData,
@@ -843,6 +846,7 @@ const totalVisibleCount = computed(() => displayServerTotal.value || listRecords
 const activeHospLabel = computed(
   () => hospOptions.find((option) => option.value === hospFilter.value)?.label || '全部',
 )
+const isTodaySyncedInpatientScope = computed(() => syncScope.value === 'today_inpatient')
 const scopeStatusText = computed(() => {
   const parts = [activeDept.value]
   if (activeDoctor.value !== '全部主管医师') {
@@ -850,6 +854,9 @@ const scopeStatusText = computed(() => {
   }
   if (hospFilter.value !== 'all') {
     parts.push(activeHospLabel.value)
+  }
+  if (isTodaySyncedInpatientScope.value) {
+    parts.push('今日同步·在院')
   }
   if (currentStageFilter.value) {
     parts.push(stageMeta.value.tableTitle)
@@ -956,6 +963,9 @@ const tableSummaryText = computed(() => {
   }
   if (hospFilter.value !== 'all') {
     parts.push(activeHospLabel.value)
+  }
+  if (isTodaySyncedInpatientScope.value) {
+    parts.push('今日同步·在院')
   }
   return parts.join(' / ')
 })
@@ -2408,6 +2418,20 @@ function handleClearFilters() {
     void fetchStageWorklist(currentStageFilter.value)
     return
   }
+  void fetchData(1)
+}
+
+function handleHospFilter(value: 'all' | 'inpatient' | 'discharged') {
+  syncScope.value = 'all'
+  selectHospFilter(value)
+}
+
+function toggleTodaySyncedInpatient() {
+  const enabled = syncScope.value !== 'today_inpatient'
+  syncScope.value = enabled ? 'today_inpatient' : 'all'
+  hospFilter.value = enabled ? 'inpatient' : 'all'
+  selectedWorkbenchKeys.value = []
+  currentPage.value = 1
   void fetchData(1)
 }
 

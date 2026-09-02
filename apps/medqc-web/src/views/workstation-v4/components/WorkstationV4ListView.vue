@@ -96,6 +96,16 @@
                   />
                 </div>
 
+                <a-button
+                  v-if="!isStageQueueMode"
+                  size="small"
+                  :type="syncScope === 'today_inpatient' ? 'primary' : 'default'"
+                  class="wv4-record-pool-filter__sync-shortcut"
+                  @click="emit('toggleTodayInpatient')"
+                >
+                  今日同步 · 在院
+                </a-button>
+
                 <div class="workbench-dept-filter">
                   <a-select
                     :value="activeDept"
@@ -351,6 +361,7 @@ const props = defineProps<{
   activeDoctor: string
   hospFilter: string
   hospOptions: HospFilterOption[]
+  syncScope: 'all' | 'today_inpatient'
   workbenchRows: WorkbenchRow[]
   selectedWorkbenchKeys: string[]
   tableSummaryText: string
@@ -380,6 +391,7 @@ const emit = defineEmits<{
   selectDept: [deptName: string]
   selectDoctor: [doctorName: string]
   selectHospFilter: [value: HospFilterValue]
+  toggleTodayInpatient: []
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
   'filter-qc': []

@@ -17,6 +17,7 @@ const EMPTY_QC_SUMMARY: RecordPoolQcSummary = {
 export type WorkstationDateField = 'visit' | 'admission' | 'discharge' | 'updated'
 export type WorkstationDateRange = [string, string] | null
 export type HospitalStatusScope = 'all' | 'inpatient' | 'discharged'
+export type RecordPoolSyncScope = 'all' | 'today_inpatient'
 
 function normalizeDepartment(raw: unknown): DeptInfo {
   const source = (raw || {}) as Record<string, unknown>
@@ -88,6 +89,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const dateRange = ref<WorkstationDateRange>(null)
   const dateField = ref<WorkstationDateField>('visit')
   const hospFilter = ref<HospitalStatusScope>(initialHospitalStatus)
+  const syncScope = ref<RecordPoolSyncScope>('all')
   let activeRequestSequence = 0
 
   const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
@@ -134,6 +136,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       }
       if (hospFilter.value !== 'all') {
         params.hospital_status = hospFilter.value
+      }
+      if (syncScope.value !== 'all') {
+        params.sync_scope = syncScope.value
       }
       const analyticsKeys = [
         'analytics_job_id',
@@ -240,6 +245,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     dateRange.value = null
     dateField.value = 'visit'
     hospFilter.value = initialHospitalStatus
+    syncScope.value = 'all'
     currentPage.value = 1
   }
 
@@ -261,6 +267,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     dateRange,
     dateField,
     hospFilter,
+    syncScope,
     hospOptions,
     filteredRecords,
     fetchData,

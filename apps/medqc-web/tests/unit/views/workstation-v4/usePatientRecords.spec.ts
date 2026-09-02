@@ -133,6 +133,20 @@ describe('usePatientRecords workstation filters', () => {
     })
   })
 
+  it('sends the explicit today-synced inpatient scope to the backend', async () => {
+    const records = usePatientRecords()
+    records.syncScope.value = 'today_inpatient'
+
+    await records.fetchData()
+
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      sync_scope: 'today_inpatient',
+    })
+  })
+
   it('keeps backend sort time metadata for displaying newest synced records first', async () => {
     const records = usePatientRecords()
 
@@ -216,6 +230,7 @@ describe('usePatientRecords workstation filters', () => {
     records.dateRange.value = ['2026-05-01', '2026-05-31']
     records.dateField.value = 'discharge'
     records.hospFilter.value = 'inpatient'
+    records.syncScope.value = 'today_inpatient'
     records.currentPage.value = 5
 
     records.resetFilters()
@@ -226,6 +241,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.dateRange.value).toBeNull()
     expect(records.dateField.value).toBe('visit')
     expect(records.hospFilter.value).toBe('all')
+    expect(records.syncScope.value).toBe('all')
     expect(records.currentPage.value).toBe(1)
   })
 

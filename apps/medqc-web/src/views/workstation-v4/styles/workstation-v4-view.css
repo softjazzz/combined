@@ -1079,6 +1079,7 @@
 .workstation-shell .wv4-record-pool-hero .ant-select-selector,
 .workstation-shell .wv4-record-pool-hero .ant-picker,
 .workstation-shell .wv4-record-pool-hero .workbench-hosp-filter,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut,
 .workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
   height: 42px !important;
   min-height: 42px !important;
@@ -1090,6 +1091,7 @@
 .workstation-shell .wv4-record-pool-hero .ant-select-selection-placeholder,
 .workstation-shell .wv4-record-pool-hero .ant-picker-input > input,
 .workstation-shell .wv4-record-pool-hero .ant-segmented-item-label,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut,
 .workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
   font-family: inherit !important;
   font-size: 14px !important;
@@ -1109,6 +1111,13 @@
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut {
+  flex: 0 0 auto;
+  border-color: rgba(0, 102, 204, 0.24);
+  color: var(--workstation-primary);
+  padding-inline: 13px;
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-dept-select__name {

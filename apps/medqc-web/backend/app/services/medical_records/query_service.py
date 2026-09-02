@@ -753,6 +753,7 @@ def _apply_workstation_filters(
     end_date: Optional[date],
     date_field: Optional[str],
     hospital_status: Optional[str],
+    sync_scope: Optional[str],
     include_department: bool,
     include_doctor: bool,
     discharge_summary=None,
@@ -782,6 +783,14 @@ def _apply_workstation_filters(
         query = query.filter(_workstation_is_discharged_expr(discharge_summary))
     elif normalized_hospital_status == "inpatient":
         query = query.filter(~_workstation_is_discharged_expr(discharge_summary))
+    normalized_sync_scope = str(sync_scope or "all").strip().lower()
+    if normalized_sync_scope not in {"all", "today_inpatient"}:
+        raise ValueError("sync_scope must be one of: all, today_inpatient")
+    if normalized_sync_scope == "today_inpatient":
+        query = query.filter(~_workstation_is_discharged_expr(discharge_summary))
+        query = query.filter(
+            func.date(MedicalRecordFrontpage.local_sync_completed_at) == date.today()
+        )
     return query
 
 
@@ -811,6 +820,7 @@ def get_workstation_data(
     end_date: Optional[date] = None,
     date_field: Optional[str] = "visit",
     hospital_status: Optional[str] = "all",
+    sync_scope: Optional[str] = "all",
     page: int = 1,
     page_size: int = 50,
     session_factory: Callable[[], Any] | None = None,
@@ -832,6 +842,9 @@ def get_workstation_data(
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
         raise ValueError("hospital_status must be one of: all, inpatient, discharged")
+    normalized_sync_scope = str(sync_scope or "all").strip().lower()
+    if normalized_sync_scope not in {"all", "today_inpatient"}:
+        raise ValueError("sync_scope must be one of: all, today_inpatient")
     if (
         analytics_completed_from
         and analytics_completed_to
@@ -870,6 +883,10 @@ def get_workstation_data(
                 if (_parse_datetime_value(demo.get("dischargeDate")) is not None)
                 == (normalized_hospital_status == "discharged")
             ]
+        if normalized_sync_scope == "today_inpatient":
+            # 没有主记录的索引/演示数据不存在本地完整同步时间，不能混入该快捷范围。
+            indexed_registration_records = []
+            visible_demos = []
         discharge_summary = _workstation_discharge_summary_subquery(session)
 
         base_query = session.query(MedicalRecordFrontpage)
@@ -887,6 +904,7 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
+            sync_scope=normalized_sync_scope,
             include_department=True,
             include_doctor=True,
             discharge_summary=discharge_summary,
@@ -1111,6 +1129,7 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
+            sync_scope=normalized_sync_scope,
             include_department=False,
             include_doctor=True,
             discharge_summary=discharge_summary,
@@ -1146,6 +1165,7 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
+            sync_scope=normalized_sync_scope,
             include_department=False,
             include_doctor=True,
             discharge_summary=discharge_summary,
@@ -1173,6 +1193,7 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
+            sync_scope=normalized_sync_scope,
             include_department=True,
             include_doctor=False,
             discharge_summary=discharge_summary,

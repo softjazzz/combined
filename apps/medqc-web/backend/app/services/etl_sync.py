@@ -3059,6 +3059,43 @@ def upsert_to_local(
 
 # ==================== 主同步逻辑 ====================
 
+def _mark_primary_records_sync_completed(
+    case_refs: Sequence[CaseRef],
+    *,
+    completed_at: datetime,
+) -> None:
+    """仅在整次病例资料完整同步后标记病历池主记录。
+
+    该时间是本地同步事实，不覆盖源库 update_time；病历池的“今日同步·在院”
+    依此字段筛选，避免把源资料修改时间误作同步时间。
+    """
+
+    if engine is None or not case_refs:
+        return
+
+    with Session(engine) as session:
+        schema, columns, _ = _get_local_table_meta(session, "mr")
+        if not schema or "local_sync_completed_at" not in columns:
+            raise RuntimeError("病历池同步时间字段未就绪，请先执行数据库升级")
+        table_ident = f"{_safe_identifier(schema)}.mr"
+        session.execute(
+            text(
+                f"""
+                UPDATE {table_ident}
+                SET local_sync_completed_at = :completed_at
+                WHERE institute_id = :institute_id
+                  AND patient_id = :patient_id
+                  AND visit_id = :visit_id
+                """
+            ),
+            [
+                {**case_ref.as_dict(), "completed_at": completed_at}
+                for case_ref in case_refs
+            ],
+        )
+        session.commit()
+
+
 def _emit_sync_progress(
     progress_callback: Optional[Callable[[Dict[str, Any]], None]],
     payload: Dict[str, Any],
@@ -3678,6 +3715,19 @@ def run_sync(
             if unavailable_detail_tables and visible_case_refs
             else "primary_unavailable"
         )
+        if final_success:
+            try:
+                _mark_primary_records_sync_completed(
+                    tuple(visible_case_refs),
+                    completed_at=datetime.now(),
+                )
+            except Exception as exc:
+                # 病历资料已完成同步；筛选辅助字段失败不能回滚已写入的病历资料。
+                logger.warning(
+                    "mark_local_sync_completed_failed error_type=%s",
+                    type(exc).__name__,
+                )
+                run_warnings.append("病历池今日同步筛选标记未写入，请完成数据库升级后再次同步")
         _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _sync_state.last_sync_status = final_status
         _sync_state.total_records_synced = total_rows_upserted

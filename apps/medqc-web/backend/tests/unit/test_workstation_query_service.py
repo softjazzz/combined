@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -1551,6 +1551,65 @@ def test_get_workstation_data_rejects_unknown_hospital_status(workstation_sessio
     with pytest.raises(ValueError, match="hospital_status"):
         get_workstation_data(
             hospital_status="pending_discharge",
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+        )
+
+
+def test_get_workstation_data_today_inpatient_scope_uses_local_sync_time(
+    workstation_session_factory,
+):
+    """快捷范围只保留今日本地完整同步且仍在院的主记录。"""
+
+    today = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P-TODAY",
+            visit_id="V-TODAY-INPATIENT",
+            name="今日同步在院",
+            admission_dept_name="内科",
+            admission_datetime=today,
+            local_sync_completed_at=today,
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P-OLD",
+            visit_id="V-OLD-INPATIENT",
+            name="历史同步在院",
+            admission_dept_name="内科",
+            admission_datetime=today,
+            local_sync_completed_at=today - timedelta(days=1),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P-DISCHARGED",
+            visit_id="V-TODAY-DISCHARGED",
+            name="今日同步已出院",
+            admission_dept_name="内科",
+            admission_datetime=today,
+            discharge_datetime=today,
+            local_sync_completed_at=today,
+        ),
+    )
+
+    result = get_workstation_data(
+        sync_scope="today_inpatient",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 1
+    assert [record["id"] for record in result["records"]] == ["V-TODAY-INPATIENT"]
+
+
+def test_get_workstation_data_rejects_unknown_sync_scope(workstation_session_factory):
+    with pytest.raises(ValueError, match="sync_scope"):
+        get_workstation_data(
+            sync_scope="last_run",
             session_factory=workstation_session_factory,
             settings_loader=_workstation_settings_loader,
             demo_policy=_no_demo_policy,
