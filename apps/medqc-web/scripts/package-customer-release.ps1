@@ -222,17 +222,10 @@ Write-Step "Copy frontend build artifacts"
 Copy-Item -LiteralPath (Join-Path $projectRoot "dist") -Destination (Join-Path $frontendDir "dist") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\serve_dist_spa.py") -Destination (Join-Path $toolsDir "serve_dist_spa.py") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\customer-db-preflight.ps1") -Destination (Join-Path $toolsDir "customer-db-preflight.ps1") -Force
-Write-Step "Slim frontend fonts (keep Source Han Sans SC Regular/Medium only)"
+Write-Step "Remove frontend font files (use customer/system fonts)"
 $distFontsDir = Join-Path $frontendDir "dist\fonts"
-$sfProDir = Join-Path $distFontsDir "sf-pro"
-if (Test-Path -LiteralPath $sfProDir) {
-  Remove-Item -LiteralPath $sfProDir -Recurse -Force
-}
-$sourceHanDir = Join-Path $distFontsDir "source-han-sans-sc"
-if (Test-Path -LiteralPath $sourceHanDir) {
-  Get-ChildItem -LiteralPath $sourceHanDir -File | Where-Object {
-    $_.Name -notin @("SourceHanSansSC-Regular.otf", "SourceHanSansSC-Medium.otf")
-  } | Remove-Item -Force
+if (Test-Path -LiteralPath $distFontsDir) {
+  Remove-Item -LiteralPath $distFontsDir -Recurse -Force
 }
 
 Write-Step "Copy backend runtime allowlist (exclude development scripts and artifacts)"
@@ -426,13 +419,13 @@ $readmeLines = @(
   "- backend/data/sample_pool_uploads and local SQLite/demo DB files",
   "- backend/.env and local runtime secrets",
   "- backend/tests, cache, temporary scripts, runtime logs",
-  "- frontend font files except Source Han Sans SC Regular/Medium",
+  "- all frontend font files (the browser falls back to customer/system fonts)",
   "- cache, virtual environment, and log directories",
   "",
   "## Notes",
   "- This package does not include the ICD semantic vector index.",
   "- This package does not include the ICD vector index builder script.",
-  "- This package keeps only Source Han Sans SC Regular/Medium and removes SF Pro font files.",
+  "- This package excludes all frontend font files and uses customer/system font fallbacks.",
   "- Frontend is built in customer mode and does not hardcode the public API domain.",
   "- Start the backend from backend with: powershell -NoProfile -ExecutionPolicy Bypass -File .\start_dev_backend.ps1",
   "- The customer launcher enforces PRODUCT_ACTIVATION_REQUIRED=true; activate offline in System Settings > Product Activation.",
