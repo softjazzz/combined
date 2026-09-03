@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -339,6 +339,66 @@ def test_collect_records_visit_date_matches_admission_or_discharge_date() -> Non
         ).all()
 
     assert {row[0].visit_id for row in rows} == {"ADMISSION-HIT", "DISCHARGE-HIT"}
+
+
+def test_collect_records_today_inpatient_requires_today_verified_projection() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    for model in (
+        record_repository_module.MedicalRecordFrontpage,
+        record_repository_module.AdmissionRecord,
+        record_repository_module.DischargeRecord,
+        record_repository_module.HospitalizationStatusProjection,
+    ):
+        model.__table__.create(bind=engine)
+
+    now = datetime.now()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                record_repository_module.MedicalRecordFrontpage(
+                    institute_id="H1",
+                    patient_id="P1",
+                    visit_id="TODAY-INPATIENT",
+                    admission_datetime=now - timedelta(days=2),
+                ),
+                record_repository_module.MedicalRecordFrontpage(
+                    institute_id="H1",
+                    patient_id="P2",
+                    visit_id="STALE-INPATIENT",
+                    admission_datetime=now - timedelta(days=3),
+                ),
+                record_repository_module.HospitalizationStatusProjection(
+                    institute_id="H1",
+                    patient_id="P1",
+                    visit_id="TODAY-INPATIENT",
+                    status="inpatient",
+                    verified_at=now,
+                    source="test",
+                ),
+                record_repository_module.HospitalizationStatusProjection(
+                    institute_id="H1",
+                    patient_id="P2",
+                    visit_id="STALE-INPATIENT",
+                    status="inpatient",
+                    verified_at=now - timedelta(days=1),
+                    source="test",
+                ),
+            ]
+        )
+        session.commit()
+
+        records = RecordRepository(session_factory=lambda: session).collect_records(
+            scope="running",
+            sync_scope="today_inpatient",
+            department=None,
+            doctor=None,
+            date_field="visit",
+            start_date=None,
+            end_date=None,
+            keyword=None,
+        )
+
+    assert [item["visit_id"] for item in records] == ["TODAY-INPATIENT"]
 
 
 def test_refresh_parent_batch_job_persists_completed_status_after_children_finish(monkeypatch):

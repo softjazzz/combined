@@ -2522,6 +2522,7 @@ class CustomQCWorkspaceService:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
+        sync_scope: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         return self._record_repository().collect_records(
             scope=scope,
@@ -2533,6 +2534,7 @@ class CustomQCWorkspaceService:
             keyword=keyword,
             record_ids=record_ids,
             record_refs=record_refs,
+            sync_scope=sync_scope,
         )
 
     def count_records(

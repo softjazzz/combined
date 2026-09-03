@@ -53,6 +53,7 @@ export async function createSichuanWorkspaceBatchJob(payload: {
   refine_confidence_threshold?: number
   max_refine_candidates?: number
   scope: 'all' | 'running' | 'final'
+  sync_scope?: 'all' | 'today_inpatient'
   department?: string
   doctor?: string
   date_field: 'visit' | 'admission' | 'discharge'

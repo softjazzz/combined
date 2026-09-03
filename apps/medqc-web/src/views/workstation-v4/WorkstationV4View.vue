@@ -2365,6 +2365,7 @@ async function handleFilterQc() {
   await runRecordPoolFilterQc({
     total: qcSummary.value.totalRecords,
     hospitalStatus: hospFilter.value,
+    syncScope: syncScope.value,
     department: activeDept.value,
     doctor: activeDoctor.value,
     keyword: searchText.value,

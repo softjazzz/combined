@@ -351,6 +351,7 @@ describe('runRecordPoolFilterQc', () => {
     return {
       total: 75,
       hospitalStatus: 'all',
+      syncScope: 'all' as const,
       department: '重症医学科',
       doctor: '陈医师',
       keyword: '待复核',
@@ -389,6 +390,24 @@ describe('runRecordPoolFilterQc', () => {
     expect(params.setBatchExtracting).toHaveBeenLastCalledWith(false)
     expect(params.onTaskCreated).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'job-filter-1' }),
+    )
+  })
+
+  it('preserves the verified-today inpatient scope when creating a filtered task', async () => {
+    const params = createFilterParams({
+      hospitalStatus: 'inpatient',
+      syncScope: 'today_inpatient',
+    })
+
+    await runRecordPoolFilterQc(params)
+
+    expect(mocks.createSichuanWorkspaceBatchJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'running',
+        sync_scope: 'today_inpatient',
+        department: '重症医学科',
+        doctor: '陈医师',
+      }),
     )
   })
 

@@ -56,6 +56,7 @@ interface RunRecordPoolQcParams {
 interface RunRecordPoolFilterQcParams {
   total: number
   hospitalStatus: string
+  syncScope: 'all' | 'today_inpatient'
   department: string
   doctor: string
   keyword: string
@@ -225,6 +226,7 @@ export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams)
   const payload = {
     rule_set_key: 'luxian_0609_qc_v1',
     scope: recordPoolScopeFromHospitalStatus(params.hospitalStatus),
+    ...(params.syncScope === 'today_inpatient' ? { sync_scope: 'today_inpatient' as const } : {}),
     ...(department && department !== '全部科室' ? { department } : {}),
     ...(doctor && doctor !== '全部主管医师' ? { doctor } : {}),
     ...(keyword ? { keyword } : {}),

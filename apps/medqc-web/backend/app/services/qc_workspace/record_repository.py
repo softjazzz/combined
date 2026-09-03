@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from sqlalchemy import and_, asc, desc, func, or_
+from sqlalchemy import and_, asc, desc, exists, func, or_
 from sqlalchemy.orm import Session
 
 from ...database.models.cdm import (
     AdmissionRecord,
     DischargeRecord,
+    HospitalizationStatusProjection,
     InpatRegistration,
     MedicalRecordFrontpage,
 )
@@ -415,6 +416,7 @@ class RecordRepository:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
+        sync_scope: Optional[str] = None,
     ):
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
@@ -464,6 +466,22 @@ class RecordRepository:
             query = query.filter(discharge_dt_expr.is_not(None))
         elif scope_value == "running":
             query = query.filter(discharge_dt_expr.is_(None))
+        if _safe_text(sync_scope).lower() == "today_inpatient":
+            query = query.filter(
+                exists().where(
+                    and_(
+                        HospitalizationStatusProjection.institute_id
+                        == MedicalRecordFrontpage.institute_id,
+                        HospitalizationStatusProjection.patient_id
+                        == MedicalRecordFrontpage.patient_id,
+                        HospitalizationStatusProjection.visit_id
+                        == MedicalRecordFrontpage.visit_id,
+                        HospitalizationStatusProjection.status == "inpatient",
+                        func.date(HospitalizationStatusProjection.verified_at)
+                        == date.today(),
+                    )
+                )
+            )
         if department:
             query = query.filter(dept_expr == department)
         if doctor:
@@ -672,6 +690,7 @@ class RecordRepository:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
+        sync_scope: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         session = self._session_factory()
         try:
@@ -686,6 +705,7 @@ class RecordRepository:
                 keyword=keyword,
                 record_ids=record_ids,
                 record_refs=record_refs,
+                sync_scope=sync_scope,
             )
             rows = query.order_by(
                 desc(MedicalRecordFrontpage.discharge_datetime),

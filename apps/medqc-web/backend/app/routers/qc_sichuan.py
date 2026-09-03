@@ -428,6 +428,7 @@ class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
     refine_confidence_threshold: Optional[float] = None
     max_refine_candidates: Optional[int] = None
     scope: str = "final"
+    sync_scope: Literal["all", "today_inpatient"] = "all"
     department: Optional[str] = None
     doctor: Optional[str] = None
     date_field: str = "discharge"
@@ -1701,7 +1702,7 @@ async def create_workspace_batch_job(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if payload.record_refs and len(requested_record_refs) != len(payload.record_refs):
         raise HTTPException(status_code=422, detail="record_refs 不可重复")
-    records = workspace.collect_records(
+    collect_kwargs: Dict[str, Any] = dict(
         scope=normalized_scope,
         department=payload.department,
         doctor=payload.doctor,
@@ -1712,6 +1713,9 @@ async def create_workspace_batch_job(
         record_ids=None if requested_record_refs else payload.record_ids or None,
         record_refs=requested_record_refs or None,
     )
+    if payload.sync_scope == "today_inpatient":
+        collect_kwargs["sync_scope"] = payload.sync_scope
+    records = workspace.collect_records(**collect_kwargs)
     if not records:
         raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行病历")
 
@@ -1755,6 +1759,11 @@ async def create_workspace_batch_job(
     idempotency_payload = {
         "scope": normalized_scope,
         "query_scope": normalized_scope,
+        **(
+            {"sync_scope": payload.sync_scope}
+            if payload.sync_scope == "today_inpatient"
+            else {}
+        ),
         "department": payload.department or "",
         "doctor": payload.doctor or "",
         "date_field": _normalize_date_field(payload.date_field),
@@ -1836,6 +1845,11 @@ async def create_workspace_batch_job(
         filters={
             "department": payload.department,
             "doctor": payload.doctor,
+            **(
+                {"sync_scope": payload.sync_scope}
+                if payload.sync_scope == "today_inpatient"
+                else {}
+            ),
             "date_field": _normalize_date_field(payload.date_field),
             "start_date": payload.start_date,
             "end_date": payload.end_date,

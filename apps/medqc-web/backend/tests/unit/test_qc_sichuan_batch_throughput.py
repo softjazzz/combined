@@ -2199,6 +2199,64 @@ async def test_create_workspace_batch_job_freezes_full_visit_filter_scope(monkey
 
 
 @pytest.mark.asyncio
+async def test_create_workspace_batch_job_preserves_verified_today_inpatient_scope(monkeypatch):
+    workspace = _WorkspaceStub()
+    collect_calls: List[Dict[str, Any]] = []
+    matched_records = [
+        {
+            "institute_id": "HOSP-001",
+            "patient_id": "PAT-001",
+            "visit_id": "VISIT-001",
+            "scope": "running",
+            "admission_datetime": "2026-09-03 08:00:00",
+            "discharge_datetime": "",
+        }
+    ]
+
+    def collect_records(**kwargs: Any) -> List[Dict[str, Any]]:
+        collect_calls.append(kwargs)
+        return list(matched_records)
+
+    workspace.collect_records = collect_records  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *_args: None)
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+            scope="running",
+            sync_scope="today_inpatient",
+            department="重症医学科",
+            doctor="陈医师",
+            date_field="visit",
+        ),
+        qc_service=_ServiceStub(),  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert collect_calls == [
+        {
+            "scope": "running",
+            "department": "重症医学科",
+            "doctor": "陈医师",
+            "date_field": "visit",
+            "start_date": None,
+            "end_date": None,
+            "keyword": None,
+            "record_ids": None,
+            "record_refs": None,
+            "sync_scope": "today_inpatient",
+        }
+    ]
+    assert workspace.created_job is not None
+    assert workspace.created_job["filters"]["sync_scope"] == "today_inpatient"
+    assert workspace.created_job["filters"]["idempotency_payload"]["sync_scope"] == "today_inpatient"
+
+
+@pytest.mark.asyncio
 async def test_create_workspace_batch_job_rejects_partial_or_duplicate_explicit_record_refs(
     monkeypatch,
 ):
