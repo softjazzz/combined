@@ -333,6 +333,30 @@ async def test_069_direct_row_without_explicit_completion_time_fails_closed() ->
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("document_title", [None, "会诊记录单"])
+async def test_069_record_only_source_without_request_time_is_source_unavailable(
+    document_title: str | None,
+) -> None:
+    """机构接口只给记录时间时，应标明申请时间源未接入，而非误报关联失败。"""
+    result = await _execute(
+        (
+            {
+                "document_id": "CONSULT-RECORD-1",
+                "document_title": document_title,
+                "record_time": "2026-09-01 17:13:53",
+            },
+        )
+    )
+
+    decision = result.decisions[0]
+    assert decision.applicability is ApplicabilityState.UNKNOWN
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.qc_direction is QcDirection.UNKNOWN
+    assert decision.reason_code == "source_unavailable"
+    assert result.customer_display_facts == ()
+
+
+@pytest.mark.asyncio
 async def test_069_multiple_events_pair_by_business_id_and_keep_each_outcome() -> None:
     result = await _execute(
         (

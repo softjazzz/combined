@@ -153,6 +153,19 @@ def evaluate_consultation_timeliness(
             "not_applicable", "trigger_absent_complete"
         )
 
+    has_explicit_request_time = any(
+        _has_value(row, _REQUEST_TIME_FIELDS) for row in consultation_rows
+    )
+    has_request_document = any(
+        _REQUEST_TITLE_PATTERN.search(_clean(row.get("document_title")))
+        for row in consultation_rows
+    )
+    if not has_explicit_request_time and not has_request_document:
+        # 当前机构接口可能只返回会诊记录及 record_time，却从未提供
+        # consult_apply_time。此时缺失的是规则所需的申请时间数据源，
+        # 不是两份已知资料之间的配对失败。
+        return ConsultationTimelinessOutcome("data_gap", "source_unavailable")
+
     direct_events: list[tuple[datetime | None, datetime | None]] = []
     remaining_rows: list[Mapping[str, Any]] = []
     for row in consultation_rows:

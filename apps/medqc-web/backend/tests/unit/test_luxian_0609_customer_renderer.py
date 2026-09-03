@@ -491,6 +491,27 @@ def test_071_reason_specific_data_gap_copy_is_factual(
     assert "当前未读取到经治医师变更事件" not in rendered["evidence"]
 
 
+def test_069_source_unavailable_copy_identifies_institution_source_gap() -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-069",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_unavailable",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-extended-document-v1",
+        )
+    )
+
+    rendered = render_luxian_0609_customer_result(decision=decision)
+
+    assert rendered["findings"] == "当前机构会诊申请时间数据源未接入"
+    assert "会诊记录已读取" in rendered["evidence"]
+    assert "资料关联失败" not in str(rendered)
+
+
 @pytest.mark.parametrize("reason_code", ["association_failed", "authoritative_time_missing"])
 def test_071_reason_copy_does_not_claim_that_handoff_records_exist(
     reason_code,

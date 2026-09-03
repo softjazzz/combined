@@ -293,6 +293,21 @@ def test_every_data_gap_reason_gets_a_controlled_customer_explanation(
     assert isinstance(result["missing_fields"], list)
 
 
+def test_069_source_unavailable_is_labeled_as_institution_source_gap() -> None:
+    result = _finalize(
+        {
+            "rule_id": "LX0609-069",
+            "status": "data_gap",
+            "reason_code": "source_unavailable",
+        }
+    )
+
+    details = result["data_gap_details"]
+    assert details["reason_label"] == "机构数据源未接入"
+    assert details["missing_sources"] == ["会诊申请时间"]
+    assert "当前机构" in details["customer_message"]
+
+
 def test_data_gap_completion_preserves_more_precise_existing_details():
     result = _finalize(
         {

@@ -94,6 +94,14 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
+    ("LX0609-069", "source_unavailable"): {
+        "reason_label": "机构数据源未接入",
+        "missing_sources": ["会诊申请时间"],
+        "missing_fields": [],
+        "customer_message": (
+            "当前机构会诊接口未提供会诊申请时间，无法核对会诊记录是否在申请发出后24小时内完成。"
+        ),
+    },
     ("LX0609-009", "candidate_scope_incomplete"): {
         "reason_label": "自动核对范围超限",
         "missing_sources": [],
