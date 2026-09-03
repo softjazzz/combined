@@ -799,6 +799,7 @@ NOT_APPLICABLE_CASES = (
     ("LX0609-007", "eligibility_not_met"),
     ("LX0609-008", "trigger_absent_complete"),
     ("LX0609-009", "trigger_absent_complete"),
+    ("LX0609-010", "trigger_absent_complete"),
     ("LX0609-011", "trigger_absent_complete"),
     ("LX0609-012", "trigger_absent_complete"),
     ("LX0609-013", "trigger_absent_complete"),
@@ -897,9 +898,12 @@ def test_004_data_gap_reasons_have_specific_customer_messages(
         ("LX0609-004", "trigger_absent_complete", "未发现有效抢救事件"),
         ("LX0609-006", "evaluation_window_not_mature", "入院尚未满72小时"),
         ("LX0609-007", "evaluation_window_not_mature", "病情稳定观察时段尚未满3天"),
+        ("LX0609-010", "trigger_absent_complete", "未发现已实施的CT或MRI检查"),
+        ("LX0609-011", "trigger_absent_complete", "未发现已实施的CT或MRI检查"),
+        ("LX0609-012", "trigger_absent_complete", "未发现已实施并出具报告的CT或MRI检查"),
     ],
 )
-def test_004_006_007_not_applicable_reasons_have_specific_customer_messages(
+def test_not_applicable_reasons_have_specific_customer_messages(
     rule_id: str,
     reason_code: str,
     expected_finding: str,

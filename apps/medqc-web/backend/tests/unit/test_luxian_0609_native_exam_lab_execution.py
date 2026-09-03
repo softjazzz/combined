@@ -1710,10 +1710,10 @@ def test_010_prompt_example_uses_position_allowed_by_current_rule_catalog():
 
 
 @pytest.mark.asyncio
-async def test_010_fails_closed_when_grouped_ct_reason_is_after_order_without_exam_time(
+async def test_010_orders_and_course_mentions_without_actual_exam_are_not_applicable(
     monkeypatch,
 ):
-    """只有医嘱后病程且缺检查时间时，不能猜测病程早于实际检查。"""
+    """只有医嘱和病程提及时，不能据此推定 CT/MRI 已经实施。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -1777,9 +1777,9 @@ async def test_010_fails_closed_when_grouped_ct_reason_is_after_order_without_ex
     )
 
     assert result.llm_call_count == 0
-    assert decision.final_state.value == "data_gap"
-    assert decision.reason_code == "association_failed"
-    assert canonical["status"] == "data_gap"
+    assert decision.final_state.value == "not_applicable"
+    assert decision.reason_code == "trigger_absent_complete"
+    assert canonical["status"] == "not_applicable"
     assert client.prompts == []
 
 
@@ -2074,7 +2074,7 @@ async def test_010_public_native_uses_order_exam_report_contract(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("exam_rows", "order_rows"),
+    ("exam_rows", "order_rows", "expected_state", "expected_reason"),
     (
         (
             (),
@@ -2086,6 +2086,8 @@ async def test_010_public_native_uses_order_exam_report_contract(
                     "prescribed_datetime": "2026-07-07 08:00:00",
                 },
             ),
+            "not_applicable",
+            "trigger_absent_complete",
         ),
         (
             (
@@ -2104,6 +2106,8 @@ async def test_010_public_native_uses_order_exam_report_contract(
                     "prescribed_datetime": "2026-07-07 08:00:00",
                 },
             ),
+            "data_gap",
+            "association_failed",
         ),
     ),
 )
@@ -2111,8 +2115,10 @@ async def test_010_missing_required_business_key_fails_closed_without_legacy_rea
     monkeypatch,
     exam_rows,
     order_rows,
+    expected_state,
+    expected_reason,
 ):
-    """010 的医嘱或检查业务键缺失时，不能借旧“检查前原因”路径判合规。"""
+    """待执行医嘱不触发规则；实际检查缺业务键时仍须安全失败。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -2126,10 +2132,10 @@ async def test_010_missing_required_business_key_fails_closed_without_legacy_rea
         ),
     )
 
-    assert decision.final_state.value == "data_gap"
-    assert decision.reason_code == "association_failed"
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "association_failed"
+    assert decision.final_state.value == expected_state
+    assert decision.reason_code == expected_reason
+    assert canonical["status"] == expected_state
+    assert canonical["reason_code"] == expected_reason
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -2339,8 +2345,8 @@ async def test_010_reused_exam_id_across_orders_stays_data_gap(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_010_effective_order_without_exam_master_stays_data_gap(monkeypatch):
-    """O1 已完整关联而 O2 缺主表时，不得把整条010误判合规。"""
+async def test_010_pending_order_does_not_poison_executed_exam(monkeypatch):
+    """O1 已完成而 O2 只有待执行医嘱时，只核对 O1。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -2373,18 +2379,18 @@ async def test_010_effective_order_without_exam_master_stays_data_gap(monkeypatc
                 "record_content": "因头部外伤拟行头颅CT明确颅脑损伤。",
             },
         ),
+        llm_outputs=(_fact_response(("LX0609-010",)),),
     )
 
-    assert decision.reason_code == "association_failed"
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "association_failed"
-    assert dict(result.customer_display_facts)["LX0609-010"]["failure_kind"] == "exam_order_exam_association_failed"
-    assert result.llm_call_count == result.total_tokens == 0
-    assert client.prompts == []
+    assert decision.reason_code == "requirement_satisfied"
+    assert canonical["status"] == "compliant"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
-async def test_010_association_gap_delivers_counts_and_only_association_evidence(monkeypatch):
+async def test_010_multiple_pending_orders_do_not_poison_one_executed_exam(monkeypatch):
     order_rows = tuple(
         {
             "order_id": f"ORD-{index}",
@@ -2430,44 +2436,14 @@ async def test_010_association_gap_delivers_counts_and_only_association_evidence
                 "document_id": "RESCUE-DOC-1",
             },
         ),
+        llm_outputs=(_fact_response(("LX0609-010",)),),
     )
 
-    assert decision.reason_code == "association_failed"
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "association_failed"
-    assert dict(result.customer_display_facts)["LX0609-010"] == {
-        "failure_kind": "exam_order_exam_association_failed",
-        "subject": "ct_mri",
-        "checked_sources": ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"],
-        "requirement": "order_course_report_consistency",
-        "requirement_met": False,
-        "order_count": 6,
-        "exam_master_count": 1,
-        "uniquely_linked_order_count": 1,
-        "unmatched_or_ambiguous_order_count": 5,
-        "association_issue_kind": "order_without_exam_master",
-        "trigger_orders": [
-            {
-                "order_name": "胸部CT平扫",
-                "order_time": f"2026-07-07 {index + 7:02d}:00:00",
-            }
-            for index in range(1, 7)
-        ],
-    }
-    assert canonical["findings"] == (
-        "已核对6条CT/MRI医嘱与1条检查主记录，其中5条医嘱未找到唯一对应检查主记录，"
-        "暂无法确认属于同一次诊疗事件。"
-    )
-    assert {
-        item["source_type"] for item in canonical.get("customer_evidence", [])
-    } == {"exam_master", "exam_item_report"}
-    assert not {
-        "first_course_record", "daily_course_record", "senior_course_record", "rescue_record"
-    }.intersection(
-        item["source_type"] for item in canonical.get("customer_evidence", [])
-    )
-    assert result.llm_call_count == result.total_tokens == 0
-    assert client.prompts == []
+    assert decision.reason_code == "requirement_satisfied"
+    assert canonical["status"] == "compliant"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -3594,9 +3570,9 @@ async def test_typed_all_empty_complete_sources_are_not_applicable_in_requested_
 
 
 @pytest.mark.asyncio
-async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
+async def test_empty_exam_lab_tables_treat_unexecuted_orders_as_not_applicable(
 ):
-    """只有医嘱时缺少权威检查时间，010同样必须失败关闭。"""
+    """只有医嘱、没有实际检查或报告时，CT/MRI规则均不启动。"""
     rows_by_source = {
         CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
             {
@@ -3686,33 +3662,23 @@ async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
     )
 
     assert [item.final_state.value for item in reduced] == [
-        "data_gap",
-        "data_gap",
-        "data_gap",
+        "not_applicable",
+        "not_applicable",
+        "not_applicable",
         "data_gap",
         "data_gap",
     ]
-    assert result.decisions[0].reason_code == "association_failed"
-    assert [item.reason_code for item in result.decisions[1:]] == [
-        "target_report_missing",
-        "target_report_missing",
+    assert [item.reason_code for item in result.decisions[:3]] == [
+        "trigger_absent_complete",
+        "trigger_absent_complete",
+        "trigger_absent_complete",
+    ]
+    assert [item.reason_code for item in result.decisions[3:]] == [
         "target_report_missing",
         "target_report_missing",
     ]
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-010"]["trigger_orders"] == [
-        {
-            "order_name": "头颅CT平扫",
-            "order_time": "2026-07-07 14:31:00",
-        }
-    ]
-    for rule_id in ("LX0609-011", "LX0609-012"):
-        assert facts[rule_id]["trigger_orders"] == [
-            {
-                "order_name": "头颅CT平扫",
-                "order_time": "2026-07-07 14:31:00",
-            }
-        ]
+    assert all(rule_id not in facts for rule_id in ("LX0609-010", "LX0609-011", "LX0609-012"))
     for rule_id in ("LX0609-014", "LX0609-015"):
         assert facts[rule_id]["trigger_orders"] == [
             {
@@ -3733,10 +3699,8 @@ async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
     public_facts = {
         item["rule_id"]: item.get("customer_display_facts") for item in canonical
     }
-    assert all(
-        public_facts[rule_id]["trigger_orders"]
-        for rule_id in exam_lab.EXAM_LAB_RULE_IDS
-    )
+    assert all(public_facts[rule_id] is None for rule_id in ("LX0609-010", "LX0609-011", "LX0609-012"))
+    assert all(public_facts[rule_id]["trigger_orders"] for rule_id in ("LX0609-014", "LX0609-015"))
     assert result.llm_call_count == 0
     assert client.prompts == []
     assert all(item.fact_refs for item in result.decisions)

@@ -528,11 +528,20 @@ def _order_exam_structure_outcome(
         if isinstance(row, Mapping)
         and _is_exam_master_target(row)
     )
+    report_rows = tuple(
+        row
+        for row in rows_by_source.get("exam_item_report", ())
+        if isinstance(row, Mapping)
+    )
     if not orders and not course_rows and not exam_rows:
         return None
     if raw_target_orders and not orders:
         # 已撤销的目标医嘱不产生检查触发；病程中的既往计划不能据此构成
         # “病程有检查、无医嘱”的缺陷。
+        return None
+    if orders and not exam_rows and not report_rows:
+        # 医嘱只表示计划。检查主表和正式报告均为空时尚未形成实际检查事件，
+        # 不应因“医嘱无主表”提前产生资料缺口。
         return None
     if course_rows and not orders and not exam_rows:
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
@@ -563,9 +572,6 @@ def _order_exam_structure_outcome(
             return _ExamLabOutcome("LX0609-010", "data_gap", "authoritative_order_time_missing")
         orders_by_id[order_id] = (order_time, order)
 
-    if not exam_rows:
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
-
     exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
     for exam in exam_rows:
         order_id = _clean(exam.get("order_id"))
@@ -578,21 +584,12 @@ def _order_exam_structure_outcome(
     exam_ids = [_clean(exam.get("exam_id")) for exam in exam_rows]
     if len(exam_ids) != len(set(exam_ids)):
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
-    # 关联是双向完整合同：不能只确认“已有主表的医嘱”唯一，还必须确认每条
-    # 有效 CT/MRI 医嘱都有且仅有一条检查主表。缺少主表时不能擅自视为未执行。
-    if (
-        set(exams_by_order) != set(orders_by_id)
-        or any(len(exams) != 1 for exams in exams_by_order.values())
-    ):
+    # 只核对已形成检查主表的实际事件；仍处于待执行状态的医嘱不参与本轮。
+    if any(len(exams) != 1 for exams in exams_by_order.values()):
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
 
     executed = tuple(exams[0] for exams in exams_by_order.values())
 
-    report_rows = tuple(
-        row
-        for row in rows_by_source.get("exam_item_report", ())
-        if isinstance(row, Mapping)
-    )
     for exam in executed:
         exam_id = _clean(exam.get("exam_id"))
         has_report = any(_clean(row.get("exam_id")) == exam_id for row in report_rows)
@@ -1503,7 +1500,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
                     events = events_for_family(projection, family)
                     if not events:
-                        if _effective_target_orders(rows_by_source, fact_kind=family):
+                        if family == "exam":
+                            emit_typed(
+                                rule_id,
+                                "not_applicable",
+                                "trigger_absent_complete",
+                            )
+                        elif _effective_target_orders(rows_by_source, fact_kind=family):
                             emit_typed(
                                 rule_id,
                                 "data_gap",
