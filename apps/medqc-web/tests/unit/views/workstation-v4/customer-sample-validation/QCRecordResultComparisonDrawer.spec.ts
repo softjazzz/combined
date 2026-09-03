@@ -77,6 +77,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
         visitId: 'V001',
         instituteId: 'H1',
         patientId: 'P001',
+        patientName: '周勇书',
         recordId: 'R001',
         label: '测试病历',
       },
@@ -193,6 +194,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(workbenchProps?.debugContext).toMatchObject({
       instituteId: 'H1',
       patientId: 'P001',
+      patientName: '周勇书',
       visitId: 'V001',
       recordId: 'R001',
       recordRef: 'rec-safe-001',

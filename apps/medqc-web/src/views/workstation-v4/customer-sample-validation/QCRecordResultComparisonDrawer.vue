@@ -95,6 +95,7 @@ export interface QCRecordResultFocus {
   patientId: string
   recordId: string
   recordRef?: string
+  patientName?: string
   label: string
 }
 
@@ -137,6 +138,7 @@ const debugContext = computed(() => {
     isComplete: result.is_complete,
     missingRuleIds: result.missing_rule_ids,
     conflictingRuleIds: result.conflicting_rule_ids,
+    patientName: focus.patientName,
   }
 })
 

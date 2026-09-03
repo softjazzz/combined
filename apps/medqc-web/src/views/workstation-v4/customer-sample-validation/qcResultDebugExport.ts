@@ -1,6 +1,7 @@
 import type { SingleRecordQcEvidence, SingleRecordQcResultItem } from './single-record-result-model'
+import { sanitizeQcDebugPayload } from './qcDebugSanitizer'
 
-const DEBUG_SCHEMA = 'medqc-qc-debug-v2'
+const DEBUG_SCHEMA = 'medqc-qc-debug-v3-redacted'
 type QcDebugResultItem = SingleRecordQcResultItem & { displayStatus?: string }
 
 export interface QcResultDebugContext {
@@ -18,6 +19,7 @@ export interface QcResultDebugContext {
   isComplete?: boolean
   missingRuleIds?: string[]
   conflictingRuleIds?: string[]
+  patientName?: string
 }
 
 function text(value: unknown): string {
@@ -119,14 +121,19 @@ export function buildQcResultDebugText(
   items: QcDebugResultItem[],
   context?: QcResultDebugContext,
 ): string {
-  const normalizedItems = Array.isArray(items) ? items : []
+  const sanitized = sanitizeQcDebugPayload(
+    { items: Array.isArray(items) ? items : [], context },
+    { patientName: context?.patientName },
+  )
+  const normalizedItems = sanitized.items
+  const sanitizedContext = sanitized.context
   const header = [
     '# MedQC 质控调试信息',
     `格式版本：${DEBUG_SCHEMA}`,
     `结果数量：${normalizedItems.length}`,
-    '说明：以下内容来自本次质控保存结果，仅用于核对规则状态、判定事实和证据链。',
+    '说明：以下内容已脱敏，仅用于核对规则状态、判定事实和证据链。身份标识已使用临时别名，日期已整体平移但时间间隔保持不变；发送前仍请人工复核。',
   ]
-  appendContext(header, context)
+  appendContext(header, sanitizedContext)
   appendStatusSummary(header, normalizedItems)
   const sections = normalizedItems.map(buildRuleDebugSection)
   return [...header, ...sections.map((section) => `\n${section}`)].join('\n').trim()

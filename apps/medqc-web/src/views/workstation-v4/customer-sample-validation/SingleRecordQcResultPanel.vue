@@ -24,7 +24,7 @@
             :size="14"
             :stroke-width="2"
           />
-          {{ debugCopying ? '复制中' : '复制调试信息' }}
+          {{ debugCopying ? '复制中' : '复制脱敏调试信息' }}
         </button>
       </div>
       <template v-if="viewItems.length">
@@ -987,7 +987,7 @@ async function copyDebugResults() {
     const copied = await copyQcResultDebugText(
       buildQcResultDebugText(viewItems.value, props.debugContext),
     )
-    if (copied) message.success('质控结论和判定依据已复制')
+    if (copied) message.success('脱敏后的质控结论和判定依据已复制')
     else message.error('复制失败，请检查浏览器剪贴板权限')
   } finally {
     debugCopying.value = false

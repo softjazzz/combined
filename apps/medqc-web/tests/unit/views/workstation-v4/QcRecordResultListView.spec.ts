@@ -381,6 +381,7 @@ describe('QcRecordResultListView', () => {
     expect(drawer.props('focus')).toMatchObject({
       instituteId: 'H-2',
       patientId: 'P-2',
+      patientName: '患者乙',
       visitId: 'V-shared',
       recordId: 'V-shared',
     })

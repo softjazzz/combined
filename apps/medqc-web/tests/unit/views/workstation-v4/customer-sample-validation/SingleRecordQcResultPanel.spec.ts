@@ -211,9 +211,11 @@ describe('SingleRecordQcResultPanel', () => {
     expect(copied).toContain('受控子结论 criterion_results')
     expect(copied).toContain('关键证据 evidence')
     expect(copied).toContain('LX0609-003 手术记录：手术后24小时内是否完成')
-    expect(copied).toContain('患者ID：P001')
-    expect(copied).toContain('就诊ID：V001')
-    expect(copied).toContain('质控任务ID：job-safe-001')
+    expect(copied).toContain('格式版本：medqc-qc-debug-v3-redacted')
+    expect(copied).toContain('患者ID：患者-001')
+    expect(copied).toContain('就诊ID：就诊-001')
+    expect(copied).toContain('质控任务ID：任务-001')
+    expect(copied).not.toContain('job-safe-001')
   })
 
   it('结果卡片精简时仍保留完整调试字段', async () => {

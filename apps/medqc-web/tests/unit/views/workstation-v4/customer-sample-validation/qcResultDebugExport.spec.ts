@@ -6,7 +6,7 @@ import {
 } from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
 
 describe('qcResultDebugExport', () => {
-  it('exports conclusion, controlled facts, criteria, data gaps and evidence without reinterpreting them', () => {
+  it('exports redacted conclusion, controlled facts, criteria, data gaps and evidence without reinterpreting them', () => {
     const result = buildQcResultDebugText(
       [
         {
@@ -43,6 +43,7 @@ describe('qcResultDebugExport', () => {
         instituteId: 'H1',
         patientId: 'P001',
         visitId: 'V001',
+        patientName: '周勇书',
         recordRef: 'record-safe-1',
         jobId: 'job-safe-1',
         ruleSetKey: 'luxian_0609_qc_v1',
@@ -54,11 +55,12 @@ describe('qcResultDebugExport', () => {
       },
     )
 
-    expect(result).toContain('格式版本：medqc-qc-debug-v2')
-    expect(result).toContain('机构ID：H1')
-    expect(result).toContain('患者ID：P001')
-    expect(result).toContain('就诊ID：V001')
-    expect(result).toContain('质控任务ID：job-safe-1')
+    expect(result).toContain('格式版本：medqc-qc-debug-v3-redacted')
+    expect(result).toContain('内容已脱敏')
+    expect(result).toContain('机构ID：机构-001')
+    expect(result).toContain('患者ID：患者-001')
+    expect(result).toContain('就诊ID：就诊-001')
+    expect(result).toContain('质控任务ID：任务-001')
     expect(result).toContain('规则集版本：2026.08.27')
     expect(result).toContain('结果完整性：完整')
     expect(result).toContain('- data_gap：1')
@@ -69,9 +71,87 @@ describe('qcResultDebugExport', () => {
     expect(result).toContain('受控判定事实 customer_display_facts')
     expect(result).toContain('daily_course_record.record_time')
     expect(result).toContain('关键证据 evidence（1 条）')
-    expect(result).toContain('安全引用：exam-safe-1')
+    expect(result).toContain('安全引用：引用-001')
     expect(result).toContain('字段路径：exam_master.report_time')
     expect(result).toContain('关键原文摘要：腹部CT检查完成。')
+  })
+
+  it('redacts patient names inside narrative text and common direct identifiers', () => {
+    const result = buildQcResultDebugText(
+      [
+        {
+          rule_id: 'LX0609-018',
+          rule_name: '主诉与第一诊断',
+          status: 'non_compliant',
+          conclusion:
+            '患者周勇书，男，住址：四川省泸县某镇1组，联系电话13800138000，身份证号510000199001011234。',
+          detail:
+            '患者周勇书,性别男，于2026-07-07 19:00:01入院。医师签名：张云海。文件位于D:\\medqc\\secret.json。',
+          customer_display_facts: {
+            patient_id: '0000176759',
+            visit_id: '2563837',
+            source_document_ids: ['5038135||14'],
+            admission_time: '2026-07-07 19:00:01',
+          },
+          evidence: [
+            {
+              source_ref: 'document:5038135||14',
+              source_type: 'first_course_record',
+              source_label: '首次病程记录',
+              record_time: '2026-07-07 19:39:10',
+              field_path: 'first_course_record.record_content',
+              evidence_excerpt: '患者周勇书，男，联系电话13800138000。',
+              excerpt_kind: '字段级依据',
+            },
+          ],
+        },
+      ],
+      {
+        instituteId: 'HOSPITAL-01',
+        patientId: '0000176759',
+        visitId: '2563837',
+        patientName: '周勇书',
+        recordId: '2563837',
+        jobId: '18c48be4-4221-40d1-80a5-d1be30f7263e',
+      },
+    )
+
+    expect(result).not.toContain('周勇书')
+    expect(result).not.toContain('0000176759')
+    expect(result).not.toContain('2563837')
+    expect(result).not.toContain('5038135||14')
+    expect(result).not.toContain('13800138000')
+    expect(result).not.toContain('510000199001011234')
+    expect(result).not.toContain('四川省泸县某镇1组')
+    expect(result).not.toContain('张云海')
+    expect(result).not.toContain('D:\\medqc\\secret.json')
+    expect(result).not.toContain('2026-07-07')
+    expect(result).toContain('患者A')
+    expect(result).toContain('患者-001')
+    expect(result).toContain('就诊-001')
+    expect(result).toContain('文书-001')
+    expect(result).toContain('[电话号码已脱敏]')
+    expect(result).toContain('[身份证号已脱敏]')
+    expect(result).toContain('住址：[地址已脱敏]')
+    expect(result).toContain('医师签名：医务人员A')
+    expect(result).toContain('[本地路径已脱敏]')
+    expect(result).toContain('LX0609-018')
+    expect(result).toContain('first_course_record.record_content')
+    expect(result).toContain('non_compliant')
+  })
+
+  it('infers a patient name from a strongly labelled narrative when context has no name', () => {
+    const result = buildQcResultDebugText([
+      {
+        rule_id: 'LX0609-006',
+        rule_name: '上级医师查房记录',
+        status: 'compliant',
+        conclusion: '患者李庆珍,性别女,年龄89岁，已完成上级医师查房。',
+      },
+    ])
+
+    expect(result).not.toContain('李庆珍')
+    expect(result).toContain('患者A,性别女')
   })
 
   it('copies the generated text through the browser clipboard', async () => {

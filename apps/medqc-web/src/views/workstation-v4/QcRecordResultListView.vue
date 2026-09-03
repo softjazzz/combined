@@ -723,6 +723,7 @@ function handleOpenResult(recordKey: string) {
     instituteId: record.instituteId as string,
     patientId: record.patientId as string,
     recordId: record.id || (record.visitId as string),
+    patientName: record.name,
     label: labelParts.join(' · '),
   }
   drawerOpen.value = true
@@ -749,6 +750,7 @@ function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
     instituteId,
     patientId,
     recordId: visitId,
+    patientName: String(record.patient_name || '').trim(),
     label: labelParts.join(' · '),
   }
   drawerOpen.value = true

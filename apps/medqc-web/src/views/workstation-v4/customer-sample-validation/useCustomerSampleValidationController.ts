@@ -258,6 +258,7 @@ export function useCustomerSampleValidationController() {
     patientId: string
     recordId: string
     recordRef?: string
+    patientName?: string
     label: string
   } | null>(null)
   let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
@@ -2229,6 +2230,7 @@ export function useCustomerSampleValidationController() {
       instituteId: String(record.matched_institute_id || '').trim(),
       patientId: String(record.matched_patient_id || '').trim(),
       recordId: resolveRecordIdentifier(record),
+      patientName: resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
       label: [
         resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
         record.department || '',
