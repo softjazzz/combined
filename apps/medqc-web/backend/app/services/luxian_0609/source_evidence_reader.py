@@ -77,6 +77,7 @@ _NATIVE_SOURCE_FIELDS = {
     "admission_record_diagnosis": (
         "document_id",
         "diagnosis_id",
+        "diagnosis_main",
         "diagnosis_no",
         "diagnosis_type",
         "diagnosis_name",

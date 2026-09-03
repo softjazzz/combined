@@ -17,6 +17,13 @@ def test_2496813_structured_course_fields_are_in_source_projection() -> None:
     )
 
 
+def test_admission_diagnosis_source_preserves_main_diagnosis_flag() -> None:
+    assert (
+        "diagnosis_main"
+        in source_evidence_reader._NATIVE_SOURCE_FIELDS["admission_record_diagnosis"]
+    )
+
+
 @dataclass
 class _Rows:
     rows: list[dict]

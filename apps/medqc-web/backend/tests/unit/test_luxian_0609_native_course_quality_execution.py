@@ -4753,20 +4753,24 @@ async def test_typed_018_reads_only_first_numbered_diagnosis():
 
 
 @pytest.mark.asyncio
-async def test_typed_018_reads_admission_first_diagnosis():
+async def test_typed_018_reads_admission_first_diagnosis_from_main_flag():
     rows_by_source = {
         "admission_record": [
-            _row("主诉：反复咳嗽咳痰气促10余年，加重伴纳差1天。现病史完整。")
+            _row("主诉：上腹部阵发性绞痛8+小时。现病史完整。")
         ],
         "diagnosis": [],
         "admission_record_diagnosis": [
             {
-                "diagnosis_type": "初步诊断",
-                "diagnosis_no": "1",
-                "diagnosis_name": (
-                    "1、慢性阻塞性肺病伴有急性下呼吸道感染；"
-                    "2、慢性呼吸衰竭；3、尘肺？"
-                ),
+                "diagnosis_type": "入院诊断；初步诊断",
+                "diagnosis_main": "是",
+                "diagnosis_no": None,
+                "diagnosis_name": "急性胰腺炎",
+            },
+            {
+                "diagnosis_type": "入院诊断；初步诊断",
+                "diagnosis_main": "否",
+                "diagnosis_no": None,
+                "diagnosis_name": "腹痛",
             },
         ],
     }
@@ -4806,8 +4810,8 @@ async def test_typed_018_reads_admission_first_diagnosis():
 
     assert typed.llm_call_count == 1
     assert len(client.prompts) == 1
-    assert "慢性阻塞性肺病伴有急性下呼吸道感染" in client.prompts[0]
-    assert "慢性呼吸衰竭" not in client.prompts[0]
+    assert "急性胰腺炎" in client.prompts[0]
+    assert "第一诊断：腹痛" not in client.prompts[0]
     assert typed.results == ()
 
 
@@ -4843,6 +4847,32 @@ def test_lx018_normalizes_single_explicit_composite_diagnosis_type():
     assert course._lx018_primary_diagnosis_resolution(documents) == (
         "available",
         "急性阑尾炎",
+    )
+
+
+def test_lx018_uses_explicit_main_flag_when_sequence_is_missing():
+    """客户入院诊断以 diagnosis_main 标记第一诊断时不得报字段缺失。"""
+
+    documents = {
+        "admission_record_diagnosis": [
+            {
+                "diagnosis_type": "入院诊断；初步诊断",
+                "diagnosis_main": "是",
+                "diagnosis_no": None,
+                "diagnosis_name": "急性胰腺炎",
+            },
+            {
+                "diagnosis_type": "入院诊断；初步诊断",
+                "diagnosis_main": "否",
+                "diagnosis_no": None,
+                "diagnosis_name": "腹痛",
+            },
+        ]
+    }
+
+    assert course._lx018_primary_diagnosis_resolution(documents) == (
+        "available",
+        "急性胰腺炎",
     )
 
 

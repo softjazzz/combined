@@ -32,6 +32,7 @@ LX018_DIAGNOSTIC_REASON_DIMENSIONS = frozenset(
 
 _COMPLAINT_VALUE_PATTERN = re.compile(r"主诉\s*[:：]\s*([^；;。\r\n]{1,160})")
 _ADMISSION_FIRST_DIAGNOSIS_TYPES = frozenset({"初步诊断", "入院诊断"})
+_EXPLICIT_MAIN_DIAGNOSIS_VALUES = frozenset({"是", "true", "1", "yes", "y", "主诊断"})
 _DIAGNOSIS_TYPE_SEPARATOR_PATTERN = re.compile(r"[\s/／,，、;；+＋|｜]+")
 _LX018_DIAGNOSIS_ORDER_FIELDS = (
     "diagnosis_no",
@@ -159,6 +160,10 @@ def _lx018_structured_order(row: Mapping[str, Any]) -> int | None:
     return values.pop() if len(values) == 1 else None
 
 
+def _lx018_has_explicit_main_flag(row: Mapping[str, Any]) -> bool:
+    return _clean(row.get("diagnosis_main")).lower() in _EXPLICIT_MAIN_DIAGNOSIS_VALUES
+
+
 def _lx018_diagnosis_label(row: Mapping[str, Any]) -> str:
     label = _clean(row.get("diagnosis_name") or row.get("diagnosis"))
     if not label:
@@ -182,6 +187,8 @@ def _lx018_primary_diagnosis_resolution(
                 continue
             saw_admission_candidate = True
             order = _lx018_structured_order(row)
+            if order is None and _lx018_has_explicit_main_flag(row):
+                order = 1
             label = _lx018_diagnosis_label(row)
             numbered_items = _split_numbered_diagnosis_items(
                 row.get("diagnosis_name") or row.get("diagnosis")
