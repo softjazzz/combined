@@ -2242,6 +2242,110 @@ def test_071_projects_only_strict_handoff_and_handover_refs() -> None:
     assert "source_document_refs" not in result["customer_display_facts"]
 
 
+def _071_derived_single_facts(source_document_refs) -> dict[str, object]:
+    return {
+        "verification_kind": "physician_handoff_timeliness_check",
+        "change_time": "2026-07-01 08:00:00",
+        "handoff_times": ["2026-07-01 07:50:00"],
+        "handover_times": ["2026-07-01 14:00:00"],
+        "handover_threshold_hours": 24,
+        "source_document_refs": source_document_refs,
+    }
+
+
+def test_071_derived_single_event_projects_daily_and_handoff_evidence() -> None:
+    refs = [
+        {"source_type": "daily_course_record", "source_document_id": "daily-b-071"},
+        {"source_type": "handoff_record", "source_document_id": "handoff-a-071"},
+        {"source_type": "handover_record", "source_document_id": "handover-b-071"},
+    ]
+    facts = _071_derived_single_facts(refs)
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-071"),),
+        customer_display_facts=(("LX0609-071", facts),),
+    )[0]
+
+    assert result["customer_evidence"] == refs
+    assert result["customer_display_facts"] == {
+        key: value for key, value in facts.items() if key != "source_document_refs"
+    }
+
+
+@pytest.mark.parametrize(
+    "refs",
+    [
+        [{"source_type": "daily_course_record", "source_document_id": "bad\nid"}],
+        [
+            {"source_type": "daily_course_record", "source_document_id": "daily-b-071"},
+            {"source_type": "daily_course_record", "source_document_id": "daily-c-071"},
+        ],
+    ],
+)
+def test_071_derived_single_event_rejects_invalid_or_excess_daily_refs(refs) -> None:
+    facts = _071_derived_single_facts(refs)
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-071"),),
+        customer_display_facts=(("LX0609-071", facts),),
+    )[0]
+
+    assert "customer_evidence" not in result
+
+
+def test_071_signature_timeline_gap_projects_strict_facts_and_daily_ref() -> None:
+    facts = {
+        "failure_kind": "physician_signature_timeline_incomplete",
+        "daily_course_record_count": 2,
+        "eligible_daily_course_count": 2,
+        "missing_title_count": 0,
+        "missing_time_count": 1,
+        "missing_signature_count": 0,
+        "source_document_refs": [
+            {"source_type": "daily_course_record", "source_document_id": "daily-gap-071"}
+        ],
+    }
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-071"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-071"),),
+        customer_display_facts=(("LX0609-071", facts),),
+    )[0]
+
+    assert result["customer_display_facts"]["failure_kind"] == (
+        "physician_signature_timeline_incomplete"
+    )
+    assert result["customer_evidence"] == facts["source_document_refs"]
+
+
+def test_071_handoff_identity_gap_projects_strict_facts() -> None:
+    facts = {
+        "failure_kind": "physician_handoff_identity_missing",
+        "change_event_count": 1,
+        "change_times": ["2026-07-01 08:00:00"],
+        "handoff_record_count": 1,
+        "handoff_times": ["2026-07-01 07:50:00"],
+        "handover_record_count": 1,
+        "handover_times": ["2026-07-01 14:00:00"],
+        "handover_threshold_hours": 24,
+        "source_document_refs": [
+            {"source_type": "daily_course_record", "source_document_id": "daily-b-071"},
+            {"source_type": "handoff_record", "source_document_id": "handoff-unknown-071"},
+            {"source_type": "handover_record", "source_document_id": "handover-b-071"},
+        ],
+    }
+
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-071", raw=facts)
+
+    assert safe is not None
+    assert safe["failure_kind"] == "physician_handoff_identity_missing"
+
+
 def test_071_single_change_association_gap_keeps_controlled_facts() -> None:
     facts = _071_association_facts([])
     facts["change_event_count"] = 1

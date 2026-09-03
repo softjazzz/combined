@@ -2410,6 +2410,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 physician_change_error=physician_change_error,
                 nondrug_order_rows=nondrug_order_rows,
                 nondrug_order_error=nondrug_order_error,
+                daily_course_rows=daily_rows,
+                daily_course_error=daily_error,
                 handoff_rows=handoff_rows,
                 handoff_error=handoff_error,
                 handover_rows=handover_rows,

@@ -910,6 +910,8 @@ def safe_luxian_0609_customer_display_facts(
             "physician_handoff_multi_event_check",
             "physician_handoff_association_failed",
             "physician_handoff_record_time_missing",
+            "physician_handoff_identity_missing",
+            "physician_signature_timeline_incomplete",
             "physician_change_time_missing",
         },
         "LX0609-072": {"transfer_record_timeliness_check", "transfer_records_missing"},
@@ -1047,6 +1049,14 @@ def safe_luxian_0609_customer_display_facts(
             "change_times", "handoff_record_count", "handoff_times",
             "handover_record_count", "handover_times", "handover_threshold_hours",
         },
+        "physician_handoff_identity_missing": {
+            "change_event_count", "change_times", "handoff_record_count", "handoff_times",
+            "handover_record_count", "handover_times", "handover_threshold_hours",
+        },
+        "physician_signature_timeline_incomplete": {
+            "daily_course_record_count", "eligible_daily_course_count",
+            "missing_title_count", "missing_time_count", "missing_signature_count",
+        },
         "transfer_record_timeliness_check": {
             "transfer_order_time", "transfer_in_time", "transfer_out_time",
             "threshold_hours", "transfer_in_interval_hours",
@@ -1080,6 +1090,15 @@ def safe_luxian_0609_customer_display_facts(
         kind_key = "verification_kind" if raw.get("verification_kind") else "failure_kind"
         kind = raw.get(kind_key)
         if kind not in extended_kinds_by_rule[rule_id]:
+            return None
+        if kind in {
+            "physician_handoff_identity_missing",
+            "physician_signature_timeline_incomplete",
+        } and set(raw) != {
+            kind_key,
+            "source_document_refs",
+            *extended_allowed_keys[kind],
+        }:
             return None
         if rule_id == "LX0609-031":
             events = raw.get("surgery_events")
@@ -1617,6 +1636,7 @@ def safe_luxian_0609_customer_display_facts(
                 return None
         if kind in {
             "physician_handoff_association_failed",
+            "physician_handoff_identity_missing",
             "physician_change_time_missing",
         }:
             change_event_count = raw.get("change_event_count")
@@ -1643,7 +1663,10 @@ def safe_luxian_0609_customer_display_facts(
                 or raw.get("handover_threshold_hours") != 24
             ):
                 return None
-            if kind == "physician_handoff_association_failed" and (
+            if kind in {
+                "physician_handoff_association_failed",
+                "physician_handoff_identity_missing",
+            } and (
                 len(change_times) != change_event_count
             ):
                 return None
@@ -1661,6 +1684,27 @@ def safe_luxian_0609_customer_display_facts(
                     or timed_count + missing_count != change_event_count
                 ):
                     return None
+        if kind == "physician_signature_timeline_incomplete":
+            counts = tuple(
+                raw.get(key)
+                for key in (
+                    "daily_course_record_count",
+                    "eligible_daily_course_count",
+                    "missing_title_count",
+                    "missing_time_count",
+                    "missing_signature_count",
+                )
+            )
+            if (
+                any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in counts)
+                or counts[0] < counts[1]
+                or counts[0] < counts[2]
+                or counts[1] + counts[2] > counts[0]
+                or counts[3] > counts[1]
+                or counts[4] > counts[1]
+                or not any(value > 0 for value in counts[2:])
+            ):
+                return None
         if kind == "physician_handoff_multi_event_check":
             change_event_count = raw.get("change_event_count")
             raw_events = raw.get("events")
@@ -5185,7 +5229,11 @@ def _customer_evidence_from_display_facts(
                 return located
 
     if rule_id == "LX0609-071":
-        allowed_source_types = {"handoff_record", "handover_record"}
+        allowed_source_types = {
+            "daily_course_record",
+            "handoff_record",
+            "handover_record",
+        }
         raw_refs = raw.get("source_document_refs")
         if isinstance(raw_refs, list) and len(raw_refs) <= 8:
             located: list[dict[str, str]] = []
@@ -5231,9 +5279,21 @@ def _customer_evidence_from_display_facts(
                     )
                 ):
                     return []
+            elif kind == "physician_signature_timeline_incomplete":
+                daily_count = raw.get("daily_course_record_count")
+                if (
+                    not isinstance(daily_count, int)
+                    or isinstance(daily_count, bool)
+                    or daily_count < 0
+                    or source_ref_counts["daily_course_record"] > daily_count
+                    or source_ref_counts["handoff_record"]
+                    or source_ref_counts["handover_record"]
+                ):
+                    return []
             else:
                 handoff_record_count = raw.get("handoff_record_count")
                 handover_record_count = raw.get("handover_record_count")
+                change_event_count = raw.get("change_event_count")
                 if (
                     not isinstance(handoff_record_count, int)
                     or isinstance(handoff_record_count, bool)
@@ -5241,6 +5301,19 @@ def _customer_evidence_from_display_facts(
                     or isinstance(handover_record_count, bool)
                     or source_ref_counts["handoff_record"] > handoff_record_count
                     or source_ref_counts["handover_record"] > handover_record_count
+                    or (
+                        kind == "physician_handoff_identity_missing"
+                        and (
+                            not isinstance(change_event_count, int)
+                            or isinstance(change_event_count, bool)
+                            or source_ref_counts["daily_course_record"]
+                            > change_event_count
+                        )
+                    )
+                    or (
+                        kind != "physician_handoff_identity_missing"
+                        and source_ref_counts["daily_course_record"]
+                    )
                 ):
                     return []
             if located:

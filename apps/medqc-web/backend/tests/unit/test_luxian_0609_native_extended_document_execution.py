@@ -211,11 +211,12 @@ def test_064_binds_evaluation_horizon_for_postoperative_window_maturity() -> Non
     assert "evaluation_context.horizon" in sources
 
 
-def test_071_binds_authoritative_and_explicit_order_change_sources() -> None:
+def test_071_binds_authoritative_order_and_daily_signature_change_sources() -> None:
     sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-071",))
 
     assert "physician_change_event" in sources
     assert "inpat_nondrug_order" in sources
+    assert "daily_course_record" in sources
 
 
 def test_068_binds_daily_and_senior_course_sources() -> None:
@@ -2217,15 +2218,15 @@ async def test_071_uses_explicit_physician_change_order_when_event_table_is_empt
 
 
 @pytest.mark.asyncio
-async def test_071_missing_event_table_and_explicit_order_remains_data_gap() -> None:
+async def test_071_missing_event_table_with_complete_empty_daily_source_is_not_applicable() -> None:
     _, reduced = await _evaluate(
         "LX0609-071",
         {},
         unavailable_sources={"physician_change_event"},
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_unavailable"
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v23"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v24"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -564,8 +564,12 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-067": ("inpat_registration",),
     "LX0609-068": ("inpat_registration", "death_record"),
     # 优先使用权威经治医师变更事件；部分院端尚未提供独立事件表，允许
-    # 明确的“经治医师变更/交接班”医嘱作为受控替代触发。
-    "LX0609-071": ("physician_change_event", "inpat_nondrug_order"),
+    # 明确医嘱或普通病程的受控医师签名时间线作为替代触发。
+    "LX0609-071": (
+        "physician_change_event",
+        "inpat_nondrug_order",
+        "daily_course_record",
+    ),
     "LX0609-072": ("inpat_nondrug_order",),
     "LX0609-073": ("inpat_nondrug_order",),
     "LX0609-074": ("diagnosis",),

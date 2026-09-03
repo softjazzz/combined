@@ -14,6 +14,10 @@ from .shared import _clean, _parse_datetime, _row_time
 _PHYSICIAN_CHANGE_ORDER_PATTERN = re.compile(
     r"经治医师(?:发生)?变更|更换经治医师|交接班医嘱"
 )
+_NON_ROUTINE_COURSE_TITLE_PATTERN = re.compile(
+    r"上级医师查房|副主任医师查房|主任医师查房|会诊|手术|麻醉|抢救|"
+    r"交接班|交班|接班|术前|术后|转科|转入|转出|死亡|出院"
+)
 
 
 @dataclass(frozen=True)
@@ -130,6 +134,228 @@ def _evaluate_explicit_order_events(
             "source_document_refs": all_refs,
         },
     )
+
+
+def _derive_change_rows_from_daily_courses(
+    daily_course_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[Mapping[str, Any], ...], str, Mapping[str, Any] | None]:
+    """从普通病程的结构化医师签名序列推导稳定的经治医师变更。"""
+
+    eligible_count = 0
+    eligible_rows: list[Mapping[str, Any]] = []
+    timed_signed_rows: list[tuple[datetime, str, Mapping[str, Any]]] = []
+    missing_title_count = 0
+    missing_time_count = 0
+    missing_signature_count = 0
+    for row in daily_course_rows:
+        title = _clean(row.get("document_title"))
+        if not title:
+            missing_title_count += 1
+            continue
+        if _NON_ROUTINE_COURSE_TITLE_PATTERN.search(title):
+            continue
+        eligible_count += 1
+        eligible_rows.append(row)
+        record_time = _row_time(row)
+        # author_name/submitter 是文书元数据，真实病历中可能与医师签名不同；
+        # 071 只消费结构化 physician_sign，禁止用正文姓名或记录者代替签名。
+        physician_name = _clean(row.get("physician_sign"))
+        if record_time is None:
+            missing_time_count += 1
+        if not physician_name:
+            missing_signature_count += 1
+        if record_time is not None and physician_name:
+            timed_signed_rows.append((record_time, physician_name, row))
+
+    if missing_title_count or missing_time_count or missing_signature_count:
+        return (
+            (),
+            "required_field_missing",
+            {
+                "failure_kind": "physician_signature_timeline_incomplete",
+                "daily_course_record_count": len(daily_course_rows),
+                "eligible_daily_course_count": eligible_count,
+                "missing_title_count": missing_title_count,
+                "missing_time_count": missing_time_count,
+                "missing_signature_count": missing_signature_count,
+                "source_document_refs": _document_refs(
+                    (("daily_course_record", eligible_rows),)
+                ),
+            },
+        )
+
+    ordered_rows = sorted(timed_signed_rows, key=lambda item: item[0])
+    if not ordered_rows:
+        return (), "", None
+
+    runs: list[list[tuple[datetime, str, Mapping[str, Any]]]] = []
+    for item in ordered_rows:
+        if runs and runs[-1][0][1].casefold() == item[1].casefold():
+            runs[-1].append(item)
+        else:
+            runs.append([item])
+
+    current_physician = runs[0][0][1]
+    change_rows: list[Mapping[str, Any]] = []
+    for run in runs[1:]:
+        new_physician = run[0][1]
+        if new_physician.casefold() == current_physician.casefold():
+            continue
+        # 单份异名文书可能来自临时代班，不足以证明经治医师发生变更。
+        if len(run) < 2:
+            continue
+        change_time, _, first_row = run[0]
+        change_rows.append(
+            {
+                "change_datetime": change_time.isoformat(sep=" "),
+                "old_physician_name": current_physician,
+                "new_physician_name": new_physician,
+                "document_id": first_row.get("document_id") or first_row.get("id"),
+            }
+        )
+        current_physician = new_physician
+    return tuple(change_rows), "", None
+
+
+def _evaluate_derived_change_events(
+    *,
+    change_rows: Sequence[Mapping[str, Any]],
+    handoff_rows: Sequence[Mapping[str, Any]],
+    handover_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, str, dict[str, Any]]:
+    """按签名推导时间，为每次变更选择身份相符且时间最近的交接文书。"""
+
+    normalized_handoffs: list[Mapping[str, Any]] = []
+    normalized_handovers: list[Mapping[str, Any]] = []
+    for rows, field in (
+        (handoff_rows, "handoff_time"),
+        (handover_rows, "handover_time"),
+    ):
+        if any(_handoff_record_time(row, field=field) is None for row in rows):
+            return (
+                "data_gap",
+                "authoritative_time_missing",
+                {
+                    "failure_kind": "physician_handoff_record_time_missing",
+                    "change_event_count": len(change_rows),
+                    "handoff_record_count": len(handoff_rows),
+                    "handover_record_count": len(handover_rows),
+                    "handover_threshold_hours": 24,
+                    "source_document_refs": _document_refs(
+                        (("handoff_record", handoff_rows), ("handover_record", handover_rows))
+                    ),
+                },
+            )
+
+    ordered_changes = tuple(
+        sorted(change_rows, key=lambda row: _parse_datetime(row.get("change_datetime")) or datetime.min)
+    )
+    for position, change_row in enumerate(ordered_changes):
+        change_time = _parse_datetime(change_row.get("change_datetime"))
+        assert change_time is not None
+        previous_change_time = (
+            _parse_datetime(ordered_changes[position - 1].get("change_datetime"))
+            if position
+            else None
+        )
+        next_change_time = (
+            _parse_datetime(ordered_changes[position + 1].get("change_datetime"))
+            if position + 1 < len(ordered_changes)
+            else None
+        )
+        old_physicians = _identity_tokens(change_row, _OLD_PHYSICIAN_FIELDS)
+        new_physicians = _identity_tokens(change_row, _NEW_PHYSICIAN_FIELDS)
+        handoff_candidates = [
+            row
+            for row in handoff_rows
+            if _identity_tokens(row, _HANDOFF_PHYSICIAN_FIELDS).intersection(old_physicians)
+            and (record_time := _handoff_record_time(row, field="handoff_time")) is not None
+            and (previous_change_time is None or record_time >= previous_change_time)
+            and record_time <= change_time
+        ]
+        handover_candidates = [
+            row
+            for row in handover_rows
+            if _identity_tokens(row, _HANDOVER_PHYSICIAN_FIELDS).intersection(new_physicians)
+            and (record_time := _handoff_record_time(row, field="handover_time")) is not None
+            and record_time >= change_time
+            and (next_change_time is None or record_time < next_change_time)
+        ]
+        ambiguous_handoff_identity = any(
+            not _identity_tokens(row, _HANDOFF_PHYSICIAN_FIELDS)
+            and (record_time := _handoff_record_time(row, field="handoff_time")) is not None
+            and (previous_change_time is None or record_time >= previous_change_time)
+            and record_time <= change_time
+            for row in handoff_rows
+        )
+        ambiguous_handover_identity = any(
+            not _identity_tokens(row, _HANDOVER_PHYSICIAN_FIELDS)
+            and (record_time := _handoff_record_time(row, field="handover_time")) is not None
+            and record_time >= change_time
+            and (next_change_time is None or record_time < next_change_time)
+            for row in handover_rows
+        )
+        if (
+            not handoff_candidates
+            and ambiguous_handoff_identity
+            or not handover_candidates
+            and ambiguous_handover_identity
+        ):
+            return (
+                "data_gap",
+                "association_failed",
+                {
+                    "failure_kind": "physician_handoff_identity_missing",
+                    "change_event_count": len(change_rows),
+                    "change_times": [
+                        _clean(row.get("change_datetime")) for row in ordered_changes
+                    ],
+                    "handoff_record_count": len(handoff_rows),
+                    "handoff_times": [
+                        value.isoformat(sep=" ")
+                        for row in handoff_rows
+                        if (value := _handoff_record_time(row, field="handoff_time"))
+                        is not None
+                    ],
+                    "handover_record_count": len(handover_rows),
+                    "handover_times": [
+                        value.isoformat(sep=" ")
+                        for row in handover_rows
+                        if (value := _handoff_record_time(row, field="handover_time"))
+                        is not None
+                    ],
+                    "handover_threshold_hours": 24,
+                    "source_document_refs": _document_refs((
+                        ("daily_course_record", change_rows),
+                        ("handoff_record", handoff_rows),
+                        ("handover_record", handover_rows),
+                    )),
+                },
+            )
+        if handoff_candidates:
+            selected = max(
+                handoff_candidates,
+                key=lambda row: _handoff_record_time(row, field="handoff_time") or datetime.min,
+            )
+            normalized_handoffs.append({**selected, "shift_time": change_row["change_datetime"]})
+        if handover_candidates:
+            selected = min(
+                handover_candidates,
+                key=lambda row: _handoff_record_time(row, field="handover_time") or datetime.max,
+            )
+            normalized_handovers.append({**selected, "shift_time": change_row["change_datetime"]})
+
+    state, reason, facts = _evaluate_structured_change_events(
+        change_rows=change_rows,
+        handoff_rows=tuple(normalized_handoffs),
+        handover_rows=tuple(normalized_handovers),
+    )
+    facts["source_document_refs"] = _document_refs((
+        ("daily_course_record", change_rows),
+        ("handoff_record", normalized_handoffs),
+        ("handover_record", normalized_handovers),
+    ))
+    return state, reason, facts
 
 
 def _identity_tokens(
@@ -396,6 +622,8 @@ def evaluate_physician_handoff(
     physician_change_error: str,
     nondrug_order_rows: Sequence[Mapping[str, Any]],
     nondrug_order_error: str,
+    daily_course_rows: Sequence[Mapping[str, Any]],
+    daily_course_error: str,
     handoff_rows: Sequence[Mapping[str, Any]],
     handoff_error: str,
     handover_rows: Sequence[Mapping[str, Any]],
@@ -419,17 +647,31 @@ def evaluate_physician_handoff(
         change_source_key = "inpat_nondrug_order"
         effective_change_rows = explicit_change_orders
 
-    source_error = handoff_error or handover_error
     if not effective_change_rows:
-        source_error = source_error or physician_change_error or nondrug_order_error
-    if source_error:
-        return PhysicianHandoffOutcome("data_gap", source_error, change_source_key)
+        change_source_key = "daily_course_record"
+        if daily_course_error:
+            return PhysicianHandoffOutcome(
+                "data_gap", daily_course_error, change_source_key
+            )
+        effective_change_rows, derivation_error, derivation_facts = (
+            _derive_change_rows_from_daily_courses(daily_course_rows)
+        )
+        if derivation_error:
+            return PhysicianHandoffOutcome(
+                "data_gap",
+                derivation_error,
+                change_source_key,
+                derivation_facts,
+            )
     if not effective_change_rows:
         return PhysicianHandoffOutcome(
             "not_applicable",
             "trigger_absent_complete",
             change_source_key,
         )
+    source_error = handoff_error or handover_error
+    if source_error:
+        return PhysicianHandoffOutcome("data_gap", source_error, change_source_key)
 
     change_times = tuple(
         parsed
@@ -502,6 +744,18 @@ def evaluate_physician_handoff(
     if change_source_key == "inpat_nondrug_order":
         final_state, reason_code, display_facts = _evaluate_explicit_order_events(
             change_times=change_times,
+            handoff_rows=handoff_rows,
+            handover_rows=handover_rows,
+        )
+        return PhysicianHandoffOutcome(
+            final_state,
+            reason_code,
+            change_source_key,
+            display_facts,
+        )
+    if change_source_key == "daily_course_record":
+        final_state, reason_code, display_facts = _evaluate_derived_change_events(
+            change_rows=effective_change_rows,
             handoff_rows=handoff_rows,
             handover_rows=handover_rows,
         )

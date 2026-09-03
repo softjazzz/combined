@@ -29,9 +29,19 @@ from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 _QUERY_VERSIONS = {
     "physician_change_event": "snapshot-provider-physician_change_event-v1",
     "inpat_nondrug_order": "snapshot-provider-inpat_nondrug_order-v1",
+    "daily_course_record": "snapshot-provider-daily_course_record-v1",
     "handoff_record": "snapshot-provider-handoff_record-v1",
     "handover_record": "snapshot-provider-handover_record-v1",
 }
+
+
+def _daily(document_id: str, time: str | None, physician: str | None, *, title="日常病程记录"):
+    return {
+        "document_id": document_id,
+        "document_title": title,
+        "record_time": time,
+        "physician_sign": physician,
+    }
 
 
 def _handoff_session(rows_by_source, *, unavailable_sources=frozenset()):
@@ -391,3 +401,185 @@ async def test_071_invalid_business_handoff_time_does_not_fall_back_to_record_ti
     decision = result.decisions[0]
     assert decision.evidence_state is EvidenceState.DATA_GAP
     assert decision.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_071_complete_stable_daily_signature_is_not_applicable() -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                _daily("DAILY-A-2", "2026-08-21 08:00:00", "张甲"),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    decision = result.decisions[0]
+    assert decision.applicability is ApplicabilityState.NOT_APPLICABLE
+    assert decision.reason_code == "trigger_absent_complete"
+
+
+@pytest.mark.asyncio
+async def test_071_unavailable_daily_signature_source_is_data_gap() -> None:
+    result = await _execute(
+        {},
+        unavailable_sources={
+            "physician_change_event",
+            "inpat_nondrug_order",
+            "daily_course_record",
+        },
+    )
+
+    decision = result.decisions[0]
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.reason_code == "source_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_071_excludes_surgery_course_from_signature_timeline() -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                _daily("DAILY-A-2", "2026-08-21 08:00:00", "张甲"),
+                _daily(
+                    "POSTOP-B",
+                    "2026-08-22 08:00:00",
+                    None,
+                    title="术后首次病程记录",
+                ),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    assert result.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_071_single_foreign_signature_does_not_trigger_change() -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                _daily("DAILY-A-2", "2026-08-21 08:00:00", "张甲"),
+                _daily("DAILY-B-1", "2026-08-22 08:00:00", "李乙"),
+                _daily("DAILY-A-3", "2026-08-23 08:00:00", "张甲"),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    assert result.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_071_stable_signature_change_without_handoff_is_non_compliant() -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                _daily("DAILY-A-2", "2026-08-21 08:00:00", "张甲"),
+                _daily("DAILY-B-1", "2026-08-22 08:00:00", "李乙"),
+                _daily("DAILY-B-2", "2026-08-23 08:00:00", "李乙"),
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    decision = result.decisions[0]
+    assert decision.applicability is ApplicabilityState.APPLICABLE
+    assert decision.evidence_state is EvidenceState.SUFFICIENT
+    assert decision.qc_direction is QcDirection.DEFECT
+    assert decision.reason_code == "requirement_violated"
+    facts = dict(result.customer_display_facts)["LX0609-071"]
+    assert facts["change_time"] == "2026-08-22 08:00:00"
+    assert facts["source_document_refs"] == [
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "DAILY-B-1",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_071_stable_signature_change_with_timely_matching_records_is_compliant() -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                _daily("DAILY-A-2", "2026-08-21 08:00:00", "张甲"),
+                _daily("DAILY-B-1", "2026-08-22 08:00:00", "李乙"),
+                _daily("DAILY-B-2", "2026-08-23 08:00:00", "李乙"),
+            ),
+            "handoff_record": ({
+                "document_id": "HANDOFF-A",
+                "handoff_doctor": "张甲",
+                "record_time": "2026-08-22 07:30:00",
+            },),
+            "handover_record": ({
+                "document_id": "HANDOVER-B",
+                "handover_doctor": "李乙",
+                "record_time": "2026-08-22 10:00:00",
+            },),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    decision = result.decisions[0]
+    assert decision.qc_direction is QcDirection.SATISFIED
+    assert decision.reason_code == "requirement_satisfied"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing_field", ["record_time", "physician_sign"])
+async def test_071_incomplete_daily_signature_timeline_is_data_gap(
+    missing_field: str,
+) -> None:
+    incomplete = _daily("DAILY-INCOMPLETE", "2026-08-21 08:00:00", "张甲")
+    incomplete[missing_field] = None
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                incomplete,
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    decision = result.decisions[0]
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.reason_code == "required_field_missing"
+
+
+@pytest.mark.asyncio
+async def test_071_multiple_stable_signature_changes_are_checked_independently() -> None:
+    result = await _execute(
+        {
+            "daily_course_record": (
+                _daily("DAILY-A-1", "2026-08-20 08:00:00", "张甲"),
+                _daily("DAILY-A-2", "2026-08-21 08:00:00", "张甲"),
+                _daily("DAILY-B-1", "2026-08-22 08:00:00", "李乙"),
+                _daily("DAILY-B-2", "2026-08-23 08:00:00", "李乙"),
+                _daily("DAILY-C-1", "2026-08-24 08:00:00", "王丙"),
+                _daily("DAILY-C-2", "2026-08-25 08:00:00", "王丙"),
+            ),
+            "handoff_record": (
+                {"document_id": "H-A", "handoff_doctor": "张甲", "record_time": "2026-08-22 07:30:00"},
+                {"document_id": "H-B", "handoff_doctor": "李乙", "record_time": "2026-08-24 07:30:00"},
+            ),
+            "handover_record": (
+                {"document_id": "R-B", "handover_doctor": "李乙", "record_time": "2026-08-22 10:00:00"},
+                {"document_id": "R-C", "handover_doctor": "王丙", "record_time": "2026-08-24 10:00:00"},
+            ),
+        },
+        unavailable_sources={"physician_change_event", "inpat_nondrug_order"},
+    )
+
+    decision = result.decisions[0]
+    assert decision.qc_direction is QcDirection.SATISFIED
+    facts = dict(result.customer_display_facts)["LX0609-071"]
+    assert facts["verification_kind"] == "physician_handoff_multi_event_check"
+    assert facts["change_event_count"] == 2
