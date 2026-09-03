@@ -4453,8 +4453,8 @@ async def test_054_requires_action_and_reason_for_each_distinct_antimicrobial_ev
 
 
 @pytest.mark.asyncio
-async def test_054_does_not_reuse_one_course_record_for_repeated_same_drug_events() -> None:
-    _, reduced = await _evaluate(
+async def test_054_repeated_same_drug_orders_share_one_documented_use_reason() -> None:
+    result, reduced = await _evaluate(
         "LX0609-054",
         {
             "inpat_drug_order": (
@@ -4468,8 +4468,56 @@ async def test_054_does_not_reuse_one_course_record_for_repeated_same_drug_event
         },
     )
 
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-054"]
+    assert facts["reason_documented"] is True
+    assert facts["unmatched_antimicrobials"] == []
+    assert facts["association_ambiguous"] is False
+
+
+@pytest.mark.asyncio
+async def test_054_repeated_same_drug_orders_without_reason_are_non_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": (
+                {"order_id": "M-1", "generic_name": "美罗培南"},
+                {"order_id": "M-2", "generic_name": "美罗培南"},
+            ),
+            "daily_course_record": (),
+            "senior_course_record": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
+    facts = dict(result.customer_display_facts)["LX0609-054"]
+    assert facts["reason_documented"] is False
+    assert facts["unmatched_antimicrobials"] == ["美罗培南"]
+    assert facts["association_ambiguous"] is False
+
+
+@pytest.mark.asyncio
+async def test_054_unavailable_course_source_remains_data_gap() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {"inpat_drug_order": ({"generic_name": "美罗培南"},)},
+        unavailable_sources={"daily_course_record"},
+    )
+
     assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "association_failed"
+    assert reduced.reason_code == "source_unavailable"
+    assert "LX0609-054" not in dict(result.customer_display_facts)
+
+
+@pytest.mark.asyncio
+async def test_054_without_antimicrobial_is_not_applicable() -> None:
+    result, reduced = await _evaluate("LX0609-054", {"inpat_drug_order": ()})
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert "LX0609-054" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio

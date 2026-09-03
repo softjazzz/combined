@@ -535,32 +535,6 @@ def _linked_order_id(row: Mapping[str, Any]) -> str:
     )
 
 
-def _repeated_antimicrobial_association_failed(
-    order_rows: Sequence[Mapping[str, Any]],
-    course_rows: Sequence[Mapping[str, Any]],
-) -> bool:
-    """同药重复事件必须逐医嘱显式关联，不能复用一份泛化病程。"""
-
-    for name in _ANTIMICROBIALS:
-        matching_orders = tuple(
-            row for row in order_rows if name in _material_text(row)
-        )
-        if len(matching_orders) < 2:
-            continue
-        order_ids = tuple(_clean(row.get("order_id")) for row in matching_orders)
-        if not all(order_ids) or len(set(order_ids)) != len(order_ids):
-            return True
-        if any(
-            name not in _documented_antimicrobial_names(
-                tuple(row for row in course_rows if _linked_order_id(row) == order_id),
-                (name,),
-            )
-            for order_id in order_ids
-        ):
-            return True
-    return False
-
-
 def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     ordered = sorted(
         (
@@ -1292,33 +1266,25 @@ async def execute_luxian_0609_native_extended_document_rules(
                     name for name in _ANTIMICROBIALS
                     if any(name in _material_text(row) for row in antimicrobial_orders)
                 )
-                association_failed = _repeated_antimicrobial_association_failed(
-                    antimicrobial_orders, course_rows
-                )
-                documented_names = (
-                    ()
-                    if association_failed
-                    else _documented_antimicrobial_names(course_rows, used_names)
+                documented_names = _documented_antimicrobial_names(
+                    course_rows, used_names
                 )
                 unmatched_names = tuple(
                     name for name in used_names if name not in documented_names
                 )
-                complete = not association_failed and not unmatched_names
-                if association_failed:
-                    final_state, reason_code = "data_gap", "association_failed"
-                else:
-                    final_state = "compliant" if complete else "non_compliant"
-                    reason_code = (
-                        "requirement_satisfied"
-                        if complete
-                        else "requirement_violated"
-                    )
+                complete = not unmatched_names
+                final_state = "compliant" if complete else "non_compliant"
+                reason_code = (
+                    "requirement_satisfied"
+                    if complete
+                    else "requirement_violated"
+                )
                 display.append((rule_id, {
                     "verification_kind": "antimicrobial_reason_documentation_check",
                     "antimicrobials": list(used_names),
                     "reason_documented": complete,
                     "unmatched_antimicrobials": list(unmatched_names),
-                    "association_ambiguous": association_failed,
+                    "association_ambiguous": False,
                 }))
             elif rule_id == "LX0609-055":
                 order_events = tuple(
