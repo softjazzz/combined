@@ -156,6 +156,7 @@ function mountListView(overrides: Record<string, unknown> = {}) {
       activeDoctor: '全部主管医师',
       hospFilter: 'all',
       syncScope: 'all',
+      inpatientSort: 'default',
       hospitalizationStatusVerifying: false,
       hospOptions: [
         { value: 'all', label: '全部病历' },
@@ -409,6 +410,21 @@ describe('WorkstationV4ListView filters', () => {
     expect(shortcut.text()).toContain('核验当日在院')
     await shortcut.trigger('click')
     expect(wrapper.emitted('toggleTodayInpatient')).toHaveLength(1)
+  })
+
+  it('shows server-side admission sorting only for inpatient records', async () => {
+    const wrapper = mountListView({ hospFilter: 'inpatient', inpatientSort: 'longest' })
+    const sortSelect = wrapper.find('select.wv4-record-pool-filter__inpatient-sort')
+
+    expect(sortSelect.exists()).toBe(true)
+    expect((sortSelect.element as HTMLSelectElement).value).toBe('longest')
+    expect(sortSelect.text()).toContain('住院最久优先')
+
+    await sortSelect.setValue('recent')
+    expect(wrapper.emitted('selectInpatientSort')?.[0]).toEqual(['recent'])
+
+    await wrapper.setProps({ hospFilter: 'discharged', syncScope: 'all' })
+    expect(wrapper.find('select.wv4-record-pool-filter__inpatient-sort').exists()).toBe(false)
   })
 
   it('does not render the hospital-status filter for a stage queue', () => {

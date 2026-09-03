@@ -1120,6 +1120,11 @@
   padding-inline: 13px;
 }
 
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__inpatient-sort {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
 .workstation-shell .wv4-record-pool-hero .workbench-dept-select__name {
   font-weight: 600;
   letter-spacing: 0;

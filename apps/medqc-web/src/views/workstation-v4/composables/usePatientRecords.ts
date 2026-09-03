@@ -18,6 +18,7 @@ export type WorkstationDateField = 'visit' | 'admission' | 'discharge' | 'update
 export type WorkstationDateRange = [string, string] | null
 export type HospitalStatusScope = 'all' | 'inpatient' | 'discharged'
 export type RecordPoolSyncScope = 'all' | 'today_inpatient'
+export type InpatientSort = 'default' | 'longest' | 'recent'
 
 function normalizeDepartment(raw: unknown): DeptInfo {
   const source = (raw || {}) as Record<string, unknown>
@@ -90,6 +91,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const dateField = ref<WorkstationDateField>('visit')
   const hospFilter = ref<HospitalStatusScope>(initialHospitalStatus)
   const syncScope = ref<RecordPoolSyncScope>('all')
+  const inpatientSort = ref<InpatientSort>('default')
   let activeRequestSequence = 0
 
   const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
@@ -139,6 +141,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       }
       if (syncScope.value !== 'all') {
         params.sync_scope = syncScope.value
+      }
+      if (inpatientSort.value !== 'default') {
+        params.inpatient_sort = inpatientSort.value
       }
       const analyticsKeys = [
         'analytics_job_id',
@@ -238,6 +243,14 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     fetchData(1)
   }
 
+  function selectInpatientSort(value: InpatientSort) {
+    const nextValue = ['default', 'longest', 'recent'].includes(value) ? value : 'default'
+    if (inpatientSort.value === nextValue) return
+    inpatientSort.value = nextValue
+    currentPage.value = 1
+    fetchData(1)
+  }
+
   function resetFilters() {
     activeDept.value = ALL_DEPARTMENTS
     activeDoctor.value = ALL_DOCTORS
@@ -246,6 +259,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     dateField.value = 'visit'
     hospFilter.value = initialHospitalStatus
     syncScope.value = 'all'
+    inpatientSort.value = 'default'
     currentPage.value = 1
   }
 
@@ -268,6 +282,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     dateField,
     hospFilter,
     syncScope,
+    inpatientSort,
     hospOptions,
     filteredRecords,
     fetchData,
@@ -276,6 +291,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     selectDept,
     selectDoctor,
     selectHospFilter,
+    selectInpatientSort,
     resetFilters,
   }
 }

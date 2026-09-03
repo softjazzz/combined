@@ -92,6 +92,10 @@ async def get_workstation_data_api(
         "all",
         description="快捷范围：today_inpatient 仅返回今日已核验且仍在院的病历",
     ),
+    inpatient_sort: Literal["default", "longest", "recent"] = Query(
+        "default",
+        description="在院病历排序：default/longest/recent",
+    ),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),
     analytics_job_id: Optional[UUID] = Query(None, description="统计下钻的已完成根任务 ID"),
@@ -122,6 +126,7 @@ async def get_workstation_data_api(
             date_field=date_field,
             hospital_status=hospital_status,
             sync_scope=sync_scope,
+            inpatient_sort=inpatient_sort,
             page=page,
             page_size=page_size,
             analytics_job_id=str(analytics_job_id) if analytics_job_id else None,

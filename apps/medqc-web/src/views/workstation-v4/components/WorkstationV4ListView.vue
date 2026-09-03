@@ -87,6 +87,20 @@
                   />
                 </div>
 
+                <a-select
+                  v-if="!isStageQueueMode && showInpatientSort"
+                  :value="inpatientSort"
+                  class="wv4-record-pool-filter__inpatient-sort"
+                  size="large"
+                  popup-class-name="wv4-record-pool-select-popup"
+                  aria-label="在院病历排序"
+                  @update:value="emit('selectInpatientSort', normalizeInpatientSort($event))"
+                >
+                  <a-select-option value="default"> 默认排序 </a-select-option>
+                  <a-select-option value="longest"> 住院最久优先 </a-select-option>
+                  <a-select-option value="recent"> 最近入院优先 </a-select-option>
+                </a-select>
+
                 <a-button
                   v-if="!isStageQueueMode"
                   size="small"
@@ -304,7 +318,11 @@ import type { SichuanBatchJob } from '../semantic-rules/types'
 import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
 import type { DeptInfo, DoctorInfo, RecordPoolQcSummary } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
-import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
+import type {
+  InpatientSort,
+  WorkstationDateField,
+  WorkstationDateRange,
+} from '../composables/usePatientRecords'
 import { filterDepartmentOption } from '../utils/workstationFilterPresentation'
 
 interface StageMetaLike {
@@ -338,6 +356,7 @@ const props = defineProps<{
   hospFilter: string
   hospOptions: HospFilterOption[]
   syncScope: 'all' | 'today_inpatient'
+  inpatientSort: InpatientSort
   hospitalizationStatusVerifying: boolean
   workbenchRows: WorkbenchRow[]
   selectedWorkbenchKeys: string[]
@@ -368,6 +387,7 @@ const emit = defineEmits<{
   selectDept: [deptName: string]
   selectDoctor: [doctorName: string]
   selectHospFilter: [value: HospFilterValue]
+  selectInpatientSort: [value: InpatientSort]
   toggleTodayInpatient: []
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
@@ -403,6 +423,11 @@ function normalizeHospFilterValue(value: unknown): HospFilterValue {
   return normalized === 'inpatient' || normalized === 'discharged' ? normalized : 'all'
 }
 
+function normalizeInpatientSort(value: unknown): InpatientSort {
+  const normalized = String(value || 'default').trim()
+  return normalized === 'longest' || normalized === 'recent' ? normalized : 'default'
+}
+
 function filterDepartmentSelectOption(
   input: string,
   option?: { value?: unknown; label?: unknown },
@@ -413,6 +438,9 @@ function filterDepartmentSelectOption(
 const tenderValidationOpen = ref(false)
 
 const isFrontpageGenerateStage = computed(() => props.currentStageFilter === 'frontpage_generate')
+const showInpatientSort = computed(
+  () => props.hospFilter === 'inpatient' || props.syncScope === 'today_inpatient',
+)
 
 const overviewEyebrow = computed(() =>
   isFrontpageGenerateStage.value ? 'Workstation / Frontpage Generate' : 'Workstation / Record Pool',

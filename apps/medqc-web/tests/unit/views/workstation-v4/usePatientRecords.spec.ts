@@ -147,6 +147,24 @@ describe('usePatientRecords workstation filters', () => {
     })
   })
 
+  it('requests inpatient length-of-stay sorting from the first page', async () => {
+    const records = usePatientRecords()
+    records.hospFilter.value = 'inpatient'
+    records.currentPage.value = 3
+
+    records.selectInpatientSort('longest')
+    await flushPromises()
+
+    expect(records.currentPage.value).toBe(1)
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      hospital_status: 'inpatient',
+      inpatient_sort: 'longest',
+    })
+  })
+
   it('keeps backend sort time metadata for displaying newest synced records first', async () => {
     const records = usePatientRecords()
 

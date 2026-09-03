@@ -18,6 +18,7 @@
         :hosp-filter="hospFilter"
         :hosp-options="hospOptions"
         :sync-scope="syncScope"
+        :inpatient-sort="inpatientSort"
         :hospitalization-status-verifying="hospitalizationStatusVerifying"
         :workbench-rows="workbenchRows"
         :selected-workbench-keys="selectedWorkbenchKeys"
@@ -45,6 +46,7 @@
         @select-dept="selectDept"
         @select-doctor="selectDoctor"
         @select-hosp-filter="handleHospFilter"
+        @select-inpatient-sort="selectInpatientSort"
         @toggle-today-inpatient="toggleTodaySyncedInpatient"
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
@@ -458,6 +460,7 @@ const {
   dateField,
   hospFilter,
   syncScope,
+  inpatientSort,
   hospOptions,
   filteredRecords,
   fetchData,
@@ -466,6 +469,7 @@ const {
   selectDept,
   selectDoctor,
   selectHospFilter,
+  selectInpatientSort,
   resetFilters,
 } = usePatientRecords()
 const departmentSelectOptions = computed(() =>

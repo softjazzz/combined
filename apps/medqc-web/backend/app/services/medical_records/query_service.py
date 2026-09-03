@@ -331,16 +331,17 @@ def _filter_indexed_registration_records(
     return filtered
 
 
-def _workstation_python_sort_key(record) -> tuple[datetime, datetime, str]:
-    def comparable(value: Any) -> datetime | None:
-        parsed = _parse_datetime_value(value)
-        if parsed is not None and parsed.tzinfo is not None:
-            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
-        return parsed
+def _workstation_comparable_datetime(value: Any) -> datetime | None:
+    parsed = _parse_datetime_value(value)
+    if parsed is not None and parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
-    discharge = comparable(record.discharge_datetime)
-    admission = comparable(record.admission_datetime)
-    updated = comparable(record.update_time)
+
+def _workstation_python_sort_key(record) -> tuple[datetime, datetime, str]:
+    discharge = _workstation_comparable_datetime(record.discharge_datetime)
+    admission = _workstation_comparable_datetime(record.admission_datetime)
+    updated = _workstation_comparable_datetime(record.update_time)
     return (
         updated or discharge or admission or datetime.min,
         discharge or admission or datetime.min,
@@ -887,6 +888,46 @@ def _workstation_default_order_by(discharge_summary=None):
     )
 
 
+def _workstation_order_by(inpatient_sort: str, discharge_summary=None):
+    if inpatient_sort == "longest":
+        return (
+            MedicalRecordFrontpage.admission_datetime.asc().nullslast(),
+            MedicalRecordFrontpage.visit_id.asc(),
+        )
+    if inpatient_sort == "recent":
+        return (
+            MedicalRecordFrontpage.admission_datetime.desc().nullslast(),
+            MedicalRecordFrontpage.visit_id.desc(),
+        )
+    return _workstation_default_order_by(discharge_summary)
+
+
+def _workstation_sorted_records(records, inpatient_sort: str):
+    def admission_datetime(record) -> datetime | None:
+        return _workstation_comparable_datetime(record.admission_datetime)
+
+    if inpatient_sort == "longest":
+        return sorted(
+            records,
+            key=lambda record: (
+                admission_datetime(record) is None,
+                admission_datetime(record) or datetime.max,
+                str(record.visit_id or ""),
+            ),
+        )
+    if inpatient_sort == "recent":
+        return sorted(
+            records,
+            key=lambda record: (
+                admission_datetime(record) is not None,
+                admission_datetime(record) or datetime.min,
+                str(record.visit_id or ""),
+            ),
+            reverse=True,
+        )
+    return sorted(records, key=_workstation_python_sort_key, reverse=True)
+
+
 def get_workstation_data(
     dept: Optional[str] = None,
     doctor: Optional[str] = None,
@@ -896,6 +937,7 @@ def get_workstation_data(
     date_field: Optional[str] = "visit",
     hospital_status: Optional[str] = "all",
     sync_scope: Optional[str] = "all",
+    inpatient_sort: Optional[str] = "default",
     page: int = 1,
     page_size: int = 50,
     session_factory: Callable[[], Any] | None = None,
@@ -920,6 +962,14 @@ def get_workstation_data(
     normalized_sync_scope = str(sync_scope or "all").strip().lower()
     if normalized_sync_scope not in {"all", "today_inpatient"}:
         raise ValueError("sync_scope must be one of: all, today_inpatient")
+    normalized_inpatient_sort = str(inpatient_sort or "default").strip().lower()
+    if normalized_inpatient_sort not in {"default", "longest", "recent"}:
+        raise ValueError("inpatient_sort must be one of: default, longest, recent")
+    is_inpatient_scope = (
+        normalized_hospital_status == "inpatient"
+        or normalized_sync_scope == "today_inpatient"
+    )
+    effective_inpatient_sort = normalized_inpatient_sort if is_inpatient_scope else "default"
     if (
         analytics_completed_from
         and analytics_completed_to
@@ -1109,19 +1159,17 @@ def get_workstation_data(
         if real_limit > 0:
             candidate_limit = real_offset + real_limit
             frontpage_candidates = (
-                q.order_by(*_workstation_default_order_by(discharge_summary))
+                q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
                 .limit(candidate_limit)
                 .all()
             )
-            indexed_candidates = sorted(
+            indexed_candidates = _workstation_sorted_records(
                 indexed_filtered_records,
-                key=_workstation_python_sort_key,
-                reverse=True,
+                effective_inpatient_sort,
             )[:candidate_limit]
-            records = sorted(
+            records = _workstation_sorted_records(
                 [*frontpage_candidates, *indexed_candidates],
-                key=_workstation_python_sort_key,
-                reverse=True,
+                effective_inpatient_sort,
             )[real_offset : real_offset + real_limit]
 
         full_record_refs = [

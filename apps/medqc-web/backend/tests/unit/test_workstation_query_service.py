@@ -1560,6 +1560,78 @@ def test_get_workstation_data_rejects_unknown_hospital_status(workstation_sessio
         )
 
 
+def test_get_workstation_data_sorts_inpatients_by_length_of_stay_across_pages(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P-RECENT",
+            visit_id="V-RECENT",
+            name="最近入院",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 4, 10, 8, 0),
+            update_time=datetime(2026, 4, 20, 8, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P-MIDDLE",
+            visit_id="V-MIDDLE",
+            name="中间入院",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 4, 5, 8, 0),
+            update_time=datetime(2026, 4, 21, 8, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P-LONGEST",
+            visit_id="V-LONGEST",
+            name="住院最久",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 4, 1, 8, 0),
+            update_time=datetime(2026, 4, 19, 8, 0),
+        ),
+    )
+    common_kwargs = {
+        "hospital_status": "inpatient",
+        "inpatient_sort": "longest",
+        "page_size": 2,
+        "session_factory": workstation_session_factory,
+        "settings_loader": _workstation_settings_loader,
+        "demo_policy": _no_demo_policy,
+    }
+
+    first_page = get_workstation_data(page=1, **common_kwargs)
+    second_page = get_workstation_data(page=2, **common_kwargs)
+
+    assert [record["id"] for record in first_page["records"]] == [
+        "V-LONGEST",
+        "V-MIDDLE",
+    ]
+    assert [record["id"] for record in second_page["records"]] == ["V-RECENT"]
+
+    recent_first = get_workstation_data(
+        **{**common_kwargs, "inpatient_sort": "recent", "page_size": 3}
+    )
+    assert [record["id"] for record in recent_first["records"]] == [
+        "V-RECENT",
+        "V-MIDDLE",
+        "V-LONGEST",
+    ]
+
+
+def test_get_workstation_data_rejects_unknown_inpatient_sort(workstation_session_factory):
+    with pytest.raises(ValueError, match="inpatient_sort"):
+        get_workstation_data(
+            hospital_status="inpatient",
+            inpatient_sort="priority",
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+        )
+
+
 def test_get_workstation_data_today_inpatient_scope_uses_verified_status(
     workstation_session_factory,
 ):

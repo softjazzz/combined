@@ -51,6 +51,17 @@ def test_workstation_route_rejects_unknown_hospital_status(monkeypatch):
     assert response.status_code == 422
 
 
+def test_workstation_route_rejects_unknown_inpatient_sort(monkeypatch):
+    client = _client_for_workstation_auth(
+        monkeypatch,
+        user={"id": "reader-1", "roles": ["read_only_observer"]},
+    )
+
+    response = client.get("/api/medical-records/workstation?inpatient_sort=priority")
+
+    assert response.status_code == 422
+
+
 def test_workstation_route_forwards_attending_physician_filter(monkeypatch):
     captured = {}
     app = FastAPI()
