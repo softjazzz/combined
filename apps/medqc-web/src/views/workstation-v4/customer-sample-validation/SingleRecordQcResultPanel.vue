@@ -12,20 +12,6 @@
           <strong>质控结果</strong>
           <span data-testid="single-record-result-summary">{{ resultExecutionSummary }}</span>
         </div>
-        <button
-          type="button"
-          class="debug-copy-button"
-          data-testid="copy-qc-debug-results"
-          :disabled="!viewItems.length || debugCopying"
-          @click="copyDebugResults"
-        >
-          <Copy
-            aria-hidden="true"
-            :size="14"
-            :stroke-width="2"
-          />
-          {{ debugCopying ? '复制中' : '复制脱敏调试信息' }}
-        </button>
       </div>
       <template v-if="viewItems.length">
         <div
@@ -265,6 +251,23 @@
               </span>
             </span>
           </span>
+        </button>
+        <button
+          v-if="isDocumentGroupExpandedForItem(item.key)"
+          type="button"
+          class="result-row-debug-copy"
+          data-testid="copy-single-qc-debug-result"
+          title="复制本条脱敏调试信息"
+          :aria-label="`复制${item.rule_name}的脱敏调试信息`"
+          :disabled="Boolean(debugCopyingKey)"
+          @click="copySingleDebugResult(item)"
+        >
+          <Copy
+            aria-hidden="true"
+            :size="13"
+            :stroke-width="2"
+          />
+          <span>{{ debugCopyingKey === item.key ? '复制中' : '复制本条' }}</span>
         </button>
 
         <section
@@ -978,19 +981,19 @@ const DetailBlock = defineComponent({
 })
 
 const viewItems = computed(() => buildSingleRecordQcResultItems(props.items))
-const debugCopying = ref(false)
+const debugCopyingKey = ref('')
 
-async function copyDebugResults() {
-  if (!props.items.length || debugCopying.value) return
-  debugCopying.value = true
+async function copySingleDebugResult(item: SingleRecordQcResultViewItem) {
+  if (debugCopyingKey.value) return
+  debugCopyingKey.value = item.key
   try {
     const copied = await copyQcResultDebugText(
-      buildQcResultDebugText(viewItems.value, props.debugContext),
+      buildQcResultDebugText([item], props.debugContext),
     )
-    if (copied) message.success('脱敏后的质控结论和判定依据已复制')
+    if (copied) message.success('本条脱敏质控调试信息已复制')
     else message.error('复制失败，请检查浏览器剪贴板权限')
   } finally {
-    debugCopying.value = false
+    debugCopyingKey.value = ''
   }
 }
 
@@ -1277,39 +1280,6 @@ watch(
   font-size: 12px;
   line-height: 18px;
   color: rgba(29, 29, 31, 0.58);
-}
-
-.debug-copy-button {
-  display: inline-flex;
-  min-height: 30px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid rgba(0, 102, 204, 0.18);
-  border-radius: 8px;
-  background: rgba(0, 102, 204, 0.06);
-  padding: 5px 9px;
-  color: #0066cc;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 18px;
-  transition:
-    border-color 180ms ease,
-    background 180ms ease,
-    box-shadow 180ms ease;
-  white-space: nowrap;
-}
-
-.debug-copy-button:hover:not(:disabled) {
-  border-color: rgba(0, 102, 204, 0.34);
-  background: rgba(0, 102, 204, 0.1);
-  box-shadow: 0 2px 7px rgba(0, 102, 204, 0.09);
-}
-
-.debug-copy-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
 }
 
 .result-tabs {
@@ -1632,6 +1602,43 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  padding-right: 78px;
+}
+
+.result-row-debug-copy {
+  position: absolute;
+  z-index: 3;
+  top: 10px;
+  right: 11px;
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0 8px;
+  color: rgba(29, 29, 31, 0.62);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+  white-space: nowrap;
+}
+
+.result-row-debug-copy:hover:not(:disabled) {
+  border-color: rgba(0, 102, 204, 0.28);
+  background: #f5f9ff;
+  color: #0066cc;
+}
+
+.result-row-debug-copy:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .result-row-meta {

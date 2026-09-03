@@ -185,7 +185,7 @@ const explainedDataGapItem = {
 }
 
 describe('SingleRecordQcResultPanel', () => {
-  it('一键复制全部质控结论和服务端判定依据用于调试', async () => {
+  it('只复制当前一条脱敏质控结果，不导出整份病历的其他规则', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -202,7 +202,8 @@ describe('SingleRecordQcResultPanel', () => {
       },
     })
 
-    await wrapper.get('[data-testid="copy-qc-debug-results"]').trigger('click')
+    expect(wrapper.find('[data-testid="copy-qc-debug-results"]').exists()).toBe(false)
+    await wrapper.findAll('[data-testid="copy-single-qc-debug-result"]')[0]!.trigger('click')
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
 
     const copied = String(writeText.mock.calls[0]?.[0] || '')
@@ -210,7 +211,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(copied).toContain('质控结论：主诉共14字')
     expect(copied).toContain('受控子结论 criterion_results')
     expect(copied).toContain('关键证据 evidence')
-    expect(copied).toContain('LX0609-003 手术记录：手术后24小时内是否完成')
+    expect(copied).not.toContain('LX0609-003 手术记录：手术后24小时内是否完成')
+    expect(copied).toContain('结果数量：1')
     expect(copied).toContain('格式版本：medqc-qc-debug-v4-redacted-minimal')
     expect(copied).toContain('患者ID：患者-001')
     expect(copied).toContain('就诊ID：就诊-001')
@@ -244,7 +246,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-result-conclusion"]').text()).not.toContain(
       analysis,
     )
-    await wrapper.get('[data-testid="copy-qc-debug-results"]').trigger('click')
+    await wrapper.get('[data-testid="copy-single-qc-debug-result"]').trigger('click')
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
 
     const copied = String(writeText.mock.calls[0]?.[0] || '')
