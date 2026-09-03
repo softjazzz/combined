@@ -230,6 +230,25 @@ class MedicalRecordFrontpage(AuditMixin, PatientBasicMixin, Base):
     )
 
 
+class HospitalizationStatusProjection(Base):
+    """病历池当前住院状态投影；仅保存最近一次轻量核验结果。"""
+
+    __tablename__ = "hospitalization_status_projection"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    status = Column(String(20), nullable=False, comment="inpatient/discharged/unknown")
+    verified_at = Column(DateTime, nullable=False, comment="状态核验时间")
+    source = Column(String(100), nullable=False, comment="核验事实来源")
+    discharge_datetime = Column(DateTime, comment="明确出院时间")
+    update_time = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_hospitalization_status_verified", "status", "verified_at"),
+    )
+
+
 # ==================== 4. 病案首页手术记录明细 ====================
 
 class MrSurgery(AuditMixin, Base):

@@ -109,7 +109,7 @@
               class="batch-table-panel__avatar"
               :src="patientAvatarSrc(record)"
               :alt="`${record.patientName || '患者'}头像`"
-            >
+            />
             <span class="batch-table-panel__patient-meta">
               <span class="batch-table-panel__patient-name">
                 {{ record.patientName }}
@@ -147,13 +147,9 @@
           <div class="batch-table-panel__hospitalization">
             <span
               class="batch-table-panel__hospitalization-status"
-              :class="
-                isDischargedRecord(record)
-                  ? 'batch-table-panel__hospitalization-status--discharged'
-                  : 'batch-table-panel__hospitalization-status--inpatient'
-              "
+              :class="hospitalizationStatusClass(record)"
             >
-              {{ isDischargedRecord(record) ? '已出院' : '在院' }}
+              {{ hospitalizationStatusLabel(record) }}
             </span>
             <span class="batch-table-panel__date-pair">
               <span class="batch-table-panel__date-line">
@@ -163,11 +159,7 @@
               <span class="batch-table-panel__date-line">
                 <span class="batch-table-panel__date-label">出院</span>
                 <span :class="{ 'batch-table-panel__date-pending': !isDischargedRecord(record) }">
-                  {{
-                    isDischargedRecord(record)
-                      ? displayHospitalDate(record.dischargeDate)
-                      : '尚未出院'
-                  }}
+                  {{ dischargeDateLabel(record) }}
                 </span>
               </span>
             </span>
@@ -213,6 +205,8 @@ export interface WorkbenchRow {
   riskReason: string
   admissionDate?: string
   dischargeDate?: string
+  hospitalizationStatus?: 'inpatient' | 'discharged' | 'unknown'
+  hospitalizationStatusVerifiedAt?: string
   updatedAt: string
   isDemo: boolean
   sourceState?: RecordSourceState
@@ -356,6 +350,35 @@ function displayHospitalDate(value?: string) {
 
 function isDischargedRecord(record: Pick<WorkbenchRow, 'dischargeDate'>) {
   return displayHospitalDate(record.dischargeDate) !== '-'
+}
+
+type HospitalizationRow = Pick<
+  WorkbenchRow,
+  'dischargeDate' | 'hospitalizationStatus' | 'hospitalizationStatusVerifiedAt'
+>
+
+function resolvedHospitalizationStatus(record: HospitalizationRow) {
+  if (record.hospitalizationStatus) return record.hospitalizationStatus
+  return isDischargedRecord(record) ? 'discharged' : 'inpatient'
+}
+
+function hospitalizationStatusLabel(record: HospitalizationRow) {
+  const status = resolvedHospitalizationStatus(record)
+  if (status === 'discharged') return '已出院'
+  if (status === 'unknown') return '待核验'
+  return '在院'
+}
+
+function hospitalizationStatusClass(record: HospitalizationRow) {
+  return `batch-table-panel__hospitalization-status--${resolvedHospitalizationStatus(record)}`
+}
+
+function dischargeDateLabel(record: HospitalizationRow) {
+  if (isDischargedRecord(record)) return displayHospitalDate(record.dischargeDate)
+  const status = resolvedHospitalizationStatus(record)
+  if (status === 'discharged') return '时间待同步'
+  if (status === 'unknown') return '状态待核验'
+  return '尚未出院'
 }
 
 function stageTagClass(stageStatus: string) {
@@ -616,6 +639,12 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel__hospitalization-status--discharged {
   background: rgba(22, 163, 74, 0.1);
   color: #15803d;
+}
+
+.batch-table-panel__hospitalization-status--unknown {
+  border-color: rgba(203, 213, 225, 0.9);
+  background: rgba(248, 250, 252, 0.96);
+  color: #64748b;
 }
 
 .batch-table-panel__date-pair {

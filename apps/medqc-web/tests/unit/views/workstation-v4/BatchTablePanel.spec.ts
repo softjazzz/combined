@@ -91,6 +91,17 @@ function mountTable() {
 }
 
 describe('BatchTablePanel 病历池列表', () => {
+  it('shows an unverified status without claiming that the patient is inpatient', () => {
+    const wrapper = mountTable()
+    const row = wrapper.props('rows')[0]
+    row.hospitalizationStatus = 'unknown'
+    row.dischargeDate = '-'
+    return wrapper.setProps({ rows: [row] }).then(() => {
+      expect(wrapper.text()).toContain('待核验')
+      expect(wrapper.text()).not.toContain('尚未出院')
+    })
+  })
+
   it('renders task progress directly below the action toolbar and before the table', () => {
     const wrapper = mount(BatchTablePanel, {
       props: {

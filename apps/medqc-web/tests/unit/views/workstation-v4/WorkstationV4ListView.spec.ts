@@ -155,6 +155,8 @@ function mountListView(overrides: Record<string, unknown> = {}) {
       ],
       activeDoctor: '全部主管医师',
       hospFilter: 'all',
+      syncScope: 'all',
+      hospitalizationStatusVerifying: false,
       hospOptions: [
         { value: 'all', label: '全部病历' },
         { value: 'inpatient', label: '在院' },
@@ -398,6 +400,15 @@ describe('WorkstationV4ListView filters', () => {
     await hospitalSelect.setValue('discharged')
 
     expect(wrapper.emitted('selectHospFilter')?.[0]).toEqual(['discharged'])
+  })
+
+  it('offers a dedicated lightweight verification shortcut for patients still hospitalized today', async () => {
+    const wrapper = mountListView()
+    const shortcut = wrapper.find('.wv4-record-pool-filter__sync-shortcut')
+
+    expect(shortcut.text()).toContain('核验当日在院')
+    await shortcut.trigger('click')
+    expect(wrapper.emitted('toggleTodayInpatient')).toHaveLength(1)
   })
 
   it('does not render the hospital-status filter for a stage queue', () => {

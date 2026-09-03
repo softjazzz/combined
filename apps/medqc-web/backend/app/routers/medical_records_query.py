@@ -14,9 +14,24 @@ from ..services.medical_records.query_service import (
     get_workstation_data,
     list_medical_records,
 )
+from ..services.medical_records.hospitalization_status_service import (
+    default_hospitalization_status_service,
+)
 from .medical_records_common import raise_medical_records_http_error
 
 router = APIRouter(tags=["病案数据-查询"])
+
+
+@router.post("/workstation/hospitalization-status/verify")
+async def verify_workstation_hospitalization_status(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """轻量核验病历池病例当前是否仍在院，不同步病历文书。"""
+
+    try:
+        return default_hospitalization_status_service.verify_current_statuses()
+    except Exception as exc:
+        raise_medical_records_http_error(exc)
 
 
 @router.get("/list")
@@ -75,7 +90,7 @@ async def get_workstation_data_api(
     ),
     sync_scope: Literal["all", "today_inpatient"] = Query(
         "all",
-        description="同步范围：today_inpatient 仅返回今日本地完整同步且仍在院的病历",
+        description="快捷范围：today_inpatient 仅返回今日已核验且仍在院的病历",
     ),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),

@@ -15,6 +15,9 @@ export interface PatientRecord {
   department: string
   admissionDate: string
   dischargeDate: string
+  hospitalizationStatus?: 'inpatient' | 'discharged' | 'unknown'
+  hospitalizationStatusVerifiedAt?: string
+  hospitalizationStatusSource?: string
   updateTime?: string
   sortTime?: string
   days: number

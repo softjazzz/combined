@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Optional
 
-from sqlalchemy import DateTime, String, and_, case, cast, func, inspect as sa_inspect, or_, text
+from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text
 from sqlalchemy.orm import Session
 
 from ...database.connection import engine
@@ -16,6 +16,7 @@ from ...database.repository import get_repository
 from ...database.models.cdm import (
     AdmissionRecord,
     DischargeRecord,
+    HospitalizationStatusProjection,
     InpatRegistration,
     MedicalRecordFrontpage,
     QCResult,
@@ -50,6 +51,37 @@ def _workstation_identity_condition():
         MedicalRecordFrontpage.visit_id.is_not(None),
         MedicalRecordFrontpage.visit_id != "",
     )
+
+
+def _hospital_today() -> date:
+    return datetime.now(timezone(timedelta(hours=8))).date()
+
+
+def _projection_matches_frontpage(*, status: str | None = None, verified_today: bool = False):
+    conditions = [
+        HospitalizationStatusProjection.institute_id == MedicalRecordFrontpage.institute_id,
+        HospitalizationStatusProjection.patient_id == MedicalRecordFrontpage.patient_id,
+        HospitalizationStatusProjection.visit_id == MedicalRecordFrontpage.visit_id,
+    ]
+    if status:
+        conditions.append(HospitalizationStatusProjection.status == status)
+    if verified_today:
+        conditions.append(func.date(HospitalizationStatusProjection.verified_at) == _hospital_today())
+    return exists().where(and_(*conditions))
+
+
+def _load_hospitalization_projection_map(
+    session: Session,
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    return {
+        (str(row.institute_id), str(row.patient_id), str(row.visit_id)): {
+            "status": str(row.status or "unknown"),
+            "verified_at": row.verified_at,
+            "source": str(row.source or ""),
+            "discharge_datetime": row.discharge_datetime,
+        }
+        for row in session.query(HospitalizationStatusProjection).all()
+    }
 
 
 def list_medical_records(
@@ -233,6 +265,8 @@ def _filter_indexed_registration_records(
     end_date: Optional[date],
     date_field: Optional[str],
     hospital_status: str,
+    sync_scope: str,
+    hospitalization_projection_map: dict[tuple[str, str, str], dict[str, Any]],
 ) -> list[SimpleNamespace]:
     normalized_doctor = str(doctor or "").strip()
     normalized_keyword = str(keyword or "").strip().lower()
@@ -248,6 +282,16 @@ def _filter_indexed_registration_records(
 
     filtered: list[SimpleNamespace] = []
     for record in records:
+        identity = (str(record.institute_id), str(record.patient_id), str(record.visit_id))
+        projection = hospitalization_projection_map.get(identity) or {}
+        projection_status = str(projection.get("status") or "")
+        verified_at = _parse_datetime_value(projection.get("verified_at"))
+        if sync_scope == "today_inpatient" and not (
+            projection_status == "inpatient"
+            and verified_at is not None
+            and verified_at.date() == _hospital_today()
+        ):
+            continue
         department = record.discharge_dept_name or record.admission_dept_name or ""
         if dept and department != dept:
             continue
@@ -271,11 +315,15 @@ def _filter_indexed_registration_records(
                 )
             if not date_matches:
                 continue
-        discharged = (
+        locally_discharged = (
             _parse_datetime_value(record.discharge_datetime) is not None
             or bool(getattr(record, "_has_discharge_record", False))
         )
-        if hospital_status == "inpatient" and discharged:
+        discharged = projection_status == "discharged" or locally_discharged
+        inpatient = not locally_discharged and (
+            projection_status == "inpatient" or not projection_status
+        )
+        if hospital_status == "inpatient" and not inpatient:
             continue
         if hospital_status == "discharged" and not discharged:
             continue
@@ -307,6 +355,7 @@ def _serialize_real_workstation_record(
     frontpage_generate_state_map: dict[str, dict[str, Any]],
     discharge_summary_map: dict[str, dict[str, Any]],
     latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+    hospitalization_projection_map: dict[tuple[str, str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     key = _workstation_record_key(record.institute_id, record.patient_id, record.visit_id)
     if not key:
@@ -323,6 +372,9 @@ def _serialize_real_workstation_record(
         or ""
     )
     qc_info = status_map.get(key)
+    hospitalization_projection = hospitalization_projection_map.get(
+        (str(record.institute_id), str(record.patient_id), str(record.visit_id))
+    ) or {}
     if qc_info is None:
         record_status = "pending"
     elif qc_info["has_error"]:
@@ -378,6 +430,13 @@ def _serialize_real_workstation_record(
         "dischargeDate": resolved_discharge_datetime.strftime("%Y-%m-%d") if resolved_discharge_datetime else "",
         "admissionDateDisplay": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
         "dischargeDateDisplay": resolved_discharge_datetime.strftime("%m-%d") if resolved_discharge_datetime else "",
+        "hospitalizationStatus": hospitalization_projection.get("status"),
+        "hospitalizationStatusVerifiedAt": (
+            hospitalization_projection["verified_at"].strftime("%Y-%m-%d %H:%M:%S")
+            if hospitalization_projection.get("verified_at")
+            else ""
+        ),
+        "hospitalizationStatusSource": hospitalization_projection.get("source") or "",
         "updateTime": record.update_time.strftime("%Y-%m-%d %H:%M:%S") if record.update_time else "",
         "sortTime": sort_time.strftime("%Y-%m-%d %H:%M:%S") if sort_time else "",
         "days": hospital_days,
@@ -779,17 +838,33 @@ def _apply_workstation_filters(
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
         raise ValueError("hospital_status must be one of: all, inpatient, discharged")
+    has_projection = _projection_matches_frontpage()
     if normalized_hospital_status == "discharged":
-        query = query.filter(_workstation_is_discharged_expr(discharge_summary))
+        query = query.filter(
+            or_(
+                _workstation_is_discharged_expr(discharge_summary),
+                _projection_matches_frontpage(status="discharged"),
+            )
+        )
     elif normalized_hospital_status == "inpatient":
-        query = query.filter(~_workstation_is_discharged_expr(discharge_summary))
+        query = query.filter(
+            and_(
+                ~_workstation_is_discharged_expr(discharge_summary),
+                or_(
+                    _projection_matches_frontpage(status="inpatient"),
+                    ~has_projection,
+                ),
+            )
+        )
     normalized_sync_scope = str(sync_scope or "all").strip().lower()
     if normalized_sync_scope not in {"all", "today_inpatient"}:
         raise ValueError("sync_scope must be one of: all, today_inpatient")
     if normalized_sync_scope == "today_inpatient":
-        query = query.filter(~_workstation_is_discharged_expr(discharge_summary))
         query = query.filter(
-            func.date(MedicalRecordFrontpage.local_sync_completed_at) == date.today()
+            and_(
+                ~_workstation_is_discharged_expr(discharge_summary),
+                _projection_matches_frontpage(status="inpatient", verified_today=True),
+            )
         )
     return query
 
@@ -868,6 +943,7 @@ def get_workstation_data(
 
     with session_factory() as session:
         settings, _ = settings_loader()
+        hospitalization_projection_map = _load_hospitalization_projection_map(session)
         indexed_registration_records = _load_indexed_registration_records(session)
         real_total_count = (
             session.query(func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
@@ -884,8 +960,7 @@ def get_workstation_data(
                 == (normalized_hospital_status == "discharged")
             ]
         if normalized_sync_scope == "today_inpatient":
-            # 没有主记录的索引/演示数据不存在本地完整同步时间，不能混入该快捷范围。
-            indexed_registration_records = []
+            # 演示数据没有可核验的源库住院状态，不能混入该快捷范围。
             visible_demos = []
         discharge_summary = _workstation_discharge_summary_subquery(session)
 
@@ -918,6 +993,8 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
+            sync_scope=normalized_sync_scope,
+            hospitalization_projection_map=hospitalization_projection_map,
         )
         if any(
             (
@@ -1144,6 +1221,8 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
+            sync_scope=normalized_sync_scope,
+            hospitalization_projection_map=hospitalization_projection_map,
         )
         indexed_department_totals = Counter(
             str(row.discharge_dept_name or row.admission_dept_name or "")
@@ -1214,6 +1293,8 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
+            sync_scope=normalized_sync_scope,
+            hospitalization_projection_map=hospitalization_projection_map,
         )
         indexed_doctor_totals = Counter(
             str(row.attending_physician_sign or "").strip()
@@ -1296,6 +1377,7 @@ def get_workstation_data(
                 frontpage_generate_state_map,
                 discharge_summary_map,
                 latest_qc_summary_map,
+                hospitalization_projection_map,
             )
             if not item:
                 continue

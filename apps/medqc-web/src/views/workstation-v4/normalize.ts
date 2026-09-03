@@ -160,6 +160,23 @@ export function normalizeRecord(raw: unknown): PatientRecord {
       '未分科室',
     admissionDate,
     dischargeDate,
+    hospitalizationStatus: (() => {
+      const status = pickString(source, [
+        'hospitalizationStatus',
+        'hospitalization_status',
+      ]).toLowerCase()
+      return status === 'inpatient' || status === 'discharged' || status === 'unknown'
+        ? status
+        : undefined
+    })(),
+    hospitalizationStatusVerifiedAt:
+      pickString(source, [
+        'hospitalizationStatusVerifiedAt',
+        'hospitalization_status_verified_at',
+      ]) || undefined,
+    hospitalizationStatusSource:
+      pickString(source, ['hospitalizationStatusSource', 'hospitalization_status_source']) ||
+      undefined,
     updateTime: updateTime || undefined,
     sortTime: sortTime || undefined,
     days: asNumber(

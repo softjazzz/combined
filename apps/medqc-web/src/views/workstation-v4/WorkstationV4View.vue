@@ -18,6 +18,7 @@
         :hosp-filter="hospFilter"
         :hosp-options="hospOptions"
         :sync-scope="syncScope"
+        :hospitalization-status-verifying="hospitalizationStatusVerifying"
         :workbench-rows="workbenchRows"
         :selected-workbench-keys="selectedWorkbenchKeys"
         :table-summary-text="tableSummaryText"
@@ -277,10 +278,7 @@
               <span class="paste-frontpage-preset__title">{{ preset.title }}</span>
               <span class="paste-frontpage-preset__subtitle">{{ preset.subtitle }}</span>
               <span class="paste-frontpage-preset__tags">
-                <span
-                  v-for="tag in preset.tags"
-                  :key="tag"
-                >{{ tag }}</span>
+                <span v-for="tag in preset.tags" :key="tag">{{ tag }}</span>
               </span>
             </button>
           </div>
@@ -293,10 +291,7 @@
           show-count
           :disabled="frontpageGenerating"
         />
-        <div
-          v-if="frontpageGenerating"
-          class="paste-frontpage-progress"
-        >
+        <div v-if="frontpageGenerating" class="paste-frontpage-progress">
           <FrontpageWorkspacePanel
             :generating="frontpageGenerating"
             :post-processing="frontpagePostProcessing"
@@ -319,9 +314,7 @@
           >
             清空
           </a-button>
-          <a-button @click="handlePasteFrontpageCancel">
-            取消
-          </a-button>
+          <a-button @click="handlePasteFrontpageCancel"> 取消 </a-button>
           <a-button
             type="primary"
             :loading="frontpageGenerating"
@@ -856,7 +849,7 @@ const scopeStatusText = computed(() => {
     parts.push(activeHospLabel.value)
   }
   if (isTodaySyncedInpatientScope.value) {
-    parts.push('今日同步·在院')
+    parts.push('当日在院·已核验')
   }
   if (currentStageFilter.value) {
     parts.push(stageMeta.value.tableTitle)
@@ -940,6 +933,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
     riskReason: priorityReason(record),
     admissionDate: record.admissionDate || '-',
     dischargeDate: record.dischargeDate || '-',
+    hospitalizationStatus: record.hospitalizationStatus,
+    hospitalizationStatusVerifiedAt: record.hospitalizationStatusVerifiedAt,
     updatedAt:
       record.sortTime || record.updateTime || record.dischargeDate || record.admissionDate || '-',
     isDemo: isDemoRecord(record),
@@ -965,7 +960,7 @@ const tableSummaryText = computed(() => {
     parts.push(activeHospLabel.value)
   }
   if (isTodaySyncedInpatientScope.value) {
-    parts.push('今日同步·在院')
+    parts.push('当日在院·已核验')
   }
   return parts.join(' / ')
 })
@@ -2426,13 +2421,41 @@ function handleHospFilter(value: 'all' | 'inpatient' | 'discharged') {
   selectHospFilter(value)
 }
 
-function toggleTodaySyncedInpatient() {
+const hospitalizationStatusVerifying = ref(false)
+
+async function toggleTodaySyncedInpatient() {
   const enabled = syncScope.value !== 'today_inpatient'
-  syncScope.value = enabled ? 'today_inpatient' : 'all'
-  hospFilter.value = enabled ? 'inpatient' : 'all'
+  if (!enabled) {
+    syncScope.value = 'all'
+    hospFilter.value = 'all'
+    selectedWorkbenchKeys.value = []
+    currentPage.value = 1
+    await fetchData(1)
+    return
+  }
+  hospitalizationStatusVerifying.value = true
+  try {
+    const { data } = await apiClient.post<{
+      total: number
+      inpatient: number
+      discharged: number
+      unknown: number
+    }>('/api/medical-records/workstation/hospitalization-status/verify')
+    syncScope.value = 'today_inpatient'
+    hospFilter.value = 'inpatient'
+    message.success(
+      `已核验 ${data.total} 份：在院 ${data.inpatient}，已出院 ${data.discharged}，待确认 ${data.unknown}`,
+    )
+  } catch (error) {
+    console.error('核验病历住院状态失败:', error)
+    message.error('住院状态核验失败，已保留原筛选和上次核验结果')
+    return
+  } finally {
+    hospitalizationStatusVerifying.value = false
+  }
   selectedWorkbenchKeys.value = []
   currentPage.value = 1
-  void fetchData(1)
+  await fetchData(1)
 }
 
 function goToFinalRecords() {

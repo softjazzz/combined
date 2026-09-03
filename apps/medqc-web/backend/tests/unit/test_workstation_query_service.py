@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database.connection import Base
 from app.database.models.cdm import (
     AdmissionRecord,
+    HospitalizationStatusProjection,
     InpatRegistration,
     MedicalRecordFrontpage,
     QCResult,
@@ -120,6 +121,7 @@ def workstation_session_factory(monkeypatch):
             MedicalRecordFrontpage.__table__,
             InpatRegistration.__table__,
             AdmissionRecord.__table__,
+            HospitalizationStatusProjection.__table__,
             QCResult.__table__,
         ],
     )
@@ -166,6 +168,7 @@ def workstation_session_factory_without_discharge_record(monkeypatch):
             MedicalRecordFrontpage.__table__,
             InpatRegistration.__table__,
             AdmissionRecord.__table__,
+            HospitalizationStatusProjection.__table__,
             QCResult.__table__,
         ],
     )
@@ -1557,10 +1560,10 @@ def test_get_workstation_data_rejects_unknown_hospital_status(workstation_sessio
         )
 
 
-def test_get_workstation_data_today_inpatient_scope_uses_local_sync_time(
+def test_get_workstation_data_today_inpatient_scope_uses_verified_status(
     workstation_session_factory,
 ):
-    """快捷范围只保留今日本地完整同步且仍在院的主记录。"""
+    """快捷范围只保留今日由轻量状态核验确认仍在院的记录。"""
 
     today = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
     _insert_workstation_records(
@@ -1573,6 +1576,31 @@ def test_get_workstation_data_today_inpatient_scope_uses_local_sync_time(
             admission_dept_name="内科",
             admission_datetime=today,
             local_sync_completed_at=today,
+        ),
+        HospitalizationStatusProjection(
+            institute_id="I",
+            patient_id="P-TODAY",
+            visit_id="V-TODAY-INPATIENT",
+            status="inpatient",
+            verified_at=today,
+            source="inpat_registration",
+        ),
+        HospitalizationStatusProjection(
+            institute_id="I",
+            patient_id="P-OLD",
+            visit_id="V-OLD-INPATIENT",
+            status="inpatient",
+            verified_at=today - timedelta(days=1),
+            source="inpat_registration",
+        ),
+        HospitalizationStatusProjection(
+            institute_id="I",
+            patient_id="P-DISCHARGED",
+            visit_id="V-TODAY-DISCHARGED",
+            status="discharged",
+            verified_at=today,
+            source="discharge_record",
+            discharge_datetime=today,
         ),
         MedicalRecordFrontpage(
             institute_id="I",
