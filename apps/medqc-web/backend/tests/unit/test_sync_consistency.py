@@ -17,6 +17,7 @@ from app.database.models.cdm import (
     HandoffRecord,
     HandoverRecord,
     InpatDrugOrder,
+    InpatNondrugOrder,
     SurgeryRecord,
 )
 from app.services import etl_sync, mongo_sync, sync_run_history
@@ -2120,6 +2121,74 @@ def test_inpatient_drug_order_preserves_planned_start_separately_from_prescribed
     assert columns["planned_start_datetime"].comment == "计划开始/启用时间（非实际给药时间）"
 
 
+def test_upsert_to_local_preserves_nondrug_order_lifecycle_times(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "order_id",
+                "prescribed_datetime",
+                "planned_start_datetime",
+                "planned_end_datetime",
+                "order_status",
+                "order_name",
+            ],
+            ["institute_id", "patient_id", "visit_id", "order_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="inpat_nondrug_order",
+        records=[{
+            "institute_id": "A",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "order_id": "O1",
+            "prescribed_time": "2026-08-11 12:30:51+08",
+            "planned_start_time": "2026-08-11 12:29:14+08",
+            "planned_end_time": "2026-08-13 09:10:00+08",
+            "order_status": "停止",
+            "order_name": "病危",
+        }],
+        primary_keys=["patient_id", "visit_id", "order_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["prescribed_datetime"] == "2026-08-11 12:30:51+08"
+    assert executed_params[0]["planned_start_datetime"] == "2026-08-11 12:29:14+08"
+    assert executed_params[0]["planned_end_datetime"] == "2026-08-13 09:10:00+08"
+
+
+def test_inpatient_nondrug_order_preserves_lifecycle_times():
+    columns = InpatNondrugOrder.__table__.columns
+
+    assert "prescribed_datetime" in columns
+    assert "planned_start_datetime" in columns
+    assert "planned_end_datetime" in columns
+
+
 def test_upsert_to_local_keeps_transfer_record_structured_fields(monkeypatch):
     executed_params: list[dict] = []
 
@@ -3346,6 +3415,7 @@ def test_upsert_to_local_refuses_partial_full_visit_reload_before_delete(monkeyp
         "20260819_000036_preserve_consent_and_exam_master_contracts.py",
         "20260821_000037_preserve_consultation_and_handoff_facts.py",
         "20260824_000038_preserve_drug_order_planned_start.py",
+        "20260903_000043_preserve_nondrug_order_lifecycle_times.py",
     ),
 )
 def test_sync_contract_migrations_never_mutate_public_source_in_split_mode(monkeypatch, filename):
@@ -3446,3 +3516,44 @@ def test_drug_order_planned_start_migration_is_idempotent_and_cdm_only(monkeypat
     migration.upgrade()
 
     assert added == [("cdm", "inpat_drug_order", "planned_start_datetime")]
+
+
+def test_nondrug_order_lifecycle_migration_is_idempotent_and_cdm_only(monkeypatch):
+    migration = _load_migration_module(
+        "20260903_000043_preserve_nondrug_order_lifecycle_times.py"
+    )
+    existing = {"inpat_nondrug_order": set()}
+    added: list[tuple[str, str, str]] = []
+
+    class _Inspector:
+        @staticmethod
+        def get_schema_names():
+            return ["public", "cdm"]
+
+        @staticmethod
+        def get_table_names(*, schema):
+            assert schema == "cdm"
+            return list(existing)
+
+        @staticmethod
+        def get_columns(table_name, *, schema):
+            assert schema == "cdm"
+            return [{"name": name} for name in existing[table_name]]
+
+    def _add_column(table_name, column, *, schema):
+        assert schema == "cdm"
+        added.append((schema, table_name, column.name))
+        existing[table_name].add(column.name)
+
+    monkeypatch.setenv("DB_SCHEMA_MODE", "split")
+    monkeypatch.setattr(migration.op, "get_bind", lambda: object())
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: _Inspector())
+    monkeypatch.setattr(migration.op, "add_column", _add_column)
+
+    migration.upgrade()
+    migration.upgrade()
+
+    assert added == [
+        ("cdm", "inpat_nondrug_order", "planned_start_datetime"),
+        ("cdm", "inpat_nondrug_order", "planned_end_datetime"),
+    ]

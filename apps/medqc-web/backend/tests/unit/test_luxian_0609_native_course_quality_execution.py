@@ -2044,6 +2044,129 @@ async def test_course_008_009_stop_events_cut_off_the_required_interval() -> Non
 
 
 @pytest.mark.asyncio
+async def test_course_008_009_stopped_rows_use_planned_end_as_interval_cutoff() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": severity,
+                "event_kind": "start",
+                "status_state": "effective",
+                "lifecycle_state": "stopped",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "planned_start_datetime": "2026-01-01 09:00:00",
+                "planned_end_datetime": "2026-01-02 10:00:00",
+                "row_ref": marker * 64,
+            }
+            for severity, marker in (("serious", "s"), ("critical", "c"))
+        ],
+        daily_rows=[
+            _row("第一日病程", "2026-01-01 08:00:00"),
+            _row("第二日病程", "2026-01-02 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-05",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert tuple(item.final_state for item in reduced) == (
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    )
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_009_stopped_rows_without_end_time_are_data_gap() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": severity,
+                "event_kind": "start",
+                "status_state": "effective",
+                "lifecycle_state": "stopped",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "planned_start_datetime": "2026-01-01 09:00:00",
+                "planned_end_datetime": None,
+                "row_ref": marker * 64,
+            }
+            for severity, marker in (("serious", "s"), ("critical", "c"))
+        ],
+        evaluation_as_of_date="2026-01-05",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert tuple(item.final_state for item in reduced) == (
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    )
+    assert all(item.reason_code == "authoritative_time_missing" for item in reduced)
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_009_active_rows_ignore_unreached_planned_end_time() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "event_kind": "start",
+                "status_state": "effective",
+                "lifecycle_state": "active",
+                "planned_start_datetime": "2026-01-01 09:00:00",
+                "planned_end_datetime": "2026-01-02 10:00:00",
+                "row_ref": "c" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日病程", "2026-01-01 08:00:00"),
+            _row("第二日病程", "2026-01-02 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-03",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[1].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[1].reason_code == "requirement_violated"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_009_supports_multiple_stopped_lifecycle_intervals() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "event_kind": "start",
+                "status_state": "effective",
+                "lifecycle_state": "stopped",
+                "planned_start_datetime": start,
+                "planned_end_datetime": end,
+                "row_ref": marker * 64,
+            }
+            for start, end, marker in (
+                ("2026-01-01 09:00:00", "2026-01-02 10:00:00", "c"),
+                ("2026-01-04 09:00:00", "2026-01-05 10:00:00", "d"),
+            )
+        ],
+        daily_rows=[
+            _row("第一日病程", "2026-01-01 08:00:00"),
+            _row("第二日病程", "2026-01-02 08:00:00"),
+            _row("第四日病程", "2026-01-04 08:00:00"),
+            _row("第五日病程", "2026-01-05 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-07",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[1].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[1].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_course_008_009_restart_after_stop_opens_a_new_required_interval() -> None:
     session = _severity_session(
         rows=[

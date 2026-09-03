@@ -114,18 +114,25 @@ def _severity_active_date_intervals(
 ) -> tuple[tuple[date, date | None], ...] | None:
     """按权威时间顺序配对病重/病危开始与解除事件，保留再次下达区间。"""
 
-    events: list[tuple[date, int, str]] = []
+    events: list[tuple[date, int, int, str]] = []
     for index, row in enumerate(rows):
         if row.get("status_state") not in {None, "effective"}:
             continue
         event_kind = row.get("event_kind") or "start"
-        event_date = _authoritative_natural_date(row.get("prescribed_datetime"))
+        event_date = _authoritative_natural_date(
+            row.get("planned_start_datetime") or row.get("prescribed_datetime")
+        )
         if event_date is None:
             return None
-        events.append((event_date, index, event_kind))
+        events.append((event_date, 0 if event_kind == "start" else 1, index, event_kind))
+        if event_kind == "start" and row.get("lifecycle_state") == "stopped":
+            end_date = _authoritative_natural_date(row.get("planned_end_datetime"))
+            if end_date is None or end_date < event_date:
+                return None
+            events.append((end_date, 1, index, "end"))
     active_start: date | None = None
     intervals: list[tuple[date, date | None]] = []
-    for event_date, _index, event_kind in sorted(events):
+    for event_date, _kind_order, _index, event_kind in sorted(events):
         if horizon_date is not None and event_date > horizon_date:
             continue
         if event_kind == "start":
@@ -342,7 +349,9 @@ def _rule_008_009_decision(
             confidence=None,
         )
     order_dates = tuple(
-        _authoritative_natural_date(row.get("prescribed_datetime"))
+        _authoritative_natural_date(
+            row.get("planned_start_datetime") or row.get("prescribed_datetime")
+        )
         for row in relevant_orders
     )
     if any(item is None for item in order_dates):
@@ -820,7 +829,9 @@ def _rule_009_semantic_context(
             if row.get("severity") == "critical"
         )
         critical_dates = tuple(
-            _authoritative_natural_date(row.get("prescribed_datetime"))
+            _authoritative_natural_date(
+                row.get("planned_start_datetime") or row.get("prescribed_datetime")
+            )
             for row in critical_rows
             if row.get("event_kind") in {None, "start"}
         )

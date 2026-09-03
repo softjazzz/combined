@@ -1042,7 +1042,7 @@ def read_luxian_0609_severity_order_rows(
     visit_id: str,
     source_schema: str | None,
 ) -> SnapshotSourceRows:
-    """只读取病重/病危医嘱类别与权威开立时间，不返回医嘱原文。"""
+    """读取病重/病危医嘱类别及生命周期时间，不返回医嘱原文。"""
 
     trusted_schema = bundle_assembly._default_source_schema()
     if source_schema not in (None, trusted_schema):
@@ -1067,12 +1067,25 @@ def read_luxian_0609_severity_order_rows(
     selected = ["order_name"]
     selected.extend(
         field
-        for field in ("order_id", "prescribed_datetime", "order_status")
+        for field in (
+            "order_id",
+            "prescribed_datetime",
+            "planned_start_datetime",
+            "planned_end_datetime",
+            "order_status",
+        )
         if field in columns
     )
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
     order_columns = [
-        field for field in ("prescribed_datetime", "order_id", "order_name") if field in columns
+        field
+        for field in (
+            "planned_start_datetime",
+            "prescribed_datetime",
+            "order_id",
+            "order_name",
+        )
+        if field in columns
     ]
     order_sql = ", ".join(
         f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
@@ -1121,9 +1134,9 @@ def read_luxian_0609_severity_order_rows(
             if has_critical and not has_serious
             else "serious" if has_serious and not has_critical else "unknown"
         )
-        # 停止状态表示该次医嘱曾有效，不作为评价区间终点。初始取消、撤销、
-        # 作废行不产生触发；空值及未审计状态则保守保留为 unresolved，交由
-        # 008/009 映射为 data_gap，避免把未知状态伪装成无医嘱。
+        # 停止状态表示该次医嘱曾有效，结束时间由同一行 planned_end_datetime
+        # 提供。初始取消、撤销、作废行不产生触发；空值及未审计状态则保守
+        # 保留为 unresolved，交由 008/009 映射为 data_gap。
         order_status = row.get("order_status")
         normalized_status = (
             order_status.strip() if isinstance(order_status, str) else ""
@@ -1134,33 +1147,37 @@ def read_luxian_0609_severity_order_rows(
             status_state = "excluded"
         else:
             status_state = "unresolved"
+        lifecycle_state = (
+            "stopped"
+            if normalized_status == "停止"
+            else "active" if status_state == "effective" else ""
+        )
+        event_kind = (
+            "end"
+            if any(marker in order_name for marker in _SEVERITY_ORDER_TERMINAL_MARKERS)
+            else "start"
+        )
         safe_rows.append(
             {
                 "severity": severity,
-                "event_kind": (
-                    "end"
-                    if any(
-                        marker in order_name
-                        for marker in _SEVERITY_ORDER_TERMINAL_MARKERS
-                    )
-                    else "start"
-                ),
+                "event_kind": event_kind,
                 "status_state": status_state,
+                "lifecycle_state": lifecycle_state,
                 "prescribed_datetime": row.get("prescribed_datetime"),
+                "planned_start_datetime": row.get("planned_start_datetime"),
+                "planned_end_datetime": row.get("planned_end_datetime"),
                 "row_ref": digest_source_evidence(
                     (
                         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
                         row.get("order_id"),
                         severity,
-                        "end"
-                        if any(
-                            marker in order_name
-                            for marker in _SEVERITY_ORDER_TERMINAL_MARKERS
-                        )
-                        else "start",
+                        event_kind,
                         status_state,
+                        lifecycle_state,
                         order_status,
                         row.get("prescribed_datetime"),
+                        row.get("planned_start_datetime"),
+                        row.get("planned_end_datetime"),
                     )
                 ),
             }

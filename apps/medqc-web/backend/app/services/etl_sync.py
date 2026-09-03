@@ -122,6 +122,14 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "order_start_time",
             "order_time",
         ),
+        "planned_start_datetime": (
+            "planned_start_datetime",
+            "planned_start_time",
+        ),
+        "planned_end_datetime": (
+            "planned_end_datetime",
+            "planned_end_time",
+        ),
         "order_status": ("order_status", "status"),
         "order_name": ("order_name", "item_name", "order_item_name", "order_item"),
     },

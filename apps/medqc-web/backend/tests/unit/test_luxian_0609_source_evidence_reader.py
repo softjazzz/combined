@@ -522,6 +522,59 @@ def test_severity_order_reader_keeps_stop_event_for_interval_cutoff(monkeypatch)
     assert "NOT LIKE :cancelled_name" in connection.calls[0][0]
 
 
+def test_severity_order_reader_preserves_same_row_lifecycle_times(monkeypatch) -> None:
+    connection = _SeverityConnection(
+        [
+            {
+                "order_id": "CRITICAL-STOPPED",
+                "order_name": "病危",
+                "order_status": "停止",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "planned_start_datetime": "2026-01-01 09:00:00",
+                "planned_end_datetime": "2026-01-02 10:00:00",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_id",
+            "order_name",
+            "order_status",
+            "prescribed_datetime",
+            "planned_start_datetime",
+            "planned_end_datetime",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_severity_order_rows(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None
+    )
+
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row["severity"] == "critical"
+    assert row["event_kind"] == "start"
+    assert row["lifecycle_state"] == "stopped"
+    assert row["planned_start_datetime"] == "2026-01-01 09:00:00"
+    assert row["planned_end_datetime"] == "2026-01-02 10:00:00"
+    sql = connection.calls[0][0]
+    assert '"planned_start_datetime"' in sql
+    assert '"planned_end_datetime"' in sql
+
+
 def test_severity_order_reader_filters_cancelled_rows_before_limit(monkeypatch) -> None:
     """取消历史不能占满受控上限而掩盖后续有效病危医嘱。"""
 

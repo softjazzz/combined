@@ -1177,6 +1177,14 @@ class InpatNondrugOrder(AuditMixin, Base):
     frequency = Column(String(100), comment="频次")
 
     prescribed_datetime = Column(DateTime, comment="开立时间")
+    planned_start_datetime = Column(
+        DateTime(timezone=True),
+        comment="计划开始/启用时间",
+    )
+    planned_end_datetime = Column(
+        DateTime(timezone=True),
+        comment="计划结束/停止时间",
+    )
     prescribed_doctor = Column(String(100), comment="开立医师姓名")
     order_status = Column(String(100), comment="医嘱状态")
     record_content = Column(Text, comment="记录内容")
