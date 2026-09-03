@@ -55,7 +55,7 @@ describe('qcResultDebugExport', () => {
       },
     )
 
-    expect(result).toContain('格式版本：medqc-qc-debug-v3-redacted')
+    expect(result).toContain('格式版本：medqc-qc-debug-v4-redacted-minimal')
     expect(result).toContain('内容已脱敏')
     expect(result).toContain('机构ID：机构-001')
     expect(result).toContain('患者ID：患者-001')
@@ -152,6 +152,77 @@ describe('qcResultDebugExport', () => {
 
     expect(result).not.toContain('李庆珍')
     expect(result).toContain('患者A,性别女')
+  })
+
+  it('removes credentials, infrastructure details and full raw documents while retaining debug facts', () => {
+    const result = buildQcResultDebugText([
+      {
+        rule_id: 'LX0609-020',
+        rule_name: '会诊建议执行情况',
+        status: 'data_gap',
+        reason_code: 'consultation_evidence_missing',
+        conclusion:
+          '第2次会诊缺少执行证据，联系人：王小兰，电话0830-1234567。password=plain-secret; Cookie: session=another-secret',
+        customer_display_facts: {
+          consultation_id: 'CONSULT-2026-009',
+          specimen_no: 'LAB-009',
+          doctor_name: '胡强',
+          record_content: '患者周勇书的完整病历正文不应进入调试剪贴板。',
+          api_key: 'sk-proj-abcdefghijklmnopqrstuvwxyz',
+          has_api_key: true,
+          database_user: 'postgres',
+          phone: 13800138000,
+          headers: {
+            authorization: 'Bearer secret-access-token-value',
+            cookie: 'session=raw-cookie-value',
+          },
+          source_url: 'https://10.2.3.4:8001/api/v1/qc?token=secret',
+          server_path: '\\\\medqc-server\\share\\patient.json',
+          trace_path: '/var/log/medqc/patient.log',
+        },
+        evidence: [
+          {
+            source_ref: 'CONSULT-2026-009',
+            source_type: 'consultation_record',
+            source_label: '会诊记录单',
+            record_time: '2026-08-19 10:07:00',
+            field_path: 'consultation_record.record_content',
+            evidence_excerpt: '会诊意见建议继续保肝治疗，已遵执行。',
+            excerpt_kind: '字段级依据',
+          },
+        ],
+      },
+    ])
+
+    expect(result).toContain('格式版本：medqc-qc-debug-v4-redacted-minimal')
+    expect(result).toContain('LX0609-020')
+    expect(result).toContain('consultation_evidence_missing')
+    expect(result).toContain('consultation_record.record_content')
+    expect(result).toContain('会诊意见建议继续保肝治疗，已遵执行。')
+    expect(result).toContain('[完整原始正文已省略]')
+    expect(result).toContain('[访问凭证已脱敏]')
+    expect(result).toContain('"has_api_key": true')
+    expect(result).toContain('[网络地址已脱敏]')
+    expect(result).toContain('[本地路径已脱敏]')
+    expect(result).toContain('[关联人员已脱敏]')
+    expect(result).toContain('医务人员A')
+    expect(result).toContain('标识-001')
+    expect(result).not.toContain('周勇书')
+    expect(result).not.toContain('胡强')
+    expect(result).not.toContain('王小兰')
+    expect(result).not.toContain('0830-1234567')
+    expect(result).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz')
+    expect(result).not.toContain('secret-access-token-value')
+    expect(result).not.toContain('raw-cookie-value')
+    expect(result).not.toContain('plain-secret')
+    expect(result).not.toContain('another-secret')
+    expect(result).not.toContain('postgres')
+    expect(result).not.toContain('13800138000')
+    expect(result).not.toContain('LAB-009')
+    expect(result).not.toContain('10.2.3.4')
+    expect(result).not.toContain('medqc-server')
+    expect(result).not.toContain('/var/log/medqc')
+    expect(result).not.toContain('完整病历正文不应进入')
   })
 
   it('copies the generated text through the browser clipboard', async () => {

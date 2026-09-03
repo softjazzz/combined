@@ -1,7 +1,7 @@
 import type { SingleRecordQcEvidence, SingleRecordQcResultItem } from './single-record-result-model'
 import { sanitizeQcDebugPayload } from './qcDebugSanitizer'
 
-const DEBUG_SCHEMA = 'medqc-qc-debug-v3-redacted'
+const DEBUG_SCHEMA = 'medqc-qc-debug-v4-redacted-minimal'
 type QcDebugResultItem = SingleRecordQcResultItem & { displayStatus?: string }
 
 export interface QcResultDebugContext {
@@ -131,7 +131,7 @@ export function buildQcResultDebugText(
     '# MedQC 质控调试信息',
     `格式版本：${DEBUG_SCHEMA}`,
     `结果数量：${normalizedItems.length}`,
-    '说明：以下内容已脱敏，仅用于核对规则状态、判定事实和证据链。身份标识已使用临时别名，日期已整体平移但时间间隔保持不变；发送前仍请人工复核。',
+    '说明：以下内容已脱敏，并按最小必要原则仅保留核对规则状态、判定事实和证据链所需信息。受控事实中的完整原始正文字段和访问凭证不会导出；身份标识已使用临时别名，日期已整体平移但时间间隔保持不变。内容仍包含脱敏后的医疗判定语义，仅限授权调试使用，发送前仍请人工复核。',
   ]
   appendContext(header, sanitizedContext)
   appendStatusSummary(header, normalizedItems)
