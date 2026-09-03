@@ -25,13 +25,10 @@ describe('旧 Dashboard 首页路由', () => {
     if (typeof redirect !== 'function') {
       throw new Error('旧 Dashboard 首页必须使用函数重定向')
     }
-    const target = redirect(
-      {
-        query: { source: 'legacy-link', scene: 'final' },
-        hash: '#recent-task',
-      } as never,
-      {} as never,
-    )
+    const target = redirect({
+      query: { source: 'legacy-link', scene: 'final' },
+      hash: '#recent-task',
+    } as never)
 
     expect(target).toEqual({
       path: '/workstation-v4',
