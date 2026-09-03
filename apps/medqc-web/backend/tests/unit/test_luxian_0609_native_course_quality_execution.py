@@ -824,11 +824,10 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
         "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
-            {"discharge_datetime": "2026-01-02 12:00:00"}
+            {"discharge_datetime": "2026-01-04 08:00:00"}
         ],
         "daily_course_record": [
-            _row("患者病情稳定，继续当前治疗。", "2026-01-01 09:00:00"),
-            _row("患者症状改善，继续观察。", "2026-01-02 09:00:00"),
+            _row("入院后第72小时完成查房。", "2026-01-04 08:00:00"),
         ],
         "senior_course_record": [],
     }
@@ -849,7 +848,7 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
         visit_id="V",
         source_schema=None,
         created_at="2026-07-16T12:00:00+08:00",
-        evaluation_as_of_date="2026-01-02",
+        evaluation_as_of_date="2026-01-04",
         row_reader=read,
         additional_source_keys=("daily_course_record", "senior_course_record"),
     )
@@ -893,8 +892,21 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
 @pytest.mark.parametrize(
     ("horizon", "expected_state", "expected_reason"),
     [
-        ("2026-01-04 07:59:59", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
-        ("2026-01-04 08:00:01", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
+        (
+            "2026-01-04 07:59:59",
+            CustomerFinalState.NOT_APPLICABLE,
+            "evaluation_window_not_mature",
+        ),
+        (
+            "2026-01-04 08:00:00",
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
+        (
+            "2026-01-04 08:00:01",
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
     ],
 )
 async def test_course_007_uses_admission_to_first_record_maturity_boundary(
@@ -955,12 +967,187 @@ async def test_course_007_uses_admission_to_first_record_maturity_boundary(
 
 
 @pytest.mark.asyncio
+async def test_course_007_missing_candidate_time_only_blocks_a_mature_empty_window() -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+                {"discharge_datetime": "2026-01-04 08:00:00"}
+            ],
+            "daily_course_record": [
+                {"record_content": "病情稳定，完成日常查房。", "record_time": None}
+            ],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-04",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_course_007_missing_candidate_time_blocks_an_otherwise_overdue_gap() -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+                {"discharge_datetime": "2026-01-05 09:00:00"}
+            ],
+            "daily_course_record": [
+                _row("首次查房", "2026-01-01 09:00:00"),
+                {"record_content": "查房记录正文存在。", "record_time": None},
+                _row("后续查房", "2026-01-05 08:00:01"),
+            ],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-05",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_course_007_does_not_count_explicit_non_round_course_document() -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+            "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: [
+                {"discharge_datetime": "2026-01-04 08:00:00"}
+            ],
+            "daily_course_record": [
+                {
+                    "document_title": "术后首次病程记录",
+                    "record_content": "记录术后返回病房情况。",
+                    "record_time": "2026-01-02 08:00:00",
+                }
+            ],
+            "senior_course_record": [],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-04",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "threshold_exceeded"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("evaluation_as_of_date", "expected_state", "expected_reason"),
     [
-        ("2026-01-03", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        (
+            "2026-01-03",
+            CustomerFinalState.NOT_APPLICABLE,
+            "evaluation_window_not_mature",
+        ),
         ("2026-01-04", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
-        ("2026-01-05", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
+        ("2026-01-05", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
     ],
 )
 async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
@@ -1290,7 +1477,11 @@ async def test_course_007_keeps_real_document_id_at_boundary_interval(
         ("unstable", CustomerFinalState.NOT_APPLICABLE, "eligibility_not_met"),
         ("over_72h", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
         ("submit_time", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
-        ("missing_time", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        (
+            "missing_time",
+            CustomerFinalState.NOT_APPLICABLE,
+            "evaluation_window_not_mature",
+        ),
         ("unavailable", CustomerFinalState.DATA_GAP, "source_unavailable"),
         ("query_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
         ("truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
@@ -1464,9 +1655,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
             "stable_course_rule_applicable": False,
         }),)
     elif scenario == "missing_time":
-        assert dict(result.customer_display_facts)["LX0609-007"]["failure_kind"] == (
-            "course_record_interval_within_72h"
-        )
+        assert result.customer_display_facts == ()
     else:
         assert result.customer_display_facts == ()
 

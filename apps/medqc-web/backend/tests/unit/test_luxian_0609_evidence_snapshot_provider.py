@@ -22,6 +22,7 @@ from app.services.luxian_0609.evaluation_horizon import (
 from app.services.luxian_0609.source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
+    CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
     CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
@@ -1417,6 +1418,7 @@ def test_all_75_registered_rules_query_each_bounded_source_once_and_never_query_
             *expected_bounded,
             CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
             CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
+            CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
             CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
             "admission_record_diagnosis",
@@ -1459,6 +1461,7 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         *expected,
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
         CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
+        CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,
@@ -1584,26 +1587,28 @@ def test_provider_requires_three_coordinates_before_any_read(missing_field: str)
 
 
 def test_rescue_record_uses_bounded_reader_after_typed_migration() -> None:
-    calls = 0
+    calls: list[str] = []
 
-    def reader(**_kwargs):
-        nonlocal calls
-        calls += 1
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
         return SnapshotSourceRows.create(
-            source_key="rescue_record",
+            source_key=source_key,
             rows=(),
             truncated=False,
             limit_rows=50,
         )
 
     snapshot = _build(selected_rule_ids=("LX0609-004",), row_reader=reader)
-    assert calls == 1
-    assert len(snapshot.observations) == 1
-    observation = snapshot.observations[0]
-    assert observation.source_key == "rescue_record"
-    assert observation.query_state is SourceQueryState.EMPTY
-    assert observation.completeness is SourceCompleteness.COMPLETE
-    assert observation.reason_code == ""
+    assert calls == [CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"]
+    assert len(snapshot.observations) == 2
+    assert {item.source_key for item in snapshot.observations} == set(calls)
+    assert all(
+        item.query_state is SourceQueryState.EMPTY
+        and item.completeness is SourceCompleteness.COMPLETE
+        and item.reason_code == ""
+        for item in snapshot.observations
+    )
 
 
 @dataclass
@@ -2334,6 +2339,7 @@ def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_c
     special_sources = {
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
         CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
+        CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,

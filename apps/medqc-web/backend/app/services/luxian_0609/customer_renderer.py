@@ -441,6 +441,21 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-004", "rescue_record_missing_after_trigger"): (
+        "已发现有效抢救医嘱，但未读取到对应抢救记录",
+        "抢救事件已被有效医嘱触发，但当前抢救记录来源为空，暂无法核对抢救结束后6小时内是否完成记录。",
+        "请先核对抢救记录是否已完整同步；仅在人工确认记录确实缺失后再按本质控点整改。",
+    ),
+    ("LX0609-004", "rescue_end_time_missing"): (
+        "抢救记录缺少抢救结束时间，暂无法核对6小时时限",
+        "已读取抢救记录，但无法计算抢救结束至记录完成的间隔。",
+        "请核对并补充本次抢救的权威结束时间后重新评估。",
+    ),
+    ("LX0609-004", "document_completion_time_missing"): (
+        "抢救记录缺少权威完成时间，暂无法核对6小时时限",
+        "已读取抢救记录和抢救结束时间，但无法计算抢救结束至记录完成的间隔。",
+        "请核对并补充抢救记录的权威完成时间后重新评估。",
+    ),
     ("LX0609-029", "association_failed"): (
         "已确认本次存在已实施手术且已读取术前小结，但现有资料无法确认术前小结"
         "对应哪一台手术，暂无法逐台完成核对",
@@ -721,6 +736,21 @@ _RULE_NON_COMPLIANT_MESSAGES = {
     ),
 }
 _RULE_NOT_APPLICABLE_MESSAGES = {
+    ("LX0609-004", "trigger_absent_complete"): (
+        "本次未发现有效抢救事件，不启动抢救记录6小时时限核对",
+        "抢救记录及有效抢救医嘱来源均已完成核对，未发现本次住院发生抢救。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-006", "evaluation_window_not_mature"): (
+        "入院尚未满72小时，暂不判定最高级别医师首次查房缺失",
+        "截至本次冻结评价时点，入院后72小时观察窗口尚未结束。",
+        "无需提前补写；请在观察窗口结束后按届时病历资料重新评估。",
+    ),
+    ("LX0609-007", "evaluation_window_not_mature"): (
+        "病情稳定观察时段尚未满3天，暂不判定查房记录缺失",
+        "截至本次冻结评价时点，病情稳定患者3天查房频次观察窗口尚未结束。",
+        "无需提前补写；请在观察窗口结束后按届时病历资料重新评估。",
+    ),
     ("LX0609-003", "performed_event_absent"): (
         "本次未实施手术，不启动手术记录24小时时限核对",
         "已核对手术主表和手术记录，未发现已实施手术事件。",
@@ -3008,6 +3038,9 @@ def render_luxian_0609_customer_result(
             is not None
             or (decision.rule_id, decision.reason_code) in {
                 ("LX0609-004", "applicability_source_gap"),
+                ("LX0609-004", "rescue_record_missing_after_trigger"),
+                ("LX0609-004", "rescue_end_time_missing"),
+                ("LX0609-004", "document_completion_time_missing"),
                 ("LX0609-050", "diagnosis_scope_uncertain"),
             }
         )

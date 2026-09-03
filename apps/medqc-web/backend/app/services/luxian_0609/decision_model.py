@@ -96,6 +96,7 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "trigger_absent_complete",
             "eligibility_not_met",
             "performed_event_absent",
+            "evaluation_window_not_mature",
         }
     ),
     "data_gap": frozenset(
@@ -114,6 +115,9 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "association_failed",
             "linkage_unresolved",
             "applicability_source_gap",
+            "rescue_record_missing_after_trigger",
+            "rescue_end_time_missing",
+            "document_completion_time_missing",
             "candidate_scope_incomplete",
             "diagnosis_scope_uncertain",
         }

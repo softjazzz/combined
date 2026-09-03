@@ -71,6 +71,7 @@ def _typed_basic_session(
             "inpat_registration",
             "daily_course_record",
             "first_course_record",
+            source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
             "rescue_record",
             "senior_course_record",
         ),
@@ -78,7 +79,7 @@ def _typed_basic_session(
 
 
 @pytest.mark.unit
-def test_004_complete_empty_rescue_records_fail_closed_in_canonical_result() -> None:
+def test_004_complete_empty_rescue_records_and_orders_are_not_applicable() -> None:
     session = _typed_basic_session(
         {"rescue_record": []},
         selected_rule_ids=("LX0609-004",),
@@ -94,16 +95,10 @@ def test_004_complete_empty_rescue_records_fail_closed_in_canonical_result() -> 
     )[0]
 
     assert execution.results == ()
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "applicability_source_gap"
-    assert canonical["status"] == canonical["result_status"] == "data_gap"
-    assert canonical["is_compliant"] is None
-    assert canonical["reason_code"] == "applicability_source_gap"
-    assert canonical["findings"] == "暂无法确认本次住院是否发生抢救"
-    assert "缺少可独立证明是否发生抢救的权威事件资料" in canonical["evidence"]
-    assert "不能据此确认未发生抢救" in canonical["evidence"]
-    assert "权威抢救事件资料" in canonical["suggestion"]
-    assert "无需" not in canonical["suggestion"]
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "trigger_absent_complete"
+    assert canonical["status"] == canonical["result_status"] == "not_applicable"
+    assert canonical["reason_code"] == "trigger_absent_complete"
     assert getattr(execution, "llm_call_count", 0) == 0
     assert getattr(execution, "total_tokens", 0) == 0
 
@@ -134,7 +129,12 @@ def test_missing_timeliness_document_before_maturity_is_not_non_compliant(
 
     _, reduced = _reduce_typed_basic(session, (rule_id,))
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    expected_state = (
+        CustomerFinalState.NOT_APPLICABLE
+        if rule_id == "LX0609-006"
+        else CustomerFinalState.DATA_GAP
+    )
+    assert reduced[0].final_state is expected_state
     assert reduced[0].reason_code == "evaluation_window_not_mature"
 
 
@@ -164,9 +164,12 @@ def test_missing_timeliness_document_after_maturity_is_data_gap(
 
     _, reduced = _reduce_typed_basic(session, (rule_id,))
 
-    if rule_id in {"LX0609-005", "LX0609-006"}:
+    if rule_id == "LX0609-005":
         assert reduced[0].final_state is CustomerFinalState.DATA_GAP
         assert reduced[0].reason_code == "source_empty"
+    elif rule_id == "LX0609-006":
+        assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+        assert reduced[0].reason_code == "required_document_missing"
     else:
         assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
         assert reduced[0].reason_code == "required_document_missing"
@@ -651,7 +654,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
     assert [item.final_state for item in reduced] == [
         CustomerFinalState.NON_COMPLIANT,
         CustomerFinalState.DATA_GAP,
-        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.NON_COMPLIANT,
     ]
     assert execution.customer_display_facts == (
         (
@@ -669,11 +672,22 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
                 "source_document_id": "admission-private-id",
             },
         ),
+        (
+            "LX0609-006",
+            {
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "senior_course_record",
+                "source_label": "副主任医师或主任医师首次查房记录",
+                "timeliness_state": "missing",
+                "threshold_hours": 72,
+                "anchor_time": "2026-06-01 08:00:00",
+            },
+        ),
     )
     assert [item.reason_code for item in reduced] == [
         "threshold_exceeded",
         "source_empty",
-        "source_empty",
+        "required_document_missing",
     ]
 
 
@@ -1077,7 +1091,7 @@ def test_002_compliant_result_exposes_actual_interval_and_source_document():
 @pytest.mark.parametrize(
     ("rows", "expected_state", "expected_reason"),
     [
-        ([], CustomerFinalState.DATA_GAP, "applicability_source_gap"),
+        ([], CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete"),
         (
             [
                 {
@@ -1106,7 +1120,7 @@ def test_002_compliant_result_exposes_actual_interval_and_source_document():
                 }
             ],
             CustomerFinalState.DATA_GAP,
-            "required_field_missing",
+            "rescue_end_time_missing",
         ),
     ],
 )
@@ -1199,6 +1213,24 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
         "elapsed_hours": 5.5,
         "remaining_hours": 0.5,
         "source_document_id": "rescue-worst",
+        "rescue_events": [
+            {
+                "event_index": 1,
+                "source_document_id": "rescue-first",
+                "rescue_end_time": "2026-06-01 09:00:00",
+                "document_completion_time": "2026-06-01 11:00:00",
+                "event_state": "within",
+                "elapsed_hours": 2.0,
+            },
+            {
+                "event_index": 2,
+                "source_document_id": "rescue-worst",
+                "rescue_end_time": "2026-06-02 10:00:00",
+                "document_completion_time": "2026-06-02 15:30:00",
+                "event_state": "within",
+                "elapsed_hours": 5.5,
+            },
+        ],
     }
 
 
@@ -1273,10 +1305,236 @@ def test_complete_empty_and_unavailable_rescue_sources_are_distinct() -> None:
         unavailable, ("LX0609-004",)
     )
 
-    assert complete_reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert complete_reduced[0].reason_code == "applicability_source_gap"
+    assert complete_reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert complete_reduced[0].reason_code == "trigger_absent_complete"
     assert unavailable_reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert unavailable_reduced[0].reason_code == "source_unavailable"
+
+
+@pytest.mark.unit
+def test_004_effective_rescue_order_without_record_is_data_gap() -> None:
+    session = _typed_basic_session(
+        {
+            "rescue_record": [],
+            source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY: [
+                {
+                    "order_id": "rescue-order-ref",
+                    "status_state": "effective",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "rescue_record_missing_after_trigger"
+    assert dict(execution.customer_display_facts)["LX0609-004"] == {
+        "failure_kind": "rescue_record_missing_after_trigger",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "trigger_source": source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+        "trigger_order_id": "rescue-order-ref",
+    }
+
+
+@pytest.mark.unit
+def test_004_cancelled_rescue_orders_filtered_by_source_do_not_trigger() -> None:
+    session = _typed_basic_session(
+        {
+            "rescue_record": [],
+            source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY: [],
+        },
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "trigger_absent_complete"
+
+
+@pytest.mark.unit
+def test_004_empty_record_with_unavailable_rescue_order_source_is_data_gap() -> None:
+    session = _typed_basic_session(
+        {"rescue_record": []},
+        selected_rule_ids=("LX0609-004",),
+        failures={
+            source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY:
+                SourceEvidenceUnavailable()
+        },
+    )
+
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_unavailable"
+
+
+@pytest.mark.unit
+def test_004_unresolved_rescue_order_status_is_data_gap() -> None:
+    session = _typed_basic_session(
+        {
+            "rescue_record": [],
+            source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY: [
+                {"order_id": "unknown-status-ref", "status_state": "unresolved"}
+            ],
+        },
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+
+
+@pytest.mark.unit
+def test_004_overdue_event_wins_but_all_rescue_events_remain_projected() -> None:
+    session = _typed_basic_session(
+        {
+            "rescue_record": [
+                {
+                    "document_id": "late-rescue-ref",
+                    "record_time": "2026-06-01 16:01:00",
+                    "record_content": "抢救结束时间：2026-06-01 09:00:00",
+                },
+                {
+                    "document_id": "most-overdue-rescue-ref",
+                    "record_time": "2026-06-02 18:00:00",
+                    "record_content": "抢救结束时间：2026-06-02 09:00:00",
+                },
+                {
+                    "document_id": "missing-end-ref",
+                    "record_time": "2026-06-03 11:00:00",
+                    "record_content": "抢救结束，患者情况平稳。",
+                },
+            ]
+        },
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "threshold_exceeded"
+    facts = dict(execution.customer_display_facts)["LX0609-004"]
+    assert facts["source_document_id"] == "most-overdue-rescue-ref"
+    assert facts["elapsed_hours"] == 9.0
+    events = facts["rescue_events"]
+    assert [item["source_document_id"] for item in events] == [
+        "late-rescue-ref",
+        "most-overdue-rescue-ref",
+        "missing-end-ref",
+    ]
+    assert [item["event_state"] for item in events] == [
+        "late",
+        "late",
+        "rescue_end_time_missing",
+    ]
+
+
+@pytest.mark.unit
+def test_006_ignores_round_after_frozen_horizon_and_keeps_window_not_mature() -> None:
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "future-round-ref",
+                    "document_title": "主任医师首次查房记录",
+                    "record_time": "2026-07-17 09:00:00",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-006",),
+        evaluation_as_of_date="2026-07-16",
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-006",))
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+    assert execution.customer_display_facts == ()
+
+
+@pytest.mark.unit
+def test_006_window_not_mature_precedes_ambiguous_candidate_role() -> None:
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "ambiguous-round-ref",
+                    "document_title": "医师查房记录",
+                    "record_time": "2026-07-16 10:30:02",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-006",),
+        evaluation_as_of_date="2026-07-16",
+    )
+
+    _execution, reduced = _reduce_typed_basic(session, ("LX0609-006",))
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("row", "expected_reason"),
+    [
+        (
+            {
+                "document_id": "missing-end-ref",
+                "record_time": "2026-06-01 10:00:00",
+                "record_content": "抢救结束，患者生命体征平稳。",
+            },
+            "rescue_end_time_missing",
+        ),
+        (
+            {
+                "document_id": "missing-completion-ref",
+                "record_content": "抢救结束时间：2026-06-01 09:00:00",
+            },
+            "document_completion_time_missing",
+        ),
+        (
+            {
+                "document_id": "conflicting-time-ref",
+                "record_time": "2026-06-01 08:59:59",
+                "record_content": "抢救结束时间：2026-06-01 09:00:00",
+            },
+            "authoritative_time_conflict",
+        ),
+    ],
+)
+def test_004_distinguishes_missing_and_conflicting_rescue_times(
+    row: dict,
+    expected_reason: str,
+) -> None:
+    session = _typed_basic_session(
+        {"rescue_record": [row]},
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == expected_reason
+    facts = dict(execution.customer_display_facts)["LX0609-004"]
+    assert facts["failure_kind"] == expected_reason
+    assert facts["source_document_id"] == row["document_id"]
 
 
 @pytest.mark.unit
@@ -1561,6 +1819,47 @@ def test_006_explicit_senior_round_remains_zero_llm_call():
 
 
 @pytest.mark.unit
+def test_006_future_semantic_candidate_does_not_call_llm_before_window_matures():
+    class _LLM:
+        async def generate(self, _prompt: str) -> dict:
+            raise AssertionError("评价时点后的查房记录不得进入语义判定")
+
+    selected = ("LX0609-006",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "future-upper-round-ref",
+                    "document_title": "上级医师查房记录",
+                    "record_time": "2026-07-17 10:30:02",
+                    "record_content": "今日彭中主任医师联合神经疾病相关专业医师查房。",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-16",
+    )
+
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        llm_client=_LLM(),
+    )
+
+    assert not hasattr(execution, "__await__")
+    assert getattr(execution, "llm_call_count", 0) == 0
+    assert execution.decisions[0].reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.unit
 def test_006_recognizes_explicit_senior_round_role_from_customer_record_body():
     selected = ("LX0609-006",)
     session = _typed_basic_session(
@@ -1581,6 +1880,7 @@ def test_006_recognizes_explicit_senior_round_role_from_customer_record_body():
             ],
         },
         selected_rule_ids=selected,
+        evaluation_as_of_date="2026-08-15",
     )
 
     execution, reduced = _reduce_typed_basic(session, selected)
@@ -1637,6 +1937,7 @@ async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body
             ],
         },
         selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
     )
     llm = _LLM()
 
@@ -1698,6 +1999,7 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
             ],
         },
         selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
     )
 
     execution = await execute_luxian_0609_native_basic_timeliness(
@@ -1741,6 +2043,7 @@ async def test_006_unavailable_llm_does_not_report_unaccounted_call():
             ],
         },
         selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
     )
 
     execution = await execute_luxian_0609_native_basic_timeliness(

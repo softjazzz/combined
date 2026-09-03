@@ -367,6 +367,104 @@ def test_exam_lab_order_reader_filters_before_limit_so_unrelated_orders_cannot_h
     assert "safe-institute" not in sql
 
 
+def test_rescue_order_reader_filters_before_limit_and_preserves_audited_status(
+    monkeypatch,
+) -> None:
+    class _RescueOrderConnection(_SourceRowsConnection):
+        def execute(self, statement, params):
+            sql = str(statement)
+            bound = dict(params)
+            self.calls.append((sql, bound))
+            accepted_names = {
+                bound["small_rescue"],
+                bound["medium_rescue"],
+                bound["small_rescue_free_ascii"],
+                bound["small_rescue_free_full"],
+            }
+            cancelled_statuses = {
+                bound["cancelled_status"],
+                bound["revoked_status"],
+                bound["voided_status"],
+            }
+            filtered = [
+                row
+                for row in self.rows
+                if row.get("order_name") in accepted_names
+                and (
+                    row.get("order_status") is None
+                    or row.get("order_status") not in cancelled_statuses
+                )
+            ]
+            return _Rows(filtered[: bound["limit_rows"]])
+
+    connection = _RescueOrderConnection(
+        [
+            {
+                "order_id": f"OTHER-{index:03d}",
+                "order_name": "常规护理",
+                "order_status": "执行中",
+            }
+            for index in range(120)
+        ]
+        + [
+            {
+                "order_id": f"CANCELLED-{index:03d}",
+                "order_name": "小抢救",
+                "order_status": "取消",
+            }
+            for index in range(60)
+        ]
+        + [
+            {"order_id": "ACTIVE", "order_name": "小抢救", "order_status": "执行中"},
+            {"order_id": "STOPPED", "order_name": "中抢救", "order_status": "已停止"},
+            {"order_id": "UNKNOWN", "order_name": "小抢救", "order_status": "待确认"},
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_id",
+            "order_name",
+            "order_status",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+    )
+
+    assert list(result.rows) == [
+        {"order_id": "ACTIVE", "status_state": "effective"},
+        {"order_id": "STOPPED", "status_state": "effective"},
+        {"order_id": "UNKNOWN", "status_state": "unresolved"},
+    ]
+    assert result.truncated is False
+    sql, params = connection.calls[0]
+    assert 'FROM "cdm"."inpat_nondrug_order"' in sql
+    assert '"order_name" IN' in sql
+    assert '"order_status" IS NULL OR "order_status" NOT IN' in sql
+    assert params["cancelled_status"] == "取消"
+    assert params["revoked_status"] == "撤销"
+    assert params["voided_status"] == "作废"
+    assert params["limit_rows"] == 51
+
+
 def test_severity_order_reader_keeps_stop_event_for_interval_cutoff(monkeypatch) -> None:
     connection = _SeverityConnection(
         [

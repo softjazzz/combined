@@ -1137,11 +1137,11 @@ async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_r
     assert [item.final_state.value for item in context.reduced_decisions] == [
         "compliant",
         "compliant",
-        "data_gap",
+        "not_applicable",
         "compliant",
         "compliant",
     ]
-    assert context.reduced_decisions[2].reason_code == "applicability_source_gap"
+    assert context.reduced_decisions[2].reason_code == "trigger_absent_complete"
     assert all(item.fact_refs for item in context.reduced_decisions)
     assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
@@ -1163,7 +1163,7 @@ async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_r
     assert [item["status"] for item in orchestrated["results"]] == [
         "compliant",
         "compliant",
-        "data_gap",
+        "not_applicable",
         "compliant",
         "compliant",
     ]

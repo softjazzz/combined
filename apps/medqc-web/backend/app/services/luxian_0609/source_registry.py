@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v22"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v23"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -245,6 +245,11 @@ _INTERNAL_SOURCE_ENTRIES = (
         access_mode=_BOUNDED,
         query_version="snapshot-provider-inpat_nondrug_order.exam_lab_order-v1",
     ),
+    _entry(
+        "inpat_nondrug_order.rescue_order",
+        access_mode=_BOUNDED,
+        query_version="snapshot-provider-inpat_nondrug_order.rescue_order-v1",
+    ),
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
@@ -280,7 +285,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "first_course_record",
         "inpat_registration",
     ),
-    "LX0609-004": ("rescue_record",),
+    "LX0609-004": ("rescue_record", "inpat_nondrug_order.rescue_order"),
     "LX0609-005": (
         "admission_record",
         "discharge_record",

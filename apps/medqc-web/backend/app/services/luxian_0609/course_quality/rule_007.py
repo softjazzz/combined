@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Mapping
 
+from ..basic_timeliness_facts import CourseRoundRole, classify_course_round_role
 from ..decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -28,6 +29,19 @@ from .shared import authoritative_course_time, row_text
 RULE_007_RECORD_SOURCES = ("daily_course_record", "senior_course_record")
 _RULE_007_ADMISSION_SOURCE = "inpat_registration"
 _MAX_INTERVAL = timedelta(hours=72)
+
+
+def _is_round_record(row: Mapping[str, Any], *, source_key: str) -> bool:
+    """排除明确标成其他用途的病程；标题缺失时保留来源表既有语义。"""
+
+    title = "".join(
+        "".join(str(row.get(field) or "").split())
+        for field in ("document_title", "title")
+    )
+    if not title:
+        return True
+    role = classify_course_round_role(row, source_key=source_key)
+    return "查房" in title and role is not CourseRoundRole.NONE
 
 
 @dataclass(frozen=True)
@@ -208,7 +222,7 @@ def evaluate_rule_007_typed(
     ):
         raise ValueError("typed 007 evidence session mismatch")
 
-    evaluator_version = "rule007-authoritative-time-v2"
+    evaluator_version = "rule007-authoritative-time-v3"
     observation_by_source = {
         item.source_key: item for item in snapshot.observations
     }
@@ -477,6 +491,8 @@ def evaluate_rule_007_typed(
                 confidence=None,
             )
         for row in rows:
+            if not _is_round_record(row, source_key=source_key):
+                continue
             parsed = authoritative_course_time(
                 authoritative_document_time_value(row)
             )
@@ -498,30 +514,35 @@ def evaluate_rule_007_typed(
             or (horizon_time is not None and record_time <= horizon_time)
         )
     )
-    # 评价窗口已超过成熟期但完全没有可定位病程记录时，不能输出无证据的
-    # 确定问题；72 小时内仍按边界合规处理。
+    # 完整来源没有任何可定位病程记录时，先区分规则是否成熟，再区分
+    # “记录不存在”和“候选记录存在但时间缺失”。空来源本身不是时间缺口。
     if not ordered_times and horizon_time is not None:
-        elapsed = (
-            horizon_time - admission_time
-            if horizon_time is not None
-            else datetime.combine(horizon_date, datetime.min.time()) - admission_time
-        )
-        if elapsed <= _MAX_INTERVAL:
+        elapsed = horizon_time - admission_time
+        if elapsed < _MAX_INTERVAL:
             return decision(
-                applicability=ApplicabilityState.APPLICABLE,
+                applicability=ApplicabilityState.NOT_APPLICABLE,
                 evidence_state=EvidenceState.SUFFICIENT,
-                qc_direction=QcDirection.SATISFIED,
-                reason_code="requirement_within_threshold",
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="evaluation_window_not_mature",
                 refs=refs,
                 confidence=1.0,
             )
+        if substantive_record_without_time:
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="authoritative_time_missing",
+                refs=refs,
+                confidence=None,
+            )
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="authoritative_time_missing",
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="threshold_exceeded",
             refs=refs,
-            confidence=None,
+            confidence=1.0,
         )
     exact_boundary_times = (admission_time, *ordered_times)
     interval_over_72h = any(
@@ -545,14 +566,34 @@ def evaluate_rule_007_typed(
         tail_time_ambiguous = horizon_date == deadline_date
         if not same_day_horizon_candidate:
             interval_over_72h = interval_over_72h or horizon_date > deadline_date
-    if not ordered_times and horizon_time is None and interval_over_72h:
+    if not ordered_times and horizon_time is None:
+        assert horizon_date is not None
+        deadline_date = (admission_time + _MAX_INTERVAL).date()
+        if horizon_date < deadline_date:
+            return decision(
+                applicability=ApplicabilityState.NOT_APPLICABLE,
+                evidence_state=EvidenceState.SUFFICIENT,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="evaluation_window_not_mature",
+                refs=refs,
+                confidence=1.0,
+            )
+        if horizon_date == deadline_date or substantive_record_without_time:
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="authoritative_time_missing",
+                refs=refs,
+                confidence=None,
+            )
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="authoritative_time_missing",
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="threshold_exceeded",
             refs=refs,
-            confidence=None,
+            confidence=1.0,
         )
     if interval_over_72h and substantive_record_without_time:
         return decision(
@@ -609,6 +650,8 @@ def rule_007_customer_display_facts(
             "failure_kind": "unstable_patient_order_present",
             "stable_course_rule_applicable": False,
         }
+    if decision.reason_code == "evaluation_window_not_mature":
+        return None
     if decision.evidence_state is not EvidenceState.SUFFICIENT:
         return None
     record_points: list[tuple[datetime, str, str]] = []
@@ -638,6 +681,8 @@ def rule_007_customer_display_facts(
         same_day_horizon_candidate = False
         for source_key in RULE_007_RECORD_SOURCES:
             for row in materials.rows(source_key):
+                if not _is_round_record(row, source_key=source_key):
+                    continue
                 record_time = authoritative_course_time(
                     authoritative_document_time_value(row)
                 )
@@ -709,6 +754,13 @@ def rule_007_customer_display_facts(
     interval, previous, current = max(intervals, key=lambda item: item[0])
     interval_seconds = round(interval.total_seconds())
     threshold_seconds = round(_MAX_INTERVAL.total_seconds())
+    if (
+        decision.qc_direction is QcDirection.DEFECT
+        and interval_seconds <= threshold_seconds
+    ):
+        # 到达 72 小时仍完全没有记录属于缺失，但“恰好 72 小时”不是一个
+        # 超时区间，不能伪造超过阈值的展示事实。
+        return None
     previous_position = (
         ordered_records.index(previous) + 1
         if previous in ordered_records

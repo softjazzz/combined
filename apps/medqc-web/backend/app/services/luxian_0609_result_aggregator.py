@@ -692,6 +692,92 @@ def safe_luxian_0609_customer_display_facts(
             )
         return safe_events
 
+    def controlled_datetime(candidate: Any) -> datetime | None:
+        if not isinstance(candidate, str) or not candidate or len(candidate) > 40:
+            return None
+        try:
+            return datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    def controlled_rescue_events(value: Any) -> list[dict[str, Any]] | None:
+        """投影 004 逐次时限事实，同时验证并剔除内部文书 ID。"""
+
+        if not isinstance(value, (list, tuple)) or not 2 <= len(value) <= 100:
+            return None
+
+        base_keys = {"event_index", "event_state"}
+        fields_by_state = {
+            "within": ({"rescue_end_time", "document_completion_time", "elapsed_hours"},),
+            "late": ({"rescue_end_time", "document_completion_time", "elapsed_hours"},),
+            "rescue_end_time_missing": (set(), {"document_completion_time"}),
+            "document_completion_time_missing": ({"rescue_end_time"},),
+            "authoritative_time_conflict": ({"rescue_end_time", "document_completion_time"},),
+        }
+        safe_events: list[dict[str, Any]] = []
+        for expected_index, item in enumerate(value, start=1):
+            if not isinstance(item, Mapping) or item.get("event_index") != expected_index:
+                return None
+            document_id = item.get("source_document_id")
+            if document_id is not None and (
+                not isinstance(document_id, str)
+                or not document_id.strip()
+                or len(document_id) > 256
+                or "\n" in document_id
+                or "\r" in document_id
+            ):
+                return None
+            state = item.get("event_state")
+            variants = fields_by_state.get(state)
+            identity_keys = {"source_document_id"} if document_id is not None else set()
+            if variants is None or set(item) not in (
+                base_keys | identity_keys | fields for fields in variants
+            ):
+                return None
+            rescue_end_value = item.get("rescue_end_time")
+            completion_value = item.get("document_completion_time")
+            rescue_end = controlled_datetime(rescue_end_value)
+            completion = controlled_datetime(completion_value)
+            if state in {"within", "late"}:
+                elapsed = item.get("elapsed_hours")
+                if (
+                    rescue_end is None
+                    or completion is None
+                    or not isinstance(elapsed, (int, float))
+                    or isinstance(elapsed, bool)
+                    or not isfinite(float(elapsed))
+                ):
+                    return None
+                try:
+                    calculated = (completion - rescue_end).total_seconds() / 3600
+                except TypeError:
+                    return None
+                if (
+                    calculated < 0
+                    or abs(float(elapsed) - round(calculated, 2)) > 0.001
+                    or (state == "within") != (calculated <= 6)
+                ):
+                    return None
+            elif state == "rescue_end_time_missing":
+                if completion_value is not None and completion is None:
+                    return None
+            elif state == "document_completion_time_missing":
+                if rescue_end is None:
+                    return None
+            elif state == "authoritative_time_conflict":
+                if rescue_end is None or completion is None:
+                    return None
+                try:
+                    if completion >= rescue_end:
+                        return None
+                except TypeError:
+                    return None
+            safe_events.append({
+                key: round(float(item[key]), 2) if key == "elapsed_hours" else item[key]
+                for key in item if key != "source_document_id"
+            })
+        return safe_events
+
     def controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
         """只投影 064 客户逐台核对所需字段，拒绝原始文书和内部事件标识。"""
 
@@ -4623,6 +4709,86 @@ def safe_luxian_0609_customer_display_facts(
         state = raw.get("timeliness_state")
         threshold = raw.get("threshold_hours")
         source_label = raw.get("source_label")
+        if rule_id == "LX0609-004" and failure_kind == "rescue_record_missing_after_trigger":
+            trigger_order_id = raw.get("trigger_order_id")
+            expected_keys = {"failure_kind", "target_document", "source_label", "trigger_source"}
+            if trigger_order_id is not None:
+                expected_keys.add("trigger_order_id")
+            if (
+                target_document != "rescue_record"
+                or source_label != "抢救记录"
+                or raw.get("trigger_source") != "inpat_nondrug_order.rescue_order"
+                or set(raw) != expected_keys
+                or (
+                    trigger_order_id is not None
+                    and (
+                        not isinstance(trigger_order_id, str)
+                        or not trigger_order_id.strip()
+                        or len(trigger_order_id) > 256
+                        or "\n" in trigger_order_id
+                        or "\r" in trigger_order_id
+                    )
+                )
+            ):
+                return None
+            return {
+                "failure_kind": failure_kind,
+                "target_document": "rescue_record",
+                "source_label": "抢救记录",
+            }
+        if rule_id == "LX0609-004" and failure_kind in {
+            "rescue_end_time_missing",
+            "document_completion_time_missing",
+            "authoritative_time_conflict",
+        }:
+            anchor_time = raw.get("anchor_time")
+            observed_time = raw.get("observed_time")
+            parsed_anchor = controlled_datetime(anchor_time) if anchor_time is not None else None
+            parsed_observed = controlled_datetime(observed_time) if observed_time is not None else None
+            expected_state = (
+                "conflict"
+                if failure_kind == "authoritative_time_conflict"
+                else "missing_time"
+            )
+            if (
+                target_document != "rescue_record"
+                or source_label != "抢救记录"
+                or threshold != 6
+                or state != expected_state
+                or (failure_kind == "rescue_end_time_missing" and anchor_time is not None)
+                or (
+                    failure_kind == "document_completion_time_missing"
+                    and observed_time is not None
+                )
+                or (anchor_time is not None and parsed_anchor is None)
+                or (observed_time is not None and parsed_observed is None)
+            ):
+                return None
+            if failure_kind == "authoritative_time_conflict":
+                if parsed_anchor is None or parsed_observed is None:
+                    return None
+                try:
+                    if parsed_observed >= parsed_anchor:
+                        return None
+                except TypeError:
+                    return None
+            facts: dict[str, Any] = {
+                "failure_kind": failure_kind,
+                "target_document": "rescue_record",
+                "source_label": "抢救记录",
+                "timeliness_state": expected_state,
+                "threshold_hours": 6,
+            }
+            if anchor_time is not None:
+                facts["anchor_time"] = anchor_time
+            if observed_time is not None:
+                facts["observed_time"] = observed_time
+            if raw.get("rescue_events") is not None:
+                rescue_events = controlled_rescue_events(raw.get("rescue_events"))
+                if rescue_events is None:
+                    return None
+                facts["rescue_events"] = rescue_events
+            return facts
         if failure_kind == "evidence_time_conflict":
             conflict_seconds = raw.get("time_conflict_seconds")
             anchor_time = raw.get("anchor_time")
@@ -4716,6 +4882,11 @@ def safe_luxian_0609_customer_display_facts(
                     max(0.0, threshold - float(elapsed_hours)),
                     2,
                 )
+        if rule_id == "LX0609-004" and raw.get("rescue_events") is not None:
+            rescue_events = controlled_rescue_events(raw.get("rescue_events"))
+            if rescue_events is None:
+                return None
+            facts["rescue_events"] = rescue_events
         return facts
     return None
 
@@ -4811,6 +4982,26 @@ def _customer_evidence_from_display_facts(
         )
 
     source_document_id = valid_document_id(raw.get("source_document_id"))
+    if rule_id == "LX0609-004":
+        located: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        candidates = [("rescue_record", raw.get("source_document_id"))]
+        candidates.extend(
+            ("rescue_record", item.get("source_document_id"))
+            for item in raw.get("rescue_events") or ()
+            if isinstance(item, Mapping)
+        )
+        if raw.get("failure_kind") == "rescue_record_missing_after_trigger":
+            candidates.append(("inpat_nondrug_order", raw.get("trigger_order_id")))
+        for source_type, value in candidates:
+            document_id = valid_document_id(value)
+            key = (source_type, document_id)
+            if document_id and key not in seen:
+                seen.add(key)
+                located.append(
+                    {"source_type": source_type, "source_document_id": document_id}
+                )
+        return located
     exact_trigger_sources = {
         "LX0609-033": {"surgery_record"},
         "LX0609-040": {"mr_surgery"},
@@ -4912,7 +5103,6 @@ def _customer_evidence_from_display_facts(
             )
         return located
     single_source_types = {
-        "LX0609-004": "rescue_record",
         "LX0609-005": "senior_course_record",
         "LX0609-006": "senior_course_record",
         "LX0609-025": str(raw.get("source_document_type") or ""),

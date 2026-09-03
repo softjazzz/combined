@@ -792,6 +792,9 @@ def test_every_customer_executable_rule_has_specific_action_instead_of_generic_a
 
 
 NOT_APPLICABLE_CASES = (
+    ("LX0609-004", "trigger_absent_complete"),
+    ("LX0609-006", "evaluation_window_not_mature"),
+    ("LX0609-007", "evaluation_window_not_mature"),
     ("LX0609-003", "performed_event_absent"),
     ("LX0609-007", "eligibility_not_met"),
     ("LX0609-008", "trigger_absent_complete"),
@@ -836,6 +839,88 @@ NOT_APPLICABLE_CASES = (
     ("LX0609-072", "trigger_absent_complete"),
     ("LX0609-073", "trigger_absent_complete"),
 )
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "expected_finding", "expected_evidence", "expected_suggestion"),
+    [
+        (
+            "rescue_record_missing_after_trigger",
+            "已发现有效抢救医嘱，但未读取到对应抢救记录",
+            "抢救事件已被有效医嘱触发",
+            "先核对抢救记录是否已完整同步",
+        ),
+        (
+            "rescue_end_time_missing",
+            "抢救记录缺少抢救结束时间",
+            "无法计算抢救结束至记录完成的间隔",
+            "补充本次抢救的权威结束时间",
+        ),
+        (
+            "document_completion_time_missing",
+            "抢救记录缺少权威完成时间",
+            "无法计算抢救结束至记录完成的间隔",
+            "补充抢救记录的权威完成时间",
+        ),
+    ],
+)
+def test_004_data_gap_reasons_have_specific_customer_messages(
+    reason_code: str,
+    expected_finding: str,
+    expected_evidence: str,
+    expected_suggestion: str,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-004",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="rescue-timeliness-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "data_gap"
+    assert expected_finding in result["findings"]
+    assert expected_evidence in result["evidence"]
+    assert expected_suggestion in result["suggestion"]
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "reason_code", "expected_finding"),
+    [
+        ("LX0609-004", "trigger_absent_complete", "未发现有效抢救事件"),
+        ("LX0609-006", "evaluation_window_not_mature", "入院尚未满72小时"),
+        ("LX0609-007", "evaluation_window_not_mature", "病情稳定观察时段尚未满3天"),
+    ],
+)
+def test_004_006_007_not_applicable_reasons_have_specific_customer_messages(
+    rule_id: str,
+    reason_code: str,
+    expected_finding: str,
+) -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="basic-timeliness-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "not_applicable"
+    assert expected_finding in result["findings"]
 
 
 def test_022_mixed_opinions_name_each_problematic_episode() -> None:

@@ -33,6 +33,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
 from .source_evidence_reader import (
+    CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
     build_luxian_0609_course_round_timeline_from_rows,
     read_luxian_0609_course_round_timeline,
@@ -126,7 +127,7 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
         "first_course_record",
         "inpat_registration",
     ),
-    "LX0609-004": ("rescue_record",),
+    "LX0609-004": (CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"),
     "LX0609-005": (
         "admission_record",
         "daily_course_record",
@@ -510,7 +511,7 @@ def _typed_basic_decisions(
             "first_course_record",
             "inpat_registration",
         ),
-        "LX0609-004": ("rescue_record",),
+        "LX0609-004": (CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY, "rescue_record"),
         "LX0609-005": (
             "admission_record",
             "daily_course_record",
@@ -804,7 +805,11 @@ def _typed_basic_decisions(
         if maturity_state == "mature":
             return None
         if maturity_state == "not_reached":
-            return gap(rule_id, "evaluation_window_not_mature")
+            return (
+                not_applicable(rule_id, "evaluation_window_not_mature")
+                if rule_id == "LX0609-006"
+                else gap(rule_id, "evaluation_window_not_mature")
+            )
         if maturity_state == "conflict":
             return conflict(rule_id)
         return gap(rule_id, "snapshot_mismatch", technical=True)
@@ -1012,21 +1017,90 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
             if not rescue_rows:
-                decisions.append(
-                    gap(
-                        rule_id,
-                        "applicability_source_gap",
-                        applicability=ApplicabilityState.UNKNOWN,
+                order_issue = source_issue((CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,))
+                try:
+                    order_rows = (
+                        rows(CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY)
+                        if observation_by_source[
+                            CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY
+                        ].query_state.value
+                        in {"available", "empty"}
+                        else ()
                     )
+                except EvidenceMaterialTruncated:
+                    order_issue = ("source_truncated", False)
+                    order_rows = ()
+                except ValueError:
+                    order_issue = ("snapshot_mismatch", True)
+                    order_rows = ()
+                if order_issue is not None:
+                    reason, technical = order_issue
+                    decisions.append(gap(rule_id, reason, technical=technical))
+                    continue
+                rescue_orders = tuple(
+                    row for row in order_rows if row.get("status_state") == "effective"
+                )
+                if order_rows and not rescue_orders:
+                    decisions.append(gap(rule_id, "required_field_missing"))
+                    continue
+                if not rescue_orders:
+                    decisions.append(not_applicable(rule_id, "trigger_absent_complete"))
+                    continue
+                decisions.append(gap(rule_id, "rescue_record_missing_after_trigger"))
+                trigger_order = rescue_orders[0]
+                add_customer_fact(
+                    rule_id,
+                    {
+                        "failure_kind": "rescue_record_missing_after_trigger",
+                        "target_document": "rescue_record",
+                        "source_label": "抢救记录",
+                        "trigger_source": CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+                        **(
+                            {"trigger_order_id": str(trigger_order.get("order_id"))}
+                            if trigger_order.get("order_id")
+                            else {}
+                        ),
+                    },
                 )
                 continue
             rescue_timeline: list[tuple[timedelta, datetime, datetime, str]] = []
-            incomplete = False
-            for event in extract_rescue_events(rescue_rows):
+            incomplete: list[tuple[str, datetime | None, datetime | None, str]] = []
+            rescue_event_facts: list[dict[str, Any]] = []
+            for event_index, event in enumerate(
+                extract_rescue_events(rescue_rows), start=1
+            ):
                 record_time = event.document.observed_time
                 rescue_end = event.rescue_end_time
-                if record_time is None or rescue_end is None:
-                    incomplete = True
+                event_fact: dict[str, Any] = {"event_index": event_index}
+                if event.document.document_id:
+                    event_fact["source_document_id"] = event.document.document_id
+                if rescue_end is not None:
+                    event_fact["rescue_end_time"] = format_time(rescue_end)
+                if record_time is not None:
+                    event_fact["document_completion_time"] = format_time(record_time)
+                if rescue_end is None:
+                    event_fact["event_state"] = "rescue_end_time_missing"
+                    rescue_event_facts.append(event_fact)
+                    incomplete.append(
+                        (
+                            "rescue_end_time_missing",
+                            None,
+                            record_time,
+                            event.document.document_id or "",
+                        )
+                    )
+                    continue
+                if record_time is None:
+                    event_fact["event_state"] = "document_completion_time_missing"
+                    rescue_event_facts.append(event_fact)
+                    incomplete.append(
+                        (
+                            "document_completion_time_missing",
+                            rescue_end,
+                            None,
+                            event.document.document_id or "",
+                        )
+                    )
                     continue
                 association = associate_timeliness_event(
                     anchor_time=rescue_end,
@@ -1034,8 +1108,23 @@ def _typed_basic_decisions(
                     threshold_hours=6,
                 )
                 if association is None or association.state == "before":
-                    incomplete = True
+                    event_fact["event_state"] = "authoritative_time_conflict"
+                    rescue_event_facts.append(event_fact)
+                    incomplete.append(
+                        (
+                            "authoritative_time_conflict",
+                            rescue_end,
+                            record_time,
+                            event.document.document_id or "",
+                        )
+                    )
                 else:
+                    elapsed_hours = (record_time - rescue_end).total_seconds() / 3600
+                    event_fact["event_state"] = (
+                        "late" if elapsed_hours > 6 else "within"
+                    )
+                    event_fact["elapsed_hours"] = round(elapsed_hours, 2)
+                    rescue_event_facts.append(event_fact)
                     rescue_timeline.append(
                         (
                             record_time - rescue_end,
@@ -1044,22 +1133,21 @@ def _typed_basic_decisions(
                             event.document.document_id or "",
                         )
                     )
-            overdue = next(
+            overdue = max(
                 (
                     item
-                    for item in sorted(rescue_timeline, key=lambda item: item[0])
+                    for item in rescue_timeline
                     if item[0] > timedelta(hours=6)
                 ),
-                None,
+                key=lambda item: item[0],
+                default=None,
             )
             if overdue is not None:
                 _delta, rescue_end, record_time, document_id = overdue
                 decisions.append(
                     conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
                 )
-                add_customer_fact(
-                    rule_id,
-                    timeliness_fact(
+                projected = timeliness_fact(
                         rule_id=rule_id,
                         target_document="rescue_record",
                         source_label="抢救记录",
@@ -1068,10 +1156,37 @@ def _typed_basic_decisions(
                         anchor=rescue_end,
                         observed=record_time,
                         source_document_id=document_id or None,
-                    ),
-                )
+                    )
+                if len(rescue_event_facts) > 1:
+                    projected["rescue_events"] = rescue_event_facts
+                add_customer_fact(rule_id, projected)
             elif incomplete:
-                decisions.append(gap(rule_id, "required_field_missing"))
+                reason, rescue_end, record_time, document_id = sorted(
+                    incomplete,
+                    key=lambda item: (
+                        {
+                            "authoritative_time_conflict": 0,
+                            "rescue_end_time_missing": 1,
+                            "document_completion_time_missing": 2,
+                        }[item[0]],
+                        item[3],
+                    ),
+                )[0]
+                decisions.append(gap(rule_id, reason))
+                projected = timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="rescue_record",
+                        source_label="抢救记录",
+                        state="conflict" if reason == "authoritative_time_conflict" else "missing_time",
+                        threshold_hours=6,
+                        anchor=rescue_end,
+                        observed=record_time,
+                        source_document_id=document_id or None,
+                        failure_kind=reason,
+                    )
+                if len(rescue_event_facts) > 1:
+                    projected["rescue_events"] = rescue_event_facts
+                add_customer_fact(rule_id, projected)
             elif rescue_timeline:
                 decisions.append(
                     conclusive(
@@ -1084,9 +1199,7 @@ def _typed_basic_decisions(
                     rescue_timeline,
                     key=lambda item: item[0],
                 )
-                add_customer_fact(
-                    rule_id,
-                    timeliness_fact(
+                projected = timeliness_fact(
                         rule_id=rule_id,
                         target_document="rescue_record",
                         source_label="抢救记录",
@@ -1096,8 +1209,10 @@ def _typed_basic_decisions(
                         observed=record_time,
                         source_document_id=document_id or None,
                         failure_kind="timeliness_requirement_satisfied",
-                    ),
-                )
+                    )
+                if len(rescue_event_facts) > 1:
+                    projected["rescue_events"] = rescue_event_facts
+                add_customer_fact(rule_id, projected)
             else:
                 decisions.append(gap(rule_id, "required_field_missing"))
             continue
@@ -1287,7 +1402,44 @@ def _typed_basic_decisions(
         qualifying_missing_time = False
         ambiguous_round = False
         semantic_round_unknown = False
+        horizon_datetime_for_filter: datetime | None = None
+        horizon_date_for_filter: date | None = None
+        if rule_id == "LX0609-006":
+            try:
+                horizon_rows_for_filter = tuple(
+                    materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
+                )
+                if len(horizon_rows_for_filter) == 1:
+                    horizon_row_for_filter = horizon_rows_for_filter[0]
+                    raw_horizon_datetime = horizon_row_for_filter.get(
+                        "horizon_datetime"
+                    )
+                    if raw_horizon_datetime:
+                        parsed_horizon = datetime.fromisoformat(
+                            str(raw_horizon_datetime)
+                        )
+                        if parsed_horizon.tzinfo is None:
+                            horizon_datetime_for_filter = parsed_horizon
+                    raw_horizon_date = horizon_row_for_filter.get("horizon_date")
+                    if raw_horizon_date:
+                        horizon_date_for_filter = date.fromisoformat(
+                            str(raw_horizon_date)
+                        )
+            except (EvidenceMaterialTruncated, TypeError, ValueError):
+                pass
         for source_key, event in course_events:
+            event_time = event.observed_time
+            if (
+                event_time is not None
+                and horizon_datetime_for_filter is not None
+                and event_time > horizon_datetime_for_filter
+            ) or (
+                event_time is not None
+                and horizon_datetime_for_filter is None
+                and horizon_date_for_filter is not None
+                and event_time.date() > horizon_date_for_filter
+            ):
+                continue
             row_id = id(event.row)
             role = (
                 semantic_round_roles.get(
@@ -1305,7 +1457,7 @@ def _typed_basic_decisions(
                     semantic_round_unknown = True
                     continue
             if qualifies(role):
-                parsed = event.observed_time
+                parsed = event_time
                 if parsed is None:
                     qualifying_missing_time = True
                 else:
@@ -1371,11 +1523,19 @@ def _typed_basic_decisions(
                     failure_kind="timeliness_requirement_satisfied",
                 ),
             )
-        elif qualifying_missing_time:
-            decisions.append(gap(rule_id, "authoritative_time_missing"))
         elif course_issue is not None:
             reason, technical = course_issue
             decisions.append(gap(rule_id, reason, technical=technical))
+        elif rule_id == "LX0609-006" and anchor is not None and (
+            maturity_decision := missing_target_decision(
+                rule_id,
+                anchor=anchor,
+                threshold=threshold,
+            )
+        ) is not None:
+            decisions.append(maturity_decision)
+        elif qualifying_missing_time:
+            decisions.append(gap(rule_id, "authoritative_time_missing"))
         elif "before" in elapsed_states:
             decisions.append(
                 make(
@@ -1444,9 +1604,8 @@ def _typed_basic_decisions(
             if missing_decision is not None:
                 decisions.append(missing_decision)
                 continue
-            # 005/006 只有“目标文书缺失”而没有可定位文书，不能交付为确定问题。
-            # 在来源已读为空时保守标记资料待核实，避免页面出现无证据的确定问题。
-            if rule_id in {"LX0609-005", "LX0609-006"}:
+            # 005 暂保留既有空来源语义；006 已由成熟门确认到期，可交付确定缺失。
+            if rule_id == "LX0609-005":
                 decisions.append(gap(rule_id, "source_empty"))
                 continue
             decision = conclusive(
@@ -1767,7 +1926,10 @@ def execute_luxian_0609_native_basic_timeliness(
     )
     if (
         senior_decision is not None
-        and senior_decision.qc_direction is QcDirection.SATISFIED
+        and (
+            senior_decision.qc_direction is QcDirection.SATISFIED
+            or senior_decision.reason_code == "evaluation_window_not_mature"
+        )
     ):
         return baseline
     if (

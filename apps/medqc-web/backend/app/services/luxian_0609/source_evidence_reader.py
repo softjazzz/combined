@@ -29,6 +29,7 @@ SURGERY_TIME_FIELDS = (
 CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY = "inpat_nondrug_order.unstable_order"
 CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY = "inpat_nondrug_order.severity_order"
 CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY = "inpat_nondrug_order.exam_lab_order"
+CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY = "inpat_nondrug_order.rescue_order"
 CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
 EVALUATION_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
 AUTHORITATIVE_DOCUMENT_TIME_FIELDS = (
@@ -643,6 +644,10 @@ _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY] = (
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY] = (
     _NATIVE_SOURCE_FIELDS[CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY]
 )
+_SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY] = (
+    "order_id",
+    "status_state",
+)
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY] = (
     "discharge_datetime",
     "row_ref",
@@ -1242,6 +1247,102 @@ def read_luxian_0609_exam_lab_order_rows(
     )
 
 
+def read_luxian_0609_rescue_order_rows(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> SnapshotSourceRows:
+    """数据库侧只读取明确抢救医嘱及最小状态，不受普通医嘱数量影响。"""
+
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
+    table = "inpat_nondrug_order"
+    try:
+        columns = set(bundle_assembly._get_table_columns(trusted_schema, table))
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    required = {
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "order_name",
+        "order_status",
+    }
+    if not required.issubset(columns):
+        raise SourceEvidenceUnavailable()
+    selected = [
+        field for field in ("order_id", "order_name", "order_status") if field in columns
+    ]
+    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
+    order_sql = ", ".join(
+        f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
+        for field in ("order_id", "order_name", "order_status")
+        if field in columns
+    )
+    limit_rows = 50
+    order_name = bundle_assembly._quote_ident("order_name")
+    order_status = bundle_assembly._quote_ident("order_status")
+    sql = (
+        f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, table)} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+        f"AND {order_name} IN (:small_rescue, :medium_rescue, "
+        f":small_rescue_free_ascii, :small_rescue_free_full) "
+        f"AND ({order_status} IS NULL OR {order_status} NOT IN "
+        f"(:cancelled_status, :revoked_status, :voided_status)) "
+        f"ORDER BY {order_sql} LIMIT :limit_rows"
+    )
+    try:
+        with engine.connect() as connection:
+            raw_rows = connection.execute(
+                bundle_assembly.text(sql),
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                    "small_rescue": "小抢救",
+                    "medium_rescue": "中抢救",
+                    "small_rescue_free_ascii": "小抢救(无费用)",
+                    "small_rescue_free_full": "小抢救（无费用）",
+                    "cancelled_status": "取消",
+                    "revoked_status": "撤销",
+                    "voided_status": "作废",
+                    "limit_rows": limit_rows + 1,
+                },
+            ).mappings().all()
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    safe_rows: list[dict[str, Any]] = []
+    for row in raw_rows:
+        status = str(row.get("order_status") or "").strip()
+        if status in {"取消", "撤销", "作废"}:
+            continue
+        status_state = (
+            "effective"
+            if status in {"新开", "执行中", "停止", "已停止"}
+            else "unresolved"
+        )
+        safe_rows.append(
+            {
+                "order_id": row.get("order_id"),
+                "status_state": status_state,
+            }
+        )
+    return SnapshotSourceRows.create(
+        source_key=CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+        rows=safe_rows[:limit_rows],
+        truncated=len(safe_rows) > limit_rows,
+        limit_rows=limit_rows,
+    )
+
+
 def read_luxian_0609_discharge_horizon_rows(
     *,
     institute_id: str,
@@ -1507,6 +1608,13 @@ def read_luxian_0609_snapshot_source_rows(
         )
     if normalized_source == CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY:
         return read_luxian_0609_exam_lab_order_rows(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        )
+    if normalized_source == CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY:
+        return read_luxian_0609_rescue_order_rows(
             institute_id=institute_id,
             patient_id=patient_id,
             visit_id=visit_id,

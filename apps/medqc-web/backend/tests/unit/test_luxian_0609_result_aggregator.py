@@ -6290,3 +6290,161 @@ def test_transfer_customer_facts_allow_only_controlled_event_fields() -> None:
     assert safe_luxian_0609_customer_display_facts(
         rule_id="LX0609-072", raw={**facts, "transfer_in_time": "2026-07-01"}
     ) is None
+
+
+def test_004_projects_rescue_events_without_exposing_internal_document_ids() -> None:
+    raw = {
+        "failure_kind": "timeliness_requirement_not_met",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "timeliness_state": "late",
+        "threshold_hours": 6,
+        "anchor_time": "2026-06-01 09:00:00",
+        "observed_time": "2026-06-01 16:00:00",
+        "elapsed_hours": 7.0,
+        "source_document_id": "rescue-1",
+        "rescue_events": [
+            {
+                "event_index": 1,
+                "source_document_id": "rescue-1",
+                "rescue_end_time": "2026-06-01 09:00:00",
+                "document_completion_time": "2026-06-01 16:00:00",
+                "event_state": "late",
+                "elapsed_hours": 7.0,
+            },
+            {
+                "event_index": 2,
+                "source_document_id": "rescue-2",
+                "document_completion_time": "2026-06-02 10:00:00",
+                "event_state": "rescue_end_time_missing",
+            },
+        ],
+    }
+
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-004", raw=raw)
+
+    assert safe is not None
+    assert safe["rescue_events"] == [
+        {
+            "event_index": 1,
+            "rescue_end_time": "2026-06-01 09:00:00",
+            "document_completion_time": "2026-06-01 16:00:00",
+            "event_state": "late",
+            "elapsed_hours": 7.0,
+        },
+        {
+            "event_index": 2,
+            "document_completion_time": "2026-06-02 10:00:00",
+            "event_state": "rescue_end_time_missing",
+        },
+    ]
+    assert "source_document_id" not in safe
+    assert all("source_document_id" not in item for item in safe["rescue_events"])
+    assert _customer_evidence_from_display_facts(
+        rule_id="LX0609-004", raw=raw
+    ) == [
+        {"source_type": "rescue_record", "source_document_id": "rescue-1"},
+        {"source_type": "rescue_record", "source_document_id": "rescue-2"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "timeliness_state", "anchor_time", "observed_time"),
+    [
+        ("rescue_end_time_missing", "missing_time", None, "2026-06-01 10:00:00"),
+        ("document_completion_time_missing", "missing_time", "2026-06-01 09:00:00", None),
+        ("authoritative_time_conflict", "conflict", "2026-06-01 09:00:00", "2026-06-01 08:59:00"),
+    ],
+)
+def test_004_accepts_controlled_incomplete_time_facts(
+    failure_kind: str,
+    timeliness_state: str,
+    anchor_time: str | None,
+    observed_time: str | None,
+) -> None:
+    raw = {
+        "failure_kind": failure_kind,
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "timeliness_state": timeliness_state,
+        "threshold_hours": 6,
+        "source_document_id": "rescue-gap",
+        **({"anchor_time": anchor_time} if anchor_time else {}),
+        **({"observed_time": observed_time} if observed_time else {}),
+    }
+
+    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-004", raw=raw)
+
+    assert safe is not None
+    assert safe["failure_kind"] == failure_kind
+    assert "source_document_id" not in safe
+    assert _customer_evidence_from_display_facts(
+        rule_id="LX0609-004", raw=raw
+    ) == [
+        {"source_type": "rescue_record", "source_document_id": "rescue-gap"}
+    ]
+
+
+def test_004_missing_record_after_rescue_order_projects_only_safe_facts_and_order_evidence() -> None:
+    raw = {
+        "failure_kind": "rescue_record_missing_after_trigger",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "trigger_source": "inpat_nondrug_order.rescue_order",
+        "trigger_order_id": "rescue-order-1",
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-004", raw=raw
+    ) == {
+        "failure_kind": "rescue_record_missing_after_trigger",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+    }
+    assert _customer_evidence_from_display_facts(
+        rule_id="LX0609-004", raw=raw
+    ) == [
+        {
+            "source_type": "inpat_nondrug_order",
+            "source_document_id": "rescue-order-1",
+        }
+    ]
+
+
+def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
+    base = {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "timeliness_state": "within",
+        "threshold_hours": 6,
+        "rescue_events": [
+            {
+                "event_index": 1,
+                "source_document_id": "rescue-1",
+                "rescue_end_time": "2026-06-01 09:00:00",
+                "document_completion_time": "2026-06-01 11:00:00",
+                "event_state": "within",
+                "elapsed_hours": 2.0,
+            }
+        ],
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-004",
+        raw={
+            **base,
+            "rescue_events": [
+                {**base["rescue_events"][0], "elapsed_hours": 20.0}
+            ],
+        },
+    ) is None
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-004",
+        raw={
+            **base,
+            "rescue_events": [
+                {**base["rescue_events"][0], "record_content": "不得投影的正文"}
+            ],
+        },
+    ) is None
