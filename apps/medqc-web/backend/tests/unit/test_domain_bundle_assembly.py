@@ -1,4 +1,5 @@
 from app.services.bundles import assembly as assembly_module
+from app.services.document_assembly import build_document_select_columns
 
 
 def test_document_inventory_should_group_lab_items_into_one_report(monkeypatch):
@@ -160,6 +161,48 @@ def test_document_inventory_should_group_exam_items_into_one_report(monkeypatch)
     assert len(report["report_items"]) == 2
     assert "双肺纹理增多" in report["content"]
     assert "双肺炎症可能" in report["content"]
+
+
+def test_exam_report_source_projection_should_merge_master_and_full_report(monkeypatch):
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    source_report = {
+        "exam_id": "1932671||2^1932671||1",
+        "item_id": "MRI-1",
+        "description": "胸腰椎序列连续。",
+        "impression": "腰椎退行性变。",
+        "recommendation": "建议结合临床。",
+        "report_status": "已出报告",
+        "report_time": "2025-08-12 18:59:19+08:00",
+    }
+    selected_columns = set(
+        build_document_select_columns("exam_item_report", set(source_report))
+    )
+    projected_report = {
+        key: value for key, value in source_report.items() if key in selected_columns
+    }
+
+    inventory = assembly_module._build_document_inventory(
+        {
+            "exam_master": [
+                {
+                    "exam_id": "1932671||2^1932671||1",
+                    "exam_type": "MRI",
+                    "performed_dept": "核磁共振室",
+                    "report_time": "2025-08-12 18:59:19+08:00",
+                }
+            ],
+            "exam_item_report": [projected_report],
+        },
+        "cdm",
+    )
+
+    assert len(inventory) == 1
+    report = inventory[0]
+    assert report["document_id"] == "1932671||2^1932671||1"
+    assert report["document_type"] == "exam_item_report"
+    assert "胸腰椎序列连续" in report["content"]
+    assert "腰椎退行性变" in report["content"]
+    assert "建议结合临床" in report["content"]
 
 
 def test_course_bundle_should_keep_raw_lab_rows_but_publish_one_report(monkeypatch):

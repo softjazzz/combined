@@ -1,4 +1,22 @@
-from app.services.document_assembly import assemble_document
+from app.services.document_assembly import assemble_document, build_document_select_columns
+
+
+def test_exam_item_report_projection_preserves_linkage_and_result_fields():
+    available = {
+        "exam_id",
+        "item_id",
+        "description",
+        "impression",
+        "recommendation",
+        "abnormal_sign",
+        "report_status",
+        "report_time",
+        "record_content",
+    }
+
+    selected = set(build_document_select_columns("exam_item_report", available))
+
+    assert available <= selected
 
 
 def test_exam_master_with_structured_fields_is_a_readable_document():

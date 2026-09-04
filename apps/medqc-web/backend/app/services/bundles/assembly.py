@@ -1931,6 +1931,7 @@ def _build_grouped_exam_reports(
                     row,
                     fields=("exam_impression", "impression", "exam_conclusion", "conclusion", "diagnosis"),
                 ),
+                "recommendation": _normalize_text(row.get("recommendation")),
             }
             report_items.append(item)
             if item["item_name"]:
@@ -1939,6 +1940,8 @@ def _build_grouped_exam_reports(
                 result_lines.append(f"检查所见：{item['findings']}")
             if item["impression"]:
                 result_lines.append(f"检查结论：{item['impression']}")
+            if item["recommendation"]:
+                result_lines.append(f"检查建议：{item['recommendation']}")
         metadata = {
             "request_time": _first_report_value(matched_master, fields=("request_time", "request_datetime")),
             "exam_time": _first_report_value(matched_master, fields=("exam_time",)),
@@ -1948,6 +1951,7 @@ def _build_grouped_exam_reports(
             "performed_dept": _first_report_value(matched_master, fields=("performed_dept",)),
             "reporter": _first_report_value(matched_master, fields=("reporter",)),
             "verifier": _first_report_value(matched_master, fields=("verifier",)),
+            "report_status": _first_report_value(first, fields=("report_status",)),
         }
         header_lines = [
             *(

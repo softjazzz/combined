@@ -168,6 +168,20 @@ def extract_document_identity_metadata(
     }
 
 _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
+    "exam_item_report": (
+        # 检查主记录与报告明细依赖 exam_id 合并；其余字段由既有报告
+        # 聚合器生成检查所见、结论与元数据，不能在查询投影阶段丢失。
+        "exam_id",
+        "item_id",
+        "impression",
+        "recommendation",
+        "abnormal_sign",
+        "device_information",
+        "image_id",
+        "remark",
+        "report_status",
+        "report_time",
+    ),
     "admission_record_diagnosis": (
         "diagnosis_id",
         "diagnosis_type",
