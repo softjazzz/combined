@@ -276,6 +276,61 @@ def test_exam_report_title_should_fall_back_to_performed_department(monkeypatch)
         assert inventory[0]["document_title"] == expected_title
 
 
+def test_exam_report_title_should_prefer_linked_exam_item_name(monkeypatch):
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+
+    inventory = assembly_module._build_document_inventory(
+        {
+            "exam_master": [
+                {
+                    "exam_id": "ECG-001",
+                    "exam_type": "",
+                    "performed_dept": "心电图室",
+                    "report_time": "2025-08-13 10:51:28+08:00",
+                },
+                {
+                    "exam_id": "BMD-001",
+                    "exam_type": "",
+                    "performed_dept": "骨密度室",
+                    "report_time": "2025-08-13 11:30:00+08:00",
+                },
+            ],
+            "exam_item": [
+                {
+                    "exam_id": "ECG-001",
+                    "item_id": "ECG-ITEM-001",
+                    "item_name": "常规心电图检查（十二通道）",
+                },
+                {
+                    "exam_id": "BMD-001",
+                    "item_id": "BMD-ITEM-001",
+                    "item_name": "骨密度测试",
+                },
+            ],
+            "exam_item_report": [
+                {
+                    "exam_id": "ECG-001",
+                    "item_id": "ECG-ITEM-001",
+                    "impression": "窦性心律，房性早搏。",
+                },
+                {
+                    "exam_id": "BMD-001",
+                    "item_id": "BMD-ITEM-001",
+                    "impression": "骨量减少。",
+                },
+            ],
+        },
+        "cdm",
+    )
+
+    assert len(inventory) == 2
+    titles = {item["document_id"]: item["document_title"] for item in inventory}
+    assert titles == {
+        "ECG-001": "常规心电图检查（十二通道）报告",
+        "BMD-001": "骨密度测试报告",
+    }
+
+
 def test_course_bundle_should_keep_raw_lab_rows_but_publish_one_report(monkeypatch):
     def _fake_select_records(**kwargs):
         if kwargs["table"] == "labtest_master":
@@ -822,7 +877,9 @@ def test_unified_refresh_should_read_each_material_once_and_keep_variant_limits(
     for visit_id in ("V1", "V2"):
         assert calls_by_visit_table[(visit_id, "daily_course_record")][0]["limit"] == 201
         assert calls_by_visit_table[(visit_id, "exam_master")][0]["limit"] == 501
+        assert calls_by_visit_table[(visit_id, "exam_item")][0]["limit"] == 2001
         assert calls_by_visit_table[(visit_id, "labtest_item_report")][0]["limit"] == 5001
+        assert "exam_item" not in domain_bundles[(visit_id, "course")]["document_hits"]
         assert len(
             domain_bundles[(visit_id, "course")]["structured_context"]["documents"][
                 "daily_course_record"

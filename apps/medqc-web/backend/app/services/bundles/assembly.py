@@ -332,6 +332,10 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "medical_insurance_settlement_cost",
     ),
 }
+_DOMAIN_ASSOCIATION_TABLES: dict[str, tuple[str, ...]] = {
+    # exam_item 只补充检查项目名称与报告关联，不作为独立文书或规则适用性来源。
+    "course": ("exam_item",),
+}
 _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "admission_record": 20,
     "admission_record_diagnosis": 50,
@@ -354,6 +358,7 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "bloodtrans_record": 50,
     "crisis_value_record": 50,
     "exam_master": 500,
+    "exam_item": 2000,
     "exam_item_report": 2000,
     "labtest_master": 500,
     "labtest_item_report": 5000,
@@ -453,6 +458,12 @@ def _material_limits_for_variants(
 
     for execution_domain in domains:
         for table_name in _DOMAIN_DOC_PRIORITY[execution_domain]:
+            _merge_material_limit(
+                limits,
+                table_name,
+                _DOMAIN_FETCH_LIMITS.get(table_name, 50) + 1,
+            )
+        for table_name in _DOMAIN_ASSOCIATION_TABLES.get(execution_domain, ()):
             _merge_material_limit(
                 limits,
                 table_name,
@@ -1895,8 +1906,33 @@ def _infer_exam_report_subject_from_department(value: Any) -> str:
     return ""
 
 
+def _infer_exam_report_subject_from_items(rows: list[dict[str, Any]]) -> str:
+    item_names: list[str] = []
+    for row in rows:
+        item_name = _first_report_value(
+            row,
+            fields=("item_name", "exam_name", "exam_item_name"),
+        )
+        if item_name and item_name not in item_names:
+            item_names.append(item_name)
+    if not item_names:
+        return ""
+    if len(item_names) == 1:
+        return item_names[0]
+    return f"{item_names[0]}等{len(item_names)}项"
+
+
+def _build_exam_report_title(subject: str) -> str:
+    if subject.endswith("报告"):
+        return subject
+    if "检查" in subject or subject.endswith(("测试", "测定", "检测")):
+        return f"{subject}报告"
+    return "检查报告" if subject == "检查" else f"{subject}检查报告"
+
+
 def _build_grouped_exam_reports(
     master_rows: list[dict[str, Any]],
+    exam_item_rows: list[dict[str, Any]],
     item_rows: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], set[int]]:
     grouped: dict[str, tuple[str, list[dict[str, Any]]]] = {}
@@ -1911,6 +1947,11 @@ def _build_grouped_exam_reports(
         grouped.setdefault(group_key, (report_id, []))[1].append(row)
 
     master_index = _index_report_masters(master_rows, id_fields=("exam_id", "exam_no"))
+    exam_items_by_exam_id: dict[str, list[dict[str, Any]]] = {}
+    for exam_item in exam_item_rows:
+        exam_id = _first_report_value(exam_item, fields=("exam_id", "exam_no"))
+        if exam_id:
+            exam_items_by_exam_id.setdefault(exam_id, []).append(exam_item)
     consumed_master_indexes: set[int] = set()
     reports: list[dict[str, Any]] = []
     for report_id, rows in grouped.values():
@@ -1927,21 +1968,22 @@ def _build_grouped_exam_reports(
         subject = _first_report_value(
             first,
             matched_master,
-            fields=("document_title", "exam_name", "exam_item_name", "exam_type"),
+            fields=("document_title", "exam_name", "exam_item_name", "item_name"),
         )
         if not subject or subject in {"检查明细", "检查结果", "检查报告"}:
-            subject = _first_report_value(matched_master, fields=("exam_type",))
+            exam_id = _first_report_value(first, matched_master, fields=("exam_id", "exam_no"))
+            subject = _infer_exam_report_subject_from_items(
+                exam_items_by_exam_id.get(exam_id, [])
+            )
+        if not subject:
+            subject = _first_report_value(first, matched_master, fields=("exam_type",))
         if not subject:
             subject = _infer_exam_report_subject_from_department(
                 _first_report_value(first, matched_master, fields=("performed_dept",))
             )
         if not subject:
             subject = "检查"
-        title = (
-            subject
-            if subject.endswith("检查报告")
-            else ("检查报告" if subject == "检查" else f"{subject}检查报告")
-        )
+        title = _build_exam_report_title(subject)
         report_time = _first_report_value(
             first,
             matched_master,
@@ -2028,13 +2070,14 @@ def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str
     )
     exam_reports, consumed_exam_masters = _build_grouped_exam_reports(
         list(docs.get("exam_master") or []),
+        list(docs.get("exam_item") or []),
         list(docs.get("exam_item_report") or []),
     )
     inventory.extend(lab_reports)
     inventory.extend(exam_reports)
     for table_name, rows in docs.items():
         _get_table_columns(schema, table_name)
-        if table_name in {"labtest_item_report", "exam_item_report"}:
+        if table_name in {"labtest_item_report", "exam_item", "exam_item_report"}:
             continue
         for row_index, row in enumerate(rows or []):
             if table_name == "labtest_master" and row_index in consumed_lab_masters:
@@ -2543,6 +2586,24 @@ def assemble_domain_bundle(
     docs: dict[str, list[dict[str, Any]]] = {}
     domain_projection_per_source: dict[str, dict[str, Any]] = {}
     for table_name in priority:
+        projection_limit = _DOMAIN_FETCH_LIMITS.get(table_name, 50)
+        fetched_rows = _material_rows(
+            material_snapshot=material_snapshot,
+            source_schema=effective_schema,
+            table=table_name,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            limit=projection_limit + 1,
+        )
+        docs[table_name] = fetched_rows[:projection_limit]
+        domain_projection_per_source[table_name] = {
+            "projected_count": len(docs[table_name]),
+            "projection_limit": projection_limit,
+            "has_more": len(fetched_rows) > projection_limit,
+        }
+
+    for table_name in _DOMAIN_ASSOCIATION_TABLES.get(execution_domain, ()):
         projection_limit = _DOMAIN_FETCH_LIMITS.get(table_name, 50)
         fetched_rows = _material_rows(
             material_snapshot=material_snapshot,

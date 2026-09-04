@@ -182,6 +182,16 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "report_status",
         "report_time",
     ),
+    "exam_item": (
+        # 检查项目用于把检查主记录、项目定义和报告明细合并为一份可读报告。
+        # item_name 是心电图、骨密度等非影像检查的主要展示名称来源。
+        "exam_id",
+        "item_id",
+        "item_name",
+        "item_code",
+        "exam_zone",
+        "report_time",
+    ),
     "admission_record_diagnosis": (
         "diagnosis_id",
         "diagnosis_type",

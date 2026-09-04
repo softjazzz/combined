@@ -1,6 +1,21 @@
 from app.services.document_assembly import assemble_document, build_document_select_columns
 
 
+def test_exam_item_projection_preserves_report_linkage_and_display_name():
+    available = {
+        "exam_id",
+        "item_id",
+        "item_name",
+        "item_code",
+        "exam_zone",
+        "report_time",
+    }
+
+    selected = set(build_document_select_columns("exam_item", available))
+
+    assert selected == available
+
+
 def test_exam_item_report_projection_preserves_linkage_and_result_fields():
     available = {
         "exam_id",
