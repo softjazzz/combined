@@ -1094,6 +1094,26 @@ def _candidate_documents(
     )
 
 
+def _explicit_embedded_opinion_documents(
+    documents: Sequence[Mapping[str, str]],
+) -> tuple[Mapping[str, str], ...]:
+    """返回全部正文均可直接证明意见明确的会诊文书。"""
+
+    embedded_opinions = tuple(
+        item
+        for item in documents
+        if _EXPLICIT_EMBEDDED_OPINION_CLEAR_PATTERN.search(
+            _evidence_text(_clean(item.get("text")))
+        )
+        and not _EXPLICIT_OPINION_VAGUE_PATTERN.search(
+            _evidence_text(_clean(item.get("text")))
+        )
+    )
+    if embedded_opinions and len(embedded_opinions) == len(documents):
+        return embedded_opinions
+    return ()
+
+
 def _strong_explicit_consultation_statuses(
     *,
     selected: Sequence[str],
@@ -1112,19 +1132,11 @@ def _strong_explicit_consultation_statuses(
         # consultation_record 的源字段本身就是会诊正文，真实数据常不带
         # “会诊申请/会诊意见”标签。仅对每份正文都明确包含“会诊后指出/建议”
         # 及具体诊疗动作的场景短路，避免让模型把明确意见误降级为 vague。
-        if "LX0609-022" in selected:
-            embedded_opinions = tuple(
-                item
-                for item in documents
-                if _EXPLICIT_EMBEDDED_OPINION_CLEAR_PATTERN.search(
-                    _evidence_text(_clean(item.get("text")))
-                )
-                and not _EXPLICIT_OPINION_VAGUE_PATTERN.search(
-                    _evidence_text(_clean(item.get("text")))
-                )
-            )
-            if embedded_opinions and len(embedded_opinions) == len(documents):
-                return {"LX0609-022": ("compliant", "requirement_satisfied")}
+        if (
+            "LX0609-022" in selected
+            and _explicit_embedded_opinion_documents(documents)
+        ):
+            return {"LX0609-022": ("compliant", "requirement_satisfied")}
         return {}
 
     statuses: dict[str, tuple[str, str]] = {}
@@ -1203,6 +1215,8 @@ def _compact_document_prompt(
         "clear为有明确目的或具体意见，vague为只有泛化措辞，missing为角色存在但内容空缺，"
         "absent为该角色不存在，unknown为材料无法可靠判断。confidence只能为high/medium/low。"
         "明确写出会诊原因、临床问题、请求专科建议或具体诊疗意见，即使只有一句，也属于clear；"
+        "明确的病情判断、处理方向或随访安排也属于opinion_state=clear；"
+        "opinion_state与recommendations相互独立，不得因为recommendations为空就把opinion_state降为vague；"
         "只有纯请会诊、协助诊治、遵会诊意见而没有具体内容时才为vague。"
         "recommendations仅用于ordinary且意见clear、confidence=high的可执行建议；不得把诊断、风险描述、"
         "既往史或泛化继续治疗当建议。建议身份由Python按数组顺序生成，禁止输出recommendation_ref；action_type只能是"
@@ -1262,6 +1276,9 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "absent为该角色不存在，unknown为材料无法可靠判断。confidence只能为high/medium/low。"
         "明确写出会诊原因、临床问题或请求专科建议，即使只有一句，也属于application_state=clear；"
         "明确给出处理或诊疗建议，即使只有一句，也属于opinion_state=clear；"
+        "明确的病情判断、处理方向或随访安排同样可支持opinion_state=clear；"
+        "opinion_state与recommendations相互独立：意见可以明确但没有满足建议清单抽取标准，"
+        "不得因为recommendations为空就把opinion_state降为vague；"
         "只有纯“请会诊”或“遵会诊意见”且没有具体内容时才为vague。"
         "仅“请会诊/请某科协助诊治/请协助处理”，无病情问题、诊疗疑问、异常或具体任务时，"
         "application_state必须为vague；科室名称本身不构成会诊目的。"
@@ -1781,6 +1798,32 @@ def _consultation_semantic_display_facts(
         ]
         facts["episode_results"] = episode_results
     return facts
+
+
+def _explicit_embedded_opinion_display_facts(
+    documents: Sequence[Mapping[str, str]],
+) -> Mapping[str, Any]:
+    """按已核实的逐份会诊正文生成 022 客户展示事实。"""
+
+    explicit_episodes = tuple(
+        _Episode(
+            episode_ref=ref,
+            member_refs=(ref,),
+            application_refs=(),
+            opinion_refs=(ref,),
+            application_state="absent",
+            opinion_state="clear",
+            confidence="high",
+            recommendations=(),
+        )
+        for document in documents
+        if (ref := _clean(document.get("ref")))
+    )
+    return _consultation_semantic_display_facts(
+        rule_id="LX0609-022",
+        episodes=explicit_episodes,
+        documents=documents,
+    )
 
 
 def _build_diagnostic_semantic_snapshot(
@@ -3090,6 +3133,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             evidence_snapshot=evidence_snapshot,
             decision_rule_ids=typed,
         )
+    explicit_022_documents = (
+        _explicit_embedded_opinion_documents(documents)
+        if "LX0609-022" in selected
+        else ()
+    )
     if llm_client is None:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     calls = 1
@@ -3136,6 +3184,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         for rule_id in selected
         if rule_id in {"LX0609-021", "LX0609-022"}
     }
+    if explicit_022_documents:
+        # 022 的高置信逐份正文事实独立于同族 020/021/023。批量执行仍只调用
+        # 原有语义链处理其余规则，但模型不得覆盖已经由正文确定的 022 结论。
+        statuses["LX0609-022"] = ("compliant", "requirement_satisfied")
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
     execution_source_incomplete_keys: frozenset[str] = frozenset()
@@ -3451,7 +3503,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     results = []
     for rule_id in selected:
         status, reason = statuses.get(rule_id, ("data_gap", "linkage_unresolved"))
-        results.append(_result(
+        item = _result(
             rule_id=rule_id,
             status=status,
             reason_code=reason,
@@ -3459,7 +3511,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             link_diagnostics=link_diagnostics,
-        ))
+        )
+        if rule_id == "LX0609-022" and explicit_022_documents:
+            item["metadata"]["executor_type"] = "program"
+        results.append(item)
     decisions = tuple(
         _decision(
             rule_id=rule_id,
@@ -3484,10 +3539,16 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             display_facts.append(
                 (
                     rule_id,
-                    _consultation_semantic_display_facts(
-                        rule_id=rule_id,
-                        episodes=episodes,
-                        documents=documents,
+                    (
+                        _explicit_embedded_opinion_display_facts(
+                            explicit_022_documents
+                        )
+                        if rule_id == "LX0609-022" and explicit_022_documents
+                        else _consultation_semantic_display_facts(
+                            rule_id=rule_id,
+                            episodes=episodes,
+                            documents=documents,
+                        )
                     ),
                 )
             )

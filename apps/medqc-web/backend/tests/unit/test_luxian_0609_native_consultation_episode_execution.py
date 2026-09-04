@@ -186,6 +186,96 @@ def test_embedded_consultation_opinion_is_clear_without_field_label():
     assert statuses == {"LX0609-022": ("compliant", "requirement_satisfied")}
 
 
+def test_conditional_embedded_opinion_is_not_upgraded_to_clear():
+    documents = ({
+        "ref": "consultation_record-1",
+        "time": "2026-02-07 18:10:03",
+        "text": "感染科医师会诊后指出：必要时行相关检查或给予药物治疗。",
+    },)
+
+    assert episode._explicit_embedded_opinion_documents(documents) == ()
+
+
+@pytest.mark.asyncio
+async def test_batch_preserves_explicit_clear_022_when_model_marks_one_episode_vague(
+    monkeypatch,
+):
+    """批量会诊链不能丢弃已由正文明确证明的 022 结论。"""
+
+    rows = _rows(
+        (
+            "患者转氨酶升高，请感染性疾病科会诊，医师会诊后指出："
+            "考虑药物性肝损伤，建议停用相关药物，复查肝功能。"
+        ),
+        (
+            "患者复查肝功结果回示，请感染性疾病科会诊，医师会诊后指出："
+            "甲肝IgM阴性、IgG阳性。考虑既往感染，继续保肝治疗，我科随访。已遵执行。"
+        ),
+        action_suffix=False,
+    )
+    rows[0]["document_id"] = "consultation-doc-1"
+    rows[1]["document_id"] = "consultation-doc-2"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: rows,
+    )
+    monkeypatch.setattr(
+        episode,
+        "_resolve_execution_stay_window",
+        lambda **_: (_ for _ in ()).throw(episode._SourceGap()),
+    )
+    client = _Client(_payload(episodes=[
+        _episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            opinion="clear",
+        ),
+        _episode(
+            "consultation_record-2",
+            ["consultation_record-2"],
+            opinion="vague",
+            recommendations=[],
+        ),
+    ]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "data_gap",
+        "compliant",
+        "compliant",
+        "data_gap",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "linkage_unresolved",
+        "requirement_satisfied",
+        "requirement_satisfied",
+        "linkage_unresolved",
+    ]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "不得因为recommendations为空" in client.prompts[0]
+    assert result.results[2]["metadata"]["executor_type"] == "program"
+    display = dict(result.customer_display_facts)["LX0609-022"]
+    assert display["semantic_state"] == "clear"
+    assert display["source_document_ids"] == [
+        "consultation-doc-1",
+        "consultation-doc-2",
+    ]
+    assert [item["semantic_state"] for item in display["episode_results"]] == [
+        "clear",
+        "clear",
+    ]
+
+
 def _rows(*contents: str, day: int = 20, hour_start: int = 1, action_suffix: bool = True):
     return [
         {
