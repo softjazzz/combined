@@ -1,0 +1,331 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+import pytest
+
+from app.services.luxian_0609 import customer_renderer, decision_binding
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
+from app.services.luxian_0609.engine import (
+    FamilyExecutionContext,
+    FamilyExecutionSuccess,
+    Luxian0609ExecutionEngine,
+)
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.execution_contract import FamilyExecutionEnvelope
+from app.services.luxian_0609.executor_registry import (
+    ExecutorRegistration,
+    Luxian0609ExecutorRegistry,
+)
+from app.services.luxian_0609.rule_contracts import (
+    ALLOWED_FINAL_STATES,
+    Luxian0609RuleContract,
+)
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
+)
+
+
+_NATIVE_RULE_ID = "LX0609-990"
+_SEMANTIC_RULE_ID = "LX0609-991"
+_SOURCE_KEY = "admission_record"
+_SEMANTIC_PROMPT = (
+    "判断受控事实中的症状与诊断是否具有明确医学指向关系；"
+    "只返回 satisfied、defect 或 unknown。"
+)
+
+
+def _contract(
+    *, rule_id: str, executor_key: str, semantic: bool
+) -> Luxian0609RuleContract:
+    return Luxian0609RuleContract(
+        rule_id=rule_id,
+        contract_version="extension-boundary-test-v1",
+        family_key=executor_key,
+        executor_key=executor_key,
+        execution_mode="controlled_semantic" if semantic else "native",
+        decision_authority=(
+            "program_then_optional_llm" if semantic else "program_only"
+        ),
+        max_llm_calls_per_rule=1 if semantic else 0,
+        source_contract_state="typed_shadow_v1",
+        allowed_final_states=ALLOWED_FINAL_STATES,
+        result_contract_version="lx0609-result-v1",
+        privacy_contract_version="lx0609-privacy-v1",
+        golden_gate_state="pending",
+        applicable_documents=("入院记录",),
+        data_dependencies=(_SOURCE_KEY,),
+        rule_version="extension-boundary-test-v1",
+        prompt_version="extension-boundary-test-v1",
+        phase_status="phase_1_target",
+        definition_version="extension-boundary-test-v1",
+    )
+
+
+def _session():
+    rows = (
+        {
+            "document_id": "ADM-EXT-1",
+            "document_title": "入院记录",
+            "record_time": "2026-09-04 08:30:00",
+            "chief_complaint": "受控症状摘要",
+        },
+    )
+
+    def read_rows(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows if source_key == _SOURCE_KEY else (),
+            truncated=False,
+            limit_rows=10,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-001",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-09-04T09:00:00+08:00",
+        evaluation_as_of_date="2026-09-04",
+        row_reader=read_rows,
+        additional_source_keys=(_SOURCE_KEY,),
+    )
+
+
+def _source_ref(context: FamilyExecutionContext) -> str:
+    observation = next(
+        item for item in context.snapshot.observations if item.source_key == _SOURCE_KEY
+    )
+    return observation.snapshot_ref.removeprefix("sha256:")
+
+
+@dataclass
+class _NativeExtensionExecutor:
+    async def evaluate(
+        self, context: FamilyExecutionContext
+    ) -> FamilyExecutionEnvelope:
+        decision = RuleDecision(
+            rule_id=_NATIVE_RULE_ID,
+            snapshot_hash=context.snapshot.snapshot_hash,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.SATISFIED,
+            reason_code="requirement_satisfied",
+            fact_refs=(_source_ref(context),),
+            evaluator_version="extension-native-test-v1",
+            confidence=1.0,
+        )
+        return FamilyExecutionEnvelope(
+            results=(),
+            planned_rule_ids=context.selected_rule_ids,
+            decisions=(decision,),
+        )
+
+
+@dataclass
+class _ControlledSemanticStub:
+    calls: list[str] = field(default_factory=list)
+
+    async def classify(self, prompt: str) -> dict[str, Any]:
+        self.calls.append(prompt)
+        return {
+            "state": "defect",
+            "prompt_tokens": 12,
+            "completion_tokens": 3,
+        }
+
+
+@dataclass
+class _SemanticExtensionExecutor:
+    model: _ControlledSemanticStub
+
+    async def evaluate(
+        self, context: FamilyExecutionContext
+    ) -> FamilyExecutionEnvelope:
+        output = await self.model.classify(_SEMANTIC_PROMPT)
+        direction = {
+            "satisfied": QcDirection.SATISFIED,
+            "defect": QcDirection.DEFECT,
+            "unknown": QcDirection.UNKNOWN,
+        }[output["state"]]
+        decision = RuleDecision(
+            rule_id=_SEMANTIC_RULE_ID,
+            snapshot_hash=context.snapshot.snapshot_hash,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=direction,
+            reason_code=(
+                "requirement_violated"
+                if direction is QcDirection.DEFECT
+                else "requirement_satisfied"
+            ),
+            fact_refs=(_source_ref(context),),
+            evaluator_version="extension-semantic-test-v1",
+            confidence=1.0,
+        )
+        return FamilyExecutionEnvelope(
+            results=(),
+            planned_rule_ids=context.selected_rule_ids,
+            decisions=(decision,),
+            llm_call_count=1,
+            prompt_tokens=output["prompt_tokens"],
+            completion_tokens=output["completion_tokens"],
+            total_tokens=output["prompt_tokens"] + output["completion_tokens"],
+            api_time=0.01,
+        )
+
+
+def test_rule_decision_format_allows_future_ids_but_rejects_zero():
+    snapshot = _session().snapshot
+
+    with pytest.raises(ValueError, match="invalid rule_id"):
+        RuleDecision(
+            rule_id="LX0609-000",
+            snapshot_hash=snapshot.snapshot_hash,
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="decision_contract_violation",
+            fact_refs=(),
+            evaluator_version="extension-contract-test-v1",
+        )
+
+
+@pytest.mark.asyncio
+async def test_two_test_only_rule_contracts_cross_existing_extension_boundary(
+    monkeypatch,
+):
+    session = _session()
+    semantic_stub = _ControlledSemanticStub()
+    contracts = (
+        _contract(
+            rule_id=_NATIVE_RULE_ID,
+            executor_key="extension_native_test",
+            semantic=False,
+        ),
+        _contract(
+            rule_id=_SEMANTIC_RULE_ID,
+            executor_key="extension_semantic_test",
+            semantic=True,
+        ),
+    )
+    registry = Luxian0609ExecutorRegistry(
+        (
+            ExecutorRegistration(
+                executor_key="extension_native_test",
+                executor=_NativeExtensionExecutor(),
+            ),
+            ExecutorRegistration(
+                executor_key="extension_semantic_test",
+                executor=_SemanticExtensionExecutor(semantic_stub),
+            ),
+        )
+    )
+
+    report = await Luxian0609ExecutionEngine(registry=registry).execute(
+        executor_batches=(
+            ("extension_native_test", (_NATIVE_RULE_ID,)),
+            ("extension_semantic_test", (_SEMANTIC_RULE_ID,)),
+        ),
+        snapshot=session.snapshot,
+        contracts=contracts,
+        default_deadline_seconds=1.0,
+        max_concurrency=2,
+    )
+
+    assert all(isinstance(item, FamilyExecutionSuccess) for item in report.outcomes)
+    assert semantic_stub.calls == [_SEMANTIC_PROMPT]
+    assert [item.envelope.llm_call_count for item in report.outcomes] == [0, 1]
+    assert [item.envelope.total_tokens for item in report.outcomes] == [0, 15]
+
+    decisions = tuple(
+        decision
+        for outcome in report.outcomes
+        for decision in outcome.envelope.decisions
+    )
+    monkeypatch.setattr(
+        decision_binding,
+        "_allowed_source_keys",
+        lambda _rule_id: frozenset({_SOURCE_KEY}),
+    )
+    monkeypatch.setattr(
+        decision_binding,
+        "resolve_luxian_0609_rule_sources",
+        lambda rule_ids: {rule_id: () for rule_id in rule_ids},
+    )
+    monkeypatch.setattr(
+        decision_binding,
+        "load_luxian_0609_rule_contracts",
+        lambda: contracts,
+    )
+    rule_names = {
+        _NATIVE_RULE_ID: "测试专用确定性规则",
+        _SEMANTIC_RULE_ID: "测试专用受控语义规则",
+    }
+    monkeypatch.setattr(
+        customer_renderer,
+        "get_luxian_0609_rule",
+        lambda rule_id: {
+            "rule_id": rule_id,
+            "name": rule_names[rule_id],
+            "rule_version": "extension-boundary-test-v1",
+        },
+    )
+    monkeypatch.setattr(
+        customer_renderer,
+        "load_luxian_0609_rule_contracts",
+        lambda: contracts,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=decisions,
+        expected_rule_ids=(_NATIVE_RULE_ID, _SEMANTIC_RULE_ID),
+        snapshot=session.snapshot,
+    )
+    results = aggregate_luxian_0609_results(
+        wrapper_rules=[
+            {"rule_id": _NATIVE_RULE_ID, "rule_name": "测试专用确定性规则"},
+            {"rule_id": _SEMANTIC_RULE_ID, "rule_name": "测试专用受控语义规则"},
+        ],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=(),
+        format_evidence=False,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )
+
+    assert [(item["status"], item["reason_code"]) for item in results] == [
+        ("compliant", "requirement_satisfied"),
+        ("non_compliant", "requirement_violated"),
+    ]
+    assert [
+        [
+            (
+                evidence.get("source_type"),
+                evidence.get("source_document_id"),
+                evidence.get("field_path"),
+                evidence.get("record_time"),
+            )
+            for evidence in item.get("customer_evidence") or []
+        ]
+        for item in results
+    ] == [
+        [(_SOURCE_KEY, "ADM-EXT-1", "chief_complaint", "2026-09-04 08:30:00")],
+        [(_SOURCE_KEY, "ADM-EXT-1", "chief_complaint", "2026-09-04 08:30:00")],
+    ]

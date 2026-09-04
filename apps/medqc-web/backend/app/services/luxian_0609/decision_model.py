@@ -16,7 +16,9 @@ from types import MappingProxyType
 from typing import Any
 
 
-_RULE_ID_PATTERN = re.compile(r"^LX0609-(?:00[1-9]|0[1-6][0-9]|07[0-5])$")
+# 规则是否已注册由目录、来源注册和 Binding 共同校验；值对象只约束稳定格式。
+# 禁止在公共决策合同中把当前最大规则号 075 固化为扩展上限。
+_RULE_ID_PATTERN = re.compile(r"^LX0609-(?!000)\d{3}$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _REASON_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _VERSION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
