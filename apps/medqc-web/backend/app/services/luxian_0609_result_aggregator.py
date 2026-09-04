@@ -16,6 +16,12 @@ from .luxian_0609_result_schema import (
 from .luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_canonical_result,
 )
+from .luxian_0609.basic_timeliness_customer_projection import (
+    basic_timeliness_customer_evidence,
+    basic_timeliness_exact_evidence_sources,
+    is_basic_timeliness_customer_rule,
+    safe_basic_timeliness_customer_display_facts,
+)
 from .luxian_0609.customer_evidence_enrichment import enrich_customer_evidence
 from .luxian_0609.decision_reducer import ReducedRuleDecision
 from .luxian_0609.source_evidence_reader import authoritative_document_time_value
@@ -70,11 +76,8 @@ _SAFE_SOURCE_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 # 其中只有入院记录是客户需要核对的实际时限文书；其余来源仅用于计算锚点，
 # 不得因通用事实反查而出现在该规则的客户证据中。
 _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
-    "LX0609-001": frozenset({"admission_record"}),
     # 005/006 的入院、出院来源仅用于确定入院锚点；实际被核对的首次查房
     # 均来自上级医师查房记录，不能把锚点文书投影成客户证据。
-    "LX0609-005": frozenset({"senior_course_record"}),
-    "LX0609-006": frozenset({"senior_course_record"}),
     # 026 以诊断事实判定适用性，但客户实际需要核对的是化疗医嘱与病程记录。
     # 诊断仅作为触发来源，不能混入两类治疗记录的一致性证据。
     "LX0609-026": frozenset({"inpat_drug_order", "daily_course_record"}),
@@ -494,6 +497,11 @@ def safe_luxian_0609_customer_display_facts(
     """旧原生分支只保留尚未迁移到通用子结论合同的受控展示事实。"""
     if not isinstance(raw, Mapping):
         return None
+    if is_basic_timeliness_customer_rule(rule_id):
+        return safe_basic_timeliness_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
 
     def controlled_list(value: Any, *, allowed: set[str] | None = None) -> list[str] | None:
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
@@ -690,92 +698,6 @@ def safe_luxian_0609_customer_display_facts(
                     "outcome": outcome,
                 }
             )
-        return safe_events
-
-    def controlled_datetime(candidate: Any) -> datetime | None:
-        if not isinstance(candidate, str) or not candidate or len(candidate) > 40:
-            return None
-        try:
-            return datetime.fromisoformat(candidate.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-
-    def controlled_rescue_events(value: Any) -> list[dict[str, Any]] | None:
-        """投影 004 逐次时限事实，同时验证并剔除内部文书 ID。"""
-
-        if not isinstance(value, (list, tuple)) or not 2 <= len(value) <= 100:
-            return None
-
-        base_keys = {"event_index", "event_state"}
-        fields_by_state = {
-            "within": ({"rescue_end_time", "document_completion_time", "elapsed_hours"},),
-            "late": ({"rescue_end_time", "document_completion_time", "elapsed_hours"},),
-            "rescue_end_time_missing": (set(), {"document_completion_time"}),
-            "document_completion_time_missing": ({"rescue_end_time"},),
-            "authoritative_time_conflict": ({"rescue_end_time", "document_completion_time"},),
-        }
-        safe_events: list[dict[str, Any]] = []
-        for expected_index, item in enumerate(value, start=1):
-            if not isinstance(item, Mapping) or item.get("event_index") != expected_index:
-                return None
-            document_id = item.get("source_document_id")
-            if document_id is not None and (
-                not isinstance(document_id, str)
-                or not document_id.strip()
-                or len(document_id) > 256
-                or "\n" in document_id
-                or "\r" in document_id
-            ):
-                return None
-            state = item.get("event_state")
-            variants = fields_by_state.get(state)
-            identity_keys = {"source_document_id"} if document_id is not None else set()
-            if variants is None or set(item) not in (
-                base_keys | identity_keys | fields for fields in variants
-            ):
-                return None
-            rescue_end_value = item.get("rescue_end_time")
-            completion_value = item.get("document_completion_time")
-            rescue_end = controlled_datetime(rescue_end_value)
-            completion = controlled_datetime(completion_value)
-            if state in {"within", "late"}:
-                elapsed = item.get("elapsed_hours")
-                if (
-                    rescue_end is None
-                    or completion is None
-                    or not isinstance(elapsed, (int, float))
-                    or isinstance(elapsed, bool)
-                    or not isfinite(float(elapsed))
-                ):
-                    return None
-                try:
-                    calculated = (completion - rescue_end).total_seconds() / 3600
-                except TypeError:
-                    return None
-                if (
-                    calculated < 0
-                    or abs(float(elapsed) - round(calculated, 2)) > 0.001
-                    or (state == "within") != (calculated <= 6)
-                ):
-                    return None
-            elif state == "rescue_end_time_missing":
-                if completion_value is not None and completion is None:
-                    return None
-            elif state == "document_completion_time_missing":
-                if rescue_end is None:
-                    return None
-            elif state == "authoritative_time_conflict":
-                if rescue_end is None or completion is None:
-                    return None
-                try:
-                    if completion >= rescue_end:
-                        return None
-                except TypeError:
-                    return None
-            safe_events.append({
-                key: round(float(item[key]), 2) if key == "elapsed_hours" else item[key]
-                for key in item if key != "source_document_id"
-            })
         return safe_events
 
     def controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
@@ -4755,249 +4677,7 @@ def safe_luxian_0609_customer_display_facts(
                 if isinstance(value, str) and value.strip()
             ][:8],
         }
-    basic_timeliness_targets = {
-        "LX0609-001": "admission_record",
-        "LX0609-002": "first_course_record",
-        "LX0609-004": "rescue_record",
-        "LX0609-005": "attending_course_record",
-        "LX0609-006": "senior_course_record",
-    }
-    target_document = basic_timeliness_targets.get(rule_id)
-    if target_document is not None:
-        failure_kind = raw.get("failure_kind")
-        state = raw.get("timeliness_state")
-        threshold = raw.get("threshold_hours")
-        source_label = raw.get("source_label")
-        if rule_id == "LX0609-004" and failure_kind == "rescue_record_missing_after_trigger":
-            trigger_order_id = raw.get("trigger_order_id")
-            expected_keys = {"failure_kind", "target_document", "source_label", "trigger_source"}
-            if trigger_order_id is not None:
-                expected_keys.add("trigger_order_id")
-            if (
-                target_document != "rescue_record"
-                or source_label != "抢救记录"
-                or raw.get("trigger_source") != "inpat_nondrug_order.rescue_order"
-                or set(raw) != expected_keys
-                or (
-                    trigger_order_id is not None
-                    and (
-                        not isinstance(trigger_order_id, str)
-                        or not trigger_order_id.strip()
-                        or len(trigger_order_id) > 256
-                        or "\n" in trigger_order_id
-                        or "\r" in trigger_order_id
-                    )
-                )
-            ):
-                return None
-            return {
-                "failure_kind": failure_kind,
-                "target_document": "rescue_record",
-                "source_label": "抢救记录",
-            }
-        if rule_id == "LX0609-004" and failure_kind in {
-            "rescue_end_time_missing",
-            "document_completion_time_missing",
-            "authoritative_time_conflict",
-        }:
-            anchor_time = raw.get("anchor_time")
-            observed_time = raw.get("observed_time")
-            parsed_anchor = controlled_datetime(anchor_time) if anchor_time is not None else None
-            parsed_observed = controlled_datetime(observed_time) if observed_time is not None else None
-            expected_state = (
-                "conflict"
-                if failure_kind == "authoritative_time_conflict"
-                else "missing_time"
-            )
-            if (
-                target_document != "rescue_record"
-                or source_label != "抢救记录"
-                or threshold != 6
-                or state != expected_state
-                or (failure_kind == "rescue_end_time_missing" and anchor_time is not None)
-                or (
-                    failure_kind == "document_completion_time_missing"
-                    and observed_time is not None
-                )
-                or (anchor_time is not None and parsed_anchor is None)
-                or (observed_time is not None and parsed_observed is None)
-            ):
-                return None
-            if failure_kind == "authoritative_time_conflict":
-                if parsed_anchor is None or parsed_observed is None:
-                    return None
-                try:
-                    if parsed_observed >= parsed_anchor:
-                        return None
-                except TypeError:
-                    return None
-            facts: dict[str, Any] = {
-                "failure_kind": failure_kind,
-                "target_document": "rescue_record",
-                "source_label": "抢救记录",
-                "timeliness_state": expected_state,
-                "threshold_hours": 6,
-            }
-            if anchor_time is not None:
-                facts["anchor_time"] = anchor_time
-            if observed_time is not None:
-                facts["observed_time"] = observed_time
-            if raw.get("rescue_events") is not None:
-                rescue_events = controlled_rescue_events(raw.get("rescue_events"))
-                if rescue_events is None:
-                    return None
-                facts["rescue_events"] = rescue_events
-            return facts
-        if failure_kind == "evidence_time_conflict":
-            conflict_seconds = raw.get("time_conflict_seconds")
-            anchor_time = raw.get("anchor_time")
-            observed_time = raw.get("observed_time")
-            try:
-                actual_conflict_seconds = round(
-                    (
-                        datetime.fromisoformat(anchor_time)
-                        - datetime.fromisoformat(observed_time)
-                    ).total_seconds()
-                )
-            except (TypeError, ValueError):
-                return None
-            if (
-                rule_id != "LX0609-001"
-                or target_document != "admission_record"
-                or state != "before"
-                or threshold != 24
-                or not isinstance(source_label, str)
-                or not source_label.strip()
-                or not isinstance(anchor_time, str)
-                or not anchor_time.strip()
-                or not isinstance(observed_time, str)
-                or not observed_time.strip()
-                or type(conflict_seconds) is not int
-                or conflict_seconds <= 0
-                or conflict_seconds != actual_conflict_seconds
-            ):
-                return None
-            return {
-                "failure_kind": "evidence_time_conflict",
-                "target_document": "admission_record",
-                "source_label": source_label.strip(),
-                "timeliness_state": "before",
-                "threshold_hours": 24,
-                "anchor_time": anchor_time.strip(),
-                "observed_time": observed_time.strip(),
-                "time_conflict_seconds": conflict_seconds,
-            }
-        valid_state = (
-            state in {"missing", "late"}
-            if failure_kind == "timeliness_requirement_not_met"
-            else state == "within"
-        )
-        if (
-            failure_kind
-            not in {
-                "timeliness_requirement_not_met",
-                "timeliness_requirement_satisfied",
-            }
-            or raw.get("target_document") != target_document
-            or not valid_state
-            or not isinstance(threshold, int)
-            or threshold <= 0
-            or not isinstance(source_label, str)
-            or not source_label.strip()
-        ):
-            return None
-        facts: dict[str, Any] = {
-            "failure_kind": failure_kind,
-            "target_document": target_document,
-            "timeliness_state": state,
-            "threshold_hours": threshold,
-            "source_label": source_label.strip(),
-        }
-        document_content_state = raw.get("document_content_state")
-        if document_content_state is not None:
-            if (
-                rule_id != "LX0609-001"
-                or failure_kind != "timeliness_requirement_not_met"
-                or state != "missing"
-                or document_content_state != "blank_or_placeholder"
-            ):
-                return None
-            facts["document_content_state"] = "blank_or_placeholder"
-        for key in ("anchor_time", "anchor_date", "observed_time"):
-            value = raw.get(key)
-            if isinstance(value, str) and value.strip():
-                facts[key] = value.strip()
-        elapsed_hours = raw.get("elapsed_hours")
-        if isinstance(elapsed_hours, (int, float)) and elapsed_hours >= 0:
-            normalized_elapsed = round(float(elapsed_hours), 2)
-            facts["elapsed_hours"] = normalized_elapsed
-            if state == "late" and float(elapsed_hours) > threshold:
-                facts["overdue_hours"] = round(
-                    float(elapsed_hours) - threshold,
-                    2,
-                )
-            elif state == "within":
-                facts["remaining_hours"] = round(
-                    max(0.0, threshold - float(elapsed_hours)),
-                    2,
-                )
-        if rule_id == "LX0609-004" and raw.get("rescue_events") is not None:
-            rescue_events = controlled_rescue_events(raw.get("rescue_events"))
-            if rescue_events is None:
-                return None
-            facts["rescue_events"] = rescue_events
-        return facts
     return None
-
-
-def _timeliness_customer_findings(
-    *,
-    rule_id: str,
-    facts: Mapping[str, Any] | None,
-) -> str:
-    """从已白名单化的时限事实生成客户可直接核对的结论。"""
-
-    if (
-        rule_id not in {
-            "LX0609-001",
-            "LX0609-002",
-            "LX0609-004",
-            "LX0609-005",
-            "LX0609-006",
-        }
-        or not isinstance(facts, Mapping)
-        or facts.get("failure_kind") != "timeliness_requirement_not_met"
-        or facts.get("timeliness_state") != "late"
-    ):
-        return ""
-    anchor_time = facts.get("anchor_time")
-    observed_time = facts.get("observed_time")
-    threshold_hours = facts.get("threshold_hours")
-    elapsed_hours = facts.get("elapsed_hours")
-    overdue_hours = facts.get("overdue_hours")
-    if (
-        not isinstance(anchor_time, str)
-        or not anchor_time
-        or not isinstance(observed_time, str)
-        or not observed_time
-        or not isinstance(threshold_hours, int)
-        or not isinstance(elapsed_hours, (int, float))
-        or not isinstance(overdue_hours, (int, float))
-    ):
-        return ""
-    labels = {
-        "LX0609-001": ("入院记录", "入院后", "入院时间"),
-        "LX0609-002": ("首次病程记录", "入院后", "入院时间"),
-        "LX0609-004": ("抢救记录", "抢救结束后", "抢救结束时间"),
-        "LX0609-005": ("主治医师及以上首次查房记录", "入院后", "入院时间"),
-        "LX0609-006": ("副主任医师或主任医师首次查房记录", "入院后", "入院时间"),
-    }
-    document_label, relation_label, anchor_label = labels[rule_id]
-    return (
-        f"{document_label}于{relation_label} {elapsed_hours:g} 小时完成"
-        f"（{anchor_label} {anchor_time}；记录时间 {observed_time}），"
-        f"超过 {threshold_hours} 小时要求 {overdue_hours:g} 小时。"
-    )
 
 
 def _controlled_customer_findings(
@@ -5007,9 +4687,7 @@ def _controlled_customer_findings(
 
     from .luxian_0609.customer_renderer import customer_finding_from_controlled_facts
 
-    return _timeliness_customer_findings(rule_id=rule_id, facts=facts) or (
-        customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
-    )
+    return customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
 
 
 def _customer_evidence_from_display_facts(
@@ -5023,6 +4701,12 @@ def _customer_evidence_from_display_facts(
 
     if not isinstance(raw, Mapping):
         return []
+    basic_timeliness_evidence = basic_timeliness_customer_evidence(
+        rule_id=rule_id,
+        raw=raw,
+    )
+    if basic_timeliness_evidence is not None:
+        return basic_timeliness_evidence
     # 先复用展示事实白名单验证业务形态；内部 ID 只在此函数中转成
     # customer_evidence，绝不能进入 customer_display_facts。
     if safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw) is None:
@@ -5041,26 +4725,6 @@ def _customer_evidence_from_display_facts(
         )
 
     source_document_id = valid_document_id(raw.get("source_document_id"))
-    if rule_id == "LX0609-004":
-        located: list[dict[str, str]] = []
-        seen: set[tuple[str, str]] = set()
-        candidates = [("rescue_record", raw.get("source_document_id"))]
-        candidates.extend(
-            ("rescue_record", item.get("source_document_id"))
-            for item in raw.get("rescue_events") or ()
-            if isinstance(item, Mapping)
-        )
-        if raw.get("failure_kind") == "rescue_record_missing_after_trigger":
-            candidates.append(("inpat_nondrug_order", raw.get("trigger_order_id")))
-        for source_type, value in candidates:
-            document_id = valid_document_id(value)
-            key = (source_type, document_id)
-            if document_id and key not in seen:
-                seen.add(key)
-                located.append(
-                    {"source_type": source_type, "source_document_id": document_id}
-                )
-        return located
     exact_trigger_sources = {
         "LX0609-033": {"surgery_record"},
         "LX0609-040": {"mr_surgery"},
@@ -5162,8 +4826,6 @@ def _customer_evidence_from_display_facts(
             )
         return located
     single_source_types = {
-        "LX0609-005": "senior_course_record",
-        "LX0609-006": "senior_course_record",
         "LX0609-025": str(raw.get("source_document_type") or ""),
         "LX0609-034": "anesthesia_record",
         "LX0609-036": "anesthesia_record",
@@ -5780,9 +5442,10 @@ def _customer_evidence_from_reduced_decision(
     if not decision.fact_refs:
         return []
     referenced = set(decision.fact_refs)
-    exact_source_keys = _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE.get(
-        str(decision.rule_id or "").strip().upper()
-    )
+    normalized_rule_id = str(decision.rule_id or "").strip().upper()
+    exact_source_keys = basic_timeliness_exact_evidence_sources(
+        normalized_rule_id
+    ) or _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE.get(normalized_rule_id)
     rows: list[dict[str, str]] = []
     seen_document_ids: set[str] = set()
     for fact in facts if isinstance(facts, tuple) else ():

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -147,3 +149,17 @@ def test_basic_timeliness_family_canonical_behavior_is_frozen_without_sha_assert
     ]
     assert getattr(execution, "llm_call_count", 0) == 0
     assert getattr(execution, "total_tokens", 0) == 0
+
+
+def test_basic_timeliness_rule_literals_do_not_return_to_result_aggregator():
+    aggregator_path = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "services"
+        / "luxian_0609_result_aggregator.py"
+    )
+    aggregator_source = aggregator_path.read_text(encoding="utf-8")
+
+    assert all(
+        rule_id not in aggregator_source for rule_id in BASIC_TIMELINESS_RULE_IDS
+    )

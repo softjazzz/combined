@@ -1402,6 +1402,10 @@ def customer_finding_from_controlled_facts(
 
     if rule_id not in {
         "LX0609-001",
+        "LX0609-002",
+        "LX0609-004",
+        "LX0609-005",
+        "LX0609-006",
         "LX0609-007",
         "LX0609-009",
         "LX0609-010",
@@ -1434,6 +1438,41 @@ def customer_finding_from_controlled_facts(
         return ""
 
     kind = str(facts.get("verification_kind") or facts.get("failure_kind") or "")
+
+    basic_timeliness_labels = {
+        "LX0609-001": ("入院记录", "入院后", "入院时间"),
+        "LX0609-002": ("首次病程记录", "入院后", "入院时间"),
+        "LX0609-004": ("抢救记录", "抢救结束后", "抢救结束时间"),
+        "LX0609-005": ("主治医师及以上首次查房记录", "入院后", "入院时间"),
+        "LX0609-006": ("副主任医师或主任医师首次查房记录", "入院后", "入院时间"),
+    }
+    if (
+        rule_id in basic_timeliness_labels
+        and kind == "timeliness_requirement_not_met"
+        and facts.get("timeliness_state") == "late"
+    ):
+        anchor_time = facts.get("anchor_time")
+        observed_time = facts.get("observed_time")
+        threshold_hours = facts.get("threshold_hours")
+        elapsed_hours = facts.get("elapsed_hours")
+        overdue_hours = facts.get("overdue_hours")
+        if (
+            isinstance(anchor_time, str)
+            and anchor_time
+            and isinstance(observed_time, str)
+            and observed_time
+            and isinstance(threshold_hours, int)
+            and isinstance(elapsed_hours, (int, float))
+            and isinstance(overdue_hours, (int, float))
+        ):
+            document_label, relation_label, anchor_label = basic_timeliness_labels[
+                rule_id
+            ]
+            return (
+                f"{document_label}于{relation_label} {elapsed_hours:g} 小时完成"
+                f"（{anchor_label} {anchor_time}；记录时间 {observed_time}），"
+                f"超过 {threshold_hours} 小时要求 {overdue_hours:g} 小时。"
+            )
 
     if rule_id == "LX0609-074" and kind == "diagnosis_change_association_failed":
         diagnosis_record_count = facts.get("diagnosis_record_count")
