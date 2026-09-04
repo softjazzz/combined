@@ -1742,6 +1742,19 @@ def _index_report_masters(
     return index
 
 
+def _infer_lab_report_subject_from_items(rows: list[dict[str, Any]]) -> str:
+    item_names: list[str] = []
+    for row in rows:
+        item_name = _first_report_value(row, fields=("item_name", "item_abbreviation"))
+        if item_name and item_name not in item_names:
+            item_names.append(item_name)
+    if not item_names:
+        return ""
+    if len(item_names) == 1:
+        return item_names[0]
+    return f"{item_names[0]}等{len(item_names)}项"
+
+
 def _build_grouped_lab_reports(
     master_rows: list[dict[str, Any]],
     item_rows: list[dict[str, Any]],
@@ -1778,7 +1791,11 @@ def _build_grouped_lab_reports(
             fields=("document_title", "labtest_subject"),
         )
         if not subject or subject in {"检验明细", "检验报告"}:
-            subject = _first_report_value(matched_master, fields=("labtest_subject",)) or "检验"
+            subject = _first_report_value(matched_master, fields=("labtest_subject",))
+        if not subject:
+            subject = _infer_lab_report_subject_from_items(rows)
+        if not subject:
+            subject = "检验"
         title = (
             subject
             if subject.endswith("检验报告")

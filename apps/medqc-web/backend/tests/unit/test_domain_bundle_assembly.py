@@ -116,6 +116,41 @@ def test_document_inventory_should_not_merge_different_lab_report_numbers(monkey
     assert {item["document_id"] for item in inventory} == {"REPORT-001", "REPORT-002"}
 
 
+def test_lab_report_title_should_fall_back_to_report_item_names(monkeypatch):
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    inventory = assembly_module._build_document_inventory(
+        {
+            "labtest_item_report": [
+                {
+                    "test_no": "REPORT-001",
+                    "item_no": "1",
+                    "item_name": "白细胞计数",
+                    "result": "4.95",
+                },
+                {
+                    "test_no": "REPORT-001",
+                    "item_no": "2",
+                    "item_name": "血小板计数",
+                    "result": "254",
+                },
+                {
+                    "test_no": "REPORT-002",
+                    "item_no": "1",
+                    "item_name": "C反应蛋白",
+                    "result": "8.2",
+                },
+            ]
+        },
+        "cdm",
+    )
+
+    titles = {item["document_id"]: item["document_title"] for item in inventory}
+    assert titles == {
+        "REPORT-001": "白细胞计数等2项检验报告",
+        "REPORT-002": "C反应蛋白检验报告",
+    }
+
+
 def test_document_inventory_should_group_exam_items_into_one_report(monkeypatch):
     monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
     inventory = assembly_module._build_document_inventory(
