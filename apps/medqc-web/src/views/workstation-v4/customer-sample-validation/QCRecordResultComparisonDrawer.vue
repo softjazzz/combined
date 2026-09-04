@@ -13,19 +13,13 @@
         title="关闭病历质控结果"
         aria-hidden="true"
       >
-        <X
-          :size="20"
-          :stroke-width="2.35"
-        />
+        <X :size="20" :stroke-width="2.35" />
       </span>
     </template>
     <template #title>
       <div class="customer-record-result-title">
         <div class="customer-record-result-title__brand">
-          <span
-            class="customer-record-result-title__icon"
-            aria-hidden="true"
-          >
+          <span class="customer-record-result-title__icon" aria-hidden="true">
             <ShieldCheck :size="18" />
           </span>
           <span class="customer-record-result-title__heading">
@@ -35,11 +29,23 @@
         </div>
         <div
           class="customer-record-result-title__context"
-          :aria-label="`当前病历：${focus?.label || '病历原文与质控结果对照'}`"
+          :aria-label="
+            [
+              `当前病历：${focus?.label || '病历原文与质控结果对照'}`,
+              focus?.dischargeTime ? `出院时间：${focus.dischargeTime}` : '',
+            ]
+              .filter(Boolean)
+              .join('，')
+          "
         >
           <span class="customer-record-result-title__context-label">当前病历</span>
-          <span class="customer-record-result-title__context-value">
-            {{ focus?.label || '病历原文与质控结果对照' }}
+          <span class="customer-record-result-title__context-details">
+            <span class="customer-record-result-title__context-value">
+              {{ focus?.label || '病历原文与质控结果对照' }}
+            </span>
+            <span v-if="focus?.dischargeTime" class="customer-record-result-title__context-time">
+              出院时间 {{ focus.dischargeTime }}
+            </span>
           </span>
         </div>
         <button
@@ -96,6 +102,7 @@ export interface QCRecordResultFocus {
   recordId: string
   recordRef?: string
   patientName?: string
+  dischargeTime?: string
   label: string
 }
 
@@ -345,6 +352,22 @@ watch(
   line-height: 22px;
   text-align: left;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.customer-record-result-title__context-details {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.customer-record-result-title__context-time {
+  flex: none;
+  padding-left: 10px;
+  border-left: 1px solid rgba(0, 102, 204, 0.14);
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
   white-space: nowrap;
 }
 .customer-record-result-title__export {

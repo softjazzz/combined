@@ -55,9 +55,7 @@
                     <span class="customer-sample-task-history-label">查看质控记录</span>
                   </a-button>
                   <a-dropdown :trigger="['click']">
-                    <a-button class="!rounded-lg">
-                      更多操作
-                    </a-button>
+                    <a-button class="!rounded-lg"> 更多操作 </a-button>
                     <template #overlay>
                       <a-menu>
                         <a-menu-item @click="handleMoreActionKey('refresh')">
@@ -92,10 +90,7 @@
                           手术分级目录
                         </a-menu-item>
                         <a-menu-divider />
-                        <a-sub-menu
-                          key="luxian-report"
-                          title="导出报告"
-                        >
+                        <a-sub-menu key="luxian-report" title="导出报告">
                           <a-menu-item @click="handleMoreActionKey('export-luxian-md')">
                             Markdown 评估报告
                           </a-menu-item>
@@ -104,10 +99,7 @@
                           </a-menu-item>
                         </a-sub-menu>
                         <a-menu-divider />
-                        <a-sub-menu
-                          key="developer-admin"
-                          title="开发/管理员"
-                        >
+                        <a-sub-menu key="developer-admin" title="开发/管理员">
                           <a-menu-item @click="handleMoreActionKey('import')">
                             导入模板
                           </a-menu-item>
@@ -137,9 +129,7 @@
                   data-customer-guide="sample-pool"
                   :class="customerSampleGuideTargetClass('sample-pool')"
                 >
-                  <div class="customer-sample-field-label">
-                    当前样本池
-                  </div>
+                  <div class="customer-sample-field-label">当前样本池</div>
                   <div class="flex items-center gap-2">
                     <a-select
                       v-model:value="selectedPoolId"
@@ -173,9 +163,7 @@
                   data-customer-guide="sample-rule"
                   :class="customerSampleGuideTargetClass('sample-rule')"
                 >
-                  <div class="customer-sample-field-label">
-                    验证规则集
-                  </div>
+                  <div class="customer-sample-field-label">验证规则集</div>
                   <div class="customer-sample-rule-switcher">
                     <button
                       v-for="ruleSet in mainRuleSets"
@@ -210,7 +198,9 @@
                     <span class="text-[14px] font-semibold text-slate-900">
                       {{ selectedRuleSet?.rule_set_name || '泸县0609质控点验证 v1' }}
                     </span>
-                    <span class="customer-sample-meta-chip">场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span>
+                    <span class="customer-sample-meta-chip"
+                      >场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span
+                    >
                   </div>
                 </div>
                 <div class="customer-sample-rule-summary">
@@ -220,7 +210,7 @@
                   <span
                     v-if="
                       selectedRuleSet?.artifact_freshness?.status &&
-                        selectedRuleSet.artifact_freshness.status !== 'fresh'
+                      selectedRuleSet.artifact_freshness.status !== 'fresh'
                     "
                     class="customer-sample-coverage-chip border-amber-200 bg-amber-50 text-amber-700"
                   >
@@ -276,7 +266,7 @@
                       <div
                         :class="
                           importWorkflow.status === 'no_match' ||
-                            importWorkflow.status === 'match_failed'
+                          importWorkflow.status === 'match_failed'
                             ? 'text-amber-700'
                             : 'text-slate-500'
                         "
@@ -349,10 +339,7 @@
                 class="customer-sample-internal-collapse"
                 @change="handleInternalDiagnosticChange"
               >
-                <a-collapse-panel
-                  key="sheet2"
-                  header="内部验收诊断"
-                >
+                <a-collapse-panel key="sheet2" header="内部验收诊断">
                   <div class="border-b border-slate-200/80 px-5 pb-4">
                     <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <div class="min-w-0">
@@ -370,10 +357,7 @@
                   </div>
 
                   <a-spin :spinning="exactReviewLoading">
-                    <div
-                      v-if="exactReviewAcceptance"
-                      class="space-y-4 px-5 py-4"
-                    >
+                    <div v-if="exactReviewAcceptance" class="space-y-4 px-5 py-4">
                       <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <div
                           v-for="item in exactReviewStatusCards"
@@ -396,9 +380,7 @@
                       <div
                         class="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-[13px] leading-6 text-amber-900"
                       >
-                        <div class="font-semibold text-amber-950">
-                          blocked_with_reason 口径
-                        </div>
+                        <div class="font-semibold text-amber-950">blocked_with_reason 口径</div>
                         <div class="mt-1">
                           {{ exactReviewAcceptance.explanations.blocked_with_reason }}
                         </div>
@@ -471,10 +453,7 @@
                       </div>
                     </div>
 
-                    <div
-                      v-else
-                      class="px-5 py-6 text-[13px] leading-6 text-rose-600"
-                    >
+                    <div v-else class="px-5 py-6 text-[13px] leading-6 text-rose-600">
                       {{ exactReviewError || '暂未读取到 Sheet2 精确复核验收包。' }}
                     </div>
                   </a-spin>
@@ -488,10 +467,7 @@
               :class="syncStatusBar.className"
               aria-live="polite"
             >
-              <span
-                class="h-2.5 w-2.5 shrink-0 rounded-full"
-                :class="syncStatusBar.dotClassName"
-              />
+              <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="syncStatusBar.dotClassName" />
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span class="text-[13px] font-semibold">{{ syncStatusBar.title }}</span>
@@ -516,12 +492,7 @@
                 >
                   重试
                 </a-button>
-                <a-button
-                  type="link"
-                  size="small"
-                  class="!px-2"
-                  @click="openSyncDetailDrawer"
-                >
+                <a-button type="link" size="small" class="!px-2" @click="openSyncDetailDrawer">
                   查看详情
                 </a-button>
                 <a-button
@@ -546,14 +517,9 @@
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-3">
-                      <div class="text-[18px] font-semibold text-slate-900">
-                        病历池
-                      </div>
+                      <div class="text-[18px] font-semibold text-slate-900">病历池</div>
                       <div class="customer-sample-inline-metrics">
-                        <span
-                          v-for="item in summaryCards"
-                          :key="item.label"
-                        >
+                        <span v-for="item in summaryCards" :key="item.label">
                           {{ item.label }} <strong>{{ item.value }}</strong>
                         </span>
                       </div>
@@ -619,19 +585,10 @@
                         :options="parallelOptions"
                       />
                     </div>
-                    <a-button
-                      type="primary"
-                      class="!rounded-full"
-                      @click="loadRecords()"
-                    >
+                    <a-button type="primary" class="!rounded-full" @click="loadRecords()">
                       查询
                     </a-button>
-                    <a-button
-                      class="!rounded-full"
-                      @click="resetFilters"
-                    >
-                      重置
-                    </a-button>
+                    <a-button class="!rounded-full" @click="resetFilters"> 重置 </a-button>
                   </div>
                 </div>
 
@@ -660,10 +617,7 @@
       data-testid="customer-sample-work-dock"
       aria-live="polite"
     >
-      <div
-        v-if="currentQcTask"
-        class="customer-sample-work-dock__task"
-      >
+      <div v-if="currentQcTask" class="customer-sample-work-dock__task">
         <CustomerSampleQcTaskStatusBar
           :task="currentQcTask"
           :loading="currentQcTaskLoading"
@@ -702,10 +656,7 @@
             data-testid="customer-sample-run-creating-notice"
             role="status"
           >
-            <span
-              class="customer-sample-selection-run-notice__spinner"
-              aria-hidden="true"
-            />
+            <span class="customer-sample-selection-run-notice__spinner" aria-hidden="true" />
             <span>
               <strong>正在创建质控任务</strong>
               <small>任务创建完成后将自动显示实时执行进度</small>
@@ -713,17 +664,8 @@
           </div>
         </div>
         <div class="customer-sample-selection-run-actions">
-          <a-button
-            class="!rounded-lg"
-            @click="clearSelectedRecords"
-          >
-            清空选择
-          </a-button>
-          <a-button
-            v-if="isLuxian0609Mode"
-            class="!rounded-lg"
-            @click="scrollToLuxianScope"
-          >
+          <a-button class="!rounded-lg" @click="clearSelectedRecords"> 清空选择 </a-button>
+          <a-button v-if="isLuxian0609Mode" class="!rounded-lg" @click="scrollToLuxianScope">
             调整质控范围
           </a-button>
           <a-button
@@ -739,18 +681,10 @@
       </div>
     </div>
 
-    <div
-      v-if="customerSampleGuideOpen"
-      class="customer-sample-tour-layer"
-    >
+    <div v-if="customerSampleGuideOpen" class="customer-sample-tour-layer">
       <div class="customer-sample-tour-scrim" />
-      <div
-        class="customer-sample-tour-card"
-        :style="customerSampleTourCardStyle"
-      >
-        <div class="customer-sample-tour-kicker">
-          客户演示主流程
-        </div>
+      <div class="customer-sample-tour-card" :style="customerSampleTourCardStyle">
+        <div class="customer-sample-tour-kicker">客户演示主流程</div>
         <div class="customer-sample-tour-count">
           {{ customerSampleGuideStepIndex + 1 }} / {{ customerSampleGuideSteps.length }}
         </div>
@@ -816,28 +750,15 @@
         </div>
 
         <a-spin :spinning="poolManagementLoading">
-          <div
-            v-if="managedPools.length"
-            class="pool-management-list"
-          >
-            <div
-              v-for="pool in managedPools"
-              :key="pool.id"
-              class="pool-management-row"
-            >
+          <div v-if="managedPools.length" class="pool-management-list">
+            <div v-for="pool in managedPools" :key="pool.id" class="pool-management-row">
               <div class="pool-management-main">
                 <div class="pool-management-title-line">
                   <strong>{{ pool.name || '未命名样本池' }}</strong>
-                  <span
-                    v-if="pool.id === selectedPoolId"
-                    class="pool-management-current"
-                  >
+                  <span v-if="pool.id === selectedPoolId" class="pool-management-current">
                     当前
                   </span>
-                  <span
-                    v-if="pool.id === CUSTOMER_TEST_POOL_ID"
-                    class="pool-management-protected"
-                  >
+                  <span v-if="pool.id === CUSTOMER_TEST_POOL_ID" class="pool-management-protected">
                     系统池
                   </span>
                 </div>
@@ -862,11 +783,7 @@
               </a-button>
             </div>
           </div>
-          <a-empty
-            v-else
-            description="没有找到样本池"
-            class="!my-8"
-          />
+          <a-empty v-else description="没有找到样本池" class="!my-8" />
         </a-spin>
 
         <div
@@ -895,10 +812,7 @@
       placement="right"
       :width="680"
     >
-      <div
-        v-if="syncJobDetail"
-        class="space-y-5"
-      >
+      <div v-if="syncJobDetail" class="space-y-5">
         <div class="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
           <div class="min-w-0">
             <div class="text-[15px] font-semibold text-slate-900">
@@ -939,33 +853,25 @@
 
         <div class="grid grid-cols-2 border-y border-slate-200 sm:grid-cols-4">
           <div class="px-3 py-4 text-center">
-            <div class="text-[12px] text-slate-400">
-              病历进度
-            </div>
+            <div class="text-[12px] text-slate-400">病历进度</div>
             <div class="mt-1 text-[19px] font-semibold text-slate-900">
               {{ syncRecordProgress.completed }}/{{ syncRecordProgress.total }}
             </div>
           </div>
           <div class="border-l border-slate-200 px-3 py-4 text-center">
-            <div class="text-[12px] text-slate-400">
-              文书就绪
-            </div>
+            <div class="text-[12px] text-slate-400">文书就绪</div>
             <div class="mt-1 text-[19px] font-semibold text-slate-900">
               {{ syncRecordProgress.ready }} 份
             </div>
           </div>
           <div class="border-l border-slate-200 px-3 py-4 text-center">
-            <div class="text-[12px] text-slate-400">
-              源库匹配
-            </div>
+            <div class="text-[12px] text-slate-400">源库匹配</div>
             <div class="mt-1 text-[19px] font-semibold text-slate-900">
               {{ syncResolvedStats.matched }} 份
             </div>
           </div>
           <div class="border-l border-slate-200 px-3 py-4 text-center">
-            <div class="text-[12px] text-slate-400">
-              表进度
-            </div>
+            <div class="text-[12px] text-slate-400">表进度</div>
             <div class="mt-1 text-[19px] font-semibold text-slate-900">
               {{ syncProgress.processed_tables ?? 0 }}/{{ syncProgress.total_tables ?? 0 }}
             </div>
@@ -1008,15 +914,8 @@
           </div>
         </div>
 
-        <div
-          v-if="syncStatusBar.canRetry"
-          class="flex justify-end border-t border-slate-100 pt-4"
-        >
-          <a-button
-            type="primary"
-            :loading="syncLoading"
-            @click="handleRetrySync"
-          >
+        <div v-if="syncStatusBar.canRetry" class="flex justify-end border-t border-slate-100 pt-4">
+          <a-button type="primary" :loading="syncLoading" @click="handleRetrySync">
             重新同步
           </a-button>
         </div>
@@ -1034,9 +933,7 @@
     >
       <div class="space-y-4 pt-2">
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">
-            样本池名称
-          </div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">样本池名称</div>
           <a-input
             v-model:value="importForm.poolName"
             placeholder="例如：手工问题样本池-第二轮"
@@ -1044,9 +941,7 @@
           />
         </div>
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">
-            备注
-          </div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">备注</div>
           <a-textarea
             v-model:value="importForm.description"
             :rows="3"
@@ -1059,11 +954,7 @@
             class="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-700"
           >
             <span>Excel 模板</span>
-            <a-button
-              type="link"
-              class="!px-0"
-              @click="handleDownloadTemplate"
-            >
+            <a-button type="link" class="!px-0" @click="handleDownloadTemplate">
               下载模板
             </a-button>
           </div>
@@ -1077,12 +968,8 @@
             <p class="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p class="ant-upload-text">
-              点击或拖拽上传 Excel 模板
-            </p>
-            <p class="ant-upload-hint">
-              支持 .xls / .xlsx，默认读取第一个工作表。
-            </p>
+            <p class="ant-upload-text">点击或拖拽上传 Excel 模板</p>
+            <p class="ant-upload-hint">支持 .xls / .xlsx，默认读取第一个工作表。</p>
             <p class="mt-2 text-[12px] text-slate-400">
               优先填写就诊ID，可补充住院流水号、病案号和患者姓名。
             </p>
@@ -1104,9 +991,7 @@
       <div class="space-y-4 pt-2">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
-            <div class="text-[12px] text-slate-400">
-              当前样本池
-            </div>
+            <div class="text-[12px] text-slate-400">当前样本池</div>
             <div class="mt-1 text-[15px] font-semibold text-slate-800">
               {{ selectedPool?.name || '未选择样本池' }}
             </div>
@@ -1128,10 +1013,7 @@
           class="grid grid-cols-1 gap-3"
           :class="hospitalizationScopeNeedsDischargeRange ? 'sm:grid-cols-3' : ''"
         >
-          <label
-            v-if="hospitalizationSyncForm.scopeMode !== 'discharged'"
-            class="block"
-          >
+          <label v-if="hospitalizationSyncForm.scopeMode !== 'discharged'" class="block">
             <span class="mb-1.5 block text-[13px] font-medium text-slate-700">在院统计日期</span>
             <a-date-picker
               v-model:value="hospitalizationSyncForm.asOfDate"
@@ -1142,10 +1024,7 @@
               @change="refreshHospitalizationScopePreview"
             />
           </label>
-          <label
-            v-if="hospitalizationScopeNeedsDischargeRange"
-            class="block"
-          >
+          <label v-if="hospitalizationScopeNeedsDischargeRange" class="block">
             <span class="mb-1.5 block text-[13px] font-medium text-slate-700">出院开始日期</span>
             <a-date-picker
               v-model:value="hospitalizationSyncForm.dischargeStartDate"
@@ -1156,10 +1035,7 @@
               @change="refreshHospitalizationScopePreview"
             />
           </label>
-          <label
-            v-if="hospitalizationScopeNeedsDischargeRange"
-            class="block"
-          >
+          <label v-if="hospitalizationScopeNeedsDischargeRange" class="block">
             <span class="mb-1.5 block text-[13px] font-medium text-slate-700">出院结束日期</span>
             <a-date-picker
               v-model:value="hospitalizationSyncForm.dischargeEndDate"
@@ -1219,10 +1095,7 @@
           class="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3"
         >
           <div class="grid grid-cols-5 gap-2 text-center">
-            <div
-              v-for="item in hospitalizationPreviewMetrics"
-              :key="item.label"
-            >
+            <div v-for="item in hospitalizationPreviewMetrics" :key="item.label">
               <div class="text-[11px] text-slate-500">
                 {{ item.label }}
               </div>
@@ -1245,46 +1118,32 @@
       </div>
     </a-modal>
 
-    <a-drawer
-      :open="detailOpen"
-      width="720"
-      title="病历关联问题"
-      @close="detailOpen = false"
-    >
-      <div
-        v-if="activeRecord"
-        class="space-y-5"
-      >
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            病历概况
-          </template>
+    <a-drawer :open="detailOpen" width="720" title="病历关联问题" @close="detailOpen = false">
+      <div v-if="activeRecord" class="space-y-5">
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 病历概况 </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">科室：</span>{{ activeRecord.department || '-' }}
+              <span class="font-medium text-slate-500">科室：</span
+              >{{ activeRecord.department || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">患者：</span>{{ activeRecord.patient_name || '-' }}
+              <span class="font-medium text-slate-500">患者：</span
+              >{{ activeRecord.patient_name || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">住院号：</span>{{ activeRecord.mr_no || '-' }}
+              <span class="font-medium text-slate-500">住院号：</span
+              >{{ activeRecord.mr_no || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span
+              >{{ activeRecord.matched_visit_id || '-' }}
             </div>
           </div>
         </a-card>
 
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            识别范围
-          </template>
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 识别范围 </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
               <span class="font-medium text-slate-500">文书范围：</span>
@@ -1301,42 +1160,38 @@
           </div>
         </a-card>
 
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            病历关联
-          </template>
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 病历关联 </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">关联结果：</span>{{ matchStatusLabel(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">关联结果：</span
+              >{{ matchStatusLabel(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">下一步：</span>{{ matchStatusHint(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">下一步：</span
+              >{{ matchStatusHint(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span
+              >{{ activeRecord.matched_visit_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">同步状态：</span>{{ activeRecord.sync_status || '-' }}
+              <span class="font-medium text-slate-500">同步状态：</span
+              >{{ activeRecord.sync_status || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">文书就绪：</span>{{ bundleStatusLabel(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">文书就绪：</span
+              >{{ bundleStatusLabel(activeRecord.bundle_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">处理建议：</span>{{ bundleStatusHint(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">处理建议：</span
+              >{{ bundleStatusHint(activeRecord.bundle_status) }}
             </div>
           </div>
         </a-card>
 
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            关联人工问题
-          </template>
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 关联人工问题 </template>
           <div class="space-y-3">
             <div
               v-for="sample in activeRecord.sample_items"
@@ -1402,9 +1257,7 @@
         </header>
 
         <div class="editable-copy-notice">
-          <div class="editable-copy-notice-title">
-            原始同步病历保持只读
-          </div>
+          <div class="editable-copy-notice-title">原始同步病历保持只读</div>
           <div>
             {{
               editableCopyReadonly
@@ -1415,10 +1268,7 @@
         </div>
 
         <a-spin :spinning="editableCopyLoading">
-          <div
-            v-if="editableCopyDraft"
-            class="editable-copy-content"
-          >
+          <div v-if="editableCopyDraft" class="editable-copy-content">
             <section class="editable-copy-section">
               <h3>{{ editableCopyReadonly ? '病历信息' : '副本信息' }}</h3>
               <div class="editable-copy-form-grid">
@@ -1447,6 +1297,13 @@
                   <span>入院时间</span>
                   <a-input
                     v-model:value="editableCopyDraft.admissionTime"
+                    :readonly="editableCopyReadonly"
+                  />
+                </label>
+                <label v-if="!editableCopyReadonly || editableCopyDraft.dischargeTime">
+                  <span>出院时间</span>
+                  <a-input
+                    v-model:value="editableCopyDraft.dischargeTime"
                     :readonly="editableCopyReadonly"
                   />
                 </label>
@@ -1480,29 +1337,24 @@
                   }}
                 </span>
               </div>
-              <div
-                v-if="!editableCopyReadonly"
-                class="editable-copy-document-toolbar"
-              >
+              <div v-if="!editableCopyReadonly" class="editable-copy-document-toolbar">
                 <a-select
                   v-model:value="editableCopyNewDocumentType"
                   :options="testRecordDocumentTypeOptions"
                   class="editable-copy-document-type-select"
                 />
-                <a-button @click="addEditableCopyDocument()">
-                  新增文书
-                </a-button>
-                <a-button @click="addEditableCopyOrderDocument()">
-                  新增医嘱
-                </a-button>
+                <a-button @click="addEditableCopyDocument()"> 新增文书 </a-button>
+                <a-button @click="addEditableCopyOrderDocument()"> 新增医嘱 </a-button>
               </div>
 
               <div class="editable-copy-document-workbench">
                 <aside class="editable-copy-document-directory">
                   <div class="editable-copy-document-directory-head">
                     <strong>文书目录</strong>
-                    <span>{{ editableCopyFilteredDocuments.length }} /
-                      {{ editableCopyDraft.documents.length }}</span>
+                    <span
+                      >{{ editableCopyFilteredDocuments.length }} /
+                      {{ editableCopyDraft.documents.length }}</span
+                    >
                   </div>
                   <a-input
                     v-model:value="editableCopyDocumentQuery"
@@ -1544,10 +1396,7 @@
                     class="editable-copy-document-directory-list"
                     :class="{ 'is-tree': editableCopyReadonly }"
                   >
-                    <template
-                      v-for="group in editableCopyDocumentGroups"
-                      :key="group.key"
-                    >
+                    <template v-for="group in editableCopyDocumentGroups" :key="group.key">
                       <button
                         v-if="editableCopyReadonly"
                         type="button"
@@ -1558,20 +1407,14 @@
                       >
                         <span>
                           <i />
-                          <b
-                            class="editable-copy-document-group-chevron"
-                            aria-hidden="true"
-                          >{{
+                          <b class="editable-copy-document-group-chevron" aria-hidden="true">{{
                             isEditableCopyDocumentGroupExpanded(group.key) ? '⌄' : '›'
                           }}</b>
                           {{ group.label }}
                         </span>
                         <em>{{ group.documents.length }}</em>
                       </button>
-                      <div
-                        v-else
-                        class="editable-copy-document-group-title"
-                      >
+                      <div v-else class="editable-copy-document-group-title">
                         <span>{{ group.label }}</span>
                         <em>{{ group.documents.length }}</em>
                       </div>
@@ -1579,7 +1422,7 @@
                         v-if="
                           (!editableCopyReadonly ||
                             isEditableCopyDocumentGroupExpanded(group.key)) &&
-                            group.key === 'order'
+                          group.key === 'order'
                         "
                         type="button"
                         class="editable-copy-document-nav-item"
@@ -1621,10 +1464,7 @@
                   </div>
                 </aside>
 
-                <article
-                  v-if="editableCopyActiveDocument"
-                  class="editable-copy-document-editor"
-                >
+                <article v-if="editableCopyActiveDocument" class="editable-copy-document-editor">
                   <div class="editable-copy-document-editor-head">
                     <div>
                       <span>{{
@@ -1635,20 +1475,11 @@
                       <h4>{{ editableCopyActiveDocument.title || '未命名文书' }}</h4>
                     </div>
                     <div class="editable-copy-document-actions">
-                      <span
-                        v-if="editableCopyReadonly"
-                        class="editable-copy-readonly-pill"
-                      >
+                      <span v-if="editableCopyReadonly" class="editable-copy-readonly-pill">
                         只读原文
                       </span>
-                      <label
-                        v-else
-                        class="editable-copy-document-toggle"
-                      >
-                        <input
-                          v-model="editableCopyActiveDocument.enabled"
-                          type="checkbox"
-                        >
+                      <label v-else class="editable-copy-document-toggle">
+                        <input v-model="editableCopyActiveDocument.enabled" type="checkbox" />
                         <span>写入副本</span>
                       </label>
                       <a-button
@@ -1714,10 +1545,7 @@
                             <td>{{ order.status }}</td>
                           </tr>
                           <tr v-if="!editableCopyVisibleOrderRows.length">
-                            <td
-                              colspan="5"
-                              class="editable-copy-order-empty"
-                            >
+                            <td colspan="5" class="editable-copy-order-empty">
                               暂无{{
                                 editableCopyOrderTypeFilter === 'long' ? '长期医嘱' : '临时医嘱'
                               }}
@@ -1773,15 +1601,9 @@
               </div>
             </section>
 
-            <section
-              v-if="!editableCopyReadonly"
-              class="editable-copy-section"
-            >
+            <section v-if="!editableCopyReadonly" class="editable-copy-section">
               <h3>验证说明</h3>
-              <a-textarea
-                v-model:value="editableCopyDraft.manualIssueText"
-                :rows="3"
-              />
+              <a-textarea v-model:value="editableCopyDraft.manualIssueText" :rows="3" />
             </section>
           </div>
         </a-spin>
@@ -1909,10 +1731,7 @@
                   {{ chip.label }} {{ chip.value }}
                 </span>
               </div>
-              <div
-                v-if="item.errorMessage"
-                class="customer-sample-luxian-aggregate-error"
-              >
+              <div v-if="item.errorMessage" class="customer-sample-luxian-aggregate-error">
                 {{ item.errorMessage }}
               </div>
               <div

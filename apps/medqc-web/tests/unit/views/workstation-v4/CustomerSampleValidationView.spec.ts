@@ -675,6 +675,7 @@ function buildRecord(overrides: Record<string, unknown> = {}) {
     patient_name: '张三',
     mr_no: '2248248',
     department: '普外科',
+    discharge_time: '2026-06-26T08:31:00+08:00',
     match_status: 'matched',
     sync_status: 'synced',
     bundle_status: 'ready',
@@ -2627,6 +2628,13 @@ describe('CustomerSampleValidationView', () => {
     const modalText = wrapper.find('.a-modal-stub').text()
     expect(modalText).toContain('查看病历文书')
     expect(modalText).toContain('病历信息')
+    expect(modalText).toContain('出院时间')
+    expect(
+      wrapper
+        .findAll('.editable-copy-form-grid label')
+        .find((node) => node.text().includes('出院时间'))
+        ?.find('input').element.value,
+    ).toBe('2026-06-26 08:31:00')
     expect(modalText).toContain('只读原文')
     expect(modalText).toContain('入院记录')
     expect(wrapper.find('.editable-copy-document-directory-list.is-tree').exists()).toBe(true)
@@ -2667,6 +2675,7 @@ describe('CustomerSampleValidationView', () => {
       instituteId: 'H1',
       patientId: 'P001',
       recordId: '2248248',
+      dischargeTime: '2026-06-26 08:31:00',
       label: '张三 · 普外科 · 2248248',
     })
     expect(latestBatchResultDrawerProps?.open).not.toBe(true)

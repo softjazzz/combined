@@ -20,6 +20,7 @@ import {
 } from './customerSampleValidationConfig'
 import {
   CUSTOMER_TEST_POOL_ID,
+  formatRecordDischargeTime,
   parseBackendDateTime,
   resolveRecordDisplayTitle,
   resolveRecordIdentifier,
@@ -343,7 +344,7 @@ export function useCustomerSampleEditableCopyController(
       mrNo: '',
       department: record.department || '未说明科室',
       admissionTime: resolveEditableCopyAdmissionTime(record),
-      dischargeTime: '',
+      dischargeTime: formatRecordDischargeTime(record.discharge_time),
       mainDiagnosis: readonlyMode
         ? sourceDiagnosis || '未返回'
         : sourceDiagnosis || '源病历编辑副本',

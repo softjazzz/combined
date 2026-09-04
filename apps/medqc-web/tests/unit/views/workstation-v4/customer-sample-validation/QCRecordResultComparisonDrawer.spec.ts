@@ -79,6 +79,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
         patientId: 'P001',
         patientName: '周勇书',
         recordId: 'R001',
+        dischargeTime: '2026-06-26 08:31:00',
         label: '测试病历',
       },
       ...(presentationMode ? { presentationMode } : {}),
@@ -122,8 +123,11 @@ describe('QCRecordResultComparisonDrawer', () => {
 
     expect(wrapper.get('.customer-record-result-title__context-label').text()).toBe('当前病历')
     expect(wrapper.get('.customer-record-result-title__context-value').text()).toBe('测试病历')
+    expect(wrapper.get('.customer-record-result-title__context-time').text()).toBe(
+      '出院时间 2026-06-26 08:31:00',
+    )
     expect(wrapper.get('.customer-record-result-title__context').attributes('aria-label')).toBe(
-      '当前病历：测试病历',
+      '当前病历：测试病历，出院时间：2026-06-26 08:31:00',
     )
   })
 

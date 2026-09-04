@@ -279,3 +279,10 @@ export function parseBackendDateTime(value: string): Date {
   const normalizedWithMilliseconds = normalized.replace(/\.(\d{3})\d+/u, '.$1')
   return new Date(hasTimezone ? normalizedWithMilliseconds : `${normalizedWithMilliseconds}Z`)
 }
+
+export function formatRecordDischargeTime(value?: string): string {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  const matched = text.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)/u)
+  return matched ? `${matched[1]} ${matched[2]}` : text
+}
