@@ -6,6 +6,23 @@ import {
 } from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
 
 describe('qcResultDebugExport', () => {
+  it('exports the safe discharge time source as a readable diagnostic field', () => {
+    const result = buildQcResultDebugText([
+      {
+        rule_id: 'LX0609-061',
+        rule_name: '出院记录时限',
+        status: 'non_compliant',
+        customer_display_facts: {
+          verification_kind: 'discharge_record_timeliness_check',
+          discharge_time: '2026-06-26 08:31:00',
+          discharge_time_source: 'inpat_registration.discharge_datetime',
+        },
+      },
+    ])
+
+    expect(result).toContain('出院时间来源：inpat_registration.discharge_datetime')
+  })
+
   it('exports redacted conclusion, controlled facts, criteria, data gaps and evidence without reinterpreting them', () => {
     const result = buildQcResultDebugText(
       [

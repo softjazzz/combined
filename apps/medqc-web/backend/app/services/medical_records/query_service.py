@@ -429,6 +429,11 @@ def _serialize_real_workstation_record(
         "department": resolved_dept_name,
         "admissionDate": record.admission_datetime.strftime("%Y-%m-%d") if record.admission_datetime else "",
         "dischargeDate": resolved_discharge_datetime.strftime("%Y-%m-%d") if resolved_discharge_datetime else "",
+        "dischargeDatetime": (
+            resolved_discharge_datetime.strftime("%Y-%m-%d %H:%M:%S")
+            if resolved_discharge_datetime
+            else ""
+        ),
         "admissionDateDisplay": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
         "dischargeDateDisplay": resolved_discharge_datetime.strftime("%m-%d") if resolved_discharge_datetime else "",
         "hospitalizationStatus": hospitalization_projection.get("status"),

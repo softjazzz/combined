@@ -23,6 +23,7 @@ function mockWorkstationResponse() {
           department: '中医科',
           admissionDate: '2026-05-25',
           dischargeDate: '',
+          dischargeDatetime: '2026-05-30 08:20:30',
           updateTime: '2026-05-30 09:10:11',
           sortTime: '2026-05-30 09:10:11',
         },
@@ -172,6 +173,8 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.allRecords.value[0].updateTime).toBe('2026-05-30 09:10:11')
     expect(records.allRecords.value[0].sortTime).toBe('2026-05-30 09:10:11')
+    expect(records.allRecords.value[0].dischargeDatetime).toBe('2026-05-30 08:20:30')
+    expect(records.allRecords.value[0].dischargeDate).toBe('2026-05-30')
   })
 
   it('retains the backend triple record key instead of reducing a record to visit ID', async () => {

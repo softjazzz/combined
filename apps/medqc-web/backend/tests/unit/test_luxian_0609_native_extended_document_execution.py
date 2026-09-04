@@ -893,6 +893,26 @@ async def test_061_discharge_record_uses_24_hour_threshold(
 
 
 @pytest.mark.asyncio
+async def test_061_exposes_the_authoritative_discharge_time_source() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": (
+                {
+                    "patient_status": "出院",
+                    "discharge_datetime": "2026-07-01 12:00:00",
+                },
+            ),
+            "discharge_record": ({"record_time": "2026-07-02 11:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-061"]
+    assert facts["discharge_time_source"] == "inpat_registration.discharge_datetime"
+
+
+@pytest.mark.asyncio
 async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() -> None:
     result, reduced = await _evaluate(
         "LX0609-061",
@@ -915,6 +935,7 @@ async def test_061_fails_closed_when_discharge_record_precedes_discharge_time() 
             {
                 "verification_kind": "discharge_record_timeliness_check",
                 "discharge_time": "2026-07-01 12:00:00",
+                "discharge_time_source": "inpat_registration.discharge_datetime",
                 "record_time": "2026-07-01 11:30:00",
                 "threshold_hours": 24,
                 "actual_interval_hours": -0.5,

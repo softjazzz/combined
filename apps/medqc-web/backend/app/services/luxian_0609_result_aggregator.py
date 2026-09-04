@@ -988,7 +988,8 @@ def safe_luxian_0609_customer_display_facts(
         },
         "death_record_presence_check": {"death_confirmed", "death_time", "death_record_count"},
         "discharge_record_timeliness_check": {
-            "discharge_time", "record_time", "threshold_hours", "actual_interval_hours",
+            "discharge_time", "discharge_time_source", "record_time", "threshold_hours",
+            "actual_interval_hours",
             "conflicting_discharge_times",
         },
         "discharge_medication_completeness_check": {
@@ -1456,6 +1457,20 @@ def safe_luxian_0609_customer_display_facts(
             # 061 的冲突列表只在确有多条权威时间时出现；保持普通结果的
             # 既有字段形状，避免把一个不存在的字段投影成 null。
             if key == "conflicting_discharge_times" and key not in raw:
+                continue
+            if key == "discharge_time_source":
+                if key not in raw:
+                    continue
+                value = raw.get(key)
+                if value not in {
+                    "inpat_registration.discharge_datetime",
+                    "inpat_registration.discharge_time",
+                    "discharge_record.discharge_datetime",
+                    "discharge_record.discharge_time",
+                    "discharge_record.discharge_date",
+                }:
+                    return None
+                safe[key] = value
                 continue
             if key == "event_results":
                 controlled_events = (

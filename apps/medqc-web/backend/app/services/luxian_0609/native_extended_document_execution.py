@@ -362,19 +362,32 @@ def _discharge_time(
     registration_rows: Sequence[Mapping[str, Any]],
     discharge_rows: Sequence[Mapping[str, Any]],
 ) -> datetime | None:
-    for row in registration_rows:
-        parsed = _parse_datetime(row.get("discharge_datetime") or row.get("discharge_time"))
-        if parsed is not None:
-            return parsed
-    for row in discharge_rows:
-        parsed = _parse_datetime(
-            row.get("discharge_datetime")
-            or row.get("discharge_time")
-            or row.get("discharge_date")
-        )
-        if parsed is not None:
-            return parsed
-    return None
+    return _discharge_time_with_source(registration_rows, discharge_rows)[0]
+
+
+def _discharge_time_with_source(
+    registration_rows: Sequence[Mapping[str, Any]],
+    discharge_rows: Sequence[Mapping[str, Any]],
+) -> tuple[datetime | None, str]:
+    source_groups = (
+        (
+            "inpat_registration",
+            registration_rows,
+            ("discharge_datetime", "discharge_time"),
+        ),
+        (
+            "discharge_record",
+            discharge_rows,
+            ("discharge_datetime", "discharge_time", "discharge_date"),
+        ),
+    )
+    for source_name, rows, field_names in source_groups:
+        for row in rows:
+            for field_name in field_names:
+                parsed = _parse_datetime(row.get(field_name))
+                if parsed is not None:
+                    return parsed, f"{source_name}.{field_name}"
+    return None, ""
 
 
 def _registration_discharge_times(
@@ -1793,6 +1806,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                 if len(registration_discharge_times) > 1
                 else ()
             )
+            discharge_time, discharge_time_source = _discharge_time_with_source(
+                registration_rows,
+                discharge_rows,
+            )
             outcome = evaluate_discharge_documentation_timeliness(
                 death_state=death_state,
                 death_error=death_error,
@@ -1801,7 +1818,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                 discharge_time=(
                     None
                     if registration_time_conflicts
-                    else _discharge_time(registration_rows, discharge_rows)
+                    else discharge_time
+                ),
+                discharge_time_source=(
+                    "" if registration_time_conflicts else discharge_time_source
                 ),
                 discharge_rows=discharge_rows,
                 registration_time_conflicts=registration_time_conflicts,

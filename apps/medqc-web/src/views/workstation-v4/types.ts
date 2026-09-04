@@ -15,6 +15,7 @@ export interface PatientRecord {
   department: string
   admissionDate: string
   dischargeDate: string
+  dischargeDatetime?: string
   hospitalizationStatus?: 'inpatient' | 'discharged' | 'unknown'
   hospitalizationStatusVerifiedAt?: string
   hospitalizationStatusSource?: string
@@ -286,6 +287,7 @@ export interface WorkstationWorklistItem {
   department: string
   admissionDate?: string
   dischargeDate?: string
+  dischargeDatetime?: string
   workflowType: 'frontpage' | 'coding' | 'settlement'
   queueStatus: QueueStatusCode
   queueStatusSource?: QueueStatusSource

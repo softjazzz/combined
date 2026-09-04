@@ -110,6 +110,17 @@ function buildRuleDebugSection(item: QcDebugResultItem, index: number): string {
   appendTextSection(lines, '核对标准', item.standard)
   appendTextSection(lines, '处理建议', item.suggestion)
   appendTextSection(lines, '模型分析', item.model_analysis)
+  if (
+    item.rule_id === 'LX0609-061' &&
+    item.customer_display_facts &&
+    typeof item.customer_display_facts === 'object'
+  ) {
+    appendTextSection(
+      lines,
+      '出院时间来源',
+      (item.customer_display_facts as Record<string, unknown>).discharge_time_source,
+    )
+  }
   appendJsonSection(lines, '受控判定事实 customer_display_facts', item.customer_display_facts)
   appendJsonSection(lines, '受控子结论 criterion_results', item.criterion_results)
   appendJsonSection(lines, '资料缺口 data_gap_details', item.data_gap_details)

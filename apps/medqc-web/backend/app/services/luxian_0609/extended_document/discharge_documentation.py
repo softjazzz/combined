@@ -34,6 +34,7 @@ def evaluate_discharge_documentation_timeliness(
     discharge_error: str,
     discharge_time: datetime | None,
     discharge_rows: Sequence[Mapping[str, Any]],
+    discharge_time_source: str = "",
     registration_time_conflicts: Sequence[datetime] = (),
 ) -> DischargeDocumentationOutcome:
     """按权威出院时间核对出院记录是否在24小时内完成。"""
@@ -106,14 +107,18 @@ def evaluate_discharge_documentation_timeliness(
                 else "threshold_exceeded"
             )
 
+    customer_display_facts = {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": discharge_time.isoformat(sep=" "),
+        "record_time": record_time.isoformat(sep=" ") if record_time else None,
+        "threshold_hours": 24,
+        "actual_interval_hours": actual_interval_hours,
+    }
+    if discharge_time_source:
+        customer_display_facts["discharge_time_source"] = discharge_time_source
+
     return DischargeDocumentationOutcome(
         final_state,
         reason_code,
-        {
-            "verification_kind": "discharge_record_timeliness_check",
-            "discharge_time": discharge_time.isoformat(sep=" "),
-            "record_time": record_time.isoformat(sep=" ") if record_time else None,
-            "threshold_hours": 24,
-            "actual_interval_hours": actual_interval_hours,
-        },
+        customer_display_facts,
     )

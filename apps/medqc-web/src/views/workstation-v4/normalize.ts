@@ -98,7 +98,10 @@ export function normalizeRecord(raw: unknown): PatientRecord {
   const id =
     pickString(source, ['id', 'record_id', 'visit_id', 'visitId']) || `record-${Date.now()}`
   const visitId = pickString(source, ['visitId', 'visit_id']) || id
-  const dischargeDate = pickString(source, ['dischargeDate', 'discharge_date', 'out_date'])
+  const dischargeDatetime = pickString(source, ['dischargeDatetime', 'discharge_datetime'])
+  const dischargeDate =
+    pickString(source, ['dischargeDate', 'discharge_date', 'out_date']) ||
+    dischargeDatetime.slice(0, 10)
   const admissionDate = pickString(source, ['admissionDate', 'admission_date', 'in_date'])
   const updateTime = pickString(source, ['updateTime', 'update_time', 'updated_at'])
   const sortTime =
@@ -160,6 +163,7 @@ export function normalizeRecord(raw: unknown): PatientRecord {
       '未分科室',
     admissionDate,
     dischargeDate,
+    dischargeDatetime,
     hospitalizationStatus: (() => {
       const status = pickString(source, [
         'hospitalizationStatus',
@@ -341,7 +345,11 @@ export function normalizeWorklistItem(raw: unknown): WorkstationWorklistItem {
     patientAge: asNumber(source.patientAge ?? source.patient_age ?? source.age ?? source.age_years),
     department: pickString(source, ['department', 'dept_name', 'deptName']) || '未分科室',
     admissionDate: pickString(source, ['admissionDate', 'admission_date']) || undefined,
-    dischargeDate: pickString(source, ['dischargeDate', 'discharge_date']) || undefined,
+    dischargeDate:
+      pickString(source, ['dischargeDate', 'discharge_date']) ||
+      pickString(source, ['dischargeDatetime', 'discharge_datetime']).slice(0, 10) ||
+      undefined,
+    dischargeDatetime: pickString(source, ['dischargeDatetime', 'discharge_datetime']) || undefined,
     workflowType:
       (pickString(source, [
         'workflowType',

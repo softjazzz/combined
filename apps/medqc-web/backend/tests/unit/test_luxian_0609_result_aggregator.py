@@ -3192,6 +3192,7 @@ def test_extended_document_facts_are_whitelisted_and_rendered_in_backend():
     raw_facts = {
         "verification_kind": "discharge_record_timeliness_check",
         "discharge_time": "2026-07-01 12:00:00",
+        "discharge_time_source": "inpat_registration.discharge_datetime",
         "record_time": "2026-07-02 14:00:00",
         "threshold_hours": 24,
         "actual_interval_hours": 26.0,
@@ -3212,6 +3213,9 @@ def test_extended_document_facts_are_whitelisted_and_rendered_in_backend():
     )
     assert "PRIVATE_DISCHARGE_TEXT" not in repr(result)
     assert "raw_record_content" not in result["customer_display_facts"]
+    assert result["customer_display_facts"]["discharge_time_source"] == (
+        "inpat_registration.discharge_datetime"
+    )
 
 
 def test_061_conflicting_discharge_times_are_preserved_and_rendered():

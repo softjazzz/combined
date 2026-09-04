@@ -1194,6 +1194,7 @@ def test_get_workstation_data_discharge_field_uses_discharge_record_time_and_dep
     assert [record["id"] for record in result["records"]] == ["V1"]
     assert result["records"][0]["department"] == "中医科"
     assert result["records"][0]["dischargeDate"] == "2026-04-05"
+    assert result["records"][0]["dischargeDatetime"] == "2026-04-05 10:00:00"
     assert result["records"][0]["days"] == 4
 
 
@@ -1228,6 +1229,7 @@ def test_get_workstation_data_discharge_field_falls_back_to_mr_discharge_datetim
     assert [record["id"] for record in result["records"]] == ["V1"]
     assert result["records"][0]["department"] == "外一科"
     assert result["records"][0]["dischargeDate"] == "2026-04-08"
+    assert result["records"][0]["dischargeDatetime"] == "2026-04-08 09:00:00"
 
 
 def test_get_workstation_data_multiple_discharge_records_do_not_duplicate_records(
