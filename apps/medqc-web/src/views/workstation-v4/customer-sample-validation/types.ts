@@ -81,7 +81,10 @@ export type ManualSamplePoolRecord = {
 }
 
 export type ManualSampleValidationMode =
-  'customer' | 'sc' | 'programmatic' | 'formal_fast_screen_full'
+  | 'customer'
+  | 'sc'
+  | 'programmatic'
+  | 'formal_fast_screen_full'
 
 export type ManualSampleValidationRuleSet = {
   rule_set_key: string
@@ -381,6 +384,7 @@ export type EditableMedicalReportItem = {
   unit?: string
   findings?: string
   impression?: string
+  recommendation?: string
 }
 
 export type ManualTestRecordSourceMeta = {
@@ -442,7 +446,11 @@ export type EditableMedicalRecordDocumentsResult = {
 }
 
 export type SyntheticCaseExpectedStatus =
-  'non_compliant' | 'compliant' | 'not_applicable' | 'data_gap' | 'uncertain'
+  | 'non_compliant'
+  | 'compliant'
+  | 'not_applicable'
+  | 'data_gap'
+  | 'uncertain'
 
 export type SyntheticCaseGoldenAnswer = {
   id?: string

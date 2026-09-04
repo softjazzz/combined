@@ -1948,10 +1948,14 @@ def _build_grouped_exam_reports(
 
     master_index = _index_report_masters(master_rows, id_fields=("exam_id", "exam_no"))
     exam_items_by_exam_id: dict[str, list[dict[str, Any]]] = {}
+    exam_items_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
     for exam_item in exam_item_rows:
         exam_id = _first_report_value(exam_item, fields=("exam_id", "exam_no"))
         if exam_id:
             exam_items_by_exam_id.setdefault(exam_id, []).append(exam_item)
+            item_id = _first_report_value(exam_item, fields=("item_id", "item_no"))
+            if item_id:
+                exam_items_by_identity.setdefault((exam_id, item_id), exam_item)
     consumed_master_indexes: set[int] = set()
     reports: list[dict[str, Any]] = []
     for report_id, rows in grouped.values():
@@ -1965,16 +1969,19 @@ def _build_grouped_exam_reports(
                 consumed_master_indexes.add(matched[0])
                 matched_master = matched[1]
                 break
+        matched_exam_id = _first_report_value(
+            first,
+            matched_master,
+            fields=("exam_id", "exam_no"),
+        )
+        matched_exam_items = exam_items_by_exam_id.get(matched_exam_id, [])
         subject = _first_report_value(
             first,
             matched_master,
             fields=("document_title", "exam_name", "exam_item_name", "item_name"),
         )
         if not subject or subject in {"检查明细", "检查结果", "检查报告"}:
-            exam_id = _first_report_value(first, matched_master, fields=("exam_id", "exam_no"))
-            subject = _infer_exam_report_subject_from_items(
-                exam_items_by_exam_id.get(exam_id, [])
-            )
+            subject = _infer_exam_report_subject_from_items(matched_exam_items)
         if not subject:
             subject = _first_report_value(first, matched_master, fields=("exam_type",))
         if not subject:
@@ -1992,12 +1999,25 @@ def _build_grouped_exam_reports(
         report_items: list[dict[str, Any]] = []
         result_lines: list[str] = []
         for row in rows:
+            row_exam_id = (
+                _first_report_value(row, fields=("exam_id", "exam_no"))
+                or matched_exam_id
+            )
+            row_item_id = _first_report_value(row, fields=("item_id", "item_no"))
+            linked_exam_item = exam_items_by_identity.get((row_exam_id, row_item_id), {})
+            if not linked_exam_item and len(exam_items_by_exam_id.get(row_exam_id, [])) == 1:
+                linked_exam_item = exam_items_by_exam_id[row_exam_id][0]
             item = {
                 "item_no": _normalize_text(row.get("item_no")),
                 "item_id": _normalize_text(row.get("item_id")),
-                "item_code": _normalize_text(row.get("item_code")),
+                "item_code": _first_report_value(
+                    row,
+                    linked_exam_item,
+                    fields=("item_code",),
+                ),
                 "item_name": _first_report_value(
                     row,
+                    linked_exam_item,
                     fields=("exam_name", "exam_item_name", "item_name"),
                 ),
                 "findings": _first_report_value(
@@ -2020,11 +2040,35 @@ def _build_grouped_exam_reports(
             if item["recommendation"]:
                 result_lines.append(f"检查建议：{item['recommendation']}")
         metadata = {
-            "request_time": _first_report_value(matched_master, fields=("request_time", "request_datetime")),
+            "request_dept": _first_report_value(matched_master, fields=("request_dept",)),
+            "request_physician": _first_report_value(
+                matched_master,
+                fields=("request_physician",),
+            ),
+            "request_time": _first_report_value(
+                matched_master,
+                fields=("request_time", "request_datetime"),
+            ),
+            "schedule_time": _first_report_value(matched_master, fields=("schedule_time",)),
             "exam_time": _first_report_value(matched_master, fields=("exam_time",)),
             "report_time": report_time,
             "exam_type": _first_report_value(first, matched_master, fields=("exam_type",)),
-            "request_dept": _first_report_value(matched_master, fields=("request_dept",)),
+            "body_part": _first_report_value(
+                matched_master,
+                *matched_exam_items,
+                fields=("body_part", "exam_zone"),
+            ),
+            "exam_item": _infer_exam_report_subject_from_items(matched_exam_items),
+            "device_information": _first_report_value(
+                first,
+                matched_master,
+                fields=("device_information",),
+            ),
+            "result_hint": _first_report_value(
+                first,
+                matched_master,
+                fields=("abnormal_sign", "exam_result_status"),
+            ),
             "performed_dept": _first_report_value(matched_master, fields=("performed_dept",)),
             "reporter": _first_report_value(matched_master, fields=("reporter",)),
             "verifier": _first_report_value(matched_master, fields=("verifier",)),
@@ -2035,6 +2079,7 @@ def _build_grouped_exam_reports(
                 f"{label}：{value}"
                 for label, value in (
                     ("申请时间", metadata["request_time"]),
+                    ("预约时间", metadata["schedule_time"]),
                     ("检查时间", metadata["exam_time"]),
                     ("报告时间", metadata["report_time"]),
                     ("检查类型", metadata["exam_type"]),

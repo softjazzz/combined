@@ -52,12 +52,19 @@ describe('ReadonlyMedicalDocumentContent report rendering', () => {
           document_type: 'exam_item_report',
           title: '胸部CT平扫检查报告',
           content: '检查结果',
+          report_metadata: {
+            request_dept: '外一科',
+            request_time: '2025-08-15 09:24:55',
+            report_time: '2025-08-15 10:38:09',
+            exam_item: '腰椎DR正侧位',
+          },
           report_items: [
             {
               item_no: '1',
               item_name: '胸部CT平扫',
               findings: '双肺纹理增多。',
               impression: '双肺炎症可能。',
+              recommendation: '建议结合临床。',
             },
           ],
         },
@@ -67,6 +74,12 @@ describe('ReadonlyMedicalDocumentContent report rendering', () => {
     expect(wrapper.findAll('.readonly-exam-item')).toHaveLength(1)
     expect(wrapper.text()).toContain('双肺纹理增多')
     expect(wrapper.text()).toContain('双肺炎症可能')
+    expect(wrapper.text()).toContain('科室')
+    expect(wrapper.text()).toContain('外一科')
+    expect(wrapper.text()).toContain('预约时间')
+    expect(wrapper.text()).toContain('腰椎DR正侧位')
+    expect(wrapper.text()).toContain('检查建议')
+    expect(wrapper.text()).toContain('建议结合临床')
   })
 
   it('does not render the same structured section twice when the source also returns a 正文 projection', () => {

@@ -1,26 +1,13 @@
 <template>
-  <div
-    class="readonly-medical-document-content"
-    data-testid="readonly-medical-document-content"
-  >
+  <div class="readonly-medical-document-content" data-testid="readonly-medical-document-content">
     <template v-if="isReportDocument">
-      <section
-        v-if="reportMetadataRows.length"
-        class="readonly-report-metadata"
-      >
-        <div
-          v-for="item in reportMetadataRows"
-          :key="item.key"
-          class="readonly-report-meta-item"
-        >
+      <section v-if="reportMetadataRows.length" class="readonly-report-metadata">
+        <div v-for="item in reportMetadataRows" :key="item.key" class="readonly-report-meta-item">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
         </div>
       </section>
-      <section
-        v-if="isLabReport"
-        class="readonly-report-results"
-      >
+      <section v-if="isLabReport" class="readonly-report-results">
         <h5>检验结果</h5>
         <div class="readonly-report-table-wrap">
           <table class="readonly-report-table">
@@ -34,10 +21,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="(item, index) in reportItems"
-                :key="item.item_id || item.item_no || index"
-              >
+              <tr v-for="(item, index) in reportItems" :key="item.item_id || item.item_no || index">
                 <td>{{ item.item_name || '未命名项目' }}</td>
                 <td class="readonly-report-result-value">
                   {{ item.result || '—' }}
@@ -52,10 +36,7 @@
           </table>
         </div>
       </section>
-      <section
-        v-else
-        class="readonly-report-results"
-      >
+      <section v-else class="readonly-report-results">
         <h5>检查结果</h5>
         <div class="readonly-exam-items">
           <article
@@ -72,6 +53,10 @@
               <template v-if="item.impression">
                 <dt>检查结论</dt>
                 <dd>{{ item.impression }}</dd>
+              </template>
+              <template v-if="item.recommendation">
+                <dt>检查建议</dt>
+                <dd>{{ item.recommendation }}</dd>
               </template>
             </dl>
           </article>
@@ -90,10 +75,7 @@
         <pre class="readonly-medical-document-section-text">{{ section.text }}</pre>
       </section>
     </template>
-    <pre
-      v-else
-      class="readonly-medical-document-fallback"
-    >{{ document.content || '未记录' }}</pre>
+    <pre v-else class="readonly-medical-document-fallback">{{ document.content || '未记录' }}</pre>
   </div>
 </template>
 
@@ -105,6 +87,7 @@ import {
   displayMedicalDocumentSectionText,
 } from './medicalDocumentDisplay'
 import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
+import { buildMedicalReportMetadataRows } from '@/utils/medicalReportDisplay'
 
 const props = defineProps<{
   document: EditableMedicalRecordDocument
@@ -118,21 +101,6 @@ type SectionView = {
   sourceIndex: number
 }
 
-const REPORT_METADATA_LABELS: Record<string, string> = {
-  request_datetime: '申请时间',
-  request_time: '申请时间',
-  exam_time: '检查时间',
-  report_datetime: '报告时间',
-  report_time: '报告时间',
-  specimen: '标本类型',
-  exam_type: '检查类型',
-  request_dept: '申请科室',
-  performed_dept: '执行科室',
-  request_physician: '申请医生',
-  reporter: '报告医生',
-  verifier: '审核医生',
-}
-
 const reportItems = computed<EditableMedicalReportItem[]>(() => props.document.report_items || [])
 const isLabReport = computed(() => props.document.document_type === 'labtest_item_report')
 const isExamReport = computed(() => props.document.document_type === 'exam_item_report')
@@ -140,9 +108,11 @@ const isReportDocument = computed(
   () => (isLabReport.value || isExamReport.value) && reportItems.value.length > 0,
 )
 const reportMetadataRows = computed(() =>
-  Object.entries(props.document.report_metadata || {})
-    .filter(([key, value]) => Boolean(REPORT_METADATA_LABELS[key] && String(value || '').trim()))
-    .map(([key, value]) => ({ key, label: REPORT_METADATA_LABELS[key], value })),
+  buildMedicalReportMetadataRows(
+    props.document.report_metadata,
+    isExamReport.value ? 'exam' : 'lab',
+    reportItems.value,
+  ),
 )
 
 const sectionViews = computed<SectionView[]>(() =>

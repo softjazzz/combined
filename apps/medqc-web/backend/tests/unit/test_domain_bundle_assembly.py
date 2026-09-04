@@ -285,7 +285,12 @@ def test_exam_report_title_should_prefer_linked_exam_item_name(monkeypatch):
                 {
                     "exam_id": "ECG-001",
                     "exam_type": "",
+                    "request_dept": "外一科",
+                    "request_time": "2025-08-13 09:24:55+08:00",
+                    "schedule_time": "2025-08-13 10:00:00+08:00",
+                    "exam_time": "2025-08-13 10:30:00+08:00",
                     "performed_dept": "心电图室",
+                    "device_information": "十二通道心电图机",
                     "report_time": "2025-08-13 10:51:28+08:00",
                 },
                 {
@@ -312,6 +317,7 @@ def test_exam_report_title_should_prefer_linked_exam_item_name(monkeypatch):
                     "exam_id": "ECG-001",
                     "item_id": "ECG-ITEM-001",
                     "impression": "窦性心律，房性早搏。",
+                    "recommendation": "建议结合临床。",
                 },
                 {
                     "exam_id": "BMD-001",
@@ -329,6 +335,35 @@ def test_exam_report_title_should_prefer_linked_exam_item_name(monkeypatch):
         "ECG-001": "常规心电图检查（十二通道）报告",
         "BMD-001": "骨密度测试报告",
     }
+    ecg_report = next(item for item in inventory if item["document_id"] == "ECG-001")
+    assert ecg_report["report_metadata"] == {
+        "request_dept": "外一科",
+        "request_physician": "",
+        "request_time": "2025-08-13 09:24:55+08:00",
+        "schedule_time": "2025-08-13 10:00:00+08:00",
+        "exam_time": "2025-08-13 10:30:00+08:00",
+        "report_time": "2025-08-13 10:51:28+08:00",
+        "exam_type": "",
+        "body_part": "",
+        "exam_item": "常规心电图检查（十二通道）",
+        "device_information": "十二通道心电图机",
+        "result_hint": "",
+        "performed_dept": "心电图室",
+        "reporter": "",
+        "verifier": "",
+        "report_status": "",
+    }
+    assert ecg_report["report_items"] == [
+        {
+            "item_no": "",
+            "item_id": "ECG-ITEM-001",
+            "item_code": "",
+            "item_name": "常规心电图检查（十二通道）",
+            "findings": "",
+            "impression": "窦性心律，房性早搏。",
+            "recommendation": "建议结合临床。",
+        }
+    ]
 
 
 def test_course_bundle_should_keep_raw_lab_rows_but_publish_one_report(monkeypatch):

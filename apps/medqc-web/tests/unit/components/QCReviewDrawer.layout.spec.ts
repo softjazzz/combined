@@ -67,5 +67,7 @@ describe('QCReviewDrawer layout', () => {
     expect(source).toContain('v-for="(item, index) in currentDocReportItems"')
     expect(source).toContain('<th>检验项目</th>')
     expect(source).toContain('<th>结果提示</th>')
+    expect(source).toContain('buildMedicalReportMetadataRows(')
+    expect(source).toContain('<dt>检查建议</dt>')
   })
 })

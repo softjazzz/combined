@@ -34,6 +34,27 @@ def test_exam_item_report_projection_preserves_linkage_and_result_fields():
     assert available <= selected
 
 
+def test_exam_master_projection_preserves_structured_report_metadata():
+    available = {
+        "exam_id",
+        "request_dept",
+        "request_physician",
+        "request_time",
+        "schedule_time",
+        "exam_time",
+        "report_time",
+        "exam_type",
+        "body_part",
+        "performed_dept",
+        "device_information",
+        "exam_result_status",
+    }
+
+    selected = set(build_document_select_columns("exam_master", available))
+
+    assert available <= selected
+
+
 def test_exam_master_with_structured_fields_is_a_readable_document():
     assembled = assemble_document(
         "exam_master",
