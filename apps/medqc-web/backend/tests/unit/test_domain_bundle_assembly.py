@@ -205,6 +205,42 @@ def test_exam_report_source_projection_should_merge_master_and_full_report(monke
     assert "建议结合临床" in report["content"]
 
 
+def test_exam_report_title_should_fall_back_to_performed_department(monkeypatch):
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+
+    expected_titles = {
+        "CT室": "CT检查报告",
+        "核磁共振室": "核磁共振检查报告",
+        "心电图室": "心电图检查报告",
+        "未知检查科室": "检查报告",
+    }
+    for performed_dept, expected_title in expected_titles.items():
+        inventory = assembly_module._build_document_inventory(
+            {
+                "exam_master": [
+                    {
+                        "exam_id": f"EXAM-{performed_dept}",
+                        "exam_type": "",
+                        "performed_dept": performed_dept,
+                        "report_time": "2025-07-06 14:47:25+08:00",
+                    }
+                ],
+                "exam_item_report": [
+                    {
+                        "exam_id": f"EXAM-{performed_dept}",
+                        "item_id": "ITEM-1",
+                        "description": "检查所见。",
+                        "report_time": "2025-07-06 14:47:25+08:00",
+                    }
+                ],
+            },
+            "cdm",
+        )
+
+        assert len(inventory) == 1
+        assert inventory[0]["document_title"] == expected_title
+
+
 def test_course_bundle_should_keep_raw_lab_rows_but_publish_one_report(monkeypatch):
     def _fake_select_records(**kwargs):
         if kwargs["table"] == "labtest_master":

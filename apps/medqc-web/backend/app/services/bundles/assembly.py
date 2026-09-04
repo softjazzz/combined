@@ -1866,6 +1866,18 @@ def _build_grouped_lab_reports(
     return reports, consumed_master_indexes
 
 
+def _infer_exam_report_subject_from_department(value: Any) -> str:
+    department = _normalize_text(value)
+    normalized = department.upper()
+    if "核磁" in department or "磁共振" in department or "MRI" in normalized:
+        return "核磁共振"
+    if "CT" in normalized:
+        return "CT"
+    if "心电" in department or "ECG" in normalized or "EKG" in normalized:
+        return "心电图"
+    return ""
+
+
 def _build_grouped_exam_reports(
     master_rows: list[dict[str, Any]],
     item_rows: list[dict[str, Any]],
@@ -1901,7 +1913,13 @@ def _build_grouped_exam_reports(
             fields=("document_title", "exam_name", "exam_item_name", "exam_type"),
         )
         if not subject or subject in {"检查明细", "检查结果", "检查报告"}:
-            subject = _first_report_value(matched_master, fields=("exam_type",)) or "检查"
+            subject = _first_report_value(matched_master, fields=("exam_type",))
+        if not subject:
+            subject = _infer_exam_report_subject_from_department(
+                _first_report_value(first, matched_master, fields=("performed_dept",))
+            )
+        if not subject:
+            subject = "检查"
         title = (
             subject
             if subject.endswith("检查报告")
