@@ -138,6 +138,7 @@ class Luxian0609PackagePlan:
             {
                 *self.native_sync_rule_ids,
                 *self.native_async_rule_ids,
+                *self.not_executed_rule_ids,
                 *self.bypassed_execution_rule_ids,
             }
         )

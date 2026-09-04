@@ -203,6 +203,7 @@ def test_formal_plan_rejects_exam_lab_compatibility_and_accepts_fully_native_pla
         native_surgery_gate_enabled=True,
     )
     assert pending.not_executed_rule_ids == ("LX0609-025",)
+    assert "LX0609-025" in pending.prepared_rule_ids_to_remove
     assert_luxian_0609_formal_package_plan_native_only(
         pending,
         context="test",
@@ -237,9 +238,12 @@ def test_transfusion_family_flag_partitions_only_nine_customer_rules():
     assert enabled.compatibility_rule_ids == ()
     assert enabled.native_executor_batches == (("transfusion", expected_executable),)
     assert enabled.not_executed_rule_ids == ("LX0609-049",)
+    assert "LX0609-049" in enabled.prepared_rule_ids_to_remove
     assert disabled.native_async_rule_ids == ()
     assert disabled.compatibility_rule_ids == expected_executable
     assert disabled.not_executed_rule_ids == ("LX0609-049",)
+    assert "LX0609-041" not in disabled.prepared_rule_ids_to_remove
+    assert "LX0609-049" in disabled.prepared_rule_ids_to_remove
 
 
 @pytest.mark.unit
