@@ -64,6 +64,7 @@ export type ManualSamplePoolRecord = {
   mr_no: string
   department: string
   hospitalization_status?: 'active' | 'discharged' | ''
+  admission_time?: string
   discharge_time?: string
   match_status: string
   sync_status: string

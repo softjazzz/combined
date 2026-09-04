@@ -3838,7 +3838,8 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
             "sync_status": "synced",
             "bundle_status": "ready",
             "raw_payload_json": (
-                '{"_sample_sync_state":{"hospitalization_status":"discharged",'
+                '{"admission_time":"2026-07-01T09:15:00+00:00",'
+                '"_sample_sync_state":{"hospitalization_status":"discharged",'
                 '"status_source":"discharge_record",'
                 '"discharge_time":"2026-07-30T15:20:00+00:00"}}'
             ),
@@ -3857,6 +3858,7 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
     assert record["sample_item_ids"] == ["item-1", "item-2"]
     assert record["candidate_rule_ids"] == ["SC-026", "SC-033"]
     assert record["hospitalization_status"] == "discharged"
+    assert record["admission_time"] == "2026-07-01T09:15:00+00:00"
     assert record["discharge_time"] == "2026-07-30T15:20:00+00:00"
     assert "首次病程记录鉴别诊断不全面" in record["issue_preview_text"]
 

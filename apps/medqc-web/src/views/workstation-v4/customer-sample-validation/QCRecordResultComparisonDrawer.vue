@@ -27,24 +27,14 @@
             <strong>病历质控结果</strong>
           </span>
         </div>
-        <div
-          class="customer-record-result-title__context"
-          :aria-label="
-            [
-              `当前病历：${focus?.label || '病历原文与质控结果对照'}`,
-              focus?.dischargeTime ? `出院时间：${focus.dischargeTime}` : '',
-            ]
-              .filter(Boolean)
-              .join('，')
-          "
-        >
+        <div class="customer-record-result-title__context" :aria-label="recordContextAriaLabel">
           <span class="customer-record-result-title__context-label">当前病历</span>
           <span class="customer-record-result-title__context-details">
             <span class="customer-record-result-title__context-value">
               {{ focus?.label || '病历原文与质控结果对照' }}
             </span>
-            <span v-if="focus?.dischargeTime" class="customer-record-result-title__context-time">
-              出院时间 {{ focus.dischargeTime }}
+            <span v-if="hospitalizationTimeText" class="customer-record-result-title__context-time">
+              {{ hospitalizationTimeText }}
             </span>
           </span>
         </div>
@@ -102,6 +92,7 @@ export interface QCRecordResultFocus {
   recordId: string
   recordRef?: string
   patientName?: string
+  admissionTime?: string
   dischargeTime?: string
   label: string
 }
@@ -125,6 +116,25 @@ const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)
 const authorizedRecordRef = ref('')
 let activeRequestSequence = 0
+
+const hospitalizationTimeText = computed(() => {
+  const admissionTime = props.focus?.admissionTime
+  const dischargeTime = props.focus?.dischargeTime
+  if (admissionTime && dischargeTime) return `住院时间 ${admissionTime} → ${dischargeTime}`
+  if (admissionTime) return `入院时间 ${admissionTime}`
+  if (dischargeTime) return `出院时间 ${dischargeTime}`
+  return ''
+})
+
+const recordContextAriaLabel = computed(() =>
+  [
+    `当前病历：${props.focus?.label || '病历原文与质控结果对照'}`,
+    props.focus?.admissionTime ? `入院时间：${props.focus.admissionTime}` : '',
+    props.focus?.dischargeTime ? `出院时间：${props.focus.dischargeTime}` : '',
+  ]
+    .filter(Boolean)
+    .join('，'),
+)
 
 const debugContext = computed(() => {
   const result = latestResult.value

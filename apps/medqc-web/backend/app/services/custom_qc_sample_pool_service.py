@@ -4696,6 +4696,10 @@ class CustomQCSamplePoolService:
                 group_key = item["matched_visit_id"] or f"id:{item['visit_id'] or item['mr_no'] or item['id']}"
                 current = grouped.get(group_key)
                 hospitalization_state = _trusted_item_hospitalization_state(item) or {}
+                raw_payload = item.get("raw_payload")
+                if not isinstance(raw_payload, dict):
+                    raw_payload = _safe_json_loads(item.get("raw_payload_json"), {})
+                admission_time = _safe_text((raw_payload or {}).get("admission_time"))
                 if current is None:
                     current = {
                         "id": group_key,
@@ -4707,6 +4711,7 @@ class CustomQCSamplePoolService:
                         "patient_age": "",
                         "mr_no": item["mr_no"],
                         "department": item["department"],
+                        "admission_time": admission_time,
                         "hospitalization_status": _safe_text(
                             hospitalization_state.get("hospitalization_status")
                         ),
@@ -4739,6 +4744,8 @@ class CustomQCSamplePoolService:
                         current["discharge_time"] = _safe_text(
                             hospitalization_state.get("discharge_time")
                         )
+                if admission_time and not _safe_text(current.get("admission_time")):
+                    current["admission_time"] = admission_time
 
                 current_created_at = current.get("created_at")
                 item_created_at = item.get("created_at")

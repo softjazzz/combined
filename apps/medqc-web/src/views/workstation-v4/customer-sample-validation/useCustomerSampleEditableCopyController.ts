@@ -20,7 +20,7 @@ import {
 } from './customerSampleValidationConfig'
 import {
   CUSTOMER_TEST_POOL_ID,
-  formatRecordDischargeTime,
+  formatRecordDateTime,
   parseBackendDateTime,
   resolveRecordDisplayTitle,
   resolveRecordIdentifier,
@@ -197,6 +197,8 @@ export function useCustomerSampleEditableCopyController(
   }
 
   function resolveEditableCopyAdmissionTime(record: ManualSamplePoolRecord): string {
+    const admissionTime = formatRecordDateTime(record.admission_time)
+    if (admissionTime) return admissionTime
     const raw = record.created_at || record.updated_at || new Date().toISOString()
     const parsed = parseBackendDateTime(raw)
     if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 16)
@@ -343,8 +345,10 @@ export function useCustomerSampleEditableCopyController(
       age: 50,
       mrNo: '',
       department: record.department || '未说明科室',
-      admissionTime: resolveEditableCopyAdmissionTime(record),
-      dischargeTime: formatRecordDischargeTime(record.discharge_time),
+      admissionTime: readonlyMode
+        ? formatRecordDateTime(record.admission_time)
+        : resolveEditableCopyAdmissionTime(record),
+      dischargeTime: formatRecordDateTime(record.discharge_time),
       mainDiagnosis: readonlyMode
         ? sourceDiagnosis || '未返回'
         : sourceDiagnosis || '源病历编辑副本',

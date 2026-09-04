@@ -45,7 +45,7 @@ import QCRecordResultComparisonDrawer from './QCRecordResultComparisonDrawer.vue
 import ReadonlyMedicalDocumentContent from './ReadonlyMedicalDocumentContent.vue'
 import {
   CUSTOMER_TEST_POOL_ID,
-  formatRecordDischargeTime,
+  formatRecordDateTime,
   isFocusedRecord,
   resolveRecordCreatedDate,
   resolveRecordDisplayCode,
@@ -260,6 +260,7 @@ export function useCustomerSampleValidationController() {
     recordId: string
     recordRef?: string
     patientName?: string
+    admissionTime?: string
     dischargeTime?: string
     label: string
   } | null>(null)
@@ -2233,7 +2234,8 @@ export function useCustomerSampleValidationController() {
       patientId: String(record.matched_patient_id || '').trim(),
       recordId: resolveRecordIdentifier(record),
       patientName: resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
-      dischargeTime: formatRecordDischargeTime(record.discharge_time),
+      admissionTime: formatRecordDateTime(record.admission_time),
+      dischargeTime: formatRecordDateTime(record.discharge_time),
       label: [
         resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
         record.department || '',
