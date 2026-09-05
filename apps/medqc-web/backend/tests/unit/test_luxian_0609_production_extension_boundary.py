@@ -24,6 +24,7 @@ from app.services.luxian_0609.execution import (
     prepare_luxian_0609_execution,
 )
 from app.services.luxian_0609 import phase_scope as phase_scope_module
+from app.services import luxian_0609_rule_catalog as rule_catalog_module
 from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
 from app.services import luxian_0609_rule_master as rule_master_module
 
@@ -32,11 +33,11 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
-def test_production_master_loader_rejects_declarative_076_077_extension(
+def test_production_master_loader_accepts_declarative_076_077_extension(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """最外层文件替换后仍由真实 master compiler 拒绝扩容。"""
+    """最外层 master 声明扩容后，不再存在固定的 75 条阻断。"""
 
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
     assert isinstance(payload["rules"], list)
@@ -50,40 +51,103 @@ def test_production_master_loader_rejects_declarative_076_077_extension(
     monkeypatch.setattr(rule_master_module, "_MASTER_PATH", extension_path)
     rule_master_module.load_luxian_0609_rule_master.cache_clear()
     try:
-        with pytest.raises(
-            ValueError,
-            match="ordered rules 001 through 075",
-        ):
-            rule_master_module.load_luxian_0609_rule_master()
+        entries = rule_master_module.load_luxian_0609_rule_master()
     finally:
         rule_master_module.load_luxian_0609_rule_master.cache_clear()
 
+    assert tuple(entry.rule_id for entry in entries[-2:]) == (
+        "LX0609-076",
+        "LX0609-077",
+    )
 
-def test_production_phase_loader_rejects_declarative_076_077_extension(
+
+def test_production_phase_loader_accepts_master_declared_076_077_extension(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """phase 文件同样不能靠增加声明越过正式 75 条集合门禁。"""
+    """phase 只校验与 master 完全一致，不再重复定义固定规则数量。"""
 
-    payload = json.loads(phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8"))
-    assert isinstance(payload["rules"], list)
+    master_payload = json.loads(
+        rule_master_module._MASTER_PATH.read_text(encoding="utf-8")
+    )
+    phase_payload = json.loads(
+        phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8")
+    )
+    assert isinstance(master_payload["rules"], list)
+    assert isinstance(phase_payload["rules"], list)
     for rule_id in ("LX0609-076", "LX0609-077"):
-        copied = dict(payload["rules"][-1])
-        copied["rule_id"] = rule_id
-        payload["rules"].append(copied)
+        master_entry = dict(master_payload["rules"][-1])
+        master_entry["rule_id"] = rule_id
+        master_payload["rules"].append(master_entry)
+        phase_entry = dict(phase_payload["rules"][-1])
+        phase_entry["rule_id"] = rule_id
+        phase_payload["rules"].append(phase_entry)
+    master_extension_path = tmp_path / "rule-master-with-076-077.json"
     extension_path = tmp_path / "phase-scope-with-076-077.json"
-    _write_json(extension_path, payload)
+    _write_json(master_extension_path, master_payload)
+    _write_json(extension_path, phase_payload)
 
+    monkeypatch.setattr(rule_master_module, "_MASTER_PATH", master_extension_path)
     monkeypatch.setattr(phase_scope_module, "_SCOPE_PATH", extension_path)
+    rule_master_module.load_luxian_0609_rule_master.cache_clear()
     phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
     try:
-        with pytest.raises(
-            ValueError,
-            match="ordered rules 001 through 075",
-        ):
-            phase_scope_module.load_luxian_0609_phase_scope()
+        entries = phase_scope_module.load_luxian_0609_phase_scope()
     finally:
+        rule_master_module.load_luxian_0609_rule_master.cache_clear()
         phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
+
+    assert tuple(entry.rule_id for entry in entries[-2:]) == (
+        "LX0609-076",
+        "LX0609-077",
+    )
+
+
+def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_076(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """目录扩容不等于规则可执行；缺少 wrapper 时不得进入执行目录。"""
+
+    master_payload = json.loads(
+        rule_master_module._MASTER_PATH.read_text(encoding="utf-8")
+    )
+    phase_payload = json.loads(
+        phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8")
+    )
+    assert isinstance(master_payload["rules"], list)
+    assert isinstance(phase_payload["rules"], list)
+    master_payload["rules"].append(
+        {**master_payload["rules"][-1], "rule_id": "LX0609-076"}
+    )
+    phase_payload["rules"].append(
+        {**phase_payload["rules"][-1], "rule_id": "LX0609-076"}
+    )
+    master_extension_path = tmp_path / "rule-master-with-076.json"
+    phase_extension_path = tmp_path / "phase-scope-with-076.json"
+    _write_json(master_extension_path, master_payload)
+    _write_json(phase_extension_path, phase_payload)
+
+    monkeypatch.setattr(rule_master_module, "_MASTER_PATH", master_extension_path)
+    monkeypatch.setattr(phase_scope_module, "_SCOPE_PATH", phase_extension_path)
+    rule_master_module.load_luxian_0609_rule_master.cache_clear()
+    phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
+    rule_catalog_module.load_luxian_0609_rules.cache_clear()
+    try:
+        assert tuple(
+            entry.rule_id
+            for entry in rule_master_module.load_luxian_0609_rule_master()
+        )[-1] == "LX0609-076"
+        assert (
+            phase_scope_module.load_luxian_0609_phase_scope()[-1].rule_id
+            == "LX0609-076"
+        )
+        with pytest.raises(ValueError, match="execution catalog drifted"):
+            rule_catalog_module.load_luxian_0609_rules()
+    finally:
+        rule_master_module.load_luxian_0609_rule_master.cache_clear()
+        phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
+        rule_catalog_module.load_luxian_0609_rules.cache_clear()
 
 
 def _production_evidence_session() -> Luxian0609EvidenceReadSession:

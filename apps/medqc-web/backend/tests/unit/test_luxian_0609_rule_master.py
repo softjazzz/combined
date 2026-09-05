@@ -1,16 +1,99 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from app.services import luxian_0609_rule_master as rule_master_module
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609_rule_master import (
     LUXIAN_0609_RULE_DEFINITION_VERSION,
     LUXIAN_0609_RULE_MASTER_VERSION,
     Luxian0609RuleMasterEntry,
+    compile_luxian_0609_rule_master,
     get_luxian_0609_rule_master_entry,
     get_luxian_0609_rule_master_summary,
     load_luxian_0609_rule_master,
 )
+
+
+@pytest.mark.unit
+def test_rule_master_derives_its_continuous_scope_from_its_own_entries() -> None:
+    """新增末尾规则时，master 本身是唯一的规则集合权威。"""
+
+    payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
+    assert isinstance(payload["rules"], list)
+    extension = dict(payload["rules"][-1])
+    extension["rule_id"] = "LX0609-076"
+    payload["rules"].append(extension)
+
+    entries = compile_luxian_0609_rule_master(payload)
+
+    assert tuple(entry.rule_id for entry in entries) == tuple(
+        f"LX0609-{index:03d}" for index in range(1, 77)
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "invalid_scope",
+    (
+        "duplicate",
+        "gap",
+        "reordered",
+        "zero",
+        "malformed",
+        "wrong_prefix",
+        "empty",
+    ),
+)
+def test_rule_master_rejects_noncontinuous_or_empty_scope(
+    invalid_scope: str,
+) -> None:
+    payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
+
+    if invalid_scope == "duplicate":
+        payload["rules"][-1] = {
+            **payload["rules"][-1],
+            "rule_id": "LX0609-074",
+        }
+        match = "continuous ordered"
+    elif invalid_scope == "gap":
+        payload["rules"][-1] = {
+            **payload["rules"][-1],
+            "rule_id": "LX0609-076",
+        }
+        match = "continuous ordered"
+    elif invalid_scope == "reordered":
+        payload["rules"][-2], payload["rules"][-1] = (
+            payload["rules"][-1],
+            payload["rules"][-2],
+        )
+        match = "continuous ordered"
+    elif invalid_scope == "zero":
+        payload["rules"][0] = {
+            **payload["rules"][0],
+            "rule_id": "LX0609-000",
+        }
+        match = "continuous ordered"
+    elif invalid_scope == "malformed":
+        payload["rules"][-1] = {
+            **payload["rules"][-1],
+            "rule_id": "LX0609-76",
+        }
+        match = "continuous ordered"
+    elif invalid_scope == "wrong_prefix":
+        payload["rules"][-1] = {
+            **payload["rules"][-1],
+            "rule_id": "SC-075",
+        }
+        match = "continuous ordered"
+    else:
+        payload["rules"] = []
+        match = "at least one rule"
+
+    with pytest.raises(ValueError, match=match):
+        compile_luxian_0609_rule_master(payload)
 
 
 @pytest.mark.unit

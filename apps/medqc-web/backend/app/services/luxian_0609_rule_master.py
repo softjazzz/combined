@@ -26,11 +26,6 @@ _MASTER_PATH = (
 _IMPLEMENTATION_STATUSES = frozenset(
     {"active", "contract_ready", "pending_definition"}
 )
-_EXPECTED_STATUS_COUNTS = {
-    "active": 75,
-    "contract_ready": 0,
-    "pending_definition": 0,
-}
 _POLICY_SOURCE_ORDER = (
     "sichuan_2026_handbook",
     "sichuan_2023_standard",
@@ -134,17 +129,14 @@ def compile_luxian_0609_rule_master(
             )
         )
 
-    expected_ids = tuple(f"LX0609-{index:03d}" for index in range(1, 76))
+    if not entries:
+        raise ValueError("LX0609 rule master must contain at least one rule")
+    expected_ids = tuple(
+        f"LX0609-{index:03d}" for index in range(1, len(entries) + 1)
+    )
     actual_ids = tuple(entry.rule_id for entry in entries)
     if actual_ids != expected_ids:
-        raise ValueError("LX0609 rule master must contain ordered rules 001 through 075")
-
-    status_counts = {
-        status: sum(entry.implementation_status == status for entry in entries)
-        for status in _IMPLEMENTATION_STATUSES
-    }
-    if status_counts != _EXPECTED_STATUS_COUNTS:
-        raise ValueError("LX0609 rule master status counts must be 75 active")
+        raise ValueError("LX0609 rule master must contain continuous ordered rule IDs")
     return tuple(entries)
 
 

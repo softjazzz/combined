@@ -97,13 +97,14 @@ def compile_luxian_0609_phase_scope(
             )
         )
 
-    expected_ids = tuple(f"LX0609-{index:03d}" for index in range(1, 76))
     actual_ids = tuple(entry.rule_id for entry in entries)
-    if actual_ids != expected_ids:
-        raise ValueError("LX0609 phase scope must contain ordered rules 001 through 075")
+    master_entries = load_luxian_0609_rule_master()
+    master_ids = tuple(entry.rule_id for entry in master_entries)
+    if actual_ids != master_ids:
+        raise ValueError("LX0609 phase scope rule IDs must exactly match rule master")
     registered_ids = {
         entry.rule_id
-        for entry in load_luxian_0609_rule_master()
+        for entry in master_entries
         if entry.implementation_status == "active"
     }
     if any(
@@ -111,6 +112,11 @@ def compile_luxian_0609_phase_scope(
         for entry in entries
     ):
         raise ValueError("LX0609 phase scope catalog registration drift")
+    if any(
+        entry.phase_status == "phase_1_target" and not entry.catalog_registered
+        for entry in entries
+    ):
+        raise ValueError("LX0609 phase target must be catalog registered")
     return tuple(entries)
 
 

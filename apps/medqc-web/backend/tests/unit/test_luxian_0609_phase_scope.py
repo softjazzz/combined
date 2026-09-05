@@ -1,7 +1,14 @@
+from dataclasses import replace
+import json
+
+import pytest
+
 from app.services.luxian_0609 import phase_scope as phase_scope_module
+from app.services import luxian_0609_rule_master as rule_master_module
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609.phase_scope import (
     Luxian0609PhaseScopeEntry,
+    compile_luxian_0609_phase_scope,
     load_luxian_0609_phase_scope,
     partition_luxian_0609_rule_scope,
 )
@@ -63,6 +70,69 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         "LX0609-059",
         "LX0609-075",
     }
+
+
+@pytest.mark.parametrize(
+    "mismatch_kind",
+    ("missing", "extra", "duplicate", "reordered"),
+)
+def test_phase_scope_rejects_any_id_set_or_order_drift_from_master(
+    mismatch_kind: str,
+) -> None:
+    payload = json.loads(phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8"))
+    assert isinstance(payload["rules"], list)
+    rules = payload["rules"]
+
+    if mismatch_kind == "missing":
+        rules.pop()
+    elif mismatch_kind == "extra":
+        rules.append({**rules[-1], "rule_id": "LX0609-076"})
+    elif mismatch_kind == "duplicate":
+        rules[-1] = {**rules[-1], "rule_id": "LX0609-074"}
+    else:
+        rules[-2], rules[-1] = rules[-1], rules[-2]
+
+    with pytest.raises(ValueError, match="exactly match rule master"):
+        compile_luxian_0609_phase_scope(payload)
+
+
+def test_phase_scope_requires_target_rules_to_be_catalog_registered() -> None:
+    payload = json.loads(phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8"))
+    assert isinstance(payload["rules"], list)
+    payload["rules"][0] = {
+        **payload["rules"][0],
+        "catalog_registered": False,
+    }
+
+    with pytest.raises(ValueError, match="catalog registration drift"):
+        compile_luxian_0609_phase_scope(payload)
+
+
+def test_phase_scope_rejects_target_rule_not_active_in_master(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """未注册的合同就绪规则不能只靠 phase target 进入执行范围。"""
+
+    payload = json.loads(phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8"))
+    assert isinstance(payload["rules"], list)
+    payload["rules"][0] = {
+        **payload["rules"][0],
+        "catalog_registered": False,
+    }
+    master_entries = list(rule_master_module.load_luxian_0609_rule_master())
+    master_entries[0] = replace(
+        master_entries[0],
+        implementation_status="contract_ready",
+        definition_note="合同已就绪，尚未进入执行目录。",
+    )
+    monkeypatch.setattr(
+        phase_scope_module,
+        "load_luxian_0609_rule_master",
+        lambda: tuple(master_entries),
+    )
+
+    with pytest.raises(ValueError, match="phase target must be catalog registered"):
+        compile_luxian_0609_phase_scope(payload)
 
 
 def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
