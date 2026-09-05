@@ -380,7 +380,6 @@ def test_exam_lab_rules_bind_current_visit_nondrug_orders() -> None:
 
 
 def test_059_binds_only_event_order_and_course_decision_support_sources() -> None:
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v23"
     expected_sources = (
         "exam_master",
         "exam_item_report",
@@ -390,9 +389,14 @@ def test_059_binds_only_event_order_and_course_decision_support_sources() -> Non
         "daily_course_record",
         "senior_course_record",
     )
-    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-059",))) == set(
-        expected_sources
-    )
+    snapshot = _snapshot()
+    assert snapshot.source_registry_version == SOURCE_REGISTRY_VERSION
+    assert snapshot.identity_dict()["source_registry_version"] == SOURCE_REGISTRY_VERSION
+    assert json.loads(snapshot.canonical_json())["source_registry_version"] == SOURCE_REGISTRY_VERSION
+
+    resolved = resolve_luxian_0609_decision_support_source_keys(("LX0609-059",))
+    assert set(resolved) == set(expected_sources)
+    assert set(resolved) <= set(load_luxian_0609_source_registry())
     contracts = {
         item.rule_id: item for item in load_luxian_0609_rule_contracts()
     }

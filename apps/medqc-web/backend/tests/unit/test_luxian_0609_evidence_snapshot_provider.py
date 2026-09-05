@@ -1999,20 +1999,25 @@ def test_severity_order_reader_excludes_cancelled_order_name(monkeypatch) -> Non
     assert result.rows == ()
 
 
-@pytest.mark.parametrize("order_status", ["新开", "执行中", "停止"])
+@pytest.mark.parametrize(
+    ("order_status", "expected_lifecycle_state"),
+    [("新开", "active"), ("执行中", "active"), ("停止", "stopped")],
+)
 def test_severity_order_reader_accepts_only_audited_effective_statuses_without_echo(
     monkeypatch,
     order_status: str,
+    expected_lifecycle_state: str,
 ) -> None:
+    source_row = {
+        "order_name": "下病危医嘱",
+        "order_id": "private-order",
+        "prescribed_datetime": "2026-01-01 08:00:00",
+        "planned_start_datetime": "2026-01-01 08:00:00",
+        "planned_end_datetime": "2026-01-01 18:00:00",
+        "order_status": order_status,
+    }
     connection = _FakeConnection(
-        [
-            {
-                "order_name": "下病危医嘱",
-                "order_id": "private-order",
-                "prescribed_datetime": "2026-01-01 08:00:00",
-                "order_status": order_status,
-            }
-        ]
+        [source_row]
     )
     monkeypatch.setattr(
         source_evidence_reader.bundle_assembly,
@@ -2034,6 +2039,8 @@ def test_severity_order_reader_accepts_only_audited_effective_statuses_without_e
             "order_name",
             "order_id",
             "prescribed_datetime",
+            "planned_start_datetime",
+            "planned_end_datetime",
             "order_status",
         ],
     )
@@ -2046,20 +2053,58 @@ def test_severity_order_reader_accepts_only_audited_effective_statuses_without_e
         source_schema=None,
     )
 
-    assert result.rows[0]["severity"] == "critical"
-    assert result.rows[0]["status_state"] == "effective"
-    assert result.rows[0]["row_ref"] == source_evidence_reader.digest_source_evidence(
-        (
-            CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
-            "private-order",
-            "critical",
-            "start",
-            "effective",
-            order_status,
-            "2026-01-01 08:00:00",
-        )
-    )
+    row = result.rows[0]
+    assert {key: value for key, value in row.items() if key != "row_ref"} == {
+        "severity": "critical",
+        "event_kind": "start",
+        "status_state": "effective",
+        "lifecycle_state": expected_lifecycle_state,
+        "prescribed_datetime": "2026-01-01 08:00:00",
+        "planned_start_datetime": "2026-01-01 08:00:00",
+        "planned_end_datetime": "2026-01-01 18:00:00",
+    }
+    assert set(row) == {
+        "severity",
+        "event_kind",
+        "status_state",
+        "lifecycle_state",
+        "prescribed_datetime",
+        "planned_start_datetime",
+        "planned_end_datetime",
+        "row_ref",
+    }
+    assert len(row["row_ref"]) == 64
+    assert set(row["row_ref"]) <= set("0123456789abcdef")
+    assert {"order_id", "order_status"}.isdisjoint(row)
+    assert "private-order" not in repr(result)
     assert order_status not in repr(result)
+
+    repeated = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+    )
+    assert repeated.rows[0]["row_ref"] == row["row_ref"]
+
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(
+            _FakeConnection(
+                [{**source_row, "planned_end_datetime": "2026-01-01 20:00:00"}]
+            )
+        ),
+    )
+    changed = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+    )
+    assert changed.rows[0]["row_ref"] != row["row_ref"]
 
 
 @pytest.mark.parametrize("order_status", ["取消", "撤销", "作废"])
