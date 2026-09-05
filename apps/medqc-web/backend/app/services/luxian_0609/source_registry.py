@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v24"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v25"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -162,6 +162,7 @@ _REGISTRY_ENTRIES = (
         "bloodtrans_record",
         "mr_bloodtrans",
         access_mode=_BOUNDED,
+        query_version="snapshot-provider-bloodtrans_record-v2",
     ),
     _entry(
         "consent_form",

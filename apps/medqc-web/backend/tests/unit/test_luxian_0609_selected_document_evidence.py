@@ -120,6 +120,69 @@ def test_projector_returns_empty_when_selected_document_cannot_be_uniquely_locat
     ) == []
 
 
+def test_projector_deduplicates_all_selected_rows_with_same_business_id():
+    rows = _source_rows(
+        "daily_course_record",
+        (
+            {"document_id": "DAILY-1", "document_title": "查房记录 A"},
+            {"document_id": "DAILY-1", "document_title": "查房记录 B"},
+        ),
+    )
+    snapshot, materials = _snapshot_and_materials({"daily_course_record": rows})
+    refs = build_material_document_refs("daily_course_record", rows.rows)
+    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-005"), fact_refs=refs)
+    reduced = _bind(snapshot, decision, materials)
+
+    assert project_selected_document_evidence(
+        decision=reduced, evidence_snapshot=snapshot, evidence_materials=materials
+    ) == [{"source_type": "daily_course_record", "source_document_id": "DAILY-1"}]
+
+
+def test_projector_rejects_partial_selection_of_same_business_id():
+    snapshot, materials, _document_ref, reduced = _daily_document_binding(
+        (
+            {"document_id": "DAILY-1", "document_title": "查房记录 A"},
+            {"document_id": "DAILY-1", "document_title": "查房记录 B"},
+        )
+    )
+
+    assert project_selected_document_evidence(
+        decision=reduced, evidence_snapshot=snapshot, evidence_materials=materials
+    ) == []
+
+
+def test_projector_projects_multiple_fully_selected_business_ids_from_one_source():
+    rows = _source_rows(
+        "daily_course_record",
+        (
+            {"document_id": "DAILY-1", "document_title": "查房记录 A"},
+            {"document_id": "DAILY-2", "document_title": "查房记录 B"},
+        ),
+    )
+    snapshot, materials = _snapshot_and_materials({"daily_course_record": rows})
+    refs = build_material_document_refs("daily_course_record", rows.rows)
+    decision = replace(_decision(snapshot, refs[0], rule_id="LX0609-005"), fact_refs=refs)
+    reduced = _bind(snapshot, decision, materials)
+
+    projected = project_selected_document_evidence(
+        decision=reduced, evidence_snapshot=snapshot, evidence_materials=materials
+    )
+
+    expected_document_ids = {
+        reference: str(row["document_id"])
+        for reference, row in materials.document_rows(
+            "daily_course_record", snapshot=snapshot
+        )
+    }
+    assert projected == [
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": expected_document_ids[reference],
+        }
+        for reference in refs
+    ]
+
+
 def test_projector_returns_empty_for_cross_snapshot_or_tampered_materials():
     rows = ({"document_id": "DAILY-1", "document_title": "查房记录"},)
     snapshot, materials, document_ref, reduced = _daily_document_binding(rows)

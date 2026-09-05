@@ -2964,6 +2964,24 @@ def test_043_short_lab_codes_require_token_boundaries() -> None:
     assert not transfusion._lab_item_alias_matches("tpo antibody", "tp")
 
 
+def test_043_public_pretransfusion_row_resolvers_preserve_item_and_admission_contract() -> None:
+    assert transfusion.resolve_pretransfusion_required_item(
+        {"item_name": "乙肝表面抗原"}
+    ) == "hbsag"
+    assert transfusion.resolve_pretransfusion_required_item(
+        {"item_name": "梅毒螺旋体抗体(tp)"}
+    ) == "syphilis"
+    assert transfusion.resolve_pretransfusion_required_item(
+        {"item_name": "葡萄糖"}
+    ) is None
+    assert transfusion.resolve_pretransfusion_admission_time(
+        {"admission_datetime": "2026-06-01 08:00:00"}
+    ) == datetime(2026, 6, 1, 8, 0)
+    assert transfusion.resolve_pretransfusion_admission_time(
+        {"admission_datetime": "not-a-datetime"}
+    ) is None
+
+
 @pytest.mark.asyncio
 async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> None:
     selected = ("LX0609-043",)

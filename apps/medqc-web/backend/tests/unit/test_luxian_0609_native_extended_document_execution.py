@@ -33,11 +33,15 @@ from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import (
     SOURCE_REGISTRY_VERSION,
     resolve_luxian_0609_decision_support_source_keys,
+    resolve_luxian_0609_physical_source_entry,
     resolve_luxian_0609_rule_sources,
 )
 
 
 def _session(rows_by_source, *, unavailable_sources=frozenset()):
+    bloodtrans_query_version = resolve_luxian_0609_physical_source_entry(
+        "mr_bloodtrans"
+    ).query_version
     query_versions = {
         "inpat_registration": "snapshot-provider-inpat_registration-v1",
         "admission_record": "snapshot-provider-admission_record-v1",
@@ -63,8 +67,8 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
         "labtest_master": "snapshot-provider-labtest_master-v1",
         "inpat_drug_order": "snapshot-provider-inpat_drug_order-v1",
         "discharge_record_diagnosis": "snapshot-provider-discharge_record_diagnosis-v1",
-        "mr_bloodtrans": "snapshot-provider-bloodtrans_record-v1",
-        "bloodtrans_record": "snapshot-provider-bloodtrans_record-v1",
+        "mr_bloodtrans": bloodtrans_query_version,
+        "bloodtrans_record": bloodtrans_query_version,
         "evaluation_context.horizon": "snapshot-provider-evaluation_context.horizon-v1",
     }
     observations = []
@@ -150,6 +154,7 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
         decisions=result.decisions,
         expected_rule_ids=(rule_id,),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     return result, reduced[0]
 
@@ -177,6 +182,7 @@ async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=fr
         decisions=result.decisions,
         expected_rule_ids=rule_ids,
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     return snapshot, materials, result, reduced
 
@@ -5448,13 +5454,23 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
             ),
             "labtest_item_report": tuple(
                 {
-                    "document_id": "lab-report-070",
+                    "document_id": (
+                        "lab-report-070-a" if index < 4 else "lab-report-070-b"
+                    ),
                     "item_code": code,
                     "item_name": name,
                     "result": "阴性",
                     "report_time": "2026-06-02 10:00:00",
                 }
-                for code, name in names
+                for index, (code, name) in enumerate(names)
+            ) + (
+                {
+                    "document_id": "lab-report-070-unrelated",
+                    "item_code": "GLU",
+                    "item_name": "葡萄糖",
+                    "result": "正常",
+                    "report_time": "2026-06-02 10:00:00",
+                },
             ),
         },
     )
@@ -5468,6 +5484,25 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
     )
 
     assert execution.decisions[0].reason_code == "requirement_satisfied"
+    selected_document_refs = {
+        reference
+        for source_key in (
+            "inpat_registration",
+            "mr_bloodtrans",
+            "labtest_item_report",
+        )
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+        if row.get("document_id") != "lab-report-070-unrelated"
+    }
+    source_snapshot_refs = {
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key
+        in {"inpat_registration", "mr_bloodtrans", "labtest_item_report"}
+    }
+    assert set(execution.decisions[0].fact_refs) == (
+        source_snapshot_refs | selected_document_refs
+    )
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert canonical["status"] == "compliant"
     assert canonical["reason_code"] == "requirement_satisfied"
@@ -5521,12 +5556,63 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
     } == {
         ("inpat_registration", "admission-070"),
         ("mr_bloodtrans", "transfusion-record-070"),
-        ("labtest_item_report", "lab-report-070"),
+        ("labtest_item_report", "lab-report-070-a"),
+        ("labtest_item_report", "lab-report-070-b"),
     }
     assert execution.llm_call_count == 0
     assert execution.prompt_tokens == 0
     assert execution.completion_tokens == 0
     assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_070_trigger_absent_does_not_project_registration_or_lab_documents() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-070",),
+        {
+            "inpat_registration": ({
+                "document_id": "admission-no-transfusion-070",
+                "admission_datetime": "2026-06-01 08:00:00",
+            },),
+            "mr_bloodtrans": (),
+            "labtest_item_report": (
+                {
+                    "document_id": "lab-nine-item-no-transfusion-070",
+                    "item_code": "HBsAg",
+                    "item_name": "乙肝表面抗原",
+                    "result": "阴性",
+                    "report_time": "2026-06-01 10:00:00",
+                },
+                {
+                    "document_id": "lab-unrelated-no-transfusion-070",
+                    "item_code": "GLU",
+                    "item_name": "葡萄糖",
+                    "result": "正常",
+                    "report_time": "2026-06-01 10:00:00",
+                },
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-070",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    source_snapshot_refs = {
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key
+        in {"inpat_registration", "mr_bloodtrans", "labtest_item_report"}
+    }
+    assert execution.decisions[0].reason_code == "trigger_absent_complete"
+    assert set(execution.decisions[0].fact_refs) == source_snapshot_refs
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert canonical["status"] == "not_applicable"
+    assert "customer_evidence" not in canonical
 
 
 @pytest.mark.asyncio

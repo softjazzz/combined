@@ -103,6 +103,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
     ),
     "mr_bloodtrans": (
+        "document_id",
         "transfuse_variety",
         "blood_transfusion_volume",
         "blood_transfusion_unit",

@@ -31,6 +31,7 @@ from app.services.luxian_0609.source_evidence_reader import (
 )
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
 from app.services.luxian_0609.source_registry import (
+    SOURCE_REGISTRY_VERSION,
     SourceAccessMode,
     load_luxian_0609_source_registry,
     resolve_luxian_0609_decision_support_source_keys,
@@ -1656,6 +1657,25 @@ def test_timeliness_snapshot_contract_keeps_authoritative_submit_time_aliases() 
             "submit_datetime"
             in source_evidence_reader._NATIVE_SOURCE_FIELDS[source_key]
         )
+
+
+def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
+    """070 必须保留输血事件的业务身份，供冻结逐行证据投影。"""
+
+    assert "document_id" in source_evidence_reader._NATIVE_SOURCE_FIELDS[
+        "mr_bloodtrans"
+    ]
+    assert "document_id" in source_evidence_reader._SNAPSHOT_SOURCE_FIELDS[
+        "mr_bloodtrans"
+    ]
+
+
+def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
+    entry = load_luxian_0609_source_registry()["bloodtrans_record"]
+
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v25"
+    assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
+    assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
 
 
 @pytest.mark.parametrize("rows", [[{"match": 1}], []])

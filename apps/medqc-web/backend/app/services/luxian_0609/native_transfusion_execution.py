@@ -905,6 +905,26 @@ def _lab_item_alias_matches(key: str, alias: str) -> bool:
     return normalized in key
 
 
+def resolve_pretransfusion_required_item(row: Mapping[str, Any]) -> str | None:
+    """返回输血前九项中该检验行命中的受控项目；其余行不参与九项判定。"""
+
+    key = _lab_item_key(row)
+    for item, aliases in _PRETRANSFUSION_REQUIRED_ITEMS:
+        if any(_lab_item_alias_matches(key, alias) for alias in aliases):
+            return item
+    return None
+
+
+def resolve_pretransfusion_admission_time(row: Mapping[str, Any]) -> datetime | None:
+    """读取输血前九项当前住院判定认可的唯一住院时间字段。"""
+
+    return _parse_document_datetime(
+        row.get("admission_datetime")
+        or row.get("admission_time")
+        or row.get("inpat_datetime")
+    )
+
+
 def _lab_report_time(row: Mapping[str, Any]) -> datetime | None:
     for key in ("report_datetime", "report_time", "record_time"):
         parsed = _parse_document_datetime(row.get(key))
@@ -952,13 +972,7 @@ def evaluate_pretransfusion_nine_items(
         admission_times = {
             parsed
             for row in _source_document_rows(documents, "inpat_registration")
-            if (
-                parsed := _parse_document_datetime(
-                    row.get("admission_datetime")
-                    or row.get("admission_time")
-                    or row.get("inpat_datetime")
-                )
-            ) is not None
+            if (parsed := resolve_pretransfusion_admission_time(row)) is not None
         }
         if len(admission_times) != 1:
             return "data_gap", "admission_time_unavailable", None
@@ -968,11 +982,8 @@ def evaluate_pretransfusion_nine_items(
         item: [] for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS
     }
     for row in rows:
-        key = _lab_item_key(row)
-        for item, aliases in _PRETRANSFUSION_REQUIRED_ITEMS:
-            if any(_lab_item_alias_matches(key, alias) for alias in aliases):
-                matched[item].append(row)
-                break
+        if (item := resolve_pretransfusion_required_item(row)) is not None:
+            matched[item].append(row)
     event_checks: list[dict[str, Any]] = []
     for transfusion_time in event_times:
         missing_items: list[str] = []

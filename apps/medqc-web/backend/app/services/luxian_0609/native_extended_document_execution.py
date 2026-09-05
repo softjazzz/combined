@@ -54,7 +54,11 @@ from .source_evidence_reader import (
     parse_strict_performed_time,
     trusted_performed_surgery_times,
 )
-from .native_transfusion_execution import evaluate_pretransfusion_nine_items
+from .native_transfusion_execution import (
+    evaluate_pretransfusion_nine_items,
+    resolve_pretransfusion_admission_time,
+    resolve_pretransfusion_required_item,
+)
 from .surgery_applicability import (
     SurgeryApplicability,
     resolve_surgery_applicability,
@@ -263,6 +267,44 @@ def _fact_refs(
     )
 
 
+def _070_document_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, ...]:
+    """只返回 070 判定实际消费的、同一快照验证过的逐行引用。"""
+
+    try:
+        registration_rows = materials.document_rows(
+            "inpat_registration", snapshot=snapshot
+        )
+        transfusion_rows = materials.document_rows(
+            "mr_bloodtrans", snapshot=snapshot
+        )
+        lab_rows = materials.document_rows("labtest_item_report", snapshot=snapshot)
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        # 既有规则已将受控来源不可用/截断映射为 data_gap；此时不能据部分材料
+        # 伪造逐行坐标。材料身份异常则保持 fail-fast，不吞掉技术错误。
+        return ()
+
+    registration_refs = (
+        reference
+        for reference, row in registration_rows
+        if resolve_pretransfusion_admission_time(row) is not None
+    )
+    lab_refs = (
+        reference
+        for reference, row in lab_rows
+        if resolve_pretransfusion_required_item(row) is not None
+    )
+    refs = (
+        *registration_refs,
+        *(reference for reference, _row in transfusion_rows),
+        *lab_refs,
+    )
+    return tuple(dict.fromkeys(refs))
+
+
 def _decision(
     *,
     rule_id: str,
@@ -270,6 +312,7 @@ def _decision(
     source_keys: Sequence[str],
     final_state: str,
     reason_code: str,
+    document_refs: Sequence[str] = (),
 ) -> RuleDecision:
     dimensions = {
         "compliant": (
@@ -306,7 +349,9 @@ def _decision(
         evidence_state=evidence_state,
         qc_direction=direction,
         reason_code=reason_code,
-        fact_refs=_fact_refs(snapshot, source_keys),
+        fact_refs=tuple(
+            dict.fromkeys((*_fact_refs(snapshot, source_keys), *document_refs))
+        ),
         evaluator_version="extended-document-v2",
         confidence=None,
     )
@@ -1611,6 +1656,11 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-070":
+            source_keys = (
+                "inpat_registration",
+                "mr_bloodtrans",
+                "labtest_item_report",
+            )
             if mr_bloodtrans_error:
                 final_state, reason_code = "data_gap", mr_bloodtrans_error
             elif not mr_bloodtrans_rows:
@@ -1648,12 +1698,16 @@ async def execute_luxian_0609_native_extended_document_rules(
                     display.append((rule_id, dict(facts)))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=(
-                    "inpat_registration",
-                    "mr_bloodtrans",
-                    "labtest_item_report",
-                ),
+                source_keys=source_keys,
                 final_state=final_state, reason_code=reason_code,
+                document_refs=(
+                    _070_document_refs(
+                        snapshot=evidence_snapshot,
+                        materials=evidence_materials,
+                    )
+                    if mr_bloodtrans_rows and not mr_bloodtrans_error
+                    else ()
+                ),
             ))
             continue
 

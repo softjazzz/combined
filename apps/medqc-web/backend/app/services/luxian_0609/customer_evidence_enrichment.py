@@ -116,6 +116,10 @@ def project_selected_document_evidence(
         )
     )
     if not selected:
+        # 明确不存在触发事件时，来源快照只说明判定读过哪些来源，不能回退为
+        # 客户文书坐标。空列表会阻止旧来源级投影继续猜测文书。
+        if decision.reason_code == "trigger_absent_complete":
+            return []
         return None
     if (
         not isinstance(evidence_materials, Luxian0609EvidenceMaterialStore)
@@ -141,26 +145,55 @@ def project_selected_document_evidence(
             # 受控计算来源不一定属于 document_refs；只允许最终全部选中
             # 引用都被验证解析，不让无关计算来源使真实文书定位整体失效。
             continue
-        for reference, row in document_rows:
-            if reference not in selected_refs:
-                continue
+        selected_document_rows = tuple(
+            (reference, row)
+            for reference, row in document_rows
+            if reference in selected_refs
+        )
+        if not selected_document_rows:
+            continue
+        selected_by_document_id: dict[str, set[str]] = {}
+        for reference, row in selected_document_rows:
             document_id = next(
-                (_text(row.get(field)) for field in _IDENTITY_FIELDS if _text(row.get(field))),
+                (
+                    _text(row.get(field))
+                    for field in _IDENTITY_FIELDS
+                    if _text(row.get(field))
+                ),
                 "",
             )
-            # 前端仍以业务 ID 定位。同来源复用 ID 的多行不能证明唯一文书，
-            # 即使内部引用能区分材料行，也不能交付有歧义的客户坐标。
-            if not document_id or sum(
-                _row_has_identity(candidate, document_id) for _, candidate in document_rows
-            ) != 1:
+            if not document_id:
                 return []
-            resolved.add(reference)
-            located_by_ref[reference] = {
+            selected_by_document_id.setdefault(document_id, set()).add(reference)
+        for document_id, selected_source_refs in selected_by_document_id.items():
+            # 同 ID 的重复材料行必须全部被决策选择，才可安全折叠为一个客户文书；
+            # 同一来源可同时投影多个各自完整的业务文书。
+            same_document_refs = {
+                reference
+                for reference, row in document_rows
+                if _row_has_identity(row, document_id)
+            }
+            if not same_document_refs or selected_source_refs != same_document_refs:
+                return []
+            coordinate = {
                 "source_type": customer_source_type,
                 "source_document_id": document_id,
             }
+            resolved.update(selected_source_refs)
+            located_by_ref.update(
+                {reference: coordinate for reference in selected_source_refs}
+            )
         if resolved == selected_refs:
-            return [located_by_ref[reference] for reference in selected]
+            seen_coordinates: set[tuple[str, str]] = set()
+            projected: list[dict[str, str]] = []
+            for reference in selected:
+                coordinate = located_by_ref[reference]
+                key = (coordinate["source_type"], coordinate["source_document_id"])
+                if key in seen_coordinates:
+                    continue
+                seen_coordinates.add(key)
+                projected.append(coordinate)
+            return projected
     return []
 
 
