@@ -2,7 +2,12 @@
 
 日期：2026-09-05
 
-范围：第三闭环的只读、可复现门禁证据；不新增生产规则，不写数据库，不调用真实模型。
+范围：记录生产目录扩展边界的历史验证与当前状态；不新增生产规则，不写数据库，不调用
+真实模型。
+
+> 2026-09-05 勘误：本文件早期版本记录了 master 与 phase 固定 75 条的阻断。当前代码已
+> 由 master 按声明数量校验连续规则 ID，phase 只校验与同版本 master 完全一致。原阻断
+> 已修复，下面以当前实现为准。
 
 ## 已验证调用链
 
@@ -16,20 +21,19 @@
 
 新增的单选/组合一致性回归分别运行 `001`、`006`、`001+006`。三次的 usage attribution 均为 `basic_timeliness`，且不存在 compatibility batch、legacy wrapper 或 raw native result 回退。组合的两项归一化 Canonical 交付字段分别等于单选结果；001 始终零 LLM 调用，006 单选与组合均为一次、40 输入 token、52 total token，且 prompt 完全一致。客户证据定位也被精确固定：001 为 `admission-001 / admission_record / record_content / 2026-07-15 14:30:00`，006 为 `upper-round-006 / senior_course_record / record_content / 2026-07-16 10:30:02`。
 
-## 076/077 的现状门禁
+## 076/077 的当前目录边界
 
-测试把现有 master 或 phase JSON 复制到临时文件，只增加声明式 `LX0609-076` 和 `LX0609-077`，再替换相应模块的既有 `_MASTER_PATH` / `_SCOPE_PATH` 后调用真实 cached loader（每次均清 cache）。两条 loader 都按预期抛出：
+当前测试把 master 与 phase JSON 复制到临时文件，连续追加声明式 `LX0609-076` 和
+`LX0609-077`，再通过真实 cached loader 加载。master 接受连续扩展，phase 在与 master
+完整有序集合一致时也接受扩展。目录层不再存在固定 75 条阻断。
 
-`... must contain ordered rules 001 through 075`
+这只证明目录能够扩容。真实新规则仍必须补齐业务定义、规则合同、来源声明、所属执行器、
+声明式客户文案和针对性测试；缺少任一项时，正式计划必须失败关闭，不能凭目录条目直接
+上线。
 
-因此 076/077 当前不能进入正式规则加载、计划、prepare、统一引擎、Binding 或 Canonical。本测试记录这个失败门禁，不把它改写为“扩展已通过”。
+## 后续真实规则验收
 
-## 后续待审的最小方向
-
-若业务正式批准扩至 076/077，修改应先限定为声明式目录边界：
-
-1. master 以其声明的有序目录 ID 为唯一权威，移除固定 `001..075` 数量断言；
-2. phase scope 只要求与同版本 master 的完整有序集合一致，不再复制固定 75 条常量；
-3. contracts、dependency inventory、source 声明和 customer renderer 为新增规则补齐真实元数据及针对性测试。
-
-不新增测试专用 runtime、第二套身份/来源合同或测试专用 executor。新增规则能否进入执行，必须继续由正式目录、计划、来源声明、Binding 和 renderer 的同一条主资料链决定。
+业务正式批准新规则后，应选择一条 native 与一条受控语义规则，沿正式目录、计划、来源
+声明、执行器、Binding、公共证据投影和 Canonical 主链完成三业务入口验证。新增规则不应
+要求修改聚合器、任务公共入口、保存合同、API DTO 或前端状态解释；如果需要，应先定位
+重复业务所有者并单独治理。
