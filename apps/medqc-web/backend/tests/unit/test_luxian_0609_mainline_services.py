@@ -231,6 +231,143 @@ async def test_native_040_enabled_bypasses_legacy_dispatch_and_accounts_tokens(m
     assert "mapped_rule_ids" not in repr(orchestrated["results"])
 
 
+def test_orchestrated_aggregation_projects_usage_executor_key_without_forging_unattributed_result(
+    monkeypatch,
+):
+    customer_results = [
+        {"rule_id": "LX0609-001", "metadata": {}},
+        {"rule_id": "LX0609-002", "metadata": {}},
+    ]
+    monkeypatch.setattr(
+        luxian_execution,
+        "aggregate_luxian_0609_results",
+        lambda **_kwargs: customer_results,
+    )
+    context = luxian_execution.Luxian0609ExecutionContext(
+        enabled=True,
+        native_usage_attributions=(
+            luxian_execution.build_family_usage_attribution(
+                executor_key="consultation_quality",
+                covered_customer_rule_ids=("LX0609-001",),
+                llm_call_count=1,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                api_time=0.0,
+            ),
+        ),
+    )
+
+    delivered = luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []},
+        context=context,
+        visit_id="V",
+        model_name="",
+        evidence_payload=None,
+    )
+
+    by_rule_id = {item["rule_id"]: item for item in delivered["results"]}
+    assert by_rule_id["LX0609-001"]["metadata"]["executor_key"] == "consultation_quality"
+    assert "executor_key" not in by_rule_id["LX0609-002"]["metadata"]
+
+
+@pytest.mark.parametrize(
+    ("attributions", "customer_result", "error_match"),
+    (
+        (("invalid",), {"rule_id": "LX0609-001", "metadata": {}}, "invalid native usage attribution"),
+        (
+            (
+                luxian_execution.build_family_usage_attribution(
+                    executor_key="basic_timeliness",
+                    covered_customer_rule_ids=("LX0609-001",),
+                    llm_call_count=0,
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    api_time=0.0,
+                ),
+                luxian_execution.build_family_usage_attribution(
+                    executor_key="exam_lab",
+                    covered_customer_rule_ids=("LX0609-001",),
+                    llm_call_count=0,
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    api_time=0.0,
+                ),
+            ),
+            {"rule_id": "LX0609-001", "metadata": {}},
+            "duplicate native usage attribution",
+        ),
+        (
+            (
+                luxian_execution.build_family_usage_attribution(
+                    executor_key="surgery_mdt",
+                    covered_customer_rule_ids=("LX0609-001",),
+                    llm_call_count=0,
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    api_time=0.0,
+                ),
+                luxian_execution.build_family_usage_attribution(
+                    executor_key="surgery_mdt",
+                    covered_customer_rule_ids=("LX0609-001",),
+                    llm_call_count=0,
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    api_time=0.0,
+                ),
+            ),
+            {"rule_id": "LX0609-001", "metadata": {}},
+            "duplicate native usage attribution",
+        ),
+        (
+            (
+                luxian_execution.build_family_usage_attribution(
+                    executor_key="consultation_quality",
+                    covered_customer_rule_ids=("LX0609-001",),
+                    llm_call_count=0,
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    api_time=0.0,
+                ),
+            ),
+            {
+                "rule_id": "LX0609-001",
+                "metadata": {"executor_key": "basic_timeliness"},
+            },
+            "conflicting customer result executor_key",
+        ),
+    ),
+)
+def test_orchestrated_aggregation_rejects_invalid_usage_executor_attribution(
+    monkeypatch,
+    attributions,
+    customer_result,
+    error_match,
+):
+    monkeypatch.setattr(
+        luxian_execution,
+        "aggregate_luxian_0609_results",
+        lambda **_kwargs: [customer_result],
+    )
+
+    with pytest.raises(ValueError, match=error_match):
+        luxian_execution.aggregate_luxian_0609_orchestrated_results(
+            orchestrated={"results": []},
+            context=luxian_execution.Luxian0609ExecutionContext(
+                enabled=True,
+                native_usage_attributions=attributions,
+            ),
+            visit_id="V",
+            model_name="",
+            evidence_payload=None,
+        )
+
+
 async def _async_value(value):
     return value
 
@@ -971,7 +1108,9 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
     )
     assert [item["rule_id"] for item in orchestrated["results"]] == ["LX0609-007"]
     assert orchestrated["results"][0]["status"] == "compliant"
-    assert "metadata" not in orchestrated["results"][0]
+    assert orchestrated["results"][0]["metadata"] == {
+        "executor_key": "course_quality"
+    }
     assert "LXE-18" not in repr(orchestrated["results"])
 
 

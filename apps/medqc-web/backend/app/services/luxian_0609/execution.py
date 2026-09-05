@@ -1039,16 +1039,30 @@ def aggregate_luxian_0609_orchestrated_results(
         for rule_id, snapshot in context.diagnostic_semantic_snapshots
         if isinstance(snapshot, Mapping)
     }
+    executor_key_by_customer_rule_id: dict[str, str] = {}
+    for attribution in context.native_usage_attributions:
+        if not isinstance(attribution, FamilyUsageAttribution):
+            raise ValueError("invalid native usage attribution")
+        for rule_id in attribution.covered_customer_rule_ids:
+            if rule_id in executor_key_by_customer_rule_id:
+                raise ValueError("duplicate native usage attribution")
+            executor_key_by_customer_rule_id[rule_id] = attribution.executor_key
     for result in customer_results:
         rule_id = str(result.get("rule_id") or result.get("rule_code") or "").strip().upper()
         snapshot = semantic_snapshots.get(rule_id)
-        if snapshot is None:
-            continue
-        metadata = result.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = {}
-            result["metadata"] = metadata
-        metadata["diagnostic_semantic_snapshot"] = snapshot
+        executor_key = executor_key_by_customer_rule_id.get(rule_id)
+        if snapshot is not None or executor_key:
+            metadata = result.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+                result["metadata"] = metadata
+            if snapshot is not None:
+                metadata["diagnostic_semantic_snapshot"] = snapshot
+            if executor_key:
+                existing_executor_key = str(metadata.get("executor_key") or "").strip()
+                if existing_executor_key and existing_executor_key != executor_key:
+                    raise ValueError("conflicting customer result executor_key")
+                metadata["executor_key"] = executor_key
     orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
     orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
     orchestrated["results"] = customer_results
