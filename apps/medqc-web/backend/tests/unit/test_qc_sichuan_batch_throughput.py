@@ -988,6 +988,36 @@ async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch)
     assert progress_steps[-1] == "aggregate"
 
 
+@pytest.mark.asyncio
+async def test_workspace_batch_does_not_count_legacy_executor_key_as_native(monkeypatch):
+    """只有正式 unified native 结果才进入 native 观测桶。"""
+
+    workspace = _WorkspaceStub()
+    service = _ServiceStub()
+    original_evaluate_document = service.evaluate_document
+
+    async def _evaluate_document_with_legacy_executor_key(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = await original_evaluate_document(*args, **kwargs)
+        for item in list(result.get("evaluation_results") or []):
+            metadata = item.setdefault("metadata", {})
+            metadata["executor_key"] = "legacy_adapter"
+        return result
+
+    service.evaluate_document = _evaluate_document_with_legacy_executor_key  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    breakdown = dict((workspace.summary or {}).get("executor_breakdown") or {})
+    assert breakdown == {"program": 6, "llm": 0, "native": 0}
+
+
 @pytest.mark.parametrize(
     ("configured_limit", "expected_peak"),
     [(None, 4), (1, 1), (2, 2)],

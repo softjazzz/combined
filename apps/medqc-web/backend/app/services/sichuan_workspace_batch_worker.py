@@ -1512,6 +1512,7 @@ async def run_sichuan_workspace_batch_job(
         first_result_source = ""
         executor_program = 0
         executor_llm = 0
+        executor_native = 0
         cache_hit = 0
         cache_miss = 0
         cot_summary_total = {
@@ -1565,6 +1566,7 @@ async def run_sichuan_workspace_batch_job(
                 "total_processing_time": 0.0,
                 "executor_program": 0,
                 "executor_llm": 0,
+                "executor_native": 0,
             }
             if not rule:
                 state["failed_records"].append(
@@ -1639,6 +1641,7 @@ async def run_sichuan_workspace_batch_job(
                     "total_processing_time": 0.0,
                     "executor_program": 0,
                     "executor_llm": 0,
+                    "executor_native": 0,
                 }
             total_rules = max(1, len(output_rule_ids))
         record_rule_map_raw = dict(filters.get("record_rule_map") or {})
@@ -1759,7 +1762,11 @@ async def run_sichuan_workspace_batch_job(
                 "status_breakdown": result_status_counts,
                 "total_tokens": int(total_tokens),
                 "total_processing_time": float(total_processing_time),
-                "executor_breakdown": {"program": executor_program, "llm": executor_llm},
+                "executor_breakdown": {
+                    "program": executor_program,
+                    "llm": executor_llm,
+                    "native": executor_native,
+                },
                 "cache_breakdown": {"hit": cache_hit, "miss": cache_miss},
             }
 
@@ -1892,6 +1899,7 @@ async def run_sichuan_workspace_batch_job(
                             "executor_breakdown": {
                                 "program": int(state.get("executor_program") or 0),
                                 "llm": int(state.get("executor_llm") or 0),
+                                "native": int(state.get("executor_native") or 0),
                             }
                         },
                     }
@@ -2090,6 +2098,7 @@ async def run_sichuan_workspace_batch_job(
                     "total_processing_time": 0.0,
                     "executor_program": 0,
                     "executor_llm": 0,
+                    "executor_native": 0,
                 }
                 for rule_id in result_rule_ids
             }
@@ -2516,6 +2525,7 @@ async def run_sichuan_workspace_batch_job(
                 local_total_processing_time = 0.0
                 local_executor_program = 0
                 local_executor_llm = 0
+                local_executor_native = 0
                 local_cache_hit = 0
                 local_cache_miss = 0
                 has_issue = False
@@ -2677,8 +2687,14 @@ async def run_sichuan_workspace_batch_job(
                         float(rule_stats[rule_id]["total_processing_time"] or 0.0) + api_time
                     )
 
+                    executor_key = str(metadata.get("executor_key") or "").strip()
                     executor_type = str(metadata.get("executor_type") or "llm").lower()
-                    if executor_type == "program":
+                    if native_direct_enabled and executor_key:
+                        local_executor_native += 1
+                        rule_stats[rule_id]["executor_native"] = (
+                            int(rule_stats[rule_id]["executor_native"] or 0) + 1
+                        )
+                    elif executor_type == "program":
                         local_executor_program += 1
                         rule_stats[rule_id]["executor_program"] = (
                             int(rule_stats[rule_id]["executor_program"] or 0) + 1
@@ -2951,6 +2967,7 @@ async def run_sichuan_workspace_batch_job(
                     "first_result_source": record_first_result_source,
                     "executor_program": local_executor_program,
                     "executor_llm": local_executor_llm,
+                    "executor_native": local_executor_native,
                     "cache_hit": local_cache_hit,
                     "cache_miss": local_cache_miss,
                     "pack_metrics": record_pack_metrics,
@@ -2999,6 +3016,7 @@ async def run_sichuan_workspace_batch_job(
                     "first_result_source": "",
                     "executor_program": 0,
                     "executor_llm": 0,
+                    "executor_native": 0,
                     "cache_hit": 0,
                     "cache_miss": 0,
                     "pack_metrics": {},
@@ -3037,6 +3055,7 @@ async def run_sichuan_workspace_batch_job(
             nonlocal first_result_source
             nonlocal executor_program
             nonlocal executor_llm
+            nonlocal executor_native
             nonlocal cache_hit
             nonlocal cache_miss
             nonlocal total_pack_count
@@ -3067,6 +3086,7 @@ async def run_sichuan_workspace_batch_job(
             total_processing_time += float(record_result.get("total_processing_time") or 0.0)
             executor_program += int(record_result.get("executor_program") or 0)
             executor_llm += int(record_result.get("executor_llm") or 0)
+            executor_native += int(record_result.get("executor_native") or 0)
             cache_hit += int(record_result.get("cache_hit") or 0)
             cache_miss += int(record_result.get("cache_miss") or 0)
 
@@ -3131,6 +3151,9 @@ async def run_sichuan_workspace_batch_job(
                 )
                 state["executor_llm"] = int(state.get("executor_llm") or 0) + int(
                     stats.get("executor_llm") or 0
+                )
+                state["executor_native"] = int(state.get("executor_native") or 0) + int(
+                    stats.get("executor_native") or 0
                 )
                 for item in list(items_by_rule.get(rule_id) or []):
                     state["items"].append(item)
@@ -3435,6 +3458,7 @@ async def run_sichuan_workspace_batch_job(
             "executor_breakdown": {
                 "program": executor_program,
                 "llm": executor_llm,
+                "native": executor_native,
             },
             "cache_breakdown": {
                 "hit": cache_hit,

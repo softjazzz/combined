@@ -172,6 +172,24 @@ def _assert_native_consultation_item(item: dict[str, Any]) -> None:
     assert "legacy" not in str(metadata).lower()
 
 
+def _assert_native_executor_breakdown(job: dict[str, Any]) -> None:
+    """正式 native 结果不得落入旧 program/llm 观测桶。"""
+
+    items = list(job.get("items") or [])
+    result_visit_ids = {
+        str(item.get("visit_id") or "").strip()
+        for item in items
+        if str(item.get("visit_id") or "").strip()
+    }
+    breakdown = dict((job.get("summary") or {}).get("executor_breakdown") or {})
+    assert job.get("job_kind") == "leaf"
+    assert not job.get("parent_job_id")
+    assert not list(job.get("child_job_ids") or [])
+    assert (job.get("summary") or {}).get("total_records") == len(result_visit_ids)
+    assert breakdown.get("native") == len(items)
+    assert breakdown.get("llm") == 0
+
+
 def _task_customer_conclusion(item: dict[str, Any]) -> str:
     """与 Canonical 映射一致：conclusion → customer_conclusion → findings。"""
 
@@ -446,6 +464,7 @@ def test_consultation_api_entries_create_dispatch_and_persist_formal_worker(
         assert job["status"] == "completed", job.get("error_message")
         assert not list(job.get("failed_records") or [])
         assert (job.get("filters") or {}).get("rule_set_key") == "luxian_0609_qc_v1"
+        _assert_native_executor_breakdown(job)
         assert any(
             event_job_id == job["id"]
             and event.get("event") == "completed"
@@ -583,6 +602,7 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
         job_id = create_workspace_job([rule_id], [_RECORD_A])
         job = _wait_for_terminal_job(workspace=workspace, job_id=job_id)
         assert job["status"] == "completed", job.get("error_message")
+        _assert_native_executor_breakdown(job)
         item = _saved_item(job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id)
         assert (item["status"], item["reason_code"]) == (
             "not_applicable",
@@ -683,10 +703,7 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
         ) == _envelope_customer_projection(sample_envelopes[rule_id])
 
     for job in (single_job, pool_job, sample_job):
-        # executor_breakdown.llm 仍从 SichuanQCService 的 declarative
-        # executor_type 归一化统计而来，会把 cross_document 计为 llm；它与
-        # native package 的实际派发无关，不能作为回退判据。这里用零 token、
-        # native phase 和逐项 executor_key/fallback 合同共同约束真实执行链。
+        _assert_native_executor_breakdown(job)
         assert (job.get("summary") or {}).get("total_tokens") == 0
 
     # 069 作为目录路由对照：当前正式设置会把它送入 extended_document，
