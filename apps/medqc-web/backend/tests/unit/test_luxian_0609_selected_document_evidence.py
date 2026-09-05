@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from app.services.luxian_0609.customer_evidence_enrichment import (
+    project_selected_grouped_document_refs,
     project_selected_document_evidence,
 )
 from app.services.luxian_0609.source_registry import (
@@ -247,3 +248,38 @@ def test_projector_does_not_deliver_partial_coordinates_for_multiple_selected_re
 )
 def test_customer_source_type_only_exposes_registered_document_type(source_key, expected):
     assert resolve_luxian_0609_customer_document_type(source_key) == expected
+
+
+def test_grouped_reference_projector_converts_internal_document_ids_to_safe_refs() -> None:
+    projected = project_selected_grouped_document_refs(
+        raw_refs=[
+            {
+                "source_type": "consultation_record",
+                "source_document_id": "CONSULT-PRIVATE-1",
+            }
+        ],
+        public=False,
+        allowed_source_types=frozenset({"consultation_record"}),
+    )
+
+    assert projected is not None
+    assert projected[0]["source_type"] == "consultation_record"
+    assert projected[0]["source_ref"].startswith("src_")
+    assert "CONSULT-PRIVATE-1" not in str(projected)
+
+
+def test_grouped_reference_projector_preserves_valid_public_refs_and_rejects_duplicates() -> None:
+    public_ref = "src_0123456789abcdef01234567"
+    assert project_selected_grouped_document_refs(
+        raw_refs=[{"source_type": "consultation_record", "source_ref": public_ref}],
+        public=True,
+        allowed_source_types=frozenset({"consultation_record"}),
+    ) == [{"source_type": "consultation_record", "source_ref": public_ref}]
+    assert project_selected_grouped_document_refs(
+        raw_refs=[
+            {"source_type": "consultation_record", "source_ref": public_ref},
+            {"source_type": "consultation_record", "source_ref": public_ref},
+        ],
+        public=True,
+        allowed_source_types=frozenset({"consultation_record"}),
+    ) is None

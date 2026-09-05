@@ -121,6 +121,20 @@ def _allowed_material_document_refs(
 
 
 def _requires_evidence_ref(decision: RuleDecision) -> bool:
+    if (
+        decision.rule_id in {
+            "LX0609-020",
+            "LX0609-021",
+            "LX0609-022",
+            "LX0609-023",
+        }
+        and
+        decision.applicability is ApplicabilityState.NOT_APPLICABLE
+        and decision.reason_code == "trigger_absent_complete"
+    ):
+        # 会诊族已经由正式 episode 执行器证明来源完整；“不存在会诊事件”本身
+        # 没有可定位文书。这里只豁免已迁移规则族，避免改变其他规则的旧合同。
+        return False
     return (
         decision.applicability is ApplicabilityState.NOT_APPLICABLE
         or (

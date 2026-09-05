@@ -1491,7 +1491,9 @@ async def test_consultation_episode_typed_decisions_replace_raw_results(
         "not_applicable",
         "not_applicable",
     ]
-    assert all(item.fact_refs for item in context.reduced_decisions)
+    # 完整来源确认不存在会诊事件时没有可定位文书，不能再以来源级引用冒充
+    # 客户证据；Binding 仅对会诊族这一精确 reason 允许空 fact_refs。
+    assert all(item.fact_refs == () for item in context.reduced_decisions)
     assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
 
@@ -1682,7 +1684,9 @@ async def test_executor_contract_stub_projection_keeps_invalid_display_facts_tec
         ("technical_error", "model_invalid_output"),
     ]
     assert all("data_gap_details" not in item for item in orchestrated["results"])
-    assert all(item["criterion_results"] == [] for item in orchestrated["results"])
+    # 客户事实合同非法属于技术失败；不得保留可能由非法事实导出的临床
+    # criterion 结构，缺省比伪造一个“空临床结论”更安全。
+    assert all("criterion_results" not in item for item in orchestrated["results"])
 
 
 @pytest.mark.asyncio

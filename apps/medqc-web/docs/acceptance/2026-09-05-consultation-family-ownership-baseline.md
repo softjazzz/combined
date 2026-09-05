@@ -5,7 +5,7 @@
 ## 结论与范围
 
 本基线只为下一闭环（B2）冻结会诊规则族的真实主链、职责迁移边界和验收口径。B1 的
-允许写入范围仅为新增／修订验收测试和本文档；本次 B1 实际仅新增本文档。B1 不改生产
+允许写入范围仅为新增／修订验收测试和本文档；本次 B1 实际新增了冻结测试和本文档。B1 不改生产
 代码、Prompt、API、数据库 schema 或前端，也不调用模型或写数据库。
 
 正式主链不是历史 `native_consultation_execution.py` 的
@@ -153,12 +153,23 @@ B1 不调用真实模型。B2 完成后，以同一五类中需要模型的固�
 
 ## B2 文件白名单与巨型文件门禁
 
-允许修改的生产文件仅为：
+允许修改的生产文件为：
 
 1. 新建 `backend/app/services/luxian_0609/consultation_customer_projection.py`；
 2. `backend/app/services/luxian_0609/native_consultation_episode_execution.py`；
 3. `backend/app/services/luxian_0609/canonical_result_finalizer.py`；
 4. `backend/app/services/luxian_0609_result_aggregator.py`。
+5. 新建 `backend/app/services/luxian_0609/consultation_decision_evidence.py`，承载逐文书
+   材料绑定与执行器已选 `fact_refs` 的完整职责；
+6. `backend/app/services/luxian_0609/customer_evidence_enrichment.py`，只增加公共的
+   已选分组文书引用安全投影，不选择业务证据；
+7. `backend/app/services/luxian_0609/decision_binding.py`，只允许 020–023 在
+   `trigger_absent_complete` 时不伪造不存在的文书引用，其他规则和原因仍维持原合同。
+
+第 5–7 项是 B2 审查中发现的必要边界修正：如果不建立单一的材料引用选择职责，
+聚合器删除旧证据推断后正式 `RuleDecision` 将无法定位真实文书；如果不复用公共安全
+引用投影，会诊族又会形成第二个客户证据投影器。它们不新增业务状态、Prompt、
+执行器、fallback 或公开 DTO。
 
 允许修改的测试文件仅为：
 
@@ -166,8 +177,13 @@ B1 不调用真实模型。B2 完成后，以同一五类中需要模型的固�
 2. `backend/tests/unit/test_luxian_0609_canonical_result_finalizer.py`；
 3. `backend/tests/unit/test_luxian_0609_result_aggregator.py`；
 4. `backend/tests/unit/test_luxian_0609_execution_routing.py`；
-5. 必要时新增一个只覆盖三入口隔离的
-   `backend/tests/unit/test_luxian_0609_consultation_family_ownership.py`。
+5. `backend/tests/unit/test_luxian_0609_consultation_decision_evidence.py`；
+6. `backend/tests/unit/test_luxian_0609_selected_document_evidence.py`；
+7. `backend/tests/unit/test_luxian_0609_decision_binding.py`；
+8. `backend/tests/unit/test_luxian_0609_mainline_services.py`；
+9. `backend/tests/unit/test_luxian_0609_consultation_family_architecture_freeze.py`；
+10. 必要时新增一个只覆盖三入口隔离的
+    `backend/tests/unit/test_luxian_0609_consultation_family_ownership.py`。
 
 新模块是必要的：episode 执行器当前 3553 行、结果聚合器当前 6308 行，均已越过巨型
 文件预警；被迁出的不是转发壳，而是完整的“020–023 已判定事实 -> 无内部 ID 客户

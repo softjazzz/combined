@@ -15,6 +15,93 @@ def _finalize(result: dict):
     return finalize_luxian_0609_canonical_result(result)
 
 
+def test_finalizer_delegates_consultation_facts_to_the_family_projection() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        validate_luxian_0609_executor_customer_display_facts,
+    )
+
+    facts = validate_luxian_0609_executor_customer_display_facts(
+        rule_id="LX0609-022",
+        raw={
+            "verification_kind": "consultation_opinion_quality_check",
+            "episode_count": 1,
+            "document_count": 1,
+            "semantic_state": "clear",
+            "checked_requirement": "给出针对当前病情的明确诊疗意见",
+            "source_document_ids": ["CONSULT-1"],
+            "episode_results": [
+                {
+                    "episode_index": 1,
+                    "semantic_state": "clear",
+                    "source_document_id": "CONSULT-1",
+                    "record_time": "2026-07-20 01:00:00",
+                    "document_title": "会诊记录单",
+                }
+            ],
+        },
+    )
+
+    assert facts is not None
+    assert "source_document_ids" not in facts
+    assert "source_document_id" not in str(facts)
+
+
+def test_finalizer_converts_invalid_executor_facts_to_isolated_technical_error() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+    )
+
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-022",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "customer_display_facts": {"private": "must not survive"},
+            "customer_evidence": [{"source_document_id": "PRIVATE-1"}],
+            "criterion_results": [{"criterion_id": "semantic"}],
+            "data_gap_details": {"reason_code": "unexpected_gap"},
+            "findings": "临床结论不得残留",
+            "evidence": "证据不得残留",
+            "suggestion": "建议不得残留",
+        },
+        raw_facts={"PRIVATE_UNKNOWN": "PRIVATE-CONSULTATION-TEXT"},
+    )
+
+    assert handled is True
+    assert finalized["status"] == "technical_error"
+    assert finalized["result_status"] == "technical_error"
+    assert finalized["reason_code"] == "model_invalid_output"
+    assert finalized["is_compliant"] is None
+    assert not {
+        "customer_display_facts",
+        "customer_evidence",
+        "criterion_results",
+        "data_gap_details",
+        "findings",
+        "evidence",
+        "suggestion",
+    } & set(finalized)
+
+
+def test_finalizer_preserves_existing_technical_reason_for_invalid_executor_facts() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+    )
+
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-020",
+            "status": "technical_error",
+            "reason_code": "snapshot_mismatch",
+        },
+        raw_facts={"PRIVATE_UNKNOWN": "PRIVATE-CONSULTATION-TEXT"},
+    )
+
+    assert handled is True
+    assert finalized["status"] == "technical_error"
+    assert finalized["reason_code"] == "snapshot_mismatch"
+
+
 @pytest.mark.parametrize(
     "extra",
     [

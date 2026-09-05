@@ -171,6 +171,103 @@ def test_snapshot_or_ref_mismatch_is_isolated_technical_error(decision):
     assert reduced[0].fact_refs == ()
 
 
+def test_complete_absent_trigger_does_not_require_a_fabricated_document_ref():
+    snapshot = _snapshot()
+    decision = RuleDecision(
+        rule_id="LX0609-020",
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=ApplicabilityState.NOT_APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code="trigger_absent_complete",
+        fact_refs=(),
+        evaluator_version="binding-test-v1",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-020",),
+        snapshot=snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "trigger_absent_complete"
+    assert reduced[0].fact_refs == ()
+
+
+def test_complete_absent_trigger_still_rejects_a_mismatched_snapshot():
+    snapshot = _snapshot()
+    decision = RuleDecision(
+        rule_id="LX0609-020",
+        snapshot_hash="b" * 64,
+        applicability=ApplicabilityState.NOT_APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code="trigger_absent_complete",
+        fact_refs=(),
+        evaluator_version="binding-test-v1",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-020",),
+        snapshot=snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "snapshot_mismatch"
+
+
+def test_complete_absent_trigger_exemption_is_scoped_to_consultation_family():
+    snapshot = _snapshot()
+    decision = RuleDecision(
+        rule_id="LX0609-007",
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=ApplicabilityState.NOT_APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code="trigger_absent_complete",
+        fact_refs=(),
+        evaluator_version="binding-test-v1",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-007",),
+        snapshot=snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "snapshot_mismatch"
+
+
+@pytest.mark.parametrize(
+    "reason_code",
+    ("eligibility_not_met", "performed_event_absent", "evaluation_window_not_mature"),
+)
+def test_other_not_applicable_reasons_still_require_attested_evidence(reason_code):
+    snapshot = _snapshot()
+    decision = RuleDecision(
+        rule_id="LX0609-020",
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=ApplicabilityState.NOT_APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code=reason_code,
+        fact_refs=(),
+        evaluator_version="binding-test-v1",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-020",),
+        snapshot=snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "snapshot_mismatch"
+
+
 def test_missing_duplicate_extra_or_ordered_wrong_scope_is_contract_error():
     snapshot = _snapshot()
     reduced = bind_and_reduce_luxian_0609_rule_decisions(

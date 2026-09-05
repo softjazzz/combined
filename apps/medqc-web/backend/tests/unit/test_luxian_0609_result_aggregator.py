@@ -108,7 +108,7 @@ def test_020_recommendation_evidence_projects_each_mapping_without_raw_ids():
     assert projected[-1]["execution_evidence"][0]["source_ref"].startswith("src_")
     assert "CONSULT-9" not in str(projected[-1])
     assert "COURSE-9" not in str(projected[-1])
-    assert len(result["customer_evidence"]) <= 8
+    assert "customer_evidence" not in result
 
 
 def test_020_recommendation_evidence_rejects_duplicate_indexes_fail_closed():
@@ -1454,10 +1454,7 @@ def test_021_episode_locator_is_renderable_but_document_ids_only_enter_customer_
         "共核对2次会诊申请；需完善1次："
         "2026-07-20 02:00:00《会诊申请单》（第2次）目的不明确。其余1次申请目的明确。"
     )
-    assert result["customer_evidence"] == [
-        {"source_type": "consultation_record", "source_document_id": "CONSULT-1"},
-        {"source_type": "consultation_record", "source_document_id": "CONSULT-2"},
-    ]
+    assert "customer_evidence" not in result
     assert "source_document_ids" not in result["customer_display_facts"]
     assert all(
         "source_document_id" not in item
@@ -1515,24 +1512,9 @@ def test_customer_evidence_uses_frozen_material_for_time_and_excerpt() -> None:
         audit_context={"evidence_materials": _Materials()},
     )[0]
 
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "consultation_record",
-            "source_document_id": "CONSULT-1",
-            "record_time": "2026-07-20 01:00:00",
-            "field_path": "record_content",
-            "evidence_excerpt": "患者反复发热，申请感染科会诊协助明确抗感染方案。",
-            "excerpt_kind": "文书级依据",
-        },
-        {
-            "source_type": "consultation_record",
-            "source_document_id": "CONSULT-2",
-            "record_time": "2026-07-20 02:00:00",
-            "field_path": "record_content",
-            "evidence_excerpt": "请相关科室会诊。",
-            "excerpt_kind": "文书级依据",
-        },
-    ]
+    # 文书坐标只能由 ReducedRuleDecision.fact_refs 经公共投影器形成，不能由
+    # 会诊 display facts 中的私有 ID 反推。
+    assert "customer_evidence" not in result
 
 
 def test_customer_evidence_does_not_enrich_ambiguous_document_identity() -> None:
@@ -1591,10 +1573,7 @@ def test_022_failed_episode_after_eighth_still_has_customer_evidence() -> None:
         customer_display_facts=(("LX0609-022", facts),),
     )[0]
 
-    assert {item["source_document_id"] for item in result["customer_evidence"]} >= {
-        "CONSULT-12"
-    }
-    assert len(result["customer_evidence"]) <= 8
+    assert "customer_evidence" not in result
     assert "source_document_ids" not in result["customer_display_facts"]
     assert all(
         "source_document_id" not in item
@@ -1635,7 +1614,7 @@ def test_020_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
         customer_display_facts=(("LX0609-020", facts),),
     )[0]
 
-    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "customer_evidence" not in result
     assert "source_document_refs" not in result.get("customer_display_facts", {})
 
 
@@ -1693,7 +1672,7 @@ def test_020_non_compliant_delivery_explains_missing_recommendation_and_locates_
         "请针对结果列出的未闭环建议，在后续病程中补记具体执行措施、"
         "执行结果或未执行原因。"
     ) in result["suggestion"]
-    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "customer_evidence" not in result
     assert result["customer_display_facts"]["recommendation_results"] == facts[
         "recommendation_results"
     ]
@@ -1764,7 +1743,7 @@ def test_023_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
         customer_display_facts=(("LX0609-023", facts),),
     )[0]
 
-    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "customer_evidence" not in result
     assert result["customer_display_facts"] == {
         key: value
         for key, value in facts.items()
@@ -1866,7 +1845,10 @@ def test_023_customer_display_projection_is_idempotent() -> None:
     ],
 )
 def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
-    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+    safe_facts = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts)
+    assert safe_facts is not None
+    assert "source_document_ids" not in safe_facts
+    assert "source_document_id" not in str(safe_facts)
 
 
 @pytest.mark.parametrize(
@@ -1914,7 +1896,7 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
         ),
     ],
 )
-def test_invalid_consultation_customer_facts_yield_technical_error_with_evidence(
+def test_invalid_consultation_customer_facts_yield_isolated_technical_error(
     rule_id, facts
 ):
     result = aggregate_luxian_0609_results(
@@ -1927,7 +1909,9 @@ def test_invalid_consultation_customer_facts_yield_technical_error_with_evidence
     assert result["status"] == "technical_error"
     assert result["is_compliant"] is None
     assert result["reason_code"] == "model_invalid_output"
-    assert result["customer_evidence"]
+    assert "customer_evidence" not in result
+    assert "customer_display_facts" not in result
+    assert "criterion_results" not in result
     assert "PRIVATE_UNKNOWN" not in repr(result)
 
     technical = reduce_luxian_0609_rule_decision(
@@ -1951,7 +1935,7 @@ def test_invalid_consultation_customer_facts_yield_technical_error_with_evidence
     assert technical_result["status"] == "technical_error"
     assert technical_result["reason_code"] == "snapshot_mismatch"
     assert "data_gap_details" not in technical_result
-    assert technical_result["criterion_results"] == []
+    assert "criterion_results" not in technical_result
 
 
 @pytest.mark.parametrize(
@@ -4279,10 +4263,8 @@ def test_consultation_native_invalid_facts_are_technical_error():
     assert result["status"] == "technical_error"
     assert result["is_compliant"] is None
     assert result["reason_code"] == "snapshot_mismatch"
-    assert [item["source_document_id"] for item in result["customer_evidence"]] == [
-        "CONSULT-REQUEST",
-        "CONSULT-OPINION",
-    ]
+    assert "customer_evidence" not in result
+    assert "customer_display_facts" not in result
     assert "PRIVATE-CONSULTATION-TEXT" not in repr(result)
 
 

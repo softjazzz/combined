@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from datetime import date, datetime
 
 import httpx
@@ -10,6 +11,9 @@ import pytest
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.customer_evidence_enrichment import (
+    project_selected_document_evidence,
 )
 from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
@@ -269,10 +273,7 @@ async def test_batch_preserves_explicit_clear_022_when_model_marks_one_episode_v
     assert result.results[2]["metadata"]["executor_type"] == "program"
     display = dict(result.customer_display_facts)["LX0609-022"]
     assert display["semantic_state"] == "clear"
-    assert display["source_document_ids"] == [
-        "consultation-doc-1",
-        "consultation-doc-2",
-    ]
+    assert "source_document_ids" not in display
     assert [item["semantic_state"] for item in display["episode_results"]] == [
         "clear",
         "clear",
@@ -694,6 +695,137 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_material_reference_binding_keeps_anonymous_prompt_sequence_unchanged(
+    monkeypatch,
+):
+    """材料仓只补内部引用，不能重排文书或把真实引用泄露给模型。"""
+
+    rows = (
+        {
+            "document_id": "CONSULT-PROMPT-2",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 12:00:00",
+            "record_content": "第二份会诊意见：建议复查血常规。",
+        },
+        {
+            "document_id": "CONSULT-PROMPT-1",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 08:00:00",
+            "record_content": "第一份会诊申请：请协助评估。",
+        },
+    )
+
+    def reader(**kwargs):
+        assert kwargs["source_key"] == "consultation_record"
+        return SnapshotSourceRows.create(
+            source_key="consultation_record",
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-22T00:00:00+08:00",
+        row_reader=reader,
+    )
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        application="clear",
+        opinion="clear",
+    ), _episode(
+        "consultation_record-2",
+        ["consultation_record-2"],
+        application="clear",
+        opinion="clear",
+    )])
+    raw_client = _Client(payload)
+    material_client = _Client(payload)
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: [dict(row) for row in rows],
+    )
+
+    raw_result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=raw_client,
+    )
+    material_result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=material_client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in material_result.results] == [
+        item["status"] for item in raw_result.results
+    ]
+    assert material_client.prompts == raw_client.prompts
+    material_refs = tuple(
+        reference
+        for reference, _ in session.materials.document_rows(
+            "consultation_record", snapshot=session.snapshot,
+        )
+    )
+    assert all(reference not in material_client.prompts[0] for reference in material_refs)
+
+
+@pytest.mark.asyncio
+async def test_unparseable_consultation_material_binding_is_technical_error_without_prompt(
+    monkeypatch,
+):
+    """会诊文书材料无法与 snapshot 证明同源时，不能静默产生无定位结论。"""
+
+    rows = ({
+        "document_id": "CONSULT-MATERIAL-1",
+        "document_title": "会诊记录",
+        "record_time": "2026-07-20 08:00:00",
+        "record_content": "会诊意见：建议复查血常规。",
+    },)
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-022",),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        created_at="2026-07-22T00:00:00+08:00",
+        row_reader=lambda **_: SnapshotSourceRows.create(
+            source_key="consultation_record",
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        ),
+    )
+    monkeypatch.setattr(
+        type(session.materials),
+        "document_rows",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("tampered")),
+    )
+    client = _Client(_payload(episodes=[]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-022",),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-022",),
+    )
+
+    assert result.results == ()
+    assert [(item.reason_code, item.fact_refs) for item in result.decisions] == [
+        ("source_query_error", ()),
+    ]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
 async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation(
     monkeypatch,
 ):
@@ -744,28 +876,24 @@ async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation
         {
             "episode_index": 1,
             "semantic_state": "clear",
-            "source_document_id": "CONSULT-1",
             "record_time": "2026-07-20 01:00:00",
             "document_title": "会诊记录单",
         },
         {
             "episode_index": 2,
             "semantic_state": "vague",
-            "source_document_id": "CONSULT-2",
             "record_time": "2026-07-20 02:00:00",
             "document_title": "会诊记录单",
         },
         {
             "episode_index": 3,
             "semantic_state": "clear",
-            "source_document_id": "CONSULT-3",
             "record_time": "2026-07-20 03:00:00",
             "document_title": "会诊记录单",
         },
         {
             "episode_index": 4,
             "semantic_state": "missing",
-            "source_document_id": "CONSULT-4",
             "record_time": "2026-07-20 04:00:00",
             "document_title": "会诊记录单",
         },
@@ -2068,11 +2196,9 @@ async def test_typed_decision_preserves_terminal_source_reason_code(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_typed_explicit_non_target_document_uses_allowed_not_applicable_reason(monkeypatch):
-    monkeypatch.setattr(
-        episode,
-        "read_luxian_0609_native_source_rows",
-        lambda **_: _rows("麻醉评估"),
+async def test_typed_explicit_non_target_document_uses_allowed_not_applicable_reason():
+    session = _window_session(
+        rows_by_source={"consultation_record": tuple(_rows("麻醉评估"))}
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -2082,21 +2208,21 @@ async def test_typed_explicit_non_target_document_uses_allowed_not_applicable_re
         visit_id="v",
         source_schema=None,
         llm_client=None,
-        evidence_snapshot=_snapshot(),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
         decision_rule_ids=("LX0609-021",),
     )
 
     assert result.results == ()
     assert result.decisions[0].applicability is episode.ApplicabilityState.NOT_APPLICABLE
     assert result.decisions[0].reason_code == "eligibility_not_met"
+    assert result.decisions[0].fact_refs
 
 
 @pytest.mark.asyncio
-async def test_typed_low_confidence_episode_is_conflict_not_source_gap(monkeypatch):
-    monkeypatch.setattr(
-        episode,
-        "read_luxian_0609_native_source_rows",
-        lambda **_: _rows("会诊文书"),
+async def test_typed_low_confidence_episode_is_conflict_not_source_gap():
+    session = _window_session(
+        rows_by_source={"consultation_record": tuple(_rows("会诊文书"))}
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021",),
@@ -2107,12 +2233,14 @@ async def test_typed_low_confidence_episode_is_conflict_not_source_gap(monkeypat
         llm_client=_Client(_payload(episodes=[_episode(
             "consultation_record-1", ["consultation_record-1"], confidence="low",
         )])),
-        evidence_snapshot=_snapshot(),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
         decision_rule_ids=("LX0609-021",),
     )
     assert result.results == ()
     assert result.decisions[0].evidence_state is episode.EvidenceState.CONFLICT
     assert result.decisions[0].reason_code == "semantic_low_confidence"
+    assert result.decisions[0].fact_refs
 
 
 @pytest.mark.asyncio
@@ -2404,16 +2532,8 @@ async def test_020_023_accept_exact_course_ref_when_model_omits_redundant_quote(
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-023"]["source_document_refs"] == [
-        {
-            "source_type": "consultation_record",
-            "source_document_id": "CONSULT-OPINION",
-        },
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "COURSE-EXECUTION",
-        },
-    ]
+    assert "source_document_refs" not in facts["LX0609-023"]
+    assert facts["LX0609-023"]["specific_execution_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -2712,16 +2832,8 @@ async def test_020_display_facts_bind_selected_opinion_and_execution_documents(
     )
 
     facts = dict(result.customer_display_facts)["LX0609-020"]
-    assert facts["source_document_refs"] == [
-        {
-            "source_type": "consultation_record",
-            "source_document_id": "CONSULT-OPINION",
-        },
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "COURSE-EXECUTION",
-        },
-    ]
+    assert "source_document_refs" not in facts
+    assert facts["specific_execution_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -2976,22 +3088,17 @@ async def test_020_023_include_each_authorized_execution_evidence_category_once(
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
     assert result.total_tokens == 32
-    source_types = {
-        item["source_type"]
-        for item in dict(result.customer_display_facts)["LX0609-020"]["source_document_refs"]
-    }
-    assert source_types == {
-        "consultation_record",
-        "daily_course_record",
-        "inpat_drug_order",
-        "exam_master",
-        "labtest_master",
-        "surgery_record",
-    }
+    safe_facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert "source_document_refs" not in safe_facts
+    assert safe_facts["specific_execution_count"] == 1
     for rule_id in ("LX0609-020", "LX0609-023"):
-        assert dict(result.customer_display_facts)[rule_id]["recommendation_evidence"][0][
-            "execution_refs"
-        ]
+        facts = dict(result.customer_display_facts)[rule_id]
+        assert facts["specific_execution_count"] == 1
+        assert "source_document_refs" not in facts
+        assert all(
+            "execution_refs" not in item
+            for item in facts["recommendation_evidence"]
+        )
     assert "exam_master-1" in client.prompts[1]
     assert "labtest_master-1" in client.prompts[1]
     assert "surgery_record-1" in client.prompts[1]
@@ -3389,12 +3496,8 @@ async def test_020_non_compliant_facts_list_each_recommendation_and_only_locate_
             "execution_state": "missing",
         },
     ]
-    assert facts["source_document_refs"] == [
-        {
-            "source_type": "consultation_record",
-            "source_document_id": "CONSULT-2",
-        }
-    ]
+    assert "source_document_refs" not in facts
+    assert facts["missing_execution_count"] == 1
 
 
 def test_023_non_compliant_keeps_late_offending_episode_and_execution_reference():
@@ -3477,6 +3580,249 @@ def test_023_non_compliant_keeps_late_offending_episode_and_execution_reference(
         {"source_type": "consultation_record", "source_document_id": "CONSULT-9"},
         {"source_type": "daily_course_record", "source_document_id": "COURSE-9"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_023_late_offending_episode_is_in_decision_and_projected_customer_evidence():
+    """决策证据不能因八条展示上限遗漏第九次笼统执行。"""
+
+    consultation_rows = _rows(*(["申请与明确会诊意见"] * 9), day=2)
+    course_rows = _rows(*(["遵会诊意见执行"] * 9), day=2, hour_start=11)
+    for index, row in enumerate(consultation_rows, start=1):
+        row["document_id"] = f"CONSULT-{index}"
+    for index, row in enumerate(course_rows, start=1):
+        row["document_id"] = f"COURSE-{index}"
+    session = _window_session(
+        rows_by_source={
+            "consultation_record": tuple(consultation_rows),
+            "daily_course_record": tuple(course_rows),
+        }
+    )
+    client = _SequentialClient(
+        _payload(
+            episodes=[
+                _episode(
+                    f"consultation_record-{index}",
+                    [f"consultation_record-{index}"],
+                )
+                for index in range(1, 10)
+            ]
+        ),
+        _execution(
+            *[
+                {
+                    "recommendation_ref": f"consultation_record-{index}#r1",
+                    "execution_record_state": (
+                        "generic_trace" if index == 9 else "specific_trace"
+                    ),
+                    "trace_refs": [f"daily_course_record-{index}"],
+                    "execution_state": "absent",
+                    "structured_action_refs": [],
+                    "confidence": "high",
+                }
+                for index in range(1, 10)
+            ]
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    decision_023 = next(
+        item for item in result.decisions if item.rule_id == "LX0609-023"
+    )
+    consultation_rows_by_ref = dict(
+        session.materials.document_rows(
+            "consultation_record", snapshot=session.snapshot
+        )
+    )
+    course_rows_by_ref = dict(
+        session.materials.document_rows(
+            "daily_course_record", snapshot=session.snapshot
+        )
+    )
+    late_consultation_ref = next(
+        reference
+        for reference, row in consultation_rows_by_ref.items()
+        if row.get("document_id") == "CONSULT-9"
+    )
+    late_course_ref = next(
+        reference
+        for reference, row in course_rows_by_ref.items()
+        if row.get("document_id") == "COURSE-9"
+    )
+    # RuleDecision 对 material refs 作全局稳定排序；这里验证在截断前选中的末次
+    # 缺陷文书仍完整进入八条决定性引用，不能因排序改变而丢失。
+    assert {late_consultation_ref, late_course_ref}.issubset(decision_023.fact_refs)
+    assert len(decision_023.fact_refs) == 8
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision_023,),
+        expected_rule_ids=("LX0609-023",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    customer_evidence = project_selected_document_evidence(
+        decision=reduced[0],
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in customer_evidence
+    }.issuperset({
+        ("consultation_record", "CONSULT-9"),
+        ("daily_course_record", "COURSE-9"),
+    })
+
+
+@pytest.mark.asyncio
+async def test_material_binding_failure_isolated_to_the_selected_typed_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _window_session(
+        rows_by_source={
+            "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+            "daily_course_record": tuple(_rows("已具体落实会诊意见", day=2, hour_start=3)),
+        }
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            }
+        ),
+    )
+    original_selector = episode.select_consultation_rule_material_refs
+
+    def reject_023_binding(**kwargs):
+        if kwargs["rule_id"] == "LX0609-023":
+            raise ValueError("consultation internal reference cannot be uniquely bound")
+        return original_selector(**kwargs)
+
+    monkeypatch.setattr(
+        episode,
+        "select_consultation_rule_material_refs",
+        reject_023_binding,
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    decisions_by_rule = {item.rule_id: item for item in result.decisions}
+    assert decisions_by_rule["LX0609-020"].reason_code == "requirement_satisfied"
+    assert decisions_by_rule["LX0609-023"].reason_code == "snapshot_mismatch"
+    assert decisions_by_rule["LX0609-023"].fact_refs == ()
+    assert "LX0609-023" not in dict(result.customer_display_facts)
+
+
+@pytest.mark.asyncio
+async def test_real_partial_candidate_material_mapping_only_fails_the_dependent_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """候选投影缺少冻结材料时，不得由 selector mock 掩盖真实绑定失败。"""
+
+    consultation_rows = _rows("会诊意见一", "会诊意见二", day=2)
+    course_rows = _rows("未见执行", "遵会诊意见执行", day=2, hour_start=3)
+    for index, row in enumerate(consultation_rows, start=1):
+        row["document_id"] = f"CONSULT-{index}"
+    for index, row in enumerate(course_rows, start=1):
+        row["document_id"] = f"COURSE-{index}"
+    session = _window_session(
+        rows_by_source={
+            "consultation_record": tuple(consultation_rows),
+            "daily_course_record": tuple(course_rows),
+        }
+    )
+    original_candidate_projection = episode._candidate_documents
+
+    def candidate_projection_with_partial_material(**kwargs):
+        projection = original_candidate_projection(**kwargs)
+        return replace(
+            projection,
+            candidates=tuple(
+                replace(item, material_ref="")
+                if item.ref == "daily_course_record-2"
+                else item
+                for item in projection.candidates
+            ),
+        )
+
+    monkeypatch.setattr(
+        episode,
+        "_candidate_documents",
+        candidate_projection_with_partial_material,
+    )
+    client = _SequentialClient(
+        _payload(
+            episodes=[
+                _episode("consultation_record-1", ["consultation_record-1"]),
+                _episode("consultation_record-2", ["consultation_record-2"]),
+            ]
+        ),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            },
+            {
+                "recommendation_ref": "consultation_record-2#r1",
+                "execution_record_state": "generic_trace",
+                "trace_refs": ["daily_course_record-2"],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            },
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    decisions_by_rule = {item.rule_id: item for item in result.decisions}
+    assert decisions_by_rule["LX0609-020"].reason_code == "requirement_violated"
+    assert decisions_by_rule["LX0609-020"].fact_refs
+    assert decisions_by_rule["LX0609-023"].reason_code == "snapshot_mismatch"
+    assert decisions_by_rule["LX0609-023"].fact_refs == ()
+    safe_facts_by_rule = dict(result.customer_display_facts)
+    assert "LX0609-020" in safe_facts_by_rule
+    assert "LX0609-023" not in safe_facts_by_rule
 
 
 @pytest.mark.asyncio
@@ -4144,9 +4490,13 @@ async def test_020_023_window_filters_post_discharge_candidate_as_complete_absen
 
 @pytest.mark.asyncio
 async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window_refs():
+    consultation_rows = _rows("申请与明确会诊意见", day=2)
+    consultation_rows[0]["document_id"] = "CONSULT-OPINION-1"
+    course_rows = _rows("已具体落实会诊意见", day=3)
+    course_rows[0]["document_id"] = "COURSE-EXECUTION-1"
     session = _window_session(rows_by_source={
-        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
-        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+        "consultation_record": tuple(consultation_rows),
+        "daily_course_record": tuple(course_rows),
         "inpat_drug_order": ({
             "order_id": "ORDER-1",
             "generic_name": "头孢哌酮舒巴坦",
@@ -4186,29 +4536,58 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
 
     assert result.results == ()
     assert [item.qc_direction.value for item in result.decisions] == ["satisfied", "satisfied"]
-    assert all(len(item.fact_refs) >= 3 for item in result.decisions)
-    source_refs = {
-        item.source_key: item.snapshot_ref.removeprefix("sha256:")
-        for item in session.snapshot.observations
-        if item.source_key in {
-            "daily_course_record",
-            "inpat_drug_order",
-            "exam_master",
-            "labtest_master",
-            "surgery_record",
-        }
-    }
-    assert set(source_refs) == {
-        "daily_course_record",
-        "inpat_drug_order",
-        "exam_master",
-        "labtest_master",
-        "surgery_record",
-    }
-    assert all(
-        set(source_refs.values()).issubset(item.fact_refs)
-        for item in result.decisions
+    # 正式 episode 主链只把实际用于判定的会诊意见与病程执行文书写入
+    # fact_refs。住院窗口、未采用的医嘱/检查/检验/手术来源仅提供上下文，
+    # 不能伪装成客户证据，也不能用来源级 snapshot ref 冒充文书。
+    consultation_rows = dict(
+        session.materials.document_rows(
+            "consultation_record", snapshot=session.snapshot,
+        )
     )
+    course_rows = dict(
+        session.materials.document_rows(
+            "daily_course_record", snapshot=session.snapshot,
+        )
+    )
+    consultation_ref = next(
+        reference
+        for reference, row in consultation_rows.items()
+        if row.get("document_id") == "CONSULT-OPINION-1"
+    )
+    course_ref = next(
+        reference
+        for reference, row in course_rows.items()
+        if row.get("document_id") == "COURSE-EXECUTION-1"
+    )
+    assert all(item.fact_refs == (consultation_ref, course_ref) for item in result.decisions)
+    assert all(
+        reference in session.snapshot.document_refs
+        for item in result.decisions
+        for reference in item.fact_refs
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-020", "LX0609-023"),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    assert [
+        project_selected_document_evidence(
+            decision=item,
+            evidence_snapshot=session.snapshot,
+            evidence_materials=session.materials,
+        )
+        for item in reduced
+    ] == [
+        [
+            {"source_type": "consultation_record", "source_document_id": "CONSULT-OPINION-1"},
+            {"source_type": "daily_course_record", "source_document_id": "COURSE-EXECUTION-1"},
+        ],
+        [
+            {"source_type": "consultation_record", "source_document_id": "CONSULT-OPINION-1"},
+            {"source_type": "daily_course_record", "source_document_id": "COURSE-EXECUTION-1"},
+        ],
+    ]
     assert result.llm_call_count == 2
 
 
@@ -4456,6 +4835,7 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_
         decisions=result.decisions,
         expected_rule_ids=("LX0609-020", "LX0609-023"),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert [item.final_state.value for item in reduced] == [
         "technical_error",
@@ -4739,6 +5119,7 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-020", "LX0609-023"),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert [item.final_state.value for item in reduced] == ["compliant", "compliant"]
     assert [item.reason_code for item in reduced] == [

@@ -203,12 +203,98 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_basic_timeliness_customer_rule,
         safe_basic_timeliness_customer_display_facts,
     )
+    from .consultation_customer_projection import (
+        is_consultation_customer_rule,
+        safe_consultation_customer_display_facts,
+    )
 
+    if is_consultation_customer_rule(rule_id):
+        safe_facts = safe_consultation_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
+        return (
+            safe_facts
+            if safe_facts is not None and not contains_private_identifier(safe_facts)
+            else None
+        )
     if not is_basic_timeliness_customer_rule(rule_id):
         return NotImplemented
     if not isinstance(raw, Mapping) or contains_private_identifier(raw):
         return None
     return safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=raw)
+
+
+def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
+    """返回由 Finalizer 负责 fail-closed 收敛的执行器事实合同。
+
+    该函数只暴露合同归属，不解释规则的业务状态或事实；聚合器据此把单规则原始
+    facts 交给统一 Finalizer，避免继续持有会诊族的失败语义。
+    """
+
+    from .consultation_customer_projection import is_consultation_customer_rule
+
+    return is_consultation_customer_rule(rule_id)
+
+
+def finalize_luxian_0609_executor_customer_display_facts(
+    *,
+    result: Mapping[str, Any],
+    raw_facts: Any,
+    contract_failure: bool = False,
+) -> tuple[dict[str, Any], bool]:
+    """在单规则边界收敛执行器客户事实合同失败。
+
+    ``handled`` 为 ``False`` 表示该规则不属于已迁出的执行器事实合同，调用方可
+    继续使用原有兼容处理。对于已拥有合同的规则，事实无效必须只影响该规则并形成
+    ``technical_error``；不得把技术失败误交付成临床结论或资料不足。
+    """
+
+    finalized = deepcopy(dict(result))
+    if not finalizer_owns_executor_customer_display_facts(
+        str(finalized.get("rule_id") or finalized.get("rule_code") or "")
+    ):
+        return finalized, False
+    safe_facts = (
+        None
+        if contract_failure
+        else validate_luxian_0609_executor_customer_display_facts(
+            rule_id=str(finalized.get("rule_id") or finalized.get("rule_code") or ""),
+            raw=raw_facts,
+        )
+    )
+    if safe_facts is NotImplemented:
+        return finalized, False
+    if safe_facts is not None:
+        finalized["customer_display_facts"] = safe_facts
+        return finalized, True
+
+    original_status = str(finalized.get("status") or "").strip().lower()
+    original_reason_code = str(finalized.get("reason_code") or "").strip()
+    # 合同失败不应保留由无效 facts 导出的临床结论、证据或资料缺口说明。
+    for key in (
+        "customer_display_facts",
+        "customer_evidence",
+        "criterion_results",
+        "data_gap_details",
+        "missing_sources",
+        "missing_fields",
+        "customer_message",
+        "findings",
+        "evidence",
+        "suggestion",
+        "evidence_items",
+    ):
+        finalized.pop(key, None)
+    finalized["status"] = "technical_error"
+    finalized["result_status"] = "technical_error"
+    finalized["is_compliant"] = None
+    finalized["reason_code"] = (
+        original_reason_code
+        if original_status == "technical_error" and original_reason_code
+        else "model_invalid_output"
+    )
+    return finalized, True
 
 
 def _missing_sources_from_customer_facts(result: Mapping[str, Any]) -> list[str]:

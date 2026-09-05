@@ -14,7 +14,9 @@ from .luxian_0609_result_schema import (
     apply_luxian_0609_result_schema,
 )
 from .luxian_0609.canonical_result_finalizer import (
+    finalizer_owns_executor_customer_display_facts,
     finalize_luxian_0609_canonical_result,
+    finalize_luxian_0609_executor_customer_display_facts,
     validate_luxian_0609_executor_customer_display_facts,
 )
 from .luxian_0609.customer_evidence_enrichment import (
@@ -493,6 +495,12 @@ def safe_luxian_0609_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
     """旧原生分支只保留尚未迁移到通用子结论合同的受控展示事实。"""
+    delegated_facts = validate_luxian_0609_executor_customer_display_facts(
+        rule_id=rule_id,
+        raw=raw,
+    )
+    if delegated_facts is not NotImplemented:
+        return delegated_facts
     if not isinstance(raw, Mapping):
         return None
     def controlled_list(value: Any, *, allowed: set[str] | None = None) -> list[str] | None:
@@ -4157,519 +4165,6 @@ def safe_luxian_0609_customer_display_facts(
                 if isinstance(value, str) and value.strip()
             ][:2],
         }
-    if rule_id in {"LX0609-020", "LX0609-021", "LX0609-022"} and raw.get(
-        "consultation_assessment"
-    ) in {"明确", "不符合要求"}:
-        expected_keys = {"source_document_ids", "consultation_assessment"}
-        if rule_id == "LX0609-020":
-            expected_keys.update({"execution_record_state", "execution_candidate_count"})
-        source_document_ids = raw.get("source_document_ids")
-        if (
-            set(raw) != expected_keys
-            or not isinstance(source_document_ids, list)
-            or len(source_document_ids) > 8
-            or any(
-                not isinstance(value, str) or not value.strip()
-                for value in source_document_ids
-            )
-        ):
-            return None
-        facts = {
-            "source_document_ids": list(dict.fromkeys(source_document_ids)),
-            "consultation_assessment": raw["consultation_assessment"],
-        }
-        if rule_id == "LX0609-020":
-            if (
-                raw.get("execution_record_state")
-                not in {"已发现明确执行记录", "未发现执行记录"}
-                or type(raw.get("execution_candidate_count")) is not int
-                or not 0 <= raw["execution_candidate_count"] <= 100
-            ):
-                return None
-            facts.update(
-                {
-                    "execution_record_state": raw["execution_record_state"],
-                    "execution_candidate_count": raw["execution_candidate_count"],
-                }
-            )
-        return facts
-    if rule_id in {"LX0609-021", "LX0609-022"}:
-        expected_kind = (
-            "consultation_application_quality_check"
-            if rule_id == "LX0609-021"
-            else "consultation_opinion_quality_check"
-        )
-        expected_requirement = (
-            "说明具体临床问题、会诊理由或明确会诊目的"
-            if rule_id == "LX0609-021"
-            else "给出针对当前病情的明确诊疗意见"
-        )
-        expected_keys = {
-            "verification_kind",
-            "episode_count",
-            "document_count",
-            "semantic_state",
-            "checked_requirement",
-            "source_document_ids",
-        }
-        is_public_projection = "source_document_ids" not in raw
-        if is_public_projection:
-            expected_keys.remove("source_document_ids")
-        has_episode_results = rule_id in {"LX0609-021", "LX0609-022"} and "episode_results" in raw
-        if has_episode_results:
-            expected_keys.add("episode_results")
-        source_document_ids = raw.get("source_document_ids", [])
-        if (
-            set(raw) != expected_keys
-            or raw.get("verification_kind") != expected_kind
-            or raw.get("checked_requirement") != expected_requirement
-            or raw.get("semantic_state")
-            not in {"clear", "vague", "missing", "absent", "unknown", "mixed"}
-            or type(raw.get("episode_count")) is not int
-            or not 0 <= raw["episode_count"] <= 100
-            or type(raw.get("document_count")) is not int
-            or not 0 <= raw["document_count"] <= 100
-            or not isinstance(source_document_ids, list)
-            or any(not isinstance(value, str) or not value.strip() for value in source_document_ids)
-        ):
-            return None
-        facts = {
-            "verification_kind": expected_kind,
-            "episode_count": raw["episode_count"],
-            "document_count": raw["document_count"],
-            "semantic_state": raw["semantic_state"],
-            "checked_requirement": expected_requirement,
-        }
-        if not has_episode_results:
-            return facts
-        episode_results = raw.get("episode_results")
-        if (
-            not isinstance(episode_results, list)
-            or len(episode_results) != raw["episode_count"]
-            or len(episode_results) > 100
-        ):
-            return None
-        safe_episode_results: list[dict[str, Any]] = []
-        episode_states: list[str] = []
-        allowed_states = {"clear", "vague", "missing", "unknown"}
-        source_document_id_set = set(source_document_ids)
-        for expected_index, item in enumerate(episode_results, start=1):
-            base_item_keys = {
-                "episode_index",
-                "semantic_state",
-            }
-            if not is_public_projection:
-                base_item_keys.add("source_document_id")
-            locator_item_keys = {"record_time", "document_title"}
-            if not isinstance(item, Mapping) or set(item) not in {
-                frozenset(base_item_keys),
-                frozenset(base_item_keys | locator_item_keys),
-            }:
-                return None
-            source_document_id = item.get("source_document_id")
-            state = item.get("semantic_state")
-            if (
-                item.get("episode_index") != expected_index
-                or state not in allowed_states
-                or (
-                    not is_public_projection
-                    and (
-                        not isinstance(source_document_id, str)
-                        or source_document_id not in source_document_id_set
-                    )
-                )
-            ):
-                return None
-            if locator_item_keys.issubset(item):
-                record_time = item.get("record_time")
-                document_title = item.get("document_title")
-                expected_title = (
-                    "会诊申请单"
-                    if rule_id == "LX0609-021"
-                    else "会诊记录单"
-                )
-                if not isinstance(record_time, str) or document_title != expected_title:
-                    return None
-                if record_time:
-                    time_format = (
-                        "%Y-%m-%d %H:%M:%S"
-                        if re.fullmatch(
-                            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}",
-                            record_time,
-                        )
-                        else "%Y-%m-%d"
-                        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", record_time)
-                        else ""
-                    )
-                    if not time_format:
-                        return None
-                    try:
-                        parsed_time = datetime.strptime(record_time, time_format)
-                    except ValueError:
-                        return None
-                    if parsed_time.strftime(time_format) != record_time:
-                        return None
-            episode_states.append(state)
-            safe_episode_results.append({
-                "episode_index": expected_index,
-                "semantic_state": state,
-                **(
-                    {
-                        "record_time": item["record_time"],
-                        "document_title": item["document_title"],
-                    }
-                    if locator_item_keys.issubset(item)
-                    else {}
-                ),
-            })
-        state_set = set(episode_states)
-        derived_state = (
-            "absent"
-            if not state_set
-            else next(iter(state_set))
-            if len(state_set) == 1
-            else "mixed"
-        )
-        if derived_state != raw["semantic_state"]:
-            return None
-        facts["episode_results"] = safe_episode_results
-        return facts
-    if rule_id in {"LX0609-020", "LX0609-023"} and raw.get(
-        "verification_kind"
-    ) in {
-        "consultation_execution_relation_check",
-        "consultation_execution_quality_check",
-    }:
-        expected_verification_kind = (
-            "consultation_execution_quality_check"
-            if rule_id == "LX0609-023"
-            else "consultation_execution_relation_check"
-        )
-        allowed_relation_states = (
-            {
-                "specific_execution",
-                "generic_or_copied_execution",
-                "execution_record_absent",
-                "source_incomplete",
-                "association_unresolved",
-                "source_error",
-            }
-            if rule_id == "LX0609-023"
-            else {
-                "all_linked",
-                "execution_missing",
-                "not_triggered",
-                "source_incomplete",
-                "association_unresolved",
-                "source_error",
-            }
-        )
-        expected_keys = {
-            "verification_kind",
-            "completed_opinion_episode_count",
-            "recommendation_count",
-            "specific_execution_count",
-            "generic_execution_count",
-            "missing_execution_count",
-            "relation_state",
-            "source_document_ids",
-        }
-        is_public_projection = "source_document_ids" not in raw
-        if is_public_projection:
-            expected_keys.remove("source_document_ids")
-        if rule_id == "LX0609-020" and "recommendation_results" in raw:
-            expected_keys.add("recommendation_results")
-        allowed_internal_keys = {"source_document_refs", "recommendation_evidence"}
-        count_keys = (
-            "completed_opinion_episode_count",
-            "recommendation_count",
-            "specific_execution_count",
-            "generic_execution_count",
-            "missing_execution_count",
-        )
-        source_document_ids = raw.get("source_document_ids", [])
-        if (
-            set(raw) - allowed_internal_keys != expected_keys
-            or raw.get("verification_kind") != expected_verification_kind
-            or raw.get("relation_state") not in allowed_relation_states
-            or any(
-                type(raw.get(key)) is not int or not 0 <= raw[key] <= 100
-                for key in count_keys
-            )
-            or not isinstance(source_document_ids, list)
-            or any(not isinstance(value, str) or not value.strip() for value in source_document_ids)
-        ):
-            return None
-        source_document_refs = raw.get("source_document_refs")
-        if source_document_refs is not None:
-            allowed_source_types = {
-                "consultation_record",
-                "daily_course_record",
-                "senior_course_record",
-                "inpat_drug_order",
-                "inpat_nondrug_order",
-                "exam_master",
-                "exam_item_report",
-                "labtest_master",
-                "labtest_item_report",
-                "surgery_record",
-            }
-            if not isinstance(source_document_refs, list) or len(source_document_refs) > 8:
-                return None
-            for item in source_document_refs:
-                if (
-                    not isinstance(item, Mapping)
-                    or set(item) != {"source_type", "source_document_id"}
-                    or item.get("source_type") not in allowed_source_types
-                    or not isinstance(item.get("source_document_id"), str)
-                    or not item["source_document_id"].strip()
-                ):
-                    return None
-        recommendation_results: list[dict[str, Any]] | None = None
-        if rule_id == "LX0609-020" and "recommendation_results" in raw:
-            raw_results = raw.get("recommendation_results")
-            allowed_action_types = {
-                "medication",
-                "test",
-                "procedure",
-                "transfer",
-                "monitoring",
-                "other",
-            }
-            allowed_execution_states = {
-                "specific",
-                "generic",
-                "missing",
-                "unknown",
-            }
-            if (
-                not isinstance(raw_results, list)
-                or len(raw_results) != raw["recommendation_count"]
-                or len(raw_results) > 96
-            ):
-                return None
-            recommendation_results = []
-            for index, item in enumerate(raw_results, start=1):
-                if (
-                    not isinstance(item, Mapping)
-                    or set(item)
-                    != {
-                        "episode_index",
-                        "recommendation_index",
-                        "action_type",
-                        "execution_state",
-                    }
-                    or type(item.get("episode_index")) is not int
-                    or not 1
-                    <= item["episode_index"]
-                    <= raw["completed_opinion_episode_count"]
-                    or type(item.get("recommendation_index")) is not int
-                    or item["recommendation_index"] != index
-                    or item.get("action_type") not in allowed_action_types
-                    or item.get("execution_state")
-                    not in allowed_execution_states
-                ):
-                    return None
-                recommendation_results.append(dict(item))
-            state_counts = {
-                state: sum(
-                    item["execution_state"] == state
-                    for item in recommendation_results
-                )
-                for state in ("specific", "generic", "missing")
-            }
-            if (
-                sum(state_counts.values()) > raw["recommendation_count"]
-            ):
-                return None
-            # recommendation_results 是逐条事实，优先用它重建摘要计数；
-            # 原始摘要可能未包含 unknown 条目，不能因此拒绝整批投影。
-            validated_count_values = {
-                "specific_execution_count": state_counts["specific"],
-                "generic_execution_count": state_counts["generic"],
-                "missing_execution_count": state_counts["missing"],
-            }
-        else:
-            validated_count_values = {
-                key: raw[key]
-                for key in ("specific_execution_count", "generic_execution_count", "missing_execution_count")
-            }
-        safe_facts = {
-            "verification_kind": expected_verification_kind,
-            "completed_opinion_episode_count": raw["completed_opinion_episode_count"],
-            "recommendation_count": raw["recommendation_count"],
-            **validated_count_values,
-            "relation_state": raw["relation_state"],
-        }
-        if recommendation_results is not None:
-            safe_facts["recommendation_results"] = recommendation_results
-        raw_recommendation_evidence = raw.get("recommendation_evidence")
-        if raw_recommendation_evidence is not None:
-            if (
-                not isinstance(raw_recommendation_evidence, list)
-                or len(raw_recommendation_evidence) != raw["recommendation_count"]
-                or len(raw_recommendation_evidence) > 96
-            ):
-                return None
-            from .qc_workspace.canonical_result_store import (
-                customer_safe_projection_key,
-                keyed_ref,
-            )
-
-            safe_recommendation_evidence: list[dict[str, Any]] = []
-            seen_indexes: set[tuple[int, int]] = set()
-            allowed_execution_states = {"specific", "generic", "missing", "unknown"}
-            allowed_source_types = {
-                "consultation_record",
-                "daily_course_record",
-                "senior_course_record",
-                "inpat_drug_order",
-                "inpat_nondrug_order",
-                "exam_master",
-                "exam_item_report",
-                "labtest_master",
-                "labtest_item_report",
-                "surgery_record",
-            }
-            # 某些原生执行结果已提前把文书ID投影为 src_ref，但仍保留
-            # source_document_ids 作为内部完整性索引。按证据条目形状识别
-            # 这种受控公开形态，避免把 opinion_evidence 误当成 opinion_refs。
-            evidence_shape_is_public = bool(
-                isinstance(raw_recommendation_evidence, list)
-                and any(
-                    isinstance(item, Mapping)
-                    and (
-                        "opinion_evidence" in item
-                        or "execution_evidence" in item
-                    )
-                    for item in raw_recommendation_evidence
-                )
-            )
-            is_public_recommendation_evidence = (
-                is_public_projection or evidence_shape_is_public
-            )
-            has_internal_evidence_item = any(
-                isinstance(item, Mapping)
-                and "opinion_evidence" not in item
-                and "execution_evidence" not in item
-                for item in raw_recommendation_evidence
-            )
-            projection_key = (
-                customer_safe_projection_key()
-                if not is_public_recommendation_evidence or has_internal_evidence_item
-                else ""
-            )
-
-            def project_refs(value: Any, *, public: bool) -> list[dict[str, str]] | None:
-                if not isinstance(value, list) or len(value) > 8:
-                    return None
-                projected: list[dict[str, str]] = []
-                seen_refs: set[tuple[str, str]] = set()
-                for ref in value:
-                    if not isinstance(ref, Mapping):
-                        return None
-                    if public:
-                        if set(ref) != {"source_type", "source_ref"}:
-                            return None
-                        source_type = str(ref.get("source_type") or "").strip()
-                        source_ref = str(ref.get("source_ref") or "").strip()
-                        if (
-                            source_type not in allowed_source_types
-                            or re.fullmatch(r"src_[0-9a-f]{24}", source_ref) is None
-                        ):
-                            return None
-                        key = (source_type, source_ref)
-                        if key in seen_refs:
-                            return None
-                        seen_refs.add(key)
-                        projected.append({"source_type": source_type, "source_ref": source_ref})
-                    else:
-                        if set(ref) != {"source_type", "source_document_id"}:
-                            return None
-                        source_type = str(ref.get("source_type") or "").strip()
-                        document_id = str(ref.get("source_document_id") or "").strip()
-                        if source_type not in allowed_source_types or not document_id or len(document_id) > 256:
-                            return None
-                        key = (source_type, document_id)
-                        if key in seen_refs:
-                            return None
-                        seen_refs.add(key)
-                        projected.append({
-                            "source_type": source_type,
-                            "source_ref": keyed_ref("src", document_id, hmac_key=projection_key),
-                        })
-                return projected
-
-            for expected_index, item in enumerate(raw_recommendation_evidence, start=1):
-                if not isinstance(item, Mapping):
-                    return None
-                # 真实病例可能在同一 facts 中混用两种受控引用格式；按条目识别，
-                # 不能用整批 evidence 的某一个条目决定其他条目的字段合同。
-                item_is_public = (
-                    "opinion_evidence" in item or "execution_evidence" in item
-                )
-                if item_is_public:
-                    expected_item_keys = {"episode_index", "recommendation_index", "execution_state", "opinion_evidence", "execution_evidence"}
-                    opinion_key, execution_key = "opinion_evidence", "execution_evidence"
-                else:
-                    expected_item_keys = {"episode_index", "recommendation_index", "execution_state", "opinion_refs", "execution_refs"}
-                    opinion_key, execution_key = "opinion_refs", "execution_refs"
-                if set(item) != expected_item_keys:
-                    return None
-                episode_index = item.get("episode_index")
-                recommendation_index = item.get("recommendation_index")
-                if (
-                    type(episode_index) is not int
-                    or not 1 <= episode_index <= raw["completed_opinion_episode_count"]
-                    or type(recommendation_index) is not int
-                    or recommendation_index != expected_index
-                    or item.get("execution_state") not in allowed_execution_states
-                ):
-                    return None
-                if (
-                    recommendation_results is not None
-                    and item["execution_state"]
-                    != recommendation_results[expected_index - 1]["execution_state"]
-                ):
-                    return None
-                index_key = (episode_index, recommendation_index)
-                if index_key in seen_indexes:
-                    return None
-                seen_indexes.add(index_key)
-                opinion_evidence = project_refs(item.get(opinion_key), public=item_is_public)
-                execution_evidence = project_refs(item.get(execution_key), public=item_is_public)
-                if opinion_evidence is None or execution_evidence is None:
-                    return None
-                safe_recommendation_evidence.append({
-                    "episode_index": episode_index,
-                    "recommendation_index": recommendation_index,
-                    "execution_state": item["execution_state"],
-                    "opinion_evidence": opinion_evidence,
-                    "execution_evidence": execution_evidence,
-                })
-            safe_facts["recommendation_evidence"] = safe_recommendation_evidence
-        return safe_facts
-    if rule_id == "LX0609-023":
-        missing_details = raw.get("missing_details")
-        source_document_ids = raw.get("source_document_ids")
-        if (
-            raw.get("failure_kind") != "consultation_execution_too_generic"
-            or raw.get("observed_expression") != "仅笼统记录已按会诊意见执行"
-            or missing_details != ["具体执行措施", "执行结果或后续安排"]
-            or not isinstance(source_document_ids, list)
-        ):
-            return None
-        return {
-            "failure_kind": "consultation_execution_too_generic",
-            "observed_expression": "仅笼统记录已按会诊意见执行",
-            "missing_details": list(missing_details),
-            "source_document_ids": [
-                value
-                for value in dict.fromkeys(source_document_ids)
-                if isinstance(value, str) and value.strip()
-            ][:8],
-        }
-    return None
 
 
 def _controlled_customer_findings(
@@ -5042,52 +4537,12 @@ def _customer_evidence_from_display_facts(
             if located:
                 return located
 
-    if rule_id in {"LX0609-020", "LX0609-023"}:
-        allowed_source_types = {
-            "consultation_record",
-            "daily_course_record",
-            "senior_course_record",
-            "inpat_drug_order",
-            "inpat_nondrug_order",
-            "exam_master",
-            "exam_item_report",
-            "labtest_master",
-            "labtest_item_report",
-            "surgery_record",
-        }
-        raw_refs = raw.get("source_document_refs")
-        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
-            located: list[dict[str, str]] = []
-            seen: set[tuple[str, str]] = set()
-            for item in raw_refs:
-                if not isinstance(item, Mapping):
-                    return []
-                source_type = str(item.get("source_type") or "").strip()
-                source_document_id = valid_document_id(
-                    item.get("source_document_id")
-                )
-                key = (source_type, source_document_id)
-                if source_type not in allowed_source_types or not source_document_id:
-                    return []
-                if key in seen:
-                    continue
-                seen.add(key)
-                located.append({
-                    "source_type": source_type,
-                    "source_document_id": source_document_id,
-                })
-            if located:
-                return located
-
     if rule_id not in {
         "LX0609-010",
         "LX0609-011",
         "LX0609-012",
         "LX0609-014",
         "LX0609-015",
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
         "LX0609-046",
         "LX0609-045",
     }:
@@ -5105,9 +4560,7 @@ def _customer_evidence_from_display_facts(
     # 这些来源行仅在显式存在 document_id 时进入此列表。类型无法可靠区分
     # 时统一按 document 交给病历对照页按 source_ref 精确解析，禁止猜测标题。
     source_type = (
-        "consultation_record"
-        if rule_id in {"LX0609-020", "LX0609-021", "LX0609-022"}
-        else "bloodtrans_record"
+        "bloodtrans_record"
         if rule_id in {"LX0609-045", "LX0609-046"}
         else "exam_master"
         if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012"}
@@ -5121,56 +4574,6 @@ def _customer_evidence_from_display_facts(
     ]
 
 
-def _customer_evidence_from_incomplete_consultation_facts(
-    *, rule_id: str, raw: Any
-) -> list[dict[str, str]]:
-    """不完整会诊事实仍保留显式文书证据，但绝不投影业务事实。"""
-
-    if rule_id not in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}:
-        return []
-    if not isinstance(raw, Mapping):
-        return []
-    allowed_source_types = {
-        "consultation_record",
-        "daily_course_record",
-        "senior_course_record",
-        "inpat_drug_order",
-        "inpat_nondrug_order",
-        "exam_master",
-        "exam_item_report",
-        "labtest_master",
-        "labtest_item_report",
-        "surgery_record",
-    }
-
-    def valid_document_id(value: Any) -> str:
-        candidate = str(value or "").strip()
-        return candidate if candidate and len(candidate) <= 256 and "\n" not in candidate and "\r" not in candidate else ""
-
-    refs = raw.get("source_document_refs")
-    if isinstance(refs, list):
-        rows: list[dict[str, str]] = []
-        seen: set[tuple[str, str]] = set()
-        for item in refs[:8]:
-            if not isinstance(item, Mapping):
-                continue
-            source_type = str(item.get("source_type") or "").strip()
-            document_id = valid_document_id(item.get("source_document_id"))
-            key = (source_type, document_id)
-            if source_type not in allowed_source_types or not document_id or key in seen:
-                continue
-            seen.add(key)
-            rows.append({"source_type": source_type, "source_document_id": document_id})
-        if rows:
-            return rows
-    raw_ids = raw.get("source_document_ids")
-    if not isinstance(raw_ids, list):
-        return []
-    return [
-        {"source_type": "consultation_record", "source_document_id": document_id}
-        for document_id in dict.fromkeys(valid_document_id(value) for value in raw_ids[:8])
-        if document_id
-    ]
 
 
 def _valid_customer_evidence_document_id(value: Any) -> str:
@@ -5555,21 +4958,10 @@ def _copy_native_customer_fields(
 ) -> dict[str, Any]:
     """原生结果不携带旧映射诊断，并保留程序/模型执行类型。"""
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
-    is_consultation_rule = wrapper_id in {
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-023",
-    }
-    consultation_facts_incomplete = False
-
+    finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(wrapper_id)
     def reject_invalid_display_facts() -> None:
         if wrapper_id == "LX0609-017":
             raise ValueError("invalid copy customer display facts")
-        if is_consultation_rule:
-            raise ValueError(
-                f"invalid consultation customer display facts [{wrapper_id}]"
-            )
         if wrapper_id == "LX0609-025":
             raise ValueError("lx0609_025_display_fact_status_mismatch")
         raise Luxian0609CustomerDisplayFactsError(wrapper_id)
@@ -5581,15 +4973,6 @@ def _copy_native_customer_fields(
     selected_metadata_mapping = (
         selected_metadata_raw if isinstance(selected_metadata_raw, Mapping) else {}
     )
-    consultation_invalid_reason = (
-        str(
-            selected.get("reason_code")
-            or selected_metadata_mapping.get("reason_code")
-            or "model_invalid_output"
-        )
-        if status == "technical_error"
-        else "model_invalid_output"
-    )
     top_level_display_facts = selected.get("customer_display_facts")
     metadata_display_facts = selected_metadata_mapping.get("customer_display_facts")
     supplied_display_facts = tuple(
@@ -5598,8 +4981,8 @@ def _copy_native_customer_fields(
         if candidate is not None
     )
 
-    def safe_executor_display_facts(raw: Any) -> dict[str, Any] | None:
-        safe_facts = validate_luxian_0609_executor_customer_display_facts(
+    def safe_executor_display_facts(raw: Any) -> tuple[dict[str, Any] | None, bool]:
+        validated_facts = validate_luxian_0609_executor_customer_display_facts(
             rule_id=wrapper_id,
             raw=raw,
         )
@@ -5608,43 +4991,25 @@ def _copy_native_customer_fields(
                 rule_id=wrapper_id,
                 raw=raw,
             )
-            if safe_facts is NotImplemented
-            else safe_facts
+            if validated_facts is NotImplemented
+            else validated_facts,
+            validated_facts is not NotImplemented,
         )
 
-    supplied_safe_facts = tuple(
+    supplied_fact_contracts = tuple(
         safe_executor_display_facts(supplied_facts)
         for supplied_facts in supplied_display_facts
     )
-    for supplied_facts, supplied_safe_facts_item in zip(
-        supplied_display_facts, supplied_safe_facts
+    supplied_safe_facts = tuple(item[0] for item in supplied_fact_contracts)
+    supplied_contracts_handled = tuple(item[1] for item in supplied_fact_contracts)
+    contract_failure = False
+    for supplied_facts, supplied_safe_facts_item, contract_handled in zip(
+        supplied_display_facts, supplied_safe_facts, supplied_contracts_handled
     ):
         if supplied_safe_facts_item is not None:
             continue
-        if is_consultation_rule:
-            consultation_facts_incomplete = True
-            compact = {
-                "keys": sorted(str(key) for key in supplied_facts)
-                if isinstance(supplied_facts, Mapping)
-                else [],
-                "episode_count": supplied_facts.get("episode_count")
-                if isinstance(supplied_facts, Mapping)
-                else None,
-                "document_count": supplied_facts.get("document_count")
-                if isinstance(supplied_facts, Mapping)
-                else None,
-                "source_document_ids_count": len(supplied_facts.get("source_document_ids") or [])
-                if isinstance(supplied_facts, Mapping)
-                else None,
-                "episode_results_count": len(supplied_facts.get("episode_results") or [])
-                if isinstance(supplied_facts, Mapping)
-                else None,
-            }
-            logger.warning(
-                "LX0609 consultation customer facts rejected: rule=%s facts=%s",
-                wrapper_id,
-                compact,
-            )
+        if contract_handled and finalizer_owns_facts:
+            contract_failure = True
             continue
         is_strict_010_contract = (
             wrapper_id == "LX0609-010"
@@ -5653,16 +5018,14 @@ def _copy_native_customer_fields(
             == "order_course_report_consistency"
         )
         if not is_strict_010_contract:
-            if is_consultation_rule:
-                consultation_facts_incomplete = True
-            else:
-                reject_invalid_display_facts()
+            reject_invalid_display_facts()
     if len(supplied_display_facts) == 2:
         if all(item is not None for item in supplied_safe_facts):
             if supplied_safe_facts[0] != supplied_safe_facts[1]:
-                reject_invalid_display_facts()
-        elif is_consultation_rule:
-            consultation_facts_incomplete = True
+                if finalizer_owns_facts and any(supplied_contracts_handled):
+                    contract_failure = True
+                else:
+                    reject_invalid_display_facts()
         elif not (
             wrapper_id == "LX0609-010"
             and all(isinstance(item, Mapping) for item in supplied_display_facts)
@@ -5670,7 +5033,10 @@ def _copy_native_customer_fields(
             and dict(supplied_display_facts[0])
             == dict(supplied_display_facts[1])
         ):
-            reject_invalid_display_facts()
+            if finalizer_owns_facts and any(supplied_contracts_handled):
+                contract_failure = True
+            else:
+                reject_invalid_display_facts()
     raw_display_facts = (
         top_level_display_facts
         if top_level_display_facts is not None
@@ -5679,8 +5045,6 @@ def _copy_native_customer_fields(
     safe_display_facts = (
         supplied_safe_facts[0] if supplied_safe_facts else None
     )
-    if is_consultation_rule and consultation_facts_incomplete:
-        status = "technical_error"
     _validate_transfusion_system_gap_fact_status(
         rule_id=wrapper_id,
         status=status,
@@ -5764,8 +5128,6 @@ def _copy_native_customer_fields(
         else "native_programmatic"
     )
     metadata["customer_rule_id"] = wrapper_id
-    if is_consultation_rule and consultation_facts_incomplete:
-        metadata["reason_code"] = consultation_invalid_reason
     result = {
         **_strip_sensitive(selected),
         "rule_id": wrapper_id,
@@ -5783,26 +5145,6 @@ def _copy_native_customer_fields(
         "trigger_decision": {},
         "postprocess_reason": str(metadata.get("reason_code") or ""),
     }
-    if is_consultation_rule and consultation_facts_incomplete:
-        result.update(
-            {
-                "status": "technical_error",
-                "is_compliant": None,
-                "findings": "质控执行未完成。",
-                "evidence": "本次执行未形成临床结论。",
-                "suggestion": "请在技术问题处理后重新评估。",
-                "reason_code": consultation_invalid_reason,
-                "postprocess_reason": consultation_invalid_reason,
-            }
-        )
-        for gap_key in (
-            "data_gap_details",
-            "missing_sources",
-            "missing_fields",
-            "customer_message",
-        ):
-            result.pop(gap_key, None)
-        result["criterion_results"] = []
     result.pop("customer_display_facts", None)
     if safe_display_facts:
         result["customer_display_facts"] = safe_display_facts
@@ -5813,17 +5155,14 @@ def _copy_native_customer_fields(
         ),
         copy_pair_evidence,
     )
-    if is_consultation_rule and consultation_facts_incomplete:
-        incomplete_evidence = _customer_evidence_from_incomplete_consultation_facts(
-            rule_id=wrapper_id,
-            raw=raw_display_facts,
-        )
-        customer_evidence = _merge_customer_evidence(
-            incomplete_evidence,
-            customer_evidence,
-        )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
+    if finalizer_owns_facts and raw_display_facts is not None:
+        result, _handled = finalize_luxian_0609_executor_customer_display_facts(
+            result=result,
+            raw_facts=raw_display_facts,
+            contract_failure=contract_failure,
+        )
     return result
 
 
@@ -5875,10 +5214,10 @@ def aggregate_luxian_0609_results(
         reduced_decisions=reduced_decisions,
     )
     display_facts_by_rule: dict[str, dict[str, Any]] = {}
+    raw_executor_display_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     raw_copy_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     raw_025_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     customer_evidence_by_rule: dict[str, list[dict[str, str]]] = {}
-    incomplete_consultation_rules: set[str] = set()
     wrapper_rule_ids = {
         _norm_id(item.get("rule_id") or item.get("rule_code"))
         for item in wrapper_rules
@@ -5890,11 +5229,12 @@ def aggregate_luxian_0609_results(
             or not isinstance(facts, Mapping)
         ):
             raise ValueError("invalid customer display facts scope")
-        safe_facts = validate_luxian_0609_executor_customer_display_facts(
+        validated_facts = validate_luxian_0609_executor_customer_display_facts(
             rule_id=rule_id,
             raw=facts,
         )
-        if safe_facts is NotImplemented:
+        safe_facts = validated_facts
+        if validated_facts is NotImplemented:
             safe_facts = safe_luxian_0609_customer_display_facts(
                 rule_id=rule_id,
                 raw=facts,
@@ -5910,35 +5250,20 @@ def aggregate_luxian_0609_results(
             )
         ):
             raise ValueError("invalid copy customer display facts")
-        if safe_facts is None and rule_id in {
-            "LX0609-020",
-            "LX0609-021",
-            "LX0609-022",
-            "LX0609-023",
-        }:
-            logger.warning(
-                "LX0609 consultation display facts rejected during aggregation: rule=%s facts=%s",
-                rule_id,
-                {
-                    "keys": sorted(str(key) for key in facts),
-                    "episode_count": facts.get("episode_count"),
-                    "document_count": facts.get("document_count"),
-                    "source_document_ids_count": len(facts.get("source_document_ids") or []),
-                    "episode_results_count": len(facts.get("episode_results") or []),
-                },
-            )
-            incomplete_consultation_rules.add(rule_id)
         is_strict_display_contract = rule_id == "LX0609-025" or (
             rule_id == "LX0609-010"
             and facts.get("requirement") == "order_course_report_consistency"
         )
+        finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(rule_id)
+        if finalizer_owns_facts:
+            raw_executor_display_facts_by_rule[rule_id] = facts
         if safe_facts is not None:
             display_facts_by_rule[rule_id] = safe_facts
             if rule_id == "LX0609-017":
                 raw_copy_facts_by_rule[rule_id] = facts
             if rule_id == "LX0609-025":
                 raw_025_facts_by_rule[rule_id] = facts
-        elif not is_strict_display_contract and rule_id not in incomplete_consultation_rules:
+        elif not finalizer_owns_facts and not is_strict_display_contract:
             raise Luxian0609CustomerDisplayFactsError(rule_id)
         elif rule_id == "LX0609-025":
             raw_025_facts_by_rule[rule_id] = facts
@@ -5946,11 +5271,6 @@ def aggregate_luxian_0609_results(
             rule_id=rule_id,
             raw=facts,
         )
-        if not customer_evidence and rule_id in incomplete_consultation_rules:
-            customer_evidence = _customer_evidence_from_incomplete_consultation_facts(
-                rule_id=rule_id,
-                raw=facts,
-            )
         if customer_evidence:
             customer_evidence_by_rule[rule_id] = customer_evidence
     result_by_rule: dict[str, list[dict[str, Any]]] = {}
@@ -5974,31 +5294,6 @@ def aggregate_luxian_0609_results(
                 safe_customer_display_facts=display_facts_by_rule.get(wrapper_id),
                 trace_sink=decision_trace_sink,
             )
-            if wrapper_id in incomplete_consultation_rules:
-                consultation_invalid_reason = (
-                    str(result.get("reason_code") or "model_invalid_output")
-                    if result.get("status") == "technical_error"
-                    else "model_invalid_output"
-                )
-                result.update(
-                    {
-                        "status": "technical_error",
-                        "result_status": "technical_error",
-                        "is_compliant": None,
-                        "findings": "质控执行未完成。",
-                        "evidence": "本次执行未形成临床结论。",
-                        "suggestion": "请在技术问题处理后重新评估。",
-                        "reason_code": consultation_invalid_reason,
-                    }
-                )
-                for gap_key in (
-                    "data_gap_details",
-                    "missing_sources",
-                    "missing_fields",
-                    "customer_message",
-                ):
-                    result.pop(gap_key, None)
-                result["criterion_results"] = []
             _validate_lx0609_025_fact_status(
                 rule_id=wrapper_id,
                 status=str(result.get("status") or ""),
@@ -6029,6 +5324,16 @@ def aggregate_luxian_0609_results(
                 )
                 if precise_findings:
                     result["findings"] = precise_findings
+            raw_executor_facts = raw_executor_display_facts_by_rule.get(wrapper_id)
+            if raw_executor_facts is not None:
+                result, handled = finalize_luxian_0609_executor_customer_display_facts(
+                    result=result,
+                    raw_facts=raw_executor_facts,
+                )
+                if handled and "customer_display_facts" not in result:
+                    result = finalize_luxian_0609_canonical_result(result)
+                    customer_results.append(result)
+                    continue
             # 051/067/071 的执行器已经精确绑定实际采用的文书；禁止再按整个来源
             # 回退，否则命中文书缺 ID 时可能误借同来源另一份记录的 ID。
             decision_evidence = (

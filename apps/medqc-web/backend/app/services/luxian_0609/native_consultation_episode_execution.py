@@ -18,6 +18,16 @@ import traceback
 import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
+from .consultation_decision_evidence import (
+    bind_document_material_rows,
+    is_material_binding_error,
+    material_refs_for_internal_refs,
+    select_consultation_rule_material_refs,
+)
+from .consultation_customer_projection import (
+    is_consultation_customer_rule,
+    safe_consultation_customer_display_facts,
+)
 from .decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
 from .evidence_material import (
     EvidenceMaterialTruncated,
@@ -376,6 +386,7 @@ class _CandidateDocument:
     observed_time: "_ObservedTime"
     text: str
     document_id: str = ""
+    material_ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -634,7 +645,30 @@ def _read_rows(
                 and not allow_truncated
             ):
                 raise _SourceGap()
-            rows = [dict(row) for row in evidence_materials.bounded_rows(source_key)]
+            material_rows = evidence_materials.bounded_rows(source_key)
+            # `material_ref` 只在本次请求内连接匿名 Prompt 引用与冻结材料。
+            # 它绝不进入 Prompt；只有完整且已由 snapshot 证明的来源才能产出。
+            if observation.completeness is SourceCompleteness.COMPLETE:
+                try:
+                    rows = bind_document_material_rows(
+                        source_key=source_key,
+                        rows=material_rows,
+                        materials=evidence_materials,
+                        snapshot=evidence_snapshot,
+                    )
+                except Exception as exc:
+                    # 会诊正文和后续病程会被交付为客户证据；材料与 snapshot
+                    # 无法证明同源时，绝不能继续用无引用行得出确定结论。
+                    if (
+                        is_material_binding_error(exc)
+                        and (source_key == _SOURCE_KEY or source_key in _COURSE_EXECUTION_SOURCE_KEYS)
+                    ):
+                        raise _SourceTechnical()
+                    if not is_material_binding_error(exc):
+                        raise
+                    rows = [dict(row) for row in material_rows]
+            else:
+                rows = [dict(row) for row in material_rows]
         else:
             rows = read_luxian_0609_native_source_rows(
                 source_key=source_key,
@@ -691,6 +725,7 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
         projected.append(({
             "ref": f"{_SOURCE_KEY}-{index}",
             "document_id": document_id,
+            "material_ref": _clean(row.get("_material_document_ref")),
             "time": _clean(row.get("record_time")),
             "text": text,
             "event_identity_mode": event_identity_mode,
@@ -1081,6 +1116,7 @@ def _candidate_documents(
                 observed_time=observed_time,
                 text=text,
                 document_id=_candidate_document_id(row=row, source_key=source_key),
+                material_ref=_clean(row.get("_material_document_ref")),
             ))
         if source_is_complete:
             source_complete_keys.add(source_key)
@@ -1119,6 +1155,7 @@ def _strong_explicit_consultation_statuses(
     selected: Sequence[str],
     documents: Sequence[Mapping[str, str]],
     execution_projection: _CandidateProjection | None,
+    decision_document_refs: dict[str, tuple[str, ...]] | None = None,
 ) -> dict[str, tuple[str, str]]:
     """只处理文书角色和结论均显式的高置信会诊场景。"""
 
@@ -1136,6 +1173,12 @@ def _strong_explicit_consultation_statuses(
             "LX0609-022" in selected
             and _explicit_embedded_opinion_documents(documents)
         ):
+            if decision_document_refs is not None:
+                decision_document_refs["LX0609-022"] = tuple(
+                    _clean(item.get("ref"))
+                    for item in documents
+                    if _clean(item.get("ref"))
+                )
             return {"LX0609-022": ("compliant", "requirement_satisfied")}
         return {}
 
@@ -1147,11 +1190,21 @@ def _strong_explicit_consultation_statuses(
             statuses["LX0609-021"] = ("non_compliant", "requirement_violated")
         elif _EXPLICIT_REQUEST_CLEAR_PATTERN.search(request_text):
             statuses["LX0609-021"] = ("compliant", "requirement_satisfied")
+        if "LX0609-021" in statuses and decision_document_refs is not None:
+            decision_document_refs["LX0609-021"] = tuple(
+                _clean(item.get("ref")) for item in request_documents
+                if _clean(item.get("ref"))
+            )
     if "LX0609-022" in selected:
         if _EXPLICIT_OPINION_VAGUE_PATTERN.search(opinion_text):
             statuses["LX0609-022"] = ("non_compliant", "requirement_violated")
         elif _EXPLICIT_OPINION_CLEAR_PATTERN.search(opinion_text):
             statuses["LX0609-022"] = ("compliant", "requirement_satisfied")
+        if "LX0609-022" in statuses and decision_document_refs is not None:
+            decision_document_refs["LX0609-022"] = tuple(
+                _clean(item.get("ref")) for item in opinion_documents
+                if _clean(item.get("ref"))
+            )
     if "LX0609-020" in selected and execution_projection is not None:
         opinion_time = _parse_observed_time(opinion_documents[0].get("time"))
 
@@ -1166,13 +1219,28 @@ def _strong_explicit_consultation_statuses(
                 and candidate.observed_time.value > opinion_time.value
             )
 
-        if any(
-            item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
-            and _is_after_opinion(item)
-            and _EXPLICIT_EXECUTION_TRACE_PATTERN.search(item.text)
+        explicit_execution_candidates = tuple(
+            item
             for item in execution_projection.candidates
-        ):
+            if (
+                item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+                and _is_after_opinion(item)
+                and _EXPLICIT_EXECUTION_TRACE_PATTERN.search(item.text)
+            )
+        )
+        if explicit_execution_candidates:
             statuses["LX0609-020"] = ("compliant", "requirement_satisfied")
+            if decision_document_refs is not None:
+                decision_document_refs["LX0609-020"] = tuple(
+                    dict.fromkeys((
+                        *(
+                            _clean(item.get("ref"))
+                            for item in opinion_documents
+                            if _clean(item.get("ref"))
+                        ),
+                        *(item.ref for item in explicit_execution_candidates),
+                    ))
+                )
         elif (
             not any(
                 item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
@@ -1183,6 +1251,14 @@ def _strong_explicit_consultation_statuses(
             )
         ):
             statuses["LX0609-020"] = ("non_compliant", "requirement_violated")
+            if decision_document_refs is not None:
+                # 缺失的是会诊后病程执行痕迹；实际可证明的决定性文书只有
+                # 对应会诊意见，不能借空来源或 snapshot ref 伪造执行证据。
+                decision_document_refs["LX0609-020"] = tuple(
+                    _clean(item.get("ref"))
+                    for item in opinion_documents
+                    if _clean(item.get("ref"))
+                )
     return statuses
 
 
@@ -2810,23 +2886,28 @@ def _result(
     return result
 
 
+def _safe_customer_display_facts(
+    raw_facts: Sequence[tuple[str, Mapping[str, Any]]],
+) -> tuple[tuple[tuple[str, Mapping[str, Any]], ...], frozenset[str]]:
+    """客户事实只经声明式投影输出；单规则合同异常就地技术失败。"""
+
+    safe_facts: list[tuple[str, Mapping[str, Any]]] = []
+    invalid_rule_ids: set[str] = set()
+    for rule_id, raw in raw_facts:
+        if not is_consultation_customer_rule(rule_id):
+            invalid_rule_ids.add(rule_id)
+        elif (safe := safe_consultation_customer_display_facts(rule_id=rule_id, raw=raw)) is None:
+            invalid_rule_ids.add(rule_id)
+        else:
+            safe_facts.append((rule_id, safe))
+    return tuple(safe_facts), frozenset(invalid_rule_ids)
+
+
 def _decision(
     *, rule_id: str, status: str, reason_code: str,
     snapshot: Luxian0609EvidenceSnapshot,
+    fact_refs: Sequence[str] = (),
 ) -> RuleDecision:
-    source_keys = {_SOURCE_KEY}
-    if rule_id in {"LX0609-020", "LX0609-023"}:
-        source_keys.update({
-            _STAY_ADMISSION_SOURCE_KEY,
-            _STAY_DISCHARGE_SOURCE_KEY,
-            _STAY_HORIZON_SOURCE_KEY,
-            *_SNAPSHOT_EXECUTION_SOURCE_KEYS,
-        })
-    refs = tuple(
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in snapshot.observations
-        if observation.source_key in source_keys
-    )
     if status == "compliant":
         dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.SATISFIED)
     elif status == "non_compliant":
@@ -2847,7 +2928,7 @@ def _decision(
         evidence_state=evidence_state,
         qc_direction=direction,
         reason_code=reason_code,
-        fact_refs=refs,
+        fact_refs=tuple(dict.fromkeys(str(reference) for reference in fact_refs if reference)),
         evaluator_version=_EVALUATOR_VERSION,
     )
 
@@ -2858,6 +2939,7 @@ def _finish(
     total_tokens: int = 0, api_time: float = 0.0,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     decision_rule_ids: frozenset[str] = frozenset(),
+    fact_refs_by_rule: Mapping[str, Sequence[str]] | None = None,
 ) -> NativeConsultationEpisodeExecutionResult:
     decisions = tuple(
         _decision(
@@ -2865,6 +2947,7 @@ def _finish(
             status=status,
             reason_code=reason_code,
             snapshot=evidence_snapshot,
+            fact_refs=(fact_refs_by_rule or {}).get(rule_id, ()),
         )
         for rule_id in selected
         if rule_id in decision_rule_ids and evidence_snapshot is not None
@@ -2937,6 +3020,7 @@ def _finish_explicit_statuses(
     execution_projection: _CandidateProjection | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None,
     decision_rule_ids: frozenset[str],
+    explicit_decision_document_refs: Mapping[str, Sequence[str]],
 ) -> NativeConsultationEpisodeExecutionResult:
     results = []
     for rule_id in selected:
@@ -2952,16 +3036,44 @@ def _finish_explicit_statuses(
         item["metadata"]["executor_type"] = "program"
         if rule_id not in decision_rule_ids:
             results.append(item)
-    decisions = tuple(
-        _decision(
-            rule_id=rule_id,
-            status=statuses[rule_id][0],
-            reason_code=statuses[rule_id][1],
-            snapshot=evidence_snapshot,
-        )
-        for rule_id in selected
-        if rule_id in decision_rule_ids and evidence_snapshot is not None
-    )
+    decisions: list[RuleDecision] = []
+    material_binding_failure_rule_ids: set[str] = set()
+    if evidence_snapshot is not None:
+        for rule_id in selected:
+            if rule_id not in decision_rule_ids:
+                continue
+            try:
+                fact_refs = material_refs_for_internal_refs(
+                    documents=documents,
+                    candidates=(
+                        execution_projection.candidates
+                        if execution_projection is not None
+                        else ()
+                    ),
+                    internal_refs=explicit_decision_document_refs.get(rule_id, ()),
+                )
+            except Exception as exc:
+                if not is_material_binding_error(exc):
+                    raise
+                material_binding_failure_rule_ids.add(rule_id)
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        status="technical_error",
+                        reason_code="snapshot_mismatch",
+                        snapshot=evidence_snapshot,
+                    )
+                )
+                continue
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    status=statuses[rule_id][0],
+                    reason_code=statuses[rule_id][1],
+                    snapshot=evidence_snapshot,
+                    fact_refs=fact_refs,
+                )
+            )
     source_document_ids = tuple(
         dict.fromkeys(
             document_id
@@ -3015,11 +3127,47 @@ def _finish_explicit_statuses(
                 else 0
             )
         display_facts.append((rule_id, facts))
+    safe_display_facts, invalid_fact_rule_ids = _safe_customer_display_facts(
+        tuple(
+            item
+            for item in display_facts
+            if item[0] not in material_binding_failure_rule_ids
+        )
+    )
+    if invalid_fact_rule_ids:
+        results = [
+            (
+                _result(
+                    rule_id=item["rule_id"],
+                    status="technical_error",
+                    reason_code="model_invalid_output",
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                )
+                if item["rule_id"] in invalid_fact_rule_ids
+                else item
+            )
+            for item in results
+        ]
+        decisions = [
+            (
+                _decision(
+                    rule_id=item.rule_id,
+                    status="technical_error",
+                    reason_code="model_invalid_output",
+                    snapshot=evidence_snapshot,
+                )
+                if item.rule_id in invalid_fact_rule_ids
+                else item
+            )
+            for item in decisions
+        ]
     return NativeConsultationEpisodeExecutionResult(
         results=tuple(results),
         planned_rule_ids=selected,
-        decisions=decisions,
-        customer_display_facts=tuple(display_facts),
+        decisions=tuple(decisions),
+        customer_display_facts=safe_display_facts,
     )
 
 
@@ -3057,12 +3205,51 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     if not documents:
         return _finish(selected=selected, status="not_applicable", reason_code="trigger_absent_complete", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     if _documents_are_explicit_non_target(documents):
+        try:
+            non_target_refs = material_refs_for_internal_refs(
+                documents=documents,
+                candidates=(),
+                internal_refs=tuple(
+                    _clean(document.get("ref"))
+                    for document in documents
+                    if _clean(document.get("ref"))
+                ),
+            )
+        except Exception as exc:
+            if not is_material_binding_error(exc):
+                raise
+            return NativeConsultationEpisodeExecutionResult(
+                results=tuple(
+                    _result(
+                        rule_id=rule_id,
+                        status="not_applicable",
+                        reason_code="eligibility_not_met",
+                        prompt_tokens=0,
+                        completion_tokens=0,
+                        total_tokens=0,
+                    )
+                    for rule_id in selected
+                    if rule_id not in typed
+                ),
+                planned_rule_ids=selected,
+                decisions=tuple(
+                    _decision(
+                        rule_id=rule_id,
+                        status="technical_error",
+                        reason_code="snapshot_mismatch",
+                        snapshot=evidence_snapshot,
+                    )
+                    for rule_id in selected
+                    if rule_id in typed and evidence_snapshot is not None
+                ),
+            )
         return _finish(
             selected=selected,
             status="not_applicable",
             reason_code="eligibility_not_met",
             evidence_snapshot=evidence_snapshot,
             decision_rule_ids=typed,
+            fact_refs_by_rule={rule_id: non_target_refs for rule_id in typed},
         )
     if stage_two_rule_ids:
         try:
@@ -3098,10 +3285,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             evidence_snapshot=evidence_snapshot,
             stay_window=execution_stay_window,
         )
+    explicit_decision_document_refs: dict[str, tuple[str, ...]] = {}
     explicit_statuses = _strong_explicit_consultation_statuses(
         selected=selected,
         documents=documents,
         execution_projection=explicit_execution_projection,
+        decision_document_refs=explicit_decision_document_refs,
     )
     if all(rule_id in explicit_statuses for rule_id in selected):
         return _finish_explicit_statuses(
@@ -3111,6 +3300,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             execution_projection=explicit_execution_projection,
             evidence_snapshot=evidence_snapshot,
             decision_rule_ids=typed,
+            explicit_decision_document_refs=explicit_decision_document_refs,
         )
     explicit_022_documents = (
         _explicit_embedded_opinion_documents(documents)
@@ -3488,16 +3678,49 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         if rule_id == "LX0609-022" and explicit_022_documents:
             item["metadata"]["executor_type"] = "program"
         results.append(item)
-    decisions = tuple(
-        _decision(
-            rule_id=rule_id,
-            status=statuses[rule_id][0],
-            reason_code=statuses[rule_id][1],
-            snapshot=evidence_snapshot,
-        )
-        for rule_id in selected
-        if rule_id in typed and evidence_snapshot is not None
-    )
+    decisions: list[RuleDecision] = []
+    material_binding_failure_rule_ids: set[str] = set()
+    if evidence_snapshot is not None:
+        for rule_id in selected:
+            if rule_id not in typed:
+                continue
+            try:
+                fact_refs = select_consultation_rule_material_refs(
+                    rule_id=rule_id,
+                    status=statuses[rule_id][0],
+                    reason_code=statuses[rule_id][1],
+                    documents=documents,
+                    episodes=episodes,
+                    completed_recommendations=completed_recommendations,
+                    assessments=execution_assessments,
+                    candidates=(
+                        execution_candidate_projection.candidates
+                        if execution_candidate_projection is not None
+                        else ()
+                    ),
+                )
+            except Exception as exc:
+                if not is_material_binding_error(exc):
+                    raise
+                material_binding_failure_rule_ids.add(rule_id)
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        status="technical_error",
+                        reason_code="snapshot_mismatch",
+                        snapshot=evidence_snapshot,
+                    )
+                )
+                continue
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    status=statuses[rule_id][0],
+                    reason_code=statuses[rule_id][1],
+                    snapshot=evidence_snapshot,
+                    fact_refs=fact_refs,
+                )
+            )
     display_facts: list[tuple[str, Mapping[str, Any]]] = []
     for rule_id in ("LX0609-021", "LX0609-022"):
         if rule_id in selected and rule_id in statuses:
@@ -3538,6 +3761,52 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 ),
             )
         )
+    safe_display_facts, invalid_fact_rule_ids = _safe_customer_display_facts(
+        tuple(
+            item
+            for item in display_facts
+            if item[0] not in material_binding_failure_rule_ids
+        )
+    )
+    failed_rule_ids = material_binding_failure_rule_ids | set(invalid_fact_rule_ids)
+    if failed_rule_ids:
+        results = [
+            (
+                _result(
+                    rule_id=item["rule_id"],
+                    status="technical_error",
+                    reason_code=(
+                        "snapshot_mismatch"
+                        if item["rule_id"] in material_binding_failure_rule_ids
+                        else "model_invalid_output"
+                    ),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    link_diagnostics=link_diagnostics,
+                )
+                if item["rule_id"] in failed_rule_ids
+                else item
+            )
+            for item in results
+        ]
+        decisions = [
+            (
+                _decision(
+                    rule_id=item.rule_id,
+                    status="technical_error",
+                    reason_code=(
+                        "snapshot_mismatch"
+                        if item.rule_id in material_binding_failure_rule_ids
+                        else "model_invalid_output"
+                    ),
+                    snapshot=evidence_snapshot,
+                )
+                if item.rule_id in failed_rule_ids
+                else item
+            )
+            for item in decisions
+        ]
     diagnostic_semantic_snapshot = _build_diagnostic_semantic_snapshot(
         documents=documents,
         episodes=episodes,
@@ -3545,7 +3814,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     )
     return NativeConsultationEpisodeExecutionResult(
         results=tuple(item for item in results if item["rule_id"] not in typed), planned_rule_ids=selected,
-        decisions=decisions, customer_display_facts=tuple(display_facts),
+        decisions=tuple(decisions), customer_display_facts=safe_display_facts,
         diagnostic_semantic_snapshot=diagnostic_semantic_snapshot,
         llm_call_count=calls,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,

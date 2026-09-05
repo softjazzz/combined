@@ -81,6 +81,7 @@ _EXCERPT_FIELDS = (
 _TIME_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:?\d{2})?)?"
 )
+_CUSTOMER_SOURCE_REF_PATTERN = re.compile(r"src_[0-9a-f]{24}")
 
 
 def _text(value: Any) -> str:
@@ -89,6 +90,67 @@ def _text(value: Any) -> str:
 
 def _row_has_identity(row: Mapping[str, Any], document_id: str) -> bool:
     return any(_text(row.get(field)) == document_id for field in _IDENTITY_FIELDS)
+
+
+def project_selected_grouped_document_refs(
+    *,
+    raw_refs: Any,
+    public: bool,
+    allowed_source_types: frozenset[str],
+) -> list[dict[str, str]] | None:
+    """安全投影执行器已经选择的一组文书引用。
+
+    该公共边界只验证来源类型、去重和安全引用形状：公开引用原样透传，内部业务
+    文书 ID 仅在此处转换为既有 ``src_`` 引用。调用方负责自己的逐项业务合同，
+    因此本函数不按规则号解释事实、选择文书或拼装客户证据坐标。
+    """
+
+    if not isinstance(raw_refs, list) or len(raw_refs) > 8:
+        return None
+    projected: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    projection_key = ""
+    if not public:
+        # 复用既有客户安全引用机制；这里是公共投影边界，避免规则族自行处理
+        # 业务文书 ID 或把它泄漏给客户展示事实。
+        from app.services.qc_workspace.canonical_result_store import (
+            customer_safe_projection_key,
+        )
+
+        projection_key = customer_safe_projection_key()
+    for raw_ref in raw_refs:
+        if not isinstance(raw_ref, Mapping):
+            return None
+        if public:
+            if set(raw_ref) != {"source_type", "source_ref"}:
+                return None
+            source_type = _text(raw_ref.get("source_type"))
+            source_ref = _text(raw_ref.get("source_ref"))
+            if (
+                source_type not in allowed_source_types
+                or _CUSTOMER_SOURCE_REF_PATTERN.fullmatch(source_ref) is None
+            ):
+                return None
+        else:
+            if set(raw_ref) != {"source_type", "source_document_id"}:
+                return None
+            source_type = _text(raw_ref.get("source_type"))
+            document_id = _text(raw_ref.get("source_document_id"))
+            if (
+                source_type not in allowed_source_types
+                or not document_id
+                or len(document_id) > 256
+            ):
+                return None
+            from app.services.qc_workspace.canonical_result_store import keyed_ref
+
+            source_ref = keyed_ref("src", document_id, hmac_key=projection_key)
+        identity = (source_type, source_ref)
+        if identity in seen:
+            return None
+        seen.add(identity)
+        projected.append({"source_type": source_type, "source_ref": source_ref})
+    return projected
 
 
 def project_selected_document_evidence(

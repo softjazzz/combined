@@ -237,8 +237,9 @@ async def test_formal_unified_chain_freezes_explicit_022_with_locatable_evidence
         ("compliant", "requirement_satisfied")
     ]
     raw_facts = dict(context.customer_display_facts)["LX0609-022"]
-    assert raw_facts["source_document_ids"] == ["CONSULT-022-1"]
-    assert raw_facts["episode_results"][0]["source_document_id"] == "CONSULT-022-1"
+    assert "source_document_ids" not in raw_facts
+    assert "source_document_id" not in raw_facts["episode_results"][0]
+    assert len(context.reduced_decisions[0].fact_refs) == 1
     facts = delivered["results"][0]["customer_display_facts"]
     assert "source_document_ids" not in facts
     assert facts["episode_results"] == [
@@ -249,6 +250,10 @@ async def test_formal_unified_chain_freezes_explicit_022_with_locatable_evidence
             "document_title": "会诊记录单",
         }
     ]
+    assert [
+        (item["source_type"], item["source_document_id"])
+        for item in delivered["results"][0]["customer_evidence"]
+    ] == [("consultation_record", "CONSULT-022-1")]
     assert "sha" not in repr(facts).lower()
 
 
@@ -308,11 +313,12 @@ async def test_formal_unified_chain_freezes_mixed_022_episodes_and_prompt_usage(
     )
     assert delivered["executor_breakdown"] == {"llm": 1}
     raw_facts = dict(context.customer_display_facts)["LX0609-022"]
-    assert [item["source_document_id"] for item in raw_facts["episode_results"]] == [
-        "CONSULT-MIX-1",
-        "CONSULT-MIX-2",
-        "CONSULT-MIX-3",
-    ]
+    assert "source_document_ids" not in raw_facts
+    assert all(
+        "source_document_id" not in item
+        for item in raw_facts["episode_results"]
+    )
+    assert len(context.reduced_decisions[0].fact_refs) == 3
     facts = delivered["results"][0]["customer_display_facts"]
     assert "source_document_ids" not in facts
     assert facts["episode_results"] == [
@@ -335,6 +341,14 @@ async def test_formal_unified_chain_freezes_mixed_022_episodes_and_prompt_usage(
             "document_title": "会诊记录单",
         },
     ]
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in delivered["results"][0]["customer_evidence"]
+    } == {
+        ("consultation_record", "CONSULT-MIX-1"),
+        ("consultation_record", "CONSULT-MIX-2"),
+        ("consultation_record", "CONSULT-MIX-3"),
+    }
     rerun_client = RecordingClient(
         _episode_facts(
             _fact("consultation_record-1", opinion_state="clear"),
@@ -374,6 +388,41 @@ async def test_formal_unified_chain_empty_complete_consultation_is_not_applicabl
     assert [(item["status"], item["reason_code"]) for item in delivered["results"]] == [
         ("not_applicable", "trigger_absent_complete")
     ]
+
+
+@pytest.mark.asyncio
+async def test_formal_unified_chain_non_target_consultation_keeps_excluding_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _consultation_row(
+        "CONSULT-NON-TARGET-1",
+        "2026-07-02 09:30:00",
+        "术前麻醉风险评估。",
+    )
+    client = RecordingClient()
+
+    context, delivered = await _run_formal_chain(
+        monkeypatch,
+        selected_rule_ids=("LX0609-021",),
+        session=_session(
+            selected_rule_ids=("LX0609-021",),
+            rows_by_source={"consultation_record": [row]},
+        ),
+        client=client,
+    )
+
+    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
+        ("not_applicable", "eligibility_not_met")
+    ]
+    assert len(context.reduced_decisions[0].fact_refs) == 1
+    assert client.prompts == []
+    assert [(item["status"], item["reason_code"]) for item in delivered["results"]] == [
+        ("not_applicable", "eligibility_not_met")
+    ]
+    assert [
+        (item["source_type"], item["source_document_id"])
+        for item in delivered["results"][0]["customer_evidence"]
+    ] == [("consultation_record", "CONSULT-NON-TARGET-1")]
 
 
 @pytest.mark.asyncio
