@@ -272,27 +272,18 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
             state: sum(item["execution_state"] == state for item in recommendation_results)
             for state in ("specific", "generic", "missing")
         }
-        if sum(count_values.values()) > raw["recommendation_count"]:
+        if any(
+            raw[f"{state}_execution_count"] != count_values[state]
+            for state in ("specific", "generic", "missing")
+        ):
             return None
-        validated_counts = {
-            "specific_execution_count": count_values["specific"],
-            "generic_execution_count": count_values["generic"],
-            "missing_execution_count": count_values["missing"],
-        }
-    else:
-        validated_counts = {
-            key: raw[key]
-            for key in (
-                "specific_execution_count",
-                "generic_execution_count",
-                "missing_execution_count",
-            )
-        }
     safe_facts: dict[str, Any] = {
         "verification_kind": expected_kind,
         "completed_opinion_episode_count": raw["completed_opinion_episode_count"],
         "recommendation_count": raw["recommendation_count"],
-        **validated_counts,
+        "specific_execution_count": raw["specific_execution_count"],
+        "generic_execution_count": raw["generic_execution_count"],
+        "missing_execution_count": raw["missing_execution_count"],
         "relation_state": raw["relation_state"],
     }
     if recommendation_results is not None:
@@ -368,6 +359,15 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
                     "execution_evidence": execution_evidence,
                 }
             )
+        if any(
+            raw[f"{state}_execution_count"]
+            != sum(
+                item["execution_state"] == state
+                for item in safe_recommendation_evidence
+            )
+            for state in ("specific", "generic", "missing")
+        ):
+            return None
         safe_facts["recommendation_evidence"] = safe_recommendation_evidence
     return safe_facts
 

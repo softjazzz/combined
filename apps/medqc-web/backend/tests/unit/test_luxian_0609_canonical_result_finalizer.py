@@ -83,6 +83,50 @@ def test_finalizer_converts_invalid_executor_facts_to_isolated_technical_error()
     } & set(finalized)
 
 
+def test_finalizer_converts_conflicting_020_execution_counts_to_technical_error() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+    )
+
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-020",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "data_gap_details": {"reason_code": "unexpected_gap"},
+        },
+        raw_facts={
+            "verification_kind": "consultation_execution_relation_check",
+            "completed_opinion_episode_count": 1,
+            "recommendation_count": 2,
+            "specific_execution_count": 0,
+            "generic_execution_count": 0,
+            "missing_execution_count": 0,
+            "relation_state": "execution_missing",
+            "source_document_ids": ["CONSULT-1"],
+            "recommendation_results": [
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 1,
+                    "action_type": "test",
+                    "execution_state": "missing",
+                },
+                {
+                    "episode_index": 1,
+                    "recommendation_index": 2,
+                    "action_type": "medication",
+                    "execution_state": "missing",
+                },
+            ],
+        },
+    )
+
+    assert handled is True
+    assert finalized["status"] == "technical_error"
+    assert finalized["reason_code"] == "model_invalid_output"
+    assert "data_gap_details" not in finalized
+
+
 def test_finalizer_preserves_existing_technical_reason_for_invalid_executor_facts() -> None:
     from app.services.luxian_0609.canonical_result_finalizer import (
         finalize_luxian_0609_executor_customer_display_facts,

@@ -139,6 +139,128 @@ def test_020_projection_keeps_only_safe_recommendation_evidence_refs() -> None:
     assert "COURSE-1" not in str(facts)
 
 
+def test_020_projection_rejects_executor_counts_that_conflict_with_complete_results() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 2,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "execution_missing",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "action_type": "test",
+                "execution_state": "missing",
+            },
+            {
+                "episode_index": 1,
+                "recommendation_index": 2,
+                "action_type": "medication",
+                "execution_state": "missing",
+            },
+        ],
+    }
+
+    assert (
+        safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw)
+        is None
+    )
+
+
+def test_020_projection_keeps_unknown_out_of_missing_count() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "all_linked",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "action_type": "test",
+                "execution_state": "unknown",
+            }
+        ],
+    }
+
+    facts = safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw)
+
+    assert facts is not None
+    assert facts["missing_execution_count"] == 0
+
+
+def test_020_projection_accepts_empty_complete_recommendation_set() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 0,
+        "recommendation_count": 0,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "not_triggered",
+        "source_document_ids": [],
+        "recommendation_results": [],
+    }
+
+    assert safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw) is not None
+
+
+def test_020_projection_rejects_recommendation_result_overflow() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 97,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "all_linked",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_results": [
+            {
+                "episode_index": 1,
+                "recommendation_index": index,
+                "action_type": "test",
+                "execution_state": "unknown",
+            }
+            for index in range(1, 98)
+        ],
+    }
+
+    assert safe_consultation_customer_display_facts(rule_id="LX0609-020", raw=raw) is None
+
+
+def test_023_projection_rejects_executor_counts_that_conflict_with_complete_evidence() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "execution_record_absent",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_evidence": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "execution_state": "missing",
+                "opinion_refs": [],
+                "execution_refs": [],
+            }
+        ],
+    }
+
+    assert safe_consultation_customer_display_facts(rule_id="LX0609-023", raw=raw) is None
+
+
 def test_023_legacy_projection_strips_private_document_ids() -> None:
     raw = {
         "failure_kind": "consultation_execution_too_generic",
