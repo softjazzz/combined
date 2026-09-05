@@ -11,6 +11,9 @@ from app.services.luxian_0609 import native_consultation_episode_execution as ep
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
+)
 from app.services.luxian_0609.evidence_snapshot import (
     EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
     Luxian0609EvidenceSnapshot,
@@ -3785,7 +3788,7 @@ async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert {item["status"] for item in result.results} == {"technical_error"}
     assert {item["metadata"]["reason_code"] for item in result.results} == {
         "model_invalid_output"
     }
@@ -4003,6 +4006,32 @@ async def test_020_023_without_authoritative_stay_window_is_data_gap_without_llm
     assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
     assert result.llm_call_count == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_020_023_missing_llm_client_is_technical_error():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+    })
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "technical_error", "technical_error",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "model_transport_error", "model_transport_error",
+    ]
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -4372,7 +4401,7 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
             "technical_error",
             "model_transport_error",
         ),
-        ("not-json", "uncertain", "model_invalid_output"),
+        ("not-json", "technical_error", "model_invalid_output"),
     ):
         client = _PlannedStageClient(
             _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
@@ -4395,8 +4424,8 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
 
 
 @pytest.mark.asyncio
-async def test_020_023_semantic_contract_failure_keeps_typed_decision_uncertain():
-    """二阶段契约不完整时，绑定层不得把 020/023 降成技术错误。"""
+async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_error():
+    """二阶段模型合同非法时，绑定层必须保留技术错误。"""
 
     session = _window_session(rows_by_source={
         "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
@@ -4420,8 +4449,8 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_uncertain(
     )
 
     assert [item.reason_code for item in result.decisions] == [
-        "semantic_output_unknown",
-        "semantic_output_unknown",
+        "model_invalid_output",
+        "model_invalid_output",
     ]
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
@@ -4429,10 +4458,24 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_uncertain(
         snapshot=session.snapshot,
     )
     assert [item.final_state.value for item in reduced] == [
-        "evaluation_unknown",
-        "evaluation_unknown",
+        "technical_error",
+        "technical_error",
     ]
-    assert all(item.reason_code == "semantic_output_unknown" for item in reduced)
+    assert all(item.reason_code == "model_invalid_output" for item in reduced)
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-020"}, {"rule_id": "LX0609-023"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )
+    assert [(item["status"], item["reason_code"]) for item in canonical] == [
+        ("technical_error", "model_invalid_output"),
+        ("technical_error", "model_invalid_output"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -4475,7 +4518,7 @@ async def test_020_023_rejects_nested_stage_two_reference_values_as_technical_er
     )
 
     assert [item["status"] for item in result.results] == [
-        "uncertain", "compliant", "compliant", "uncertain",
+        "technical_error", "compliant", "compliant", "technical_error",
     ]
     assert [item["metadata"]["reason_code"] for item in result.results] == [
         "model_invalid_output", "requirement_satisfied", "requirement_satisfied", "model_invalid_output",

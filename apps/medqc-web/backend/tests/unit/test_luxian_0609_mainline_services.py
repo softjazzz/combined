@@ -1497,6 +1497,195 @@ async def test_consultation_episode_typed_decisions_replace_raw_results(
 
 
 @pytest.mark.asyncio
+async def test_consultation_invalid_model_output_survives_prepare_binding_and_aggregate(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-020", "LX0609-023")
+    rows_by_source = {
+        "consultation_record": [
+            {
+                "document_id": "consultation-record-001",
+                "document_title": "会诊记录",
+                "record_time": "2026-07-02 09:00:00",
+                "record_content": "申请会诊协助诊治。会诊意见：建议复查血常规。",
+            }
+        ],
+        "inpat_registration": [
+            {"admission_datetime": "2026-07-01 08:00:00"},
+        ],
+        "inpat_registration.discharge_horizon": [
+            {"discharge_datetime": "2026-07-03 08:00:00"},
+        ],
+    }
+
+    def read(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=rows_by_source.get(kwargs["source_key"], []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+        created_at="2026-09-05T12:00:00+08:00",
+        evaluation_as_of_date="2026-07-05",
+        row_reader=read,
+        additional_source_keys=("consultation_record",),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: session,
+    )
+    class InvalidModelClient:
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        async def generate(self, prompt: str, **_kwargs: object) -> dict[str, str]:
+            self.prompts.append(prompt)
+            return {"content": "not-json"}
+
+    client = InvalidModelClient()
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=client,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED=True,
+            LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+        evaluation_as_of_date="2026-07-05",
+    )
+
+    assert executable == []
+    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
+        ("technical_error", "model_invalid_output"),
+        ("technical_error", "model_invalid_output"),
+    ]
+    assert len(client.prompts) == 1
+    assert context.native_llm_call_count == 1
+    orchestrated = luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []},
+        context=context,
+        visit_id="private-visit",
+        model_name="test-model",
+        evidence_payload={},
+    )
+    assert [(item["status"], item["reason_code"]) for item in orchestrated["results"]] == [
+        ("technical_error", "model_invalid_output"),
+        ("technical_error", "model_invalid_output"),
+    ]
+    assert all("data_gap_details" not in item for item in orchestrated["results"])
+    assert all(item["criterion_results"] == [] for item in orchestrated["results"])
+
+
+@pytest.mark.asyncio
+async def test_executor_contract_stub_projection_keeps_invalid_display_facts_technical(
+    monkeypatch,
+) -> None:
+    """仅冻结非法展示 facts 的聚合投影；模型合同回归见上一测试。"""
+
+    selected = ("LX0609-020", "LX0609-023")
+
+    def read(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+        created_at="2026-09-05T12:00:00+08:00",
+        row_reader=read,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: session,
+    )
+
+    async def invalid_display_facts(**kwargs):
+        snapshot = kwargs["evidence_snapshot"]
+        return NativeConsultationEpisodeExecutionResult(
+            results=(),
+            planned_rule_ids=selected,
+            decisions=tuple(
+                RuleDecision(
+                    rule_id=rule_id,
+                    snapshot_hash=snapshot.snapshot_hash,
+                    applicability=ApplicabilityState.ERROR,
+                    evidence_state=EvidenceState.TECHNICAL_ERROR,
+                    qc_direction=QcDirection.UNKNOWN,
+                    reason_code="model_invalid_output",
+                    fact_refs=(),
+                    evaluator_version="test-consultation-stub-v1",
+                )
+                for rule_id in selected
+            ),
+            customer_display_facts=tuple(
+                (rule_id, {"invalid_model_contract": True})
+                for rule_id in selected
+            ),
+        )
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_consultation_episode_rules",
+        invalid_display_facts,
+    )
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED=True,
+            LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    orchestrated = luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []},
+        context=context,
+        visit_id="private-visit",
+        model_name="test-model",
+        evidence_payload=None,
+    )
+    assert [(item["status"], item["reason_code"]) for item in orchestrated["results"]] == [
+        ("technical_error", "model_invalid_output"),
+        ("technical_error", "model_invalid_output"),
+    ]
+    assert all("data_gap_details" not in item for item in orchestrated["results"])
+    assert all(item["criterion_results"] == [] for item in orchestrated["results"])
+
+
+@pytest.mark.asyncio
 async def test_tumor_and_course_admission_typed_flags_reach_unified_reducer(
     monkeypatch,
 ) -> None:

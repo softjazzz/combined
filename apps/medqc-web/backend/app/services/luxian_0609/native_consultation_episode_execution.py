@@ -2902,20 +2902,7 @@ def _finish_statuses(
                 _decision(
                     rule_id=rule_id,
                     status=status,
-                    # 020/023 的语义输出不完整属于可交付的
-                    # evaluation_unknown。保留普通结果的
-                    # model_invalid_output 原因，但 typed decision 必须使用
-                    # reducer 合同允许的 unknown 原因，避免被绑定层误判为
-                    # decision_contract_violation。
-                    reason_code=(
-                        "semantic_output_unknown"
-                        if (
-                            rule_id in {"LX0609-020", "LX0609-023"}
-                            and status == "evaluation_unknown"
-                            and reason_code == "model_invalid_output"
-                        )
-                        else reason_code
-                    ),
+                    reason_code=reason_code,
                     snapshot=evidence_snapshot,
                 )
             )
@@ -2969,15 +2956,7 @@ def _finish_explicit_statuses(
         _decision(
             rule_id=rule_id,
             status=statuses[rule_id][0],
-            reason_code=(
-                "semantic_output_unknown"
-                if (
-                    rule_id in {"LX0609-020", "LX0609-023"}
-                    and statuses[rule_id][0] == "evaluation_unknown"
-                    and statuses[rule_id][1] == "model_invalid_output"
-                )
-                else statuses[rule_id][1]
-            ),
+            reason_code=statuses[rule_id][1],
             snapshot=evidence_snapshot,
         )
         for rule_id in selected
@@ -3139,7 +3118,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         else ()
     )
     if llm_client is None:
-        return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+        return _finish(selected=selected, status="technical_error", reason_code="model_transport_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     calls = 1
     prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
@@ -3156,14 +3135,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     except _SemanticUnresolved:
         return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticInvalid:
-        # 模型结构化输出无效属于语义不可判定，不应把 020/023 阻断为
-        # 技术错误；对外投影为 uncertain，并保留 model_invalid_output
-        # 原因码及证据快照。021/022 仍沿用旧技术错误语义。
         invalid_statuses = {
-            rule_id: (
-                "evaluation_unknown" if rule_id in stage_two_rule_ids else "technical_error",
-                "model_invalid_output",
-            )
+            rule_id: ("technical_error", "model_invalid_output")
             for rule_id in selected
         }
         return _finish_statuses(
@@ -3214,7 +3187,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             except _SemanticInvalid:
                 completed_recommendations = ()
                 for rule_id in stage_two_rule_ids:
-                    statuses[rule_id] = ("evaluation_unknown", "model_invalid_output")
+                    statuses[rule_id] = ("technical_error", "model_invalid_output")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
             preliminary = _execution_outcome(
                 "LX0609-020",
@@ -3454,7 +3427,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         except _SemanticInvalid:
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = (
-                                    "evaluation_unknown",
+                                    "technical_error",
                                     "model_invalid_output",
                                 )
                         except Exception as error:
@@ -3519,15 +3492,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         _decision(
             rule_id=rule_id,
             status=statuses[rule_id][0],
-            reason_code=(
-                "semantic_output_unknown"
-                if (
-                    rule_id in {"LX0609-020", "LX0609-023"}
-                    and statuses[rule_id][0] == "evaluation_unknown"
-                    and statuses[rule_id][1] == "model_invalid_output"
-                )
-                else statuses[rule_id][1]
-            ),
+            reason_code=statuses[rule_id][1],
             snapshot=evidence_snapshot,
         )
         for rule_id in selected

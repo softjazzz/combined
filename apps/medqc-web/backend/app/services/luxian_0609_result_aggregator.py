@@ -5609,6 +5609,15 @@ def _copy_native_customer_fields(
     selected_metadata_mapping = (
         selected_metadata_raw if isinstance(selected_metadata_raw, Mapping) else {}
     )
+    consultation_invalid_reason = (
+        str(
+            selected.get("reason_code")
+            or selected_metadata_mapping.get("reason_code")
+            or "model_invalid_output"
+        )
+        if status == "technical_error"
+        else "model_invalid_output"
+    )
     top_level_display_facts = selected.get("customer_display_facts")
     metadata_display_facts = selected_metadata_mapping.get("customer_display_facts")
     supplied_display_facts = tuple(
@@ -5687,7 +5696,7 @@ def _copy_native_customer_fields(
         supplied_safe_facts[0] if supplied_safe_facts else None
     )
     if is_consultation_rule and consultation_facts_incomplete:
-        status = "data_gap"
+        status = "technical_error"
     _validate_transfusion_system_gap_fact_status(
         rule_id=wrapper_id,
         status=status,
@@ -5772,7 +5781,7 @@ def _copy_native_customer_fields(
     )
     metadata["customer_rule_id"] = wrapper_id
     if is_consultation_rule and consultation_facts_incomplete:
-        metadata["reason_code"] = "required_field_missing"
+        metadata["reason_code"] = consultation_invalid_reason
     result = {
         **_strip_sensitive(selected),
         "rule_id": wrapper_id,
@@ -5793,15 +5802,23 @@ def _copy_native_customer_fields(
     if is_consultation_rule and consultation_facts_incomplete:
         result.update(
             {
-                "status": "data_gap",
+                "status": "technical_error",
                 "is_compliant": None,
-                "findings": "已读取会诊相关资料，但客户展示事实不完整，暂时无法完成本项质控。",
-                "evidence": "已保留可识别的会诊文书证据，未将不完整事实作为确定结论。",
-                "suggestion": "请补充完整会诊事实后重新评估。",
-                "reason_code": "required_field_missing",
-                "postprocess_reason": "required_field_missing",
+                "findings": "质控执行未完成。",
+                "evidence": "本次执行未形成临床结论。",
+                "suggestion": "请在技术问题处理后重新评估。",
+                "reason_code": consultation_invalid_reason,
+                "postprocess_reason": consultation_invalid_reason,
             }
         )
+        for gap_key in (
+            "data_gap_details",
+            "missing_sources",
+            "missing_fields",
+            "customer_message",
+        ):
+            result.pop(gap_key, None)
+        result["criterion_results"] = []
     result.pop("customer_display_facts", None)
     if safe_display_facts:
         result["customer_display_facts"] = safe_display_facts
@@ -5969,17 +5986,30 @@ def aggregate_luxian_0609_results(
                 trace_sink=decision_trace_sink,
             )
             if wrapper_id in incomplete_consultation_rules:
+                consultation_invalid_reason = (
+                    str(result.get("reason_code") or "model_invalid_output")
+                    if result.get("status") == "technical_error"
+                    else "model_invalid_output"
+                )
                 result.update(
                     {
-                        "status": "data_gap",
-                        "result_status": "data_gap",
+                        "status": "technical_error",
+                        "result_status": "technical_error",
                         "is_compliant": None,
-                        "findings": "已读取会诊相关资料，但客户展示事实不完整，暂时无法完成本项质控。",
-                        "evidence": "已保留可识别的会诊文书证据，未将不完整事实作为确定结论。",
-                        "suggestion": "请补充完整会诊事实后重新评估。",
-                        "reason_code": "required_field_missing",
+                        "findings": "质控执行未完成。",
+                        "evidence": "本次执行未形成临床结论。",
+                        "suggestion": "请在技术问题处理后重新评估。",
+                        "reason_code": consultation_invalid_reason,
                     }
                 )
+                for gap_key in (
+                    "data_gap_details",
+                    "missing_sources",
+                    "missing_fields",
+                    "customer_message",
+                ):
+                    result.pop(gap_key, None)
+                result["criterion_results"] = []
             _validate_lx0609_025_fact_status(
                 rule_id=wrapper_id,
                 status=str(result.get("status") or ""),

@@ -1911,7 +1911,7 @@ def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
         ),
     ],
 )
-def test_consultation_customer_facts_incomplete_yield_data_gap_with_evidence(
+def test_invalid_consultation_customer_facts_yield_technical_error_with_evidence(
     rule_id, facts
 ):
     result = aggregate_luxian_0609_results(
@@ -1921,11 +1921,34 @@ def test_consultation_customer_facts_incomplete_yield_data_gap_with_evidence(
         customer_display_facts=((rule_id, facts),),
     )[0]
 
-    assert result["status"] == "data_gap"
+    assert result["status"] == "technical_error"
     assert result["is_compliant"] is None
-    assert result["reason_code"] == "required_field_missing"
+    assert result["reason_code"] == "model_invalid_output"
     assert result["customer_evidence"]
     assert "PRIVATE_UNKNOWN" not in repr(result)
+
+    technical = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash="a" * 64,
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            fact_refs=("b" * 64,),
+            evaluator_version="aggregator-test-v1",
+        )
+    )
+    technical_result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[],
+        reduced_decisions=(technical,),
+        customer_display_facts=((rule_id, facts),),
+    )[0]
+    assert technical_result["status"] == "technical_error"
+    assert technical_result["reason_code"] == "snapshot_mismatch"
+    assert "data_gap_details" not in technical_result
+    assert technical_result["criterion_results"] == []
 
 
 @pytest.mark.parametrize(
@@ -4222,13 +4245,14 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
     assert "PRIVATE_" not in repr(result)
 
 
-def test_consultation_native_incomplete_facts_do_not_fail_task():
+def test_consultation_native_invalid_facts_are_technical_error():
     result = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-020", "name": "LX0609-020"}],
         execution_results=[
             {
                 "rule_id": "LX0609-020",
-                "status": "non_compliant",
+                "status": "technical_error",
+                "reason_code": "snapshot_mismatch",
                 "findings": "规则要求未满足。",
                 "metadata": {
                     "execution_source": "lx0609_native",
@@ -4245,9 +4269,9 @@ def test_consultation_native_incomplete_facts_do_not_fail_task():
         ],
     )[0]
 
-    assert result["status"] == "data_gap"
+    assert result["status"] == "technical_error"
     assert result["is_compliant"] is None
-    assert result["reason_code"] == "required_field_missing"
+    assert result["reason_code"] == "snapshot_mismatch"
     assert [item["source_document_id"] for item in result["customer_evidence"]] == [
         "CONSULT-REQUEST",
         "CONSULT-OPINION",
