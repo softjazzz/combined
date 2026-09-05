@@ -527,6 +527,7 @@ async def prepare_luxian_0609_execution(
             decisions=tuple(native_rule_decisions),
             expected_rule_ids=typed_decision_rule_ids,
             snapshot=evidence_snapshot,
+            evidence_materials=evidence_materials,
         )
         native_results = [
             item

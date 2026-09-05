@@ -452,6 +452,7 @@ def _reduce_typed_basic(
         decisions=execution.decisions,
         expected_rule_ids=rule_ids,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     return execution, reduced
 
@@ -1812,6 +1813,7 @@ def test_006_explicit_senior_round_remains_zero_llm_call():
         decisions=execution.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
@@ -1953,6 +1955,7 @@ async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body
         decisions=execution.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert len(llm.prompts) == 1
@@ -2014,6 +2017,7 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
         decisions=execution.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert execution.llm_call_count == 1

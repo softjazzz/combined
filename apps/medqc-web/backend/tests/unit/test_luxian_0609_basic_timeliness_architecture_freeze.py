@@ -100,6 +100,7 @@ def test_basic_timeliness_family_canonical_behavior_is_frozen_without_sha_assert
         decisions=execution.decisions,
         expected_rule_ids=BASIC_TIMELINESS_RULE_IDS,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     selected = set(BASIC_TIMELINESS_RULE_IDS)
     wrapper_rules = [
@@ -140,7 +141,7 @@ def test_basic_timeliness_family_canonical_behavior_is_frozen_without_sha_assert
     assert [_evidence_coordinates(item) for item in results] == [
         [("admission_record", "ADM-1", "chief_complaint", "2026-06-01 09:00:00")],
         [
-            ("admission_record", "ADM-1", "chief_complaint", "2026-06-01 09:00:00"),
+            # 只交付执行器明确选中的目标文书，入院锚点仍保留在受控事实中。
             ("first_course_record", "FC-1", "record_content", "2026-06-01 10:00:00"),
         ],
         [],

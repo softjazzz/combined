@@ -32,22 +32,40 @@ def build_material_document_refs(
     source_key: str,
     rows: tuple[Mapping[str, Any], ...],
 ) -> tuple[str, ...]:
-    materials = sorted(canonical_source_evidence(dict(row)) for row in rows)
+    return tuple(
+        document_ref
+        for document_ref, _ in _build_material_document_rows(source_key, rows)
+    )
+
+
+def _build_material_document_rows(
+    source_key: str,
+    rows: tuple[Mapping[str, Any], ...],
+) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+    """按既有文书摘要顺序配对原始行，重复正文以 occurrence 区分。"""
+
+    materials = sorted(
+        ((canonical_source_evidence(dict(row)), row) for row in rows),
+        key=lambda item: item[0],
+    )
     occurrences: Counter[str] = Counter()
-    refs: list[str] = []
-    for material in materials:
+    document_rows: list[tuple[str, Mapping[str, Any]]] = []
+    for material, row in materials:
         ordinal = occurrences[material]
         occurrences[material] += 1
-        refs.append(
-            digest_source_evidence(
-                {
-                    "material": material,
-                    "occurrence": ordinal,
-                    "source_key": source_key,
-                }
+        document_rows.append(
+            (
+                digest_source_evidence(
+                    {
+                        "material": material,
+                        "occurrence": ordinal,
+                        "source_key": source_key,
+                    }
+                ),
+                row,
             )
         )
-    return tuple(refs)
+    return tuple(document_rows)
 
 
 def build_material_snapshot_ref(
@@ -141,6 +159,63 @@ class Luxian0609EvidenceMaterialStore:
 
     def rows(self, source_key: str) -> tuple[Mapping[str, object], ...]:
         return self.source(source_key).rows
+
+    def document_rows(
+        self,
+        source_key: str,
+        *,
+        snapshot: Luxian0609EvidenceSnapshot,
+    ) -> tuple[tuple[str, Mapping[str, object]], ...]:
+        """返回经同一 snapshot 证明的 ``(document_ref, 原始行)`` 对。"""
+
+        if not isinstance(snapshot, Luxian0609EvidenceSnapshot):
+            raise TypeError("snapshot must be Luxian0609EvidenceSnapshot")
+        if self.snapshot_hash != snapshot.snapshot_hash:
+            raise ValueError("material store does not match snapshot")
+        normalized = str(source_key or "").strip().lower()
+        if not isinstance(self._sources, Mapping):
+            raise ValueError("invalid material store")
+        material = self._sources.get(normalized)
+        if material is None:
+            raise EvidenceMaterialUnavailable()
+        if (
+            not isinstance(material, SnapshotSourceRows)
+            or material.source_key != normalized
+        ):
+            raise ValueError("invalid material source")
+        if material.truncated:
+            raise EvidenceMaterialTruncated()
+        observation = next(
+            (
+                item
+                for item in snapshot.observations
+                if item.source_key == normalized
+            ),
+            None,
+        )
+        if (
+            observation is None
+            or observation.query_state
+            not in (QueryStatus.AVAILABLE, QueryStatus.EMPTY)
+            or observation.completeness is not SourceCompleteness.COMPLETE
+            or observation.record_count != len(material.rows)
+        ):
+            raise ValueError("material source does not match snapshot")
+        document_rows = _build_material_document_rows(normalized, material.rows)
+        document_refs = tuple(item[0] for item in document_rows)
+        expected_snapshot_ref = build_material_snapshot_ref(
+            source_key=normalized,
+            query_version=observation.query_version,
+            query_state=observation.query_state,
+            completeness=observation.completeness,
+            document_refs=document_refs,
+        )
+        if (
+            observation.snapshot_ref != expected_snapshot_ref
+            or not set(document_refs).issubset(snapshot.document_refs)
+        ):
+            raise ValueError("material rows do not match snapshot identity")
+        return document_rows
 
     def bounded_rows(self, source_key: str) -> tuple[Mapping[str, object], ...]:
         """返回请求内有界前缀；是否可作否定结论必须另查 snapshot 完整性。"""

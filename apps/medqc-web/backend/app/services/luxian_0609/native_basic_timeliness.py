@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 import json
 import re
@@ -628,6 +628,37 @@ def _typed_basic_decisions(
         except Exception as exc:
             raise ValueError("snapshot material mismatch") from exc
 
+    document_rows_by_source: dict[str, tuple[tuple[str, Mapping[str, object]], ...]] = {}
+
+    def attach_selected_row(
+        decision: RuleDecision,
+        *,
+        source_key: str,
+        row: Mapping[str, Any],
+    ) -> RuleDecision:
+        """将实际参与结论的同一行材料引用附加到既有来源快照引用之后。"""
+
+        try:
+            document_rows = document_rows_by_source.get(source_key)
+            if document_rows is None:
+                document_rows = materials.document_rows(source_key, snapshot=snapshot)
+                document_rows_by_source[source_key] = document_rows
+        except (
+            EvidenceMaterialTruncated,
+            EvidenceMaterialUnavailable,
+            KeyError,
+            TypeError,
+            ValueError,
+        ):
+            return gap(decision.rule_id, "snapshot_mismatch", technical=True)
+        document_ref = next(
+            (reference for reference, original_row in document_rows if original_row is row),
+            None,
+        )
+        if document_ref is None:
+            return gap(decision.rule_id, "snapshot_mismatch", technical=True)
+        return replace(decision, fact_refs=(*decision.fact_refs, document_ref))
+
     admission_needed = any(
         rule_id in {"LX0609-001", "LX0609-002", "LX0609-005", "LX0609-006"}
         for rule_id in rule_ids
@@ -688,7 +719,7 @@ def _typed_basic_decisions(
     admission_record_events = tuple(
         sorted(
             (
-                (event.observed_time, event.document_id)
+                (event.observed_time, event.document_id, event.row)
                 for event in extract_document_events(substantive_admission_rows)
                 if event.observed_time is not None
             ),
@@ -817,7 +848,14 @@ def _typed_basic_decisions(
     def add_customer_fact(rule_id: str, facts: Mapping[str, Any]) -> None:
         """仅保留时限解释需要的标量事实；原始文书仍留在证据材料仓。"""
 
-        if customer_display_facts is not None:
+        if (
+            customer_display_facts is not None
+            and not (
+                decisions
+                and decisions[-1].evidence_state is EvidenceState.TECHNICAL_ERROR
+                and decisions[-1].reason_code == "snapshot_mismatch"
+            )
+        ):
             customer_display_facts.append((rule_id, dict(facts)))
 
     def format_time(value: datetime | None) -> str:
@@ -909,7 +947,7 @@ def _typed_basic_decisions(
                     )
                 )
                 continue
-            complete_events: list[tuple[datetime, str | None]] = []
+            complete_events: list[tuple[datetime, str | None, Mapping[str, Any]]] = []
             incomplete = False
             for event in extract_document_events(first_course_rows):
                 row = event.row
@@ -925,19 +963,13 @@ def _typed_basic_decisions(
                         (
                             record_time,
                             event.document_id,
+                            row,
                         )
                     )
-            complete_times = [value for value, _document_id in complete_events]
+            complete_times = [value for value, *_ in complete_events]
             deltas = sorted(value - anchor for value in complete_times)
             if any(timedelta(0) <= delta <= timedelta(hours=8) for delta in deltas):
-                decisions.append(
-                    conclusive(
-                        rule_id,
-                        QcDirection.SATISFIED,
-                        "requirement_within_threshold",
-                    )
-                )
-                observed, source_document_id = min(
+                observed, source_document_id, selected_row = min(
                     (
                         item
                         for item in complete_events
@@ -945,6 +977,16 @@ def _typed_basic_decisions(
                     ),
                     key=lambda item: item[0],
                 )
+                decision = attach_selected_row(
+                    conclusive(
+                        rule_id,
+                        QcDirection.SATISFIED,
+                        "requirement_within_threshold",
+                    ),
+                    source_key="first_course_record",
+                    row=selected_row,
+                )
+                decisions.append(decision)
                 add_customer_fact(
                     rule_id,
                     timeliness_fact(
@@ -972,14 +1014,16 @@ def _typed_basic_decisions(
                     )
                 )
             elif deltas:
-                decision = conclusive(
-                    rule_id, QcDirection.DEFECT, "threshold_exceeded"
-                )
-                decisions.append(decision)
-                observed, source_document_id = min(
+                observed, source_document_id, selected_row = min(
                     complete_events,
                     key=lambda item: item[0],
                 )
+                decision = attach_selected_row(
+                    conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded"),
+                    source_key="first_course_record",
+                    row=selected_row,
+                )
+                decisions.append(decision)
                 add_customer_fact(
                     rule_id,
                     timeliness_fact(
@@ -1291,16 +1335,20 @@ def _typed_basic_decisions(
                     threshold=timedelta(hours=24),
                 )
             if delta_state == "before":
+                observed, source_document_id, selected_row = admission_record_events[0]
                 decisions.append(
-                    make(
-                        rule_id,
-                        evidence_state=EvidenceState.CONFLICT,
-                        qc_direction=QcDirection.UNKNOWN,
-                        reason_code="evidence_conflict",
-                        confidence=None,
+                    attach_selected_row(
+                        make(
+                            rule_id,
+                            evidence_state=EvidenceState.CONFLICT,
+                            qc_direction=QcDirection.UNKNOWN,
+                            reason_code="evidence_conflict",
+                            confidence=None,
+                        ),
+                        source_key="admission_record",
+                        row=selected_row,
                     )
                 )
-                observed, source_document_id = admission_record_events[0]
                 assert anchor is not None
                 add_customer_fact(
                     rule_id,
@@ -1323,10 +1371,18 @@ def _typed_basic_decisions(
                     },
                 )
             elif delta_state == "within":
+                observed, source_document_id, selected_row = admission_record_events[0]
                 decisions.append(
-                    conclusive(rule_id, QcDirection.SATISFIED, "requirement_within_threshold")
+                    attach_selected_row(
+                        conclusive(
+                            rule_id,
+                            QcDirection.SATISFIED,
+                            "requirement_within_threshold",
+                        ),
+                        source_key="admission_record",
+                        row=selected_row,
+                    )
                 )
-                observed, source_document_id = admission_record_events[0]
                 add_customer_fact(
                     rule_id,
                     timeliness_fact(
@@ -1347,8 +1403,13 @@ def _typed_basic_decisions(
             elif delta_state == "ambiguous":
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
             else:
-                decision = conclusive(
-                    rule_id, QcDirection.DEFECT, "threshold_exceeded"
+                observed, source_document_id, selected_row = admission_record_events[0]
+                decision = attach_selected_row(
+                    conclusive(
+                        rule_id, QcDirection.DEFECT, "threshold_exceeded"
+                    ),
+                    source_key="admission_record",
+                    row=selected_row,
                 )
                 decisions.append(decision)
                 add_customer_fact(
@@ -1361,8 +1422,8 @@ def _typed_basic_decisions(
                         threshold_hours=24,
                         anchor=anchor,
                         anchor_date=anchor_date,
-                        observed=admission_record_events[0][0],
-                        source_document_id=admission_record_events[0][1],
+                        observed=observed,
+                        source_document_id=source_document_id,
                     ),
                 )
             continue
@@ -1398,7 +1459,7 @@ def _typed_basic_decisions(
                 }
             return role is CourseRoundRole.SENIOR
 
-        qualifying_events: list[tuple[datetime, str | None]] = []
+        qualifying_events: list[tuple[datetime, str | None, str, Mapping[str, Any]]] = []
         qualifying_missing_time = False
         ambiguous_round = False
         semantic_round_unknown = False
@@ -1461,12 +1522,14 @@ def _typed_basic_decisions(
                 if parsed is None:
                     qualifying_missing_time = True
                 else:
-                    qualifying_events.append((parsed, event.document_id))
+                    qualifying_events.append(
+                        (parsed, event.document_id, source_key, event.row)
+                    )
             elif role is CourseRoundRole.AMBIGUOUS:
                 ambiguous_round = True
 
         threshold = timedelta(hours=48 if rule_id == "LX0609-005" else 72)
-        qualifying_times = tuple(value for value, _document_id in qualifying_events)
+        qualifying_times = tuple(value for value, *_ in qualifying_events)
         if anchor is not None:
             elapsed_states = tuple(
                 "before"
@@ -1485,20 +1548,24 @@ def _typed_basic_decisions(
                 for value in qualifying_times
             )
         if "within" in elapsed_states:
-            decisions.append(
-                conclusive(
-                    rule_id,
-                    QcDirection.SATISFIED,
-                    "requirement_within_threshold",
-                )
-            )
-            observed, source_document_id = min(
+            observed, source_document_id, selected_source_key, selected_row = min(
                 (
                     event
                     for event, state in zip(qualifying_events, elapsed_states)
                     if state == "within"
                 ),
                 key=lambda item: item[0],
+            )
+            decisions.append(
+                attach_selected_row(
+                    conclusive(
+                        rule_id,
+                        QcDirection.SATISFIED,
+                        "requirement_within_threshold",
+                    ),
+                    source_key=selected_source_key,
+                    row=selected_row,
+                ),
             )
             add_customer_fact(
                 rule_id,
@@ -1549,7 +1616,7 @@ def _typed_basic_decisions(
         elif "ambiguous" in elapsed_states:
             decisions.append(gap(rule_id, "authoritative_time_missing"))
         elif elapsed_states:
-            observed, source_document_id = min(
+            observed, source_document_id, selected_source_key, selected_row = min(
                 (
                     event
                     for event, state in zip(qualifying_events, elapsed_states)
@@ -1557,8 +1624,10 @@ def _typed_basic_decisions(
                 ),
                 key=lambda item: item[0],
             )
-            decision = conclusive(
-                rule_id, QcDirection.DEFECT, "threshold_exceeded"
+            decision = attach_selected_row(
+                conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded"),
+                source_key=selected_source_key,
+                row=selected_row,
             )
             decisions.append(decision)
             add_customer_fact(

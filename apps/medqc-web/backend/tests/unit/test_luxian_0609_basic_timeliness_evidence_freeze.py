@@ -84,6 +84,7 @@ def _execute_and_aggregate(session, rule_ids: tuple[str, ...]):
         decisions=execution.decisions,
         expected_rule_ids=rule_ids,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     selected = set(rule_ids)
     results = aggregate_luxian_0609_results(
@@ -107,6 +108,17 @@ def _fact_ref_source_keys(session, execution) -> dict[str, frozenset[str]]:
         observation.snapshot_ref.removeprefix("sha256:"): observation.source_key
         for observation in session.snapshot.observations
     }
+    for observation in session.snapshot.observations:
+        if session.materials.has_source(observation.source_key):
+            try:
+                document_rows = session.materials.document_rows(
+                    observation.source_key, snapshot=session.snapshot
+                )
+            except ValueError:
+                continue
+            source_by_ref.update(
+                (reference, observation.source_key) for reference, _row in document_rows
+            )
     return {
         decision.rule_id: frozenset(
             source_by_ref[reference] for reference in decision.fact_refs
@@ -127,10 +139,8 @@ def _coordinates(result: Mapping[str, object]) -> list[tuple[str, str, str, str]
     ]
 
 
-@pytest.mark.unit
-def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
-    rule_ids = ("LX0609-001", "LX0609-002", "LX0609-005", "LX0609-006")
-    session = _session(
+def _multi_document_session(rule_ids: tuple[str, ...]):
+    return _session(
         rule_ids=rule_ids,
         rows_by_source={
             "inpat_registration": [
@@ -190,6 +200,12 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             ],
         },
     )
+
+
+@pytest.mark.unit
+def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
+    rule_ids = ("LX0609-001", "LX0609-002", "LX0609-005", "LX0609-006")
+    session = _multi_document_session(rule_ids)
 
     execution, reduced, results = _execute_and_aggregate(session, rule_ids)
 
@@ -271,9 +287,9 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
         ("compliant", "requirement_within_threshold", "已确认最高级别医师首次查房记录在入院后 72 小时内完成。"),
     ]
     assert [_coordinates(item) for item in results] == [
-        [],
-        [],
-        [("senior_course_record", "ROUND-ATTENDING-SELECTED", "", "")],
+        [("admission_record", "ADM-SELECTED", "chief_complaint", "2026-06-01 11:00:00")],
+        [("first_course_record", "FC-SELECTED", "record_content", "2026-06-01 10:00:00")],
+        [("daily_course_record", "ROUND-ATTENDING-SELECTED", "document_title", "2026-06-02 08:00:00")],
         [
             (
                 "senior_course_record",
@@ -701,8 +717,8 @@ def test_fact_v2_without_document_id_does_not_backfill_from_multiple_material_ro
 
 
 @pytest.mark.unit
-def test_document_refs_not_yet_supported_by_binding():
-    """逐文书 material ref 尚未进入 Binding 的允许合同，迁移前必须保持失败关闭。"""
+def test_document_refs_require_materials_for_binding():
+    """逐文书引用必须携带可验证材料，不能仅凭全局引用存在而放行。"""
 
     session = _session(
         rule_ids=("LX0609-001",),

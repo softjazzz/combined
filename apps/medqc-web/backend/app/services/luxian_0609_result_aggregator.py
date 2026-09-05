@@ -22,7 +22,10 @@ from .luxian_0609.basic_timeliness_customer_projection import (
     is_basic_timeliness_customer_rule,
     safe_basic_timeliness_customer_display_facts,
 )
-from .luxian_0609.customer_evidence_enrichment import enrich_customer_evidence
+from .luxian_0609.customer_evidence_enrichment import (
+    enrich_customer_evidence,
+    project_selected_document_evidence,
+)
 from .luxian_0609.decision_reducer import ReducedRuleDecision
 from .luxian_0609.source_evidence_reader import authoritative_document_time_value
 from .luxian_0609.surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
@@ -6059,6 +6062,14 @@ def aggregate_luxian_0609_results(
                 course_evidence,
                 decision_evidence,
             )
+            selected_document_evidence = project_selected_document_evidence(
+                decision=reduced,
+                evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
+                evidence_materials=(audit_context or {}).get("evidence_materials"),
+            )
+            if selected_document_evidence is not None:
+                # 已有明确逐行选择时，不再接受旧事实或来源级推测补入其他文书。
+                customer_evidence = _merge_customer_evidence(selected_document_evidence)
             customer_evidence = enrich_customer_evidence(
                 customer_evidence,
                 evidence_materials=(audit_context or {}).get("evidence_materials"),

@@ -15,6 +15,11 @@ from .decision_reducer import (
     ReducedRuleDecision,
     reduce_luxian_0609_rule_decision,
 )
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .source_registry import (
@@ -77,6 +82,42 @@ def _allowed_snapshot_refs(
             ),
         }
     )
+
+
+def _allowed_material_document_refs(
+    *,
+    rule_id: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+    candidate_refs: frozenset[str],
+    document_rows_cache: dict[str, tuple[tuple[str, object], ...] | None],
+) -> frozenset[str]:
+    """仅为疑似文书引用验证规则允许来源的请求内材料。"""
+
+    if (
+        not candidate_refs.intersection(snapshot.document_refs)
+        or not isinstance(evidence_materials, Luxian0609EvidenceMaterialStore)
+    ):
+        return frozenset()
+    allowed: set[str] = set()
+    for source_key in _allowed_source_keys(rule_id):
+        if not evidence_materials.has_source(source_key):
+            continue
+        document_rows = document_rows_cache.get(source_key)
+        if document_rows is None and source_key not in document_rows_cache:
+            try:
+                document_rows = tuple(
+                    evidence_materials.document_rows(source_key, snapshot=snapshot)
+                )
+            except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, TypeError, ValueError):
+                document_rows_cache[source_key] = None
+                continue
+            document_rows_cache[source_key] = document_rows
+        if document_rows is not None:
+            allowed.update(document_ref for document_ref, _ in document_rows)
+            if candidate_refs.issubset(allowed):
+                break
+    return frozenset(allowed)
 
 
 def _requires_evidence_ref(decision: RuleDecision) -> bool:
@@ -144,6 +185,7 @@ def bind_and_reduce_luxian_0609_rule_decisions(
     decisions: tuple[RuleDecision, ...],
     expected_rule_ids: tuple[str, ...],
     snapshot: Luxian0609EvidenceSnapshot,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> tuple[ReducedRuleDecision, ...]:
     """逐规则校验 snapshot/ref；伪绑定只污染该规则，不回退旧链。"""
 
@@ -181,11 +223,23 @@ def bind_and_reduce_luxian_0609_rule_decisions(
         )
 
     reduced: list[ReducedRuleDecision] = []
+    document_rows_cache: dict[str, tuple[tuple[str, object], ...] | None] = {}
     for decision in decisions:
         allowed_refs = _allowed_snapshot_refs(
             rule_id=decision.rule_id,
             snapshot=snapshot,
         )
+        candidate_document_refs = frozenset(decision.fact_refs).difference(allowed_refs)
+        if candidate_document_refs:
+            allowed_refs = allowed_refs.union(
+                _allowed_material_document_refs(
+                    rule_id=decision.rule_id,
+                    snapshot=snapshot,
+                    evidence_materials=evidence_materials,
+                    candidate_refs=candidate_document_refs,
+                    document_rows_cache=document_rows_cache,
+                )
+            )
         snapshot_binding_valid = (
             decision.snapshot_hash == snapshot.snapshot_hash
             and set(decision.fact_refs).issubset(allowed_refs)
