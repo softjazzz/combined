@@ -160,6 +160,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED: bool = True
     # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生执行；正式任务关闭时失败关闭。
     LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = True
+    # 扩展文书族050-075独立原生执行开关；正式任务关闭时失败关闭。
+    LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED: bool = True
     # 正式客户主链默认直接使用统一证据快照，不依赖运行时覆盖层。
     LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = True
     # 正式客户主链默认使用统一执行信封；关闭总开关时正式任务失败关闭。

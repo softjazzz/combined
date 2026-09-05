@@ -292,7 +292,8 @@ def build_luxian_0609_package_plan(
     inventory: Sequence[Luxian0609RuleDependency],
     selected_rule_ids: Iterable[str],
     native_sync_enabled: bool,
-    native_async_enabled: bool,
+    native_mdt_enabled: bool,
+    native_extended_document_enabled: bool = False,
     native_basic_timeliness_enabled: bool = False,
     native_consultation_enabled: bool = False,
     native_consultation_execution_link_enabled: bool = False,
@@ -370,16 +371,13 @@ def build_luxian_0609_package_plan(
                 )
             )
             or (
-                item.executor_key not in {
-                    EXAM_LAB_EXECUTOR_KEY,
-                    CONSULTATION_EPISODE_EXECUTOR_KEY,
-                    TRANSFUSION_EXECUTOR_KEY,
-                    TUMOR_PATHOLOGY_EXECUTOR_KEY,
-                    COURSE_QUALITY_EXECUTOR_KEY,
-                    SURGERY_GATE_EXECUTOR_KEY,
-                    SURGERY_DOCUMENT_EXECUTOR_KEY,
-                }
-                and native_async_enabled
+                item.executor_key == EXECUTOR_SURGERY_MDT
+                and native_mdt_enabled
+                and item.rule_id == NATIVE_ASYNC_RULE_ID
+            )
+            or (
+                item.executor_key == EXTENDED_DOCUMENT_EXECUTOR_KEY
+                and native_extended_document_enabled
             )
         )
     )
@@ -434,8 +432,15 @@ def build_luxian_0609_package_plan_from_settings(
         native_sync_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False)
         ),
-        native_async_enabled=bool(
+        native_mdt_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_MDT_040_ENABLED", False)
+        ),
+        native_extended_document_enabled=bool(
+            getattr(
+                settings,
+                "LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED",
+                False,
+            )
         ),
         native_basic_timeliness_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED", False)

@@ -34,6 +34,7 @@ def _settings(**overrides: object) -> SimpleNamespace:
         "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED": True,
         "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
+        "LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": True,
         "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED": True,
@@ -110,6 +111,7 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert manifest["flags"]["unified_engine"] is True
     assert manifest["flags"]["rule_decision_surgery_document"] is True
     assert manifest["flags"]["native_consultation"] is False
+    assert manifest["flags"]["native_extended_document"] is True
     assert manifest["runtime"]["models"] == {
         "primary": "safe-model-name",
         "adjudicator": "safe-adjudicator-name",

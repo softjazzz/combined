@@ -59,6 +59,10 @@ _SAFE_FLAG_FIELDS: tuple[tuple[str, str], ...] = (
     ("native_surgery_gate", "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED"),
     ("native_surgery_document", "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED"),
     ("native_mdt_040", "LUXIAN_0609_NATIVE_MDT_040_ENABLED"),
+    (
+        "native_extended_document",
+        "LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED",
+    ),
     ("evidence_snapshot_sidecar", "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED"),
     ("unified_engine", "LUXIAN_0609_UNIFIED_ENGINE_ENABLED"),
     ("mainline_rule_decision", "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED"),

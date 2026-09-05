@@ -36,6 +36,7 @@ LLM_ENV_KEYS = [
     "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED",
     "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED",
     "LUXIAN_0609_NATIVE_MDT_040_ENABLED",
+    "LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED",
     "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED",
     "LUXIAN_0609_PREPRODUCTION_API_ENABLED",
 ]
@@ -481,3 +482,12 @@ def test_luxian_native_mdt_040_defaults_on_and_can_be_disabled(monkeypatch):
 
     monkeypatch.setenv("LUXIAN_0609_NATIVE_MDT_040_ENABLED", "false")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_MDT_040_ENABLED is False
+
+
+def test_luxian_native_extended_document_defaults_on_and_can_be_disabled(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED is True
+
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED is False

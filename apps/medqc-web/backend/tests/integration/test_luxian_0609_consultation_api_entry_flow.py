@@ -504,9 +504,10 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
     sample_pool_service = _install_sample_pool_sqlite(monkeypatch, engine=engine)
     _empty_evidence_session_builder(monkeypatch)
     settings = _formal_settings()
-    # 当前正式配置以该开关同时允许 069 的 extended_document 包；保留这个
-    # 配置耦合事实以验证真实派发，不在测试里伪造 069 的执行器注册。
-    settings.LUXIAN_0609_NATIVE_MDT_040_ENABLED = True
+    # 069 是 extended_document 规则，不得再借 MDT-040 开关被放行。这里刻意
+    # 关闭 MDT，同时启用 extended_document，以真实入口验证两族执行门已解耦。
+    settings.LUXIAN_0609_NATIVE_MDT_040_ENABLED = False
+    settings.LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED = True
     monkeypatch.setattr(batch_worker, "get_settings", lambda: settings)
     monkeypatch.setattr(sichuan_qc_service, "get_settings", lambda: settings)
     monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
@@ -706,9 +707,8 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
         _assert_native_executor_breakdown(job)
         assert (job.get("summary") or {}).get("total_tokens") == 0
 
-    # 069 作为目录路由对照：当前正式设置会把它送入 extended_document，
-    # 绝不能借会诊执行器的阶段事件蒙混。这个开关同时控制 extended_document
-    # 是已有配置耦合，测试仅固定行为，不修改生产所有权。
+    # 069 作为目录路由对照：即使 MDT-040 已关闭，只要扩展文书包显式启用，
+    # 也必须抵达 extended_document，绝不能借会诊或 surgery_mdt 阶段蒙混。
     before_069_events = len(native_phase_events)
     with TestClient(app) as client:
         rule_069_response = client.post(
@@ -760,3 +760,41 @@ def test_consultation_rule_matrix_no_consultation_and_069_control(
         event.get("executor_key") == "consultation_quality"
         for _event_job_id, event in native_phase_events[before_069_events:]
     )
+    assert not any(
+        event.get("executor_key") == "surgery_mdt"
+        for _event_job_id, event in native_phase_events[before_069_events:]
+    )
+
+    # 扩展文书包关闭时，正式创建入口必须同步拒绝。不能先建任务、派发 worker
+    # 再让它掉回旧通用引擎，否则客户会看到“已发起”的伪成功任务。
+    settings.LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED = False
+    jobs_before_rejection = 0
+    with Session(engine) as session:
+        jobs_before_rejection = int(
+            session.execute(
+                sa.select(sa.func.count()).select_from(workspace._batch_job_table)
+            ).scalar_one()
+        )
+    phases_before_rejection = len(native_phase_events)
+    with TestClient(app) as client:
+        disabled_069_response = client.post(
+            "/api/v1/qc/sichuan/workspace/batch-jobs",
+            json={
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_ids": ["LX0609-069"],
+                "scope": "final",
+                "record_refs": [_RECORD_A],
+                "run_mode": "serial",
+            },
+        )
+    assert disabled_069_response.status_code == 503, disabled_069_response.text
+    with Session(engine) as session:
+        assert (
+            int(
+                session.execute(
+                    sa.select(sa.func.count()).select_from(workspace._batch_job_table)
+                ).scalar_one()
+            )
+            == jobs_before_rejection
+        )
+    assert len(native_phase_events) == phases_before_rejection

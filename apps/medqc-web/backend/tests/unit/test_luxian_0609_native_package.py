@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from types import SimpleNamespace
+
 import pytest
 
 from app.services.luxian_0609.customer_rule_package import RULE_FAMILY_DEFINITIONS
@@ -10,6 +13,7 @@ from app.services.luxian_0609.native_package import (
     assert_luxian_0609_formal_package_plan_native_only,
     build_luxian_0609_dependency_inventory,
     build_luxian_0609_package_plan,
+    build_luxian_0609_package_plan_from_settings,
     resolve_package_entry_execution_rule_ids,
     resolve_selected_customer_rule_ids,
 )
@@ -146,14 +150,14 @@ def test_exam_lab_family_flag_partitions_only_five_customer_rules():
         inventory=inventory,
         selected_rule_ids=selected,
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_exam_lab_enabled=True,
     )
     disabled = build_luxian_0609_package_plan(
         inventory=inventory,
         selected_rule_ids=selected,
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_exam_lab_enabled=False,
     )
 
@@ -174,7 +178,7 @@ def test_formal_plan_rejects_exam_lab_compatibility_and_accepts_fully_native_pla
         "inventory": inventory,
         "selected_rule_ids": ["LX0609-010"],
         "native_sync_enabled": True,
-        "native_async_enabled": False,
+        "native_mdt_enabled": False,
     }
     compatibility = build_luxian_0609_package_plan(
         **common,
@@ -199,7 +203,7 @@ def test_formal_plan_rejects_exam_lab_compatibility_and_accepts_fully_native_pla
         inventory=inventory,
         selected_rule_ids=["LX0609-025"],
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_surgery_gate_enabled=True,
     )
     assert pending.not_executed_rule_ids == ("LX0609-025",)
@@ -222,14 +226,14 @@ def test_transfusion_family_flag_partitions_only_nine_customer_rules():
         inventory=inventory,
         selected_rule_ids=selected,
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_transfusion_enabled=True,
     )
     disabled = build_luxian_0609_package_plan(
         inventory=inventory,
         selected_rule_ids=selected,
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_transfusion_enabled=False,
     )
 
@@ -258,14 +262,14 @@ def test_tumor_pathology_family_flag_partitions_only_four_customer_rules():
         inventory=inventory,
         selected_rule_ids=selected,
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_tumor_pathology_enabled=True,
     )
     disabled = build_luxian_0609_package_plan(
         inventory=inventory,
         selected_rule_ids=selected,
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_tumor_pathology_enabled=False,
     )
 
@@ -308,7 +312,7 @@ def test_remaining_family_flags_partition_only_their_customer_rules(
         "inventory": inventory,
         "selected_rule_ids": selected,
         "native_sync_enabled": True,
-        "native_async_enabled": False,
+        "native_mdt_enabled": False,
     }
 
     enabled = build_luxian_0609_package_plan(**common, **{flag_name: True})
@@ -328,6 +332,87 @@ def test_remaining_family_flags_partition_only_their_customer_rules(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("native_mdt_enabled", "native_extended_document_enabled", "expected_native"),
+    (
+        (False, False, ()),
+        (False, True, ("LX0609-050",)),
+        (True, False, ("LX0609-040",)),
+        (True, True, ("LX0609-040", "LX0609-050")),
+    ),
+)
+def test_mdt_and_extended_document_gates_are_independent(
+    native_mdt_enabled,
+    native_extended_document_enabled,
+    expected_native,
+):
+    """040 仅受 MDT 门控，extended_document 仅受自身门控。"""
+
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+    selected = (
+        "LX0609-040",
+        "LX0609-050",
+        "LX0609-056",
+        "LX0609-059",
+        "LX0609-075",
+    )
+
+    plan = build_luxian_0609_package_plan_from_settings(
+        inventory=inventory,
+        selected_rule_ids=selected,
+        settings=SimpleNamespace(
+            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+            LUXIAN_0609_NATIVE_MDT_040_ENABLED=native_mdt_enabled,
+            LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED=(
+                native_extended_document_enabled
+            ),
+        ),
+    )
+
+    assert plan.native_async_rule_ids == expected_native
+    assert plan.not_executed_rule_ids == (
+        "LX0609-056",
+        "LX0609-059",
+        "LX0609-075",
+    )
+    assert plan.compatibility_rule_ids == tuple(
+        rule_id
+        for rule_id in ("LX0609-040", "LX0609-050")
+        if rule_id not in expected_native
+    )
+
+
+@pytest.mark.unit
+def test_unknown_native_async_executor_is_not_implicitly_enabled():
+    """新增 executor 必须显式获得自己的门控，不能复用 MDT 兜底。"""
+
+    inventory = tuple(
+        replace(item, executor_key="future_async_executor")
+        if item.rule_id == "LX0609-050"
+        else item
+        for item in build_luxian_0609_dependency_inventory(
+            rules=load_luxian_0609_rules(),
+            family_definitions=RULE_FAMILY_DEFINITIONS,
+        )
+    )
+
+    plan = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=("LX0609-050",),
+        native_sync_enabled=True,
+        native_mdt_enabled=True,
+        native_extended_document_enabled=True,
+    )
+
+    assert plan.native_async_rule_ids == ()
+    assert plan.compatibility_rule_ids == ("LX0609-050",)
+    assert plan.native_executor_batches == ()
+
+
+@pytest.mark.unit
 def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
@@ -338,7 +423,8 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
         inventory=inventory,
         selected_rule_ids=[item.rule_id for item in inventory],
         native_sync_enabled=True,
-        native_async_enabled=True,
+        native_mdt_enabled=True,
+        native_extended_document_enabled=True,
         native_basic_timeliness_enabled=True,
         native_consultation_enabled=True,
         native_consultation_execution_link_enabled=False,
@@ -373,7 +459,8 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
         inventory=inventory,
         selected_rule_ids=[item.rule_id for item in inventory],
         native_sync_enabled=True,
-        native_async_enabled=True,
+        native_mdt_enabled=True,
+        native_extended_document_enabled=True,
         native_basic_timeliness_enabled=True,
         native_consultation_enabled=True,
         native_consultation_execution_link_enabled=True,
@@ -402,7 +489,7 @@ def test_029_surgery_document_requires_its_explicit_unified_opt_in():
         "inventory": inventory,
         "selected_rule_ids": ["LX0609-029"],
         "native_sync_enabled": True,
-        "native_async_enabled": False,
+        "native_mdt_enabled": False,
         "native_surgery_document_enabled": True,
     }
 
@@ -430,7 +517,7 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
         inventory=inventory,
         selected_rule_ids=["LX0609-040", "LX0609-029", "LX0609-001"],
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_basic_timeliness_enabled=True,
         native_surgery_document_enabled=True,
         native_surgery_document_029_enabled=True,
@@ -452,7 +539,7 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
             inventory=inventory,
             selected_rule_ids=["SC-002"],
             native_sync_enabled=True,
-            native_async_enabled=False,
+            native_mdt_enabled=False,
         )
 
 
@@ -467,7 +554,7 @@ def test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them():
         inventory=inventory,
         selected_rule_ids=["LX0609-059", "LX0609-017", "LX0609-049"],
         native_sync_enabled=True,
-        native_async_enabled=True,
+        native_mdt_enabled=True,
         native_course_quality_enabled=True,
         native_transfusion_enabled=True,
     )
@@ -514,7 +601,7 @@ def test_consultation_two_stage_package_dispatch(
             "LX0609-023",
         ],
         native_sync_enabled=True,
-        native_async_enabled=False,
+        native_mdt_enabled=False,
         native_consultation_enabled=native_consultation_enabled,
         native_consultation_execution_link_enabled=execution_link_enabled,
     )
