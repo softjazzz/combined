@@ -346,9 +346,14 @@ def complete_sync_trigger(
         session.commit()
 
 
-def reset_sync_idempotency_for_testing() -> None:
+def reset_sync_idempotency_memory_for_testing() -> None:
+    """清空进程内幂等状态，不访问持久化存储。"""
     with _MEMORY_LOCK:
         _MEMORY_STORE.clear()
+
+
+def reset_sync_idempotency_for_testing() -> None:
+    reset_sync_idempotency_memory_for_testing()
 
     if engine is None:
         return

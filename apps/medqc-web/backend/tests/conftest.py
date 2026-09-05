@@ -15,7 +15,7 @@ from datetime import datetime
 from app.main import create_app
 from app.core.rate_limit import reset_rate_limit_store_for_testing
 from app.core.upload_security import clear_virus_scan_hook_for_testing
-from app.services.sync_idempotency import reset_sync_idempotency_for_testing
+from app.services.sync_idempotency import reset_sync_idempotency_memory_for_testing
 
 # 导入语义规则 fixtures
 pytest_plugins = ["tests.fixtures.semantic_rules_fixtures"]
@@ -235,7 +235,7 @@ def reset_rate_limit_store():
     """避免测试间共享限流桶导致相互污染。"""
     reset_rate_limit_store_for_testing()
     clear_virus_scan_hook_for_testing()
-    reset_sync_idempotency_for_testing()
+    reset_sync_idempotency_memory_for_testing()
 
 
 # 测试辅助函数

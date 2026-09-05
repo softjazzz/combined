@@ -37,6 +37,22 @@ def _sqlite_engine_with_migrated_table():
     return db_engine
 
 
+def test_reset_sync_idempotency_memory_for_testing_clears_memory_without_database_access(
+    monkeypatch,
+):
+    def fail_database_access(*_args, **_kwargs):
+        pytest.fail("内存测试清理不应访问数据库")
+
+    monkeypatch.setattr(sync_idempotency, "engine", object())
+    monkeypatch.setattr(sync_idempotency, "Session", fail_database_access)
+    monkeypatch.setattr(sync_idempotency, "text", fail_database_access)
+    sync_idempotency._MEMORY_STORE["memory-only-reset"] = {"status": "pending"}
+
+    sync_idempotency.reset_sync_idempotency_memory_for_testing()
+
+    assert sync_idempotency._MEMORY_STORE == {}
+
+
 def test_reserve_same_key_returns_same_run_id(monkeypatch):
     db_engine = _sqlite_engine_with_migrated_table()
     monkeypatch.setattr(sync_idempotency, "engine", db_engine)
