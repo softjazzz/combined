@@ -300,7 +300,9 @@ def _assert_semantic_facts(envelope: dict[str, Any], scenario: str) -> None:
     "scenario",
     ["normal", "partial", "horizon_gap", "invalid_first", "invalid_second", "unknown"],
 )
-def test_controlled_semantic_facts_survive_three_api_entries(semantic_api, scenario):
+def test_controlled_semantic_facts_survive_three_api_entries(
+    semantic_api, scenario, caplog
+):
     app, _workspace, _pool, _sample, state = semantic_api
     state["scenario"] = scenario
     projections = []
@@ -374,6 +376,7 @@ def test_controlled_semantic_facts_survive_three_api_entries(semantic_api, scena
                     clinical_claim not in envelope["conclusion"]
                     for clinical_claim in ("合规", "符合要求", "已归纳具体执行情况")
                 )
+
                 if rule_id == "LX0609-020":
                     assert [
                         row["execution_state"]
@@ -406,6 +409,14 @@ def test_controlled_semantic_facts_survive_three_api_entries(semantic_api, scena
             )
         projections.append(envelopes)
     assert projections[0] == projections[1] == projections[2]
+    fallback_warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.services.sichuan_qc_service"
+        and "executor_type" in record.getMessage()
+        and any(rule_id in record.getMessage() for rule_id in {"LX0609-020", "LX0609-023"})
+    ]
+    assert fallback_warnings == []
 
 
 @pytest.mark.integration

@@ -134,7 +134,10 @@ async def evaluate_running_final_bundle_input(
         customer_rules = host_module.load_luxian_0609_rules()
         selected_customer_ids = set(selected_customer_rule_ids)
         selected_rules = [
-            host._ensure_rule_execution_meta(dict(rule))
+            # 纯 native 客户规则已经由正式执行计划选择；这里仅保留
+            # wrapper 供统一聚合。不能再让旧宿主按 llm/program 兼容元数据
+            # 归一化，否则 cross_document 会被错误观测为 llm。
+            dict(rule)
             for rule in customer_rules
             if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
             in selected_customer_ids
