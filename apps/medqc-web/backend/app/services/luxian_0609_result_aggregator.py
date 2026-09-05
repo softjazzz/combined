@@ -5459,9 +5459,9 @@ def _customer_evidence_from_reduced_decision(
             getattr(fact, "source_document_id", "")
         )
         source_type = str(getattr(fact, "source_key", "") or "").strip().lower()
-        # 部分确定性事实只绑定来源快照，不携带单行文书 ID。若本次冻结材料中
-        # 该来源恰好只有一份带 ID 的文书，可安全补回当前 Bundle 的真实 ID；
-        # 多行或无材料时保持无证据，避免以时间/正文猜测文书。
+        # 部分确定性事实只绑定来源快照，不携带单行文书 ID。仅当本次冻结
+        # 材料恰好一行且该行带有效 ID 时，才可安全补回当前 Bundle 的真实 ID；
+        # 多行（即使仅一个非空 ID 或复用同一 ID）时保持无证据，避免猜测行。
         if (
             not document_id
             and evidence_materials is not None
@@ -5471,21 +5471,10 @@ def _customer_evidence_from_reduced_decision(
                 material_rows = tuple(evidence_materials.rows(source_type))
             except Exception:
                 material_rows = ()
-            material_document_ids = tuple(
-                dict.fromkeys(
-                    candidate
-                    for row in material_rows
-                    if isinstance(row, Mapping)
-                    for candidate in (
-                        _valid_customer_evidence_document_id(
-                            row.get("document_id") or row.get("id")
-                        ),
-                    )
-                    if candidate
+            if len(material_rows) == 1 and isinstance(material_rows[0], Mapping):
+                document_id = _valid_customer_evidence_document_id(
+                    material_rows[0].get("document_id") or material_rows[0].get("id")
                 )
-            )
-            if len(material_document_ids) == 1:
-                document_id = material_document_ids[0]
         if (
             not document_id
             or document_id in seen_document_ids
@@ -5526,24 +5515,16 @@ def _customer_evidence_from_reduced_decision(
             material_rows = tuple(evidence_materials.rows(source_key))
         except Exception:
             continue
-        document_ids = tuple(
-            dict.fromkeys(
-                candidate
-                for row in material_rows
-                if isinstance(row, Mapping)
-                for candidate in (
-                    _valid_customer_evidence_document_id(
-                        row.get("document_id") or row.get("id")
-                    ),
-                )
-                if candidate
-            )
-        )
-        if len(document_ids) != 1 or document_ids[0] in seen_document_ids:
+        if len(material_rows) != 1 or not isinstance(material_rows[0], Mapping):
             continue
-        seen_document_ids.add(document_ids[0])
+        document_id = _valid_customer_evidence_document_id(
+            material_rows[0].get("document_id") or material_rows[0].get("id")
+        )
+        if not document_id or document_id in seen_document_ids:
+            continue
+        seen_document_ids.add(document_id)
         rows.append(
-            {"source_type": source_key, "source_document_id": document_ids[0]}
+            {"source_type": source_key, "source_document_id": document_id}
         )
         if len(rows) >= 8:
             break
