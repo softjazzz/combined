@@ -8,6 +8,7 @@ from .decision_reducer import ReducedRuleDecision
 from .evidence_material import EvidenceMaterialUnavailable, Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .source_evidence_reader import authoritative_document_time_value
+from .source_registry import resolve_luxian_0609_customer_document_type
 
 
 _IDENTITY_FIELDS = (
@@ -107,7 +108,13 @@ def project_selected_document_evidence(
         return None
     if decision.snapshot_hash != evidence_snapshot.snapshot_hash:
         return []
-    selected = set(decision.fact_refs).intersection(evidence_snapshot.document_refs)
+    selected = tuple(
+        dict.fromkeys(
+            reference
+            for reference in decision.fact_refs
+            if reference in evidence_snapshot.document_refs
+        )
+    )
     if not selected:
         return None
     if (
@@ -116,10 +123,14 @@ def project_selected_document_evidence(
     ):
         return []
 
-    located: list[dict[str, str]] = []
+    selected_refs = set(selected)
+    located_by_ref: dict[str, dict[str, str]] = {}
     resolved: set[str] = set()
     for observation in evidence_snapshot.observations:
         source_key = observation.source_key
+        customer_source_type = resolve_luxian_0609_customer_document_type(source_key)
+        if customer_source_type is None:
+            continue
         try:
             document_rows = evidence_materials.document_rows(
                 source_key, snapshot=evidence_snapshot
@@ -131,7 +142,7 @@ def project_selected_document_evidence(
             # 引用都被验证解析，不让无关计算来源使真实文书定位整体失效。
             continue
         for reference, row in document_rows:
-            if reference not in selected:
+            if reference not in selected_refs:
                 continue
             document_id = next(
                 (_text(row.get(field)) for field in _IDENTITY_FIELDS if _text(row.get(field))),
@@ -144,10 +155,13 @@ def project_selected_document_evidence(
             ) != 1:
                 return []
             resolved.add(reference)
-            located.append({"source_type": source_key, "source_document_id": document_id})
-        if resolved == selected:
-            return located
-    return located if resolved == selected else []
+            located_by_ref[reference] = {
+                "source_type": customer_source_type,
+                "source_document_id": document_id,
+            }
+        if resolved == selected_refs:
+            return [located_by_ref[reference] for reference in selected]
+    return []
 
 
 def _record_time(row: Mapping[str, Any]) -> str:

@@ -7,6 +7,9 @@ import pytest
 from app.services.luxian_0609.customer_evidence_enrichment import (
     project_selected_document_evidence,
 )
+from app.services.luxian_0609.source_registry import (
+    resolve_luxian_0609_customer_document_type,
+)
 from app.services.luxian_0609.evidence_material import (
     Luxian0609EvidenceMaterialStore,
     build_material_document_refs,
@@ -163,3 +166,21 @@ def test_projector_does_not_deliver_partial_coordinates_for_multiple_selected_re
     assert project_selected_document_evidence(
         decision=reduced, evidence_snapshot=snapshot, evidence_materials=materials
     ) == []
+
+
+@pytest.mark.parametrize(
+    ("source_key", "expected"),
+    (
+        ("inpat_nondrug_order.rescue_order", "inpat_nondrug_order"),
+        ("admission_record", "admission_record"),
+        ("mr_surgery", "mr_surgery"),
+        ("inpat_registration", "inpat_registration"),
+        ("labtest_item_report", "labtest_item_report"),
+        ("admission_record.evil", None),
+        ("inpat_nondrug_order.unregistered_internal_alias", None),
+        ("unknown_source.child", None),
+        ("evaluation_context.horizon", None),
+    ),
+)
+def test_customer_source_type_only_exposes_registered_document_type(source_key, expected):
+    assert resolve_luxian_0609_customer_document_type(source_key) == expected

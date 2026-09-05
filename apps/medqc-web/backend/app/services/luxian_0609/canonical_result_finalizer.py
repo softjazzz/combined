@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from copy import deepcopy
+from types import NotImplementedType
 from typing import Any
 
 from ..luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
@@ -167,6 +168,47 @@ _CUSTOMER_SOURCE_LABELS = {
     "exam_attention_report": "检查危急值报告",
     "lab_attention_report": "检验危急值报告",
 }
+
+
+def validate_luxian_0609_executor_customer_display_facts(
+    *, rule_id: str, raw: Any
+) -> dict[str, Any] | None | NotImplementedType:
+    """接收执行器已验证的客户事实，拒绝任何内部文书标识。"""
+
+    private_keys = frozenset(
+        {
+            "source_document_id",
+            "source_document_ids",
+            "source_document_refs",
+            "trigger_order_id",
+            "trigger_source",
+        }
+    )
+
+    def contains_private_identifier(value: Any) -> bool:
+        if isinstance(value, Mapping):
+            return any(
+                not isinstance(key, str)
+                or key in private_keys
+                or contains_private_identifier(item)
+                for key, item in value.items()
+            )
+        if isinstance(value, (list, tuple)):
+            return any(contains_private_identifier(item) for item in value)
+        return False
+
+    # 规则族的受控字段合同仍由其执行器侧投影器拥有；Finalizer 只提供
+    # 一个统一接收边界，避免聚合层重新解释客户事实。
+    from .basic_timeliness_customer_projection import (
+        is_basic_timeliness_customer_rule,
+        safe_basic_timeliness_customer_display_facts,
+    )
+
+    if not is_basic_timeliness_customer_rule(rule_id):
+        return NotImplemented
+    if not isinstance(raw, Mapping) or contains_private_identifier(raw):
+        return None
+    return safe_basic_timeliness_customer_display_facts(rule_id=rule_id, raw=raw)
 
 
 def _missing_sources_from_customer_facts(result: Mapping[str, Any]) -> list[str]:

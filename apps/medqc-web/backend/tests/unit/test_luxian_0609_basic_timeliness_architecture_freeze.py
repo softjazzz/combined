@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.canonical_result_finalizer import (
+    validate_luxian_0609_executor_customer_display_facts,
 )
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
@@ -15,6 +20,7 @@ from app.services.luxian_0609.native_basic_timeliness import (
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609_result_aggregator import (
+    Luxian0609CustomerDisplayFactsError,
     aggregate_luxian_0609_results,
 )
 
@@ -164,3 +170,62 @@ def test_basic_timeliness_rule_literals_do_not_return_to_result_aggregator():
     assert all(
         rule_id not in aggregator_source for rule_id in BASIC_TIMELINESS_RULE_IDS
     )
+
+
+def test_finalizer_accepts_executor_safe_facts_and_rejects_internal_document_ids():
+    safe_facts = {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "admission_record",
+        "source_label": "入院记录",
+        "timeliness_state": "within",
+        "threshold_hours": 24,
+        "anchor_time": "2026-06-01 08:00:00",
+        "observed_time": "2026-06-01 09:00:00",
+        "elapsed_hours": 1.0,
+        "remaining_hours": 23.0,
+    }
+
+    assert validate_luxian_0609_executor_customer_display_facts(
+        rule_id="LX0609-001", raw=safe_facts
+    ) == safe_facts
+    assert validate_luxian_0609_executor_customer_display_facts(
+        rule_id="LX0609-001",
+        raw={**safe_facts, "source_document_id": "ADM-INTERNAL"},
+    ) is None
+
+
+def test_aggregator_fails_closed_for_executor_facts_with_internal_document_id():
+    session = _frozen_session()
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001",),
+        decision_rule_ids=("LX0609-001",),
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=("LX0609-001",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    safe_facts = dict(execution.customer_display_facts[0][1])
+
+    with pytest.raises(Luxian0609CustomerDisplayFactsError):
+        aggregate_luxian_0609_results(
+            wrapper_rules=[
+                rule
+                for rule in load_luxian_0609_rules()
+                if rule["rule_id"] == "LX0609-001"
+            ],
+            execution_results=[],
+            reduced_decisions=reduced,
+            customer_display_facts=(
+                ("LX0609-001", {**safe_facts, "source_document_id": "FORGED"}),
+            ),
+            format_evidence=False,
+            audit_context={
+                "evidence_snapshot": session.snapshot,
+                "evidence_materials": session.materials,
+            },
+        )

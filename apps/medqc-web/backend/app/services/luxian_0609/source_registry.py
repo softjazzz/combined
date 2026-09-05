@@ -670,6 +670,31 @@ def is_registered_luxian_0609_source_key(source_key: str) -> bool:
     return bool(_entries_for_source_key(source_key))
 
 
+def resolve_luxian_0609_customer_document_type(source_key: str) -> str | None:
+    """将受控来源解析为可对客户展示的已注册文书类型。"""
+
+    normalized = str(source_key or "").strip().lower()
+    if not _SOURCE_KEY_PATTERN.fullmatch(normalized):
+        return None
+    matches = _entries_for_source_key(normalized)
+    registry = load_luxian_0609_source_registry()
+    exact_matches = tuple(
+        entry for entry in matches if entry.document_type == normalized
+    )
+    if len(exact_matches) == 1:
+        if "." not in normalized:
+            return normalized
+        # 内部受控的 dotted source（如抢救医嘱）只能投影其已注册客户文书根。
+        customer_document_type = normalized.split(".", 1)[0]
+        return customer_document_type if customer_document_type in registry else None
+    if len(matches) != 1:
+        return None
+    # 唯一登记的物理来源别名沿用原 source_type，避免改变既有证据坐标。
+    if normalized in matches[0].source_keys and "." not in normalized:
+        return normalized
+    return None
+
+
 def resolve_luxian_0609_physical_source_entry(
     source_key: str,
 ) -> SourceRegistryEntry:

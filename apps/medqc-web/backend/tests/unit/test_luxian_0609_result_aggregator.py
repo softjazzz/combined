@@ -12,6 +12,9 @@ from app.services.luxian_0609 import native_consultation_episode_execution as co
 from app.services.luxian_0609.customer_evidence_enrichment import (
     enrich_customer_evidence,
 )
+from app.services.luxian_0609.canonical_result_finalizer import (
+    validate_luxian_0609_executor_customer_display_facts,
+)
 from app.services.luxian_0609.deterministic_gate import GateDecision, GateFactRef, GateReport
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState,
@@ -2888,7 +2891,7 @@ def test_001_time_conflict_rejects_a_duration_that_does_not_match_both_times():
         "time_conflict_seconds": 60,
     }
 
-    assert safe_luxian_0609_customer_display_facts(
+    assert validate_luxian_0609_executor_customer_display_facts(
         rule_id="LX0609-001",
         raw=facts,
     ) is None
@@ -2904,11 +2907,11 @@ def test_001_blank_or_placeholder_fact_is_strictly_whitelisted():
         "document_content_state": "blank_or_placeholder",
     }
 
-    assert safe_luxian_0609_customer_display_facts(
+    assert validate_luxian_0609_executor_customer_display_facts(
         rule_id="LX0609-001",
         raw=facts,
     ) == facts
-    assert safe_luxian_0609_customer_display_facts(
+    assert validate_luxian_0609_executor_customer_display_facts(
         rule_id="LX0609-001",
         raw={**facts, "document_content_state": "untrusted"},
     ) is None
@@ -3677,7 +3680,20 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
         reduced_decisions=(_reduced_decision("LX0609-001"),),
         audit_context={
             "evidence_snapshot": SimpleNamespace(
-                facts=(),
+                facts=(
+                    SimpleNamespace(
+                        fact_id="b" * 64,
+                        source_snapshot_hash="a" * 64,
+                        source_key="admission_record",
+                        source_document_id="private-admission-document-id",
+                    ),
+                    SimpleNamespace(
+                        fact_id="c" * 64,
+                        source_snapshot_hash="a" * 64,
+                        source_key="discharge_record",
+                        source_document_id="private-discharge-document-id",
+                    ),
+                ),
                 observations=(
                     SimpleNamespace(
                         source_key="admission_record",
@@ -3685,7 +3701,7 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
                     ),
                     SimpleNamespace(
                         source_key="discharge_record",
-                        snapshot_ref="sha256:" + "b" * 64,
+                        snapshot_ref="sha256:" + "c" * 64,
                     ),
                 ),
             ),
@@ -4038,8 +4054,6 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "anchor_time": "2026-06-01 08:00:00",
                 "observed_time": "2026-06-04 10:00:00",
                 "elapsed_hours": 74,
-                "raw_course_text": "PRIVATE_COURSE_TEXT",
-                "source_document_id": "private-course-document-id",
             },
             {
                 "failure_kind": "timeliness_requirement_not_met",
@@ -4065,8 +4079,6 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "observed_time": "2026-06-01 16:15:00",
                 "elapsed_hours": 7.25,
                 "overdue_hours": 1.25,
-                "source_document_id": "private-rescue-document-id",
-                "raw_rescue_text": "PRIVATE_RESCUE_TEXT",
             },
             {
                 "failure_kind": "timeliness_requirement_not_met",
@@ -4236,11 +4248,6 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
         assert result["customer_evidence"] == [{
             "source_type": "surgery_record",
             "source_document_id": "private-surgery-document-id",
-        }]
-    if rule_id == "LX0609-004":
-        assert result["customer_evidence"] == [{
-            "source_type": "rescue_record",
-            "source_document_id": "private-rescue-document-id",
         }]
     assert "PRIVATE_" not in repr(result)
 
@@ -4859,24 +4866,6 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
                 "source_document_type": "mr_surgery",
             },
             [{"source_type": "mr_surgery", "source_document_id": "private-surgery-document-id"}],
-        ),
-        (
-            "LX0609-005",
-            {
-                "failure_kind": "timeliness_requirement_satisfied",
-                "target_document": "attending_course_record",
-                "source_label": "主治医师及以上首次查房记录",
-                "timeliness_state": "within",
-                "threshold_hours": 48,
-                "anchor_time": "2026-07-07 13:55:30",
-                "observed_time": "2026-07-07 15:10:30",
-                "elapsed_hours": 1.25,
-                "source_document_id": "private-senior-course-document-id",
-            },
-            [{
-                "source_type": "senior_course_record",
-                "source_document_id": "private-senior-course-document-id",
-            }],
         ),
     ],
 )
@@ -6424,7 +6413,7 @@ def test_transfer_customer_facts_allow_only_controlled_event_fields() -> None:
     ) is None
 
 
-def test_004_projects_rescue_events_without_exposing_internal_document_ids() -> None:
+def test_004_finalizer_accepts_executor_safe_rescue_event_facts() -> None:
     raw = {
         "failure_kind": "timeliness_requirement_not_met",
         "target_document": "rescue_record",
@@ -6434,11 +6423,9 @@ def test_004_projects_rescue_events_without_exposing_internal_document_ids() -> 
         "anchor_time": "2026-06-01 09:00:00",
         "observed_time": "2026-06-01 16:00:00",
         "elapsed_hours": 7.0,
-        "source_document_id": "rescue-1",
         "rescue_events": [
             {
                 "event_index": 1,
-                "source_document_id": "rescue-1",
                 "rescue_end_time": "2026-06-01 09:00:00",
                 "document_completion_time": "2026-06-01 16:00:00",
                 "event_state": "late",
@@ -6446,14 +6433,15 @@ def test_004_projects_rescue_events_without_exposing_internal_document_ids() -> 
             },
             {
                 "event_index": 2,
-                "source_document_id": "rescue-2",
                 "document_completion_time": "2026-06-02 10:00:00",
                 "event_state": "rescue_end_time_missing",
             },
         ],
     }
 
-    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-004", raw=raw)
+    safe = validate_luxian_0609_executor_customer_display_facts(
+        rule_id="LX0609-004", raw=raw
+    )
 
     assert safe is not None
     assert safe["rescue_events"] == [
@@ -6472,12 +6460,6 @@ def test_004_projects_rescue_events_without_exposing_internal_document_ids() -> 
     ]
     assert "source_document_id" not in safe
     assert all("source_document_id" not in item for item in safe["rescue_events"])
-    assert _customer_evidence_from_display_facts(
-        rule_id="LX0609-004", raw=raw
-    ) == [
-        {"source_type": "rescue_record", "source_document_id": "rescue-1"},
-        {"source_type": "rescue_record", "source_document_id": "rescue-2"},
-    ]
 
 
 @pytest.mark.parametrize(
@@ -6500,47 +6482,33 @@ def test_004_accepts_controlled_incomplete_time_facts(
         "source_label": "抢救记录",
         "timeliness_state": timeliness_state,
         "threshold_hours": 6,
-        "source_document_id": "rescue-gap",
         **({"anchor_time": anchor_time} if anchor_time else {}),
         **({"observed_time": observed_time} if observed_time else {}),
     }
 
-    safe = safe_luxian_0609_customer_display_facts(rule_id="LX0609-004", raw=raw)
+    safe = validate_luxian_0609_executor_customer_display_facts(
+        rule_id="LX0609-004", raw=raw
+    )
 
     assert safe is not None
     assert safe["failure_kind"] == failure_kind
     assert "source_document_id" not in safe
-    assert _customer_evidence_from_display_facts(
-        rule_id="LX0609-004", raw=raw
-    ) == [
-        {"source_type": "rescue_record", "source_document_id": "rescue-gap"}
-    ]
 
 
-def test_004_missing_record_after_rescue_order_projects_only_safe_facts_and_order_evidence() -> None:
+def test_004_finalizer_accepts_safe_missing_record_facts() -> None:
     raw = {
         "failure_kind": "rescue_record_missing_after_trigger",
         "target_document": "rescue_record",
         "source_label": "抢救记录",
-        "trigger_source": "inpat_nondrug_order.rescue_order",
-        "trigger_order_id": "rescue-order-1",
     }
 
-    assert safe_luxian_0609_customer_display_facts(
+    assert validate_luxian_0609_executor_customer_display_facts(
         rule_id="LX0609-004", raw=raw
     ) == {
         "failure_kind": "rescue_record_missing_after_trigger",
         "target_document": "rescue_record",
         "source_label": "抢救记录",
     }
-    assert _customer_evidence_from_display_facts(
-        rule_id="LX0609-004", raw=raw
-    ) == [
-        {
-            "source_type": "inpat_nondrug_order",
-            "source_document_id": "rescue-order-1",
-        }
-    ]
 
 
 def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
@@ -6553,7 +6521,6 @@ def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
         "rescue_events": [
             {
                 "event_index": 1,
-                "source_document_id": "rescue-1",
                 "rescue_end_time": "2026-06-01 09:00:00",
                 "document_completion_time": "2026-06-01 11:00:00",
                 "event_state": "within",
@@ -6562,7 +6529,7 @@ def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
         ],
     }
 
-    assert safe_luxian_0609_customer_display_facts(
+    assert validate_luxian_0609_executor_customer_display_facts(
         rule_id="LX0609-004",
         raw={
             **base,
@@ -6571,7 +6538,7 @@ def test_004_rejects_inconsistent_or_unexpected_rescue_event_fields() -> None:
             ],
         },
     ) is None
-    assert safe_luxian_0609_customer_display_facts(
+    assert validate_luxian_0609_executor_customer_display_facts(
         rule_id="LX0609-004",
         raw={
             **base,

@@ -15,12 +15,7 @@ from .luxian_0609_result_schema import (
 )
 from .luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_canonical_result,
-)
-from .luxian_0609.basic_timeliness_customer_projection import (
-    basic_timeliness_customer_evidence,
-    basic_timeliness_exact_evidence_sources,
-    is_basic_timeliness_customer_rule,
-    safe_basic_timeliness_customer_display_facts,
+    validate_luxian_0609_executor_customer_display_facts,
 )
 from .luxian_0609.customer_evidence_enrichment import (
     enrich_customer_evidence,
@@ -500,12 +495,6 @@ def safe_luxian_0609_customer_display_facts(
     """旧原生分支只保留尚未迁移到通用子结论合同的受控展示事实。"""
     if not isinstance(raw, Mapping):
         return None
-    if is_basic_timeliness_customer_rule(rule_id):
-        return safe_basic_timeliness_customer_display_facts(
-            rule_id=rule_id,
-            raw=raw,
-        )
-
     def controlled_list(value: Any, *, allowed: set[str] | None = None) -> list[str] | None:
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
             return None
@@ -4704,12 +4693,12 @@ def _customer_evidence_from_display_facts(
 
     if not isinstance(raw, Mapping):
         return []
-    basic_timeliness_evidence = basic_timeliness_customer_evidence(
+    verified_facts = validate_luxian_0609_executor_customer_display_facts(
         rule_id=rule_id,
         raw=raw,
     )
-    if basic_timeliness_evidence is not None:
-        return basic_timeliness_evidence
+    if verified_facts is not NotImplemented:
+        return []
     # 先复用展示事实白名单验证业务形态；内部 ID 只在此函数中转成
     # customer_evidence，绝不能进入 customer_display_facts。
     if safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw) is None:
@@ -5445,10 +5434,9 @@ def _customer_evidence_from_reduced_decision(
     if not decision.fact_refs:
         return []
     referenced = set(decision.fact_refs)
-    normalized_rule_id = str(decision.rule_id or "").strip().upper()
-    exact_source_keys = basic_timeliness_exact_evidence_sources(
-        normalized_rule_id
-    ) or _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE.get(normalized_rule_id)
+    exact_source_keys = _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE.get(
+        str(decision.rule_id or "").strip().upper()
+    )
     rows: list[dict[str, str]] = []
     seen_document_ids: set[str] = set()
     for fact in facts if isinstance(facts, tuple) else ():
@@ -5609,11 +5597,23 @@ def _copy_native_customer_fields(
         for candidate in (top_level_display_facts, metadata_display_facts)
         if candidate is not None
     )
-    supplied_safe_facts = tuple(
-        safe_luxian_0609_customer_display_facts(
+
+    def safe_executor_display_facts(raw: Any) -> dict[str, Any] | None:
+        safe_facts = validate_luxian_0609_executor_customer_display_facts(
             rule_id=wrapper_id,
-            raw=supplied_facts,
+            raw=raw,
         )
+        return (
+            safe_luxian_0609_customer_display_facts(
+                rule_id=wrapper_id,
+                raw=raw,
+            )
+            if safe_facts is NotImplemented
+            else safe_facts
+        )
+
+    supplied_safe_facts = tuple(
+        safe_executor_display_facts(supplied_facts)
         for supplied_facts in supplied_display_facts
     )
     for supplied_facts, supplied_safe_facts_item in zip(
@@ -5890,10 +5890,15 @@ def aggregate_luxian_0609_results(
             or not isinstance(facts, Mapping)
         ):
             raise ValueError("invalid customer display facts scope")
-        safe_facts = safe_luxian_0609_customer_display_facts(
+        safe_facts = validate_luxian_0609_executor_customer_display_facts(
             rule_id=rule_id,
             raw=facts,
         )
+        if safe_facts is NotImplemented:
+            safe_facts = safe_luxian_0609_customer_display_facts(
+                rule_id=rule_id,
+                raw=facts,
+            )
         if safe_facts is None and rule_id == "LX0609-017":
             raise ValueError("invalid copy customer display facts")
         if (

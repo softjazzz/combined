@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 
 from ...core.settings import get_settings
 from ..case_identity import CaseRef
+from ..luxian_0609.canonical_result_finalizer import (
+    validate_luxian_0609_executor_customer_display_facts,
+)
 from ..luxian_0609.customer_renderer import RULE_SET_VERSION
 from ..luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
 from ..luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
@@ -263,7 +266,12 @@ def safe_customer_display_facts(
     raw = item.get("customer_display_facts")
     if not isinstance(raw, dict):
         return {}
-    shared = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw)
+    shared = validate_luxian_0609_executor_customer_display_facts(
+        rule_id=rule_id,
+        raw=raw,
+    )
+    if shared is NotImplemented:
+        shared = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw)
     if shared is not None:
         if rule_id == "LX0609-025" and not shared.get("missing_fields"):
             return {}

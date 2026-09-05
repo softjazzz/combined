@@ -481,8 +481,6 @@ def test_customer_projector_preserves_shared_lx004_timeliness_facts() -> None:
                 "anchor_time": "2026-06-01 09:00:00",
                 "observed_time": "2026-06-01 16:15:00",
                 "elapsed_hours": 7.25,
-                "source_document_id": "PRIVATE_RESCUE_DOCUMENT_ID",
-                "raw_rescue_text": "PRIVATE_RESCUE_TEXT",
             },
         },
         hmac_key="unit-test-key",
@@ -500,8 +498,31 @@ def test_customer_projector_preserves_shared_lx004_timeliness_facts() -> None:
         "elapsed_hours": 7.25,
         "overdue_hours": 1.25,
     }
-    assert "PRIVATE_RESCUE_TEXT" not in json.dumps(projected, ensure_ascii=False)
-    assert "PRIVATE_RESCUE_DOCUMENT_ID" not in json.dumps(projected, ensure_ascii=False)
+
+
+def test_customer_projector_rejects_lx004_facts_with_internal_document_id() -> None:
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        project_customer_safe_result_item(
+            {
+                "record_id": "R-004-INVALID",
+                "rule_id": "LX0609-004",
+                "rule_version": "2026-07-29",
+                "status": "non_compliant",
+                "reason_code": "threshold_exceeded",
+                "customer_display_facts": {
+                    "failure_kind": "timeliness_requirement_not_met",
+                    "target_document": "rescue_record",
+                    "source_label": "抢救记录",
+                    "timeliness_state": "late",
+                    "threshold_hours": 6,
+                    "anchor_time": "2026-06-01 09:00:00",
+                    "observed_time": "2026-06-01 16:15:00",
+                    "elapsed_hours": 7.25,
+                    "source_document_id": "PRIVATE_RESCUE_DOCUMENT_ID",
+                },
+            },
+            hmac_key="unit-test-key",
+        )
 
 
 def test_customer_projector_preserves_only_controlled_lx018_criteria() -> None:

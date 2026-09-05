@@ -1,4 +1,4 @@
-"""基础时限规则的客户安全事实、结论和证据投影。"""
+"""基础时限规则族的客户安全事实合同。"""
 
 from __future__ import annotations
 
@@ -19,19 +19,8 @@ _TARGET_DOCUMENT_BY_RULE = {
     "LX0609-006": "senior_course_record",
 }
 
-_EXACT_EVIDENCE_SOURCES_BY_RULE = {
-    "LX0609-001": frozenset({"admission_record"}),
-    "LX0609-005": frozenset({"senior_course_record"}),
-    "LX0609-006": frozenset({"senior_course_record"}),
-}
-
-
 def is_basic_timeliness_customer_rule(rule_id: str) -> bool:
     return str(rule_id or "").strip().upper() in BASIC_TIMELINESS_CUSTOMER_RULE_IDS
-
-
-def basic_timeliness_exact_evidence_sources(rule_id: str) -> frozenset[str] | None:
-    return _EXACT_EVIDENCE_SOURCES_BY_RULE.get(str(rule_id or "").strip().upper())
 
 
 def _controlled_datetime(candidate: Any) -> datetime | None:
@@ -152,10 +141,22 @@ def safe_basic_timeliness_customer_display_facts(
         }
         if trigger_order_id is not None:
             expected_keys.add("trigger_order_id")
+        safe_expected_keys = {
+            "failure_kind",
+            "target_document",
+            "source_label",
+        }
         if (
             source_label != "抢救记录"
-            or raw.get("trigger_source") != "inpat_nondrug_order.rescue_order"
-            or set(raw) != expected_keys
+            or raw.get("target_document") != "rescue_record"
+            or (
+                set(raw) != safe_expected_keys
+                and (
+                    raw.get("trigger_source")
+                    != "inpat_nondrug_order.rescue_order"
+                    or set(raw) != expected_keys
+                )
+            )
             or (
                 trigger_order_id is not None
                 and (
@@ -319,69 +320,8 @@ def safe_basic_timeliness_customer_display_facts(
     return facts
 
 
-def _valid_document_id(value: Any) -> str:
-    candidate = str(value or "").strip()
-    return (
-        candidate
-        if candidate
-        and len(candidate) <= 256
-        and "\n" not in candidate
-        and "\r" not in candidate
-        else ""
-    )
-
-
-def basic_timeliness_customer_evidence(
-    *, rule_id: str, raw: Any
-) -> list[dict[str, str]] | None:
-    normalized_rule_id = str(rule_id or "").strip().upper()
-    if normalized_rule_id not in BASIC_TIMELINESS_CUSTOMER_RULE_IDS:
-        return None
-    if not isinstance(raw, Mapping):
-        return []
-    if (
-        safe_basic_timeliness_customer_display_facts(
-            rule_id=normalized_rule_id, raw=raw
-        )
-        is None
-    ):
-        return []
-    if normalized_rule_id == "LX0609-004":
-        located: list[dict[str, str]] = []
-        seen: set[tuple[str, str]] = set()
-        candidates = [("rescue_record", raw.get("source_document_id"))]
-        candidates.extend(
-            ("rescue_record", item.get("source_document_id"))
-            for item in raw.get("rescue_events") or ()
-            if isinstance(item, Mapping)
-        )
-        if raw.get("failure_kind") == "rescue_record_missing_after_trigger":
-            candidates.append(("inpat_nondrug_order", raw.get("trigger_order_id")))
-        for source_type, value in candidates:
-            document_id = _valid_document_id(value)
-            key = (source_type, document_id)
-            if document_id and key not in seen:
-                seen.add(key)
-                located.append(
-                    {"source_type": source_type, "source_document_id": document_id}
-                )
-        return located
-    source_type = {
-        "LX0609-005": "senior_course_record",
-        "LX0609-006": "senior_course_record",
-    }.get(normalized_rule_id)
-    source_document_id = _valid_document_id(raw.get("source_document_id"))
-    if source_type and source_document_id:
-        return [
-            {"source_type": source_type, "source_document_id": source_document_id}
-        ]
-    return []
-
-
 __all__ = [
     "BASIC_TIMELINESS_CUSTOMER_RULE_IDS",
-    "basic_timeliness_customer_evidence",
-    "basic_timeliness_exact_evidence_sources",
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",
 ]

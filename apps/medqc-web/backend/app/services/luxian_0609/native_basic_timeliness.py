@@ -19,6 +19,9 @@ from .basic_timeliness_facts import (
     extract_rescue_events,
     is_generic_upper_physician_round,
 )
+from .basic_timeliness_customer_projection import (
+    safe_basic_timeliness_customer_display_facts,
+)
 from .decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -659,6 +662,32 @@ def _typed_basic_decisions(
             return gap(decision.rule_id, "snapshot_mismatch", technical=True)
         return replace(decision, fact_refs=(*decision.fact_refs, document_ref))
 
+    def attach_selected_rows(
+        decision: RuleDecision,
+        *,
+        source_key: str,
+        selected_rows: Sequence[Mapping[str, Any]],
+    ) -> RuleDecision:
+        """为同一结论实际检查到的每一行文书绑定材料引用。"""
+
+        bound = decision
+        seen_rows: set[int] = set()
+        for selected_row in selected_rows:
+            if id(selected_row) in seen_rows:
+                continue
+            seen_rows.add(id(selected_row))
+            bound = attach_selected_row(
+                bound,
+                source_key=source_key,
+                row=selected_row,
+            )
+            if (
+                bound.evidence_state is EvidenceState.TECHNICAL_ERROR
+                and bound.reason_code == "snapshot_mismatch"
+            ):
+                return bound
+        return bound
+
     admission_needed = any(
         rule_id in {"LX0609-001", "LX0609-002", "LX0609-005", "LX0609-006"}
         for rule_id in rule_ids
@@ -846,7 +875,7 @@ def _typed_basic_decisions(
         return gap(rule_id, "snapshot_mismatch", technical=True)
 
     def add_customer_fact(rule_id: str, facts: Mapping[str, Any]) -> None:
-        """仅保留时限解释需要的标量事实；原始文书仍留在证据材料仓。"""
+        """执行器在选择点输出已脱敏、已校验的客户事实。"""
 
         if (
             customer_display_facts is not None
@@ -856,7 +885,12 @@ def _typed_basic_decisions(
                 and decisions[-1].reason_code == "snapshot_mismatch"
             )
         ):
-            customer_display_facts.append((rule_id, dict(facts)))
+            safe_facts = safe_basic_timeliness_customer_display_facts(
+                rule_id=rule_id,
+                raw=facts,
+            )
+            if safe_facts is not None:
+                customer_display_facts.append((rule_id, safe_facts))
 
     def format_time(value: datetime | None) -> str:
         return value.strftime("%Y-%m-%d %H:%M:%S") if value is not None else ""
@@ -1090,8 +1124,13 @@ def _typed_basic_decisions(
                 if not rescue_orders:
                     decisions.append(not_applicable(rule_id, "trigger_absent_complete"))
                     continue
-                decisions.append(gap(rule_id, "rescue_record_missing_after_trigger"))
-                trigger_order = rescue_orders[0]
+                decisions.append(
+                    attach_selected_rows(
+                        gap(rule_id, "rescue_record_missing_after_trigger"),
+                        source_key=CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+                        selected_rows=rescue_orders,
+                    )
+                )
                 add_customer_fact(
                     rule_id,
                     {
@@ -1099,20 +1138,18 @@ def _typed_basic_decisions(
                         "target_document": "rescue_record",
                         "source_label": "抢救记录",
                         "trigger_source": CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
-                        **(
-                            {"trigger_order_id": str(trigger_order.get("order_id"))}
-                            if trigger_order.get("order_id")
-                            else {}
-                        ),
                     },
                 )
                 continue
-            rescue_timeline: list[tuple[timedelta, datetime, datetime, str]] = []
-            incomplete: list[tuple[str, datetime | None, datetime | None, str]] = []
+            rescue_timeline: list[
+                tuple[timedelta, datetime, datetime, str, Mapping[str, Any]]
+            ] = []
+            incomplete: list[
+                tuple[str, datetime | None, datetime | None, str, Mapping[str, Any]]
+            ] = []
             rescue_event_facts: list[dict[str, Any]] = []
-            for event_index, event in enumerate(
-                extract_rescue_events(rescue_rows), start=1
-            ):
+            rescue_events = extract_rescue_events(rescue_rows)
+            for event_index, event in enumerate(rescue_events, start=1):
                 record_time = event.document.observed_time
                 rescue_end = event.rescue_end_time
                 event_fact: dict[str, Any] = {"event_index": event_index}
@@ -1131,6 +1168,7 @@ def _typed_basic_decisions(
                             None,
                             record_time,
                             event.document.document_id or "",
+                            event.document.row,
                         )
                     )
                     continue
@@ -1143,6 +1181,7 @@ def _typed_basic_decisions(
                             rescue_end,
                             None,
                             event.document.document_id or "",
+                            event.document.row,
                         )
                     )
                     continue
@@ -1160,6 +1199,7 @@ def _typed_basic_decisions(
                             rescue_end,
                             record_time,
                             event.document.document_id or "",
+                            event.document.row,
                         )
                     )
                 else:
@@ -1175,6 +1215,7 @@ def _typed_basic_decisions(
                             rescue_end,
                             record_time,
                             event.document.document_id or "",
+                            event.document.row,
                         )
                     )
             overdue = max(
@@ -1187,25 +1228,32 @@ def _typed_basic_decisions(
                 default=None,
             )
             if overdue is not None:
-                _delta, rescue_end, record_time, document_id = overdue
+                _delta, rescue_end, record_time, document_id, selected_row = overdue
                 decisions.append(
-                    conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
+                    attach_selected_rows(
+                        conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded"),
+                        source_key="rescue_record",
+                        selected_rows=(
+                            selected_row,
+                            *(event.document.row for event in rescue_events),
+                        ),
+                    )
                 )
                 projected = timeliness_fact(
-                        rule_id=rule_id,
-                        target_document="rescue_record",
-                        source_label="抢救记录",
-                        state="late",
-                        threshold_hours=6,
-                        anchor=rescue_end,
-                        observed=record_time,
-                        source_document_id=document_id or None,
-                    )
+                    rule_id=rule_id,
+                    target_document="rescue_record",
+                    source_label="抢救记录",
+                    state="late",
+                    threshold_hours=6,
+                    anchor=rescue_end,
+                    observed=record_time,
+                    source_document_id=document_id or None,
+                )
                 if len(rescue_event_facts) > 1:
                     projected["rescue_events"] = rescue_event_facts
                 add_customer_fact(rule_id, projected)
             elif incomplete:
-                reason, rescue_end, record_time, document_id = sorted(
+                reason, rescue_end, record_time, document_id, selected_row = sorted(
                     incomplete,
                     key=lambda item: (
                         {
@@ -1216,44 +1264,64 @@ def _typed_basic_decisions(
                         item[3],
                     ),
                 )[0]
-                decisions.append(gap(rule_id, reason))
-                projected = timeliness_fact(
-                        rule_id=rule_id,
-                        target_document="rescue_record",
-                        source_label="抢救记录",
-                        state="conflict" if reason == "authoritative_time_conflict" else "missing_time",
-                        threshold_hours=6,
-                        anchor=rescue_end,
-                        observed=record_time,
-                        source_document_id=document_id or None,
-                        failure_kind=reason,
+                decisions.append(
+                    attach_selected_rows(
+                        gap(rule_id, reason),
+                        source_key="rescue_record",
+                        selected_rows=(
+                            selected_row,
+                            *(event.document.row for event in rescue_events),
+                        ),
                     )
+                )
+                projected = timeliness_fact(
+                    rule_id=rule_id,
+                    target_document="rescue_record",
+                    source_label="抢救记录",
+                    state=(
+                        "conflict"
+                        if reason == "authoritative_time_conflict"
+                        else "missing_time"
+                    ),
+                    threshold_hours=6,
+                    anchor=rescue_end,
+                    observed=record_time,
+                    source_document_id=document_id or None,
+                    failure_kind=reason,
+                )
                 if len(rescue_event_facts) > 1:
                     projected["rescue_events"] = rescue_event_facts
                 add_customer_fact(rule_id, projected)
             elif rescue_timeline:
-                decisions.append(
-                    conclusive(
-                        rule_id,
-                        QcDirection.SATISFIED,
-                        "requirement_within_threshold",
-                    )
-                )
-                _delta, rescue_end, record_time, document_id = max(
+                _delta, rescue_end, record_time, document_id, selected_row = max(
                     rescue_timeline,
                     key=lambda item: item[0],
                 )
-                projected = timeliness_fact(
-                        rule_id=rule_id,
-                        target_document="rescue_record",
-                        source_label="抢救记录",
-                        state="within",
-                        threshold_hours=6,
-                        anchor=rescue_end,
-                        observed=record_time,
-                        source_document_id=document_id or None,
-                        failure_kind="timeliness_requirement_satisfied",
+                decisions.append(
+                    attach_selected_rows(
+                        conclusive(
+                            rule_id,
+                            QcDirection.SATISFIED,
+                            "requirement_within_threshold",
+                        ),
+                        source_key="rescue_record",
+                        selected_rows=(
+                            selected_row,
+                            *(event.document.row for event in rescue_events),
+                        ),
                     )
+                )
+                projected = timeliness_fact(
+                    rule_id=rule_id,
+                    target_document="rescue_record",
+                    source_label="抢救记录",
+                    state="within",
+                    threshold_hours=6,
+                    anchor=rescue_end,
+                    observed=record_time,
+                    source_document_id=document_id or None,
+                    failure_kind="timeliness_requirement_satisfied",
+                )
                 if len(rescue_event_facts) > 1:
                     projected["rescue_events"] = rescue_event_facts
                 add_customer_fact(rule_id, projected)

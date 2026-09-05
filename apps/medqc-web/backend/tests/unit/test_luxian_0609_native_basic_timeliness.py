@@ -15,6 +15,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.evidence_material import build_material_document_refs
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -315,8 +316,13 @@ def test_001_short_clinical_content_is_a_substantive_admission_record(
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
-    assert dict(execution.customer_display_facts)["LX0609-001"]["source_document_id"] == (
-        "short-clinical-document"
+    assert "source_document_id" not in dict(execution.customer_display_facts)["LX0609-001"]
+    _assert_selected_document_ref(
+        execution,
+        session,
+        rule_id="LX0609-001",
+        source_key="admission_record",
+        document_id="short-clinical-document",
     )
 
 
@@ -374,7 +380,14 @@ def test_001_ignores_earlier_empty_template_and_uses_substantive_document():
     assert reduced[0].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)["LX0609-001"]
     assert facts["observed_time"] == "2026-06-01 10:00:00"
-    assert facts["source_document_id"] == "substantive-document"
+    assert "source_document_id" not in facts
+    _assert_selected_document_ref(
+        execution,
+        session,
+        rule_id="LX0609-001",
+        source_key="admission_record",
+        document_id="substantive-document",
+    )
 
 
 @pytest.mark.unit
@@ -457,6 +470,30 @@ def _reduce_typed_basic(
     return execution, reduced
 
 
+def _assert_selected_document_ref(
+    execution,
+    session,
+    *,
+    rule_id: str,
+    source_key: str,
+    document_id: str,
+    identity_key: str = "document_id",
+) -> None:
+    """客户安全 facts 不携带 ID；所选材料仍由 decision fact_refs 精确绑定。"""
+
+    rows = tuple(session.materials.rows(source_key))
+    selected_refs = {
+        reference
+        for reference, row in zip(
+            build_material_document_refs(source_key, rows), rows, strict=True
+        )
+        if row.get(identity_key) == document_id
+    }
+    assert len(selected_refs) == 1
+    decision = next(item for item in execution.decisions if item.rule_id == rule_id)
+    assert selected_refs.issubset(decision.fact_refs)
+
+
 @pytest.mark.unit
 def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anchor():
     session = _typed_basic_session(
@@ -510,7 +547,6 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
                 "observed_time": "2026-06-01 08:00:00",
                 "elapsed_hours": 0.0,
                 "remaining_hours": 24.0,
-                "source_document_id": "safe-admission-ref",
             },
         ),
         (
@@ -525,7 +561,6 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
                 "observed_time": "2026-06-02 08:00:00",
                 "elapsed_hours": 24.0,
                 "remaining_hours": 24.0,
-                "source_document_id": "safe-attending-ref",
             },
         ),
         (
@@ -540,9 +575,20 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
                 "observed_time": "2026-06-03 08:00:00",
                 "elapsed_hours": 48.0,
                 "remaining_hours": 24.0,
-                "source_document_id": "safe-senior-ref",
             },
         ),
+    )
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        document_id="safe-admission-ref",
+    )
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-005", source_key="daily_course_record",
+        document_id="safe-attending-ref",
+    )
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-006", source_key="senior_course_record",
+        document_id="safe-senior-ref",
     )
 
 
@@ -624,9 +670,12 @@ def test_001_time_conflict_exposes_both_times_and_exact_lead_for_customer_projec
                 "anchor_time": "2026-08-16 22:39:10",
                 "observed_time": "2026-08-16 22:20:29",
                 "time_conflict_seconds": 1121,
-                "source_document_id": "admission-conflict-document",
             },
         ),
+    )
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        document_id="admission-conflict-document",
     )
 
 
@@ -670,7 +719,6 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
                 "observed_time": "2026-06-02 10:00:00",
                 "elapsed_hours": 26.0,
                 "overdue_hours": 2.0,
-                "source_document_id": "admission-private-id",
             },
         ),
         (
@@ -690,6 +738,10 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
         "source_empty",
         "required_document_missing",
     ]
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        document_id="admission-private-id",
+    )
 
 
 @pytest.mark.unit
@@ -773,8 +825,15 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
         CustomerFinalState.COMPLIANT,
     ]
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-001"]["source_document_id"] == "101"
-    assert facts["LX0609-002"]["source_document_id"] == "102"
+    assert all("source_document_id" not in fact for fact in facts.values())
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-001", source_key="admission_record",
+        document_id="101",
+    )
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-002", source_key="first_course_record",
+        document_id="102",
+    )
 
 
 @pytest.mark.unit
@@ -1084,8 +1143,11 @@ def test_002_compliant_result_exposes_actual_interval_and_source_document():
         "observed_time": "2026-06-01 10:30:00",
         "elapsed_hours": 2.5,
         "remaining_hours": 5.5,
-        "source_document_id": "first-course-safe-ref",
     }
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-002", source_key="first_course_record",
+        document_id="first-course-safe-ref",
+    )
 
 
 @pytest.mark.unit
@@ -1174,9 +1236,12 @@ def test_004_projects_safe_late_rescue_timeline_facts() -> None:
                 "observed_time": "2026-06-01 16:15:00",
                 "elapsed_hours": 7.25,
                 "overdue_hours": 1.25,
-                "source_document_id": "rescue-private-id",
             },
         ),
+    )
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        document_id="rescue-private-id",
     )
 
 
@@ -1213,11 +1278,9 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
         "observed_time": "2026-06-02 15:30:00",
         "elapsed_hours": 5.5,
         "remaining_hours": 0.5,
-        "source_document_id": "rescue-worst",
         "rescue_events": [
             {
                 "event_index": 1,
-                "source_document_id": "rescue-first",
                 "rescue_end_time": "2026-06-01 09:00:00",
                 "document_completion_time": "2026-06-01 11:00:00",
                 "event_state": "within",
@@ -1225,7 +1288,6 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
             },
             {
                 "event_index": 2,
-                "source_document_id": "rescue-worst",
                 "rescue_end_time": "2026-06-02 10:00:00",
                 "document_completion_time": "2026-06-02 15:30:00",
                 "event_state": "within",
@@ -1233,6 +1295,14 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
             },
         ],
     }
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        document_id="rescue-first",
+    )
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        document_id="rescue-worst",
+    )
 
 
 @pytest.mark.unit
@@ -1254,9 +1324,13 @@ def test_004_uses_submit_datetime_and_keeps_late_evidence_ref() -> None:
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     facts = dict(execution.customer_display_facts)["LX0609-004"]
-    assert facts["source_document_id"] == "rescue-submit-ref"
+    assert "source_document_id" not in facts
     assert facts["elapsed_hours"] == pytest.approx(6.0, abs=0.01)
-    assert facts["overdue_hours"] == pytest.approx(0.0, abs=0.01)
+    assert "overdue_hours" not in facts
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        document_id="rescue-submit-ref",
+    )
 
 
 @pytest.mark.unit
@@ -1335,9 +1409,15 @@ def test_004_effective_rescue_order_without_record_is_data_gap() -> None:
         "failure_kind": "rescue_record_missing_after_trigger",
         "target_document": "rescue_record",
         "source_label": "抢救记录",
-        "trigger_source": source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
-        "trigger_order_id": "rescue-order-ref",
     }
+    _assert_selected_document_ref(
+        execution,
+        session,
+        rule_id="LX0609-004",
+        source_key=source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+        document_id="rescue-order-ref",
+        identity_key="order_id",
+    )
 
 
 @pytest.mark.unit
@@ -1421,19 +1501,22 @@ def test_004_overdue_event_wins_but_all_rescue_events_remain_projected() -> None
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "threshold_exceeded"
     facts = dict(execution.customer_display_facts)["LX0609-004"]
-    assert facts["source_document_id"] == "most-overdue-rescue-ref"
+    assert "source_document_id" not in facts
     assert facts["elapsed_hours"] == 9.0
     events = facts["rescue_events"]
-    assert [item["source_document_id"] for item in events] == [
-        "late-rescue-ref",
-        "most-overdue-rescue-ref",
-        "missing-end-ref",
-    ]
+    assert all("source_document_id" not in item for item in events)
     assert [item["event_state"] for item in events] == [
         "late",
         "late",
         "rescue_end_time_missing",
     ]
+    for document_id in (
+        "late-rescue-ref", "most-overdue-rescue-ref", "missing-end-ref"
+    ):
+        _assert_selected_document_ref(
+            execution, session, rule_id="LX0609-004", source_key="rescue_record",
+            document_id=document_id,
+        )
 
 
 @pytest.mark.unit
@@ -1535,7 +1618,11 @@ def test_004_distinguishes_missing_and_conflicting_rescue_times(
     assert reduced[0].reason_code == expected_reason
     facts = dict(execution.customer_display_facts)["LX0609-004"]
     assert facts["failure_kind"] == expected_reason
-    assert facts["source_document_id"] == row["document_id"]
+    assert "source_document_id" not in facts
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-004", source_key="rescue_record",
+        document_id=row["document_id"],
+    )
 
 
 @pytest.mark.unit
@@ -1729,8 +1816,12 @@ def test_005_accepts_customer_standard_upper_physician_round_within_48_hours():
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-005"]["source_document_id"] == "safe-upper-round-ref"
+    assert "source_document_id" not in facts["LX0609-005"]
     assert facts["LX0609-005"]["elapsed_hours"] == 20.69
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-005", source_key="senior_course_record",
+        document_id="safe-upper-round-ref",
+    )
     # “上级医师”只满足主治医师及以上，不得放宽副主任/主任医师规则。
     assert reduced[1].final_state is not CustomerFinalState.COMPLIANT
 
@@ -1762,8 +1853,12 @@ def test_005_accepts_senior_course_source_without_redundant_document_title():
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-005"]["source_document_id"] == "upper-round-without-title"
+    assert "source_document_id" not in facts["LX0609-005"]
     assert facts["LX0609-005"]["elapsed_hours"] == 20.69
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-005", source_key="senior_course_record",
+        document_id="upper-round-without-title",
+    )
     # 来源身份只证明“上级医师”，不能自动升级为副主任医师或主任医师。
     assert reduced[1].final_state is not CustomerFinalState.COMPLIANT
 
@@ -1890,10 +1985,12 @@ def test_006_recognizes_explicit_senior_round_role_from_customer_record_body():
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-006"]["source_document_id"] == (
-        "zhang-yunhai-senior-round"
-    )
+    assert "source_document_id" not in facts["LX0609-006"]
     assert facts["LX0609-006"]["elapsed_hours"] == 23.29
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-006", source_key="senior_course_record",
+        document_id="zhang-yunhai-senior-round",
+    )
     assert not hasattr(execution, "__await__")
 
 
@@ -1965,8 +2062,12 @@ async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body
     assert reduced[1].final_state is CustomerFinalState.COMPLIANT
     assert reduced[1].reason_code == "requirement_within_threshold"
     facts = dict(execution.customer_display_facts)
-    assert facts["LX0609-006"]["source_document_id"] == "safe-upper-round-ref"
+    assert "source_document_id" not in facts["LX0609-006"]
     assert facts["LX0609-006"]["elapsed_hours"] == 20.69
+    _assert_selected_document_ref(
+        execution, session, rule_id="LX0609-006", source_key="senior_course_record",
+        document_id="safe-upper-round-ref",
+    )
 
 
 @pytest.mark.unit

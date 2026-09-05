@@ -23,6 +23,9 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
 )
 from app.services.luxian_0609.evidence_material import build_material_document_refs
+from app.services.luxian_0609.customer_evidence_enrichment import (
+    project_selected_document_evidence,
+)
 from app.services.luxian_0609.native_basic_timeliness import (
     execute_luxian_0609_native_basic_timeliness,
 )
@@ -215,7 +218,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
         ("compliant", "requirement_within_threshold"),
         ("compliant", "requirement_within_threshold"),
     ]
-    expected_raw_customer_display_facts = {
+    expected_customer_display_facts = {
         "LX0609-001": {
             "failure_kind": "timeliness_requirement_satisfied",
             "target_document": "admission_record",
@@ -226,7 +229,6 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "observed_time": "2026-06-01 11:00:00",
             "elapsed_hours": 3.0,
             "remaining_hours": 21.0,
-            "source_document_id": "ADM-SELECTED",
         },
         "LX0609-002": {
             "failure_kind": "timeliness_requirement_satisfied",
@@ -238,7 +240,6 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "observed_time": "2026-06-01 10:00:00",
             "elapsed_hours": 2.0,
             "remaining_hours": 6.0,
-            "source_document_id": "FC-SELECTED",
         },
         "LX0609-005": {
             "failure_kind": "timeliness_requirement_satisfied",
@@ -250,7 +251,6 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "observed_time": "2026-06-02 08:00:00",
             "elapsed_hours": 24.0,
             "remaining_hours": 24.0,
-            "source_document_id": "ROUND-ATTENDING-SELECTED",
         },
         "LX0609-006": {
             "failure_kind": "timeliness_requirement_satisfied",
@@ -262,18 +262,9 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             "observed_time": "2026-06-03 08:00:00",
             "elapsed_hours": 48.0,
             "remaining_hours": 24.0,
-            "source_document_id": "ROUND-SENIOR-SELECTED",
         },
     }
-    assert dict(execution.customer_display_facts) == expected_raw_customer_display_facts
-    expected_customer_display_facts = {
-        rule_id: {
-            key: value
-            for key, value in facts.items()
-            if key != "source_document_id"
-        }
-        for rule_id, facts in expected_raw_customer_display_facts.items()
-    }
+    assert dict(execution.customer_display_facts) == expected_customer_display_facts
     assert [item["customer_display_facts"] for item in results] == [
         expected_customer_display_facts[rule_id] for rule_id in rule_ids
     ]
@@ -381,11 +372,9 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
             "observed_time": "2026-06-02 18:00:00",
             "elapsed_hours": 9.0,
             "overdue_hours": 3.0,
-            "source_document_id": "most-overdue-rescue-ref",
             "rescue_events": [
                 {
                     "event_index": 1,
-                    "source_document_id": "late-rescue-ref",
                     "rescue_end_time": "2026-06-01 09:00:00",
                     "document_completion_time": "2026-06-01 16:01:00",
                     "event_state": "late",
@@ -393,7 +382,6 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
                 },
                 {
                     "event_index": 2,
-                    "source_document_id": "most-overdue-rescue-ref",
                     "rescue_end_time": "2026-06-02 09:00:00",
                     "document_completion_time": "2026-06-02 18:00:00",
                     "event_state": "late",
@@ -401,7 +389,6 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
                 },
                 {
                     "event_index": 3,
-                    "source_document_id": "missing-end-ref",
                     "document_completion_time": "2026-06-03 11:00:00",
                     "event_state": "rescue_end_time_missing",
                 },
@@ -444,11 +431,17 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
         "抢救记录于抢救结束后 9 小时完成（抢救结束时间 2026-06-02 09:00:00；"
         "记录时间 2026-06-02 18:00:00），超过 6 小时要求 3 小时。"
     )
-    assert _coordinates(results[0]) == [
+    event_coordinates = _coordinates(results[0])
+    assert set(event_coordinates) == {
         ("rescue_record", "most-overdue-rescue-ref", "record_content", "2026-06-02 18:00:00"),
         ("rescue_record", "late-rescue-ref", "record_content", "2026-06-01 16:01:00"),
         ("rescue_record", "missing-end-ref", "record_content", "2026-06-03 11:00:00"),
-    ]
+    }
+    assert len(event_coordinates) == len(set(event_coordinates)) == 3
+    _repeat_execution, _repeat_reduced, repeat_results = _execute_and_aggregate(
+        event_session, ("LX0609-004",)
+    )
+    assert _coordinates(repeat_results[0]) == event_coordinates
     assert _fact_ref_source_keys(event_session, execution) == {
         "LX0609-004": frozenset(
             {
@@ -457,13 +450,21 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
             }
         )
     }
+    rescue_document_refs = set(
+        build_material_document_refs(
+            "rescue_record",
+            tuple(event_session.materials.rows("rescue_record")),
+        )
+    )
+    assert rescue_document_refs.issubset(execution.decisions[0].fact_refs)
 
     order_session = _session(
         rule_ids=("LX0609-004",),
         rows_by_source={
             "rescue_record": [],
             CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY: [
-                {"order_id": "rescue-order-ref", "status_state": "effective"}
+                {"order_id": "rescue-order-ref", "status_state": "effective"},
+                {"order_id": "rescue-order-ref-2", "status_state": "effective"},
             ],
         },
     )
@@ -479,8 +480,6 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
             "failure_kind": "rescue_record_missing_after_trigger",
             "target_document": "rescue_record",
             "source_label": "抢救记录",
-            "trigger_source": CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
-            "trigger_order_id": "rescue-order-ref",
         }
     }
     assert order_results[0]["customer_display_facts"] == {
@@ -489,17 +488,45 @@ def test_004_multi_rescue_events_and_effective_order_without_record_are_frozen()
         "source_label": "抢救记录",
     }
     assert order_results[0]["findings"] == "已发现有效抢救医嘱，但未读取到对应抢救记录"
-    assert _coordinates(order_results[0]) == [
-        ("inpat_nondrug_order", "rescue-order-ref", "", "")
+    order_coordinates = _coordinates(order_results[0])
+    assert set(order_coordinates) == {
+        ("inpat_nondrug_order", "rescue-order-ref", "", ""),
+        ("inpat_nondrug_order", "rescue-order-ref-2", "", ""),
+    }
+    assert len(order_coordinates) == len(set(order_coordinates)) == 2
+    assert project_selected_document_evidence(
+        decision=order_reduced[0],
+        evidence_snapshot=order_session.snapshot,
+        evidence_materials=order_session.materials,
+    ) == [
+        {
+            "source_type": "inpat_nondrug_order",
+            "source_document_id": "rescue-order-ref",
+        },
+        {
+            "source_type": "inpat_nondrug_order",
+            "source_document_id": "rescue-order-ref-2",
+        }
     ]
     assert _fact_ref_source_keys(order_session, order_execution) == {
         "LX0609-004": frozenset(
             {
-            CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
-            "rescue_record",
+                CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+                "rescue_record",
             }
         )
     }
+    order_document_refs = set(
+        build_material_document_refs(
+            CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY,
+            tuple(order_session.materials.rows(CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY)),
+        )
+    )
+    assert order_document_refs.issubset(order_execution.decisions[0].fact_refs)
+    _repeat_execution, _repeat_reduced, repeat_order_results = _execute_and_aggregate(
+        order_session, ("LX0609-004",)
+    )
+    assert _coordinates(repeat_order_results[0]) == order_coordinates
 
 
 @pytest.mark.unit
