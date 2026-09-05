@@ -514,5 +514,63 @@
     "prompt_version": "none",
     "mapped_rule_ids": ["LX0609-075"],
     "primary_execution_rule_id": "LX0609-075"
+  },
+  {
+    "rule_id": "LX0609-076",
+    "rule_code": "LX0609-076",
+    "name": "死亡记录：死亡时间缺失",
+    "description": "死亡记录必须填写具体死亡时间；记录完成时间或提交时间不得替代死亡时间。",
+    "positive_example": "死亡记录的死亡时间字段或正文明确记载具体死亡日期和时刻。",
+    "negative_example": "死亡记录仅记载抢救无效死亡，未填写具体死亡时间。",
+    "category": "死亡记录",
+    "applicable_documents": ["death_record"],
+    "applicable_document_labels": ["死亡记录"],
+    "data_dependencies": ["死亡状态", "死亡记录", "死亡时间"],
+    "dependency_type": "事件触发字段完整性",
+    "executor_type": "program",
+    "rule_version": "2026-09-05",
+    "prompt_version": "none",
+    "criteria": [
+      {
+        "criterion_id": "death_time_complete",
+        "label": "死亡时间完整",
+        "kind": "completeness",
+        "failure_reason_code": "required_field_missing",
+        "source_fact": "death_record.death_time",
+        "operator": "complete",
+        "expected": true,
+        "unit": "boolean"
+      }
+    ],
+    "mapped_rule_ids": ["LX0609-076"],
+    "primary_execution_rule_id": "LX0609-076"
+  },
+  {
+    "rule_id": "LX0609-077",
+    "rule_code": "LX0609-077",
+    "name": "首次病程记录：鉴别诊断未与第一诊断相关联",
+    "description": "首次病程记录中已写出的鉴别诊断应围绕初步诊断中的第一诊断展开。",
+    "positive_example": "第一诊断为急性胆囊炎，鉴别诊断围绕消化性溃疡穿孔、急性胰腺炎展开。",
+    "negative_example": "鉴别诊断列出与第一诊断明显无关的系统疾病，且未说明关联。",
+    "category": "首次病程记录",
+    "applicable_documents": ["first_course_record"],
+    "applicable_document_labels": ["首次病程记录"],
+    "data_dependencies": ["第一诊断", "鉴别诊断"],
+    "dependency_type": "受控语义关联",
+    "executor_type": "llm",
+    "rule_version": "2026-09-05",
+    "prompt_version": "lx0609-077-v1",
+    "criteria": [
+      {
+        "criterion_id": "differential_diagnosis_relation",
+        "label": "鉴别诊断与第一诊断关联",
+        "kind": "semantic_relation",
+        "failure_reason_code": "requirement_violated",
+        "left_fact": "first_course_record.first_diagnosis",
+        "right_fact": "first_course_record.differential_diagnosis"
+      }
+    ],
+    "mapped_rule_ids": ["LX0609-077"],
+    "primary_execution_rule_id": "LX0609-077"
   }
 ]

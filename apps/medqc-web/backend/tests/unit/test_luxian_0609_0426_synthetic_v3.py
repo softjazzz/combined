@@ -62,7 +62,7 @@ def _all_v3_cases():
     return cases
 
 
-def test_v3_family_projection_covers_the_unique_75_rule_master() -> None:
+def test_v3_family_projection_preserves_the_frozen_001_to_075_scope() -> None:
     all_rules = module.build_master_family_rule_ids()
     active_rules = module.build_master_family_rule_ids(statuses={"active"})
 

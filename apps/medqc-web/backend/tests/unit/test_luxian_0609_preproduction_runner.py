@@ -295,6 +295,8 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         "LX0609-073",
         "LX0609-074",
         "LX0609-075",
+        "LX0609-076",
+        "LX0609-077",
     }
     assert typed_source_rule_ids - typed_contract_rule_ids == typed_source_only_rule_ids
     # 025/059 合同升级后，当前已有 50 条规则使用非 v1 决策合同；
@@ -635,7 +637,7 @@ def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
     [
         ("LX0609-001", "LX0609-001"),
         ("LX0609-002", "LX0609-001"),
-        ("LX0609-076",),
+        ("LX0609-078",),
         ("SC-001",),
         (),
     ],

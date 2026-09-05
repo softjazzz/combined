@@ -18,20 +18,20 @@ from app.services.sample_validation_rule_sets import (
 )
 
 
-def test_phase_scope_freezes_all_75_customer_rules() -> None:
+def test_phase_scope_freezes_all_77_customer_rules() -> None:
     entries = load_luxian_0609_phase_scope()
 
-    assert len(entries) == 75
+    assert len(entries) == 77
     assert tuple(entry.rule_id for entry in entries) == tuple(
-        f"LX0609-{index:03d}" for index in range(1, 76)
+        f"LX0609-{index:03d}" for index in range(1, 78)
     )
     assert {entry.definition_version for entry in entries} == {
-        "lx0609-defined-scope-2026-08-15-r2"
+        "lx0609-defined-scope-2026-09-05-r3"
     }
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 69
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 71
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
     assert sum(entry.phase_status == "pending_definition" for entry in entries) == 6
-    assert sum(entry.catalog_registered for entry in entries) == 75
+    assert sum(entry.catalog_registered for entry in entries) == 77
 
 
 def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_rules() -> None:
@@ -86,7 +86,7 @@ def test_phase_scope_rejects_any_id_set_or_order_drift_from_master(
     if mismatch_kind == "missing":
         rules.pop()
     elif mismatch_kind == "extra":
-        rules.append({**rules[-1], "rule_id": "LX0609-076"})
+        rules.append({**rules[-1], "rule_id": "LX0609-078"})
     elif mismatch_kind == "duplicate":
         rules[-1] = {**rules[-1], "rule_id": "LX0609-074"}
     else:
@@ -144,12 +144,12 @@ def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
     assert pending == ("LX0609-049", "LX0609-059")
 
 
-def test_customer_delivery_scope_is_70_with_64_executable_and_6_withheld() -> None:
+def test_customer_delivery_scope_is_72_with_66_executable_and_6_withheld() -> None:
     delivery = get_luxian_0609_customer_delivery_rule_ids()
     executable, withheld = get_luxian_0609_customer_execution_scope()
 
-    assert len(delivery) == 70
-    assert len(executable) == 64
+    assert len(delivery) == 72
+    assert len(executable) == 66
     assert len(withheld) == 6
     assert set(executable).isdisjoint(withheld)
     assert set(executable) | set(withheld) == set(delivery)

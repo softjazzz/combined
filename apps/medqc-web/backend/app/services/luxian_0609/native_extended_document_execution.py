@@ -37,6 +37,7 @@ from .extended_document.discharge_course import (
     evaluate_predischarge_course_presence,
 )
 from .extended_document.physician_handoff import evaluate_physician_handoff
+from .extended_document.rule_076 import evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document.transfer_documentation import (
     evaluate_transfer_documentation,
@@ -94,6 +95,7 @@ EXTENDED_DOCUMENT_RULE_IDS = (
     "LX0609-073",
     "LX0609-074",
     "LX0609-075",
+    "LX0609-076",
 )
 
 EXTENDED_DOCUMENT_SOURCE_KEYS = (
@@ -313,6 +315,7 @@ def _decision(
     final_state: str,
     reason_code: str,
     document_refs: Sequence[str] = (),
+    criterion_results: Sequence[Any] = (),
 ) -> RuleDecision:
     dimensions = {
         "compliant": (
@@ -354,6 +357,7 @@ def _decision(
         ),
         evaluator_version="extended-document-v2",
         confidence=None,
+        criterion_results=tuple(criterion_results),
     )
 
 
@@ -1750,7 +1754,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             ))
             continue
 
-        if rule_id in {"LX0609-051", "LX0609-060"}:
+        if rule_id in {"LX0609-051", "LX0609-060", "LX0609-076"}:
             source_error = registration_error or death_error or discharge_error
             if source_error and death_state == "unknown":
                 decisions.append(
@@ -1801,6 +1805,41 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                 )
                 continue
+
+        if rule_id == "LX0609-076":
+            try:
+                death_document_rows = evidence_materials.document_rows(
+                    "death_record", snapshot=evidence_snapshot
+                )
+            except EvidenceMaterialTruncated:
+                death_document_rows = ()
+                death_rule_error = "source_truncated"
+            except EvidenceMaterialUnavailable:
+                death_document_rows = ()
+                death_rule_error = "source_unavailable"
+            else:
+                death_rule_error = death_error
+            outcome = evaluate_rule_076(
+                death_state=death_state,
+                death_rows=death_document_rows,
+                source_error=death_rule_error,
+            )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        "inpat_registration",
+                        "death_record",
+                        "discharge_record",
+                    ),
+                    final_state=outcome.status,
+                    reason_code=outcome.reason_code,
+                    document_refs=outcome.document_refs,
+                    criterion_results=outcome.criterion_results,
+                )
+            )
+            continue
 
         if rule_id == "LX0609-060":
             final_state = "compliant" if death_rows else "non_compliant"

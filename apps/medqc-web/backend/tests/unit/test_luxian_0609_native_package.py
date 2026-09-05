@@ -21,13 +21,13 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
 @pytest.mark.unit
-def test_dependency_inventory_covers_all_75_registered_rules_and_eight_families():
+def test_dependency_inventory_covers_all_77_registered_rules_and_eight_families():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
 
-    assert len(inventory) == 75
+    assert len(inventory) == 77
     assert tuple(item.rule_id for item in inventory) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
@@ -41,7 +41,7 @@ def test_dependency_inventory_covers_all_75_registered_rules_and_eight_families(
         "tumor_pathology",
         "extended_document",
     }
-    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 116
+    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 118
     assert all(item.applicable_documents for item in inventory)
     assert all(item.dependency_type for item in inventory)
 
@@ -99,6 +99,8 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-063",
         "LX0609-070",
         "LX0609-075",
+        "LX0609-076",
+        "LX0609-077",
         "LX0609-003",
         "LX0609-007",
         "LX0609-008",
@@ -437,7 +439,7 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
         native_surgery_document_029_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 67
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 69
     assert len(plan.not_executed_rule_ids) == 6
     assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
     assert plan.compatibility_execution_rule_ids == (
@@ -473,7 +475,7 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
         native_surgery_document_029_enabled=False,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 68
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 70
     assert len(plan.not_executed_rule_ids) == 6
     assert plan.compatibility_rule_ids == ("LX0609-029",)
     assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")

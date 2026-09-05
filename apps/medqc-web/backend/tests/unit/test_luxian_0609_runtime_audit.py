@@ -170,11 +170,22 @@ def test_runtime_audit_reports_exact_customer_scope_partition() -> None:
     )
     executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
     delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
+    phase_scope = load_luxian_0609_phase_scope()
+    expected_formal = sum(
+        entry.phase_status in {"phase_1_target", "phase_1_partial"}
+        for entry in phase_scope
+    )
+    expected_temporary = sum(
+        entry.phase_status == "pending_definition" for entry in phase_scope
+    )
 
-    assert audit["customer_delivery_count"] == 70
-    assert audit["executable_count"] == 64
-    assert audit["withheld_count"] == 6
-    assert audit["approved_definition_target"] == {"formal": 69, "temporary": 6}
+    assert audit["customer_delivery_count"] == len(delivery_ids)
+    assert audit["executable_count"] == len(executable_ids)
+    assert audit["withheld_count"] == len(withheld_ids)
+    assert audit["approved_definition_target"] == {
+        "formal": expected_formal,
+        "temporary": expected_temporary,
+    }
     assert audit["definition_target_reconciled"] is True
     assert audit["customer_delivery_rule_ids"] == list(delivery_ids)
     assert audit["executable_rule_ids"] == list(executable_ids)

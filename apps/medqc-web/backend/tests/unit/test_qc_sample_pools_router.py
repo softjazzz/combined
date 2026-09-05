@@ -513,8 +513,8 @@ async def test_list_sample_validation_rule_set_catalog_should_expose_customer_an
     assert by_key["luxian_0609_qc_v1"]["evaluation_summary"]["rule_count"] == 49
     assert by_key["luxian_0609_qc_v1"]["evaluation_summary"]["rules_missing_case_types"] == 49
     assert by_key["luxian_0609_qc_v1"]["work_package_summary"]["package_count"] == 49
-    assert by_key["luxian_0609_qc_v1"]["page_closure_summary"]["capability_count"] == 8
-    assert by_key["luxian_0609_qc_v1"]["page_closure_summary"]["passed_capabilities"] == 4
+    assert by_key["luxian_0609_qc_v1"]["page_closure_summary"]["capability_count"] == 9
+    assert by_key["luxian_0609_qc_v1"]["page_closure_summary"]["passed_capabilities"] == 1
     assert by_key["sc_content_full_v1"]["rule_set_name"] == "SC 内涵质控全量 v1"
     assert by_key["sc_content_full_v1"]["validation_mode"] == "formal_fast_screen_full"
     assert by_key["sc_content_full_v1"]["scope"] == "final"
@@ -1607,8 +1607,8 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
             "LX0609-075",
         }
     ]
-    assert len(luxian_rule_set.rule_ids) == 70
-    assert luxian_rule_set.rule_ids[-1] == "LX0609-075"
+    assert len(luxian_rule_set.rule_ids) == 72
+    assert luxian_rule_set.rule_ids[-1] == "LX0609-077"
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
     assert created["draft_ids"] == expected_task_rule_ids
     assert created["filters"]["validation_mode"] == "customer"
@@ -1616,7 +1616,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert created["filters"]["rule_set_name"] == "泸县0609质控点验证 v1"
     assert created["filters"]["rule_set_version"] == luxian_rule_set.version
     assert created["filters"]["rule_count"] == len(expected_task_rule_ids)
-    assert created["filters"]["customer_rule_count"] == 70
+    assert created["filters"]["customer_rule_count"] == 72
     assert created["filters"]["execution_rule_count"] == len(expected_task_rule_ids)
     assert created["filters"]["paused_customer_rule_ids"] == [
         "LX0609-025",
@@ -1634,7 +1634,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_key"] == "luxian_0609_qc_v1"
     assert response["data"]["rule_count"] == len(expected_task_rule_ids)
-    assert response["data"]["customer_rule_count"] == 70
+    assert response["data"]["customer_rule_count"] == 72
     assert response["data"]["execution_rule_count"] == len(expected_task_rule_ids)
     assert response["data"]["selected_rule_ids"] == []
     assert response["data"]["scoped_customer_rule_ids"] == []
@@ -1652,8 +1652,8 @@ def test_luxian_0609_default_rule_set_must_follow_phase_scope_and_preserve_pendi
     assert excluded_ids == frozenset(
         {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042"}
     )
-    assert len(rule_set.rule_ids) == 70
-    assert len(executable_ids) == 69
+    assert len(rule_set.rule_ids) == 72
+    assert len(executable_ids) == 71
     assert set(excluded_ids).isdisjoint(set(rule_set.rule_ids))
     assert pending_ids == (
         "LX0609-025",
@@ -1732,9 +1732,9 @@ async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalo
     paused = {"LX0609-025", "LX0609-028", "LX0609-049", "LX0609-056", "LX0609-059", "LX0609-075"}
     created = workspace_service.create_batch_job_calls[0]
     assert paused.isdisjoint(created["filters"]["rule_ids"])
-    assert created["filters"]["rule_count"] == 64
-    assert response["data"]["rule_count"] == 64
-    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 70
+    assert created["filters"]["rule_count"] == 66
+    assert response["data"]["rule_count"] == 66
+    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 72
 
 
 @pytest.mark.asyncio
@@ -2440,8 +2440,8 @@ async def test_grouped_full_luxian_run_assigns_paused_rules_to_family_delivery_s
         for child in child_calls
         for rule_id in child["filters"]["rule_ids"]
     }
-    assert len(all_delivery_rule_ids) == 70
-    assert len(all_execution_rule_ids) == 64
+    assert len(all_delivery_rule_ids) == 72
+    assert len(all_execution_rule_ids) == 66
     assert all_delivery_rule_ids == set(
         sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids
     )

@@ -1,7 +1,7 @@
 """LX0609 生产规则扩展的现状门禁与既有主链回归。
 
-本文件刻意不把 076/077 注入生产目录，也不绕过 plan、Binding 或 renderer。
-它记录当前固定 75 条目录的可复现阻断，同时固定两条已发布规则的真实链路。
+076/077 已作为真实生产规则进入目录。本文件继续用下一顺位 078/079 验证
+master/phase 的声明式扩容边界，并固定既有发布规则的真实链路。
 """
 
 from __future__ import annotations
@@ -33,19 +33,19 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
-def test_production_master_loader_accepts_declarative_076_077_extension(
+def test_production_master_loader_accepts_declarative_078_079_extension(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """最外层 master 声明扩容后，不再存在固定的 75 条阻断。"""
+    """最外层 master 声明扩容后，不存在固定规则数量阻断。"""
 
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
     assert isinstance(payload["rules"], list)
-    for rule_id in ("LX0609-076", "LX0609-077"):
+    for rule_id in ("LX0609-078", "LX0609-079"):
         copied = dict(payload["rules"][-1])
         copied["rule_id"] = rule_id
         payload["rules"].append(copied)
-    extension_path = tmp_path / "rule-master-with-076-077.json"
+    extension_path = tmp_path / "rule-master-with-078-079.json"
     _write_json(extension_path, payload)
 
     monkeypatch.setattr(rule_master_module, "_MASTER_PATH", extension_path)
@@ -56,12 +56,12 @@ def test_production_master_loader_accepts_declarative_076_077_extension(
         rule_master_module.load_luxian_0609_rule_master.cache_clear()
 
     assert tuple(entry.rule_id for entry in entries[-2:]) == (
-        "LX0609-076",
-        "LX0609-077",
+        "LX0609-078",
+        "LX0609-079",
     )
 
 
-def test_production_phase_loader_accepts_master_declared_076_077_extension(
+def test_production_phase_loader_accepts_master_declared_078_079_extension(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -75,15 +75,15 @@ def test_production_phase_loader_accepts_master_declared_076_077_extension(
     )
     assert isinstance(master_payload["rules"], list)
     assert isinstance(phase_payload["rules"], list)
-    for rule_id in ("LX0609-076", "LX0609-077"):
+    for rule_id in ("LX0609-078", "LX0609-079"):
         master_entry = dict(master_payload["rules"][-1])
         master_entry["rule_id"] = rule_id
         master_payload["rules"].append(master_entry)
         phase_entry = dict(phase_payload["rules"][-1])
         phase_entry["rule_id"] = rule_id
         phase_payload["rules"].append(phase_entry)
-    master_extension_path = tmp_path / "rule-master-with-076-077.json"
-    extension_path = tmp_path / "phase-scope-with-076-077.json"
+    master_extension_path = tmp_path / "rule-master-with-078-079.json"
+    extension_path = tmp_path / "phase-scope-with-078-079.json"
     _write_json(master_extension_path, master_payload)
     _write_json(extension_path, phase_payload)
 
@@ -98,12 +98,12 @@ def test_production_phase_loader_accepts_master_declared_076_077_extension(
         phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
 
     assert tuple(entry.rule_id for entry in entries[-2:]) == (
-        "LX0609-076",
-        "LX0609-077",
+        "LX0609-078",
+        "LX0609-079",
     )
 
 
-def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_076(
+def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_078(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -118,13 +118,13 @@ def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_0
     assert isinstance(master_payload["rules"], list)
     assert isinstance(phase_payload["rules"], list)
     master_payload["rules"].append(
-        {**master_payload["rules"][-1], "rule_id": "LX0609-076"}
+        {**master_payload["rules"][-1], "rule_id": "LX0609-078"}
     )
     phase_payload["rules"].append(
-        {**phase_payload["rules"][-1], "rule_id": "LX0609-076"}
+        {**phase_payload["rules"][-1], "rule_id": "LX0609-078"}
     )
-    master_extension_path = tmp_path / "rule-master-with-076.json"
-    phase_extension_path = tmp_path / "phase-scope-with-076.json"
+    master_extension_path = tmp_path / "rule-master-with-078.json"
+    phase_extension_path = tmp_path / "phase-scope-with-078.json"
     _write_json(master_extension_path, master_payload)
     _write_json(phase_extension_path, phase_payload)
 
@@ -137,10 +137,10 @@ def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_0
         assert tuple(
             entry.rule_id
             for entry in rule_master_module.load_luxian_0609_rule_master()
-        )[-1] == "LX0609-076"
+        )[-1] == "LX0609-078"
         assert (
             phase_scope_module.load_luxian_0609_phase_scope()[-1].rule_id
-            == "LX0609-076"
+            == "LX0609-078"
         )
         with pytest.raises(ValueError, match="execution catalog drifted"):
             rule_catalog_module.load_luxian_0609_rules()

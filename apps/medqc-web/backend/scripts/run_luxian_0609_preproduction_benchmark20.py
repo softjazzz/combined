@@ -82,9 +82,8 @@ def _rule_attestations() -> tuple[tuple[str, ...], dict[str, str]]:
     rule_ids, withheld_rule_ids = get_luxian_0609_customer_execution_scope()
     contracts_by_rule_id = {str(item.rule_id): item for item in all_contracts}
     if (
-        len(customer_rule_ids) != 70
-        or len(rule_ids) != 64
-        or len(withheld_rule_ids) != 6
+        set(rule_ids) | set(withheld_rule_ids) != set(customer_rule_ids)
+        or set(rule_ids) & set(withheld_rule_ids)
         or not rule_ids
         or len(rule_ids) != len(set(rule_ids))
         or any(rule_id not in contracts_by_rule_id for rule_id in rule_ids)

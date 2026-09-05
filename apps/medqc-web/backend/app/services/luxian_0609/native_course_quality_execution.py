@@ -40,6 +40,7 @@ from .course_quality.rule_007 import (
     evaluate_rule_007_typed as _rule_007_decision,
     rule_007_customer_display_facts as _rule_007_customer_display_facts,
 )
+from .course_quality.rule_077 import evaluate_rule_077
 from .course_quality.rules_008_009 import (
     RULE_008_009_TIMELINE_SOURCES as _TIMELINE_SOURCES,
     evaluate_rules_008_009_typed,
@@ -81,6 +82,7 @@ COURSE_QUALITY_RULE_IDS = (
     "LX0609-016",
     "LX0609-017",
     "LX0609-018",
+    "LX0609-077",
 )
 EXECUTOR_KEY = "course_quality"
 
@@ -652,6 +654,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             "LX0609-016",
             "LX0609-017",
             "LX0609-018",
+            "LX0609-077",
         }
         for rule_id in typed_requested
     ) or not typed_requested.issubset(set(selected)):
@@ -797,6 +800,21 @@ async def execute_luxian_0609_native_course_quality_rules(
             completion_tokens += severity_execution.completion_tokens
             total_tokens += severity_execution.total_tokens
             api_time += severity_execution.api_time
+            continue
+        if rule_id == "LX0609-077" and rule_id in typed_requested:
+            assert evidence_snapshot is not None
+            assert evidence_materials is not None
+            differential_execution = await evaluate_rule_077(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                llm_client=llm_client,
+            )
+            decisions.append(differential_execution.decision)
+            llm_call_count += differential_execution.llm_call_count
+            prompt_tokens += differential_execution.prompt_tokens
+            completion_tokens += differential_execution.completion_tokens
+            total_tokens += differential_execution.total_tokens
+            api_time += differential_execution.api_time
             continue
         if rule_id in {"LX0609-016", "LX0609-018"} and rule_id in typed_requested:
             assert evidence_snapshot is not None

@@ -183,8 +183,9 @@ def build_master_family_rule_ids(
     )
     if len(all_family_ids) != len(set(all_family_ids)):
         raise ValueError("LX0609 v3 validation families contain duplicate rules")
-    if set(all_family_ids) != set(entries_by_id):
-        raise ValueError("LX0609 v3 validation families drifted from the 75-rule master")
+    frozen_rule_ids = {f"LX0609-{index:03d}" for index in range(1, 76)}
+    if set(all_family_ids) != frozen_rule_ids or not frozen_rule_ids.issubset(entries_by_id):
+        raise ValueError("LX0609 v3 validation families drifted from frozen scope 001-075")
 
     wanted_statuses = set(statuses or ())
     return {
@@ -1116,6 +1117,10 @@ def build_coverage_ledger(
 
     ledger: list[dict[str, Any]] = []
     for entry in master:
+        # v3 是 001-075 的历史冻结集；后续生产规则由各自验收集覆盖，
+        # 不得在这里伪造候选病例或 Golden 状态。
+        if entry.rule_id not in family_by_rule_id:
+            continue
         family = family_by_rule_id[entry.rule_id]
         family_cases = cases_by_family.get(family, [])
         assigned_cases = [
@@ -1200,7 +1205,7 @@ def build_validation_matrix(cases: Sequence[Any]) -> list[dict[str, Any]]:
             )
     matrix.sort(key=lambda row: (row["rule_id"], row["expected_status"], row["case_index"]))
     rule_ids = {row["rule_id"] for row in matrix}
-    if len(rule_ids) != 75:
+    if rule_ids != {f"LX0609-{index:03d}" for index in range(1, 76)}:
         raise ValueError("v3 validation matrix must contain every rule")
     fixture_keys = {
         (row["rule_id"], row["expected_status"], row["case_index"])
@@ -1256,7 +1261,7 @@ def _render_report(
         f"- 候选病历：{len(cases)} 份",
         f"- 写库状态：{'已写入' if write_summary else 'dry-run，未写数据库'}",
         (
-            f"- 黄金答案：75条规则共 {len(validation_matrix)} 个多状态受控断言；"
+            f"- 黄金答案：冻结的75条规则共 {len(validation_matrix)} 个多状态受控断言；"
             f"标准层级为 {acceptance_counts['formal']} 条正式、"
             f"{acceptance_counts['provisional']} 条临时"
         ),

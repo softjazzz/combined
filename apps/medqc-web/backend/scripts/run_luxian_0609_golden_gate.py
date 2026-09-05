@@ -156,7 +156,10 @@ def _authoritative_rule_scope() -> tuple[
     contracts = load_luxian_0609_rule_contracts()
     customer_rule_ids = get_luxian_0609_customer_delivery_rule_ids()
     executable, withheld = get_luxian_0609_customer_execution_scope()
-    if len(customer_rule_ids) != 70 or len(executable) != 64 or len(withheld) != 6:
+    if (
+        set(executable) | set(withheld) != set(customer_rule_ids)
+        or set(executable) & set(withheld)
+    ):
         raise ValueError("invalid LX0609 customer scope counts")
     return contracts, executable, withheld
 
@@ -179,7 +182,7 @@ def _rule_scope_summary() -> dict[str, int]:
 def _validate_runtime_contract_identity(
     runtime_manifest: Mapping[str, Any],
 ) -> tuple[str, ...]:
-    """运行清单必须逐项绑定完整 75 条合同；Golden 默认只验可执行规则。"""
+    """运行清单必须逐项绑定当前完整合同；Golden 默认只验可执行规则。"""
 
     contracts, executable, _withheld = _authoritative_rule_scope()
     contract_rule_ids = tuple(contract.rule_id for contract in contracts)

@@ -31,7 +31,15 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "key": "course_quality",
         "name": "查房病程",
-        "rule_ids": ("LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018"),
+        "rule_ids": (
+            "LX0609-007",
+            "LX0609-008",
+            "LX0609-009",
+            "LX0609-016",
+            "LX0609-017",
+            "LX0609-018",
+            "LX0609-077",
+        ),
     },
     {
         "key": "exam_lab",
@@ -115,6 +123,7 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
             "LX0609-073",
             "LX0609-074",
             "LX0609-075",
+            "LX0609-076",
         ),
     },
 )

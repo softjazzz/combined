@@ -1,7 +1,7 @@
 {
   "schema_version": "lx0609-rule-master-v1",
-  "master_version": "2026-08-15-r2",
-  "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+  "master_version": "2026-09-05-r3",
+  "definition_version": "lx0609-defined-scope-2026-09-05-r3",
   "rule_set_key": "luxian_0609_qc_v1",
   "description": "泸县0609客户质控点唯一业务总表。active 表示规则已纳入客户工作台；是否参与当前正式结论由同版本 phase_scope 唯一决定。",
   "rules": [
@@ -607,6 +607,22 @@
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《有创操作记录》质控点执行；新增或变更口径须单独验收。"
+    },
+    {
+      "rule_id": "LX0609-076",
+      "source_document": "死亡记录",
+      "qc_point": "死亡时间缺失",
+      "implementation_status": "active",
+      "policy_sources": ["customer_confirmed"],
+      "policy_summary": "沿用已确认规则 LXE-43：死亡记录必须填写具体死亡时间，记录完成时间不得替代死亡时间。"
+    },
+    {
+      "rule_id": "LX0609-077",
+      "source_document": "首次病程记录",
+      "qc_point": "鉴别诊断未与初步诊断中第一诊断相关联",
+      "implementation_status": "active",
+      "policy_sources": ["customer_confirmed"],
+      "policy_summary": "沿用已确认规则 LX-011：首次病程中已写出的鉴别诊断应围绕第一诊断的临床问题展开。"
     }
   ]
 }

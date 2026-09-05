@@ -32,8 +32,6 @@ from scripts.build_luxian_0609_runtime_manifest import (  # noqa: E402
 
 
 SCHEMA_VERSION = "lx0609-engine-convergence-audit-v1"
-APPROVED_FORMAL_TARGET = 69
-APPROVED_TEMPORARY_TARGET = 6
 
 
 def _ordered_ids(items: Iterable[Any]) -> tuple[str, ...]:
@@ -45,8 +43,8 @@ def build_runtime_audit(
     runtime_manifest: Mapping[str, Any],
     contracts: Iterable[Any],
     phase_scope: Iterable[Any],
-    approved_formal_target: int = APPROVED_FORMAL_TARGET,
-    approved_temporary_target: int = APPROVED_TEMPORARY_TARGET,
+    approved_formal_target: int | None = None,
+    approved_temporary_target: int | None = None,
 ) -> dict[str, Any]:
     """合并现有权威清单；只报告漂移，不推断或修改医学口径。"""
 
@@ -64,6 +62,17 @@ def build_runtime_audit(
         raise ValueError("LX0609 runtime audit contract ids do not match manifest")
     if scope_ids != manifest_ids:
         raise ValueError("LX0609 runtime audit phase scope ids do not match manifest")
+    if approved_formal_target is None:
+        approved_formal_target = sum(
+            getattr(item, "phase_status", "")
+            in {"phase_1_target", "phase_1_partial"}
+            for item in scope_items
+        )
+    if approved_temporary_target is None:
+        approved_temporary_target = sum(
+            getattr(item, "phase_status", "") == "pending_definition"
+            for item in scope_items
+        )
     if approved_formal_target < 0 or approved_temporary_target < 0:
         raise ValueError("LX0609 approved definition targets must be non-negative")
     if approved_formal_target + approved_temporary_target != len(manifest_ids):
@@ -105,12 +114,11 @@ def build_runtime_audit(
             or not set(delivery_ids).issubset(set(manifest_ids))
         ):
             raise ValueError("invalid LX0609 customer scope partition")
-    if len(manifest_ids) == 75:
+    if scope_fields_present:
         expected_delivery = tuple(get_luxian_0609_customer_delivery_rule_ids())
         expected_executable, expected_withheld = get_luxian_0609_customer_execution_scope()
         if (
-            not scope_fields_present
-            or delivery_ids != expected_delivery
+            delivery_ids != expected_delivery
             or executable_ids != expected_executable
             or withheld_ids != expected_withheld
         ):

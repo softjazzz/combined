@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-rule-contracts-v1",
-  "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+  "definition_version": "lx0609-defined-scope-2026-09-05-r3",
   "defaults": {
     "allowed_final_states": [
       "compliant",

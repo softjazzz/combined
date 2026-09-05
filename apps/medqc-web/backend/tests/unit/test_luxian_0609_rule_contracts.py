@@ -33,18 +33,18 @@ _CONTRACT_PATH = (
 def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> None:
     contracts = load_luxian_0609_rule_contracts()
 
-    assert len(contracts) == 75
+    assert len(contracts) == 77
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 69
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 71
     assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 0
     assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 6
     assert {contract.definition_version for contract in contracts} == {
-        "lx0609-defined-scope-2026-08-15-r2"
+        "lx0609-defined-scope-2026-09-05-r3"
     }
     assert json.loads(_CONTRACT_PATH.read_text(encoding="utf-8"))["definition_version"] == (
-        "lx0609-defined-scope-2026-08-15-r2"
+        "lx0609-defined-scope-2026-09-05-r3"
     )
     assert all(
         "not_executed" in contract.allowed_final_states for contract in contracts
@@ -237,6 +237,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-063",
         "LX0609-070",
         "LX0609-075",
+        "LX0609-076",
         "LX0609-029",
         "LX0609-030",
         "LX0609-032",
@@ -328,6 +329,8 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-072",
         "LX0609-073",
         "LX0609-074",
+        "LX0609-076",
+        "LX0609-077",
     }
     assert typed_malignancy == {"LX0609-024", "LX0609-026", "LX0609-027"}
     assert all(contract.golden_gate_state == "pending" for contract in contracts)

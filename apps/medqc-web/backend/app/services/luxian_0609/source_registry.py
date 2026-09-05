@@ -396,6 +396,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 018 仅接受受控第一诊断：主要诊断，或入院/初步诊断中的编号首项。
     "LX0609-018": ("diagnosis", "admission_record_diagnosis"),
+    "LX0609-077": ("diagnosis", "admission_record_diagnosis"),
     # 027 需要同一快照内的病历阶段、恶性事实与正式出院记录。
     "LX0609-027": (
         "diagnosis", "discharge_record_diagnosis", "pathology_exam_report",
@@ -560,6 +561,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "evaluation_context.horizon",
     ),
     "LX0609-060": ("inpat_registration", "discharge_record"),
+    "LX0609-076": ("inpat_registration", "discharge_record"),
     "LX0609-061": ("inpat_registration", "death_record"),
     "LX0609-062": ("inpat_registration",),
     "LX0609-067": ("inpat_registration",),

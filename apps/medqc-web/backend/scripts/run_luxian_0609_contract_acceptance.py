@@ -1,4 +1,4 @@
-"""生成并校验 LX0609 75 条规则的合同验收矩阵。
+"""生成并校验 LX0609 当前生产规则的合同验收矩阵。
 
 本脚本只读取规则合同和受控合成病例元数据，不连接数据库、不调用模型，也不执行
 客户质控任务。矩阵中的 ``covered`` 表示已绑定受控 fixture，不表示引擎结果已经通过。
@@ -110,6 +110,16 @@ _NATIVE_FIXTURE_SPECS = (
     ("LX0609-070", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_070_rejects_nine_tests_reported_after_transfusion"),
 )
 
+_PRODUCTION_EXTENSION_FIXTURE_SPECS = (
+    ("LX0609-076", "compliant", "test_076_runs_as_a_real_native_rule_and_never_uses_record_time"),
+    ("LX0609-076", "non_compliant", "test_076_runs_as_a_real_native_rule_and_never_uses_record_time"),
+    ("LX0609-076", "not_applicable", "test_076_does_not_duplicate_060_when_death_record_is_absent"),
+    ("LX0609-076", "data_gap", "test_076_source_unavailable_is_data_gap"),
+    ("LX0609-077", "compliant", "test_077_runs_one_controlled_semantic_call_on_the_formal_native_family"),
+    ("LX0609-077", "non_compliant", "test_077_runs_one_controlled_semantic_call_on_the_formal_native_family"),
+    ("LX0609-077", "data_gap", "test_077_missing_inputs_are_data_gap_without_calling_model"),
+)
+
 # 仅登记确有适用性门控的规则；fixture 断言客户结果必须写明排除事实，
 # 不能使用“本次不适用”一类无依据的通用文案。
 _NOT_APPLICABLE_FIXTURE_RULE_IDS = (
@@ -150,6 +160,7 @@ _NOT_APPLICABLE_FIXTURE_RULE_IDS = (
     "LX0609-070",
     "LX0609-072",
     "LX0609-073",
+    "LX0609-076",
 )
 
 
@@ -193,6 +204,18 @@ def _fixture_bindings() -> dict[str, list[dict[str, str]]]:
                 "fixture_ref": f"native-unit:tests/unit/{filename}::{test_name}",
             }
         )
+    for rule_id, expected_status, test_name in _PRODUCTION_EXTENSION_FIXTURE_SPECS:
+        bindings.setdefault(rule_id, []).append(
+            {
+                "rule_id": rule_id,
+                "expected_status": expected_status,
+                "fixture_ref": (
+                    "native-integration:tests/integration/"
+                    "test_luxian_0609_real_production_rules_076_077.py::"
+                    f"{test_name}"
+                ),
+            }
+        )
     for contract in load_luxian_0609_rule_contracts():
         if contract.phase_status == "pending_definition":
             continue
@@ -226,7 +249,11 @@ def _validate_pytest_fixture_ref(fixture_ref: str) -> str | None:
     prefix = next(
         (
             candidate
-            for candidate in ("native-unit:", "contract-unit:")
+            for candidate in (
+                "native-unit:",
+                "native-integration:",
+                "contract-unit:",
+            )
             if fixture_ref.startswith(candidate)
         ),
         "",
@@ -448,8 +475,12 @@ def validate_acceptance_matrix(
     observed_hash = (payload.get("generated_from") or {}).get("runtime_contract_hash")
     if observed_hash != expected_hash:
         errors.append("matrix runtime contract hash is stale")
-    if tier_counts != Counter({"formal": 67, "temporary": 8}):
-        errors.append("definition tier split must be formal=67 and temporary=8")
+    expected_tier_counts = Counter(
+        "temporary" if rule_id in PROVISIONAL_RULE_IDS else "formal"
+        for rule_id in expected_ids
+    )
+    if tier_counts != expected_tier_counts:
+        errors.append("definition tier split does not match the current rule scope")
     if errors:
         raise ValueError("; ".join(errors))
     return {
@@ -488,11 +519,15 @@ def render_report(payload: Mapping[str, Any], summary: Mapping[str, Any]) -> str
         "",
         "## 当前结论",
         "",
-        f"- 规则总数：{summary['rule_count']}（正式 67，临时 8）",
+        (
+            f"- 规则总数：{summary['rule_count']}（正式 "
+            f"{summary['definition_tiers'].get('formal', 0)}，临时 "
+            f"{summary['definition_tiers'].get('temporary', 0)}）"
+        ),
         f"- 已绑定受控 fixture：{summary['bound_fixture_count']} 个规则状态引用",
         f"- 语义规则：{summary['semantic_rule_count']} 条",
         f"- 当前定义合同仍为 Pending：{summary['pending_definition_rule_count']} 条",
-        "- 当前只统计真实生成的 Golden 状态；未绑定槽位继续显示待补，不能据此宣称 75 条已经完整验收。",
+        "- 当前只统计真实生成的 Golden 状态；未绑定槽位继续显示待补，不能据此宣称全部规则已经完整验收。",
         "",
         "## 状态槽位覆盖",
         "",
@@ -515,7 +550,10 @@ def render_report(payload: Mapping[str, Any], summary: Mapping[str, Any]) -> str
             f"| {coverage_labels[key]} | {summary['time_boundaries'].get(key, 0)} |"
         )
 
-    for tier, title in (("formal", "正式 67 条"), ("temporary", "临时 8 条")):
+    for tier, title in (
+        ("formal", f"正式 {summary['definition_tiers'].get('formal', 0)} 条"),
+        ("temporary", f"临时 {summary['definition_tiers'].get('temporary', 0)} 条"),
+    ):
         lines.extend(
             [
                 "",
@@ -571,7 +609,7 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="校验 LX0609 75 条规则验收矩阵")
+    parser = argparse.ArgumentParser(description="校验 LX0609 当前生产规则验收矩阵")
     parser.add_argument("--write", action="store_true", help="按当前合同重建矩阵和报告")
     parser.add_argument("--require-complete", action="store_true", help="存在必需槽位缺口时返回失败")
     args = parser.parse_args(argv)

@@ -102,7 +102,7 @@ _SAFE_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 
 def _luxian_0609_catalog_rule_ids() -> frozenset[str]:
-    """返回当前 LX0609 的完整 75 条目录，供历史 Envelope 做身份校验。
+    """返回当前 LX0609 的完整目录，供历史 Envelope 做身份校验。
 
     客户交付层会过滤明确排除的来源规则，但这些规则仍属于已知历史目录。
     因此身份校验必须针对完整目录，不能把“客户不展示”误当成“未知规则”。
@@ -165,7 +165,7 @@ def _iter_luxian_batch_result_items(job: Dict[str, Any]):
 
 
 def _validate_luxian_batch_rule_ids(job: Dict[str, Any]) -> None:
-    """LX 客户边界只接受当前完整 75 条目录中的规则身份。"""
+    """LX 客户边界只接受当前完整目录中的规则身份。"""
 
     catalog = _luxian_0609_catalog_rule_ids()
     for item in _iter_luxian_batch_result_items(job):

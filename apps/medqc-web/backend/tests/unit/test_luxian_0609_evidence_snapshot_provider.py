@@ -1395,7 +1395,7 @@ def test_001_005_006_read_private_discharge_admission_date_once_without_affectin
     assert "discharge_record" not in calls
 
 
-def test_all_75_registered_rules_query_each_bounded_source_once_and_never_query_legacy() -> None:
+def test_all_77_registered_rules_query_each_bounded_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -1413,7 +1413,7 @@ def test_all_75_registered_rules_query_each_bounded_source_once_and_never_query_
             for source_key in entry.physical_source_keys
         }
     )
-    assert len(selected) == 75
+    assert len(selected) == 77
     assert calls == sorted(
         {
             *expected_bounded,

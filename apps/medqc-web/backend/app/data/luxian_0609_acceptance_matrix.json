@@ -1,10 +1,10 @@
 {
   "schema_version": "lx0609-acceptance-matrix-v1",
   "rule_set_key": "luxian_0609_qc_v1",
-  "rule_master_version": "2026-08-15-r2",
+  "rule_master_version": "2026-09-05-r3",
   "generated_from": {
     "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
-    "runtime_contract_hash": "2ee688bbe0c6285a288bf1e12d10c54e646753e8d2d38685634c276b4411d775",
+    "runtime_contract_hash": "9672d6dce55f4fced75364f84d8108efebdbef42076a13334767b9d9f6ade3c7",
     "synthetic_fixture_set": "0426-derived-v3"
   },
   "coverage_semantics": {
@@ -19,7 +19,7 @@
       "title": "入院记录：入院后24小时内是否完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
@@ -69,7 +69,7 @@
       "title": "首次病程：入院后8小时内无首次病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
@@ -119,7 +119,7 @@
       "title": "手术记录：手术后24小时内是否完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -174,7 +174,7 @@
       "title": "抢救记录：抢救结束后6小时内是否完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
@@ -224,7 +224,7 @@
       "title": "上级医生查房记录：入院后48小时内无主治医师首次查房记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
@@ -274,7 +274,7 @@
       "title": "上级医生查房记录：入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "basic_timeliness",
       "cases": {
         "compliant": {
@@ -340,7 +340,7 @@
       "title": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
@@ -395,7 +395,7 @@
       "title": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
@@ -455,7 +455,7 @@
       "title": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
@@ -536,7 +536,7 @@
       "title": "CT/MRI检查记录：CT/MRI检查前无说明检查原因的病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
@@ -600,7 +600,7 @@
       "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未在病程中记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
@@ -679,7 +679,7 @@
       "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
@@ -758,7 +758,7 @@
       "title": "病理检查：病理检查结果在手术记录、病程中未记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
@@ -813,7 +813,7 @@
       "title": "细菌培养记录：细菌培养结果在报告出具后24小时内未在病程中记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
@@ -892,7 +892,7 @@
       "title": "细菌培养结果无分析：细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
@@ -973,7 +973,7 @@
       "title": "不合理复制病历：首次病程记录病例特点与入院记录、现病史完全相同",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
@@ -1011,7 +1011,7 @@
       "title": "不合理复制病历：2次以上病程记录完全相同（相似度大于70%）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
@@ -1072,7 +1072,7 @@
       "title": "入院记录：主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "course_quality",
       "cases": {
         "compliant": {
@@ -1126,7 +1126,7 @@
       "title": "病理检查：取材情况未在病程记录或手术记录中记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
@@ -1181,7 +1181,7 @@
       "title": "会诊记录：有会诊记录单无请会诊执行记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
@@ -1234,7 +1234,7 @@
       "title": "会诊记录：会诊申请单会诊目的不明确",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
@@ -1287,7 +1287,7 @@
       "title": "会诊记录：会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
@@ -1340,7 +1340,7 @@
       "title": "会诊记录：请会诊执行记录不规范，照抄会诊意见，未归纳总结或未明确具体执行情况",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
@@ -1391,7 +1391,7 @@
       "title": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1445,7 +1445,7 @@
       "title": "手术记录：未记录植入物名称、种类、规格或型号、材质及数量等信息",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1508,7 +1508,7 @@
       "title": "恶性肿瘤化学治疗记录：病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
@@ -1560,7 +1560,7 @@
       "title": "出院记录：恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "tumor_pathology",
       "cases": {
         "compliant": {
@@ -1615,7 +1615,7 @@
       "title": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1676,7 +1676,7 @@
       "title": "术前小结：有手术医嘱但无术前小结",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1722,7 +1722,7 @@
       "title": "手术记录：有手术医嘱但无手术记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1763,7 +1763,7 @@
       "title": "手术记录：手术记录非手术者签字（核对术者及签名医生）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1809,7 +1809,7 @@
       "title": "手术安全核查表：有手术记录但无手术安全核查表",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1858,7 +1858,7 @@
       "title": "手术知情同意书：有手术记录但无手术知情同意书",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1915,7 +1915,7 @@
       "title": "麻醉知情同意书：有麻醉记录但无麻醉知情同意书",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1956,7 +1956,7 @@
       "title": "麻醉知情同意书：填写不规范（无患者或医生签名、签名时间未精确到分钟）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -1994,7 +1994,7 @@
       "title": "麻醉访视：无麻醉术前或麻醉术后访视记录（局麻除外）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -2035,7 +2035,7 @@
       "title": "麻醉访视：麻醉术前和术后访视记录填写不规范（局麻除外）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -2076,7 +2076,7 @@
       "title": "麻醉记录单：无麻醉记录单（局麻除外）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -2117,7 +2117,7 @@
       "title": "术前讨论记录：除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -2158,7 +2158,7 @@
       "title": "术前多学科讨论记录：四级手术术前讨论未开展多学科讨论",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
@@ -2225,7 +2225,7 @@
       "title": "输血知情同意书：无输血知情同意书",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2264,7 +2264,7 @@
       "title": "输血知情同意书：输血知情同意书填写或签名不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2303,7 +2303,7 @@
       "title": "输血前辅助检查：输血前常规检查不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2342,7 +2342,7 @@
       "title": "输血前评估：无输血前评估记录或记录不完整",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2397,7 +2397,7 @@
       "title": "输血记录：无输血病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2452,7 +2452,7 @@
       "title": "输血记录：输血病程记录不完整或不规范",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2507,7 +2507,7 @@
       "title": "输血后评价：无输血后评价",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2546,7 +2546,7 @@
       "title": "输血记录：有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2594,7 +2594,7 @@
       "title": "输血医嘱：输血医嘱与收费不一致",
       "definition_status": "formal",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "transfusion",
       "cases": {
         "compliant": {
@@ -2625,7 +2625,7 @@
       "title": "疑难病历讨论记录：诊断不明确（入院后7天）未书写疑难病历讨论",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2677,7 +2677,7 @@
       "title": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2732,7 +2732,7 @@
       "title": "危急值记录：6小时内未书写危急值处置记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2783,7 +2783,7 @@
       "title": "危急值记录：检验检查危急值报告后无危急值处置记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2820,7 +2820,7 @@
       "title": "抗菌药物使用记录：使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2856,7 +2856,7 @@
       "title": "抗菌药物使用记录：48至72小时内无效果评价",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2906,7 +2906,7 @@
       "title": "抗菌药物使用记录：接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
       "definition_status": "temporary",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2937,7 +2937,7 @@
       "title": "抗菌药物使用记录：经验用药时未说明理由，无样可采时未注明原因",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -2973,7 +2973,7 @@
       "title": "抗菌药物使用记录：使用特殊级抗菌药物缺少专家查房或会诊记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3012,7 +3012,7 @@
       "title": "医嘱：缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
       "definition_status": "temporary",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3101,7 +3101,7 @@
       "title": "死亡记录：死亡患者无死亡记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3142,7 +3142,7 @@
       "title": "出院记录：出院记录未在出院后24小时内完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3194,7 +3194,7 @@
       "title": "出院记录：出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3232,7 +3232,7 @@
       "title": "出院记录：出院诊断或死亡诊断错填、漏填、顺序错误",
       "definition_status": "temporary",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3273,7 +3273,7 @@
       "title": "术后连续三天查房记录：术后三天无连续病程记录（包含术后术者查房记录）",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3325,7 +3325,7 @@
       "title": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3377,7 +3377,7 @@
       "title": "术后首次病程记录：无术后首次病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3415,7 +3415,7 @@
       "title": "出院前病程记录：无出院前一天或当天的病程记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3453,7 +3453,7 @@
       "title": "出院前病程记录：无上级医师同意出院的意见",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3491,7 +3491,7 @@
       "title": "会诊记录：会诊记录单未在会诊申请发出后24小时内完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3542,7 +3542,7 @@
       "title": "输血前评估：未做输血前相关九项检查",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3583,7 +3583,7 @@
       "title": "交接班记录：经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3633,7 +3633,7 @@
       "title": "转科记录：转科病人24小时内未完成转入、转出记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3686,7 +3686,7 @@
       "title": "转科记录：有转科医嘱但无转入、转出记录",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3725,7 +3725,7 @@
       "title": "病程记录：修正或补充诊断时，未记录修改或补充理由及诊断依据",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3761,7 +3761,7 @@
       "title": "有创操作记录：有创操作医嘱但无有创操作记录",
       "definition_status": "temporary",
       "definition_phase": "pending_definition",
-      "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
       "family_key": "extended_document",
       "cases": {
         "compliant": {
@@ -3786,6 +3786,108 @@
       "expected_executor": "extended_document",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-076",
+      "title": "死亡记录：死亡时间缺失",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_076_runs_as_a_real_native_rule_and_never_uses_record_time"
+          ],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_076_runs_as_a_real_native_rule_and_never_uses_record_time"
+          ],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_076_does_not_duplicate_060_when_death_record_is_absent",
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-076]"
+          ],
+          "expected_status": "not_applicable"
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_076_source_unavailable_is_data_gap",
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-076]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": ["死亡状态", "死亡记录", "死亡时间"],
+      "required_evidence": ["death_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-077",
+      "title": "首次病程记录：鉴别诊断未与初步诊断中第一诊断相关联",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "family_key": "course_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_077_runs_one_controlled_semantic_call_on_the_formal_native_family"
+          ],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_077_runs_one_controlled_semantic_call_on_the_formal_native_family"
+          ],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-integration:tests/integration/test_luxian_0609_real_production_rules_076_077.py::test_077_missing_inputs_are_data_gap_without_calling_model",
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-077]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": ["第一诊断", "鉴别诊断"],
+      "required_evidence": ["first_course_record"],
+      "expected_executor": "course_quality",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["first_course_record"],
+          "facts": ["第一诊断", "鉴别诊断"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
     }
   ]
 }

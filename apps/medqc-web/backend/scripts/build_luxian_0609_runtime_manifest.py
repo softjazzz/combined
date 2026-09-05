@@ -223,9 +223,8 @@ def build_runtime_manifest(
     customer_delivery_ids = get_luxian_0609_customer_delivery_rule_ids()
     executable_ids, withheld_ids = get_luxian_0609_customer_execution_scope()
     if (
-        len(customer_delivery_ids) != 70
-        or len(executable_ids) != 64
-        or len(withheld_ids) != 6
+        not customer_delivery_ids
+        or not executable_ids
         or not set(customer_delivery_ids).issubset(set(rule_ids))
         or set(executable_ids) | set(withheld_ids) != set(customer_delivery_ids)
         or set(executable_ids) & set(withheld_ids)

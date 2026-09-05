@@ -3878,6 +3878,7 @@ async def test_selected_rules_keep_customer_catalog_order_and_missing_projection
         "LX0609-016",
         "LX0609-017",
         "LX0609-018",
+        "LX0609-077",
     )
     assert course.EXECUTOR_KEY == "course_quality"
     assert [item["rule_id"] for item in result.results] == [

@@ -86,10 +86,22 @@ def resolve_typed_decision_rule_ids(
         for rule_id in executable_rule_ids
         if rule_id in always_typed
         or (
-            rule_id in enabled_rollout
+            unified_engine_enabled
             and (
-                rule_id not in _CONSULTATION_RULE_IDS
-                or rule_id in native_async
+                (
+                    rule_id in enabled_rollout
+                    and (
+                        rule_id not in _CONSULTATION_RULE_IDS
+                        or rule_id in native_async
+                    )
+                )
+                # 发布开关只服务已有规则的受控迁移。正式注册、已进入 native
+                # 包计划且没有历史开关的新规则，直接采用其 RuleDecision 合同；
+                # 否则每新增规则都必须再次修改这个公共发布列表。
+                or (
+                    rule_id in native_async
+                    and rule_id not in _RULE_DECISION_FLAG_BY_RULE_ID
+                )
             )
         )
     )

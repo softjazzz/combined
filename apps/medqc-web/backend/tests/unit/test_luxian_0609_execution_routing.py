@@ -60,13 +60,13 @@ def test_rollout_groups_cover_legacy_rules_once() -> None:
 
 
 def test_full_mainline_selects_only_currently_executable_typed_decisions() -> None:
-    selected = _rule_ids(1, 75)
+    selected = _rule_ids(1, 77)
 
     resolved = resolve_typed_decision_rule_ids(
         selected_rule_ids=selected,
         settings=_settings(),
         unified_engine_enabled=True,
-        always_typed_rule_ids=_rule_ids(50, 75),
+        always_typed_rule_ids=_rule_ids(50, 77),
         native_async_rule_ids=selected,
     )
 
@@ -85,8 +85,8 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
     )
 
 
-def test_all_75_rules_have_one_contract_executor_and_registered_material_sources() -> None:
-    expected_rule_ids = _rule_ids(1, 75)
+def test_all_77_rules_have_one_contract_executor_and_registered_material_sources() -> None:
+    expected_rule_ids = _rule_ids(1, 77)
     contracts = load_luxian_0609_rule_contracts()
     dependencies = load_luxian_0609_dependency_inventory()
 
@@ -126,16 +126,16 @@ def test_all_75_rules_have_one_contract_executor_and_registered_material_sources
 
 def test_unified_engine_off_keeps_only_always_typed_extended_rules() -> None:
     resolved = resolve_typed_decision_rule_ids(
-        selected_rule_ids=_rule_ids(1, 75),
+        selected_rule_ids=_rule_ids(1, 77),
         settings=_settings(),
         unified_engine_enabled=False,
-        always_typed_rule_ids=_rule_ids(50, 75),
-        native_async_rule_ids=_rule_ids(1, 75),
+        always_typed_rule_ids=_rule_ids(50, 77),
+        native_async_rule_ids=_rule_ids(1, 77),
     )
 
     assert resolved == tuple(
         rule_id
-        for rule_id in _rule_ids(50, 75)
+        for rule_id in _rule_ids(50, 77)
         if rule_id not in {"LX0609-056", "LX0609-059", "LX0609-075"}
     )
 
@@ -152,6 +152,18 @@ def test_consultation_typed_decisions_require_native_dispatch() -> None:
     )
 
     assert resolved == ("LX0609-021", "LX0609-022", "LX0609-023")
+
+
+def test_new_native_rule_without_legacy_rollout_group_uses_its_typed_contract() -> None:
+    resolved = resolve_typed_decision_rule_ids(
+        selected_rule_ids=("LX0609-077",),
+        settings=_settings(),
+        unified_engine_enabled=True,
+        always_typed_rule_ids=(),
+        native_async_rule_ids=("LX0609-077",),
+    )
+
+    assert resolved == ("LX0609-077",)
 
 
 def test_disabled_rollout_flag_only_removes_its_group() -> None:

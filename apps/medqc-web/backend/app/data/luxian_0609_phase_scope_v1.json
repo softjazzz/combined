@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-phase-scope-v1",
-  "definition_version": "lx0609-defined-scope-2026-08-15-r2",
+  "definition_version": "lx0609-defined-scope-2026-09-05-r3",
   "rules": [
     { "rule_id": "LX0609-001", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-002", "phase_status": "phase_1_target", "catalog_registered": true },
@@ -111,6 +111,8 @@
       "phase_status": "pending_definition",
       "catalog_registered": true,
       "pending_reason_code": "invasive_procedure_catalog_missing"
-    }
+    },
+    { "rule_id": "LX0609-076", "phase_status": "phase_1_target", "catalog_registered": true },
+    { "rule_id": "LX0609-077", "phase_status": "phase_1_target", "catalog_registered": true }
   ]
 }

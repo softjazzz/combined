@@ -54,16 +54,16 @@ def _load_existing_rule_ids() -> set[str]:
 
 
 @pytest.mark.unit
-def test_luxian_0609_catalog_has_75_registered_rules_and_examples():
+def test_luxian_0609_catalog_has_77_registered_rules_and_examples():
     rules = load_luxian_0609_rules()
 
-    assert len(rules) == 75
-    assert customer_rule_count() == 75
+    assert len(rules) == 77
+    assert customer_rule_count() == 77
     assert rules[0]["rule_id"] == "LX0609-001"
-    assert rules[-1]["rule_id"] == "LX0609-075"
+    assert rules[-1]["rule_id"] == "LX0609-077"
 
     existing_rule_ids = _load_existing_rule_ids()
-    phase_extension_rule_ids = {f"LX0609-{index:03d}" for index in range(50, 76)}
+    phase_extension_rule_ids = {f"LX0609-{index:03d}" for index in range(50, 78)}
     for rule in rules:
         assert rule["rule_id"].startswith("LX0609-")
         assert rule.get("positive_example")
@@ -83,7 +83,7 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
     projected = attach_luxian_0609_customer_policy(wrappers)
     master_by_id = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
 
-    assert len(projected) == 75
+    assert len(projected) == 77
     assert all(rule.get("customer_policy") for rule in projected)
     assert "customer_policy" not in wrappers[0]
     for rule in projected:
@@ -251,8 +251,8 @@ def test_luxian_0609_rules_endpoint_returns_customer_rule_view(client):
     rules = payload["rules"]
     assert payload["rule_set_key"] == LUXIAN_0609_RULE_SET_KEY
     # 客户当前没有同意书来源，033/034/035/041/042 不进入客户运行范围。
-    assert payload["total_rules"] == 70
-    assert len(rules) == 70
+    assert payload["total_rules"] == 72
+    assert len(rules) == 72
     assert not {
         "LX0609-033",
         "LX0609-034",
