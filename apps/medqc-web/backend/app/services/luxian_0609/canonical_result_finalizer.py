@@ -527,10 +527,12 @@ def finalizer_rejects_invalid_public_executor_customer_display_facts(
     """返回仍需保持公共 direct 聚合入口 ValueError 的已迁出合同。"""
 
     from .antimicrobial_result_mapping import is_antimicrobial_customer_rule
+    from .basic_timeliness_customer_projection import is_basic_timeliness_customer_rule
     from .postoperative_result_mapping import is_postoperative_customer_rule
 
     return (
         is_antimicrobial_customer_rule(rule_id)
+        or is_basic_timeliness_customer_rule(rule_id)
         or is_postoperative_customer_rule(rule_id)
     )
 

@@ -83,6 +83,36 @@ def test_finalizer_converts_invalid_executor_facts_to_isolated_technical_error()
     } & set(finalized)
 
 
+def test_finalizer_converts_invalid_basic_timeliness_facts_to_technical_error() -> None:
+    """基础时限族与其他已迁出合同一致：无效执行器 facts 不得伪装成临床结论。"""
+
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+        finalizer_rejects_invalid_public_executor_customer_display_facts,
+    )
+
+    assert finalizer_rejects_invalid_public_executor_customer_display_facts(
+        "LX0609-005"
+    ) is True
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-005",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "findings": "不得残留的临床结论",
+            "customer_evidence": [{"source_document_id": "PRIVATE-005"}],
+        },
+        raw_facts={"raw_private_text": "PRIVATE-BASIC-TIMELINESS"},
+    )
+
+    assert handled is True
+    assert finalized["status"] == "technical_error"
+    assert finalized["reason_code"] == "model_invalid_output"
+    assert "customer_display_facts" not in finalized
+    assert "customer_evidence" not in finalized
+    assert "PRIVATE-BASIC-TIMELINESS" not in repr(finalized)
+
+
 def test_finalizer_converts_conflicting_020_execution_counts_to_technical_error() -> None:
     from app.services.luxian_0609.canonical_result_finalizer import (
         finalize_luxian_0609_executor_customer_display_facts,

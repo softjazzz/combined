@@ -3500,47 +3500,69 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     )
+    def read(**kwargs: object) -> SnapshotSourceRows:
+        source_key = str(kwargs["source_key"])
+        rows = {
+            "admission_record": (
+                {
+                    "document_id": "private-admission-document-id",
+                    "content": "入院记录正文",
+                },
+            ),
+            "discharge_record": (
+                {
+                    "document_id": "private-discharge-document-id",
+                    "content": "出院记录正文",
+                },
+            ),
+        }.get(source_key, ())
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-001",),
+        institute_id="aggregation-001-institute",
+        patient_id="aggregation-001-patient",
+        visit_id="aggregation-001-visit",
+        source_schema=None,
+        created_at="2026-09-07T04:00:00+08:00",
+        row_reader=read,
+    )
+    admission_document_ref = next(
+        reference
+        for reference, _row in session.materials.document_rows(
+            "admission_record", snapshot=session.snapshot
+        )
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(
+            RuleDecision(
+                rule_id="LX0609-001",
+                snapshot_hash=session.snapshot.snapshot_hash,
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.SUFFICIENT,
+                qc_direction=QcDirection.SATISFIED,
+                reason_code="requirement_satisfied",
+                fact_refs=(admission_document_ref,),
+                evaluator_version="aggregation-001-selected-evidence-v1",
+                confidence=None,
+            ),
+        ),
+        expected_rule_ids=("LX0609-001",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
     result = module.aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-001", "name": "入院记录时限"}],
         execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-001"),),
+        reduced_decisions=reduced,
         audit_context={
-            "evidence_snapshot": SimpleNamespace(
-                facts=(
-                    SimpleNamespace(
-                        fact_id="b" * 64,
-                        source_snapshot_hash="a" * 64,
-                        source_key="admission_record",
-                        source_document_id="private-admission-document-id",
-                    ),
-                    SimpleNamespace(
-                        fact_id="c" * 64,
-                        source_snapshot_hash="a" * 64,
-                        source_key="discharge_record",
-                        source_document_id="private-discharge-document-id",
-                    ),
-                ),
-                observations=(
-                    SimpleNamespace(
-                        source_key="admission_record",
-                        snapshot_ref="sha256:" + "b" * 64,
-                    ),
-                    SimpleNamespace(
-                        source_key="discharge_record",
-                        snapshot_ref="sha256:" + "c" * 64,
-                    ),
-                ),
-            ),
-            "evidence_materials": SimpleNamespace(
-                rows=lambda source_key: {
-                    "admission_record": (
-                        {"document_id": "private-admission-document-id"},
-                    ),
-                    "discharge_record": (
-                        {"document_id": "private-discharge-document-id"},
-                    ),
-                }.get(source_key, ())
-            ),
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
         },
     )[0]
 
