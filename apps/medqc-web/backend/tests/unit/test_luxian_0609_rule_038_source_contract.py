@@ -78,6 +78,7 @@ async def _run_038(*, selected_rule_ids: tuple[str, ...]):
         decisions=(decision,),
         expected_rule_ids=("LX0609-038",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )[0]
     return calls, reduced, dict(execution.customer_display_facts).get("LX0609-038")
 
