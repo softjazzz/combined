@@ -1935,6 +1935,98 @@ async def test_local_anesthesia_is_not_applicable_to_visit_and_record_sheet_rule
     assert client.prompts == []
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "anesthesia_method", "expected_status", "expected_reason"),
+    [
+        ("LX0609-036", "局部麻醉", "not_applicable", "local_anesthesia_exception"),
+        ("LX0609-037", "局部麻醉", "not_applicable", "local_anesthesia_exception"),
+        ("LX0609-038", "局部麻醉", "not_applicable", "local_anesthesia_exception"),
+        ("LX0609-038", "全身麻醉", "compliant", "anesthesia_record_present"),
+        ("LX0609-036", "", "data_gap", "anesthesia_method_unavailable"),
+        ("LX0609-037", "", "data_gap", "anesthesia_method_unavailable"),
+        ("LX0609-038", "", "data_gap", "anesthesia_method_unavailable"),
+    ],
+)
+def test_typed_anesthesia_method_state_matrix_fails_closed(
+    monkeypatch,
+    rule_id: str,
+    anesthesia_method: str,
+    expected_status: str,
+    expected_reason: str,
+):
+    """局麻、非局麻和未知方式必须走互斥、受控的状态分支。"""
+
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", anesthesia_method)
+            if source_key == "anesthesia_record"
+            else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, _source_key: "available",
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id=rule_id,
+        snapshot=object(),
+    )
+
+    assert (outcome.status, outcome.reason_code) == (expected_status, expected_reason)
+
+
+@pytest.mark.parametrize("rule_id", ("LX0609-036", "LX0609-037", "LX0609-038"))
+def test_typed_anesthesia_mr_surgery_query_error_is_technical_error(
+    monkeypatch,
+    rule_id: str,
+):
+    """麻醉触发所需的手术源查询失败不能伪装为不适用或临床缺陷。"""
+
+    def source_gate(*, source_key: str, **_kwargs):
+        if source_key == "mr_surgery":
+            return surgery_doc._SurgeryDocumentOutcome(
+                rule_id,
+                "technical_error",
+                "source_query_error",
+                "program",
+            )
+        return None
+
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", source_gate)
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id=rule_id,
+        snapshot=object(),
+    )
+
+    assert (outcome.status, outcome.reason_code) == (
+        "technical_error",
+        "source_query_error",
+    )
+
+
+def test_local_anesthesia_exception_reduces_to_eligibility_not_met():
+    """局麻是资格排除，不能在 Canonical 结果中表述成“未实施麻醉”。"""
+
+    session = _typed_session(selected_rule_ids=("LX0609-036",))
+    decision = surgery_doc._typed_decision_from_outcome(
+        outcome=surgery_doc._SurgeryDocumentOutcome(
+            "LX0609-036",
+            "not_applicable",
+            "local_anesthesia_exception",
+            "program",
+        ),
+        snapshot=session.snapshot,
+    )
+
+    assert decision.reason_code == "eligibility_not_met"
+
+
 @pytest.mark.asyncio
 async def test_missing_visits_are_owned_by_036_and_037_is_not_applicable():
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(

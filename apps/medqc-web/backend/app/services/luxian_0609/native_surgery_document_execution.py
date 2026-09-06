@@ -216,7 +216,8 @@ def _typed_decision_from_outcome(
             QcDirection.UNKNOWN,
             (
                 "eligibility_not_met"
-                if outcome.reason_code == "anesthesia_visit_absent"
+                if outcome.reason_code
+                in {"anesthesia_visit_absent", "local_anesthesia_exception"}
                 else "performed_event_absent"
             ),
         )
@@ -531,7 +532,24 @@ def _typed_anesthesia_trigger(
         if len(qualified_methods) == 1:
             candidates.append(("present", next(iter(qualified_methods)), "mr_surgery"))
 
-        # 麻醉记录本身存在即可证明实施过麻醉；麻醉方式仍优先取结构化手术源。
+        # 麻醉记录本身存在即可证明实施过麻醉；其结构化方式字段可作为
+        # 手术主表方式的同级受控来源，不能依赖下游文本猜测。
+        anesthesia_record_methods = {
+            _clean(row.get("anesthesia_method") or row.get("method"))
+            for row in materials.rows("anesthesia_record")
+            if _clean(row.get("anesthesia_method") or row.get("method"))
+        }
+        if len(anesthesia_record_methods) == 1:
+            candidates.append(
+                (
+                    "present",
+                    next(iter(anesthesia_record_methods)),
+                    "anesthesia_record",
+                )
+            )
+
+        # 麻醉记录存在但方式字段没有可靠值时，只能证明“已实施”，不能
+        # 把未知方式擅自视为非局部麻醉。
         if _typed_observation_state(snapshot, "anesthesia_record") == "available":
             candidates.append(("present", "", "anesthesia_record"))
     if not candidates:
@@ -1118,13 +1136,16 @@ def _typed_terminal_outcome(
             ),
         )
 
-    blocker = _typed_source_gate(
-        rule_id=rule_id,
-        source_key="anesthesia_record",
-        snapshot=snapshot,
-    )
-    if blocker is not None:
-        return blocker
+    # 麻醉记录和手术主表共同构成麻醉实施及方式的受控资料链。任一来源
+    # 查询失败时不能让另一个来源把技术故障掩盖成“未实施”或临床缺陷。
+    for source_key in ("anesthesia_record", "mr_surgery"):
+        blocker = _typed_source_gate(
+            rule_id=rule_id,
+            source_key=source_key,
+            snapshot=snapshot,
+        )
+        if blocker is not None:
+            return blocker
     anesthesia_state, anesthesia_method, anesthesia_trigger_source = (
         _typed_anesthesia_trigger(snapshot, materials)
     )
@@ -1139,10 +1160,15 @@ def _typed_terminal_outcome(
     if _anesthesia_record_association_state(materials) == "ambiguous":
         return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
     is_local = anesthesia_method in _LOCAL_ANESTHESIA_VALUES
-    if rule_id in {"LX0609-036", "LX0609-037", "LX0609-038"} and is_local:
-        return _SurgeryDocumentOutcome(
-            rule_id, "not_applicable", "local_anesthesia_exception", "program"
-        )
+    if rule_id in {"LX0609-036", "LX0609-037", "LX0609-038"}:
+        if is_local:
+            return _SurgeryDocumentOutcome(
+                rule_id, "not_applicable", "local_anesthesia_exception", "program"
+            )
+        if not anesthesia_method:
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "anesthesia_method_unavailable", "program"
+            )
 
     if rule_id in _ANESTHESIA_CONSENT_RULE_IDS:
         blocker = _typed_source_gate(
