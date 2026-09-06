@@ -3921,12 +3921,13 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
     assert paused_item["status"] == "not_executed"
     assert paused_item["result_status"] == "not_executed"
     assert paused_item["is_compliant"] is None
-    assert paused_item["metadata"]["result_fallback"] == "paused_customer_rule"
-    assert paused_item["metadata"]["customer_rule_paused"] is True
-    assert "不纳入本次质控结论" in paused_item["findings"]
-    assert "知情同意书" not in paused_item["findings"]
-    assert "资料缺失" in paused_item["evidence"]
-    assert "重新执行" not in paused_item["suggestion"]
+    assert not paused_item["evidence"]
+    assert paused_item["metadata"]["reason_code"] == "policy_definition_pending"
+    assert (
+        paused_item["metadata"]["pending_reason_code"]
+        == "charging_source_unavailable_customer_scope"
+    )
+    assert "不参与正式结论" in paused_item["findings"]
 
 
 @pytest.mark.asyncio

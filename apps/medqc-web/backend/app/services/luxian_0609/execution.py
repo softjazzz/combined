@@ -41,6 +41,7 @@ from .executor_registry import (
 )
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .rule_decision_settings import resolve_typed_decision_rule_ids
+from .phase_scope import build_luxian_0609_pending_definition_result
 from .treatment_order_consistency_shadow import run_luxian_0609_059_shadow
 from .implant_information_shadow import run_luxian_0609_025_shadow
 from .native_execution import (
@@ -186,28 +187,6 @@ def is_luxian_0609_customer_package_enabled(*, rule_set_key: str, settings: Any)
         str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY
         and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
     )
-
-
-def _build_phase_not_executed_results(
-    rule_ids: Iterable[str],
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "rule_id": str(rule_id).strip().upper(),
-            "status": "not_executed",
-            "is_compliant": None,
-            "findings": "本质控点当前不参与正式结论，未生成合规或问题判定。",
-            "evidence": [],
-            "suggestion": "待院方确认并发布业务口径后再启用本质控点。",
-            "confidence": 0.0,
-            "metadata": {
-                "execution_source": "lx0609_phase_gate",
-                "executor_type": "programmatic",
-                "reason_code": "policy_definition_pending",
-            },
-        }
-        for rule_id in rule_ids
-    ]
 
 
 async def prepare_luxian_0609_execution(
@@ -358,9 +337,10 @@ async def prepare_luxian_0609_execution(
         in selected_customer_rule_id_set
     ]
     native_results: list[dict[str, Any]] = []
-    phase_not_executed_results = _build_phase_not_executed_results(
-        package_plan.not_executed_rule_ids
-    )
+    phase_not_executed_results = [
+        build_luxian_0609_pending_definition_result(rule_id)
+        for rule_id in package_plan.not_executed_rule_ids
+    ]
     native_llm_call_count = 0
     native_prompt_tokens = 0
     native_completion_tokens = 0

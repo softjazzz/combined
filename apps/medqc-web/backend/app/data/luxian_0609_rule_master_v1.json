@@ -452,7 +452,7 @@
       "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "重点抗菌药物目录尚未冻结，本质控点暂不执行；不得因目录或病原学资料缺失生成数据不足或不合规结论。"
     },
     {
       "rule_id": "LX0609-057",
@@ -476,7 +476,7 @@
       "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "按实际诊疗事件逐项核对医嘱及病程，以order_id、application_id、event_code严格关联；禁止药名共现或最近时间猜测。影子核心已实现但尚未接入影子入口，真实病例金标验收前不参与正式结论。",
+      "policy_summary": "实际诊疗事件、医嘱与病程的严格关联口径仍待真实病例金标验收，本质控点暂不执行；不得因资料缺失生成数据不足或不合规结论。",
       "pending_definition_note": "需完成多事件、多业务键冲突、医嘱动作与病程语义关联的真实病例金标验收。"
     },
     {
@@ -606,7 +606,7 @@
       "qc_point": "有创操作医嘱但无有创操作记录",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《有创操作记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "有创操作目录尚未冻结，本质控点暂不执行；不得因目录或操作记录缺失生成数据不足或不合规结论。"
     },
     {
       "rule_id": "LX0609-076",

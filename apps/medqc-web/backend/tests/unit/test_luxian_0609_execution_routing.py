@@ -179,11 +179,16 @@ def test_disabled_rollout_flag_only_removes_its_group() -> None:
 
 
 @pytest.mark.parametrize(
-    "rule_id",
-    ("LX0609-025", "LX0609-028", "LX0609-059"),
+    ("rule_id", "pending_reason_code"),
+    (
+        ("LX0609-049", "charging_source_unavailable_customer_scope"),
+        ("LX0609-056", "key_antimicrobial_catalog_missing"),
+        ("LX0609-059", "treatment_event_order_course_real_gold_pending"),
+        ("LX0609-075", "invasive_procedure_catalog_missing"),
+    ),
 )
 def test_public_execution_returns_controlled_not_executed_for_pending_rule(
-    rule_id: str,
+    rule_id: str, pending_reason_code: str
 ) -> None:
     inventory = load_luxian_0609_dependency_inventory()
     prepared_rules = [
@@ -230,6 +235,10 @@ def test_public_execution_returns_controlled_not_executed_for_pending_rule(
     result = aggregated["results"][0]
     assert result["rule_id"] == rule_id
     assert result["status"] == "not_executed"
+    assert result["is_compliant"] is None
+    assert result["evidence"] == []
+    assert result["metadata"]["reason_code"] == "policy_definition_pending"
+    assert result["metadata"]["pending_reason_code"] == pending_reason_code
     assert result["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
     assert result["suggestion"] == "待院方确认并发布业务口径后再启用本质控点。"
 

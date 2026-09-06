@@ -661,10 +661,6 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-055": {"antimicrobial_effect_evaluation_check"},
         "LX0609-057": {"empiric_antimicrobial_reason_check"},
         "LX0609-058": {"special_antimicrobial_expert_support_check"},
-        "LX0609-059": {
-            "antimicrobial_course_documentation_complete",
-            "antimicrobial_course_documentation_missing",
-        },
         "LX0609-061": {"discharge_record_timeliness_check"},
         "LX0609-062": {"discharge_medication_completeness_check"},
         "LX0609-063": {"discharge_diagnosis_consistency_check"},
@@ -701,10 +697,6 @@ def safe_luxian_0609_customer_display_facts(
             "diagnosis_change_association_failed",
             "diagnosis_change_documentation_time_missing",
         },
-        "LX0609-075": {
-            "invasive_procedure_course_record_complete",
-            "invasive_procedure_course_record_missing",
-        },
     }
     extended_allowed_keys = {
         "critical_value_timeliness_check": {
@@ -736,12 +728,6 @@ def safe_luxian_0609_customer_display_facts(
             "special_antimicrobials", "expert_support_present",
             "first_antimicrobial_time", "expert_support_time", "support_before_use",
             "unmatched_special_antimicrobials", "association_ambiguous",
-        },
-        "antimicrobial_course_documentation_complete": {
-            "antimicrobials", "course_documented",
-        },
-        "antimicrobial_course_documentation_missing": {
-            "antimicrobials", "course_documented",
         },
         "discharge_record_timeliness_check": {
             "discharge_time", "discharge_time_source", "record_time", "threshold_hours",
@@ -834,12 +820,6 @@ def safe_luxian_0609_customer_display_facts(
         },
         "diagnosis_change_documentation_time_missing": {
             "diagnosis_change_count", "untimed_document_count", "issue",
-        },
-        "invasive_procedure_course_record_complete": {
-            "ordered_procedures", "course_documented",
-        },
-        "invasive_procedure_course_record_missing": {
-            "ordered_procedures", "course_documented",
         },
     }
 

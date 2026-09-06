@@ -8,6 +8,7 @@ from app.services import luxian_0609_rule_master as rule_master_module
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609.phase_scope import (
     Luxian0609PhaseScopeEntry,
+    build_luxian_0609_pending_definition_result,
     compile_luxian_0609_phase_scope,
     load_luxian_0609_phase_scope,
     partition_luxian_0609_rule_scope,
@@ -69,6 +70,34 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         "LX0609-056",
         "LX0609-059",
         "LX0609-075",
+    }
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "pending_reason_code"),
+    (
+        ("LX0609-049", "charging_source_unavailable_customer_scope"),
+        ("LX0609-056", "key_antimicrobial_catalog_missing"),
+        ("LX0609-059", "treatment_event_order_course_real_gold_pending"),
+        ("LX0609-075", "invasive_procedure_catalog_missing"),
+    ),
+)
+def test_pending_definition_result_has_one_empty_evidence_contract(
+    rule_id: str,
+    pending_reason_code: str,
+) -> None:
+    result = build_luxian_0609_pending_definition_result(rule_id)
+
+    assert result["rule_id"] == rule_id
+    assert result["status"] == "not_executed"
+    assert result["is_compliant"] is None
+    assert result["facts"] == {}
+    assert result["evidence"] == []
+    assert result["metadata"] == {
+        "execution_source": "lx0609_phase_gate",
+        "executor_type": "programmatic",
+        "reason_code": "policy_definition_pending",
+        "pending_reason_code": pending_reason_code,
     }
 
 

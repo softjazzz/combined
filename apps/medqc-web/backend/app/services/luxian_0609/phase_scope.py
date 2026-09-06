@@ -137,6 +137,30 @@ def get_luxian_0609_phase_scope(rule_id: str) -> Luxian0609PhaseScopeEntry | Non
     )
 
 
+def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, Any]:
+    """由范围契约唯一生成暂停规则的正式结果。"""
+
+    entry = get_luxian_0609_phase_scope(rule_id)
+    if entry is None or entry.phase_status != "pending_definition":
+        raise ValueError("rule is not an LX0609 pending definition")
+    return {
+        "rule_id": entry.rule_id,
+        "status": "not_executed",
+        "is_compliant": None,
+        "findings": "本质控点当前不参与正式结论，未生成合规或问题判定。",
+        "facts": {},
+        "evidence": [],
+        "suggestion": "待院方确认并发布业务口径后再启用本质控点。",
+        "confidence": 0.0,
+        "metadata": {
+            "execution_source": "lx0609_phase_gate",
+            "executor_type": "programmatic",
+            "reason_code": "policy_definition_pending",
+            "pending_reason_code": entry.pending_reason_code,
+        },
+    }
+
+
 def partition_luxian_0609_rule_scope(
     selected_rule_ids: Iterable[str],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:

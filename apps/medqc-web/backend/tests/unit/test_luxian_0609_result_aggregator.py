@@ -1112,14 +1112,6 @@ def test_critical_value_event_results_reject_internal_identifiers():
     ("rule_id", "facts"),
     [
         (
-            "LX0609-059",
-            {
-                "failure_kind": "antimicrobial_course_documentation_missing",
-                "antimicrobials": ["美罗培南"],
-                "course_documented": False,
-            },
-        ),
-        (
             "LX0609-068",
             {
                 "failure_kind": "senior_discharge_approval_missing",
@@ -1127,14 +1119,6 @@ def test_critical_value_event_results_reject_internal_identifiers():
                 "checked_dates": ["2026-07-12", "2026-07-13"],
                 "checked_source": "daily_course_record,senior_course_record",
                 "approval_present": False,
-            },
-        ),
-        (
-            "LX0609-075",
-            {
-                "failure_kind": "invasive_procedure_course_record_missing",
-                "ordered_procedures": ["中心静脉置管术"],
-                "course_documented": False,
             },
         ),
     ],

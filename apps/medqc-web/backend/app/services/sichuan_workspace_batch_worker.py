@@ -63,7 +63,10 @@ from .sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
 )
-from .luxian_0609.phase_scope import partition_luxian_0609_rule_scope
+from .luxian_0609.phase_scope import (
+    build_luxian_0609_pending_definition_result,
+    partition_luxian_0609_rule_scope,
+)
 from .sichuan_qc_service import RuleSourceGuardError, SichuanQCService
 
 
@@ -2580,19 +2583,10 @@ async def run_sichuan_workspace_batch_job(
                         if use_luxian_customer_results:
                             if is_paused_customer_rule:
                                 eval_item = {
-                                    "rule_id": rule_id,
+                                    **build_luxian_0609_pending_definition_result(
+                                        normalized_rule_id
+                                    ),
                                     "rule_name": rule_name,
-                                    "status": "not_executed",
-                                    "is_compliant": None,
-                                    "findings": "本次暂未启用：该质控点不纳入本次质控结论。",
-                                    "evidence": "本次未执行该规则；这不是资料缺失，也不表示存在质控问题。",
-                                    "suggestion": "无需处理；该质控点恢复启用后将重新纳入质控范围。",
-                                    "confidence": 0,
-                                    "metadata": {
-                                        "executor_type": "program",
-                                        "result_fallback": "paused_customer_rule",
-                                        "customer_rule_paused": True,
-                                    },
                                 }
                             elif is_gate_only_missing:
                                 eval_item = {

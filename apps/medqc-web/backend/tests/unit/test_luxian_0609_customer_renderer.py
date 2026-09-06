@@ -672,25 +672,6 @@ def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course
             },
             "已确认本次实施非局部麻醉，但未找到麻醉记录单。",
         ),
-        (
-            "LX0609-059",
-            {
-                "failure_kind": "antimicrobial_course_documentation_missing",
-                "antimicrobials": ["青霉素", "哌拉西林", "头孢他啶"],
-                "course_documented": False,
-            },
-            "已核对抗菌药物青霉素、哌拉西林、头孢他啶，未找到对应的用药病程记录。",
-        ),
-        (
-            "LX0609-075",
-            {
-                "failure_kind": "invasive_procedure_course_record_missing",
-                "ordered_procedures": ["中心静脉置管", "气管插管", "支气管镜"],
-                "course_documented": False,
-            },
-            "已识别有创操作医嘱：中心静脉置管、气管插管、支气管镜；"
-            "未找到对应的有创操作病程记录。",
-        ),
     ],
 )
 def test_customer_finding_uses_existing_controlled_facts_instead_of_generic_copy(
@@ -740,20 +721,12 @@ def test_customer_finding_uses_existing_controlled_facts_instead_of_generic_copy
             "请补充使用特殊级抗菌药物前的专家查房或会诊意见，并记录用药依据。",
         ),
         (
-            "LX0609-059",
-            "请在病程中补充上述抗菌药物的使用原因、方案调整及疗效观察。",
-        ),
-        (
             "LX0609-064",
             "请按每台手术分别补齐术后次日起连续3天的病程记录，并记录术者查房情况。",
         ),
         (
             "LX0609-074",
             "请对每次诊断修正或补充记录修改理由及诊断依据。",
-        ),
-        (
-            "LX0609-075",
-            "请分别补充上述有创操作的适应证、操作时间、过程、结果及并发症观察。",
         ),
     ],
 )
@@ -2169,7 +2142,6 @@ def test_rule_identity_and_name_come_only_from_the_trusted_catalog():
         ("LX0609-032", "已确认本次手术具备手术安全核查表。"),
         ("LX0609-043", "已核对输血前常规检查，所需项目完整。"),
         ("LX0609-048", "已核对术中输血相关记录，未发现文书间内容不一致。"),
-        ("LX0609-049", "已核对输血医嘱与收费记录，未发现不一致。"),
     ],
 )
 def test_compliant_result_explains_why_it_is_compliant(rule_id, expected_finding):
