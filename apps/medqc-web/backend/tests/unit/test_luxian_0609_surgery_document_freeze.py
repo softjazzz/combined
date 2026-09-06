@@ -204,17 +204,64 @@ def _evidence_coordinates(result: Mapping[str, Any]) -> set[tuple[str, str]]:
     }
 
 
-def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...]:
-    source_by_ref = {
-        str(observation.snapshot_ref).removeprefix("sha256:"): observation.source_key
-        for observation in snapshot.observations
+def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple[Any, ...], ...]:
+    """将 Fact / source observation / material ref 还原为可读且精确的坐标。
+
+    ``fact_refs`` 本身是内容寻址引用，冻结测试不把摘要常量写进用例；但不能
+    因此退化为只核对来源类型。本函数保留每个引用实际代表的事实类型、查询状态、
+    来源和材料文书 ID，兼顾稳定性与证据选择精度。
+    """
+
+    coordinates: dict[str, tuple[Any, ...]] = {
+        fact.fact_id: (
+            "fact",
+            fact.fact_type,
+            fact.source_key,
+            fact.assertion.value,
+            fact.event_status.value,
+        )
+        for fact in session.snapshot.facts
     }
-    return tuple(source_by_ref.get(str(ref), "document_ref") for ref in fact_refs)
+    coordinates.update(
+        {
+            str(observation.snapshot_ref).removeprefix("sha256:"): (
+                "observation",
+                observation.source_key,
+                observation.query_state.value,
+                observation.record_count,
+            )
+            for observation in session.snapshot.observations
+        }
+    )
+    for source_key in session.materials.safe_summary()["sources"]:
+        for document_ref, row in session.materials.document_rows(
+            source_key,
+            snapshot=session.snapshot,
+        ):
+            document_id = next(
+                (
+                    str(row.get(field) or "").strip()
+                    for field in ("order_id", "document_id", "id")
+                    if str(row.get(field) or "").strip()
+                ),
+                "",
+            )
+            coordinates[document_ref] = ("material", source_key, document_id)
+    return tuple(coordinates.get(str(ref), ("unknown", str(ref))) for ref in fact_refs)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("rule_id", "rows_by_source", "status", "reason_code", "display_facts", "evidence"),
+    (
+        "rule_id",
+        "rows_by_source",
+        "status",
+        "reason_code",
+        "display_facts",
+        "fact_ref_coordinates",
+        "evidence",
+        "findings",
+    ),
     (
         (
             "LX0609-029",
@@ -234,13 +281,21 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "presurg_summary",
+                "surgery_trigger_kind": "performed_surgery",
                 "performed_surgery_confirmed": True,
             },
+            (
+                ("observation", "presurg_summary", "available", 1),
+                ("observation", "inpat_nondrug_order", "empty", 0),
+                ("observation", "mr_surgery", "available", 1),
+                ("observation", "surgery_record", "available", 1),
+            ),
             {
                 ("mr_surgery", "mr-surgery-1"),
                 ("presurg_summary", "summary-1"),
                 ("surgery_record", "surgery-1"),
             },
+            "已确认本次实施手术具备术前小结。",
         ),
         (
             "LX0609-034",
@@ -256,10 +311,16 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...
                 "consent_state": "missing",
                 "checked_sources": ["consent_form"],
             },
+            (
+                ("observation", "anesthesia_record", "available", 1),
+                ("observation", "consent_form", "empty", 0),
+                ("observation", "mr_surgery", "available", 1),
+            ),
             {
                 ("anesthesia_record", "anesthesia-1"),
                 ("anesthesia_record", "mr-surgery-1"),
             },
+            "已实施麻醉，但未找到对应的麻醉知情同意书",
         ),
         (
             "LX0609-035",
@@ -269,17 +330,23 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...
                 "consent_form": _rows(_consent(complete=False)),
             },
             "non_compliant",
-            "required_document_missing",
+            "requirement_violated",
             {
                 "failure_kind": "anesthesia_consent_incomplete",
                 "performed_anesthesia_confirmed": True,
                 "missing_fields": ["patient_signature", "patient_signature_time"],
             },
+            (
+                ("observation", "consent_form", "available", 1),
+                ("observation", "anesthesia_record", "available", 1),
+                ("observation", "mr_surgery", "available", 1),
+            ),
             {
                 ("anesthesia_record", "anesthesia-1"),
                 ("consent_form", "consent-1"),
                 ("mr_surgery", "mr-surgery-1"),
             },
+            "发现质控问题",
         ),
         (
             "LX0609-036",
@@ -295,11 +362,18 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...
                 "performed_anesthesia_confirmed": True,
                 "missing_visit_sources": ["postane_surveil_record"],
             },
+            (
+                ("observation", "postane_surveil_record", "empty", 0),
+                ("observation", "anesthesia_record", "available", 1),
+                ("observation", "mr_surgery", "available", 1),
+                ("observation", "preane_surveil_record", "available", 1),
+            ),
             {
                 ("anesthesia_record", "anesthesia-1"),
                 ("anesthesia_record", "mr-surgery-1"),
                 ("preane_surveil_record", "pre-visit-1"),
             },
+            "已实施麻醉，但缺少麻醉术前或术后访视记录",
         ),
         (
             "LX0609-037",
@@ -335,12 +409,24 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...
                     ],
                 },
             },
+            (
+                ("observation", "anesthesia_record", "available", 1),
+                ("observation", "consent_form", "empty", 0),
+                ("observation", "mr_surgery", "available", 1),
+                ("observation", "postane_surveil_record", "available", 1),
+                ("observation", "preane_surveil_record", "available", 1),
+            ),
             {
                 ("anesthesia_record", "anesthesia-1"),
                 ("mr_surgery", "mr-surgery-1"),
                 ("postane_surveil_record", "post-visit-1"),
                 ("preane_surveil_record", "pre-visit-1"),
             },
+            (
+                "麻醉术前访视已核对：ASA分级、气道评估、禁食禁饮情况、既往麻醉史、"
+                "麻醉风险告知、麻醉医师签名、记录时间；麻醉术后访视已核对：意识状态、"
+                "呼吸情况、循环情况、麻醉并发症评估、麻醉医师签名、记录时间。"
+            ),
         ),
         (
             "LX0609-038",
@@ -355,7 +441,13 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...
                 "performed_anesthesia_confirmed": True,
                 "checked_sources": ["anesthesia_record"],
             },
+            (
+                ("observation", "anesthesia_record", "available", 1),
+                ("observation", "consent_form", "empty", 0),
+                ("observation", "mr_surgery", "available", 1),
+            ),
             {("anesthesia_record", "anesthesia-1")},
+            "已确认本次麻醉具备麻醉记录单。",
         ),
         (
             "LX0609-039",
@@ -384,7 +476,14 @@ def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...
                 "emergency_rescue_exception_absent": True,
                 "checked_sources": ["presurg_discussion"],
             },
+            (
+                ("observation", "presurg_discussion", "empty", 0),
+                ("observation", "mr_surgery", "empty", 0),
+                ("observation", "rescue_record", "empty", 0),
+                ("observation", "surgery_record", "available", 2),
+            ),
             set(),
+            "发现质控问题",
         ),
     ),
 )
@@ -394,7 +493,9 @@ async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
     status: str,
     reason_code: str,
     display_facts: Mapping[str, Any],
+    fact_ref_coordinates: tuple[tuple[Any, ...], ...],
     evidence: set[tuple[str, str]],
+    findings: str,
 ) -> None:
     session, execution, reduced, result = await _run_chain(rule_id, rows_by_source)
 
@@ -407,41 +508,72 @@ async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
     assert result["status"] == status
     assert result["reason_code"] == reason_code
     assert result["customer_display_facts"] == display_facts
+    assert result["findings"] == findings
     assert _evidence_coordinates(result) == evidence
-    expected_ref_sources = {
-        "LX0609-029": {"presurg_summary", "surgery_record", "mr_surgery"},
-        "LX0609-034": {"anesthesia_record", "mr_surgery", "consent_form"},
-        "LX0609-035": {"anesthesia_record", "mr_surgery", "consent_form"},
-        "LX0609-036": {
-            "anesthesia_record",
-            "mr_surgery",
-            "preane_surveil_record",
-            "postane_surveil_record",
-        },
-        "LX0609-037": {
-            "anesthesia_record",
-            "mr_surgery",
-            "consent_form",
-            "preane_surveil_record",
-            "postane_surveil_record",
-        },
-        "LX0609-038": {"anesthesia_record", "mr_surgery", "consent_form"},
-        "LX0609-039": {"surgery_record", "mr_surgery", "presurg_discussion"},
-    }[rule_id]
-    expected_fact_refs = tuple(
-        sorted(
-            str(observation.snapshot_ref).removeprefix("sha256:")
-            for observation in session.snapshot.observations
-            if observation.source_key in expected_ref_sources
-        )
-    )
-    assert decision.fact_refs == expected_fact_refs
-    assert set(_fact_ref_sources(session.snapshot, decision.fact_refs)) == expected_ref_sources
+    assert _fact_ref_coordinates(session, decision.fact_refs) == fact_ref_coordinates
 
     assert execution.llm_call_count == 0
     assert execution.prompt_tokens == 0
     assert execution.completion_tokens == 0
     assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_lx029_order_only_trigger_freezes_mutually_exclusive_facts_and_coordinates() -> None:
+    """029 的手术医嘱触发不得伪称手术已经实施。"""
+
+    session, execution, reduced, result = await _run_chain(
+        "LX0609-029",
+        {
+            "inpat_nondrug_order": _rows(
+                {
+                    "order_id": "operation-order-1",
+                    "order_type": "手术",
+                    "order_status": "新开",
+                    "order_name": "腹腔镜阑尾切除术",
+                }
+            ),
+            "presurg_summary": _rows(
+                {
+                    "document_id": "summary-order-1",
+                    "document_title": "术前小结",
+                    "record_content": "拟行腹腔镜阑尾切除术",
+                }
+            ),
+        },
+    )
+
+    decision = execution.decisions[0]
+    expected_facts = {
+        "verification_kind": "surgery_document_present",
+        "target_document": "presurg_summary",
+        "surgery_trigger_kind": "surgery_order",
+        "surgery_order_confirmed": True,
+    }
+    assert decision.reason_code == "requirement_satisfied"
+    assert (reduced.final_state.value, reduced.reason_code) == (
+        "compliant",
+        "requirement_satisfied",
+    )
+    assert result["customer_display_facts"] == expected_facts
+    assert "performed_surgery_confirmed" not in expected_facts
+    assert result["findings"] == "已发现手术医嘱，术前小结已完整记录。"
+    assert _fact_ref_coordinates(session, decision.fact_refs) == (
+        (
+            "fact",
+            "current_visit_surgery_order_confirmed",
+            "inpat_nondrug_order",
+            "affirmed",
+            "ordered",
+        ),
+        ("material", "inpat_nondrug_order", "operation-order-1"),
+        ("material", "presurg_summary", "summary-order-1"),
+    )
+    assert _evidence_coordinates(result) == {
+        ("inpat_nondrug_order", "operation-order-1"),
+        ("presurg_summary", "summary-order-1"),
+    }
+    assert execution.llm_call_count == execution.total_tokens == 0
 
 
 @pytest.mark.asyncio
