@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections import Counter
+from datetime import date, datetime, time
+from decimal import Decimal
 from types import MappingProxyType
 from typing import Any, Mapping
+from uuid import UUID
 
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .source_evidence_reader import (
@@ -68,6 +71,43 @@ def _build_material_document_rows(
     return tuple(document_rows)
 
 
+def _is_recursively_cache_safe(value: Any) -> bool:
+    """仅允许不会在 snapshot 创建后被原地改写的行值进入缓存。"""
+
+    if type(value) in (
+        type(None),
+        bool,
+        int,
+        float,
+        str,
+        bytes,
+        date,
+        datetime,
+        time,
+        Decimal,
+        UUID,
+    ):
+        return True
+    if type(value) is tuple:
+        return all(_is_recursively_cache_safe(item) for item in value)
+    if type(value) is MappingProxyType:
+        return all(
+            _is_recursively_cache_safe(key)
+            and _is_recursively_cache_safe(item)
+            for key, item in value.items()
+        )
+    return False
+
+
+def _source_rows_are_cache_safe(rows: tuple[Mapping[str, Any], ...]) -> bool:
+    """只复用顶层和嵌套层均不可变的 ``SnapshotSourceRows``。"""
+
+    return all(
+        type(row) is MappingProxyType and _is_recursively_cache_safe(row)
+        for row in rows
+    )
+
+
 def build_material_snapshot_ref(
     *,
     source_key: str,
@@ -93,6 +133,14 @@ class Luxian0609EvidenceMaterialStore:
 
     snapshot_hash: str
     _sources: Mapping[str, SnapshotSourceRows] = field(repr=False)
+    _document_rows_cache: Mapping[
+        str, tuple[tuple[str, Mapping[str, Any]], ...]
+    ] = field(
+        default_factory=lambda: MappingProxyType({}),
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     @classmethod
     def create(
@@ -109,6 +157,9 @@ class Luxian0609EvidenceMaterialStore:
             item.source_key: item for item in snapshot.observations
         }
         frozen: dict[str, SnapshotSourceRows] = {}
+        document_rows_by_source: dict[
+            str, tuple[tuple[str, Mapping[str, Any]], ...]
+        ] = {}
         for raw_source_key, material in sources.items():
             source_key = str(raw_source_key or "").strip().lower()
             observation = observation_by_source.get(source_key)
@@ -129,7 +180,8 @@ class Luxian0609EvidenceMaterialStore:
             )
             if observation.completeness is not expected_completeness:
                 raise ValueError("material completeness does not match snapshot")
-            document_refs = build_material_document_refs(source_key, material.rows)
+            document_rows = _build_material_document_rows(source_key, material.rows)
+            document_refs = tuple(item[0] for item in document_rows)
             expected_snapshot_ref = build_material_snapshot_ref(
                 source_key=source_key,
                 query_version=observation.query_version,
@@ -140,10 +192,20 @@ class Luxian0609EvidenceMaterialStore:
             if observation.snapshot_ref != expected_snapshot_ref:
                 raise ValueError("material rows do not match snapshot identity")
             frozen[source_key] = material
-        return cls(
+            if _source_rows_are_cache_safe(material.rows):
+                document_rows_by_source[source_key] = document_rows
+        store = cls(
             snapshot_hash=snapshot.snapshot_hash,
             _sources=MappingProxyType(frozen),
         )
+        # 仅缓存本次 create 已经以同一 Snapshot 逐源验证过的冻结行。该字段
+        # 不参与构造，直接构造的 Store 必须继续在 document_rows 中重算校验。
+        object.__setattr__(
+            store,
+            "_document_rows_cache",
+            MappingProxyType(document_rows_by_source),
+        )
+        return store
 
     def has_source(self, source_key: str) -> bool:
         return str(source_key or "").strip().lower() in self._sources
@@ -201,7 +263,12 @@ class Luxian0609EvidenceMaterialStore:
             or observation.record_count != len(material.rows)
         ):
             raise ValueError("material source does not match snapshot")
-        document_rows = _build_material_document_rows(normalized, material.rows)
+        cached_document_rows = self._document_rows_cache.get(normalized)
+        document_rows = (
+            cached_document_rows
+            if cached_document_rows is not None
+            else _build_material_document_rows(normalized, material.rows)
+        )
         document_refs = tuple(item[0] for item in document_rows)
         expected_snapshot_ref = build_material_snapshot_ref(
             source_key=normalized,

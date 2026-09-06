@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from decimal import Decimal
+
+import pytest
+
+from app.services.luxian_0609 import evidence_material
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -151,6 +157,72 @@ def test_document_rows_pair_sorted_rows_with_refs_and_duplicate_occurrences():
     assert document_rows[1][1] is rows.rows[2]
 
 
+def test_create_reuses_verified_document_rows_for_repeated_reads(monkeypatch):
+    """同一由 create 构造的材料仓不得重复摘要、排序和生成文书引用。"""
+
+    rows = _source_rows(
+        "daily_course_record",
+        (
+            {
+                "document_id": "daily-2",
+                "record_content": "second",
+                "recorded_at": datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc),
+                "result_value": Decimal("12.50"),
+            },
+            {"document_id": "daily-1", "record_content": "first"},
+        ),
+    )
+    snapshot, _ = _snapshot_and_materials({"daily_course_record": rows})
+    original = evidence_material._build_material_document_rows
+    expected = original("daily_course_record", rows.rows)
+    call_count = 0
+
+    def counted_build(source_key, source_rows):
+        nonlocal call_count
+        call_count += 1
+        return original(source_key, source_rows)
+
+    monkeypatch.setattr(
+        evidence_material,
+        "_build_material_document_rows",
+        counted_build,
+    )
+    materials = Luxian0609EvidenceMaterialStore.create(
+        snapshot=snapshot,
+        sources={"daily_course_record": rows},
+    )
+
+    first = materials.document_rows("daily_course_record", snapshot=snapshot)
+    second = materials.document_rows("daily_course_record", snapshot=snapshot)
+
+    assert call_count == 1
+    assert first == second
+    assert first == expected
+
+
+def test_document_rows_recompute_after_nested_value_mutation():
+    """顶层冻结但嵌套值可变时不得复用 create 阶段的文书引用。"""
+
+    nested_value = {"status": "original"}
+    rows = _source_rows(
+        "daily_course_record",
+        (
+            {
+                "document_id": "daily-1",
+                "record_content": "course",
+                "structured_detail": nested_value,
+            },
+        ),
+    )
+    snapshot, materials = _snapshot_and_materials({"daily_course_record": rows})
+
+    assert not materials._document_rows_cache
+    nested_value["status"] = "tampered"
+
+    with pytest.raises(ValueError, match="material rows do not match snapshot identity"):
+        materials.document_rows("daily_course_record", snapshot=snapshot)
+
+
 def test_binding_accepts_verified_document_ref_and_keeps_existing_source_ref_compatibility():
     rows = _source_rows(
         "daily_course_record", ({"document_id": "daily-1"},)
@@ -234,6 +306,7 @@ def test_binding_rejects_tampered_material_rows_even_when_store_hash_is_preserve
             )
         },
     )
+    assert not tampered._document_rows_cache
     document_ref = build_material_document_refs("daily_course_record", rows.rows)[0]
 
     reduced = _bind(snapshot, _decision(snapshot, document_ref), tampered)
