@@ -848,6 +848,7 @@ NOT_APPLICABLE_CASES = (
     ("LX0609-038", "performed_event_absent"),
     ("LX0609-038", "eligibility_not_met"),
     ("LX0609-039", "performed_event_absent"),
+    ("LX0609-039", "eligibility_not_met"),
     ("LX0609-040", "performed_event_absent"),
     ("LX0609-040", "trigger_absent_complete"),
     ("LX0609-042", "eligibility_not_met"),
@@ -2186,6 +2187,27 @@ def test_lx037_parent_visit_missing_has_noncontradictory_customer_explanation():
     assert result["status"] == "not_applicable"
     assert "已确认实施麻醉" in result["findings"]
     assert "LX0609-036" in result["evidence"]
+
+
+def test_lx039_emergency_rescue_exception_uses_eligibility_customer_copy():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-039",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="eligibility_not_met",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-surgery-document-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "not_applicable"
+    assert "急诊抢救手术" in result["findings"]
+    assert "未实施手术" not in result["findings"]
 
 
 def test_lx018_compliant_result_uses_controlled_criterion_values():

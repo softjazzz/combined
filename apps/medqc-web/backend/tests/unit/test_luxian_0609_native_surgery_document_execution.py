@@ -741,6 +741,7 @@ def _typed_session(
     surgery_mode: str = "exact",
     mr_surgery_mode: str = "empty",
     discussion_mode: str = "available",
+    rescue_mode: str = "empty",
     selected_rule_ids: tuple[str, ...] = surgery_doc.SURGERY_DOCUMENT_RULE_IDS,
 ):
     def reader(**kwargs):
@@ -783,6 +784,10 @@ def _typed_session(
                 if discussion_mode == "available"
                 else ()
             )
+        elif source_key == "rescue_record":
+            if rescue_mode == "error":
+                raise SourceEvidenceQueryError()
+            rows = ()
         else:
             rows = ()
         return SnapshotSourceRows.create(
@@ -2179,6 +2184,93 @@ def test_local_anesthesia_exception_reduces_to_eligibility_not_met():
     )
 
     assert decision.reason_code == "eligibility_not_met"
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "outcome_reason", "expected_reason"),
+    (
+        ("LX0609-029", "preop_summary_blank", "defect_proven"),
+        ("LX0609-029", "preop_summary_missing", "required_document_missing"),
+        ("LX0609-034", "anesthesia_consent_missing", "required_document_missing"),
+        ("LX0609-035", "anesthesia_consent_incomplete", "requirement_violated"),
+        ("LX0609-036", "anesthesia_visit_missing", "required_document_missing"),
+        ("LX0609-037", "anesthesia_visit_incomplete", "requirement_violated"),
+        ("LX0609-038", "anesthesia_record_missing", "required_document_missing"),
+        ("LX0609-039", "preop_discussion_missing", "required_document_missing"),
+        (
+            "LX0609-039",
+            "surgeon_not_in_preop_discussion",
+            "requirement_violated",
+        ),
+    ),
+)
+def test_typed_non_compliance_preserves_missing_vs_requirement_violation_reason(
+    rule_id: str,
+    outcome_reason: str,
+    expected_reason: str,
+):
+    """缺文书与已读文书不符合要求必须保留不同的 Canonical 原因码。"""
+
+    session = _typed_session(selected_rule_ids=(rule_id,))
+
+    decision = surgery_doc._typed_decision_from_outcome(
+        outcome=surgery_doc._SurgeryDocumentOutcome(
+            rule_id,
+            "non_compliant",
+            outcome_reason,
+            "program",
+        ),
+        snapshot=session.snapshot,
+    )
+
+    assert decision.reason_code == expected_reason
+
+
+def test_typed_039_emergency_exception_is_eligibility_and_references_rescue_source():
+    """急救例外不是未实施手术，且例外来源必须进入 Binding 引用集合。"""
+
+    session = _typed_session(selected_rule_ids=("LX0609-039",))
+    rescue_ref = next(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in session.snapshot.observations
+        if observation.source_key == "rescue_record"
+    )
+
+    decision = surgery_doc._typed_decision_from_outcome(
+        outcome=surgery_doc._SurgeryDocumentOutcome(
+            "LX0609-039",
+            "not_applicable",
+            "emergency_rescue_exception",
+            "program",
+        ),
+        snapshot=session.snapshot,
+    )
+
+    assert decision.reason_code == "eligibility_not_met"
+    assert rescue_ref in decision.fact_refs
+
+
+@pytest.mark.asyncio
+async def test_typed_039_rescue_source_query_error_is_technical_error():
+    """039 已依赖抢救例外源时，其查询失败必须保持技术错误。"""
+
+    session = _typed_session(
+        rescue_mode="error",
+        selected_rule_ids=("LX0609-039",),
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+
+    assert result.decisions[0].evidence_state.value == "technical_error"
+    assert result.decisions[0].reason_code == "source_query_error"
+    assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio

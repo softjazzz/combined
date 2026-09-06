@@ -69,6 +69,7 @@ _TYPED_RULE_SOURCE_KEYS = {
     "LX0609-039": (
         "surgery_record",
         "mr_surgery",
+        "rescue_record",
         "presurg_discussion",
     ),
 }
@@ -207,6 +208,15 @@ def _typed_decision_from_outcome(
                 "defect_proven"
                 if outcome.reason_code == "preop_summary_blank"
                 else "required_document_missing"
+                if outcome.reason_code
+                in {
+                    "preop_summary_missing",
+                    "anesthesia_consent_missing",
+                    "anesthesia_visit_missing",
+                    "anesthesia_record_missing",
+                    "preop_discussion_missing",
+                }
+                else "requirement_violated"
             ),
         )
     elif outcome.status == "not_applicable":
@@ -217,7 +227,11 @@ def _typed_decision_from_outcome(
             (
                 "eligibility_not_met"
                 if outcome.reason_code
-                in {"anesthesia_visit_absent", "local_anesthesia_exception"}
+                in {
+                    "anesthesia_visit_absent",
+                    "local_anesthesia_exception",
+                    "emergency_rescue_exception",
+                }
                 else "performed_event_absent"
             ),
         )
