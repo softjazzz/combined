@@ -5163,7 +5163,7 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
 
 
 @pytest.mark.parametrize(
-    ("rule_id", "raw_facts", "expected_evidence"),
+    ("rule_id", "raw_facts"),
     [
         (
             "LX0609-034",
@@ -5175,7 +5175,6 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
                 "source_document_id": "private-anesthesia-document-id",
                 "source_document_type": "anesthesia_record",
             },
-            [{"source_type": "anesthesia_record", "source_document_id": "private-anesthesia-document-id"}],
         ),
         (
             "LX0609-036",
@@ -5186,7 +5185,6 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
                 "source_document_id": "private-anesthesia-document-id",
                 "source_document_type": "anesthesia_record",
             },
-            [{"source_type": "anesthesia_record", "source_document_id": "private-anesthesia-document-id"}],
         ),
         (
             "LX0609-039",
@@ -5198,12 +5196,11 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
                 "source_document_id": "private-surgery-document-id",
                 "source_document_type": "mr_surgery",
             },
-            [{"source_type": "mr_surgery", "source_document_id": "private-surgery-document-id"}],
         ),
     ],
 )
-def test_native_display_facts_create_only_whitelisted_internal_evidence_refs(
-    rule_id, raw_facts, expected_evidence
+def test_migrated_surgery_document_display_facts_do_not_restore_legacy_evidence(
+    rule_id, raw_facts
 ):
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",
@@ -5224,7 +5221,7 @@ def test_native_display_facts_create_only_whitelisted_internal_evidence_refs(
         }],
     )[0]
 
-    assert result["customer_evidence"] == expected_evidence
+    assert "customer_evidence" not in result
     assert "source_document_id" not in result["customer_display_facts"]
     assert "source_document_ids" not in result["customer_display_facts"]
 

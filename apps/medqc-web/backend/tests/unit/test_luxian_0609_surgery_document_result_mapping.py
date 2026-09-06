@@ -4,7 +4,7 @@ from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_executor_customer_display_facts,
 )
 from app.services.luxian_0609.surgery_document_result_mapping import (
-    legacy_surgery_document_customer_evidence,
+    is_surgery_document_public_fact_ref_evidence_rule,
     safe_surgery_document_customer_display_facts,
 )
 
@@ -32,25 +32,15 @@ def test_039_customer_facts_exclude_surgeon_identity() -> None:
     }
 
 
-def test_legacy_direct_evidence_is_strictly_bounded_by_rule_contract() -> None:
-    raw = {
-        "source_document_id": "document-1",
-        "source_document_type": "surgery_record",
-    }
-
-    assert legacy_surgery_document_customer_evidence(
-        rule_id="LX0609-034", raw=raw, safe_facts={}
-    ) == [{"source_type": "anesthesia_record", "source_document_id": "document-1"}]
-    assert legacy_surgery_document_customer_evidence(
-        rule_id="LX0609-036", raw=raw, safe_facts={}
-    ) == [{"source_type": "anesthesia_record", "source_document_id": "document-1"}]
-    assert legacy_surgery_document_customer_evidence(
-        rule_id="LX0609-039", raw=raw, safe_facts={}
-    ) == [{"source_type": "surgery_record", "source_document_id": "document-1"}]
-    for rule_id in ("LX0609-029", "LX0609-035", "LX0609-037", "LX0609-038"):
-        assert legacy_surgery_document_customer_evidence(
-            rule_id=rule_id, raw=raw, safe_facts={}
-        ) == []
+def test_public_fact_ref_evidence_declaration_is_limited_to_frozen_rules() -> None:
+    assert all(
+        is_surgery_document_public_fact_ref_evidence_rule(rule_id)
+        for rule_id in ("LX0609-034", "LX0609-036", "LX0609-039")
+    )
+    assert all(
+        not is_surgery_document_public_fact_ref_evidence_rule(rule_id)
+        for rule_id in ("LX0609-029", "LX0609-035", "LX0609-037", "LX0609-038")
+    )
 
 
 def test_status_fact_contract_failure_is_isolated_as_technical_error() -> None:

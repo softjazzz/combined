@@ -21,6 +21,9 @@ SURGERY_DOCUMENT_CUSTOMER_RULE_IDS = frozenset(
         "LX0609-039",
     }
 )
+SURGERY_DOCUMENT_PUBLIC_FACT_REF_EVIDENCE_RULE_IDS = frozenset(
+    {"LX0609-034", "LX0609-036", "LX0609-039"}
+)
 
 _CONSENT_FIELDS = (
     "patient_signature",
@@ -52,6 +55,15 @@ _VISIT_FIELDS = {
 
 def is_surgery_document_customer_rule(rule_id: str) -> bool:
     return str(rule_id or "").strip().upper() in SURGERY_DOCUMENT_CUSTOMER_RULE_IDS
+
+
+def is_surgery_document_public_fact_ref_evidence_rule(rule_id: str) -> bool:
+    """返回已冻结为公共逐行 fact_refs 证据的手术文书规则。"""
+
+    return (
+        str(rule_id or "").strip().upper()
+        in SURGERY_DOCUMENT_PUBLIC_FACT_REF_EVIDENCE_RULE_IDS
+    )
 
 
 def _safe_029(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -321,38 +333,3 @@ def surgery_document_customer_fact_status_is_valid(
         "preop_discussion_missing": "non_compliant",
     }.get(str(kind))
     return expected is not None and status == expected
-
-
-def _valid_document_id(value: Any) -> str:
-    candidate = str(value or "").strip()
-    return (
-        candidate
-        if candidate and len(candidate) <= 256 and "\n" not in candidate and "\r" not in candidate
-        else ""
-    )
-
-
-def legacy_surgery_document_customer_evidence(
-    *, rule_id: str, raw: Any, safe_facts: Mapping[str, Any] | None
-) -> list[dict[str, str]] | None:
-    """仅为旧 aggregate 直调保留迁移前已存在的明确坐标。
-
-    029/035/037 绝不从裸 facts 猜文书；038 即使带原始 ID 也不投影。
-    """
-
-    normalized_rule_id = str(rule_id or "").strip().upper()
-    if normalized_rule_id not in SURGERY_DOCUMENT_CUSTOMER_RULE_IDS:
-        return None
-    if not isinstance(raw, Mapping) or safe_facts is None:
-        return []
-    if normalized_rule_id in {"LX0609-029", "LX0609-035", "LX0609-037", "LX0609-038"}:
-        return []
-    document_id = _valid_document_id(raw.get("source_document_id"))
-    if not document_id:
-        return []
-    if normalized_rule_id in {"LX0609-034", "LX0609-036"}:
-        return [{"source_type": "anesthesia_record", "source_document_id": document_id}]
-    source_type = str(raw.get("source_document_type") or "").strip()
-    if normalized_rule_id == "LX0609-039" and source_type in {"surgery_record", "mr_surgery"}:
-        return [{"source_type": source_type, "source_document_id": document_id}]
-    return []
