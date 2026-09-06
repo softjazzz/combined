@@ -260,6 +260,10 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_surgery_document_customer_rule,
         safe_surgery_document_customer_display_facts,
     )
+    from .surgery_mdt_result_mapping import (
+        is_surgery_mdt_customer_rule,
+        safe_surgery_mdt_customer_display_facts,
+    )
 
     if rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS:
         safe_facts = _safe_surgery_presence_customer_display_facts(
@@ -283,6 +287,16 @@ def validate_luxian_0609_executor_customer_display_facts(
         )
     if is_surgery_document_customer_rule(rule_id):
         safe_facts = safe_surgery_document_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
+        return (
+            safe_facts
+            if safe_facts is not None and not contains_private_identifier(safe_facts)
+            else None
+        )
+    if is_surgery_mdt_customer_rule(rule_id):
+        safe_facts = safe_surgery_mdt_customer_display_facts(
             rule_id=rule_id,
             raw=raw,
         )
@@ -340,11 +354,13 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .transfusion_result_mapping import is_transfusion_customer_rule
     from .surgery_gate_result_mapping import is_surgery_gate_customer_rule
     from .surgery_document_result_mapping import is_surgery_document_customer_rule
+    from .surgery_mdt_result_mapping import is_surgery_mdt_customer_rule
 
     return (
         rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS
         or is_surgery_gate_customer_rule(rule_id)
         or is_surgery_document_customer_rule(rule_id)
+        or is_surgery_mdt_customer_rule(rule_id)
         or is_consultation_customer_rule(rule_id)
         or is_exam_lab_customer_rule(rule_id)
         or is_transfusion_customer_rule(rule_id)
@@ -401,6 +417,11 @@ def finalize_luxian_0609_executor_customer_display_facts(
         is_surgery_document_customer_rule,
         surgery_document_customer_fact_status_is_valid,
     )
+    from .surgery_mdt_result_mapping import (
+        is_surgery_mdt_customer_rule,
+        legacy_surgery_mdt_contract_error,
+        surgery_mdt_customer_fact_status_is_valid,
+    )
     rule_id = str(finalized.get("rule_id") or finalized.get("rule_code") or "")
     if (
         safe_facts is not None
@@ -434,6 +455,13 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
         if legacy_error:
             raise ValueError(legacy_error)
+        if is_surgery_mdt_customer_rule(rule_id):
+            legacy_mdt_error = legacy_surgery_mdt_contract_error(
+                raw_facts=raw_facts,
+                safe_facts=safe_facts,
+            )
+            if legacy_mdt_error:
+                raise ValueError(legacy_mdt_error)
     if is_surgery_gate_customer_rule(rule_id) and not surgery_gate_status_valid:
         safe_facts = None
     surgery_document_status_valid = (
@@ -445,6 +473,16 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_surgery_document_customer_rule(rule_id) and not surgery_document_status_valid:
+        safe_facts = None
+    surgery_mdt_status_valid = (
+        is_surgery_mdt_customer_rule(rule_id)
+        and surgery_mdt_customer_fact_status_is_valid(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            safe_facts=safe_facts,
+        )
+    )
+    if is_surgery_mdt_customer_rule(rule_id) and not surgery_mdt_status_valid:
         safe_facts = None
     if raw_facts is None and surgery_gate_status_valid:
         finalized.pop("customer_display_facts", None)

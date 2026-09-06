@@ -1,12 +1,13 @@
-"""LX0609-040 迁移前的正式主链行为冻结。
+"""LX0609-040 的正式主链行为冻结。
 
-本文件刻意不约束迁移后的聚合器归零，只固定当前 executor → Binding →
-公共证据投影得到的客户可见结果。证据数组视为坐标集合，顺序不代表优先级。
+040 的客户事实合同和旧直调证据适配已迁入 Finalizer；聚合器只装配结果。
+证据数组视为坐标集合，顺序不代表优先级。
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 
@@ -382,3 +383,14 @@ async def test_surgery_mdt_emergency_lifesaving_exemption_is_publicly_projected(
         "mdt_exception": "emergency_lifesaving_surgery",
         "mdt_discussion_state": "exempt",
     }
+
+
+def test_surgery_mdt_aggregator_ownership_is_zero() -> None:
+    aggregator_source = (
+        Path(__file__).parents[2]
+        / "app"
+        / "services"
+        / "luxian_0609_result_aggregator.py"
+    ).read_text(encoding="utf-8")
+
+    assert RULE_ID not in aggregator_source

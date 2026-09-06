@@ -32,6 +32,9 @@ from .luxian_0609.surgery_gate_result_mapping import (
 from .luxian_0609.surgery_document_result_mapping import (
     legacy_surgery_document_customer_evidence,
 )
+from .luxian_0609.surgery_mdt_result_mapping import (
+    legacy_surgery_mdt_customer_evidence,
+)
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
     TRIGGER_ABSENT,
@@ -2013,73 +2016,6 @@ def safe_luxian_0609_customer_display_facts(
             "pathology_trigger_sources": safe_trigger_sources,
             "checked_target_sources": safe_checked_sources,
         }
-    if rule_id == "LX0609-040":
-        performed = raw.get("performed_surgery_confirmed")
-        procedure_kind = raw.get("procedure_kind")
-        effective_level = raw.get("effective_surgery_level")
-        level_source = raw.get("surgery_level_source")
-        discussion_state = raw.get("mdt_discussion_state")
-        if (
-            not isinstance(performed, bool)
-            or procedure_kind not in {"surgery", "non_surgical_operation", "none", "unknown"}
-            or (
-                effective_level is not None
-                and effective_level not in {"一级", "二级", "三级", "四级"}
-            )
-            or (
-                level_source is not None
-                and level_source
-                not in {"hospital_performance", "national_catalog", "structured_field"}
-            )
-            or (
-                discussion_state is not None
-                and discussion_state
-                not in {"completed", "missing", "unknown", "exempt"}
-            )
-            or (
-                discussion_state in {"completed", "missing"}
-                and (
-                    performed is not True
-                    or procedure_kind != "surgery"
-                    or effective_level != "四级"
-                )
-            )
-            or (
-                discussion_state == "exempt"
-                and (
-                    performed is not True
-                    or procedure_kind != "surgery"
-                    or effective_level != "四级"
-                    or raw.get("emergency_surgery_confirmed") is not True
-                    or raw.get("mdt_exception") != "emergency_lifesaving_surgery"
-                )
-            )
-        ):
-            return None
-        facts: dict[str, Any] = {
-            "performed_surgery_confirmed": performed,
-            "procedure_kind": procedure_kind,
-        }
-        if effective_level is not None:
-            facts["effective_surgery_level"] = effective_level
-        if level_source is not None:
-            facts["surgery_level_source"] = level_source
-        if discussion_state is not None:
-            facts["mdt_discussion_state"] = discussion_state
-        if discussion_state == "exempt":
-            facts["emergency_surgery_confirmed"] = True
-            facts["mdt_exception"] = "emergency_lifesaving_surgery"
-        procedure_code = raw.get("procedure_code")
-        procedure_name = raw.get("procedure_name")
-        if isinstance(procedure_code, str) and re.fullmatch(r"[0-9A-Za-z.\-]{1,32}", procedure_code):
-            facts["procedure_code"] = procedure_code
-        if (
-            isinstance(procedure_name, str)
-            and 1 <= len(procedure_name.strip()) <= 100
-            and not any(ord(char) < 32 for char in procedure_name)
-        ):
-            facts["procedure_name"] = procedure_name.strip()
-        return facts
     if rule_id == "LX0609-007":
         failure_kind = raw.get("failure_kind")
         if failure_kind == "unstable_patient_order_present":
@@ -2800,6 +2736,13 @@ def _customer_evidence_from_display_facts(
         raw=raw,
     )
     if verified_facts is not NotImplemented:
+        surgery_mdt_evidence = legacy_surgery_mdt_customer_evidence(
+            rule_id=rule_id,
+            raw=raw,
+            safe_facts=verified_facts,
+        )
+        if surgery_mdt_evidence is not None:
+            return surgery_mdt_evidence
         surgery_document_evidence = legacy_surgery_document_customer_evidence(
             rule_id=rule_id,
             raw=raw,
@@ -2829,34 +2772,6 @@ def _customer_evidence_from_display_facts(
             else ""
         )
 
-    source_document_id = valid_document_id(raw.get("source_document_id"))
-    exact_trigger_sources = {"LX0609-040": {"mr_surgery"}}
-    allowed_exact_sources = exact_trigger_sources.get(rule_id)
-    if allowed_exact_sources is not None:
-        raw_refs = raw.get("source_document_refs")
-        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
-            located: list[dict[str, str]] = []
-            seen: set[tuple[str, str]] = set()
-            for item in raw_refs:
-                if not isinstance(item, Mapping) or set(item) != {
-                    "source_type",
-                    "source_document_id",
-                }:
-                    return []
-                source_type = str(item.get("source_type") or "").strip()
-                document_id = valid_document_id(item.get("source_document_id"))
-                key = (source_type, document_id)
-                if (
-                    source_type not in allowed_exact_sources
-                    or not document_id
-                    or key in seen
-                ):
-                    return []
-                seen.add(key)
-                located.append(
-                    {"source_type": source_type, "source_document_id": document_id}
-                )
-            return located
     if (
         rule_id == "LX0609-007"
         and raw.get("failure_kind") == "course_record_interval_over_72h"
