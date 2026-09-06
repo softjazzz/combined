@@ -47,6 +47,46 @@ def test_finalizer_delegates_consultation_facts_to_the_family_projection() -> No
 
 
 @pytest.mark.parametrize(
+    ("rule_id", "raw"),
+    (
+        (
+            "LX0609-030",
+            {
+                "verification_kind": "surgery_document_present",
+                "target_document": "surgery_record",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+        (
+            "LX0609-032",
+            {
+                "failure_kind": "surgery_document_blank",
+                "target_document": "surgery_safecheck_record",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+    ),
+)
+def test_finalizer_delegates_surgery_presence_facts_without_claiming_public_evidence(
+    rule_id: str, raw: dict[str, object]
+) -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalizer_owns_executor_customer_display_facts,
+        finalizer_requires_public_fact_ref_evidence,
+        validate_luxian_0609_executor_customer_display_facts,
+    )
+    from app.services.luxian_0609.surgery_presence_result_mapping import (
+        safe_surgery_presence_customer_display_facts,
+    )
+
+    assert finalizer_owns_executor_customer_display_facts(rule_id) is True
+    assert finalizer_requires_public_fact_ref_evidence(rule_id) is False
+    assert validate_luxian_0609_executor_customer_display_facts(
+        rule_id=rule_id, raw=raw
+    ) == safe_surgery_presence_customer_display_facts(rule_id=rule_id, raw=raw)
+
+
+@pytest.mark.parametrize(
     ("rule_id", "raw_facts"),
     (
         (

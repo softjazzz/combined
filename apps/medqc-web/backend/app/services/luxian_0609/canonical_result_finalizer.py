@@ -169,44 +169,6 @@ _CUSTOMER_SOURCE_LABELS = {
     "lab_attention_report": "检验危急值报告",
 }
 
-_SURGERY_PRESENCE_DOCUMENT_TARGETS = {
-    "LX0609-030": "surgery_record",
-    "LX0609-032": "surgery_safecheck_record",
-}
-
-
-def _safe_surgery_presence_customer_display_facts(
-    *, rule_id: str, raw: Any
-) -> dict[str, Any] | None:
-    """校验 030/032 执行器已判定的安全展示事实，不重算业务结论。"""
-
-    if not isinstance(raw, Mapping):
-        return None
-    target_document = _SURGERY_PRESENCE_DOCUMENT_TARGETS[rule_id]
-    if (
-        raw.get("verification_kind") == "surgery_document_present"
-        and raw.get("target_document") == target_document
-        and raw.get("performed_surgery_confirmed") is True
-    ):
-        return {
-            "verification_kind": "surgery_document_present",
-            "target_document": target_document,
-            "performed_surgery_confirmed": True,
-        }
-    failure_kind = raw.get("failure_kind")
-    if (
-        failure_kind not in {"surgery_document_missing", "surgery_document_blank"}
-        or raw.get("target_document") != target_document
-        or raw.get("performed_surgery_confirmed") is not True
-    ):
-        return None
-    return {
-        "failure_kind": failure_kind,
-        "target_document": target_document,
-        "performed_surgery_confirmed": True,
-    }
-
-
 def validate_luxian_0609_executor_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None | NotImplementedType:
@@ -300,9 +262,13 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_continuity_customer_rule,
         safe_continuity_customer_display_facts,
     )
+    from .surgery_presence_result_mapping import (
+        is_surgery_presence_customer_rule,
+        safe_surgery_presence_customer_display_facts,
+    )
 
-    if rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS:
-        safe_facts = _safe_surgery_presence_customer_display_facts(
+    if is_surgery_presence_customer_rule(rule_id):
+        safe_facts = safe_surgery_presence_customer_display_facts(
             rule_id=rule_id,
             raw=raw,
         )
@@ -491,9 +457,10 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .antimicrobial_result_mapping import is_antimicrobial_customer_rule
     from .postoperative_result_mapping import is_postoperative_customer_rule
     from .continuity_result_mapping import is_continuity_customer_rule
+    from .surgery_presence_result_mapping import is_surgery_presence_customer_rule
 
     return (
-        rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS
+        is_surgery_presence_customer_rule(rule_id)
         or is_surgery_gate_customer_rule(rule_id)
         or is_surgery_document_customer_rule(rule_id)
         or is_surgery_mdt_customer_rule(rule_id)
