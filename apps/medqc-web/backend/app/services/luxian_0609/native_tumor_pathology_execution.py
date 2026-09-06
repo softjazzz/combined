@@ -262,16 +262,21 @@ def _typed_decision_from_outcome(
             "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
+        technical_reason = (
+            "source_query_error"
+            if outcome.reason_code
+            in {"source_query_error", "malignancy_source_query_error"}
+            else "model_invalid_output"
+            if outcome.reason_code == "tumor_llm_invalid_output"
+            else "model_transport_error"
+            if outcome.reason_code == "tumor_llm_failure"
+            else "executor_exception"
+        )
         dimensions = (
             ApplicabilityState.ERROR,
             EvidenceState.TECHNICAL_ERROR,
             QcDirection.UNKNOWN,
-            "source_query_error"
-            if outcome.reason_code in {
-                "source_query_error",
-                "malignancy_source_query_error",
-            }
-            else "executor_exception",
+            technical_reason,
         )
     else:
         raise ValueError("unsupported typed tumor final state")
@@ -1787,8 +1792,16 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         except Exception:
             emit_outcome(
                 rule_id,
-                "data_gap",
+                "technical_error",
                 "tumor_llm_failure",
+                executor_type="llm",
+            )
+            continue
+        if not isinstance(response, Mapping):
+            emit_outcome(
+                rule_id,
+                "technical_error",
+                "tumor_llm_invalid_output",
                 executor_type="llm",
             )
             continue
@@ -1801,7 +1814,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if is_compliant is None:
             emit_outcome(
                 rule_id,
-                "data_gap",
+                "technical_error",
                 "tumor_llm_invalid_output",
                 executor_type="llm",
             )

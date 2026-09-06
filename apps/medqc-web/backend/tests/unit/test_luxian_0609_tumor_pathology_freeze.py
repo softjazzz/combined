@@ -81,6 +81,43 @@ class _FailingRuleClient:
         raise RuntimeError("controlled semantic transport failure")
 
 
+class _FixedRuleClient:
+    """只返回规则语义兜底所需的最小受控输出。"""
+
+    def __init__(self, response: object) -> None:
+        self.prompts: list[str] = []
+        self._response = response
+
+    async def generate(self, prompt: str, **_kwargs: object) -> object:
+        self.prompts.append(prompt)
+        return self._response
+
+
+def _semantic_fallback_rows() -> dict[str, tuple[dict[str, Any], ...]]:
+    """保留病理触发事实，但不让013/019被确定性文本短路。"""
+
+    rows = _rows()
+    rows["surgery_record"] = (
+        {"document_id": "surgery-1", "record_content": "术后一般情况平稳。"},
+    )
+    rows["daily_course_record"] = (
+        {"document_id": "course-1", "record_content": "继续观察病情变化。"},
+    )
+    return rows
+
+
+def _semantic_response(content: str) -> dict[str, Any]:
+    return {
+        "choices": [{"message": {"content": content}}],
+        "usage": {
+            "prompt_tokens": 17,
+            "completion_tokens": 5,
+            "total_tokens": 22,
+        },
+        "_api_time": 0.01,
+    }
+
+
 def _rows() -> dict[str, tuple[dict[str, Any], ...]]:
     return {
         "pathology_exam_master": (
@@ -328,3 +365,63 @@ async def test_tumor_pathology_freeze_019_semantic_transport_failure_is_currentl
     assert [item.reason_code for item in errored_reduced] == ["source_query_error"] * 2
     assert [item["status"] for item in errored_results] == ["technical_error"] * 2
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("client", "expected_reason"),
+    [
+        (_FailingRuleClient(), "model_transport_error"),
+        (_FixedRuleClient(_semantic_response("not-json")), "model_invalid_output"),
+        (_FixedRuleClient("not-a-response-mapping"), "model_invalid_output"),
+    ],
+)
+async def test_tumor_pathology_semantic_failures_are_technical_errors_through_binding(
+    client: object,
+    expected_reason: str,
+) -> None:
+    """013/019 的语义调用失败是技术失败，不能伪装成资料缺失。"""
+
+    execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
+        rows_by_source=_semantic_fallback_rows(),
+        rule_ids=("LX0609-013", "LX0609-019"),
+        llm_client=client,
+    )
+
+    assert returned_client is client
+    assert execution.results == ()
+    assert execution.llm_call_count == 2
+    assert [item.final_state.value for item in reduced] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert [item.reason_code for item in reduced] == [expected_reason, expected_reason]
+    assert [item["status"] for item in customer_results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert len(client.prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_tumor_pathology_semantic_fallback_normal_output_is_unchanged() -> None:
+    """正常语义兜底仍只产生一次调用及原有合规结论。"""
+
+    client = _FixedRuleClient(_semantic_response('{"is_compliant": true}'))
+    execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
+        rows_by_source=_semantic_fallback_rows(),
+        rule_ids=("LX0609-019",),
+        llm_client=client,
+    )
+
+    assert returned_client is client
+    assert execution.results == ()
+    assert execution.llm_call_count == 1
+    assert (execution.prompt_tokens, execution.completion_tokens, execution.total_tokens) == (
+        17,
+        5,
+        22,
+    )
+    assert [item.final_state.value for item in reduced] == ["compliant"]
+    assert [item["status"] for item in customer_results] == ["compliant"]
+    assert len(client.prompts) == 1
