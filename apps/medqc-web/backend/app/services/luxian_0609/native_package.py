@@ -527,9 +527,10 @@ def resolve_package_entry_execution_rule_ids(
     inventory: Sequence[Luxian0609RuleDependency],
     selected_rule_ids: Iterable[str],
 ) -> tuple[str, ...]:
-    """兼容旧调用方；新公共入口不得用它启动原生执行。"""
+    """兼容旧调用方，但不得为暂停规则展开旧执行 ID。"""
 
+    executable_rule_ids, _ = partition_luxian_0609_rule_scope(selected_rule_ids)
     return resolve_package_rollback_execution_rule_ids(
         inventory=inventory,
-        selected_rule_ids=selected_rule_ids,
+        selected_rule_ids=executable_rule_ids,
     )

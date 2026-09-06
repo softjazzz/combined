@@ -146,6 +146,7 @@
       "source_document": "入院记录",
       "qc_point": "主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
       "implementation_status": "active",
+      "active_criteria": ["chief_complaint_length", "diagnostic_direction"],
       "policy_sources": ["customer_confirmed", "hospital_local_extension"],
       "policy_summary": "主诉≤20字为硬性不合规判定条件，并须能导出第一诊断；本任务不改变现有行为。"
     },
@@ -202,6 +203,8 @@
       "source_document": "手术记录",
       "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "implant_five_field_real_gold_pending",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
       "policy_summary": "永久性植入物的正式必填字段冻结为名称、种类、规格或型号、材质、数量；条码不属于本规则必填字段。病程仅辅助确认实际使用，五字段只能核对本次正式手术记录。五字段核心已实现，真实病例金标验收前不参与正式结论。",
       "pending_definition_note": "五字段口径已冻结；仍需完成多台手术、文书缺失及字段冲突的真实病例金标验收。"
@@ -227,6 +230,8 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "antimicrobial_dictionary_missing",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -395,6 +400,8 @@
       "source_document": "输血医嘱",
       "qc_point": "输血医嘱与收费不一致",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "charging_source_unavailable_customer_scope",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed"],
       "policy_summary": "当前没有可用收费数据，本质控点暂不执行；不得因收费资料缺失生成数据不足或不合规结论。"
     },
@@ -451,6 +458,8 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "key_antimicrobial_catalog_missing",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "重点抗菌药物目录尚未冻结，本质控点暂不执行；不得因目录或病原学资料缺失生成数据不足或不合规结论。"
     },
@@ -475,6 +484,8 @@
       "source_document": "医嘱",
       "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "treatment_event_order_course_real_gold_pending",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "实际诊疗事件、医嘱与病程的严格关联口径仍待真实病例金标验收，本质控点暂不执行；不得因资料缺失生成数据不足或不合规结论。",
       "pending_definition_note": "需完成多事件、多业务键冲突、医嘱动作与病程语义关联的真实病例金标验收。"
@@ -605,6 +616,8 @@
       "source_document": "有创操作记录",
       "qc_point": "有创操作医嘱但无有创操作记录",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "invasive_procedure_catalog_missing",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "有创操作目录尚未冻结，本质控点暂不执行；不得因目录或操作记录缺失生成数据不足或不合规结论。"
     },

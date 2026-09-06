@@ -1,8 +1,8 @@
-"""泸县 0609 客户质控点的唯一业务总表。
+"""泸县 0609 客户质控点及正式发布阶段的唯一业务总表。
 
-总表描述客户确认的完整规则范围；``active`` 表示规则已纳入客户工作台，
-是否参与当前正式结论由同版本 ``phase_scope`` 唯一决定，
-不得通过执行包装器反向推断完整业务范围或发布阶段。
+总表描述客户确认的完整规则范围。``implementation_status`` 只表示目录注册
+状态；``phase_status`` 表示是否参与本版本的正式结论。下游 ``phase_scope``
+只能由本表投影，禁止再维护第二份规则编号或暂停规则清单。
 """
 
 from __future__ import annotations
@@ -25,6 +25,9 @@ _MASTER_PATH = (
 )
 _IMPLEMENTATION_STATUSES = frozenset(
     {"active", "contract_ready", "pending_definition"}
+)
+_PHASE_STATUSES = frozenset(
+    {"phase_1_target", "phase_1_partial", "pending_definition"}
 )
 _POLICY_SOURCE_ORDER = (
     "sichuan_2026_handbook",
@@ -50,6 +53,10 @@ class Luxian0609RuleMasterEntry:
     policy_sources: tuple[str, ...] = ()
     policy_summary: str = ""
     pending_definition_note: str = ""
+    phase_status: str = "phase_1_target"
+    active_criteria: tuple[str, ...] = ()
+    pending_criteria: tuple[str, ...] = ()
+    pending_reason_code: str = ""
 
     def __post_init__(self) -> None:
         if self.implementation_status not in _IMPLEMENTATION_STATUSES:
@@ -60,6 +67,34 @@ class Luxian0609RuleMasterEntry:
             raise ValueError(f"active LX0609 rule cannot contain a pending note: {self.rule_id}")
         if self.implementation_status != "active" and not self.definition_note:
             raise ValueError(f"inactive LX0609 rule must explain its status: {self.rule_id}")
+
+        if self.phase_status not in _PHASE_STATUSES:
+            raise ValueError(f"invalid LX0609 phase status: {self.rule_id}")
+        if (
+            self.phase_status == "phase_1_target"
+            and self.implementation_status != "active"
+        ):
+            raise ValueError(
+                f"phase target must be catalog registered: {self.rule_id}"
+            )
+        if self.phase_status == "phase_1_target":
+            if self.pending_criteria or self.pending_reason_code:
+                raise ValueError(
+                    f"phase target cannot contain pending definition: {self.rule_id}"
+                )
+        elif self.phase_status == "phase_1_partial":
+            if (
+                not self.active_criteria
+                or not self.pending_criteria
+                or self.pending_reason_code
+            ):
+                raise ValueError(
+                    f"partial phase rule must split active and pending criteria: {self.rule_id}"
+                )
+        elif self.active_criteria or self.pending_criteria or not self.pending_reason_code:
+            raise ValueError(
+                f"pending phase rule must declare one reason: {self.rule_id}"
+            )
 
         if not isinstance(self.policy_sources, tuple):
             raise ValueError(f"LX0609 policy sources must be a tuple: {self.rule_id}")
@@ -89,6 +124,17 @@ class Luxian0609RuleMasterEntry:
                 f"LX0609 pending definition note is too long: {self.rule_id}"
             )
         object.__setattr__(self, "pending_definition_note", pending_definition_note)
+        object.__setattr__(
+            self,
+            "active_criteria",
+            tuple(_clean(item) for item in self.active_criteria if _clean(item)),
+        )
+        object.__setattr__(
+            self,
+            "pending_criteria",
+            tuple(_clean(item) for item in self.pending_criteria if _clean(item)),
+        )
+        object.__setattr__(self, "pending_reason_code", _clean(self.pending_reason_code))
 
     @property
     def title(self) -> str:
@@ -126,6 +172,18 @@ def compile_luxian_0609_rule_master(
                 policy_sources=tuple(raw_policy_sources),
                 policy_summary=_clean(raw.get("policy_summary")),
                 pending_definition_note=_clean(raw.get("pending_definition_note")),
+                phase_status=_clean(raw.get("phase_status")) or "phase_1_target",
+                active_criteria=tuple(
+                    _clean(item)
+                    for item in (raw.get("active_criteria") or ())
+                    if _clean(item)
+                ),
+                pending_criteria=tuple(
+                    _clean(item)
+                    for item in (raw.get("pending_criteria") or ())
+                    if _clean(item)
+                ),
+                pending_reason_code=_clean(raw.get("pending_reason_code")),
             )
         )
 

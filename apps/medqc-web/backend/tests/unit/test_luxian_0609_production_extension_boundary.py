@@ -1,7 +1,7 @@
 """LX0609 生产规则扩展的现状门禁与既有主链回归。
 
 076/077 已作为真实生产规则进入目录。本文件继续用下一顺位 078/079 验证
-master/phase 的声明式扩容边界，并固定既有发布规则的真实链路。
+master 声明式扩容边界，并固定既有发布规则的真实链路。
 """
 
 from __future__ import annotations
@@ -65,30 +65,20 @@ def test_production_phase_loader_accepts_master_declared_078_079_extension(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """phase 只校验与 master 完全一致，不再重复定义固定规则数量。"""
+    """phase 只从 master 投影，不再维护第二份固定规则数量。"""
 
     master_payload = json.loads(
         rule_master_module._MASTER_PATH.read_text(encoding="utf-8")
     )
-    phase_payload = json.loads(
-        phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8")
-    )
     assert isinstance(master_payload["rules"], list)
-    assert isinstance(phase_payload["rules"], list)
     for rule_id in ("LX0609-078", "LX0609-079"):
         master_entry = dict(master_payload["rules"][-1])
         master_entry["rule_id"] = rule_id
         master_payload["rules"].append(master_entry)
-        phase_entry = dict(phase_payload["rules"][-1])
-        phase_entry["rule_id"] = rule_id
-        phase_payload["rules"].append(phase_entry)
     master_extension_path = tmp_path / "rule-master-with-078-079.json"
-    extension_path = tmp_path / "phase-scope-with-078-079.json"
     _write_json(master_extension_path, master_payload)
-    _write_json(extension_path, phase_payload)
 
     monkeypatch.setattr(rule_master_module, "_MASTER_PATH", master_extension_path)
-    monkeypatch.setattr(phase_scope_module, "_SCOPE_PATH", extension_path)
     rule_master_module.load_luxian_0609_rule_master.cache_clear()
     phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
     try:
@@ -112,24 +102,14 @@ def test_incomplete_wrapper_catalog_fails_closed_after_master_and_phase_accept_0
     master_payload = json.loads(
         rule_master_module._MASTER_PATH.read_text(encoding="utf-8")
     )
-    phase_payload = json.loads(
-        phase_scope_module._SCOPE_PATH.read_text(encoding="utf-8")
-    )
     assert isinstance(master_payload["rules"], list)
-    assert isinstance(phase_payload["rules"], list)
     master_payload["rules"].append(
         {**master_payload["rules"][-1], "rule_id": "LX0609-078"}
     )
-    phase_payload["rules"].append(
-        {**phase_payload["rules"][-1], "rule_id": "LX0609-078"}
-    )
     master_extension_path = tmp_path / "rule-master-with-078.json"
-    phase_extension_path = tmp_path / "phase-scope-with-078.json"
     _write_json(master_extension_path, master_payload)
-    _write_json(phase_extension_path, phase_payload)
 
     monkeypatch.setattr(rule_master_module, "_MASTER_PATH", master_extension_path)
-    monkeypatch.setattr(phase_scope_module, "_SCOPE_PATH", phase_extension_path)
     rule_master_module.load_luxian_0609_rule_master.cache_clear()
     phase_scope_module.load_luxian_0609_phase_scope.cache_clear()
     rule_catalog_module.load_luxian_0609_rules.cache_clear()

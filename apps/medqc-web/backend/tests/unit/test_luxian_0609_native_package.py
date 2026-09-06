@@ -649,3 +649,29 @@ def test_public_package_entry_expands_only_inside_the_package():
             inventory=inventory,
             selected_rule_ids=["SC-099"],
         )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "rule_id",
+    (
+        "LX0609-025",
+        "LX0609-028",
+        "LX0609-049",
+        "LX0609-056",
+        "LX0609-059",
+        "LX0609-075",
+    ),
+)
+def test_public_package_entry_never_expands_pending_rules_to_legacy_execution_ids(
+    rule_id: str,
+) -> None:
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+
+    assert resolve_package_entry_execution_rule_ids(
+        inventory=inventory,
+        selected_rule_ids=(rule_id,),
+    ) == ()
