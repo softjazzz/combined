@@ -190,6 +190,7 @@ async def _execute_and_aggregate(
     rule_ids: tuple[str, ...] = RULE_IDS,
     failing_sources: frozenset[str] = frozenset(),
     llm_client: Any | None = None,
+    without_llm: bool = False,
 ) -> tuple[object, tuple[object, ...], list[dict[str, Any]], object, Any]:
     def read(**kwargs: object) -> SnapshotSourceRows:
         source_key = str(kwargs["source_key"])
@@ -215,7 +216,7 @@ async def _execute_and_aggregate(
             ("tumor_pathology",), selected_rule_ids=rule_ids
         ),
     )
-    client = llm_client or _ControlledMalignancyClient()
+    client = None if without_llm else llm_client or _ControlledMalignancyClient()
     execution = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=rule_ids,
         decision_rule_ids=rule_ids,
@@ -401,6 +402,34 @@ async def test_tumor_pathology_semantic_failures_are_technical_errors_through_bi
         "technical_error",
     ]
     assert len(client.prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_tumor_pathology_missing_semantic_client_is_technical_error_through_binding() -> None:
+    """模型执行能力缺失也必须沿正式主链投影为技术失败。"""
+
+    execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
+        rows_by_source=_semantic_fallback_rows(),
+        rule_ids=("LX0609-013", "LX0609-019"),
+        without_llm=True,
+    )
+
+    assert returned_client is None
+    assert execution.results == ()
+    assert execution.llm_call_count == 0
+    assert execution.prompt_tokens == execution.completion_tokens == execution.total_tokens == 0
+    assert [item.final_state.value for item in reduced] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "model_transport_error",
+        "model_transport_error",
+    ]
+    assert [item["status"] for item in customer_results] == [
+        "technical_error",
+        "technical_error",
+    ]
 
 
 @pytest.mark.asyncio
