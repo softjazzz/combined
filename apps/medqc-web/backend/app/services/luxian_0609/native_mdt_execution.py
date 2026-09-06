@@ -14,7 +14,11 @@ from .decision_model import (
     QcDirection,
     RuleDecision,
 )
-from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
@@ -71,9 +75,6 @@ _PROJECTION_PATTERN = re.compile(
 _MAX_DOCUMENT_CHARS = 3000
 _MAX_CONTEXT_CHARS = 6200
 _TYPED_EVALUATOR_VERSION = "mdt-ruledecision-shadow-v2"
-_DECISION_SOURCE_KEYS = frozenset(
-    {"mr_surgery", "presurg_discussion", "consultation_record"}
-)
 _EMERGENCY_SURGERY_PATTERN = re.compile(
     r"(?:今日|本次|当日)?(?:急诊手术|急诊抢救|紧急手术|紧急抢救)|"
     r"(?:为|因|系)?紧急.{0,12}(?:抢救|挽救生命|救命)|"
@@ -107,6 +108,7 @@ class _MdtRuleOutcome:
     finding_kind: str
     reason_code: str
     executor_type: str = "program"
+    fact_refs: tuple[str, ...] = ()
 
 
 def native_mdt_rule_selected(
@@ -362,18 +364,76 @@ def _is_emergency_surgery_text(text: str) -> bool:
     )
 
 
-def _has_emergency_surgery_exception(
+def _material_document_refs_by_row(
     *,
     materials: Luxian0609EvidenceMaterialStore,
-) -> bool:
-    """从同一 Evidence Session 的术前小结/手术主表读取040豁免事实。"""
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_key: str,
+) -> Mapping[int, str]:
+    try:
+        return {
+            id(row): document_ref
+            for document_ref, row in materials.document_rows(
+                source_key,
+                snapshot=snapshot,
+            )
+        }
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, ValueError):
+        return {}
 
+
+def _selected_material_fact_refs(
+    *,
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_key: str,
+    rows: Sequence[Mapping[str, Any]],
+    fallback_to_source: bool = False,
+    refs_by_row: Mapping[int, str] | None = None,
+) -> tuple[str, ...]:
+    """只选择实际参与判定的材料行；空行时可退回来源级事实。"""
+
+    refs_by_row = refs_by_row or _material_document_refs_by_row(
+        materials=materials,
+        snapshot=snapshot,
+        source_key=source_key,
+    )
+    refs = tuple(
+        refs_by_row[id(row)] for row in rows if id(row) in refs_by_row
+    )
+    if refs or not fallback_to_source:
+        return tuple(dict.fromkeys(refs))
+    return tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key == source_key
+    )
+
+
+def _emergency_exception_document_refs(
+    *,
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> tuple[str, ...]:
+    """仅返回实际承载急诊豁免表述的手术或术前小结文书。"""
+
+    refs: list[str] = []
     for source_key in ("presurg_summary", "mr_surgery"):
-        for row in materials.rows(source_key):
-            text = _document_text(row)
-            if _is_emergency_surgery_text(text):
-                return True
-    return False
+        try:
+            rows = materials.rows(source_key)
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            continue
+        for row in rows:
+            if _is_emergency_surgery_text(_document_text(row)):
+                refs.extend(
+                    _selected_material_fact_refs(
+                        materials=materials,
+                        snapshot=snapshot,
+                        source_key=source_key,
+                        rows=(row,),
+                    )
+                )
+    return tuple(dict.fromkeys(refs))
 
 
 def _typed_decision_from_outcome(
@@ -384,9 +444,11 @@ def _typed_decision_from_outcome(
     """直接从040内核结果生成安全决策，不经过客户结果DTO。"""
 
     refs = tuple(
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in snapshot.observations
-        if observation.source_key in _DECISION_SOURCE_KEYS
+        dict.fromkeys(
+            str(ref).strip()
+            for ref in outcome.fact_refs
+            if isinstance(ref, str) and ref.strip()
+        )
     )
     if outcome.status in {"compliant", "non_compliant", "not_applicable"} and not refs:
         raise ValueError("typed mdt decision requires evidence refs")
@@ -482,13 +544,40 @@ def _finalize(
         "data_gap",
         "evaluation_unknown",
     }:
-        outcome = conditional_blocker
+        outcome = _MdtRuleOutcome(
+            status=conditional_blocker.status,
+            finding_kind=conditional_blocker.finding_kind,
+            reason_code=conditional_blocker.reason_code,
+            executor_type=conditional_blocker.executor_type,
+            # 已确认的手术触发事实可说明资料缺口的上下文；查询异常则不能
+            # 伪造任何临床文书证据。
+            fact_refs=(
+                outcome.fact_refs
+                if conditional_blocker.status == "data_gap"
+                else ()
+            ),
+        )
+    if outcome.reason_code == "source_query_error":
+        customer_display_facts = tuple(
+            (
+                rule_id,
+                {
+                    key: value
+                    for key, value in facts.items()
+                    if key != "source_document_refs"
+                },
+            )
+            for rule_id, facts in customer_display_facts
+        )
     if typed_requested:
         assert snapshot is not None
         return NativeMdtExecutionResult(
             result=None,
             decisions=(
-                _typed_decision_from_outcome(outcome=outcome, snapshot=snapshot),
+                _typed_decision_from_outcome(
+                    outcome=outcome,
+                    snapshot=snapshot,
+                ),
             ),
             customer_display_facts=customer_display_facts,
             llm_call_count=llm_call_count,
@@ -567,12 +656,21 @@ async def execute_luxian_0609_native_mdt_rule(
     def finish(
         outcome: _MdtRuleOutcome,
         *,
+        selected_fact_refs: Sequence[str] = (),
         llm_call_count: int = 0,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
         total_tokens: int = 0,
         api_time: float = 0.0,
     ) -> NativeMdtExecutionResult:
+        if selected_fact_refs:
+            outcome = _MdtRuleOutcome(
+                status=outcome.status,
+                finding_kind=outcome.finding_kind,
+                reason_code=outcome.reason_code,
+                executor_type=outcome.executor_type,
+                fact_refs=tuple(dict.fromkeys(selected_fact_refs)),
+            )
         facts = dict(display_facts)
         if facts:
             if outcome.status == "compliant":
@@ -597,7 +695,21 @@ async def execute_luxian_0609_native_mdt_rule(
         )
 
     if terminal_blocker is not None:
-        return finish(terminal_blocker)
+        blocker_refs = ()
+        if terminal_blocker.status == "data_gap" and typed_requested:
+            assert evidence_materials is not None
+            assert evidence_snapshot is not None
+            try:
+                blocker_refs = _selected_material_fact_refs(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
+                    source_key="mr_surgery",
+                    rows=tuple(evidence_materials.rows("mr_surgery")),
+                    fallback_to_source=True,
+                )
+            except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+                blocker_refs = ()
+        return finish(terminal_blocker, selected_fact_refs=blocker_refs)
     if typed_requested:
         assert evidence_snapshot is not None
         assert evidence_materials is not None
@@ -642,18 +754,34 @@ async def execute_luxian_0609_native_mdt_rule(
             return finish(
                 _MdtRuleOutcome(
                     "not_applicable", "trigger_absent", "performed_surgery_absent"
-                )
+                ),
+                selected_fact_refs=_selected_material_fact_refs(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
+                    source_key="mr_surgery",
+                    rows=tuple(evidence_materials.rows("mr_surgery")),
+                    fallback_to_source=True,
+                ),
             )
         if surgery_applicability.effective_level != "四级":
             return finish(
                 _MdtRuleOutcome(
                     "not_applicable", "trigger_absent", "level4_surgery_absent"
-                )
+                ),
+                selected_fact_refs=_selected_material_fact_refs(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
+                    source_key="mr_surgery",
+                    rows=tuple(evidence_materials.rows("mr_surgery")),
+                    fallback_to_source=True,
+                ),
             )
-        # 规则口径明确豁免“以紧急抢救生命为目的的急诊手术”。
-        # 例外必须来自同一快照中的明确文本，不能仅凭急诊科室、麻醉方式
-        # 或手术名称推断；命中后直接返回不适用，不再要求术前 MDT。
-        if _has_emergency_surgery_exception(materials=evidence_materials):
+        # 保持既有优先级：明确急诊豁免不再因后续多台手术关联资料不足而失效。
+        exemption_refs = _emergency_exception_document_refs(
+            materials=evidence_materials,
+            snapshot=evidence_snapshot,
+        )
+        if exemption_refs:
             display_facts.update(
                 {
                     "emergency_surgery_confirmed": True,
@@ -665,7 +793,21 @@ async def execute_luxian_0609_native_mdt_rule(
                     "not_applicable",
                     "trigger_absent",
                     "emergency_surgery_mdt_exception",
-                )
+                ),
+                selected_fact_refs=tuple(
+                    dict.fromkeys(
+                        (
+                            *_selected_material_fact_refs(
+                                materials=evidence_materials,
+                                snapshot=evidence_snapshot,
+                                source_key="mr_surgery",
+                                rows=tuple(evidence_materials.rows("mr_surgery")),
+                                fallback_to_source=True,
+                            ),
+                            *exemption_refs,
+                        )
+                    )
+                ),
             )
     if not all(
         isinstance(value, str) and value.strip()
@@ -680,7 +822,7 @@ async def execute_luxian_0609_native_mdt_rule(
         )
     try:
         surgeries = (
-            [dict(row) for row in evidence_materials.rows("mr_surgery")]
+            tuple(evidence_materials.rows("mr_surgery"))
             if evidence_materials is not None
             else read_luxian_0609_native_source_rows(
                 source_key="mr_surgery",
@@ -707,7 +849,18 @@ async def execute_luxian_0609_native_mdt_rule(
         return finish(
             _MdtRuleOutcome(
                 "not_applicable", "trigger_absent", "performed_surgery_absent"
-            )
+            ),
+            selected_fact_refs=(
+                _selected_material_fact_refs(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
+                    source_key="mr_surgery",
+                    rows=surgeries,
+                    fallback_to_source=True,
+                )
+                if typed_requested
+                else ()
+            ),
         )
     level4 = [
         row
@@ -720,8 +873,30 @@ async def execute_luxian_0609_native_mdt_rule(
         return finish(
             _MdtRuleOutcome(
                 "not_applicable", "trigger_absent", "level4_surgery_absent"
-            )
+            ),
+            selected_fact_refs=(
+                _selected_material_fact_refs(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
+                    source_key="mr_surgery",
+                    rows=performed,
+                    fallback_to_source=True,
+                )
+                if typed_requested
+                else ()
+            ),
         )
+    selected_trigger_fact_refs = (
+        _selected_material_fact_refs(
+            materials=evidence_materials,
+            snapshot=evidence_snapshot,
+            source_key="mr_surgery",
+            rows=level4,
+            fallback_to_source=True,
+        )
+        if typed_requested
+        else ()
+    )
     trigger_refs: list[dict[str, str]] = []
     seen_trigger_ids: set[str] = set()
     for row in level4:
@@ -747,14 +922,15 @@ async def execute_luxian_0609_native_mdt_rule(
         return finish(
             _MdtRuleOutcome(
                 "data_gap", "data_gap", "multiple_level4_sessions_unresolved"
-            )
+            ),
+            selected_fact_refs=selected_trigger_fact_refs,
         )
 
     try:
-        documents: list[tuple[int, datetime, str, str]] = []
+        documents: list[tuple[int, datetime, str, str, str]] = []
         for source_key in ("presurg_discussion", "consultation_record"):
             rows = (
-                [dict(row) for row in evidence_materials.rows(source_key)]
+                tuple(evidence_materials.rows(source_key))
                 if evidence_materials is not None
                 else read_luxian_0609_native_source_rows(
                     source_key=source_key,
@@ -764,6 +940,15 @@ async def execute_luxian_0609_native_mdt_rule(
                     source_schema=source_schema,
                 )
             )
+            refs_by_row = (
+                _material_document_refs_by_row(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
+                    source_key=source_key,
+                )
+                if typed_requested
+                else {}
+            )
             for row in rows:
                 record_time = _parse_datetime(row.get("record_time"))
                 text = _document_text(row)
@@ -772,10 +957,19 @@ async def execute_luxian_0609_native_mdt_rule(
                 score = (4 if _COMPLETED_MDT_PATTERN.search(text) else 0) + (
                     2 if source_key == "presurg_discussion" else 0
                 )
-                documents.append((score, record_time, source_key, text))
+                documents.append(
+                    (
+                        score,
+                        record_time,
+                        source_key,
+                        text,
+                        refs_by_row.get(id(row), ""),
+                    )
+                )
     except Exception:
         return finish(
-            _MdtRuleOutcome("data_gap", "data_gap", "mdt_source_unavailable")
+            _MdtRuleOutcome("data_gap", "data_gap", "mdt_source_unavailable"),
+            selected_fact_refs=selected_trigger_fact_refs,
         )
 
     # 只接受在每台四级手术前出现的完成态强证据；计划性“拟请多学科”不会命中。
@@ -793,18 +987,34 @@ async def execute_luxian_0609_native_mdt_rule(
         ),
     )
     for reason_code, predicate in strong_evidence_policies:
+        matched_document_refs = tuple(
+            dict.fromkeys(
+                document_ref
+                for _, record_time, source, text, document_ref in documents
+                if document_ref
+                and any(
+                    (start := _parse_datetime(surgery.get("surgery_begin_datetime")))
+                    and record_time <= start
+                    and predicate(source, text)
+                    for surgery in level4
+                )
+            )
+        )
         if all(
             (start := _parse_datetime(surgery.get("surgery_begin_datetime")))
             and any(
                 record_time <= start and predicate(source, text)
-                for _, record_time, source, text in documents
+                for _, record_time, source, text, _ in documents
             )
             for surgery in level4
         ):
             return finish(
                 _MdtRuleOutcome(
                     "compliant", "requirement_satisfied", reason_code
-                )
+                ),
+                selected_fact_refs=tuple(
+                    dict.fromkeys((*selected_trigger_fact_refs, *matched_document_refs))
+                ),
             )
 
     earliest_level4 = min(
@@ -817,18 +1027,26 @@ async def execute_luxian_0609_native_mdt_rule(
                 "non_compliant",
                 "required_document_missing",
                 "preoperative_mdt_absent",
-            )
+            ),
+            selected_fact_refs=selected_trigger_fact_refs,
         )
+    semantic_candidate_refs = tuple(
+        dict.fromkeys(
+            (*selected_trigger_fact_refs, *(item[4] for item in eligible if item[4]))
+        )
+    )
     if llm_client is None:
         return finish(
             _MdtRuleOutcome(
                 "technical_error", "technical_failure", "model_transport_error", "llm"
-            )
+            ),
+            selected_fact_refs=semantic_candidate_refs,
         )
 
     eligible.sort(key=lambda item: (-item[0], item[1], item[2]))
     context = "\n\n".join(
-        f"[{source}] {_project_document(text)}" for _, _, source, text in eligible
+        f"[{source}] {_project_document(text)}"
+        for _, _, source, text, _ in eligible
     )[:_MAX_CONTEXT_CHARS]
     names = tuple(
         dict.fromkeys(
@@ -846,6 +1064,7 @@ async def execute_luxian_0609_native_mdt_rule(
             _MdtRuleOutcome(
                 "technical_error", "technical_failure", "model_transport_error", "llm"
             ),
+            selected_fact_refs=semantic_candidate_refs,
             llm_call_count=1,
         )
     if not isinstance(response, Mapping):
@@ -853,6 +1072,7 @@ async def execute_luxian_0609_native_mdt_rule(
             _MdtRuleOutcome(
                 "technical_error", "technical_failure", "model_invalid_output", "llm"
             ),
+            selected_fact_refs=semantic_candidate_refs,
             llm_call_count=1,
         )
     try:
@@ -862,6 +1082,7 @@ async def execute_luxian_0609_native_mdt_rule(
             _MdtRuleOutcome(
                 "technical_error", "technical_failure", "model_invalid_output", "llm"
             ),
+            selected_fact_refs=semantic_candidate_refs,
             llm_call_count=1,
         )
     payload = _llm_payload(response)
@@ -870,6 +1091,7 @@ async def execute_luxian_0609_native_mdt_rule(
             _MdtRuleOutcome(
                 "technical_error", "technical_failure", "model_invalid_output", "llm"
             ),
+            selected_fact_refs=semantic_candidate_refs,
             llm_call_count=1,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -896,6 +1118,7 @@ async def execute_luxian_0609_native_mdt_rule(
             _MdtRuleOutcome(
                 "technical_error", "technical_failure", "model_invalid_output", "llm"
             ),
+            selected_fact_refs=semantic_candidate_refs,
             llm_call_count=1,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -904,6 +1127,7 @@ async def execute_luxian_0609_native_mdt_rule(
         )
     return finish(
         _MdtRuleOutcome(status, kind, reason, "llm"),
+        selected_fact_refs=semantic_candidate_refs,
         llm_call_count=1,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

@@ -83,12 +83,50 @@ def _session(
         source_schema=None,
         created_at="2026-07-17T18:00:00+08:00",
         row_reader=read,
-        additional_source_keys=(
-            "mr_surgery",
-            "presurg_discussion",
-            "consultation_record",
-        ),
     )
+
+
+def _material_document_refs(session, *source_keys: str) -> set[str]:
+    return {
+        document_ref
+        for source_key in source_keys
+        for document_ref, _ in session.materials.document_rows(
+            source_key,
+            snapshot=session.snapshot,
+        )
+    }
+
+
+def _aggregate_typed(session, execution):
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=("LX0609-040",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-040", "name": "四级手术术前多学科讨论"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )[0]
+    return reduced[0], result
+
+
+def _customer_evidence_coordinates(result: dict) -> set[tuple[str, str, str, str]]:
+    return {
+        (
+            str(item.get("source_type") or ""),
+            str(item.get("source_document_id") or ""),
+            str(item.get("record_time") or ""),
+            str(item.get("field_path") or ""),
+        )
+        for item in result.get("customer_evidence") or ()
+    }
 
 
 @pytest.mark.asyncio
@@ -100,6 +138,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
         {
             "mr_surgery": [
                 {
+                    "document_id": "surgery-40",
                     "surgery_name": "测试手术",
                     "surgical_level": "四级",
                     "surgery_begin_datetime": "2026-01-02T09:00:00",
@@ -107,11 +146,18 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
             ],
             "presurg_discussion": [
                 {
+                    "document_id": "discussion-40",
                     "record_time": "2026-01-01T09:00:00",
                     "record_content": f"经多学科讨论后一致认为可实施手术。{marker}",
                 }
             ],
-            "consultation_record": [],
+            "consultation_record": [
+                {
+                    "document_id": "ordinary-consult-40",
+                    "record_time": "2026-01-01T10:00:00",
+                    "record_content": "请单一专科协助评估手术风险。",
+                }
+            ],
         }
     )
     monkeypatch.setattr(
@@ -138,22 +184,26 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
     assert decision.evidence_state is EvidenceState.SUFFICIENT
     assert decision.qc_direction is QcDirection.SATISFIED
     assert decision.reason_code == "requirement_satisfied"
-    expected_refs = {
-        item.snapshot_ref.removeprefix("sha256:")
-        for item in session.snapshot.observations
-        if item.source_key
-        in {"mr_surgery", "presurg_discussion", "consultation_record"}
-    }
+    expected_refs = _material_document_refs(
+        session,
+        "mr_surgery",
+        "presurg_discussion",
+    )
     assert set(decision.fact_refs) == expected_refs
     assert execution.llm_call_count == 0
     assert marker not in repr(execution)
     assert "2026-01-02" not in repr(execution)
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=execution.decisions,
-        expected_rule_ids=("LX0609-040",),
-        snapshot=session.snapshot,
-    )
-    assert reduced[0].final_state == "compliant"
+    reduced, result = _aggregate_typed(session, execution)
+    assert reduced.final_state == "compliant"
+    assert _customer_evidence_coordinates(result) == {
+        ("mr_surgery", "surgery-40", "2026-01-02 09:00:00", ""),
+        (
+            "presurg_discussion",
+            "discussion-40",
+            "2026-01-01 09:00:00",
+            "record_content",
+        ),
+    }
 
 
 @pytest.mark.asyncio
@@ -270,7 +320,64 @@ async def test_typed_mdt_complete_empty_trigger_is_bound_not_applicable():
     assert execution.result is None
     assert decision.applicability is ApplicabilityState.NOT_APPLICABLE
     assert decision.reason_code == "trigger_absent_complete"
-    assert decision.fact_refs
+    assert decision.fact_refs == tuple(
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in session.snapshot.observations
+        if item.source_key == "mr_surgery"
+    )
+    _, result = _aggregate_typed(session, execution)
+    assert _customer_evidence_coordinates(result) == set()
+    assert execution.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("surgical_level", "expected_status", "expected_reason"),
+    (
+        ("四级", "non_compliant", "requirement_violated"),
+        ("三级", "not_applicable", "trigger_absent_complete"),
+    ),
+)
+async def test_typed_mdt_missing_or_nonlevel_uses_only_trigger_surgery_evidence(
+    surgical_level,
+    expected_status,
+    expected_reason,
+):
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "document_id": "surgery-trigger-40",
+                    "surgical_level": surgical_level,
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "presurg_discussion": [],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].reason_code == expected_reason
+    assert set(execution.decisions[0].fact_refs) == _material_document_refs(
+        session,
+        "mr_surgery",
+    )
+    _, result = _aggregate_typed(session, execution)
+    assert result["status"] == expected_status
+    assert _customer_evidence_coordinates(result) == {
+        ("mr_surgery", "surgery-trigger-40", "2026-01-02 09:00:00", ""),
+    }
     assert execution.llm_call_count == 0
 
 
@@ -280,6 +387,7 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
         {
             "mr_surgery": [
                 {
+                    "document_id": "surgery-semantic-40",
                     "surgery_name": "测试手术",
                     "surgical_level": "四级",
                     "surgery_begin_datetime": "2026-01-02T09:00:00",
@@ -288,6 +396,7 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
             "presurg_discussion": [],
             "consultation_record": [
                 {
+                    "document_id": "consult-semantic-40",
                     "record_time": "2026-01-01T09:00:00",
                     "record_content": "请单一专科协助评估手术风险。",
                 }
@@ -326,6 +435,21 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
     assert typed.prompt_tokens == raw.prompt_tokens == 120
     assert typed.completion_tokens == raw.completion_tokens == 12
     assert typed.total_tokens == raw.total_tokens == 132
+    assert set(typed.decisions[0].fact_refs) == _material_document_refs(
+        session,
+        "mr_surgery",
+        "consultation_record",
+    )
+    _, result = _aggregate_typed(session, typed)
+    assert _customer_evidence_coordinates(result) == {
+        (
+            "consultation_record",
+            "consult-semantic-40",
+            "2026-01-01 09:00:00",
+            "record_content",
+        ),
+        ("mr_surgery", "surgery-semantic-40", "2026-01-02 09:00:00", ""),
+    }
 
 
 @pytest.mark.asyncio
@@ -358,7 +482,42 @@ async def test_typed_mdt_preserves_source_failure_states(
     assert execution.result is None
     assert execution.decisions[0].evidence_state is evidence_state
     assert execution.decisions[0].reason_code == reason_code
+    if reason_code == "source_query_error":
+        assert execution.decisions[0].fact_refs == ()
     assert execution.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_conditional_source_error_has_no_clinical_evidence():
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "document_id": "surgery-source-error-40",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "consultation_record": [],
+        },
+        failed_source="presurg_discussion",
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].reason_code == "source_query_error"
+    assert execution.decisions[0].fact_refs == ()
+    _, result = _aggregate_typed(session, execution)
+    assert _customer_evidence_coordinates(result) == set()
 
 
 @pytest.mark.asyncio
@@ -719,6 +878,7 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
         {
             "mr_surgery": [
                 {
+                    "document_id": "surgery-emergency-40",
                     "surgery_name": "开颅血肿清除术",
                     "surgical_level": "四级",
                     "surgery_begin_datetime": "2026-01-02T09:00:00",
@@ -726,6 +886,7 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
             ],
             "presurg_summary": [
                 {
+                    "document_id": "summary-emergency-40",
                     "record_content": "手术名称：开颅血肿清除术。手术时间：今日急诊。麻醉方式：气管插管全麻。",
                 }
             ],
@@ -747,6 +908,11 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
 
     assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
+    assert set(execution.decisions[0].fact_refs) == _material_document_refs(
+        session,
+        "mr_surgery",
+        "presurg_summary",
+    )
     assert dict(execution.customer_display_facts)["LX0609-040"]["mdt_exception"] == "emergency_lifesaving_surgery"
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
@@ -776,6 +942,10 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
         "emergency_surgery_confirmed": True,
         "mdt_exception": "emergency_lifesaving_surgery",
         "mdt_discussion_state": "exempt",
+    }
+    assert _customer_evidence_coordinates(result) == {
+        ("mr_surgery", "surgery-emergency-40", "2026-01-02 09:00:00", ""),
+        ("presurg_summary", "summary-emergency-40", "", "record_content"),
     }
 
 
@@ -925,6 +1095,57 @@ async def test_invalid_llm_output_is_technical_error(monkeypatch):
     assert execution.result["status"] == "technical_error"
     assert execution.result["metadata"]["reason_code"] == "model_invalid_output"
     assert execution.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_model_failure_keeps_only_prompt_candidate_evidence():
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "document_id": "surgery-llm-error-40",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "presurg_discussion": [
+                {
+                    "document_id": "discussion-llm-error-40",
+                    "record_time": "2026-01-01T09:00:00",
+                    "record_content": "普通术前讨论。",
+                }
+            ],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(invalid=True),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].reason_code == "model_invalid_output"
+    assert set(execution.decisions[0].fact_refs) == _material_document_refs(
+        session,
+        "mr_surgery",
+        "presurg_discussion",
+    )
+    _, result = _aggregate_typed(session, execution)
+    assert _customer_evidence_coordinates(result) == {
+        ("mr_surgery", "surgery-llm-error-40", "2026-01-02 09:00:00", ""),
+        (
+            "presurg_discussion",
+            "discussion-llm-error-40",
+            "2026-01-01 09:00:00",
+            "record_content",
+        ),
+    }
 
 
 @pytest.mark.asyncio

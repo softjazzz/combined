@@ -1778,7 +1778,7 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
     entry = load_luxian_0609_source_registry()["bloodtrans_record"]
 
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v27"
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v28"
     assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
     assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
 

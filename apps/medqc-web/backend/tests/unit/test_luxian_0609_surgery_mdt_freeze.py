@@ -15,6 +15,10 @@ from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
 from app.services.luxian_0609.engine import FamilyExecutionContext
+from app.services.luxian_0609.evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+)
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -40,13 +44,6 @@ _SOURCE_KEYS = (
     "presurg_discussion",
     "consultation_record",
 )
-_CURRENT_DECISION_FACT_SOURCES = {
-    "mr_surgery",
-    "presurg_discussion",
-    "consultation_record",
-}
-
-
 class _NoLlmCall:
     """本冻结集只覆盖结构化、零 LLM 的可达形状。"""
 
@@ -167,10 +164,22 @@ def _surgery(
 
 
 def _fact_ref_source_keys(session, fact_refs: tuple[str, ...]) -> set[str]:
-    source_by_ref = {
+    source_by_ref: dict[str, str] = {}
+    for source_key in _SOURCE_KEYS:
+        try:
+            document_rows = session.materials.document_rows(
+                source_key,
+                snapshot=session.snapshot,
+            )
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            continue
+        source_by_ref.update(
+            {document_ref: source_key for document_ref, _ in document_rows}
+        )
+    source_by_ref.update({
         observation.snapshot_ref.removeprefix("sha256:"): observation.source_key
         for observation in session.snapshot.observations
-    }
+    })
     return {source_by_ref[ref] for ref in fact_refs}
 
 
@@ -180,7 +189,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
             str(item["source_type"]),
             str(item["source_document_id"]),
             str(item.get("field_path") or ""),
-            str(item["record_time"]),
+            str(item.get("record_time") or ""),
         )
         for item in result.get("customer_evidence", [])  # type: ignore[union-attr]
     }
@@ -216,7 +225,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
             "",
             "compliant",
             "requirement_satisfied",
-            _CURRENT_DECISION_FACT_SOURCES,
+            {"mr_surgery", "presurg_discussion"},
             {
                 ("mr_surgery", "SURG-C", "", "2026-01-02 09:00:00"),
                 (
@@ -241,7 +250,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
             "",
             "non_compliant",
             "requirement_violated",
-            _CURRENT_DECISION_FACT_SOURCES,
+            {"mr_surgery"},
             {("mr_surgery", "SURG-NC", "", "2026-01-02 09:00:00")},
             {
                 "performed_surgery_confirmed": True,
@@ -258,8 +267,8 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
             "",
             "not_applicable",
             "trigger_absent_complete",
-            _CURRENT_DECISION_FACT_SOURCES,
-            set(),
+            {"mr_surgery"},
+            {("mr_surgery", "SURG-NA", "", "2026-01-02 09:00:00")},
             {
                 "performed_surgery_confirmed": True,
                 "procedure_kind": "surgery",
@@ -274,7 +283,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
             "",
             "data_gap",
             "source_unavailable",
-            _CURRENT_DECISION_FACT_SOURCES,
+            {"mr_surgery"},
             {("mr_surgery", "SURG-DG", "", "2026-01-02 09:00:00")},
             {
                 "performed_surgery_confirmed": True,
@@ -291,7 +300,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
             "mr_surgery",
             "technical_error",
             "source_query_error",
-            _CURRENT_DECISION_FACT_SOURCES,
+            set(),
             set(),
             None,
         ),
@@ -356,8 +365,14 @@ async def test_surgery_mdt_emergency_lifesaving_exemption_is_publicly_projected(
         "not_applicable",
         "trigger_absent_complete",
     )
-    assert _fact_ref_source_keys(session, reduced.fact_refs) == _CURRENT_DECISION_FACT_SOURCES
-    assert _evidence_coordinates(result) == set()
+    assert _fact_ref_source_keys(session, reduced.fact_refs) == {
+        "mr_surgery",
+        "presurg_summary",
+    }
+    assert _evidence_coordinates(result) == {
+        ("mr_surgery", "SURG-EMERGENCY", "", "2026-01-02 09:00:00"),
+        ("presurg_summary", "SUMMARY-EMERGENCY", "record_content", ""),
+    }
     assert result["customer_display_facts"] == {
         "performed_surgery_confirmed": True,
         "procedure_kind": "surgery",

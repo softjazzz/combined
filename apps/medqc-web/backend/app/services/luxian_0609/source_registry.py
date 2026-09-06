@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v27"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v28"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -470,7 +470,12 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 040 先由结构化手术等级确认四级手术，再核对同次就诊会诊记录。
     # 术前小结中的“今日急诊/急诊手术”是免除术前 MDT 的受控例外依据，
     # 必须与手术等级一并进入同一证据快照，不能让执行器另行读取旧数据。
-    "LX0609-040": ("mr_surgery", "presurg_summary", "consultation_record"),
+    "LX0609-040": (
+        "mr_surgery",
+        "presurg_summary",
+        "presurg_discussion",
+        "consultation_record",
+    ),
     # 输血规则的客户文书范围并非都含输血记录；统一决策仍必须先绑定
     # mr_bloodtrans/bloodtrans_record 这一实际输血锚点。申请、同意书、检验和
     # 围术期文书均保持独立来源，禁止再借用输血记录或收费行伪装。
