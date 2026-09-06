@@ -2,7 +2,7 @@
 
 ## 状态与范围
 
-状态：**本地生产迁移完成，待主协调审核；未进行客户环境验收。**
+状态：**本地生产迁移与三入口验收完成；未进行客户环境验收。**
 
 - 基线提交：`42c92fc79`
 - 规则：`LX0609-030`（手术记录）、`LX0609-032`（手术安全核查表）
@@ -47,7 +47,7 @@ EvidenceSession（同一 snapshot + materials）
 
 1. 多文书定位阻塞已关闭：成功关联的公共证据集合与执行器 selected material refs 完全一致，且不会由 Finalizer/Aggregator 补猜。
 2. 032 的 `technical_error` 前态保护保留：关联逻辑只在前态非技术错误时收敛，异常来源不生成临床 facts。
-3. 未改变既有分钟关联、状态阈值或客户文案；同一文书含多次跨日期手术的口径不在本轮范围。客户环境真实病例和三入口验收尚未执行。
+3. 未改变既有分钟关联、状态阈值或客户文案；同一文书含多次跨日期手术的口径不在本轮范围。客户环境真实病例验收尚未执行。
 
 ## 验证记录
 
@@ -65,4 +65,12 @@ py -3.10 -m pytest -q backend/tests/unit/test_luxian_0609_surgery_presence_freez
 
 主协调最终复跑：`505 passed`（5.48s；冻结 9 项 + native/Finalizer/Aggregator/Binding/selected-evidence 影响回归，15 条既有 warning）。迁移后 030 不再参加旧聚合器的通用严格 facts 参数组，改由专用回归完整冻结五个合同形状：普通显式入口的非法 facts 仍抛 `ValueError`；三种 native 输入只令该规则降为 `technical_error/model_invalid_output`，且不泄露临床 facts、证据或私有标记；不携带展示 facts 的结果仍可通过公共入口。没有减少原有覆盖。
 
-生产变更规模：`native_execution.py` 565→628 行（+67/-4），`canonical_result_finalizer.py` 464→512 行（+49/-1），聚合器 4,796→4,792 行（+1/-5），生产代码净增 107 行；没有新增模块或公开接口。聚合器中 030/032 字面引用均为 0。未进行完整前端检查、API 三入口或客户环境验收。
+生产变更规模：`native_execution.py` 565→628 行（+67/-4），`canonical_result_finalizer.py` 464→512 行（+49/-1），聚合器 4,796→4,792 行（+1/-5），生产代码净增 107 行；没有新增模块或公开接口。聚合器中 030/032 字面引用均为 0。未进行完整前端检查或客户环境验收。
+
+### 本地三入口验收
+
+独立验收文件：`backend/tests/integration/test_luxian_0609_030_032_entry_regression.py`。测试没有修改生产发布范围，030/032 均按正式 `final` 质控范围执行；外部资料读取与基础设施使用脱敏 seam，route、worker、prepare、统一引擎、Binding、Canonical 保存和回读均走生产实现。
+
+覆盖六种业务形状：无已实施手术、单台完整、缺核查表、两台唯一关联、两台关联歧义、核查表来源异常。每种形状均执行工作台单病例、工作台批量和客户样本验证三个入口，并按状态、原因码、客户 facts 与证据坐标集合比较，不把证据数组顺序当成优先级。
+
+主协调完整复跑：`6 passed`（22.13s，15 条既有 warning）。三个入口均记录 `executor_key=surgery_presence`，LLM 调用为 0，未出现 legacy、LLM fallback 或 pack fallback；保存后安全引用和回读 Canonical 与任务结果一致。客户环境真实病历验收按总计划留到全部本地规则族收口完成后统一执行。
