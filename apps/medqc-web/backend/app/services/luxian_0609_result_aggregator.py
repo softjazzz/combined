@@ -101,21 +101,6 @@ def _strip_sensitive(value: Any) -> Any:
     return value
 
 
-def _has_any(text: str, *needles: str) -> bool:
-    return any(needle and needle in text for needle in needles)
-
-
-def _implant_absence_language(text: str) -> bool:
-    return _has_any(
-        text,
-        "未提及植入物",
-        "未见植入物",
-        "无植入物",
-        "未发现植入物",
-        "无法判断是否存在植入物",
-    )
-
-
 def _select_best_result(
     *,
     mapped_results: list[dict[str, Any]],
@@ -343,16 +328,6 @@ def safe_luxian_0609_customer_display_facts(
         return delegated_facts
     return None
 
-def _controlled_customer_findings(
-    *, rule_id: str, facts: Mapping[str, Any] | None
-) -> str:
-    """统一调用后端客户渲染器解释白名单事实，前端不得重算业务语义。"""
-
-    from .luxian_0609.customer_renderer import customer_finding_from_controlled_facts
-
-    return customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
-
-
 def _copy_native_customer_fields(
     *, wrapper: dict[str, Any], selected: dict[str, Any]
 ) -> dict[str, Any]:
@@ -550,7 +525,10 @@ def aggregate_luxian_0609_results(
 ) -> list[dict[str, Any]]:
     # 延迟加载避免聚合器导入时触发 luxian_0609 包的公开 re-export，
     # 从而与 customer_rule_package 形成循环依赖。
-    from .luxian_0609.customer_renderer import render_luxian_0609_customer_result
+    from .luxian_0609.customer_renderer import (
+        customer_finding_from_controlled_facts,
+        render_luxian_0609_customer_result,
+    )
 
     reduced_by_rule = _index_reduced_decisions(
         wrapper_rules=wrapper_rules,
@@ -630,7 +608,7 @@ def aggregate_luxian_0609_results(
             )
             if wrapper_id in display_facts_by_rule:
                 result["customer_display_facts"] = display_facts_by_rule[wrapper_id]
-                precise_findings = _controlled_customer_findings(
+                precise_findings = customer_finding_from_controlled_facts(
                     rule_id=wrapper_id,
                     facts=display_facts_by_rule[wrapper_id],
                 )
@@ -752,7 +730,7 @@ def aggregate_luxian_0609_results(
                     )
                     if isinstance(facts_for_render, Mapping):
                         result["customer_display_facts"] = dict(facts_for_render)
-                        precise_findings = _controlled_customer_findings(
+                        precise_findings = customer_finding_from_controlled_facts(
                             rule_id=wrapper_id,
                             facts=facts_for_render,
                         )
