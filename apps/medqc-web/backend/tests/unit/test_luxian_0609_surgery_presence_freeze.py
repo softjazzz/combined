@@ -336,8 +336,8 @@ def test_surgery_presence_freeze_two_surgeries_requires_explicit_minute_associat
     assert [_coordinates(item) for item in ambiguous_results] == [set(), set()]
 
 
-def test_surgery_presence_freeze_source_error_keeps_current_asymmetric_outcome() -> None:
-    """冻结当前异常形态；此处不把现存技术失败改写成另一种业务状态。"""
+def test_surgery_presence_freeze_surgery_record_error_preserves_032_technical_error() -> None:
+    """关联收敛不得覆盖上游手术记录查询产生的技术失败。"""
 
     _, execution, reduced, results = _execute_and_aggregate(
         rows_by_source={},
@@ -347,11 +347,46 @@ def test_surgery_presence_freeze_source_error_keeps_current_asymmetric_outcome()
     _assert_typed_native_without_llm(execution)
     assert [(item.final_state.value, item.reason_code) for item in reduced] == [
         ("technical_error", "executor_exception"),
-        ("data_gap", "association_failed"),
+        ("technical_error", "executor_exception"),
     ]
     assert [item["findings"] for item in results] == [
         "质控执行未完成",
-        "当前缺少已实施手术与手术安全核查表的单台手术关联信息，暂时无法完成核对",
+        "质控执行未完成",
     ]
     assert all(item.get("customer_display_facts", {}) == {} for item in results)
     assert [_coordinates(item) for item in results] == [set(), set()]
+
+
+def test_surgery_presence_freeze_safecheck_error_preserves_032_technical_error() -> None:
+    """核查表查询异常同样不得被多台关联的资料缺口覆盖。"""
+
+    _, execution, reduced, results = _execute_and_aggregate(
+        rows_by_source={
+            "surgery_record": [
+                {
+                    "document_id": "SURG-SAFE-CHECK-ERROR-1",
+                    "surgery_begin_time": "2026-09-01 08:00:00+08",
+                    "record_content": "手术记录正文已经完整填写，含手术过程说明。",
+                }
+            ]
+        },
+        failing_sources=frozenset({"surgery_safecheck_record"}),
+    )
+
+    _assert_typed_native_without_llm(execution)
+    assert [(item.final_state.value, item.reason_code) for item in reduced] == [
+        ("compliant", "requirement_satisfied"),
+        ("technical_error", "executor_exception"),
+    ]
+    assert results[0]["customer_display_facts"] == {
+        "verification_kind": "surgery_document_present",
+        "target_document": "surgery_record",
+        "performed_surgery_confirmed": True,
+    }
+    assert results[1].get("customer_display_facts", {}) == {}
+    assert results[1]["findings"] == "质控执行未完成"
+    # 不改变公共投影：同一 session 内已绑定的手术记录仍可供技术异常审计定位，
+    # 但异常的核查表不产生伪造坐标。
+    assert _coordinates(results[1]) == {
+        ("surgery_record", "SURG-SAFE-CHECK-ERROR-1", "record_content", "")
+    }

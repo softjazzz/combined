@@ -2,7 +2,7 @@
 
 ## 状态与范围
 
-状态：**本地阻塞；测试冻结已建立，未修改生产代码。**
+状态：**技术状态覆盖缺陷已最小修复，待主协调审核；证据坐标阻塞仍在。**
 
 - 基线提交：`42c92fc79`
 - 规则：`LX0609-030`（手术记录）、`LX0609-032`（手术安全核查表）
@@ -51,12 +51,12 @@ EvidenceSession（同一 snapshot + materials）
 
 导入边界初查：`native_execution.py` 已依赖 EvidenceSession/RuleDecision，但当前不依赖 Finalizer 或 Aggregator；Finalizer 已是聚合结果的通用收口层。若 Finalizer 只导入一个无副作用的 native 安全事实校验函数，不形成回环。生产实施前仍须用实际 import 图与聚焦测试复核，且需要主协调再次批准文件白名单。
 
-## 阻塞项（不在本次修复）
+## 仍存阻塞与已修复缺陷
 
 1. 多台手术的明确关联成功后，030/032 结果的客户证据坐标集合为零；当前合同确保不猜测，但未满足迁移的客户定位门。须由执行器以同一 EvidenceSession 输出合法逐文书 `fact_refs` 后，才可获得定位；不得在 Finalizer 或聚合器反查补来源。
-2. `surgery_record` 查询异常时，030 保持 `technical_error / executor_exception`，但 `native_execution.py` 的 032 多台关联收敛无条件覆盖前态，令 032 变为 `data_gap / association_failed`。这是已由真实 EvidenceSession 主链精确复现的非对称技术失败，不能作为等价迁移的冻结基线放行。
+2. `surgery_record` 查询异常时，030 原先保持 `technical_error / executor_exception`，但 `native_execution.py` 的 032 多台关联收敛曾无条件覆盖前态，令 032 变为 `data_gap / association_failed`。该缺陷已在本次独立最小修复中处理：仅当 032 前态不是 `technical_error` 时才应用关联收敛；`surgery_record` 与 `surgery_safecheck_record` 查询异常均回归为 032 的 `technical_error / executor_exception`，且均无临床客户 facts。前者没有坐标；后者按既有公共投影合同保留同一 session 已绑定的手术记录坐标，不伪造核查表坐标。待主协调审核。
 
-待主协调单独授权的最小缺陷修复仅限第二项：032 在进入关联收敛前若已是 `technical_error`，不得覆盖其状态或原因码，且不能生成临床客户 facts。修复应与所有权迁移分开提交，并用本冻结反例及既有 native 规则回归验证。第一项需要先明确合法逐文书 refs 的执行器合同与等价坐标目标；在此之前不得删除聚合器安全 facts 校验或宣称 presence 已收口。
+本次修复只处理第二项，未改变多台关联、时间匹配或其他状态算法。第一项仍须先明确合法逐文书 refs 的执行器合同与等价坐标目标；在此之前不得删除聚合器安全 facts 校验或宣称 presence 已收口。
 
 ## 验证记录
 
@@ -66,6 +66,12 @@ EvidenceSession（同一 snapshot + materials）
 py -3.10 -m pytest -q tests/unit/test_luxian_0609_surgery_presence_freeze.py
 ```
 
-实际结果：`6 passed`（0.37s；仅有现有应用启动弃用警告）。
+本次修复后的聚焦命令：
 
-本阶段只新增冻结；当前有上述本地阻塞，不声称聚合器已收口、生产迁移已完成、三入口/API 或客户环境已验收。
+```powershell
+py -3.10 -m pytest -q backend/tests/unit/test_luxian_0609_surgery_presence_freeze.py backend/tests/unit/test_luxian_0609_native_execution.py
+```
+
+实际结果：`41 passed`（冻结 7 项 + 既有 native 34 项，0.57s；仅有现有应用启动弃用警告）。
+
+主协调独立复核：presence、gate、事实合同及聚合器影响范围合计 `576 passed`（4.19s）。已审查最小状态 guard；仍有上述多文书定位阻塞，不声称聚合器已收口、生产迁移已完成、三入口/API 或客户环境已验收。

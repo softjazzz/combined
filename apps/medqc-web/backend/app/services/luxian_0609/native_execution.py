@@ -479,7 +479,10 @@ def execute_luxian_0609_native_rules(
             )
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
             linkage_outcome = ("data_gap", "association_failed")
-        if linkage_outcome is not None:
+        if (
+            linkage_outcome is not None
+            and final_state_by_rule_id.get("LX0609-032") != "technical_error"
+        ):
             final_state_by_rule_id["LX0609-032"], reason_by_rule_id[
                 "LX0609-032"
             ] = linkage_outcome
