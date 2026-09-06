@@ -211,6 +211,47 @@ def test_exam_lab_finalizer_fails_closed_for_invalid_facts_only() -> None:
     assert "findings" not in finalized
 
 
+def test_discharge_finalizer_owns_facts_and_strips_private_document_refs() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+        finalizer_owns_executor_customer_display_facts,
+    )
+
+    assert finalizer_owns_executor_customer_display_facts("LX0609-067") is True
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-067",
+            "status": "compliant",
+            "reason_code": "requirement_satisfied",
+            "findings": "PRIVATE_FINDING",
+        },
+        raw_facts={
+            "verification_kind": "predischarge_course_presence_check",
+            "discharge_date": "2026-07-03",
+            "checked_dates": ["2026-07-02", "2026-07-03"],
+            "course_present": True,
+            "source_document_refs": [
+                {
+                    "source_type": "daily_course_record",
+                    "source_document_id": "PRIVATE-067",
+                }
+            ],
+        },
+    )
+
+    assert handled is True
+    assert (finalized["status"], finalized["reason_code"]) == (
+        "compliant",
+        "requirement_satisfied",
+    )
+    assert finalized["customer_display_facts"] == {
+        "verification_kind": "predischarge_course_presence_check",
+        "discharge_date": "2026-07-03",
+        "checked_dates": ["2026-07-02", "2026-07-03"],
+        "course_present": True,
+    }
+
+
 @pytest.mark.parametrize(
     ("rule_id", "raw_facts"),
     (

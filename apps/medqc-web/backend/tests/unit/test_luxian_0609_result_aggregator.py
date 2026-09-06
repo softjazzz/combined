@@ -1996,70 +1996,21 @@ def test_051_direct_aggregation_does_not_reproject_private_document_ids() -> Non
     }
 
 
-def _067_presence_facts(source_document_refs) -> dict[str, object]:
-    return {
+def test_067_private_document_ref_cannot_be_searched_by_aggregator() -> None:
+    """精确文书证据只允许公共 fact_refs 投影，私有 facts 必须 fail-closed。"""
+
+    facts = {
         "verification_kind": "predischarge_course_presence_check",
         "discharge_date": "2026-07-03",
         "checked_dates": ["2026-07-02", "2026-07-03"],
         "course_present": True,
-        "source_document_refs": source_document_refs,
-    }
-
-
-def test_067_projects_only_strict_window_matched_course_refs() -> None:
-    facts = _067_presence_facts([
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "daily-window-067",
-        },
-        {
-            "source_type": "senior_course_record",
-            "source_document_id": "senior-window-067",
-        },
-    ])
-
-    result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-067"}],
-        execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-067"),),
-        customer_display_facts=(("LX0609-067", facts),),
-    )[0]
-
-    assert result["customer_evidence"] == facts["source_document_refs"]
-    assert "source_document_refs" not in result["customer_display_facts"]
-
-
-@pytest.mark.parametrize(
-    "source_document_refs",
-    [
-        [{
-            "source_type": "discharge_record",
-            "source_document_id": "not-a-course-067",
-        }],
-        [
+        "source_document_refs": [
             {
                 "source_type": "daily_course_record",
-                "source_document_id": "duplicate-067",
-            },
-            {
-                "source_type": "daily_course_record",
-                "source_document_id": "duplicate-067",
-            },
-        ],
-        [
-            {
-                "source_type": "daily_course_record",
-                "source_document_id": f"course-{index}",
+                "source_document_id": "PRIVATE-067",
             }
-            for index in range(9)
         ],
-    ],
-)
-def test_067_rejects_invalid_duplicate_or_oversized_internal_refs(
-    source_document_refs,
-) -> None:
-    facts = _067_presence_facts(source_document_refs)
-
+    }
     result = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-067"}],
         execution_results=[],
@@ -2067,41 +2018,14 @@ def test_067_rejects_invalid_duplicate_or_oversized_internal_refs(
         customer_display_facts=(("LX0609-067", facts),),
     )[0]
 
+    assert result["status"] == "compliant"
     assert "customer_evidence" not in result
-    assert "source_document_refs" not in result["customer_display_facts"]
-
-
-def test_067_invalid_precise_refs_cannot_fall_back_to_legacy_document_ids() -> None:
-    facts = _067_presence_facts("invalid-refs")
-    facts["source_document_ids"] = ["legacy-course-067"]
-
-    result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-067"}],
-        execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-067"),),
-        customer_display_facts=(("LX0609-067", facts),),
-    )[0]
-
-    assert "customer_evidence" not in result
-    assert "source_document_refs" not in result["customer_display_facts"]
-
-
-def test_067_absent_window_course_cannot_attach_unmatched_course_evidence() -> None:
-    facts = _067_presence_facts([{
-        "source_type": "daily_course_record",
-        "source_document_id": "old-course-outside-window-067",
-    }])
-    facts["course_present"] = False
-
-    result = aggregate_luxian_0609_results(
-        wrapper_rules=[{"rule_id": "LX0609-067"}],
-        execution_results=[],
-        reduced_decisions=(_reduced_decision("LX0609-067"),),
-        customer_display_facts=(("LX0609-067", facts),),
-    )[0]
-
-    assert "customer_evidence" not in result
-    assert "source_document_refs" not in result["customer_display_facts"]
+    assert result["customer_display_facts"] == {
+        "verification_kind": "predischarge_course_presence_check",
+        "discharge_date": "2026-07-03",
+        "checked_dates": ["2026-07-02", "2026-07-03"],
+        "course_present": True,
+    }
 
 
 def _071_association_facts(source_document_refs) -> dict[str, object]:

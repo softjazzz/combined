@@ -13,6 +13,7 @@ from .luxian_0609_result_schema import (
 )
 from .luxian_0609.canonical_result_finalizer import (
     finalizer_owns_executor_customer_display_facts,
+    finalizer_requires_public_fact_ref_evidence,
     finalizer_validates_missing_executor_customer_display_facts,
     finalize_luxian_0609_canonical_result,
     finalize_luxian_0609_executor_customer_display_facts,
@@ -77,18 +78,8 @@ _SENSITIVE_KEYS = {
     "internal_data",
 }
 _SAFE_SOURCE_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
-# 001 的 RuleDecision 会为“入院锚点可用性”绑定入院记录、出院记录及登记来源。
-# 其中只有入院记录是客户需要核对的实际时限文书；其余来源仅用于计算锚点，
-# 不得因通用事实反查而出现在该规则的客户证据中。
-_EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
-    # 005/006 的入院、出院来源仅用于确定入院锚点；实际被核对的首次查房
-    # 均来自上级医师查房记录，不能把锚点文书投影成客户证据。
-    # 011/012 和 014/015 的病程是已核对范围；未命中时不能把它们展示为
-    # 支持结论的“关键证据”。客户可定位的触发证据仅为对应报告。
-    # 068 的出院登记和出院记录只负责确定适用性；客户证据必须来自实际
-    # 命中的出院前病程，不能因通用来源反查而展示成出院记录。
-    "LX0609-068": frozenset({"daily_course_record", "senior_course_record"}),
-}
+# 旧兼容投影仍统一读取该表。已迁出的规则族不得在此增加规则专属来源选择。
+_EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {}
 
 
 def _norm_id(value: Any) -> str:
@@ -661,9 +652,6 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-055": {"antimicrobial_effect_evaluation_check"},
         "LX0609-057": {"empiric_antimicrobial_reason_check"},
         "LX0609-058": {"special_antimicrobial_expert_support_check"},
-        "LX0609-061": {"discharge_record_timeliness_check"},
-        "LX0609-062": {"discharge_medication_completeness_check"},
-        "LX0609-063": {"discharge_diagnosis_consistency_check"},
         "LX0609-064": {
             "postoperative_three_day_coverage_check",
             "postoperative_surgery_event_time_check",
@@ -675,11 +663,6 @@ def safe_luxian_0609_customer_display_facts(
             "postoperative_surgery_event_time_check",
         },
         "LX0609-066": {"postoperative_first_course_presence_check"},
-        "LX0609-067": {"predischarge_course_presence_check"},
-        "LX0609-068": {
-            "senior_discharge_approval_present",
-            "senior_discharge_approval_missing",
-        },
         "LX0609-069": {"consultation_timeliness_check"},
         "LX0609-071": {
             "physician_handoff_timeliness_check",
@@ -729,17 +712,6 @@ def safe_luxian_0609_customer_display_facts(
             "first_antimicrobial_time", "expert_support_time", "support_before_use",
             "unmatched_special_antimicrobials", "association_ambiguous",
         },
-        "discharge_record_timeliness_check": {
-            "discharge_time", "discharge_time_source", "record_time", "threshold_hours",
-            "actual_interval_hours",
-            "conflicting_discharge_times",
-        },
-        "discharge_medication_completeness_check": {
-            "medication_count", "required_fields", "missing_fields",
-        },
-        "discharge_diagnosis_consistency_check": {
-            "authoritative_diagnoses", "written_diagnoses", "diagnoses_consistent",
-        },
         "postoperative_three_day_coverage_check": {
             "surgery_time", "required_postop_dates", "covered_postop_dates",
             "surgeon_round_present",
@@ -756,17 +728,6 @@ def safe_luxian_0609_customer_display_facts(
         },
         "postoperative_first_course_presence_check": {
             "performed_surgery_count", "postoperative_first_course_count",
-        },
-        "predischarge_course_presence_check": {
-            "discharge_date", "checked_dates", "course_present",
-        },
-        "senior_discharge_approval_present": {
-            "discharge_date", "checked_dates", "checked_source",
-            "approval_present", "approval_path",
-        },
-        "senior_discharge_approval_missing": {
-            "discharge_date", "checked_dates", "checked_source",
-            "approval_present",
         },
         "consultation_timeliness_check": {
             "threshold_hours", "actual_interval_hours", "request_times", "record_times",
@@ -1165,40 +1126,6 @@ def safe_luxian_0609_customer_display_facts(
                 safe[key] = list(value)
             else:
                 return None
-        if kind == "discharge_record_timeliness_check" and "conflicting_discharge_times" in raw:
-            conflict_times = raw.get("conflicting_discharge_times")
-            if (
-                not isinstance(conflict_times, (list, tuple))
-                or not 2 <= len(conflict_times) <= 100
-                or any(
-                    not isinstance(value, str)
-                    or not value
-                    or len(value) > 40
-                    or "\n" in value
-                    or "\r" in value
-                    for value in conflict_times
-                )
-            ):
-                return None
-            try:
-                parsed_conflicts = tuple(
-                    datetime.fromisoformat(value.replace("Z", "+00:00"))
-                    for value in conflict_times
-                )
-                is_sorted_unique = (
-                    len(set(parsed_conflicts)) == len(parsed_conflicts)
-                    and tuple(sorted(parsed_conflicts)) == parsed_conflicts
-                )
-            except (TypeError, ValueError):
-                return None
-            if (
-                not is_sorted_unique
-                or raw.get("discharge_time") is not None
-                or raw.get("record_time") is not None
-                or raw.get("actual_interval_hours") is not None
-            ):
-                return None
-            safe["conflicting_discharge_times"] = list(conflict_times)
         if kind == "critical_value_timeliness_check":
             has_maturity = "evaluation_window_mature" in raw
             expected_base_keys = {
@@ -1718,41 +1645,6 @@ def safe_luxian_0609_customer_display_facts(
                 result["required_items"] = required
             return append_lx070_event_facts(result)
         return None
-    if rule_id == "LX0609-068":
-        failure_kind = raw.get("failure_kind")
-        checked_dates = raw.get("checked_dates")
-        approval_present = raw.get("approval_present")
-        discharge_date = raw.get("discharge_date")
-        if (
-            failure_kind
-            not in {
-                "senior_discharge_approval_present",
-                "senior_discharge_approval_missing",
-            }
-            or raw.get("checked_source") != "senior_course_record"
-            or not isinstance(checked_dates, (list, tuple))
-            or len(checked_dates) != 2
-            or not all(
-                isinstance(value, str)
-                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-                for value in checked_dates
-            )
-            or not isinstance(discharge_date, str)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", discharge_date)
-            or approval_present
-            != (failure_kind == "senior_discharge_approval_present")
-        ):
-            return None
-        return {
-            "failure_kind": failure_kind,
-            "discharge_date": discharge_date,
-            "checked_dates": list(checked_dates),
-            "checked_source": "senior_course_record",
-            "approval_present": approval_present,
-        }
-
-
-
 def _controlled_customer_findings(
     *, rule_id: str, facts: Mapping[str, Any] | None
 ) -> str:
@@ -1814,41 +1706,6 @@ def _customer_evidence_from_display_facts(
             and "\r" not in candidate
             else ""
         )
-
-    if rule_id == "LX0609-067":
-        if raw.get("course_present") is not True:
-            return []
-        allowed_source_types = {"daily_course_record", "senior_course_record"}
-        raw_refs = raw.get("source_document_refs")
-        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
-            located: list[dict[str, str]] = []
-            seen: set[tuple[str, str]] = set()
-            for item in raw_refs:
-                if not isinstance(item, Mapping) or set(item) != {
-                    "source_type",
-                    "source_document_id",
-                }:
-                    return []
-                located_source_type = str(item.get("source_type") or "").strip()
-                located_document_id = valid_document_id(
-                    item.get("source_document_id")
-                )
-                key = (located_source_type, located_document_id)
-                if (
-                    located_source_type not in allowed_source_types
-                    or not located_document_id
-                    or key in seen
-                ):
-                    return []
-                seen.add(key)
-                located.append(
-                    {
-                        "source_type": located_source_type,
-                        "source_document_id": located_document_id,
-                    }
-                )
-            if located:
-                return located
 
     if rule_id == "LX0609-071":
         allowed_source_types = {
@@ -1938,27 +1795,6 @@ def _customer_evidence_from_display_facts(
                     )
                 ):
                     return []
-            if located:
-                return located
-
-    if rule_id == "LX0609-068":
-        allowed_source_types = {"daily_course_record", "senior_course_record"}
-        raw_refs = raw.get("source_document_refs")
-        if isinstance(raw_refs, list) and len(raw_refs) <= 1:
-            located: list[dict[str, str]] = []
-            for item in raw_refs:
-                if not isinstance(item, Mapping) or set(item) != {
-                    "source_type", "source_document_id"
-                }:
-                    return []
-                source_type = str(item.get("source_type") or "").strip()
-                document_id = valid_document_id(item.get("source_document_id"))
-                if source_type not in allowed_source_types or not document_id:
-                    return []
-                located.append({
-                    "source_type": source_type,
-                    "source_document_id": document_id,
-                })
             if located:
                 return located
 
@@ -2379,6 +2215,9 @@ def aggregate_luxian_0609_results(
         wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
         if not wrapper_id:
             continue
+        finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(
+            wrapper_id
+        )
         reduced = reduced_by_rule.get(wrapper_id)
         if reduced is not None:
             result = render_luxian_0609_customer_result(
@@ -2419,15 +2258,15 @@ def aggregate_luxian_0609_results(
                 # 已有明确逐行选择时，公共投影是唯一证据所有者。不得先让旧的
                 # 来源级反查或 display facts 补入文书，再以合并结果掩盖猜测。
                 customer_evidence = selected_document_evidence
+            elif finalizer_requires_public_fact_ref_evidence(wrapper_id):
+                # 已迁出事实合同的规则只能由公共逐行 fact_refs 投影证据；没有
+                # 精确坐标时保持无客户证据，不能回退到旧来源级反查。
+                customer_evidence = []
             else:
                 # 只有尚未迁移的旧合同才允许保留历史反查路径。
                 decision_evidence = (
                     []
-                    if wrapper_id in {
-                        "LX0609-067",
-                        "LX0609-068",
-                        "LX0609-071",
-                    }
+                    if wrapper_id == "LX0609-071"
                     else _customer_evidence_from_reduced_decision(
                         decision=reduced,
                         evidence_snapshot=(audit_context or {}).get(
