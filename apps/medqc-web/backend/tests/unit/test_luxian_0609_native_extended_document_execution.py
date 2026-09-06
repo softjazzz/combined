@@ -4419,6 +4419,139 @@ async def test_critical_value_rules_preserve_canonical_customer_delivery() -> No
 
 
 @pytest.mark.asyncio
+async def test_critical_value_fact_refs_only_include_actual_event_and_earliest_disposition() -> None:
+    snapshot, materials, execution, _reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "report_id": "critical-report",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 14:00:00",
+                },
+                {
+                    "report_id": "ordinary-report",
+                    "item_name": "血常规",
+                    "result_flag": "N",
+                    "report_time": "2026-06-01 14:01:00",
+                },
+            ),
+            "crisis_value_record": (
+                {
+                    "report_id": "critical-report",
+                    "record_time": "2026-06-01 16:00:00",
+                },
+                {
+                    "report_id": "critical-report",
+                    "record_time": "2026-06-01 18:00:00",
+                },
+            ),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-02 00:00:00",
+                "horizon_date": "2026-06-02",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    item_rows = materials.document_rows("labtest_item_report", snapshot=snapshot)
+    crisis_rows = materials.document_rows("crisis_value_record", snapshot=snapshot)
+    horizon_rows = materials.document_rows("evaluation_context.horizon", snapshot=snapshot)
+    critical_item_ref = next(
+        reference
+        for reference, row in item_rows
+        if row["report_id"] == "critical-report"
+    )
+    earliest_disposition_ref = next(
+        reference
+        for reference, row in crisis_rows
+        if row["record_time"] == "2026-06-01 16:00:00"
+    )
+    expected_refs = tuple(sorted((critical_item_ref, earliest_disposition_ref)))
+    by_rule = {item.rule_id: item for item in execution.decisions}
+
+    assert by_rule["LX0609-052"].fact_refs == expected_refs
+    assert by_rule["LX0609-053"].fact_refs == expected_refs
+    later_disposition_ref = next(
+        reference
+        for reference, row in crisis_rows
+        if row["record_time"] == "2026-06-01 18:00:00"
+    )
+    assert later_disposition_ref not in by_rule["LX0609-052"].fact_refs
+    assert horizon_rows[0][0] not in by_rule["LX0609-052"].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_critical_value_ambiguous_disposition_never_guesses_disposition_fact_refs() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": (
+                {
+                    "report_id": "report-1",
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 14:00:00",
+                },
+                {
+                    "report_id": "report-2",
+                    "item_name": "血钙",
+                    "result_flag": "PL",
+                    "report_time": "2026-06-01 14:01:00",
+                },
+            ),
+            "crisis_value_record": ({
+                "record_time": "2026-06-01 16:00:00",
+            },),
+        },
+    )
+
+    item_rows = materials.document_rows("labtest_item_report", snapshot=snapshot)
+    crisis_rows = materials.document_rows("crisis_value_record", snapshot=snapshot)
+    expected_refs = tuple(sorted(reference for reference, _row in item_rows))
+
+    assert [(item.final_state, item.reason_code) for item in reduced] == [
+        (CustomerFinalState.DATA_GAP, "association_failed"),
+        (CustomerFinalState.DATA_GAP, "association_failed"),
+    ]
+    assert [item.fact_refs for item in execution.decisions] == [
+        expected_refs,
+        expected_refs,
+    ]
+    assert crisis_rows[0][0] not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_critical_value_detail_gap_only_projects_confirmed_master_fact_refs() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_master": (
+                {"report_id": "master-1"},
+                {"report_id": "master-2"},
+            ),
+        },
+    )
+
+    master_refs = tuple(sorted(
+        reference
+        for reference, _row in materials.document_rows(
+            "labtest_master", snapshot=snapshot
+        )
+    ))
+
+    assert [(item.final_state, item.reason_code) for item in reduced] == [
+        (CustomerFinalState.DATA_GAP, "required_field_missing"),
+        (CustomerFinalState.DATA_GAP, "required_field_missing"),
+    ]
+    assert [item.fact_refs for item in execution.decisions] == [
+        master_refs,
+        master_refs,
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     (
         "rows_by_source",
@@ -4611,6 +4744,7 @@ async def test_critical_value_rules_keep_catalog_order_for_reversed_input() -> N
         decisions=result.decisions,
         expected_rule_ids=("LX0609-052", "LX0609-053"),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Mapping
+from typing import Mapping, Sequence
 
 
 CRITICAL_VALUE_RULE_IDS = ("LX0609-052", "LX0609-053")
@@ -142,6 +142,96 @@ def _events(
         for event in events
     )
     return tuple(events), association_unproven
+
+
+def select_critical_value_fact_refs(
+    *,
+    outcome: CriticalValueOutcome,
+    item_refs: Sequence[tuple[str, CriticalValueItem]],
+    disposition_refs: Sequence[tuple[str, CriticalValueDisposition]],
+    master_refs: Sequence[str] = (),
+) -> tuple[str, ...]:
+    """仅选择本次危急值判定实际消费的逐行资料引用。
+
+    该函数不重新判定状态，也不把评价终点投影为客户文书证据。危急项目与
+    处置无法唯一关联时，只保留已确认的危急项目，绝不猜测处置记录。
+    """
+
+    def unique(values: Sequence[str]) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(value for value in values if value))
+
+    critical_pairs = tuple(
+        (reference, item)
+        for reference, item in item_refs
+        if reference and _is_critical_item(item)
+    )
+    if (
+        outcome.reason_code == "required_field_missing"
+        and not critical_pairs
+    ):
+        # 已确认有检验主记录但没有明细时，只有主记录是可安全投影的证据。
+        return unique(master_refs)
+    if not critical_pairs:
+        if outcome.reason_code == "trigger_absent_complete":
+            # 无危急标记的明细是“不适用”否定结论实际消费的资料。
+            return unique(tuple(reference for reference, _item in item_refs))
+        return ()
+
+    critical_refs = unique(tuple(reference for reference, _item in critical_pairs))
+    # 资料缺口、标志冲突或关联失败时，不从处置行反向猜测对应危急事件。
+    if outcome.final_state not in {"compliant", "non_compliant", "not_applicable"}:
+        return critical_refs
+    if outcome.reason_code in {
+        "association_failed",
+        "authoritative_time_missing",
+        "authoritative_time_conflict",
+    }:
+        return critical_refs
+
+    events, association_unproven = _events(
+        tuple(item for _reference, item in critical_pairs)
+    )
+    if association_unproven:
+        return critical_refs
+
+    keyed_events = {
+        event.event_key: event for event in events if event.event_key is not None
+    }
+    matched_dispositions_by_event: dict[int, list[tuple[datetime, str]]] = {
+        index: [] for index, _event in enumerate(events)
+    }
+    event_indexes = {id(event): index for index, event in enumerate(events)}
+    unmatched_disposition = False
+    for reference, disposition in disposition_refs:
+        event: _CriticalValueEvent | None = None
+        if len(events) == 1 and disposition.event_key is None:
+            event = events[0]
+        elif disposition.event_key in keyed_events:
+            event = keyed_events[disposition.event_key]
+        else:
+            unmatched_disposition = True
+            continue
+        if (
+            event.report_time is not None
+            and disposition.disposition_time >= event.report_time
+        ):
+            matched_dispositions_by_event[event_indexes[id(event)]].append(
+                (disposition.disposition_time, reference)
+            )
+
+    if unmatched_disposition:
+        return critical_refs
+    # 执行器判定只消费每个事件报告后的最早处置；同刻多条无法进一步区分时，
+    # 保留该最早时间的集合，绝不把后续处置扩展为本次证据。
+    selected_disposition_refs: list[str] = []
+    for candidates in matched_dispositions_by_event.values():
+        if not candidates:
+            continue
+        earliest_time = min(value[0] for value in candidates)
+        selected_disposition_refs.extend(
+            reference for value, reference in candidates if value == earliest_time
+        )
+    return unique((*critical_refs, *selected_disposition_refs))
 
 
 def _event_display(
@@ -510,4 +600,5 @@ __all__ = [
     "CriticalValueDisposition",
     "CriticalValueOutcome",
     "evaluate_critical_value_rules",
+    "select_critical_value_fact_refs",
 ]

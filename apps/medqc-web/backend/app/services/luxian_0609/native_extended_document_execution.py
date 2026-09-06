@@ -44,12 +44,12 @@ from .extended_document.transfer_documentation import (
 )
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
-    CRITICAL_VALUE_SOURCE_KEYS,
-    CRITICAL_VALUE_TIMELINESS_SOURCE_KEYS,
     CriticalValueDisposition,
     CriticalValueInput,
     CriticalValueItem,
+    CriticalValueOutcome,
     evaluate_critical_value_rules,
+    select_critical_value_fact_refs,
 )
 from .source_evidence_reader import (
     authoritative_document_time_value,
@@ -397,6 +397,84 @@ def _070_document_refs(
         *lab_refs,
     )
     return tuple(dict.fromkeys(refs))
+
+
+def _critical_value_item_from_row(row: Mapping[str, Any]) -> CriticalValueItem:
+    return CriticalValueItem(
+        item_name=_clean(row.get("item_name") or row.get("item_code")),
+        flag_values=tuple(
+            _clean(row.get(key))
+            for key in (
+                "result_flag",
+                "abnormal_flag",
+                "abnormal_indicator",
+                "result_status",
+                "result_hint",
+            )
+        ),
+        marker_text=_material_text(row),
+        display_flag=_clean(
+            row.get("result_flag")
+            or row.get("abnormal_flag")
+            or row.get("abnormal_indicator")
+        ),
+        report_time=_parse_datetime(
+            row.get("report_time")
+            or row.get("report_datetime")
+            or row.get("record_time")
+        ),
+        event_key=_critical_value_event_key("labtest_item_report", row),
+    )
+
+
+def _critical_value_disposition_from_row(
+    row: Mapping[str, Any],
+) -> CriticalValueDisposition | None:
+    disposition_time = _row_time(row)
+    if disposition_time is None:
+        return None
+    return CriticalValueDisposition(
+        disposition_time=disposition_time,
+        event_key=_critical_value_event_key("crisis_value_record", row),
+    )
+
+
+def _critical_value_document_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    outcome: CriticalValueOutcome,
+) -> tuple[str, ...]:
+    """返回危急值判定实际消费的逐行证据；评价终点不属于客户文书证据。"""
+
+    def rows(source_key: str) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+        try:
+            return tuple(
+                (reference, dict(row))
+                for reference, row in materials.document_rows(
+                    source_key, snapshot=snapshot
+                )
+            )
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            return ()
+
+    item_rows = rows("labtest_item_report")
+    disposition_rows = rows("crisis_value_record")
+    master_rows = rows("labtest_master")
+    return select_critical_value_fact_refs(
+        outcome=outcome,
+        item_refs=tuple(
+            (reference, _critical_value_item_from_row(row))
+            for reference, row in item_rows
+        ),
+        disposition_refs=tuple(
+            (reference, disposition)
+            for reference, row in disposition_rows
+            for disposition in (_critical_value_disposition_from_row(row),)
+            if disposition is not None
+        ),
+        master_refs=tuple(reference for reference, _row in master_rows),
+    )
 
 
 def _death_document_refs(
@@ -1537,41 +1615,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                 lab_report_count=len(lab_master_rows),
                 lab_detail_count=len(lab_item_rows),
                 items=tuple(
-                    CriticalValueItem(
-                        item_name=_clean(row.get("item_name") or row.get("item_code")),
-                        flag_values=tuple(
-                            _clean(row.get(key))
-                            for key in (
-                                "result_flag",
-                                "abnormal_flag",
-                                "abnormal_indicator",
-                                "result_status",
-                                "result_hint",
-                            )
-                        ),
-                        marker_text=_material_text(row),
-                        display_flag=_clean(
-                            row.get("result_flag")
-                            or row.get("abnormal_flag")
-                            or row.get("abnormal_indicator")
-                        ),
-                        report_time=_parse_datetime(
-                            row.get("report_time")
-                            or row.get("report_datetime")
-                            or row.get("record_time")
-                        ),
-                        event_key=_critical_value_event_key("labtest_item_report", row),
-                    )
-                    for row in lab_item_rows
+                    _critical_value_item_from_row(row) for row in lab_item_rows
                 ),
                 dispositions=tuple(
-                    CriticalValueDisposition(
-                        disposition_time=parsed,
-                        event_key=_critical_value_event_key("crisis_value_record", row),
-                    )
+                    disposition
                     for row in crisis_rows
-                    for parsed in (_row_time(row),)
-                    if parsed is not None
+                    for disposition in (_critical_value_disposition_from_row(row),)
+                    if disposition is not None
                 ),
                 evaluation_horizon_date=critical_horizon_date,
                 evaluation_horizon_datetime=critical_horizon_datetime,
@@ -1654,13 +1704,22 @@ async def execute_luxian_0609_native_extended_document_rules(
             outcome = critical_value_outcomes[rule_id]
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
+            document_refs = _critical_value_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                outcome=outcome,
+            )
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
+                # 完整资料已读取但确无任何检验明细时，不适用结论仍需一个
+                # snapshot 级负向证据；它不会被投影为客户文书。
                 source_keys=(
-                    CRITICAL_VALUE_TIMELINESS_SOURCE_KEYS
-                    if rule_id == "LX0609-052"
-                    else CRITICAL_VALUE_SOURCE_KEYS
+                    ("labtest_item_report",)
+                    if not document_refs
+                    and outcome.final_state == "not_applicable"
+                    else ()
                 ),
+                document_refs=document_refs,
                 final_state=outcome.final_state, reason_code=outcome.reason_code,
             ))
             continue
