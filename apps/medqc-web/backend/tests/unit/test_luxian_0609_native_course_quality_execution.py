@@ -154,6 +154,7 @@ async def _run_typed_severity(session):
         decisions=result.decisions,
         expected_rule_ids=("LX0609-008", "LX0609-009"),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     return result, reduced
 
@@ -176,6 +177,7 @@ async def _run_typed_009(session, client):
         decisions=result.decisions,
         expected_rule_ids=("LX0609-009",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     return result, reduced
 
@@ -482,6 +484,7 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-017",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].fact_refs
@@ -606,6 +609,7 @@ async def test_typed_017_preserves_source_query_state_without_model(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-017",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
@@ -683,6 +687,7 @@ async def test_typed_017_python_path_matches_raw_state_and_keeps_privacy():
         decisions=typed.decisions,
         expected_rule_ids=("LX0609-017",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert typed.results == ()
@@ -880,6 +885,7 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_within_threshold"
@@ -959,6 +965,7 @@ async def test_course_007_uses_admission_to_first_record_maturity_boundary(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is expected_state
@@ -1015,6 +1022,7 @@ async def test_course_007_missing_candidate_time_only_blocks_a_mature_empty_wind
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
@@ -1072,6 +1080,7 @@ async def test_course_007_missing_candidate_time_blocks_an_otherwise_overdue_gap
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
@@ -1131,6 +1140,7 @@ async def test_course_007_does_not_count_explicit_non_round_course_document() ->
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -1201,6 +1211,7 @@ async def test_course_007_uses_date_only_evaluation_horizon_conservatively(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is expected_state
@@ -1259,6 +1270,7 @@ async def test_course_007_date_only_horizon_does_not_hide_exact_internal_gap() -
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].reason_code == "threshold_exceeded"
@@ -1315,6 +1327,7 @@ async def test_course_007_date_only_horizon_with_same_day_record_is_data_gap() -
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
@@ -1372,6 +1385,7 @@ async def test_course_007_checks_last_record_to_evaluation_horizon() -> None:
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -1458,6 +1472,7 @@ async def test_course_007_keeps_real_document_id_at_boundary_interval(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert scenario
@@ -1606,6 +1621,7 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-007",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
@@ -2442,6 +2458,7 @@ async def test_course_009_daily_complete_without_external_candidates_needs_no_mo
         decisions=result.decisions,
         expected_rule_ids=("LX0609-009",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
@@ -3099,6 +3116,7 @@ async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None
         decisions=result.decisions,
         expected_rule_ids=("LX0609-009",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
@@ -3236,6 +3254,7 @@ async def test_course_009_missing_day_stays_python_only_with_client_available() 
         decisions=result.decisions,
         expected_rule_ids=("LX0609-009",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -3275,6 +3294,7 @@ async def test_course_008_remains_python_only_with_client_available() -> None:
         decisions=result.decisions,
         expected_rule_ids=("LX0609-008",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
@@ -5996,6 +6016,7 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-017",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -6068,6 +6089,7 @@ async def test_typed_017_keeps_exact_evidence_when_record_time_is_ambiguous():
         decisions=native.decisions,
         expected_rule_ids=("LX0609-017",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     canonical = aggregate_luxian_0609_results(
@@ -6155,6 +6177,7 @@ async def test_typed_017_finds_non_adjacent_copy_across_twenty_course_records():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-017",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
@@ -6270,6 +6293,7 @@ async def test_typed_017_similarity_threshold_is_inclusive_without_model(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-017",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state is expected_state

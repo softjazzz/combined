@@ -208,6 +208,28 @@ def _snapshot_unstable_order_state(snapshot: Luxian0609EvidenceSnapshot) -> str:
     return "unavailable"
 
 
+def _material_document_refs_by_row(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    source_key: str,
+) -> dict[int, str]:
+    """返回本次材料仓中每行对应的已绑定文书引用。
+
+    规则只保存真正参与判定的行引用；不能再把整个来源 observation 当作
+    客户证据的替代品。材料仓和 ``document_rows`` 共享同一行实例，因此以
+    对象身份配对不会引入第二套文书 ID 或摘要算法。
+    """
+
+    return {
+        id(row): document_ref
+        for document_ref, row in materials.document_rows(
+            source_key,
+            snapshot=snapshot,
+        )
+    }
+
+
 def evaluate_rule_007_typed(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -267,11 +289,9 @@ def evaluate_rule_007_typed(
             refs=set(),
             confidence=None,
         )
-    refs = {
-        item.snapshot_ref.removeprefix("sha256:")
-        for item in observations.values()
-        if item is not None
-    }
+    # ``fact_refs`` 只保留参与该次判定的受控事实和实际文书行；来源级
+    # observation 不再被当作“全来源证据”塞进每个结论。
+    refs: set[str] = set()
 
     unstable_source = "inpat_nondrug_order.unstable_order"
     unstable_observation = observations[unstable_source]
@@ -374,6 +394,11 @@ def evaluate_rule_007_typed(
     try:
         admission_rows = tuple(materials.rows(_RULE_007_ADMISSION_SOURCE))
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
+        admission_document_refs = _material_document_refs_by_row(
+            snapshot=snapshot,
+            materials=materials,
+            source_key=_RULE_007_ADMISSION_SOURCE,
+        )
     except EvidenceMaterialTruncated:
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
@@ -401,6 +426,9 @@ def evaluate_rule_007_typed(
             refs=refs,
             confidence=None,
         )
+    admission_document_ref = admission_document_refs.get(id(admission_rows[0]))
+    if admission_document_ref:
+        refs.add(admission_document_ref)
     horizon_fact = next(
         (
             fact
@@ -438,7 +466,7 @@ def evaluate_rule_007_typed(
             confidence=None,
         )
 
-    record_times: set[datetime] = set()
+    record_points: list[tuple[datetime, str]] = []
     substantive_record_without_time = False
     for source_key in RULE_007_RECORD_SOURCES:
         observation = observations[source_key]
@@ -472,6 +500,11 @@ def evaluate_rule_007_typed(
             )
         try:
             rows = materials.rows(source_key)
+            document_refs_by_row = _material_document_refs_by_row(
+                snapshot=snapshot,
+                materials=materials,
+                source_key=source_key,
+            )
         except EvidenceMaterialTruncated:
             return decision(
                 applicability=ApplicabilityState.APPLICABLE,
@@ -497,13 +530,18 @@ def evaluate_rule_007_typed(
                 authoritative_document_time_value(row)
             )
             if parsed is not None:
-                record_times.add(parsed)
+                document_ref = document_refs_by_row.get(id(row))
+                if document_ref:
+                    record_points.append((parsed, document_ref))
             elif row_text(row):
                 substantive_record_without_time = True
 
-    ordered_times = sorted(
-        record_time
-        for record_time in record_times
+    ordered_points = sorted(
+        (
+            record_time,
+            document_ref,
+        )
+        for record_time, document_ref in record_points
         if admission_time <= record_time
         and (
             (
@@ -514,6 +552,8 @@ def evaluate_rule_007_typed(
             or (horizon_time is not None and record_time <= horizon_time)
         )
     )
+    ordered_times = [item[0] for item in ordered_points]
+    refs.update(document_ref for _record_time, document_ref in ordered_points)
     # 完整来源没有任何可定位病程记录时，先区分规则是否成熟，再区分
     # “记录不存在”和“候选记录存在但时间缺失”。空来源本身不是时间缺口。
     if not ordered_times and horizon_time is not None:
@@ -554,7 +594,7 @@ def evaluate_rule_007_typed(
         and horizon_date is not None
         and any(
             admission_time <= record_time and record_time.date() == horizon_date
-            for record_time in record_times
+            for record_time, _document_ref in record_points
         )
     )
     tail_start = exact_boundary_times[-1]

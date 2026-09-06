@@ -156,6 +156,28 @@ def _date_in_active_intervals(
     )
 
 
+def _material_document_refs_by_row(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    source_key: str,
+) -> dict[int, str]:
+    """返回同一材料仓内逐行、已绑定的文书引用。
+
+    008/009 的 ``fact_refs`` 不能再以整个来源 observation 代替实际参与
+    判定的医嘱、病程或检查检验行。``document_rows`` 与 ``rows`` 共用行实例，
+    因而这里不需要第二套文书 ID 或摘要算法。
+    """
+
+    return {
+        id(row): document_ref
+        for document_ref, row in materials.document_rows(
+            source_key,
+            snapshot=snapshot,
+        )
+    }
+
+
 def _rule_008_009_decision(
     *,
     rule_id: str,
@@ -220,11 +242,7 @@ def _rule_008_009_decision(
             refs=set(),
             confidence=None,
         )
-    refs = {
-        item.snapshot_ref.removeprefix("sha256:")
-        for item in observations.values()
-        if item is not None
-    }
+    refs: set[str] = set()
 
     order_observation = observations[CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY]
     assert order_observation is not None
@@ -256,6 +274,11 @@ def _rule_008_009_decision(
     try:
         order_rows = tuple(
             materials.rows(CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY)
+        )
+        order_document_refs = _material_document_refs_by_row(
+            snapshot=snapshot,
+            materials=materials,
+            source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         )
     except EvidenceMaterialTruncated:
         return decision(
@@ -326,6 +349,9 @@ def _rule_008_009_decision(
         and row.get("event_kind") in {None, "start"}
     )
     if not relevant_orders:
+        # 空的完整医嘱来源没有可投影文书；保留该来源 observation 作为“无
+        # 触发事件”的受控否定事实，满足 Binding 的不适用证据合同。
+        refs.add(order_observation.snapshot_ref.removeprefix("sha256:"))
         return decision(
             applicability=ApplicabilityState.NOT_APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -334,6 +360,15 @@ def _rule_008_009_decision(
             refs=refs,
             confidence=1.0,
         )
+
+    # 病重/病危期间由同一等级的开始、解除医嘱共同界定；不能只保留第一条
+    # start，也不能把无关等级或已排除医嘱投影给客户。
+    refs.update(
+        order_document_refs[id(row)]
+        for row in target_rows
+        if row.get("status_state") in {None, "effective"}
+        and id(row) in order_document_refs
+    )
 
     discharge_observation = observations[CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY]
     horizon_observation = observations[EVALUATION_HORIZON_SOURCE_KEY]
@@ -457,7 +492,7 @@ def _rule_008_009_decision(
             confidence=None,
         )
 
-    timed_record_dates: set[date] = set()
+    timed_record_points: list[tuple[date, str]] = []
     for source_key in _RULE_007_RECORD_SOURCES:
         observation = observations[source_key]
         assert observation is not None
@@ -488,6 +523,11 @@ def _rule_008_009_decision(
             )
         try:
             rows = tuple(materials.rows(source_key))
+            course_document_refs = _material_document_refs_by_row(
+                snapshot=snapshot,
+                materials=materials,
+                source_key=source_key,
+            )
         except EvidenceMaterialTruncated:
             return decision(
                 applicability=ApplicabilityState.APPLICABLE,
@@ -507,10 +547,13 @@ def _rule_008_009_decision(
                 confidence=None,
             )
         for row in rows:
+            document_ref = course_document_refs.get(id(row))
             parsed_date = _authoritative_natural_date(
                 authoritative_document_time_value(row)
             )
             if parsed_date is None:
+                if document_ref:
+                    refs.add(document_ref)
                 return decision(
                     applicability=ApplicabilityState.APPLICABLE,
                     evidence_state=EvidenceState.DATA_GAP,
@@ -523,8 +566,11 @@ def _rule_008_009_decision(
                 rule_id != "LX0609-009"
                 or bool(_rule_009_substantive_text(row))
             ):
-                timed_record_dates.add(parsed_date)
+                if document_ref:
+                    timed_record_points.append((parsed_date, document_ref))
 
+    timed_record_dates = {item[0] for item in timed_record_points}
+    refs.update(document_ref for _record_date, document_ref in timed_record_points)
     ordered_dates = sorted(timed_record_dates)
     if rule_id == "LX0609-008":
         interval_candidates = []
@@ -786,17 +832,45 @@ def _rule_009_group_event_time(
     return None
 
 
+def _rule_009_group_event_document_refs(
+    *,
+    event_kind: str,
+    event_time: datetime | None,
+    rows_by_source: Mapping[str, Sequence[tuple[datetime, str]]],
+) -> tuple[str, ...]:
+    """选择实际提供事件权威时间的检查/检验文书，而不是整个来源集合。"""
+
+    if event_time is None:
+        return ()
+    source_priority = (
+        ("labtest_master", "labtest_item_report")
+        if event_kind == "lab"
+        else ("exam_item_report",)
+    )
+    for source_key in source_priority:
+        candidates = tuple(
+            document_ref
+            for candidate_time, document_ref in rows_by_source.get(source_key, ())
+            if candidate_time == event_time
+        )
+        if len(candidates) == 1:
+            return candidates
+        if candidates:
+            return ()
+    return ()
+
+
 def _rule_009_baseline_course_ref(
     *,
     event_time: datetime,
-    course_rows: Sequence[tuple[datetime | None, str, str]],
+    course_rows: Sequence[tuple[Any, ...]],
 ) -> str:
     """返回事件前最近基线；对应病程的24小时时限由Python最终校验。"""
 
     timed_rows = tuple(
-        (course_time, ref)
-        for course_time, ref, _content in course_rows
-        if course_time is not None
+        (item[0], item[1])
+        for item in course_rows
+        if item[0] is not None
     )
     prior = tuple(item for item in timed_rows if item[0] < event_time)
     return max(prior, default=(datetime.min, ""), key=lambda item: item[0])[1]
@@ -812,6 +886,8 @@ def _rule_009_semantic_context(
     bool,
     Mapping[str, datetime | None],
     Mapping[str, datetime | None],
+    Mapping[str, tuple[str, ...]],
+    Mapping[str, str],
     datetime | date,
 ]:
     """返回完整语义投影及截断标记；不允许静默裁剪后交给模型。"""
@@ -821,7 +897,7 @@ def _rule_009_semantic_context(
         or type(materials) is not Luxian0609EvidenceMaterialStore
         or materials.snapshot_hash != snapshot.snapshot_hash
     ):
-        return "", False, False, {}, {}, date.min
+        return "", False, False, {}, {}, {}, {}, date.min
     try:
         critical_rows = tuple(
             row
@@ -837,23 +913,23 @@ def _rule_009_semantic_context(
         )
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
     except Exception:
-        return "", False, False, {}, {}, date.min
+        return "", False, False, {}, {}, {}, {}, date.min
     if (
         not critical_dates
         or any(item is None for item in critical_dates)
         or len(horizon_rows) != 1
     ):
-        return "", False, False, {}, {}, date.min
+        return "", False, False, {}, {}, {}, {}, date.min
     anchor_date = min(item for item in critical_dates if item is not None)
     horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
     if horizon_date is None or horizon_date < anchor_date:
-        return "", False, False, {}, {}, date.min
+        return "", False, False, {}, {}, {}, {}, date.min
     active_intervals = _severity_active_date_intervals(
         critical_rows,
         horizon_date=horizon_date,
     )
     if active_intervals is None:
-        return "", False, False, {}, {}, date.min
+        return "", False, False, {}, {}, {}, {}, date.min
     horizon_datetime = _authoritative_course_time(
         horizon_rows[0].get("horizon_datetime")
     )
@@ -868,11 +944,16 @@ def _rule_009_semantic_context(
             or observation.query_state.value not in {"available", "empty"}
             or observation.completeness.value == "truncated"
         ):
-            return "", False, False, {}, {}, evaluation_horizon
+            return "", False, False, {}, {}, {}, {}, evaluation_horizon
         try:
             source_rows = materials.rows(source_key)
+            source_document_refs = _material_document_refs_by_row(
+                snapshot=snapshot,
+                materials=materials,
+                source_key=source_key,
+            )
         except Exception:
-            return "", False, False, {}, {}, evaluation_horizon
+            return "", False, False, {}, {}, {}, {}, evaluation_horizon
         for index, row in enumerate(source_rows):
             content = _rule_009_external_event_text(source_key, row)
             if not content:
@@ -889,23 +970,33 @@ def _rule_009_semantic_context(
             )
             group = grouped_external_events.setdefault(
                 (event_kind, event_ref),
-                {"texts": [], "times_by_source": {}},
+                {"texts": [], "times_by_source": {}, "rows_by_source": {}},
             )
             if content not in group["texts"]:
                 group["texts"].append(content)
             if event_time is not None:
                 group["times_by_source"].setdefault(source_key, []).append(event_time)
+                if (document_ref := source_document_refs.get(id(row))):
+                    group["rows_by_source"].setdefault(source_key, []).append(
+                        (event_time, document_ref)
+                    )
 
-    external_events: list[tuple[datetime | None, str, str]] = []
+    external_events: list[tuple[datetime | None, str, str, tuple[str, ...]]] = []
     for (event_kind, event_ref), group in grouped_external_events.items():
+        event_time = _rule_009_group_event_time(
+            event_kind=event_kind,
+            times_by_source=group["times_by_source"],
+        )
         external_events.append(
             (
-                _rule_009_group_event_time(
-                    event_kind=event_kind,
-                    times_by_source=group["times_by_source"],
-                ),
+                event_time,
                 event_ref,
                 "；".join(group["texts"]),
+                _rule_009_group_event_document_refs(
+                    event_kind=event_kind,
+                    event_time=event_time,
+                    rows_by_source=group["rows_by_source"],
+                ),
             )
         )
     external_events.sort(
@@ -914,16 +1005,22 @@ def _rule_009_semantic_context(
 
     parts: list[str] = []
     course_times: dict[str, datetime | None] = {}
+    course_document_refs: dict[str, str] = {}
     # 保留全部可投递事件引用。时间是否权威只能在模型明确引用该事件后
     # 校验，不能因无关外部行缺时间而提前降级整条规则。
     event_times: dict[str, datetime | None] = {}
     substantive_dates: set[date] = set()
-    raw_course_rows: list[tuple[datetime | None, str, str]] = []
+    raw_course_rows: list[tuple[datetime | None, str, str, str]] = []
     for source_key in _RULE_007_RECORD_SOURCES:
         try:
             rows = materials.rows(source_key)
+            source_document_refs = _material_document_refs_by_row(
+                snapshot=snapshot,
+                materials=materials,
+                source_key=source_key,
+            )
         except Exception:
-            return "", False, False, {}, {}, evaluation_horizon
+            return "", False, False, {}, {}, {}, {}, evaluation_horizon
         for index, row in enumerate(rows):
             record_time = _authoritative_course_time(authoritative_document_time_value(row))
             record_date = record_time.date() if record_time is not None else None
@@ -936,22 +1033,31 @@ def _rule_009_semantic_context(
             internal_ref = _rule_009_row_ref(source_key, index, row)
             if record_date is not None:
                 substantive_dates.add(record_date)
-            raw_course_rows.append((record_time, internal_ref, content))
+            raw_course_rows.append(
+                (
+                    record_time,
+                    internal_ref,
+                    content,
+                    source_document_refs.get(id(row), ""),
+                )
+            )
     raw_course_rows.sort(
         key=lambda item: (item[0] is None, item[0] or datetime.max, item[1])
     )
     # 模型只看到本次请求内的临时引用。真实文书/检验标识仅用于上述稳定排序，
     # 不进入提示词，也不允许模型把内部标识带回客户事实。
     course_rows = [
-        (record_time, f"C{index:02d}", content)
-        for index, (record_time, _internal_ref, content) in enumerate(
+        (record_time, f"C{index:02d}", content, document_ref)
+        for index, (record_time, _internal_ref, content, document_ref) in enumerate(
             raw_course_rows,
             start=1,
         )
     ]
-    for record_time, ref, _content in course_rows:
+    for record_time, ref, _content, document_ref in course_rows:
         course_times[ref] = record_time
-    for record_time, ref, content in course_rows:
+        if document_ref:
+            course_document_refs[ref] = document_ref
+    for record_time, ref, content, _document_ref in course_rows:
         if record_time is not None:
             baseline_ref = _rule_009_baseline_course_ref(
                 event_time=record_time,
@@ -965,12 +1071,14 @@ def _rule_009_semantic_context(
             f"baseline_course_ref={baseline_ref or '无'}；"
             f"内容={content}"
         )
-    for index, (event_time, _internal_ref, content) in enumerate(
+    event_document_refs: dict[str, tuple[str, ...]] = {}
+    for index, (event_time, _internal_ref, content, document_refs) in enumerate(
         external_events,
         start=1,
     ):
         ref = f"E{index:02d}"
         event_times[ref] = event_time
+        event_document_refs[ref] = document_refs
         if event_time is not None:
             baseline_ref = _rule_009_baseline_course_ref(
                 event_time=event_time,
@@ -991,12 +1099,21 @@ def _rule_009_semantic_context(
         for offset in range((interval_end - start_date).days + 1)
     }
     if expected_dates.difference(substantive_dates):
-        return "", False, False, {}, {}, evaluation_horizon
+        return "", False, False, {}, {}, {}, {}, evaluation_horizon
     context = "\n".join(parts)
     return (
-        ("", True, False, {}, {}, evaluation_horizon)
+        ("", True, False, {}, {}, {}, {}, evaluation_horizon)
         if len(context) > _MAX_RULE_009_CONTEXT_CHARS
-        else (context, False, True, event_times, course_times, evaluation_horizon)
+        else (
+            context,
+            False,
+            True,
+            event_times,
+            course_times,
+            event_document_refs,
+            course_document_refs,
+            evaluation_horizon,
+        )
     )
 
 
@@ -1277,6 +1394,42 @@ def _rule_009_change_event_decision(
         },
     )
 
+
+def _rule_009_with_selected_event_document_refs(
+    *,
+    decision: RuleDecision,
+    events: Sequence[Mapping[str, Any]],
+    event_document_refs: Mapping[str, Sequence[str]],
+    course_document_refs: Mapping[str, str],
+) -> RuleDecision:
+    """将模型已完成语义核对的事件映射回对应的真实材料文书。
+
+    E/C 是仅用于受控提示词和模型返回校验的临时引用；它们不能继续留给
+    聚合器按日期反查。模型对每一条 ``E`` 都给出了受控的“变化/未变化”判定，
+    所以两种结论都必须保留其实际检查检验文书；病程只保留确实作为对应记录的
+    ``C``，而病危期间日常覆盖所需病程已由基础确定性判定加入。
+    """
+
+    selected = list(decision.fact_refs)
+    for event in events:
+        event_ref = str(event.get("event_ref") or "")
+        selected.extend(event_document_refs.get(event_ref, ()))
+        course_ref = str(event.get("corresponding_course_ref") or "")
+        if (document_ref := course_document_refs.get(course_ref)):
+            selected.append(document_ref)
+    return RuleDecision(
+        rule_id=decision.rule_id,
+        snapshot_hash=decision.snapshot_hash,
+        applicability=decision.applicability,
+        evidence_state=decision.evidence_state,
+        qc_direction=decision.qc_direction,
+        reason_code=decision.reason_code,
+        fact_refs=tuple(dict.fromkeys(selected)),
+        evaluator_version=decision.evaluator_version,
+        confidence=decision.confidence,
+        criterion_results=decision.criterion_results,
+    )
+
 async def evaluate_rules_008_009_typed(
     *,
     rule_id: str,
@@ -1321,6 +1474,8 @@ async def evaluate_rules_008_009_typed(
         context_ready,
         event_times,
         course_times,
+        event_document_refs,
+        course_document_refs,
         evaluation_horizon,
     ) = _rule_009_semantic_context(snapshot=snapshot, materials=materials)
     if context_capacity_exceeded:
@@ -1422,7 +1577,12 @@ async def evaluate_rules_008_009_typed(
         )
     if not explicit_events:
         return Rule008009TypedExecution(
-            decision=base_decision,
+            decision=_rule_009_with_selected_event_document_refs(
+                decision=base_decision,
+                events=events,
+                event_document_refs=event_document_refs,
+                course_document_refs=course_document_refs,
+            ),
             customer_display_facts=tuple(base_display_facts),
             **usage,
         )
@@ -1457,6 +1617,12 @@ async def evaluate_rules_008_009_typed(
         event_times=event_times,
         course_times=course_times,
         evaluation_horizon=evaluation_horizon,
+    )
+    semantic_decision = _rule_009_with_selected_event_document_refs(
+        decision=semantic_decision,
+        events=events,
+        event_document_refs=event_document_refs,
+        course_document_refs=course_document_refs,
     )
     daily_facts = dict(base_display_facts[0][1]) if base_display_facts else {}
     daily_facts.update(change_facts)

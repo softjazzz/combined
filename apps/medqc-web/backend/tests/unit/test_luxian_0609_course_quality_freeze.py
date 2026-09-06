@@ -493,8 +493,10 @@ async def test_course_quality_freezes_lx009_semantic_stub_prompt_usage_and_canon
     assert len(client.prompts) == 1
     assert "复查结果无新发异常改变" in client.prompts[0]
     assert _evidence_coordinates(result) == {
+        ("exam_item_report", "exam-009", "2026-01-02 10:00:00", "exam_impression"),
         ("daily_course_record", "doc-2026-01-01 08:00:00", "2026-01-01 08:00:00", "record_content"),
         ("daily_course_record", "doc-2026-01-02 08:00:00", "2026-01-02 08:00:00", "record_content"),
+        ("inpat_nondrug_order", "critical-order-1", "", ""),
     }
 
 

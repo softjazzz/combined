@@ -503,12 +503,10 @@ def _assess_copy(
     copy_match_document_fingerprints = (
         tuple(
             tuple(
-                "sha256:"
-                + hashlib.sha256(
-                    f"{item[1]}\0{item[5]}".encode("utf-8")
-                ).hexdigest()
-                if item[5]
-                else ""
+                _copy_document_fingerprint(
+                    source_key=item[1],
+                    document_id=item[5],
+                )
                 for item in pair
             )
             for pair in evidence_pairs
@@ -586,10 +584,10 @@ def _assess_copy(
                 document_refs[identity] = f"D{len(document_refs) + 1:02d}"
             pair_refs.append(document_refs[identity])
             fingerprints.append(
-                "sha256:"
-                + hashlib.sha256(f"{item[1]}\0{item[5]}".encode("utf-8")).hexdigest()
-                if item[5]
-                else ""
+                _copy_document_fingerprint(
+                    source_key=item[1],
+                    document_id=item[5],
+                )
             )
         review_candidates.append(
             _CopyReviewCandidate(
@@ -907,6 +905,114 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
     return facts
 
 
+def _copy_document_fingerprint(*, source_key: str, document_id: Any) -> str:
+    """复用既有复制匹配指纹，仅用于同源同刻的内部消歧。"""
+
+    document_id = _clean(document_id)
+    if not document_id:
+        return ""
+    return "sha256:" + hashlib.sha256(
+        f"{source_key}\0{document_id}".encode("utf-8")
+    ).hexdigest()
+
+
+def _selected_copy_document_refs(
+    *,
+    outcome: _CopyRuleOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, ...]:
+    """把实际命中的复制文书对收敛为公共投影可消费的 material refs。
+
+    ``best_match_pairs`` 已经是本规则作出结论时的最多四组候选。相同来源、
+    相同权威时间的多份文书只在结果携带既有内部指纹时消歧；不能消歧时宁可
+    不投影，避免聚合器再按日期/指纹反查或猜测客户证据。
+    """
+
+    rows_by_coordinate: dict[tuple[str, str], list[tuple[str, Mapping[str, Any]]]] = {}
+    try:
+        for source_key in RULE_017_COPY_SOURCES:
+            for document_ref, row in materials.document_rows(
+                source_key,
+                snapshot=snapshot,
+            ):
+                record_time = _authoritative_course_time(
+                    authoritative_document_time_value(row)
+                )
+                if record_time is None:
+                    continue
+                coordinate = (
+                    source_key,
+                    record_time.strftime("%Y-%m-%d %H:%M:%S"),
+                )
+                rows_by_coordinate.setdefault(coordinate, []).append(
+                    (document_ref, row)
+                )
+    except Exception:
+        return ()
+
+    metadata = outcome.safe_metadata
+    raw_pairs = metadata.get("best_match_pairs")
+    pairs = raw_pairs if isinstance(raw_pairs, list) else []
+    if not pairs:
+        source_types = metadata.get("best_match_source_types")
+        record_times = metadata.get("best_match_record_times")
+        if (
+            isinstance(source_types, list)
+            and isinstance(record_times, list)
+            and len(source_types) == len(record_times) == 2
+        ):
+            pairs = [{"source_types": source_types, "record_times": record_times}]
+
+    refs: list[str] = []
+    fingerprints = outcome.copy_match_document_fingerprints
+    for pair_index, pair in enumerate(pairs[:_COPY_DISPLAY_PAIR_LIMIT]):
+        if not isinstance(pair, Mapping):
+            continue
+        source_types = pair.get("source_types")
+        record_times = pair.get("record_times")
+        if (
+            not isinstance(source_types, list)
+            or not isinstance(record_times, list)
+            or len(source_types) != 2
+            or len(record_times) != 2
+        ):
+            continue
+        pair_fingerprints = (
+            fingerprints[pair_index]
+            if pair_index < len(fingerprints)
+            else ()
+        )
+        for position, (source_key, record_time) in enumerate(
+            zip(source_types, record_times)
+        ):
+            candidates = rows_by_coordinate.get(
+                (str(source_key), str(record_time)),
+                [],
+            )
+            if len(candidates) == 1:
+                refs.append(candidates[0][0])
+                continue
+            fingerprint = (
+                pair_fingerprints[position]
+                if position < len(pair_fingerprints)
+                else ""
+            )
+            matched = [
+                document_ref
+                for document_ref, row in candidates
+                if fingerprint
+                and _copy_document_fingerprint(
+                    source_key=str(source_key),
+                    document_id=row.get("document_id"),
+                )
+                == fingerprint
+            ]
+            if len(matched) == 1:
+                refs.append(matched[0])
+    return tuple(dict.fromkeys(refs))
+
+
 def _rule_017_decision(
     *,
     outcome: _CopyRuleOutcome,
@@ -939,7 +1045,6 @@ def _rule_017_decision(
             evaluator_version="rule017-copy-similarity-v2",
             confidence=None,
         )
-    refs = tuple(item.snapshot_ref.removeprefix("sha256:") for item in observations)
     if any(item.query_state.value == "error" for item in observations):
         dimensions = (
             ApplicabilityState.ERROR,
@@ -1004,6 +1109,17 @@ def _rule_017_decision(
             "required_field_missing",
         )
     applicability, evidence_state, qc_direction, reason_code = dimensions
+    selected_refs = _selected_copy_document_refs(
+        outcome=outcome,
+        snapshot=snapshot,
+        materials=materials,
+    )
+    if not selected_refs and applicability is ApplicabilityState.NOT_APPLICABLE:
+        # 完整来源为空时没有真实文书坐标；这里仅保留来源 observation 作为
+        # “无第二份独立病程”的否定事实，不能由 Aggregator 再猜测文书。
+        selected_refs = tuple(
+            item.snapshot_ref.removeprefix("sha256:") for item in observations
+        )
     return RuleDecision(
         rule_id="LX0609-017",
         snapshot_hash=snapshot.snapshot_hash,
@@ -1011,7 +1127,7 @@ def _rule_017_decision(
         evidence_state=evidence_state,
         qc_direction=qc_direction,
         reason_code=reason_code,
-        fact_refs=refs,
+        fact_refs=selected_refs,
         evaluator_version="rule017-copy-similarity-v2",
         confidence=outcome.confidence,
     )
