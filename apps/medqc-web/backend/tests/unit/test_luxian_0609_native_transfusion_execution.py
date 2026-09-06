@@ -143,6 +143,34 @@ def _typed_decision_session(
     )
 
 
+def _typed_044_llm_session():
+    return _typed_decision_session(
+        selected_rule_ids=("LX0609-044",),
+        bloodtrans_content="输血记录正文，记录实际输注过程及观察情况。",
+        source_rows={
+            "blood_application": [
+                {
+                    "application_id": "typed-application-044",
+                    "request_datetime": "2026-01-01 09:00:00",
+                    "reason_for_blood": "",
+                    "hemoglobin": "",
+                    "record_content": "因血红蛋白65g/L申请输注悬浮红细胞2U。",
+                }
+            ]
+        },
+    )
+
+
+def _typed_046_llm_session():
+    return _typed_decision_session(
+        selected_rule_ids=("LX0609-046",),
+        bloodtrans_content=(
+            "输血目的：纠正贫血；开始时间17:53输入A型Rh(D)阳性2U，"
+            "18:27输注完毕。输血过程顺利，未见输血不良反应。"
+        ),
+    )
+
+
 def test_typed_transfusion_core_does_not_reverse_engineer_customer_result_dto():
     execution_source = inspect.getsource(
         transfusion.execute_luxian_0609_native_transfusion_rules
@@ -159,18 +187,22 @@ def test_typed_transfusion_core_does_not_reverse_engineer_customer_result_dto():
 
 
 @pytest.mark.parametrize(
-    ("status", "raw_reason", "canonical_reason"),
+    ("status", "raw_reason", "canonical_reason", "expected_final_state"),
     (
-        ("technical_error", "source_query_error", "source_query_error"),
-        ("technical_error", "snapshot_mismatch", "snapshot_mismatch"),
-        ("technical_error", "unexpected_internal_failure", "executor_exception"),
-        ("data_gap", "transfusion_source_unavailable", "source_unavailable"),
+        ("technical_error", "source_query_error", "source_query_error", "technical_error"),
+        ("technical_error", "snapshot_mismatch", "snapshot_mismatch", "technical_error"),
+        ("technical_error", "model_transport_error", "model_transport_error", "technical_error"),
+        ("technical_error", "model_invalid_output", "model_invalid_output", "technical_error"),
+        ("technical_error", "unexpected_internal_failure", "executor_exception", "technical_error"),
+        ("evaluation_unknown", "semantic_output_unknown", "semantic_output_unknown", "evaluation_unknown"),
+        ("data_gap", "transfusion_source_unavailable", "source_unavailable", "data_gap"),
     ),
 )
 def test_typed_transfusion_preserves_only_approved_canonical_reasons(
     status,
     raw_reason,
     canonical_reason,
+    expected_final_state,
 ):
     session = _typed_decision_session(selected_rule_ids=("LX0609-045",))
 
@@ -184,7 +216,214 @@ def test_typed_transfusion_preserves_only_approved_canonical_reasons(
         snapshot=session.snapshot,
     )
 
+    canonical = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-045",),
+        snapshot=session.snapshot,
+    )[0]
+
     assert decision.reason_code == canonical_reason
+    assert canonical.final_state.value == expected_final_state
+    assert canonical.reason_code == canonical_reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_output", "expected_final_state", "expected_reason", "expected_calls", "expected_tokens"),
+    (
+        (RuntimeError("transport failed"), "technical_error", "model_transport_error", 1, 0),
+        ("not-json", "technical_error", "model_invalid_output", 1, 110),
+        (
+            {
+                "reason_state": "present",
+                "evidence_quote": "因血红蛋白65g/L申请输注",
+                "application_ref": "wrong-application-ref",
+            },
+            "technical_error",
+            "model_invalid_output",
+            1,
+            110,
+        ),
+        (
+            {
+                "reason_state": "uncertain",
+                "evidence_quote": "",
+                "application_ref": "typed-application-044",
+            },
+            "evaluation_unknown",
+            "semantic_output_unknown",
+            1,
+            110,
+        ),
+        (None, "technical_error", "model_transport_error", 0, 0),
+    ),
+)
+async def test_typed_044_llm_failure_semantics_bind_and_reduce(
+    monkeypatch,
+    model_output,
+    expected_final_state,
+    expected_reason,
+    expected_calls,
+    expected_tokens,
+):
+    session = _typed_044_llm_session()
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    client = None if model_output is None else _Client([model_output])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-044",),
+    )
+    canonical = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-044",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == expected_calls
+    assert result.total_tokens == expected_tokens
+    assert canonical[0].final_state.value == expected_final_state
+    assert canonical[0].reason_code == expected_reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_output", "expected_final_state", "expected_reason", "expected_tokens"),
+    (
+        (RuntimeError("transport failed"), "technical_error", "model_transport_error", 0),
+        ("not-json", "technical_error", "model_invalid_output", 110),
+        (
+            {
+                "assertion": "explicit",
+                "component_text": "红悬",
+                "quote": "输入A型Rh(D)阳性2U",
+                "document_ref": "wrong-document-ref",
+            },
+            "technical_error",
+            "model_invalid_output",
+            110,
+        ),
+        (
+            {
+                "assertion": "unclear",
+                "component_text": "",
+                "quote": "输入A型Rh(D)阳性2U",
+                "document_ref": "typed-transfusion-document",
+            },
+            "evaluation_unknown",
+            "semantic_output_unknown",
+            110,
+        ),
+        (None, "technical_error", "model_transport_error", 0),
+    ),
+)
+async def test_typed_046_llm_failure_semantics_bind_and_reduce(
+    monkeypatch,
+    model_output,
+    expected_final_state,
+    expected_reason,
+    expected_tokens,
+):
+    session = _typed_046_llm_session()
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    client = None if model_output is None else _Client([model_output])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-046",),
+    )
+    canonical = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-046",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == (0 if model_output is None else 1)
+    assert result.total_tokens == expected_tokens
+    assert canonical[0].final_state.value == expected_final_state
+    assert canonical[0].reason_code == expected_reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_output", "expected_reason", "expected_tokens"),
+    (
+        (RuntimeError("transport failed"), "model_transport_error", 0),
+        ("not-json", "model_invalid_output", 110),
+    ),
+)
+async def test_typed_045_generic_bool_model_failures_bind_and_reduce(
+    monkeypatch,
+    model_output,
+    expected_reason,
+    expected_tokens,
+):
+    session = _typed_decision_session(
+        selected_rule_ids=("LX0609-045",),
+        bloodtrans_content="患者已完成输血治疗，过程资料记录较为简略。",
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    client = _Client([model_output])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-045",),
+        wrapper_rules=[_wrapper("LX0609-045")],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-045",),
+    )
+    canonical = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-045",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 1
+    assert result.total_tokens == expected_tokens
+    assert canonical[0].final_state.value == "technical_error"
+    assert canonical[0].reason_code == expected_reason
 
 
 @pytest.mark.asyncio
@@ -244,7 +483,8 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
     ).final_state.value == "compliant"
     assert reduce_luxian_0609_rule_decision(
         incomplete.decisions[0]
-    ).final_state.value == "data_gap"
+    ).final_state.value == "technical_error"
+    assert incomplete.decisions[0].reason_code == "model_transport_error"
     assert complete_session.snapshot.snapshot_hash != incomplete_session.snapshot.snapshot_hash
     assert complete.decisions[0].snapshot_hash == complete_session.snapshot.snapshot_hash
     assert incomplete.decisions[0].snapshot_hash == incomplete_session.snapshot.snapshot_hash
@@ -1710,14 +1950,19 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
     ("model_output", "expected_status", "expected_reason"),
     (
         (
+            RuntimeError("model transport unavailable"),
+            "technical_error",
+            "model_transport_error",
+        ),
+        (
             {
                 "assertion": "explicit",
                 "component_text": "A型Rh(D)阳性",
                 "quote": "A型Rh(D)阳性2u",
                 "document_ref": "blood-046-type-only",
             },
-            "data_gap",
-            "transfusion_llm_invalid_output",
+            "technical_error",
+            "model_invalid_output",
         ),
         (
             {
@@ -1726,8 +1971,8 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
                 "quote": "A型Rh(D)阳性2u",
                 "document_ref": "blood-046-type-only",
             },
-            "data_gap",
-            "transfusion_llm_invalid_output",
+            "uncertain",
+            "semantic_output_unknown",
         ),
         (
             {
@@ -1746,8 +1991,8 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
                 "quote": "并不存在的原文",
                 "document_ref": "blood-046-type-only",
             },
-            "data_gap",
-            "transfusion_llm_invalid_output",
+            "technical_error",
+            "model_invalid_output",
         ),
     ),
 )
@@ -1782,7 +2027,7 @@ async def test_046_llm_rejects_inferred_component_or_invalid_quote(
     assert result.results[0]["status"] == expected_status
     assert result.results[0]["metadata"]["reason_code"] == expected_reason
     assert result.llm_call_count == 1
-    assert result.total_tokens == 110
+    assert result.total_tokens == (0 if isinstance(model_output, Exception) else 110)
     if expected_status == "non_compliant":
         assert dict(result.customer_display_facts)["LX0609-046"]["missing_fields"] == ["component"]
 
@@ -2893,6 +3138,47 @@ async def test_044_uses_one_bounded_llm_call_for_legacy_application_reason(
 
 
 @pytest.mark.asyncio
+async def test_044_llm_uncertain_is_evaluation_unknown_not_model_error(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    application_text = "因血红蛋白65g/L申请输注悬浮红细胞2U。"
+    client = _Client(
+        [{
+            "reason_state": "uncertain",
+            "evidence_quote": "",
+            "application_ref": "BA-UNKNOWN",
+        }]
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
+            blood_application=[{
+                "application_id": "BA-UNKNOWN",
+                "request_datetime": "2026-08-20 09:00:00",
+                "reason_for_blood": "",
+                "hemoglobin": "",
+                "record_content": application_text,
+            }],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "uncertain"
+    assert result.results[0]["metadata"]["reason_code"] == "semantic_output_unknown"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
+    assert application_text in client.prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client(
@@ -2926,9 +3212,9 @@ async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch
         llm_client=client,
     )
 
-    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["status"] == "technical_error"
     assert result.results[0]["metadata"]["reason_code"] == (
-        "transfusion_llm_invalid_output"
+        "model_invalid_output"
     )
     assert result.llm_call_count == 1
 

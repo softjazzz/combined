@@ -249,6 +249,8 @@ _CONTROLLED_MESSAGES = {
     "non_compliant": ("输血相关记录未满足该项要求。", "请按该质控点补充或修正输血相关记录。"),
     "not_applicable": ("当前就诊未发现已实施输血事实，本规则不适用。", ""),
     "data_gap": ("当前输血相关资料不足，暂不能形成可靠结论。", "请补齐输血相关资料后重新质控。"),
+    "evaluation_unknown": ("当前输血相关资料无法形成可靠判断。", "请由临床人员结合原始记录进一步核对。"),
+    "technical_error": ("本次规则执行出现技术异常，暂未形成质控结论。", "请稍后重试；如持续发生，请联系技术支持。"),
 }
 _SYSTEM_DATA_GAP_MESSAGES = {
     "consent_source_unavailable": (
@@ -398,7 +400,13 @@ def _typed_decision_from_outcome(
     elif status == "technical_error":
         technical_reason = (
             outcome.reason_code
-            if outcome.reason_code in {"source_query_error", "snapshot_mismatch"}
+            if outcome.reason_code
+            in {
+                "source_query_error",
+                "snapshot_mismatch",
+                "model_transport_error",
+                "model_invalid_output",
+            }
             else "executor_exception"
         )
         dimensions = (
@@ -2466,8 +2474,8 @@ async def execute_luxian_0609_native_transfusion_rules(
                 if llm_client is None:
                     emit_outcome(
                         rule_id,
-                        "data_gap",
-                        "transfusion_llm_unavailable",
+                        "technical_error",
+                        "model_transport_error",
                         executor_type="program",
                     )
                     continue
@@ -2479,8 +2487,8 @@ async def execute_luxian_0609_native_transfusion_rules(
                 except Exception:
                     emit_outcome(
                         rule_id,
-                        "data_gap",
-                        "transfusion_llm_failure",
+                        "technical_error",
+                        "model_transport_error",
                         executor_type="llm",
                     )
                     continue
@@ -2498,11 +2506,19 @@ async def execute_luxian_0609_native_transfusion_rules(
                     if reason_payload is not None
                     else None
                 )
-                if reason_state in {None, "uncertain"}:
+                if reason_state is None:
                     emit_outcome(
                         rule_id,
-                        "data_gap",
-                        "transfusion_llm_invalid_output",
+                        "technical_error",
+                        "model_invalid_output",
+                        executor_type="llm",
+                    )
+                    continue
+                if reason_state == "uncertain":
+                    emit_outcome(
+                        rule_id,
+                        "evaluation_unknown",
+                        "semantic_output_unknown",
                         executor_type="llm",
                     )
                     continue
@@ -2581,8 +2597,8 @@ async def execute_luxian_0609_native_transfusion_rules(
                 if llm_client is None:
                     emit_outcome(
                         rule_id,
-                        "data_gap",
-                        "transfusion_llm_unavailable",
+                        "technical_error",
+                        "model_transport_error",
                         executor_type="program",
                     )
                     continue
@@ -2597,8 +2613,8 @@ async def execute_luxian_0609_native_transfusion_rules(
                 except Exception:
                     emit_outcome(
                         rule_id,
-                        "data_gap",
-                        "transfusion_llm_failure",
+                        "technical_error",
+                        "model_transport_error",
                         executor_type="llm",
                     )
                     continue
@@ -2617,11 +2633,19 @@ async def execute_luxian_0609_native_transfusion_rules(
                     if component_payload is not None
                     else None
                 )
-                if assertion in {"unclear", None}:
+                if assertion is None:
                     emit_outcome(
                         rule_id,
-                        "data_gap",
-                        "transfusion_llm_invalid_output",
+                        "technical_error",
+                        "model_invalid_output",
+                        executor_type="llm",
+                    )
+                    continue
+                if assertion == "unclear":
+                    emit_outcome(
+                        rule_id,
+                        "evaluation_unknown",
+                        "semantic_output_unknown",
                         executor_type="llm",
                     )
                     continue
@@ -2688,8 +2712,8 @@ async def execute_luxian_0609_native_transfusion_rules(
         if llm_client is None:
             emit_outcome(
                 rule_id,
-                "data_gap",
-                "transfusion_llm_unavailable",
+                "technical_error",
+                "model_transport_error",
                 executor_type="program",
             )
             continue
@@ -2699,8 +2723,8 @@ async def execute_luxian_0609_native_transfusion_rules(
         except Exception:
             emit_outcome(
                 rule_id,
-                "data_gap",
-                "transfusion_llm_failure",
+                "technical_error",
+                "model_transport_error",
                 executor_type="llm",
             )
             continue
@@ -2713,8 +2737,8 @@ async def execute_luxian_0609_native_transfusion_rules(
         if is_compliant is None:
             emit_outcome(
                 rule_id,
-                "data_gap",
-                "transfusion_llm_invalid_output",
+                "technical_error",
+                "model_invalid_output",
                 executor_type="llm",
             )
             continue
