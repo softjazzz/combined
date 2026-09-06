@@ -472,7 +472,12 @@ def project_customer_safe_result_item(
     """把任意内部结果投影为唯一、可审计且不含病历原文/身份的客户 DTO。"""
 
     raw = dict(item or {})
-    status = _canonical_customer_status(raw)
+    rule_id = _safe_text(
+        raw.get("customer_rule_id")
+        or raw.get("qc_point_id")
+        or raw.get("rule_id")
+        or raw.get("rule_code")
+    ).upper()
     record_material = "|".join(
         _safe_text(raw.get(key))
         for key in ("institute_id", "patient_id", "visit_id", "record_id", "mr_no")
@@ -483,22 +488,42 @@ def project_customer_safe_result_item(
         if re.fullmatch(r"rec_[0-9a-f]{24}", existing_record_ref)
         else _keyed_ref("rec", record_material, hmac_key=hmac_key)
     )
-    is_safe_dto = _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
-    rule_id = _safe_text(
-        raw.get("customer_rule_id")
-        or raw.get("qc_point_id")
-        or raw.get("rule_id")
-        or raw.get("rule_code")
-    ).upper()
+    is_luxian = rule_id.startswith("LX0609-")
+    is_current_luxian_canonical = (
+        is_luxian
+        and _safe_text(raw.get("schema_version")) == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
+        and bool(_safe_text(raw.get("status")))
+        and bool(_safe_text(raw.get("result_status")))
+    )
+    if is_current_luxian_canonical:
+        status = _safe_text(raw.get("status")).lower()
+        result_status = _safe_text(raw.get("result_status")).lower()
+        display_status = _safe_text(raw.get("display_status")).lower()
+        expected_is_compliant = (
+            True if status == "compliant" else False if status == "non_compliant" else None
+        )
+        if (
+            status not in _GENERIC_CUSTOMER_TEXT
+            or result_status != status
+            or (display_status and display_status != status)
+            or raw.get("is_compliant") is not expected_is_compliant
+        ):
+            raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR)
+    else:
+        status = _canonical_customer_status(raw)
+
     customer_display_facts, criterion_results = _validated_customer_explanation(
         raw,
         rule_id=rule_id,
         status=status,
     )
     generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
-    # 原始执行结果中的 customer_* 字段仍可能混入病历句子。只有已经通过本投影器
-    # 生成的 DTO 才允许复用客户文案；首次投影一律按状态生成固定安全表述。
-    reuse_saved_customer_text = is_safe_dto
+    # 当前 Canonical 文案由执行器/Renderer 已生成。读取层只做敏感裁剪，
+    # 不得按规则、事实或 status 再次生成结论。
+    reuse_saved_customer_text = (
+        is_current_luxian_canonical
+        or _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
+    )
     conclusion = _explicit_customer_text(
         raw,
         (
@@ -511,22 +536,25 @@ def project_customer_safe_result_item(
         else (),
         generic_conclusion,
     )
-    if status == "compliant" and rule_id.startswith("LX0609-"):
-        # Canonical Envelope 在此唯一生成。合规说明只取规则身份和已经过
-        # 白名单校验的子结论，不能复用任意上游自由文本。
-        conclusion = compliant_customer_finding(
-            rule_id=rule_id,
-            criterion_results=criterion_results,
-        )
-    elif rule_id.startswith("LX0609-"):
-        # 首次投影不能信任 v2 schema 中的任意自由文本；规则专属说明只能由
-        # 已通过白名单校验的受控事实重新生成。
-        controlled_finding = customer_finding_from_controlled_facts(
-            rule_id=rule_id,
-            facts=customer_display_facts,
-        )
-        if controlled_finding:
-            conclusion = controlled_finding
+    if (
+        is_luxian
+        and not is_current_luxian_canonical
+        and _safe_text(raw.get("schema_version")) != _CUSTOMER_RESULT_SCHEMA
+    ):
+        # 兼容测试/复核中的旧内部投影形状；正式 LX0609 批详情在进入此函数前
+        # 已隔离为 technical_error，不能沿用这条旧的结论重建分支。
+        if status == "compliant":
+            conclusion = compliant_customer_finding(
+                rule_id=rule_id,
+                criterion_results=criterion_results,
+            )
+        else:
+            controlled_finding = customer_finding_from_controlled_facts(
+                rule_id=rule_id,
+                facts=customer_display_facts,
+            )
+            if controlled_finding:
+                conclusion = controlled_finding
     suggestion = _explicit_customer_text(
         raw,
         (
@@ -552,9 +580,13 @@ def project_customer_safe_result_item(
         "qc_point_id": rule_id,
         "rule_name": rule_name,
         "status": status,
-        "result_status": status,
-        "display_status": status,
-        "is_compliant": True if status == "compliant" else False if status == "non_compliant" else None,
+        "result_status": result_status if is_current_luxian_canonical else status,
+        "display_status": (
+            display_status or status if is_current_luxian_canonical else status
+        ),
+        "is_compliant": raw.get("is_compliant") if is_current_luxian_canonical else (
+            True if status == "compliant" else False if status == "non_compliant" else None
+        ),
         "is_confirmed_issue": status == "non_compliant",
         "reason_code": _canonical_reason_code(raw),
         "rule_version": _safe_text(raw.get("rule_version")),
@@ -632,29 +664,16 @@ def iter_unique_customer_result_source_items(
             continue
         if not _is_current_rule_contract_result(item):
             continue
-        source_item = item
-        try:
-            projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
-        except ValueError as exc:
-            # 旧批任务偶有一条“确定问题”只保存了状态而未保存可审计解释；
-            # 该条不能把整批详情读成 409/500，也不能重判为 data_gap。
-            # 仅无当前 rule_version 的历史裸 payload 隔离为既有 technical_error，
-            # 当前 Canonical 结果仍按其原始合同 fail-closed。
-            is_bare_legacy_luxian_item = (
-                validate_luxian
-                and str(exc) == LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
-                and _safe_text(item.get("rule_id") or item.get("rule_code")).startswith("LX0609-")
-                and _safe_text(item.get("status") or item.get("result_status")).lower() == "non_compliant"
-                and not item.get("customer_display_facts")
-                and not item.get("criterion_results")
-                and not _safe_text(item.get("rule_version"))
-                and (
-                    isinstance(item.get("diagnostic_trace"), dict)
-                    or isinstance(item.get("metadata"), dict)
-                )
-            )
-            if not is_bare_legacy_luxian_item:
-                raise
+        is_current_luxian_canonical = (
+            _safe_text(item.get("rule_id") or item.get("rule_code")).startswith("LX0609-")
+            and _safe_text(item.get("schema_version")) == LUXIAN_0609_CUSTOMER_SCHEMA_VERSION
+            and bool(_safe_text(item.get("status")))
+            and bool(_safe_text(item.get("result_status")))
+        )
+        if validate_luxian and not is_current_luxian_canonical:
+            # 旧批任务项没有 Canonical 交付合同。读取 API 明确隔离为既有
+            # technical_error，绝不在此重算状态或客户结论，也不让单条旧项
+            # 中断整个任务详情。
             source_item = {
                 **item,
                 "status": "technical_error",
@@ -662,7 +681,9 @@ def iter_unique_customer_result_source_items(
                 "is_compliant": None,
                 "reason_code": "canonical_result_envelope_invalid",
             }
-            projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
+        else:
+            source_item = item
+        projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
         identity = (
             _safe_text(projected.get("record_ref")),
             _safe_text(projected.get("rule_id")),
