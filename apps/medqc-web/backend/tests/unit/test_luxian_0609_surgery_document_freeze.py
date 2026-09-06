@@ -1,0 +1,526 @@
+"""Freeze the current surgery-document family through the real native chain.
+
+These tests intentionally record the current public behaviour before the family is
+moved out of ``luxian_0609_result_aggregator``.  They are not a specification for
+fixing known reason-code semantics; see the matching acceptance note.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Mapping, Sequence
+
+import pytest
+
+from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.native_surgery_document_execution import (
+    SURGERY_DOCUMENT_RULE_IDS,
+    execute_luxian_0609_native_surgery_document_rules,
+)
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
+    safe_luxian_0609_customer_display_facts,
+)
+from app.services.luxian_0609.source_evidence_reader import SourceEvidenceQueryError
+
+
+_RULE_NAMES = {
+    "LX0609-029": "术前小结",
+    "LX0609-034": "麻醉知情同意书存在",
+    "LX0609-035": "麻醉知情同意书填写完整",
+    "LX0609-036": "麻醉术前及术后访视存在",
+    "LX0609-037": "麻醉访视填写完整",
+    "LX0609-038": "麻醉记录单存在",
+    "LX0609-039": "术前讨论及术者参加",
+}
+
+
+class _NoLlmClient:
+    async def generate(self, **_kwargs: Any) -> str:
+        raise AssertionError("surgery_document typed 主链不得调用 LLM")
+
+
+def _wrapper(rule_id: str) -> dict[str, Any]:
+    return {
+        "rule_id": rule_id,
+        "rule_code": rule_id,
+        "name": _RULE_NAMES[rule_id],
+        "description": _RULE_NAMES[rule_id],
+        "severity": "major",
+        "category": "surgery_anesthesia",
+        "applicable": True,
+    }
+
+
+def _rows(*items: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    return tuple(items)
+
+
+def _surgery(
+    document_id: str = "surgery-1",
+    *,
+    begin: datetime = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc),
+    surgeon: str = "王医生",
+    anesthesia_method: str = "全身麻醉",
+) -> Mapping[str, Any]:
+    return {
+        "document_id": document_id,
+        "surgery_name": "腹腔镜阑尾切除术",
+        "surgery_begin_time": begin,
+        "surgery_end_time": begin.replace(hour=9),
+        "surgeon_name": surgeon,
+        "surgeon": surgeon,
+        "anesthesia_method": anesthesia_method,
+        "surgical_level": "三级",
+    }
+
+
+def _anesthesia_record(document_id: str = "anesthesia-1") -> Mapping[str, Any]:
+    return {
+        "document_id": document_id,
+        "anesthesia_method": "全身麻醉",
+        "record_content": "麻醉诱导、维持及复苏记录完整",
+    }
+
+
+def _consent(*, complete: bool) -> Mapping[str, Any]:
+    row: dict[str, Any] = {
+        "document_id": "consent-1",
+        "document_title": "麻醉知情同意书",
+        "record_content": "已说明麻醉方式、风险和替代方案",
+        "physician_sign": "麻醉医生",
+        "physician_sign_datetime": datetime(2026, 9, 1, 7, 0, tzinfo=timezone.utc),
+    }
+    if complete:
+        row.update(
+            {
+                "patient_sign": "患者",
+                "patient_sign_datetime": datetime(2026, 9, 1, 7, 10, tzinfo=timezone.utc),
+            }
+        )
+    return row
+
+
+def _visit(document_id: str, *, post: bool) -> Mapping[str, Any]:
+    return {
+        "document_id": document_id,
+        "document_title": "麻醉术后访视记录" if post else "麻醉术前访视记录",
+        "record_content": (
+            "神志清楚，呼吸循环稳定，无恶心呕吐及麻醉并发症"
+            if post
+            else "ASA II级，气道评估正常，禁食已确认，无麻醉史，已评估麻醉风险"
+        ),
+        "anesthetist_sign": "麻醉医生",
+        "record_time": datetime(2026, 9, 1, 10 if post else 7, 0, tzinfo=timezone.utc),
+    }
+
+
+def _discussion(*, participants: str) -> Mapping[str, Any]:
+    return {
+        "document_id": "discussion-1",
+        "document_title": "术前讨论记录",
+        "discussion_time": datetime(2026, 9, 1, 7, 0, tzinfo=timezone.utc),
+        "discuss_staff": participants,
+        "record_content": "讨论手术指征、方案、风险及应对措施",
+    }
+
+
+def _session(
+    rule_id: str,
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    error_sources: frozenset[str] = frozenset(),
+):
+    def _reader(*, source_key: str, **_kwargs: Any) -> SnapshotSourceRows:
+        if source_key in error_sources:
+            raise SourceEvidenceQueryError()
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=tuple(rows_by_source.get(source_key, ())),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=(rule_id,),
+        institute_id="freeze-institute",
+        patient_id="freeze-patient",
+        visit_id="freeze-visit",
+        source_schema=None,
+        created_at="2026-09-07T08:00:00+08:00",
+        row_reader=_reader,
+        additional_source_keys=tuple(rows_by_source),
+    )
+
+
+async def _run_chain(
+    rule_id: str,
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    error_sources: frozenset[str] = frozenset(),
+) -> tuple[Any, Any, Any, Any]:
+    session = _session(rule_id, rows_by_source, error_sources=error_sources)
+    execution = await execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=(rule_id,),
+        wrapper_rules=(_wrapper(rule_id),),
+        evidence_payload=None,
+        llm_client=_NoLlmClient(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=(rule_id,),
+    )
+    assert execution.results == ()
+    assert len(execution.decisions) == 1
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=(rule_id,),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    assert len(reduced) == 1
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=(_wrapper(rule_id),),
+        execution_results=(),
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )
+    assert len(aggregated) == 1
+    return session, execution, reduced[0], aggregated[0]
+
+
+def _evidence_coordinates(result: Mapping[str, Any]) -> set[tuple[str, str]]:
+    return {
+        (str(item.get("source_type")), str(item.get("source_document_id")))
+        for item in result.get("customer_evidence") or ()
+    }
+
+
+def _fact_ref_sources(snapshot: Any, fact_refs: Sequence[str]) -> tuple[str, ...]:
+    source_by_ref = {
+        str(observation.snapshot_ref).removeprefix("sha256:"): observation.source_key
+        for observation in snapshot.observations
+    }
+    return tuple(source_by_ref.get(str(ref), "document_ref") for ref in fact_refs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rule_id", "rows_by_source", "status", "reason_code", "display_facts", "evidence"),
+    (
+        (
+            "LX0609-029",
+            {
+                "surgery_record": _rows(_surgery()),
+                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "presurg_summary": _rows(
+                    {
+                        "document_id": "summary-1",
+                        "document_title": "术前小结",
+                        "record_content": "拟行腹腔镜阑尾切除术",
+                    }
+                ),
+            },
+            "compliant",
+            "requirement_satisfied",
+            {
+                "verification_kind": "surgery_document_present",
+                "target_document": "presurg_summary",
+                "performed_surgery_confirmed": True,
+            },
+            {
+                ("mr_surgery", "mr-surgery-1"),
+                ("presurg_summary", "summary-1"),
+                ("surgery_record", "surgery-1"),
+            },
+        ),
+        (
+            "LX0609-034",
+            {
+                "anesthesia_record": _rows(_anesthesia_record()),
+                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+            },
+            "non_compliant",
+            "required_document_missing",
+            {
+                "failure_kind": "anesthesia_consent_missing",
+                "performed_anesthesia_confirmed": True,
+                "consent_state": "missing",
+                "checked_sources": ["consent_form"],
+            },
+            {
+                ("anesthesia_record", "anesthesia-1"),
+                ("anesthesia_record", "mr-surgery-1"),
+            },
+        ),
+        (
+            "LX0609-035",
+            {
+                "anesthesia_record": _rows(_anesthesia_record()),
+                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "consent_form": _rows(_consent(complete=False)),
+            },
+            "non_compliant",
+            "required_document_missing",
+            {
+                "failure_kind": "anesthesia_consent_incomplete",
+                "performed_anesthesia_confirmed": True,
+                "missing_fields": ["patient_signature", "patient_signature_time"],
+            },
+            {
+                ("anesthesia_record", "anesthesia-1"),
+                ("consent_form", "consent-1"),
+                ("mr_surgery", "mr-surgery-1"),
+            },
+        ),
+        (
+            "LX0609-036",
+            {
+                "anesthesia_record": _rows(_anesthesia_record()),
+                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "preane_surveil_record": _rows(_visit("pre-visit-1", post=False)),
+            },
+            "non_compliant",
+            "required_document_missing",
+            {
+                "failure_kind": "anesthesia_visit_missing",
+                "performed_anesthesia_confirmed": True,
+                "missing_visit_sources": ["postane_surveil_record"],
+            },
+            {
+                ("anesthesia_record", "anesthesia-1"),
+                ("anesthesia_record", "mr-surgery-1"),
+                ("preane_surveil_record", "pre-visit-1"),
+            },
+        ),
+        (
+            "LX0609-037",
+            {
+                "anesthesia_record": _rows(_anesthesia_record()),
+                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+                "preane_surveil_record": _rows(_visit("pre-visit-1", post=False)),
+                "postane_surveil_record": _rows(_visit("post-visit-1", post=True)),
+            },
+            "compliant",
+            "requirement_satisfied",
+            {
+                "verification_kind": "anesthesia_visits_complete",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["preane_surveil_record", "postane_surveil_record"],
+                "checked_fields_by_visit": {
+                    "preanesthesia_visit": [
+                        "asa_level",
+                        "airway_assessment",
+                        "fasting_status",
+                        "anesthesia_history",
+                        "risk_discussion",
+                        "anesthetist_signature",
+                        "record_time",
+                    ],
+                    "postanesthesia_visit": [
+                        "consciousness_status",
+                        "respiratory_status",
+                        "circulatory_status",
+                        "complication_assessment",
+                        "anesthetist_signature",
+                        "record_time",
+                    ],
+                },
+            },
+            {
+                ("anesthesia_record", "anesthesia-1"),
+                ("mr_surgery", "mr-surgery-1"),
+                ("postane_surveil_record", "post-visit-1"),
+                ("preane_surveil_record", "pre-visit-1"),
+            },
+        ),
+        (
+            "LX0609-038",
+            {
+                "anesthesia_record": _rows(_anesthesia_record()),
+                "mr_surgery": _rows(_surgery("mr-surgery-1")),
+            },
+            "compliant",
+            "requirement_satisfied",
+            {
+                "verification_kind": "anesthesia_record_present",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["anesthesia_record"],
+            },
+            {("anesthesia_record", "anesthesia-1")},
+        ),
+        (
+            "LX0609-039",
+            {
+                "surgery_record": _rows(
+                    {
+                        **_surgery("surgery-1"),
+                        "surgery_begin_time": "2026-09-01 08:00:00+08",
+                        "record_content": "本次手术不属于紧急抢救手术。",
+                    },
+                    {
+                        **_surgery(
+                            "surgery-2",
+                            begin=datetime(2026, 9, 2, 8, 0, tzinfo=timezone.utc),
+                        ),
+                        "surgery_begin_time": "2026-09-02 08:00:00+08",
+                        "record_content": "本次手术不属于紧急抢救手术。",
+                    },
+                ),
+            },
+            "non_compliant",
+            "required_document_missing",
+            {
+                "failure_kind": "preop_discussion_missing",
+                "performed_surgery_confirmed": True,
+                "emergency_rescue_exception_absent": True,
+                "checked_sources": ["presurg_discussion"],
+            },
+            set(),
+        ),
+    ),
+)
+async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
+    rule_id: str,
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    status: str,
+    reason_code: str,
+    display_facts: Mapping[str, Any],
+    evidence: set[tuple[str, str]],
+) -> None:
+    session, execution, reduced, result = await _run_chain(rule_id, rows_by_source)
+
+    decision = execution.decisions[0]
+    assert decision.reason_code == reason_code
+    assert rule_id in dict(execution.customer_display_facts)
+    assert reduced.final_state.value == status
+    assert reduced.reason_code == reason_code
+    assert reduced.fact_refs == decision.fact_refs
+    assert result["status"] == status
+    assert result["reason_code"] == reason_code
+    assert result["customer_display_facts"] == display_facts
+    assert _evidence_coordinates(result) == evidence
+    expected_ref_sources = {
+        "LX0609-029": {"presurg_summary", "surgery_record", "mr_surgery"},
+        "LX0609-034": {"anesthesia_record", "mr_surgery", "consent_form"},
+        "LX0609-035": {"anesthesia_record", "mr_surgery", "consent_form"},
+        "LX0609-036": {
+            "anesthesia_record",
+            "mr_surgery",
+            "preane_surveil_record",
+            "postane_surveil_record",
+        },
+        "LX0609-037": {
+            "anesthesia_record",
+            "mr_surgery",
+            "consent_form",
+            "preane_surveil_record",
+            "postane_surveil_record",
+        },
+        "LX0609-038": {"anesthesia_record", "mr_surgery", "consent_form"},
+        "LX0609-039": {"surgery_record", "mr_surgery", "presurg_discussion"},
+    }[rule_id]
+    expected_fact_refs = tuple(
+        sorted(
+            str(observation.snapshot_ref).removeprefix("sha256:")
+            for observation in session.snapshot.observations
+            if observation.source_key in expected_ref_sources
+        )
+    )
+    assert decision.fact_refs == expected_fact_refs
+    assert set(_fact_ref_sources(session.snapshot, decision.fact_refs)) == expected_ref_sources
+
+    assert execution.llm_call_count == 0
+    assert execution.prompt_tokens == 0
+    assert execution.completion_tokens == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_surgery_document_family_freezes_not_applicable_data_gap_and_technical_error() -> None:
+    cases = (
+        (
+            "LX0609-029",
+            {},
+            frozenset(),
+            "not_applicable",
+            "performed_event_absent",
+        ),
+        (
+            "LX0609-029",
+            {
+                "surgery_record": _rows(
+                    _surgery("surgery-1"),
+                    _surgery(
+                        "surgery-2",
+                        begin=datetime(2026, 9, 2, 8, 0, tzinfo=timezone.utc),
+                    ),
+                ),
+                "presurg_summary": _rows(
+                    {
+                        "document_id": "summary-1",
+                        "document_title": "术前小结",
+                        "record_content": "拟行腹腔镜阑尾切除术",
+                    }
+                ),
+            },
+            frozenset(),
+            "data_gap",
+            "association_failed",
+        ),
+        (
+            "LX0609-034",
+            {},
+            frozenset({"anesthesia_record"}),
+            "technical_error",
+            "source_query_error",
+        ),
+    )
+
+    for rule_id, rows_by_source, error_sources, status, reason_code in cases:
+        _session_value, execution, reduced, result = await _run_chain(
+            rule_id,
+            rows_by_source,
+            error_sources=error_sources,
+        )
+        decision = execution.decisions[0]
+        assert decision.reason_code == reason_code
+        assert (reduced.final_state.value, reduced.reason_code) == (status, reason_code)
+        assert (result["status"], result["reason_code"]) == (status, reason_code)
+        assert result.get("customer_display_facts") == dict(execution.customer_display_facts).get(rule_id)
+        assert execution.llm_call_count == 0
+        assert execution.total_tokens == 0
+
+
+def test_surgery_document_family_rule_set_and_aggregator_ownership_baseline() -> None:
+    assert SURGERY_DOCUMENT_RULE_IDS == (
+            "LX0609-029",
+            "LX0609-034",
+            "LX0609-035",
+            "LX0609-036",
+            "LX0609-037",
+            "LX0609-038",
+            "LX0609-039",
+    )
+
+    # 迁移提交前只冻结“当前仍由聚合器生产”，不预置迁移后归零断言。
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-038",
+        raw={
+            "failure_kind": "anesthesia_record_missing",
+            "performed_anesthesia_confirmed": True,
+            "checked_sources": ["anesthesia_record"],
+        },
+    ) == {
+        "failure_kind": "anesthesia_record_missing",
+        "performed_anesthesia_confirmed": True,
+        "checked_sources": ["anesthesia_record"],
+    }
