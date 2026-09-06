@@ -4677,7 +4677,7 @@ def test_discharge_medication_labels_form_a_structured_contract() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "rule_id",
-    ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-057", "LX0609-058"],
+    ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-058"],
 )
 async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> None:
     result, reduced = await _evaluate(
@@ -4847,7 +4847,7 @@ async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> No
 
 
 @pytest.mark.asyncio
-async def test_057_structured_culture_then_start_fact_triggers_empiric_review() -> None:
+async def test_057_culture_then_start_and_susceptibility_adjustment_is_not_empiric_use() -> None:
     result, reduced = await _evaluate(
         "LX0609-057",
         {
@@ -4859,13 +4859,13 @@ async def test_057_structured_culture_then_start_fact_triggers_empiric_review() 
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-057"]
-    assert facts["empiric_use_confirmed"] is True
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert "LX0609-057" not in dict(result.customer_display_facts)
 
 
 @pytest.mark.asyncio
-async def test_057_single_order_accepts_explicit_generic_empiric_sequence() -> None:
+async def test_057_generic_culture_then_start_sequence_is_not_empiric_use() -> None:
     _, reduced = await _evaluate(
         "LX0609-057",
         {
@@ -4876,11 +4876,12 @@ async def test_057_single_order_accepts_explicit_generic_empiric_sequence() -> N
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
 
 
 @pytest.mark.asyncio
-async def test_057_unknown_antimicrobial_treatment_intent_is_data_gap() -> None:
+async def test_057_antimicrobial_order_without_explicit_empiric_use_is_not_applicable() -> None:
     _, reduced = await _evaluate(
         "LX0609-057",
         {
@@ -4890,8 +4891,77 @@ async def test_057_unknown_antimicrobial_treatment_intent_is_data_gap() -> None:
         },
     )
 
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+
+
+@pytest.mark.asyncio
+async def test_057_explicit_empiric_use_with_reason_is_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-057",
+        {
+            "inpat_drug_order": ({"order_id": "A-1", "generic_name": "美罗培南"},),
+            "daily_course_record": ({
+                "order_id": "A-1",
+                "record_content": "考虑重症感染，经验性抗感染治疗，启用美罗培南覆盖耐药菌。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+    assert dict(result.customer_display_facts)["LX0609-057"]["empiric_use_confirmed"] is True
+
+
+@pytest.mark.asyncio
+async def test_057_explicit_empiric_use_without_unique_drug_event_is_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-057",
+        {
+            "inpat_drug_order": (
+                {"order_id": "A-1", "generic_name": "美罗培南"},
+                {"order_id": "A-2", "generic_name": "万古霉素"},
+            ),
+            "daily_course_record": ({
+                "record_content": "经验性抗感染治疗，覆盖耐药菌。",
+            },),
+        },
+    )
+
     assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "applicability_source_gap"
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_057_absent_empiric_trigger_survives_binding_aggregator_and_renderer() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-057",),
+        {
+            "inpat_drug_order": ({"generic_name": "美罗培南"},),
+            "daily_course_record": ({
+                "record_content": "留取血培养后启用美罗培南，待药敏结果调整方案。",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-057",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert (canonical["status"], canonical["reason_code"]) == (
+        "not_applicable", "trigger_absent_complete"
+    )
+    assert "customer_display_facts" not in canonical
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+    rendered = render_luxian_0609_customer_result(decision=reduced[0])
+    assert (rendered["status"], rendered["reason_code"]) == (
+        "not_applicable", "trigger_absent_complete"
+    )
 
 
 @pytest.mark.asyncio

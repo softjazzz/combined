@@ -151,6 +151,20 @@ _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
     "恶化", "调整方案", "更换抗菌药", "升级抗菌药", "降阶梯", "停用",
 )
 _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
+_EMPIRIC_ANTIMICROBIAL_TRIGGER_PATTERN = re.compile(
+    r"(?:经验性用药|经验用药|经验性抗感染(?:治疗)?|经验性抗菌治疗|经验性)"
+)
+_EMPIRIC_ANTIMICROBIAL_NEGATED_PATTERN = re.compile(
+    r"(?:非|不是|并非|停止|终止).{0,8}(?:经验性用药|经验用药|经验性抗感染(?:治疗)?|经验性抗菌治疗)"
+)
+_TARGETED_ANTIMICROBIAL_MARKERS = (
+    "根据药敏", "依据药敏", "药敏结果调整", "培养结果后调整",
+    "培养结果调整", "目标治疗",
+)
+_EMPIRIC_REASON_MARKERS = (
+    "重症感染", "覆盖耐药菌", "感染证据", "感染可能", "疑似感染",
+    "考虑感染", "因感染", "感染指标升高", "无样可采",
+)
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
 )
@@ -662,6 +676,98 @@ def _documented_antimicrobial_names(
             for row in rows
         )
     )
+
+
+def _is_explicit_empiric_antimicrobial_use(row: Mapping[str, Any]) -> bool:
+    """只以明确的经验用药表述触发057，排除药敏/培养后的目标治疗。"""
+
+    text = _material_text(row)
+    if not _EMPIRIC_ANTIMICROBIAL_TRIGGER_PATTERN.search(text):
+        return False
+    if _EMPIRIC_ANTIMICROBIAL_NEGATED_PATTERN.search(text):
+        return False
+    if any(marker in text for marker in _TARGETED_ANTIMICROBIAL_MARKERS):
+        return False
+    # 单独的“经验性”必须同时有实际抗菌用药动作，不能把泛泛的病情描述
+    # 误作经验用药事件；其余完整术语本身已足以表示触发事实。
+    if "经验性" in text and not any(
+        marker in text
+        for marker in (
+            "经验性用药", "经验性抗感染", "经验性抗菌治疗",
+        )
+    ):
+        return (
+            any(action in text for action in ("启用", "使用", "给予", "用药", "治疗"))
+            and (
+                any(name in text for name in _ANTIMICROBIALS)
+                or any(marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS)
+            )
+        )
+    return True
+
+
+def _empiric_antimicrobial_event_contexts(
+    *,
+    antimicrobial_orders: Sequence[Mapping[str, Any]],
+    candidate_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...], bool]:
+    """返回可唯一关联的经验用药事件；无法归属具体医嘱时由调用方交付资料缺口。"""
+
+    contexts: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    association_ambiguous = False
+    for row in candidate_rows:
+        if not _is_explicit_empiric_antimicrobial_use(row):
+            continue
+        linked_order_id = _linked_order_id(row)
+        mentioned_names = _antimicrobial_names_in(row)
+        if linked_order_id:
+            candidates = tuple(
+                order
+                for order in antimicrobial_orders
+                if _linked_order_id(order) == linked_order_id
+            )
+        elif mentioned_names:
+            candidates = tuple(
+                order
+                for order in antimicrobial_orders
+                if any(name in _antimicrobial_names_in(order) for name in mentioned_names)
+            )
+        elif len(antimicrobial_orders) == 1:
+            candidates = tuple(antimicrobial_orders)
+        else:
+            candidates = ()
+        if len(candidates) != 1:
+            association_ambiguous = True
+            continue
+        contexts.append((row, candidates[0]))
+    return tuple(contexts), association_ambiguous
+
+
+def _empiric_reason_documented(
+    *,
+    event_row: Mapping[str, Any],
+    order_row: Mapping[str, Any],
+    course_rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """理由只能来自可归属该经验用药事件的病程，不以培养/药敏调整代替。"""
+
+    order_id = _linked_order_id(order_row)
+    order_names = _antimicrobial_names_in(order_row)
+    for row in course_rows:
+        text = _material_text(row)
+        if not any(marker in text for marker in _EMPIRIC_REASON_MARKERS):
+            continue
+        row_order_id = _linked_order_id(row)
+        if row_order_id and order_id:
+            if row_order_id == order_id:
+                return True
+            continue
+        row_names = _antimicrobial_names_in(row)
+        if row_names and any(name in order_names for name in row_names):
+            return True
+        if row is event_row and len(order_names) == 1:
+            return True
+    return False
 
 
 def _linked_order_id(row: Mapping[str, Any]) -> str:
@@ -1605,34 +1711,36 @@ async def execute_luxian_0609_native_extended_document_rules(
                         final_state = "compliant" if complete else "non_compliant"
                         reason_code = "requirement_satisfied" if complete else "requirement_violated"
             elif rule_id == "LX0609-057":
-                structured_empiric = any(
-                    "培养" in (text := _material_text(row))
-                    and "药敏" in text
-                    and "调整" in text
-                    and any(action in text for action in ("启用", "使用", "给予"))
-                    and (any(name in text for name in _ANTIMICROBIALS) or (
-                        len(antimicrobial_orders) == 1
-                        and any(term in text for term in ("抗菌药", "抗感染治疗"))))
-                    for row in course_rows
+                empiric_contexts, association_ambiguous = (
+                    _empiric_antimicrobial_event_contexts(
+                        antimicrobial_orders=antimicrobial_orders,
+                        candidate_rows=(*antimicrobial_orders, *course_rows),
+                    )
                 )
-                empiric = structured_empiric or _has_any_text(
-                    (*antimicrobial_orders, *course_rows), ("经验性", "经验用药")
-                )
-                if not empiric:
-                    final_state, reason_code = "data_gap", "applicability_source_gap"
+                if association_ambiguous:
+                    final_state, reason_code = "data_gap", "association_failed"
+                elif not empiric_contexts:
+                    final_state, reason_code = (
+                        "not_applicable", "trigger_absent_complete"
+                    )
                 else:
-                    complete = structured_empiric or _has_any_text(
-                        course_rows,
-                        ("重症感染", "覆盖耐药菌", "已留取", "无样可采，", "无样可采；"),
+                    complete = all(
+                        _empiric_reason_documented(
+                            event_row=event_row,
+                            order_row=order_row,
+                            course_rows=course_rows,
+                        )
+                        for event_row, order_row in empiric_contexts
                     )
                     final_state = "compliant" if complete else "non_compliant"
                     reason_code = "requirement_satisfied" if complete else "requirement_violated"
                     display.append((rule_id, {
                         "verification_kind": "empiric_antimicrobial_reason_check",
-                        "antimicrobials": [
-                            name for name in _ANTIMICROBIALS
-                            if any(name in _material_text(row) for row in antimicrobial_orders)
-                        ],
+                        "antimicrobials": list(dict.fromkeys(
+                            name
+                            for _event_row, order_row in empiric_contexts
+                            for name in _antimicrobial_names_in(order_row)
+                        )),
                         "empiric_use_confirmed": True,
                         "reason_or_no_specimen_documented": complete,
                     }))
