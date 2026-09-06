@@ -3737,7 +3737,7 @@ def test_038_customer_evidence_preserves_explicitly_selected_coordinates():
     }
 
 
-def test_026_customer_evidence_keeps_comparison_sources_and_excludes_diagnosis_trigger():
+def test_026_customer_evidence_uses_only_executor_selected_fact_refs():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
@@ -3748,7 +3748,7 @@ def test_026_customer_evidence_keeps_comparison_sources_and_excludes_diagnosis_t
         reduced_decisions=(
             _reduced_decision(
                 "LX0609-026",
-                fact_refs=("b" * 64, "c" * 64, "d" * 64),
+                fact_refs=("b" * 64, "d" * 64),
             ),
         ),
         audit_context={

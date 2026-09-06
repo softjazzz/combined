@@ -268,6 +268,10 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_course_quality_customer_rule,
         safe_course_quality_customer_display_facts,
     )
+    from .tumor_pathology_result_mapping import (
+        is_tumor_pathology_customer_rule,
+        safe_tumor_pathology_customer_display_facts,
+    )
 
     if rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS:
         safe_facts = _safe_surgery_presence_customer_display_facts(
@@ -311,6 +315,16 @@ def validate_luxian_0609_executor_customer_display_facts(
         )
     if is_course_quality_customer_rule(rule_id):
         safe_facts = safe_course_quality_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
+        return (
+            safe_facts
+            if safe_facts is not None and not contains_private_identifier(safe_facts)
+            else None
+        )
+    if is_tumor_pathology_customer_rule(rule_id):
+        safe_facts = safe_tumor_pathology_customer_display_facts(
             rule_id=rule_id,
             raw=raw,
         )
@@ -370,6 +384,7 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .surgery_document_result_mapping import is_surgery_document_customer_rule
     from .surgery_mdt_result_mapping import is_surgery_mdt_customer_rule
     from .course_quality_result_mapping import is_course_quality_customer_rule
+    from .tumor_pathology_result_mapping import is_tumor_pathology_customer_rule
 
     return (
         rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS
@@ -377,6 +392,7 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
         or is_surgery_document_customer_rule(rule_id)
         or is_surgery_mdt_customer_rule(rule_id)
         or is_course_quality_customer_rule(rule_id)
+        or is_tumor_pathology_customer_rule(rule_id)
         or is_consultation_customer_rule(rule_id)
         or is_exam_lab_customer_rule(rule_id)
         or is_transfusion_customer_rule(rule_id)

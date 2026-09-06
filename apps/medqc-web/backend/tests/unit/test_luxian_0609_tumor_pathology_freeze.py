@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import re
 from typing import Any
 
 import pytest
@@ -22,6 +24,18 @@ from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_res
 
 RULE_IDS = ("LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027")
 CREATED_AT = "2026-09-07T10:00:00+08:00"
+
+
+def test_tumor_pathology_rules_have_no_aggregator_specific_branch() -> None:
+    """013/019/026/027 的事实合同不能回流至聚合器。"""
+
+    import app.services.luxian_0609_result_aggregator as aggregator
+
+    source = Path(aggregator.__file__).read_text(encoding="utf-8")
+    for rule_id in RULE_IDS:
+        assert not re.search(
+            rf'if rule_id == "{re.escape(rule_id)}"', source
+        ), rule_id
 
 
 def _wrapper(rule_id: str) -> dict[str, str]:
