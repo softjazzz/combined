@@ -212,6 +212,48 @@ def test_exam_lab_finalizer_fails_closed_for_invalid_facts_only() -> None:
 
 
 @pytest.mark.parametrize(
+    ("rule_id", "raw_facts"),
+    (
+        ("LX0609-009", {"raw_private_text": "PRIVATE-009"}),
+        ("LX0609-017", {
+            "failure_kind": "copy_similarity_threshold_exceeded",
+        }),
+        ("LX0609-018", {"raw_private_text": "PRIVATE-018"}),
+    ),
+)
+def test_course_quality_finalizer_rejects_invalid_typed_facts_as_technical_error(
+    rule_id: str,
+    raw_facts: dict,
+) -> None:
+    """非法查房病程 facts 仅可在 Typed Finalizer 边界降级为技术错误。"""
+
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+    )
+
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": rule_id,
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "findings": "不得保留",
+            "customer_evidence": [{"source_document_id": "PRIVATE-DOCUMENT"}],
+        },
+        raw_facts=raw_facts,
+    )
+
+    assert handled is True
+    assert (finalized["status"], finalized["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert "customer_display_facts" not in finalized
+    assert "customer_evidence" not in finalized
+    assert "findings" not in finalized
+    assert "PRIVATE" not in repr(finalized)
+
+
+@pytest.mark.parametrize(
     "extra",
     [
         {},

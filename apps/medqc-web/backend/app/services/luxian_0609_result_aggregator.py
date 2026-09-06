@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from datetime import datetime, timedelta
 from math import isfinite
 from typing import TYPE_CHECKING, Any, Mapping
-from zoneinfo import ZoneInfo
 
 from .luxian_0609_evidence_formatter import format_luxian_0609_evidence
 from .luxian_0609_result_schema import (
@@ -25,7 +23,6 @@ from .luxian_0609.customer_evidence_enrichment import (
     project_selected_document_evidence,
 )
 from .luxian_0609.decision_reducer import ReducedRuleDecision
-from .luxian_0609.source_evidence_reader import authoritative_document_time_value
 from .luxian_0609.surgery_gate_result_mapping import (
     legacy_surgery_gate_customer_evidence,
 )
@@ -57,7 +54,6 @@ _STATUS_PRIORITY = {
     "not_executed": 5,
     "technical_error": 60,
 }
-_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 logger = logging.getLogger(__name__)
 
 
@@ -278,37 +274,6 @@ def _build_diagnostic_trace(
         }
     )
 
-
-def _validate_lx0609_017_fact_status(
-    *,
-    rule_id: str,
-    status: str,
-    raw_facts: Any,
-    safe_facts: Mapping[str, Any] | None,
-) -> None:
-    """017终态只能携带方向一致、已通过受控投影的事实。"""
-
-    if rule_id != "LX0609-017":
-        return
-    expected_kind = {
-        "non_compliant": "copy_similarity_threshold_exceeded",
-        "compliant": "copy_similarity_within_threshold",
-    }.get(status)
-    kind = (
-        raw_facts.get("failure_kind")
-        if isinstance(raw_facts, Mapping)
-        else None
-    )
-    terminal_kinds = {
-        "copy_similarity_threshold_exceeded",
-        "copy_similarity_within_threshold",
-    }
-    if expected_kind is not None:
-        if safe_facts is None or kind != expected_kind:
-            raise ValueError("invalid copy customer display facts")
-        return
-    if kind in terminal_kinds:
-        raise ValueError("invalid copy customer display facts")
 
 
 def _copy_customer_fields(
@@ -2016,632 +1981,6 @@ def safe_luxian_0609_customer_display_facts(
             "pathology_trigger_sources": safe_trigger_sources,
             "checked_target_sources": safe_checked_sources,
         }
-    if rule_id == "LX0609-007":
-        failure_kind = raw.get("failure_kind")
-        if failure_kind == "unstable_patient_order_present":
-            return (
-                {
-                    "failure_kind": failure_kind,
-                    "stable_course_rule_applicable": False,
-                }
-                if raw.get("stable_course_rule_applicable") is False
-                else None
-            )
-        recorded_dates = raw.get("recorded_dates")
-        interval_hours = raw.get("interval_hours")
-        start_source = raw.get("interval_start_source")
-        end_source = raw.get("interval_end_source")
-        record_sources = {"daily_course_record", "senior_course_record"}
-        start_boundary_source = "inpat_registration"
-        end_boundary_source = "evaluation_context.horizon"
-        is_date_only_end = raw.get("interval_end_precision") == "date"
-        if (
-            failure_kind
-            not in {
-                "course_record_interval_over_72h",
-                "course_record_interval_within_72h",
-            }
-            or start_source not in record_sources | {start_boundary_source}
-            or end_source not in record_sources | {end_boundary_source}
-            or start_source == end_boundary_source
-            or end_source == start_boundary_source
-            or not isinstance(raw.get("interval_start_time"), str)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", raw["interval_start_time"])
-            or raw.get("threshold_hours") != 72
-            or not isinstance(recorded_dates, list)
-            or len(recorded_dates) > 64
-            or not all(
-                isinstance(value, str)
-                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-                for value in recorded_dates
-            )
-        ):
-            return None
-        if is_date_only_end:
-            end_date = raw.get("interval_end_date")
-            if (
-                failure_kind != "course_record_interval_over_72h"
-                or end_source != end_boundary_source
-                or "interval_end_time" in raw
-                or not isinstance(end_date, str)
-                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_date)
-                or interval_hours is not None
-                or raw.get("interval_seconds") is not None
-                or raw.get("overdue_seconds") is not None
-            ):
-                return None
-            try:
-                started_at = datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S")
-                confirmed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-            except ValueError:
-                return None
-            if confirmed_end_date <= (started_at + timedelta(hours=72)).date():
-                return None
-        elif (
-            raw.get("interval_end_precision") is not None
-            or raw.get("interval_end_date") is not None
-            or not isinstance(raw.get("interval_end_time"), str)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", raw["interval_end_time"])
-            or not isinstance(interval_hours, (int, float))
-            or (failure_kind == "course_record_interval_over_72h" and float(interval_hours) <= 72)
-            or (failure_kind == "course_record_interval_within_72h" and float(interval_hours) > 72)
-        ):
-            return None
-        facts: dict[str, Any] = {
-            "failure_kind": failure_kind,
-            "interval_start_source": start_source,
-            "interval_end_source": end_source,
-            "interval_start_time": raw["interval_start_time"],
-            "threshold_hours": 72,
-            "recorded_dates": list(recorded_dates),
-        }
-        if is_date_only_end:
-            facts.update({"interval_end_date": raw["interval_end_date"], "interval_end_precision": "date"})
-        else:
-            facts.update({"interval_end_time": raw["interval_end_time"], "interval_hours": round(float(interval_hours), 2)})
-        enhanced_keys = {
-            "interval_start_position",
-            "interval_end_position",
-            "record_count",
-            "interval_seconds",
-            "overdue_seconds",
-        }
-        if any(key in raw for key in enhanced_keys):
-            start_position = raw.get("interval_start_position")
-            end_position = raw.get("interval_end_position")
-            record_count = raw.get("record_count")
-            interval_seconds = raw.get("interval_seconds")
-            overdue_seconds = raw.get("overdue_seconds")
-            if is_date_only_end:
-                if (
-                    interval_seconds is not None
-                    or overdue_seconds is not None
-                    or not all(
-                        type(value) is int
-                        for value in (start_position, end_position, record_count)
-                    )
-                    or not 0 <= start_position < end_position <= record_count + 1
-                    or end_position != start_position + 1
-                    or record_count != len(recorded_dates)
-                    or (start_source == start_boundary_source and start_position != 0)
-                    or (start_source in record_sources and start_position < 1)
-                    or end_position != record_count + 1
-                ):
-                    return None
-                facts.update(
-                    {
-                        "interval_start_position": start_position,
-                        "interval_end_position": end_position,
-                        "record_count": record_count,
-                    }
-                )
-            else:
-                if not all(
-                    type(value) is int
-                    for value in (
-                        start_position,
-                        end_position,
-                        record_count,
-                        interval_seconds,
-                        overdue_seconds,
-                    )
-                ):
-                    return None
-                if (
-                    not 0 <= start_position < end_position <= record_count + 1
-                    or end_position != start_position + 1
-                    or record_count != len(recorded_dates)
-                    or (start_source == start_boundary_source and start_position != 0)
-                    or (start_source in record_sources and start_position < 1)
-                    or (end_source == end_boundary_source and end_position != record_count + 1)
-                    or (end_source in record_sources and end_position > record_count)
-                ):
-                    return None
-                try:
-                    started_at = datetime.strptime(
-                        raw["interval_start_time"], "%Y-%m-%d %H:%M:%S"
-                    )
-                    ended_at = datetime.strptime(
-                        raw["interval_end_time"], "%Y-%m-%d %H:%M:%S"
-                    )
-                except ValueError:
-                    return None
-                actual_seconds = round((ended_at - started_at).total_seconds())
-                expected_overdue_seconds = max(0, actual_seconds - 72 * 3600)
-                if (
-                    actual_seconds <= 0
-                    or interval_seconds != actual_seconds
-                    or overdue_seconds != expected_overdue_seconds
-                    or round(actual_seconds / 3600, 2)
-                    != round(float(interval_hours), 2)
-                    or (start_source in record_sources and recorded_dates[start_position - 1] != started_at.date().isoformat())
-                    or (end_source in record_sources and recorded_dates[end_position - 1] != ended_at.date().isoformat())
-                    or (
-                        failure_kind == "course_record_interval_over_72h"
-                        and overdue_seconds <= 0
-                    )
-                    or (
-                        failure_kind == "course_record_interval_within_72h"
-                        and overdue_seconds != 0
-                    )
-                ):
-                    return None
-                facts.update(
-                    {
-                        "interval_start_position": start_position,
-                        "interval_end_position": end_position,
-                        "record_count": record_count,
-                        "interval_seconds": interval_seconds,
-                        "overdue_seconds": overdue_seconds,
-                    }
-                )
-        start_document_id = raw.get("interval_start_document_id")
-        end_document_id = raw.get("interval_end_document_id")
-        if (
-            start_source in record_sources
-            and end_source in record_sources
-            and (start_document_id is not None or end_document_id is not None)
-            and (start_document_id is None or end_document_id is None)
-        ):
-            return None
-        for source, document_id in (
-            (start_source, start_document_id),
-            (end_source, end_document_id),
-        ):
-            if source not in record_sources and document_id is not None:
-                return None
-            if document_id is not None and (
-                not isinstance(document_id, str)
-                or not document_id.strip()
-                or len(document_id.strip()) > 256
-                or "\n" in document_id
-                or "\r" in document_id
-            ):
-                return None
-        return facts
-    if rule_id == "LX0609-008":
-        failure_kind = raw.get("failure_kind")
-        allowed = {
-            "failure_kind": failure_kind,
-            "severity": "serious",
-            "threshold_days": 2,
-        }
-        if failure_kind not in {
-            "severity_course_gap_exceeded",
-            "severity_course_interval_satisfied",
-        }:
-            return None
-        dates = {
-            key: raw.get(key) for key in ("anchor_date", "horizon_date")
-        }
-        recorded_dates = raw.get("recorded_dates")
-        gap_days = raw.get("gap_days")
-        if (
-            any(raw.get(key) != value for key, value in allowed.items())
-            or not all(isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) for value in dates.values())
-            or (
-                recorded_dates is not None
-                and (
-                    not isinstance(recorded_dates, list)
-                    or len(recorded_dates) > 64
-                    or not all(
-                        isinstance(value, str)
-                        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-                        for value in recorded_dates
-                    )
-                )
-            )
-        ):
-            return None
-        if failure_kind == "severity_course_gap_exceeded":
-            gap_dates = {
-                key: raw.get(key) for key in ("gap_start_date", "gap_end_date")
-            }
-            if (
-                not all(
-                    isinstance(value, str)
-                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-                    for value in gap_dates.values()
-                )
-                or not isinstance(gap_days, int)
-                or gap_days <= 2
-            ):
-                return None
-            facts = {
-                **allowed,
-                **dates,
-                **gap_dates,
-                "gap_days": gap_days,
-            }
-            if isinstance(recorded_dates, list):
-                facts["recorded_dates"] = list(recorded_dates)
-            return facts
-        maximum_gap_days = raw.get("maximum_gap_days")
-        if not isinstance(maximum_gap_days, int) or not 0 <= maximum_gap_days <= 2:
-            return None
-        return {
-            **allowed,
-            **dates,
-            "maximum_gap_days": maximum_gap_days,
-            "recorded_dates": list(recorded_dates),
-        }
-    if rule_id == "LX0609-009":
-        failure_kind = raw.get("failure_kind")
-        if failure_kind == "critical_change_time_unavailable":
-            if raw.get("threshold_hours") != 24:
-                return None
-            return {
-                "failure_kind": failure_kind,
-                "threshold_hours": 24,
-            }
-        if failure_kind == "critical_change_course_association_failed":
-            event_ref = raw.get("event_ref")
-            course_ref = raw.get("corresponding_course_ref")
-            if (
-                raw.get("threshold_hours") != 24
-                or not isinstance(event_ref, str)
-                or not event_ref.strip()
-                or len(event_ref) > 256
-                or not isinstance(course_ref, str)
-                or not course_ref.strip()
-                or len(course_ref) > 256
-            ):
-                return None
-            return {
-                "failure_kind": failure_kind,
-                "event_ref": event_ref,
-                "corresponding_course_ref": course_ref,
-                "threshold_hours": 24,
-            }
-        if failure_kind == "critical_change_window_not_mature":
-            event_ref = raw.get("event_ref")
-            event_time = raw.get("event_time")
-            deadline_time = raw.get("deadline_time")
-            if (
-                raw.get("threshold_hours") != 24
-                or not isinstance(event_ref, str)
-                or not event_ref.strip()
-                or len(event_ref) > 256
-                or any(
-                    not isinstance(value, str)
-                    or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value)
-                    for value in (event_time, deadline_time)
-                )
-            ):
-                return None
-            return {
-                "failure_kind": failure_kind,
-                "event_ref": event_ref,
-                "event_time": event_time,
-                "deadline_time": deadline_time,
-                "threshold_hours": 24,
-            }
-        change_kinds = {
-            "critical_change_course_timely",
-            "critical_change_course_not_timely",
-        }
-        if raw.get("failure_kind") in change_kinds:
-            change_events = raw.get("change_events")
-            unmet_events = raw.get("unmet_events")
-            threshold_hours = raw.get("threshold_hours")
-            allowed_categories = {
-                "subjective",
-                "objective",
-                "exam_lab",
-                "complication",
-                "special_state",
-            }
-
-            def safe_change_event(item: Any) -> dict[str, Any] | None:
-                if not isinstance(item, Mapping) or set(item) != {
-                    "event_ref",
-                    "change_category",
-                    "event_time",
-                    "corresponding_course_ref",
-                    "corresponding_course_time",
-                    "deadline_time",
-                    "threshold_hours",
-                    "timely",
-                }:
-                    return None
-                if (
-                    not isinstance(item.get("event_ref"), str)
-                    or not item["event_ref"].strip()
-                    or len(item["event_ref"]) > 256
-                    or not isinstance(item.get("corresponding_course_ref"), str)
-                    or len(item["corresponding_course_ref"]) > 256
-                    or item.get("change_category") not in allowed_categories
-                    or item.get("threshold_hours") != 24
-                    or type(item.get("timely")) is not bool
-                    or any(
-                        not isinstance(item.get(key), str)
-                        or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", item[key])
-                        for key in ("event_time", "deadline_time")
-                    )
-                    or (
-                        item["corresponding_course_ref"]
-                        and not re.fullmatch(
-                            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}",
-                            str(item.get("corresponding_course_time") or ""),
-                        )
-                    )
-                    or (
-                        not item["corresponding_course_ref"]
-                        and item.get("corresponding_course_time") != ""
-                    )
-                ):
-                    return None
-                return {
-                    key: item[key]
-                    for key in (
-                        "event_ref",
-                        "change_category",
-                        "event_time",
-                        "corresponding_course_ref",
-                        "corresponding_course_time",
-                        "deadline_time",
-                        "threshold_hours",
-                        "timely",
-                    )
-                }
-
-            if (
-                not isinstance(change_events, list)
-                or not change_events
-                or len(change_events) > 20
-                or threshold_hours != 24
-            ):
-                return None
-            safe_events = [safe_change_event(item) for item in change_events]
-            if any(item is None for item in safe_events):
-                return None
-            facts: dict[str, Any] = {
-                "failure_kind": raw["failure_kind"],
-                "change_events": safe_events,
-                "threshold_hours": 24,
-            }
-            if raw["failure_kind"] == "critical_change_course_timely":
-                if any(not item["timely"] for item in safe_events):
-                    return None
-                return facts
-            if not isinstance(unmet_events, list) or not unmet_events:
-                return None
-            safe_unmet = [safe_change_event(item) for item in unmet_events]
-            if (
-                any(item is None for item in safe_unmet)
-                or any(item["timely"] for item in safe_unmet)
-                or any(item not in safe_events for item in safe_unmet)
-            ):
-                return None
-            facts["unmet_events"] = safe_unmet
-            return facts
-        scope_valid = (
-            raw.get("evaluated_scope") == "critical_daily_course_coverage"
-            and raw.get("pending_scope")
-            == ["condition_change_course_documentation"]
-        )
-        if raw.get("failure_kind") == "critical_daily_record_coverage_satisfied":
-            required_dates = raw.get("required_dates")
-            covered_dates = raw.get("covered_dates")
-            anchor_date = raw.get("anchor_date")
-            horizon_date = raw.get("horizon_date")
-            if (
-                not scope_valid
-                or raw.get("severity") != "critical"
-                or raw.get("missing_count") != 0
-                or not isinstance(required_dates, list)
-                or not required_dates
-                or not isinstance(covered_dates, list)
-                or required_dates != covered_dates
-                or not all(
-                    isinstance(value, str)
-                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-                    for value in required_dates
-                )
-                or not isinstance(anchor_date, str)
-                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", anchor_date)
-                or not isinstance(horizon_date, str)
-                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", horizon_date)
-            ):
-                return None
-            return {
-                "failure_kind": "critical_daily_record_coverage_satisfied",
-                "severity": "critical",
-                "evaluated_scope": "critical_daily_course_coverage",
-                "pending_scope": ["condition_change_course_documentation"],
-                "anchor_date": anchor_date,
-                "horizon_date": horizon_date,
-                "required_dates": list(required_dates),
-                "covered_dates": list(covered_dates),
-                "missing_count": 0,
-            }
-        missing_dates = raw.get("missing_dates")
-        required_dates = raw.get("required_dates")
-        covered_dates = raw.get("covered_dates")
-        missing_count = raw.get("missing_count")
-        first_date = raw.get("missing_first_date")
-        last_date = raw.get("missing_last_date")
-        if (
-            not scope_valid
-            or raw.get("failure_kind") != "critical_daily_record_missing"
-            or raw.get("severity") != "critical"
-            or not isinstance(required_dates, list)
-            or not isinstance(covered_dates, list)
-            or not all(
-                isinstance(value, str)
-                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-                for value in (*required_dates, *covered_dates)
-            )
-            or not set(covered_dates).issubset(set(required_dates))
-            or not isinstance(missing_dates, list)
-            or not missing_dates
-            or len(missing_dates) > 7
-            or not all(isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) for value in missing_dates)
-            or not isinstance(missing_count, int)
-            or missing_count < len(missing_dates)
-            or not isinstance(first_date, str)
-            or not isinstance(last_date, str)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", first_date)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", last_date)
-        ):
-            return None
-        facts = {
-            "failure_kind": "critical_daily_record_missing",
-            "severity": "critical",
-            "evaluated_scope": "critical_daily_course_coverage",
-            "pending_scope": ["condition_change_course_documentation"],
-            "required_dates": list(required_dates),
-            "covered_dates": list(covered_dates),
-            "missing_dates": list(missing_dates),
-            "missing_count": missing_count,
-            "missing_first_date": first_date,
-            "missing_last_date": last_date,
-        }
-        for key in ("anchor_date", "horizon_date"):
-            value = raw.get(key)
-            if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-                facts[key] = value
-        return facts
-    if rule_id == "LX0609-017":
-        allowed_keys = {
-            "failure_kind",
-            "copy_similarity",
-            "copy_similarity_threshold",
-            "copy_document_sources",
-            "copy_document_record_times",
-            "copy_match_pairs",
-            "copy_match_document_fingerprints",
-        }
-        failure_kind = raw.get("failure_kind")
-        source_types = raw.get("copy_document_sources")
-        record_times = raw.get("copy_document_record_times")
-        similarity = raw.get("copy_similarity")
-        threshold = raw.get("copy_similarity_threshold")
-        raw_pairs = raw.get("copy_match_pairs")
-        if (
-            not set(raw).issubset(allowed_keys)
-            or failure_kind
-            not in {
-                "copy_similarity_threshold_exceeded",
-                "copy_similarity_within_threshold",
-            }
-            or not isinstance(source_types, list)
-            or len(source_types) != 2
-            or any(value not in {"daily_course_record", "senior_course_record"} for value in source_types)
-            or not isinstance(record_times, list)
-            or len(record_times) != 2
-            or not all(_strict_copy_fact_record_time(value) for value in record_times)
-            or isinstance(similarity, bool)
-            or not isinstance(similarity, (int, float))
-            or not isfinite(float(similarity))
-            or not 0.0 <= float(similarity) <= 1.0
-            or isinstance(threshold, bool)
-            or not isinstance(threshold, (int, float))
-            or not isfinite(float(threshold))
-            or float(threshold) != 0.7
-            or (
-                failure_kind == "copy_similarity_threshold_exceeded"
-                and float(similarity) < float(threshold)
-            )
-            or (
-                failure_kind == "copy_similarity_within_threshold"
-                and float(similarity) >= float(threshold)
-                and (raw_pairs or raw.get("copy_match_document_fingerprints"))
-            )
-        ):
-            return None
-        safe_pairs: list[dict[str, Any]] = []
-        if raw_pairs is not None:
-            if not isinstance(raw_pairs, list) or len(raw_pairs) > 4:
-                return None
-            for pair in raw_pairs:
-                if not isinstance(pair, Mapping) or set(pair) != {
-                    "source_types",
-                    "record_times",
-                    "similarity",
-                }:
-                    return None
-                pair_sources = pair.get("source_types")
-                pair_times = pair.get("record_times")
-                pair_similarity = pair.get("similarity")
-                if (
-                    not isinstance(pair_sources, list)
-                    or len(pair_sources) != 2
-                    or any(
-                        value not in {"daily_course_record", "senior_course_record"}
-                        for value in pair_sources
-                    )
-                    or not isinstance(pair_times, list)
-                    or len(pair_times) != 2
-                    or not all(
-                        _strict_copy_fact_record_time(value) for value in pair_times
-                    )
-                    or isinstance(pair_similarity, bool)
-                    or not isinstance(pair_similarity, (int, float))
-                    or not 0.0 <= float(pair_similarity) <= 1.0
-                    or float(pair_similarity) < float(threshold)
-                ):
-                    return None
-                safe_pairs.append(
-                    {
-                        "source_types": list(pair_sources),
-                        "record_times": list(pair_times),
-                        "similarity": round(float(pair_similarity), 4),
-                    }
-                )
-            if safe_pairs and (
-                safe_pairs[0]["source_types"] != source_types
-                or safe_pairs[0]["record_times"] != record_times
-                or safe_pairs[0]["similarity"] != round(float(similarity), 4)
-            ):
-                return None
-        raw_fingerprints = raw.get("copy_match_document_fingerprints")
-        if raw_fingerprints is not None and (
-            not safe_pairs
-            or not isinstance(raw_fingerprints, list)
-            or len(raw_fingerprints) != len(safe_pairs)
-            or any(
-                not isinstance(pair_fingerprints, list)
-                or len(pair_fingerprints) != 2
-                or any(
-                    not isinstance(value, str)
-                    or re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None
-                    for value in pair_fingerprints
-                )
-                for pair_fingerprints in raw_fingerprints
-            )
-        ):
-            return None
-        safe = {
-            "failure_kind": failure_kind,
-            "copy_similarity": round(float(similarity), 4),
-            "copy_similarity_threshold": round(float(threshold), 4),
-            "copy_document_sources": list(source_types),
-            "copy_document_record_times": list(record_times),
-        }
-        if raw_pairs is not None:
-            safe["copy_match_pairs"] = safe_pairs
-        return safe
     if rule_id == "LX0609-068":
         failure_kind = raw.get("failure_kind")
         checked_dates = raw.get("checked_dates")
@@ -2674,40 +2013,7 @@ def safe_luxian_0609_customer_display_facts(
             "checked_source": "senior_course_record",
             "approval_present": approval_present,
         }
-    if rule_id == "LX0609-016":
-        similarity = raw.get("copy_similarity")
-        relation = raw.get("copy_relation")
-        sections = raw.get("compared_sections")
-        source_document_ids = raw.get("source_document_ids")
-        failure_kind = raw.get("failure_kind")
-        if (
-            failure_kind
-            not in {
-                "admission_first_course_copy_detected",
-                "admission_first_course_not_identical",
-            }
-            or not isinstance(similarity, (int, float))
-            or not 0 <= float(similarity) <= 1
-            or relation
-            not in {"completely_identical", "not_completely_identical"}
-            or (relation == "completely_identical") != (float(similarity) == 1.0)
-            or (failure_kind == "admission_first_course_copy_detected")
-            != (relation == "completely_identical")
-            or sections != ["入院记录现病史", "首次病程记录病例特点"]
-            or not isinstance(source_document_ids, list)
-        ):
-            return None
-        return {
-            "failure_kind": failure_kind,
-            "copy_similarity": round(float(similarity), 4),
-            "copy_relation": relation,
-            "compared_sections": list(sections),
-            "source_document_ids": [
-                value
-                for value in dict.fromkeys(source_document_ids)
-                if isinstance(value, str) and value.strip()
-            ][:2],
-        }
+
 
 
 def _controlled_customer_findings(
@@ -2772,27 +2078,6 @@ def _customer_evidence_from_display_facts(
             else ""
         )
 
-    if (
-        rule_id == "LX0609-007"
-        and raw.get("failure_kind") == "course_record_interval_over_72h"
-    ):
-        allowed_source_types = {"daily_course_record", "senior_course_record"}
-        start_source = str(raw.get("interval_start_source") or "").strip()
-        end_source = str(raw.get("interval_end_source") or "").strip()
-        start_document_id = valid_document_id(
-            raw.get("interval_start_document_id")
-        )
-        end_document_id = valid_document_id(raw.get("interval_end_document_id"))
-        located: list[dict[str, str]] = []
-        if start_source in allowed_source_types and start_document_id:
-            located.append(
-                {"source_type": start_source, "source_document_id": start_document_id}
-            )
-        if end_source in allowed_source_types and end_document_id:
-            located.append(
-                {"source_type": end_source, "source_document_id": end_document_id}
-            )
-        return located
     if rule_id == "LX0609-051":
         allowed_source_types = {"death_record", "death_discussion"}
         raw_refs = raw.get("source_document_refs")
@@ -2988,234 +2273,6 @@ def _valid_customer_evidence_document_id(value: Any) -> str:
     )
 
 
-def _strict_copy_fact_record_time(value: Any) -> str:
-    """017事实只接受无时区、精确到秒的医院本地时间。"""
-
-    if not isinstance(value, str) or re.fullmatch(
-        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
-    ) is None:
-        return ""
-    try:
-        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return ""
-    return parsed.strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _normalized_copy_material_record_time(value: Any) -> str:
-    """将MaterialStore标准时间或ISO时区时间规范到本地秒，禁止前缀命中。"""
-
-    if isinstance(value, datetime):
-        if value.tzinfo is not None:
-            value = value.astimezone(_HOSPITAL_TIMEZONE)
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    if not isinstance(value, str):
-        return ""
-    candidate = value.strip()
-    if re.fullmatch(
-        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
-        r"|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})",
-        candidate,
-    ) is None:
-        return ""
-    try:
-        parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
-    except ValueError:
-        return ""
-    if parsed.microsecond:
-        return ""
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(_HOSPITAL_TIMEZONE)
-    return parsed.strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _customer_evidence_from_copy_pair_facts(
-    *, facts: Mapping[str, Any] | None, evidence_materials: Any
-) -> list[dict[str, str]]:
-    """按017已选定的来源与权威记录时间反查唯一文书，不重新计算相似度。"""
-
-    if not isinstance(facts, Mapping) or evidence_materials is None:
-        return []
-    raw_pairs = facts.get("copy_match_pairs")
-    pairs = (
-        raw_pairs
-        if isinstance(raw_pairs, list) and raw_pairs
-        else [
-            {
-                "source_types": facts.get("copy_document_sources"),
-                "record_times": facts.get("copy_document_record_times"),
-            }
-        ]
-    )
-
-    raw_fingerprints = facts.get("copy_match_document_fingerprints")
-    if raw_fingerprints is not None:
-        if (
-            not isinstance(raw_fingerprints, list)
-            or len(raw_fingerprints) != len(pairs[:4])
-            or not raw_fingerprints
-        ):
-            return []
-        precise_located: list[dict[str, str]] = []
-        precise_seen: set[str] = set()
-        for pair, pair_fingerprints in zip(pairs[:4], raw_fingerprints):
-            if not isinstance(pair, Mapping):
-                return []
-            source_types = pair.get("source_types")
-            record_times = pair.get("record_times")
-            if (
-                not isinstance(source_types, list)
-                or len(source_types) != 2
-                or any(
-                    value not in {"daily_course_record", "senior_course_record"}
-                    for value in source_types
-                )
-                or not isinstance(record_times, list)
-                or len(record_times) != 2
-                or not all(isinstance(value, str) and value for value in record_times)
-                or not isinstance(pair_fingerprints, list)
-                or len(pair_fingerprints) != 2
-            ):
-                return []
-            pair_document_ids: set[str] = set()
-            for source_type, record_time, fingerprint in zip(
-                source_types, record_times, pair_fingerprints
-            ):
-                if not isinstance(fingerprint, str) or not re.fullmatch(
-                    r"sha256:[0-9a-f]{64}", fingerprint
-                ):
-                    return []
-                try:
-                    rows = tuple(evidence_materials.rows(source_type))
-                except Exception:
-                    return []
-                matched_ids = tuple(
-                    dict.fromkeys(
-                        document_id
-                        for row in rows
-                        if isinstance(row, Mapping)
-                        and _normalized_copy_material_record_time(
-                            authoritative_document_time_value(row)
-                        )
-                        == record_time
-                        for document_id in (
-                            _valid_customer_evidence_document_id(
-                                row.get("document_id") or row.get("id")
-                            ),
-                        )
-                        if document_id
-                        and "sha256:"
-                        + hashlib.sha256(
-                            f"{source_type}\0{document_id}".encode("utf-8")
-                        ).hexdigest()
-                        == fingerprint
-                    )
-                )
-                if len(matched_ids) != 1 or matched_ids[0] in pair_document_ids:
-                    return []
-                pair_document_ids.add(matched_ids[0])
-                if matched_ids[0] not in precise_seen:
-                    precise_seen.add(matched_ids[0])
-                    precise_located.append(
-                        {
-                            "source_type": source_type,
-                            "source_document_id": matched_ids[0],
-                        }
-                    )
-        return precise_located
-
-    located: list[dict[str, str]] = []
-    seen_document_ids: set[str] = set()
-    for pair in pairs[:4]:
-        if not isinstance(pair, Mapping):
-            continue
-        source_types = pair.get("source_types")
-        record_times = pair.get("record_times")
-        if (
-            not isinstance(source_types, list)
-            or len(source_types) != 2
-            or any(
-                value not in {"daily_course_record", "senior_course_record"}
-                for value in source_types
-            )
-            or not isinstance(record_times, list)
-            or len(record_times) != 2
-            or not all(isinstance(value, str) and value for value in record_times)
-        ):
-            continue
-        pair_rows: list[dict[str, str]] = []
-        pair_document_ids: set[str] = set()
-        for source_type, record_time in zip(source_types, record_times):
-            try:
-                rows = tuple(evidence_materials.rows(source_type))
-            except Exception:
-                pair_rows = []
-                break
-            matched_ids = tuple(
-                dict.fromkeys(
-                    document_id
-                    for row in rows
-                    if isinstance(row, Mapping)
-                    and _normalized_copy_material_record_time(
-                        authoritative_document_time_value(row)
-                    )
-                    == record_time
-                    for document_id in (
-                        _valid_customer_evidence_document_id(
-                            row.get("document_id") or row.get("id")
-                        ),
-                    )
-                    if document_id
-                )
-            )
-            if len(matched_ids) != 1 or matched_ids[0] in pair_document_ids:
-                pair_rows = []
-                break
-            pair_document_ids.add(matched_ids[0])
-            pair_rows.append(
-                {"source_type": source_type, "source_document_id": matched_ids[0]}
-            )
-        if len(pair_rows) != 2:
-            continue
-        for row in pair_rows:
-            document_id = row["source_document_id"]
-            if document_id in seen_document_ids:
-                continue
-            seen_document_ids.add(document_id)
-            located.append(row)
-    return located
-
-
-def _customer_evidence_from_course_display_facts(
-    *, rule_id: str, facts: Any, evidence_materials: Any
-) -> list[dict[str, str]]:
-    """为查房时限缺口补出已记录日期对应的精确病程文书引用。"""
-    if rule_id not in {"LX0609-008", "LX0609-009"} or not isinstance(facts, Mapping):
-        return []
-    dates = set(facts.get("recorded_dates") or facts.get("covered_dates") or [])
-    if not dates or evidence_materials is None:
-        return []
-    located: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for source_type in ("daily_course_record", "senior_course_record"):
-        try:
-            rows = evidence_materials.rows(source_type)
-        except Exception:
-            continue
-        for row in rows:
-            if not isinstance(row, Mapping):
-                continue
-            value = authoritative_document_time_value(row)
-            date_text = str(value or "")[:10]
-            document_id = str(row.get("document_id") or row.get("id") or "").strip()
-            if date_text not in dates or not document_id or document_id in seen:
-                continue
-            seen.add(document_id)
-            located.append({"source_type": source_type, "source_document_id": document_id})
-            if len(located) >= 8:
-                return located
-    return located
-
 
 def _customer_evidence_from_reduced_decision(
     *,
@@ -3358,8 +2415,6 @@ def _copy_native_customer_fields(
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
     finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(wrapper_id)
     def reject_invalid_display_facts() -> None:
-        if wrapper_id == "LX0609-017":
-            raise ValueError("invalid copy customer display facts")
         raise Luxian0609CustomerDisplayFactsError(wrapper_id)
 
     status = _status(selected)
@@ -3428,37 +2483,6 @@ def _copy_native_customer_fields(
     safe_display_facts = (
         supplied_safe_facts[0] if supplied_safe_facts else None
     )
-    if (
-        wrapper_id == "LX0609-017"
-        and raw_display_facts is not None
-        and safe_display_facts is None
-    ):
-        raise ValueError("invalid copy customer display facts")
-    _validate_lx0609_017_fact_status(
-        rule_id=wrapper_id,
-        status=status,
-        raw_facts=raw_display_facts,
-        safe_facts=safe_display_facts,
-    )
-    if (
-        wrapper_id == "LX0609-017"
-        and status == "non_compliant"
-        and isinstance(raw_display_facts, Mapping)
-        and raw_display_facts.get("copy_match_document_fingerprints") is None
-    ):
-        raise ValueError("invalid copy customer display facts")
-    copy_pair_evidence: list[dict[str, str]] = []
-    if (
-        wrapper_id == "LX0609-017"
-        and isinstance(raw_display_facts, Mapping)
-        and raw_display_facts.get("copy_match_document_fingerprints") is not None
-    ):
-        copy_pair_evidence = _customer_evidence_from_copy_pair_facts(
-            facts=raw_display_facts,
-            evidence_materials=evidence_materials,
-        )
-        if not copy_pair_evidence:
-            raise ValueError("invalid copy customer display facts")
     selected_metadata = _strip_sensitive(dict(selected_metadata_mapping))
     # 原生结果可能同时带有旧链写入的顶层 executor_type 和当前执行器
     # 元数据。客户结果必须以当前元数据为准，并把同一个值投影到顶层，
@@ -3515,12 +2539,9 @@ def _copy_native_customer_fields(
     result.pop("customer_display_facts", None)
     if safe_display_facts:
         result["customer_display_facts"] = safe_display_facts
-    customer_evidence = _merge_customer_evidence(
-        _customer_evidence_from_display_facts(
-            rule_id=wrapper_id,
-            raw=raw_display_facts,
-        ),
-        copy_pair_evidence,
+    customer_evidence = _customer_evidence_from_display_facts(
+        rule_id=wrapper_id,
+        raw=raw_display_facts,
     )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
@@ -3586,7 +2607,6 @@ def aggregate_luxian_0609_results(
     )
     display_facts_by_rule: dict[str, dict[str, Any]] = {}
     raw_executor_display_facts_by_rule: dict[str, Mapping[str, Any]] = {}
-    raw_copy_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     customer_evidence_by_rule: dict[str, list[dict[str, str]]] = {}
     wrapper_rule_ids = {
         _norm_id(item.get("rule_id") or item.get("rule_code"))
@@ -3615,24 +2635,11 @@ def aggregate_luxian_0609_results(
                 rule_id=rule_id,
                 raw=facts,
             )
-        if safe_facts is None and rule_id == "LX0609-017":
-            raise ValueError("invalid copy customer display facts")
-        if (
-            rule_id == "LX0609-017"
-            and facts.get("copy_match_document_fingerprints") is not None
-            and not _customer_evidence_from_copy_pair_facts(
-                facts=facts,
-                evidence_materials=(audit_context or {}).get("evidence_materials"),
-            )
-        ):
-            raise ValueError("invalid copy customer display facts")
         finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(rule_id)
         if finalizer_owns_facts:
             raw_executor_display_facts_by_rule[rule_id] = facts
         if safe_facts is not None:
             display_facts_by_rule[rule_id] = safe_facts
-            if rule_id == "LX0609-017":
-                raw_copy_facts_by_rule[rule_id] = facts
         else:
             # 独立传入的事实不是执行器结果的延迟合同。若没有 Typed 决策或
             # native 直接结果能交给 Finalizer，不能静默丢弃非法客户事实。
@@ -3670,12 +2677,6 @@ def aggregate_luxian_0609_results(
                 decision=reduced,
                 safe_customer_display_facts=display_facts_by_rule.get(wrapper_id),
                 trace_sink=decision_trace_sink,
-            )
-            _validate_lx0609_017_fact_status(
-                rule_id=wrapper_id,
-                status=str(result.get("status") or ""),
-                raw_facts=raw_copy_facts_by_rule.get(wrapper_id),
-                safe_facts=display_facts_by_rule.get(wrapper_id),
             )
             if wrapper_id in display_facts_by_rule:
                 result["customer_display_facts"] = display_facts_by_rule[wrapper_id]
@@ -3730,25 +2731,8 @@ def aggregate_luxian_0609_results(
                         ),
                     )
                 )
-                copy_pair_evidence = (
-                    _customer_evidence_from_copy_pair_facts(
-                        facts=raw_copy_facts_by_rule.get(wrapper_id),
-                        evidence_materials=(audit_context or {}).get(
-                            "evidence_materials"
-                        ),
-                    )
-                    if wrapper_id == "LX0609-017"
-                    else []
-                )
-                course_evidence = _customer_evidence_from_course_display_facts(
-                    rule_id=wrapper_id,
-                    facts=display_facts_by_rule.get(wrapper_id),
-                    evidence_materials=(audit_context or {}).get("evidence_materials"),
-                )
                 customer_evidence = _merge_customer_evidence(
                     customer_evidence_by_rule.get(wrapper_id, []),
-                    copy_pair_evidence,
-                    course_evidence,
                     decision_evidence,
                 )
             customer_evidence = enrich_customer_evidence(
@@ -3762,10 +2746,7 @@ def aggregate_luxian_0609_results(
             continue
         decision = decisions.get(wrapper_id)
         gate_result = None
-        if decision and (
-            decision.status == TRIGGER_ABSENT
-            or (wrapper_id == "LX0609-016" and decision.status == TRIGGER_DATA_GAP)
-        ):
+        if decision and decision.status == TRIGGER_ABSENT:
             gate_result = decision_to_result(wrapper, decision)
             if gate_result is not None:
                 result = _copy_customer_fields(

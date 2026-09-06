@@ -1,9 +1,9 @@
-# LX0609 查房病程族：提交 A 行为冻结基线
+# LX0609 查房病程族：受控收口记录
 
 日期：2026-09-07  
 范围：`LX0609-007/008/009/016/017/018`。`LX0609-077` 已走新生产规则主链，仅作回归对象，不计入本次旧族迁移。
 
-## 目的与边界
+## 提交 A：行为冻结基线
 
 本提交只冻结当前正式 `course_quality native → Decision Binding → Aggregator` 的可观察行为，未修改生产逻辑、Prompt、规则口径、数据库、API 或前端。后续迁移必须保持下列状态、原因码、客户展示事实及证据坐标集合等价；证据数组本身不以顺序表达优先级。
 
@@ -70,3 +70,14 @@ py -3.10 -m pytest -q tests/unit/test_luxian_0609_course_quality_freeze.py
 ## 下一步门槛
 
 只有在本冻结提交被审查后，才可进行提交 B：将 007/008/009/016/017/018 的完整展示事实校验和证据策略迁出聚合器。提交 B 不得修改上述状态、原因码、Prompt、Token、客户 DTO、任务入口、保存、API 或前端；若发现真实业务口径问题，停止迁移并转入独立缺陷队列。
+
+## 提交 B：等价迁移（本次）
+
+- 新增 `course_quality_result_mapping.py`，成为 007/008/009/016/017/018 客户事实合同与 017 终态一致性校验的唯一所有者；Finalizer 统一调用。
+- 聚合器已删除本族所有规则号分支、007 旧 raw 坐标适配、008/009 按日期反查和 017 按指纹反查。Typed 证据只走 `fact_refs → Binding → 公共 selected-document projector`。
+- 007/008/009/017/018 的 Canonical 状态、原因码、客户 findings 和客户证据精确坐标集合保持冻结等价；009 的 Prompt、调用次数和 Token 未变化。
+- **唯一字段级安全收口：016 `customer_display_facts.source_document_ids` 被删除。** 它是内部文书坐标，原先与公共 `customer_evidence` 重复；迁移后真实文书仍由 016 已选择的 `fact_refs` 投影，冻结的客户证据坐标集合不变。
+- 新增硬守卫：聚合器源码不得出现六条规则号，防止后续规则专属事实或证据判断回流。
+- 历史 direct-aggregate 回归已改为两类合同：缺少 `RuleDecision.fact_refs` 的兼容输入只可隔离 raw facts，**不得**通过文书 ID、日期、指纹、时区或资料行反查重建专属证据；非法 typed facts 由 Finalizer 收敛为 `technical_error/model_invalid_output`。未删除任何边界覆盖。
+
+本提交不处理 009 评价窗口成熟度等业务口径问题；若真实病例发现反例，必须另立缺陷闭环并重新冻结。

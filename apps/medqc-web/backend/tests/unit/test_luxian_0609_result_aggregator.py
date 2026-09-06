@@ -2658,31 +2658,29 @@ def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monke
     )
 
 
-def test_reduced_decision_rejects_unsupported_018_customer_display_facts():
+def test_reduced_decision_strips_unsupported_018_customer_display_facts():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     )
     private_marker = "PRIVATE_UNSUPPORTED_018_FACT"
 
-    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
-        module.aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
-            execution_results=[],
-            reduced_decisions=(_reduced_decision("LX0609-018"),),
-            customer_display_facts=(
-                (
-                    "LX0609-018",
-                    {
-                        "complaint_length": 12,
-                        "diagnostic_relation_state": "supported",
-                        "source_label": private_marker,
-                    },
-                ),
-            ),
-        )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-018"),),
+        customer_display_facts=(("LX0609-018", {
+            "complaint_length": 12,
+            "diagnostic_relation_state": "supported",
+            "source_label": private_marker,
+        }),),
+    )[0]
 
-    assert private_marker not in str(exc_info.value)
+    # direct aggregate 未携带 Typed Finalizer 合同；只能隔离原始事实，不能据此
+    # 重建 018 的业务解释或客户证据。
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
+    assert private_marker not in repr(result)
 
 
 @pytest.mark.parametrize(
@@ -2927,16 +2925,8 @@ def test_007_overdue_interval_names_both_rounds_and_locates_both_records():
         "第3次查房（2026-08-17 10:37:00）间隔73小时6分22秒，"
         "超过72小时要求1小时6分22秒。"
     )
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "senior_course_record",
-            "source_document_id": "round-20260814",
-        },
-        {
-            "source_type": "daily_course_record",
-            "source_document_id": "round-20260817",
-        },
-    ]
+    # direct aggregate 不得从 raw document id 反查或重建客户证据。
+    assert "customer_evidence" not in result
     assert "document_id" not in repr(result["customer_display_facts"])
 
 
@@ -2983,12 +2973,7 @@ def test_007_start_boundary_overdue_delivers_controlled_fact_and_only_record_evi
         "74小时2分，超过72小时要求2小时2分。"
     )
     assert result["customer_display_facts"] == safe
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "senior_course_record",
-            "source_document_id": "round-20260817",
-        }
-    ]
+    assert "customer_evidence" not in result
 
 
 def test_007_date_only_tail_boundary_delivers_confirmed_overdue_without_document_evidence():
@@ -3114,10 +3099,19 @@ def test_007_interval_details_fail_closed_when_the_pair_is_inconsistent(
     }
     facts[field] = invalid_value
 
-    assert safe_luxian_0609_customer_display_facts(
+    safe = safe_luxian_0609_customer_display_facts(
         rule_id="LX0609-007",
         raw=facts,
-    ) is None
+    )
+    if field == "interval_end_document_id":
+        # 文书 ID 是内部坐标，Finalizer 不读取也不复验。
+        assert safe == {
+            key: value
+            for key, value in facts.items()
+            if key not in {"interval_start_document_id", "interval_end_document_id"}
+        }
+    else:
+        assert safe is None
 
 
 def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
@@ -4362,6 +4356,30 @@ def test_public_aggregation_rejects_invalid_customer_display_facts(
         assert private_marker not in repr(result)
         return
 
+    if rule_id == "LX0609-009":
+        if entry_path == "explicit":
+            with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+                aggregate_luxian_0609_results(
+                    wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+                    execution_results=[execution_result],
+                    customer_display_facts=customer_display_facts,
+                    format_evidence=False,
+                )
+            assert private_marker not in str(exc_info.value)
+            return
+        result = aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+            execution_results=[execution_result],
+            customer_display_facts=customer_display_facts,
+            format_evidence=False,
+        )[0]
+        # 兼容 direct aggregate 不携带 Typed Finalizer 的 RuleDecision；原始事实
+        # 必须被隔离，且不得按旧规则专属逻辑生成证据。
+        assert "customer_display_facts" not in result
+        assert "customer_evidence" not in result
+        assert private_marker not in repr(result)
+        return
+
     with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
         aggregate_luxian_0609_results(
             wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
@@ -5239,44 +5257,45 @@ def test_native_045_display_facts_do_not_restore_legacy_evidence_projection():
     assert "source_document_ids" not in result["customer_display_facts"]
 
 
-def test_native_018_invalid_customer_display_facts_fail_closed():
+def test_native_018_invalid_customer_display_facts_are_isolated_without_legacy_repair():
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
     private_marker = "PRIVATE_UNSUPPORTED_NATIVE_018_FACT"
 
-    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
-        aggregate(
-            wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
-            execution_results=[
-                {
-                    "rule_id": "LX0609-018",
-                    "status": "non_compliant",
-                    "confidence": 0.99,
-                    "findings": "兼容链通用结论",
-                    "metadata": {"execution_source": "compatibility"},
-                },
-                {
-                    "rule_id": "LX0609-018",
-                    "status": "non_compliant",
-                    "confidence": 0.1,
-                    "findings": "原生结论",
-                    "metadata": {
-                        "execution_source": "lx0609_native",
-                        "executor_type": "llm",
-                        "customer_display_facts": {
-                            "complaint_length": 21,
-                            "length_state": "violated",
-                            "diagnostic_relation_state": "supported",
-                            "source_label": private_marker,
-                        },
+    result = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-018", "name": "主诉能导出第一诊断"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-018",
+                "status": "non_compliant",
+                "confidence": 0.99,
+                "findings": "兼容链通用结论",
+                "metadata": {"execution_source": "compatibility"},
+            },
+            {
+                "rule_id": "LX0609-018",
+                "status": "non_compliant",
+                "confidence": 0.1,
+                "findings": "原生结论",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "executor_type": "llm",
+                    "customer_display_facts": {
+                        "complaint_length": 21,
+                        "length_state": "violated",
+                        "diagnostic_relation_state": "supported",
+                        "source_label": private_marker,
                     },
                 },
-            ],
-        )
+            },
+        ],
+    )[0]
 
-    assert private_marker not in str(exc_info.value)
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
+    assert private_marker not in repr(result)
 
 
 def test_exam_lab_native_result_preserves_only_safe_explanation_facts():
@@ -5896,37 +5915,36 @@ def test_native_result_without_executor_metadata_defaults_to_program():
     assert result["metadata"]["executor_type"] == "program"
 
 
-def test_native_copy_non_compliant_without_controlled_facts_fails_closed():
+def test_native_copy_without_controlled_facts_does_not_restore_legacy_evidence():
     aggregate = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
-    with pytest.raises(
-        ValueError, match="invalid copy customer display facts"
-    ) as exc_info:
-        aggregate(
-            wrapper_rules=[{
-                "rule_id": "LX0609-017",
-                "name": "复制病历",
-                "mapped_rule_ids": ["CL-275", "LXE-21"],
-            }],
-            execution_results=[{
-                "rule_id": "LX0609-017",
-                "status": "non_compliant",
-                "is_compliant": False,
-                "findings": "发现两份病程记录高度重复。",
-                "metadata": {
-                    "execution_source": "lx0609_native",
-                    "executor_type": "program",
-                    "document_id": "RAW_DOCUMENT_ID_MUST_NOT_LEAK",
-                },
-            }],
-            format_evidence=False,
-        )
+    result = aggregate(
+        wrapper_rules=[{
+            "rule_id": "LX0609-017",
+            "name": "复制病历",
+            "mapped_rule_ids": ["CL-275", "LXE-21"],
+        }],
+        execution_results=[{
+            "rule_id": "LX0609-017",
+            "status": "non_compliant",
+            "is_compliant": False,
+            "findings": "发现两份病程记录高度重复。",
+            "metadata": {
+                "execution_source": "lx0609_native",
+                "executor_type": "program",
+                "document_id": "RAW_DOCUMENT_ID_MUST_NOT_LEAK",
+            },
+        }],
+        format_evidence=False,
+    )[0]
 
-    assert "RAW_DOCUMENT_ID_MUST_NOT_LEAK" not in str(exc_info.value)
-    assert "CL-275" not in str(exc_info.value)
-    assert "LXE-21" not in str(exc_info.value)
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
+    assert "RAW_DOCUMENT_ID_MUST_NOT_LEAK" not in repr(result)
+    assert "CL-275" not in repr(result)
+    assert "LXE-21" not in repr(result)
 
 
 @pytest.mark.parametrize(
@@ -5992,13 +6010,7 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
         else "compliant"
     )
     assert result["customer_display_facts"] == facts
-    assert [
-        (item["source_type"], item["source_document_id"])
-        for item in result["customer_evidence"]
-    ] == [
-        ("daily_course_record", "copy-left"),
-        ("daily_course_record", "copy-right"),
-    ]
+    assert "customer_evidence" not in result
     if failure_kind == "copy_similarity_within_threshold":
         assert "达到或超过 70%" in result["findings"]
     else:
@@ -6080,22 +6092,20 @@ def test_017_canonical_aggregation_rejects_invalid_customer_display_facts(
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
 
-    with pytest.raises(
-        ValueError, match="invalid copy customer display facts"
-    ) as exc_info:
-        aggregate(
-            wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
-            execution_results=[],
-            reduced_decisions=(
-                _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
-            ),
-            customer_display_facts=(("LX0609-017", facts),),
-            format_evidence=False,
-        )
-    assert "PRIVATE_COURSE_TEXT" not in str(exc_info.value)
+    result = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-017", facts),),
+        format_evidence=False,
+    )[0]
+    assert "customer_evidence" not in result
+    assert "PRIVATE_COURSE_TEXT" not in repr(result)
 
 
-def test_017_canonical_aggregation_rejects_unbound_candidate_fingerprints():
+def test_017_canonical_aggregation_ignores_unbound_candidate_fingerprints():
     pair = {
         "source_types": ["daily_course_record", "daily_course_record"],
         "record_times": [
@@ -6129,17 +6139,18 @@ def test_017_canonical_aggregation_rejects_unbound_candidate_fingerprints():
         fromlist=["aggregate_luxian_0609_results"],
     ).aggregate_luxian_0609_results
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
-        aggregate(
-            wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
-            execution_results=[],
-            reduced_decisions=(
-                _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
-            ),
-            customer_display_facts=(("LX0609-017", facts),),
-            audit_context={"evidence_materials": _Materials()},
-            format_evidence=False,
-        )
+    result = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-017", facts),),
+        audit_context={"evidence_materials": _Materials()},
+        format_evidence=False,
+    )[0]
+    assert "customer_evidence" not in result
+    assert "copy_match_document_fingerprints" not in repr(result)
 
 
 def _017_fingerprint(source_type: str, document_id: str) -> str:
@@ -6197,12 +6208,20 @@ def _017_native_result(*, facts: dict, audit_context=None, status="non_compliant
     )[0]
 
 
-def test_017_native_fingerprints_require_current_evidence_materials():
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+def _assert_017_direct_result_has_no_selected_evidence(result: Mapping[str, Any]) -> None:
+    """旧 direct aggregate 不能以客户 facts 重新选择病历文书。"""
+
+    assert "customer_evidence" not in result
+    assert "copy_match_document_fingerprints" not in repr(result)
+
+
+def test_017_native_fingerprints_do_not_require_legacy_evidence_materials():
+    _assert_017_direct_result_has_no_selected_evidence(
         _017_native_result(facts=_017_fingerprint_facts())
+    )
 
 
-def test_017_native_fingerprints_reject_mismatched_evidence_materials():
+def test_017_native_fingerprints_do_not_recheck_mismatched_evidence_materials():
     class _MismatchedMaterials:
         @staticmethod
         def rows(source_type):
@@ -6213,14 +6232,15 @@ def test_017_native_fingerprints_reject_mismatched_evidence_materials():
                 },
             )
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+    _assert_017_direct_result_has_no_selected_evidence(
         _017_native_result(
             facts=_017_fingerprint_facts(),
             audit_context={"evidence_materials": _MismatchedMaterials()},
         )
+    )
 
 
-def test_017_native_fingerprints_bind_iso_timezone_rows_at_exact_second():
+def test_017_native_fingerprints_do_not_backlookup_iso_timezone_rows():
     class _Materials:
         @staticmethod
         def rows(source_type):
@@ -6243,16 +6263,10 @@ def test_017_native_fingerprints_bind_iso_timezone_rows_at_exact_second():
         audit_context={"evidence_materials": _Materials()},
     )
 
-    assert [
-        (item["source_type"], item["source_document_id"])
-        for item in result["customer_evidence"]
-    ] == [
-        ("daily_course_record", "copy-left"),
-        ("senior_course_record", "copy-right"),
-    ]
+    _assert_017_direct_result_has_no_selected_evidence(result)
 
 
-def test_017_native_fingerprints_bind_naive_datetime_rows_like_executor():
+def test_017_native_fingerprints_do_not_backlookup_naive_datetime_rows():
     class _Materials:
         @staticmethod
         def rows(source_type):
@@ -6275,13 +6289,10 @@ def test_017_native_fingerprints_bind_naive_datetime_rows_like_executor():
         audit_context={"evidence_materials": _Materials()},
     )
 
-    assert [item["source_document_id"] for item in result["customer_evidence"]] == [
-        "copy-left",
-        "copy-right",
-    ]
+    _assert_017_direct_result_has_no_selected_evidence(result)
 
 
-def test_017_native_fingerprints_normalize_utc_to_hospital_timezone():
+def test_017_native_fingerprints_do_not_normalize_utc_rows_for_projection():
     class _UtcMaterials:
         @staticmethod
         def rows(source_type):
@@ -6304,13 +6315,10 @@ def test_017_native_fingerprints_normalize_utc_to_hospital_timezone():
         audit_context={"evidence_materials": _UtcMaterials()},
     )
 
-    assert [item["source_document_id"] for item in result["customer_evidence"]] == [
-        "copy-left",
-        "copy-right",
-    ]
+    _assert_017_direct_result_has_no_selected_evidence(result)
 
 
-def test_017_native_fingerprints_reject_utc_wall_clock_false_match():
+def test_017_native_fingerprints_do_not_compare_utc_wall_clock_rows():
     class _UtcWallClockMaterials:
         @staticmethod
         def rows(source_type):
@@ -6328,14 +6336,15 @@ def test_017_native_fingerprints_reject_utc_wall_clock_false_match():
                 },
             )
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+    _assert_017_direct_result_has_no_selected_evidence(
         _017_native_result(
             facts=_017_fingerprint_facts(),
             audit_context={"evidence_materials": _UtcWallClockMaterials()},
         )
+    )
 
 
-def test_017_native_fingerprints_reject_record_time_prefix_match():
+def test_017_native_fingerprints_do_not_compare_record_time_prefixes():
     class _PrefixMaterials:
         @staticmethod
         def rows(source_type):
@@ -6353,14 +6362,15 @@ def test_017_native_fingerprints_reject_record_time_prefix_match():
                 },
             )
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+    _assert_017_direct_result_has_no_selected_evidence(
         _017_native_result(
             facts=_017_fingerprint_facts(),
             audit_context={"evidence_materials": _PrefixMaterials()},
         )
+    )
 
 
-def test_017_native_fingerprints_reject_submit_time_when_record_time_differs():
+def test_017_native_fingerprints_do_not_choose_submit_time_over_record_time():
     class _ConflictingTimeMaterials:
         @staticmethod
         def rows(source_type):
@@ -6379,14 +6389,15 @@ def test_017_native_fingerprints_reject_submit_time_when_record_time_differs():
                 },
             )
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+    _assert_017_direct_result_has_no_selected_evidence(
         _017_native_result(
             facts=_017_fingerprint_facts(),
             audit_context={"evidence_materials": _ConflictingTimeMaterials()},
         )
+    )
 
 
-def test_017_native_fingerprints_use_submit_time_when_record_time_is_empty():
+def test_017_native_fingerprints_do_not_fallback_to_submit_time():
     class _SubmitFallbackMaterials:
         @staticmethod
         def rows(source_type):
@@ -6410,18 +6421,16 @@ def test_017_native_fingerprints_use_submit_time_when_record_time_is_empty():
         audit_context={"evidence_materials": _SubmitFallbackMaterials()},
     )
 
-    assert [item["source_document_id"] for item in result["customer_evidence"]] == [
-        "copy-left",
-        "copy-right",
-    ]
+    _assert_017_direct_result_has_no_selected_evidence(result)
 
 
-def test_017_native_non_compliant_requires_bound_fingerprints():
+def test_017_native_non_compliant_does_not_require_bound_fingerprints_for_projection():
     facts = _017_fingerprint_facts()
     facts.pop("copy_match_document_fingerprints")
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
+    _assert_017_direct_result_has_no_selected_evidence(
         _017_native_result(facts=facts)
+    )
 
 
 def test_017_native_compliant_without_fingerprints_allows_missing_context():
@@ -6480,8 +6489,13 @@ def test_017_native_status_must_match_terminal_facts(
     facts.pop("copy_match_pairs")
     facts.pop("copy_match_document_fingerprints")
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
-        _017_native_result(facts=facts, status=status)
+    result = _017_native_result(facts=facts, status=status)
+    assert (result["status"], result["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
 
 
 @pytest.mark.parametrize(
@@ -6504,29 +6518,34 @@ def test_017_reduced_status_must_match_terminal_facts(
     facts.pop("copy_match_pairs")
     facts.pop("copy_match_document_fingerprints")
 
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
-        aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
-            execution_results=[],
-            reduced_decisions=(
-                _reduced_decision("LX0609-017", direction=direction),
-            ),
-            customer_display_facts=(("LX0609-017", facts),),
-            format_evidence=False,
-        )
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-017", direction=direction),
+        ),
+        customer_display_facts=(("LX0609-017", facts),),
+        format_evidence=False,
+    )[0]
+    assert (result["status"], result["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
 
 
-def test_017_reduced_fingerprints_require_current_evidence_materials():
-    with pytest.raises(ValueError, match="invalid copy customer display facts"):
-        aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
-            execution_results=[],
-            reduced_decisions=(
-                _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
-            ),
-            customer_display_facts=(("LX0609-017", _017_fingerprint_facts()),),
-            format_evidence=False,
-        )
+def test_017_reduced_fingerprints_do_not_require_legacy_evidence_materials():
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-017", _017_fingerprint_facts()),),
+        format_evidence=False,
+    )[0]
+    _assert_017_direct_result_has_no_selected_evidence(result)
 
 
 def test_017_without_fingerprints_allows_missing_evidence_materials():
@@ -6585,7 +6604,7 @@ def test_017_customer_evidence_fails_closed_when_record_time_is_ambiguous():
     assert "79.9%" in result["findings"]
 
 
-def test_017_canonical_aggregation_keeps_four_ranked_copy_pairs_with_evidence():
+def test_017_canonical_aggregation_keeps_four_ranked_copy_pairs_without_legacy_evidence_lookup():
     pairs = [
         {
             "source_types": ["daily_course_record", "daily_course_record"],
@@ -6634,13 +6653,7 @@ def test_017_canonical_aggregation_keeps_four_ranked_copy_pairs_with_evidence():
 
     assert result["customer_display_facts"]["copy_match_pairs"] == pairs
     assert result["findings"].endswith("另有 3 组病程记录达到判定阈值。")
-    assert [
-        (item["source_type"], item["source_document_id"])
-        for item in result["customer_evidence"]
-    ] == [
-        ("daily_course_record", f"copy-{day:02d}")
-        for day in range(1, 9)
-    ]
+    _assert_017_direct_result_has_no_selected_evidence(result)
 
 
 @pytest.mark.parametrize("field", ["visit_ref", "gate_fingerprint", "finding_schema_version", "finding_policy_version", "findings"])

@@ -7,6 +7,7 @@ customer facts or aggregator ownership after a later migration.
 
 from __future__ import annotations
 
+from pathlib import Path
 import json
 import re
 from typing import Any, Mapping, Sequence
@@ -388,6 +389,14 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
             for key, value in expected_facts.items()
             if key != "copy_match_document_fingerprints"
         }
+    elif rule_id == "LX0609-016":
+        # source_document_ids 是执行器内部坐标；迁移后只能由 fact_refs
+        # 经公共投影形成 customer_evidence，不能继续进入客户展示 facts。
+        assert result.get("customer_display_facts") == {
+            key: value
+            for key, value in dict(execution.customer_display_facts)[rule_id].items()
+            if key != "source_document_ids"
+        }
     else:
         assert result.get("customer_display_facts") == dict(execution.customer_display_facts).get(rule_id)
     assert _fact_ref_sources(session.snapshot, decision.fact_refs)
@@ -502,3 +511,14 @@ async def test_course_quality_freezes_lx009_semantic_stub_prompt_usage_and_canon
 
 def test_course_quality_freezes_family_membership_before_migration() -> None:
     assert tuple(rule_id for rule_id in COURSE_QUALITY_RULE_IDS if rule_id != "LX0609-077") == _FAMILY_RULE_IDS
+
+
+def test_course_quality_rules_have_no_aggregator_specific_branches() -> None:
+    """迁移完成后聚合器不得继续解释本族业务事实或选择客户证据。"""
+
+    aggregator = (
+        Path(__file__).resolve().parents[2]
+        / "app/services/luxian_0609_result_aggregator.py"
+    ).read_text(encoding="utf-8")
+    for rule_id in _FAMILY_RULE_IDS:
+        assert rule_id not in aggregator
