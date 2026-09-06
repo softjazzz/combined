@@ -4,7 +4,6 @@ import uuid
 import json
 import hashlib
 import logging
-import re
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
@@ -92,7 +91,6 @@ from ..services.sichuan_workspace_batch_worker import (
     _normalize_batch_output_mode,
     _normalize_max_refine_candidates,
     _normalize_run_mode,
-    _build_record_status_counts,
     _build_result_performance_profile,
     _sanitize_trace_value,
     _result_diagnostic_trace,
@@ -3188,248 +3186,6 @@ def _load_single_test_rule(qc_service: SichuanQCService, rule_id: str) -> tuple[
     return qc_service.get_rule_by_id(rule_id), False
 
 
-def _parse_luxian_datetime(value: str) -> Optional[datetime]:
-    text = str(value or "").strip()
-    patterns = (
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y年%m月%d日 %H:%M",
-        "%Y年%m月%d日%H:%M",
-    )
-    for pattern in patterns:
-        try:
-            return datetime.strptime(text, pattern)
-        except ValueError:
-            continue
-    return None
-
-
-def _extract_labeled_luxian_time(text: str, labels: tuple[str, ...]) -> Optional[datetime]:
-    for label in labels:
-        pattern = rf"{re.escape(label)}\s*[:：]\s*(\d{{4}}[-年]\d{{1,2}}[-月]\d{{1,2}}(?:日)?\s+\d{{1,2}}:\d{{2}}(?::\d{{2}})?)"
-        match = re.search(pattern, text)
-        if match:
-            parsed = _parse_luxian_datetime(
-                match.group(1).replace("年", "-").replace("月", "-").replace("日", "")
-            )
-            if parsed:
-                return parsed
-    return None
-
-
-def _apply_luxian_time_rule(result: Dict[str, Any], medical_text: str) -> Optional[Dict[str, Any]]:
-    rule_id = str(result.get("rule_id") or "").strip().upper()
-    configs = {
-        "LX0609-001": (("入院时间",), ("记录时间",), 24),
-        "LX0609-002": (("入院时间",), ("记录时间",), 8),
-        "LX0609-003": (("手术结束时间",), ("记录时间",), 24),
-        "LX0609-004": (("抢救结束时间",), ("记录时间",), 6),
-    }
-    config = configs.get(rule_id)
-    if not config:
-        return None
-    start_labels, end_labels, limit_hours = config
-    start_time = _extract_labeled_luxian_time(medical_text, start_labels)
-    end_time = _extract_labeled_luxian_time(medical_text, end_labels)
-    if rule_id == "LX0609-003" and not start_time:
-        surgery_time_match = re.search(
-            r"手术时间\s*[:：]\s*"
-            r"(\d{4}[-年]\d{1,2}[-月]\d{1,2}(?:日)?)\s+\d{1,2}:\d{2}"
-            r"\s*[至-]\s*"
-            r"(?:(\d{4}[-年]\d{1,2}[-月]\d{1,2}(?:日)?)\s+)?(\d{1,2}:\d{2})",
-            medical_text,
-        )
-        if surgery_time_match:
-            end_date = surgery_time_match.group(2) or surgery_time_match.group(1)
-            date_part = end_date.replace("年", "-").replace("月", "-").replace("日", "")
-            start_time = _parse_luxian_datetime(f"{date_part} {surgery_time_match.group(3)}")
-    if not start_time or not end_time:
-        return None
-    elapsed_hours = (end_time - start_time).total_seconds() / 3600
-    normalized = dict(result)
-    normalized["is_compliant"] = elapsed_hours <= limit_hours
-    normalized["status"] = "compliant" if normalized["is_compliant"] else "non_compliant"
-    normalized["not_applicable"] = False
-    normalized["applicability"] = {"is_applicable": True, "reason": "", "method": "luxian_time_rule"}
-    metadata = dict(normalized.get("metadata") or {})
-    metadata["engine"] = "luxian_time_rule"
-    normalized["metadata"] = metadata
-    normalized["confidence"] = max(float(normalized.get("confidence") or 0), 0.98)
-    start_label = start_labels[0]
-    end_label = end_labels[0]
-    if rule_id == "LX0609-003":
-        start_label = "手术结束时间"
-    elapsed_text = f"{elapsed_hours:.1f}".rstrip("0").rstrip(".")
-    evidence = (
-        f"{start_label}: {start_time.strftime('%Y-%m-%d %H:%M')}；"
-        f"{end_label}: {end_time.strftime('%Y-%m-%d %H:%M')}；"
-        f"间隔 {elapsed_text} 小时。"
-    )
-    normalized["evidence"] = normalized.get("evidence") or evidence
-    if normalized["is_compliant"]:
-        normalized["findings"] = normalized.get("findings") or (
-            f"{evidence}未超过 {limit_hours} 小时限制，符合规则要求。"
-        )
-        normalized["suggestion"] = normalized.get("suggestion") or ""
-        normalized["issues"] = []
-    else:
-        normalized["findings"] = normalized.get("findings") or (
-            f"{evidence}超过 {limit_hours} 小时限制，存在超时缺陷。"
-        )
-        normalized["suggestion"] = normalized.get("suggestion") or (
-            f"请按病历书写规范在 {limit_hours} 小时内完成对应记录，并补充逾期原因说明。"
-        )
-        normalized["issues"] = normalized.get("issues") or [
-            {"description": f"记录完成时间超过 {limit_hours} 小时限制", "evidence": evidence}
-        ]
-    return normalized
-
-
-def _extract_luxian_section(text: str, title: str, next_titles: tuple[str, ...] = ()) -> str:
-    start = text.find(title)
-    if start < 0:
-        return ""
-    end_candidates = [text.find(next_title, start + len(title)) for next_title in next_titles]
-    end_candidates = [index for index in end_candidates if index >= 0]
-    end = min(end_candidates) if end_candidates else len(text)
-    return text[start:end]
-
-
-def _apply_luxian_preop_surgeon_rule(result: Dict[str, Any], medical_text: str) -> Optional[Dict[str, Any]]:
-    rule_id = str(result.get("rule_id") or "").strip().upper()
-    if rule_id != "LX0609-039":
-        return None
-
-    preop_section = _extract_luxian_section(
-        medical_text,
-        "文书标题：术前讨论记录",
-        ("文书标题：手术医嘱", "文书标题：手术记录"),
-    )
-    surgery_section = _extract_luxian_section(medical_text, "文书标题：手术记录")
-    if not preop_section or not surgery_section:
-        return None
-
-    surgeon_match = re.search(r"术者[：:]\s*([^。；，,\n]+)", surgery_section)
-    if not surgeon_match:
-        return None
-    surgeon = surgeon_match.group(1).strip()
-    is_emergency_rescue = bool(re.search(r"(?<!非)急诊抢救|抢救生命", medical_text))
-    if is_emergency_rescue:
-        return None
-
-    normalized = dict(result)
-    surgeon_in_preop = surgeon in preop_section
-    normalized["is_compliant"] = surgeon_in_preop
-    normalized["status"] = "compliant" if surgeon_in_preop else "non_compliant"
-    normalized["not_applicable"] = False
-    normalized["applicability"] = {"is_applicable": True, "reason": "", "method": "luxian_preop_surgeon_rule"}
-    metadata = dict(normalized.get("metadata") or {})
-    metadata["engine"] = "luxian_preop_surgeon_rule"
-    normalized["metadata"] = metadata
-    normalized["confidence"] = max(float(normalized.get("confidence") or 0), 0.98)
-    normalized["evidence"] = (
-        f"手术记录术者：{surgeon}；"
-        f"术前讨论记录签名/参加人员片段：{preop_section[-180:]}"
-    )
-    if surgeon_in_preop:
-        normalized["findings"] = f"术前讨论记录中包含拟任术者 {surgeon}，符合规则要求。"
-        normalized["suggestion"] = normalized.get("suggestion") or ""
-        normalized["issues"] = []
-    else:
-        normalized["findings"] = (
-            f"手术记录显示术者为 {surgeon}，但术前讨论记录的参加人员或签名中未见该术者，"
-            "不符合非急诊手术术者应参加术前讨论的要求。"
-        )
-        normalized["suggestion"] = "请补充术者参加术前讨论的记录、讨论意见和签名，或完善术前讨论记录。"
-        normalized["issues"] = [
-            {"description": "术者未参加术前讨论", "evidence": normalized["evidence"]}
-        ]
-    return normalized
-
-
-def _apply_luxian_local_rule(result: Dict[str, Any], medical_text: str) -> Optional[Dict[str, Any]]:
-    return (
-        _apply_luxian_time_rule(result, medical_text)
-        or _apply_luxian_preop_surgeon_rule(result, medical_text)
-    )
-
-
-def _normalize_luxian_single_test_result(result: Dict[str, Any], medical_text: str) -> Dict[str, Any]:
-    """修正泸县0609单条测试中 LLM JSON 字段与文字结论自相矛盾的情况。
-
-    仅用于规则管理页正反例测试，不进入正式批量质控链路。
-    """
-    normalized = dict(result)
-    raw_output = str(normalized.get("llm_raw_output") or "")
-    findings = str(normalized.get("findings") or "")
-    evidence = str(normalized.get("evidence") or "")
-    suggestion = str(normalized.get("suggestion") or "")
-    haystack = f"{findings}\n{evidence}\n{suggestion}\n{raw_output}"
-
-    local_rule_result = _apply_luxian_local_rule(normalized, medical_text)
-    if local_rule_result:
-        return local_rule_result
-
-    raw_declares_non_compliant = bool(
-        re.search(r'"is_compliant"\s*:\s*false', raw_output, flags=re.IGNORECASE)
-    )
-    non_compliant_patterns = (
-        r"属于不合规",
-        r"判定为不合规",
-        r"不符合(?:规则|要求|规定)",
-        r"不合规情形",
-        r"严重缺陷",
-        r"缺陷",
-        r"未[^。；，,]*(?:记录|分析|完成|签名|说明)",
-        r"无[^。；，,]*(?:记录|分析|签名|说明)",
-        r"存在[^。；，,]*违规情形",
-        r"出现[^。；，,]*违规情形",
-        r"已超时",
-        r"超时未",
-        r"超出[^。；，,]*时限",
-        r"已超过[^。；，,]*时限",
-        r"(?<!未)超过了[^。；，,]*时限",
-        r"(?<!未)超过[^。；，,]*限制",
-        r"记录时间[^。；，,]*晚于",
-        r"患者签名[:：][^。；，,]*未签",
-        r"待补签",
-        r"收费中[^。；，,]*不一致",
-        r"与医嘱[^。；，,]*不一致",
-        r"(?<!未)(?:存在|出现|发现|构成|属于)[^。；，,]*(?:完全相同|逐字复制)",
-    )
-    has_non_compliant_text = any(re.search(pattern, haystack) for pattern in non_compliant_patterns)
-    compliant_patterns = (
-        r"符合[^。；，,]*规则",
-        r"符合[^。；，,]*质控",
-        r"符合规定",
-        r"未发现[^。；，,]*(?:违规|不合规|缺陷|问题)",
-        r"不存在[^。；，,]*(?:不一致|缺失|缺少)",
-        r"(?:未出现|并未出现|未发现)[^。；，,]*(?:完全相同|逐字复制)",
-        r"未超过[^。；，,]*(?:时限|限制)",
-        r"记录齐全",
-    )
-    has_compliant_text = any(re.search(pattern, findings) for pattern in compliant_patterns)
-
-    if raw_declares_non_compliant or has_non_compliant_text:
-        normalized["is_compliant"] = False
-        normalized["status"] = "non_compliant"
-        normalized["not_applicable"] = False
-        applicability = dict(normalized.get("applicability") or {})
-        applicability["is_applicable"] = True
-        normalized["applicability"] = applicability
-        if not normalized.get("issues") and findings:
-            normalized["issues"] = [{"description": "命中质控点", "evidence": findings[:120]}]
-    elif has_compliant_text:
-        normalized["is_compliant"] = True
-        normalized["status"] = "compliant"
-        normalized["not_applicable"] = False
-        normalized["issues"] = []
-        applicability = dict(normalized.get("applicability") or {})
-        applicability["is_applicable"] = True
-        normalized["applicability"] = applicability
-    return normalized
-
-
 @router.post("/test-rule")
 async def test_rule(
     request: Request,
@@ -3445,34 +3201,13 @@ async def test_rule(
             )
 
         if is_luxian_wrapper:
-            local_rule_result = _apply_luxian_local_rule(
-                {
-                    "rule_id": target_rule.get("rule_id") or req.rule_id,
-                    "rule_name": target_rule.get("name") or target_rule.get("rule_name"),
-                    "is_compliant": True,
-                    "issues": [],
-                    "findings": "",
-                    "evidence": "",
-                    "suggestion": "",
-                    "confidence": 0,
-                    "llm_raw_output": None,
-                    "status": "compliant",
-                    "applicability": {"is_applicable": True, "reason": "", "method": "luxian_time_rule"},
-                    "not_applicable": False,
-                    "not_applicable_reason": None,
-                    "evidence_verified": True,
-                    "evidence_span": None,
-                    "token_usage": {"total_tokens": 0},
-                    "metadata": {"engine": "luxian_time_rule"},
-                },
-                req.medical_text,
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "LX0609 规则必须通过客户样本验证或正式单规则入口执行；"
+                    "纯文本测试无法提供所需的结构化事件和关联字段。"
+                ),
             )
-            if local_rule_result:
-                return success_response(
-                    data=local_rule_result,
-                    message="规则测试完成",
-                    trace_id=get_trace_id(request),
-                )
 
         engine_result = await qc_service.rule_engine.evaluate(
             rule=target_rule,
@@ -3504,9 +3239,6 @@ async def test_rule(
             "token_usage": {"total_tokens": metadata.get("tokens_used", 0)},
             "metadata": metadata,
         }
-        if is_luxian_wrapper:
-            response_data = _normalize_luxian_single_test_result(response_data, req.medical_text)
-
         return success_response(
             data=response_data,
             message="规则测试完成",
