@@ -2377,7 +2377,8 @@ def safe_luxian_0609_customer_display_facts(
             )
             or (
                 discussion_state is not None
-                and discussion_state not in {"completed", "missing", "unknown"}
+                and discussion_state
+                not in {"completed", "missing", "unknown", "exempt"}
             )
             or (
                 discussion_state in {"completed", "missing"}
@@ -2385,6 +2386,16 @@ def safe_luxian_0609_customer_display_facts(
                     performed is not True
                     or procedure_kind != "surgery"
                     or effective_level != "四级"
+                )
+            )
+            or (
+                discussion_state == "exempt"
+                and (
+                    performed is not True
+                    or procedure_kind != "surgery"
+                    or effective_level != "四级"
+                    or raw.get("emergency_surgery_confirmed") is not True
+                    or raw.get("mdt_exception") != "emergency_lifesaving_surgery"
                 )
             )
         ):
@@ -2399,6 +2410,9 @@ def safe_luxian_0609_customer_display_facts(
             facts["surgery_level_source"] = level_source
         if discussion_state is not None:
             facts["mdt_discussion_state"] = discussion_state
+        if discussion_state == "exempt":
+            facts["emergency_surgery_confirmed"] = True
+            facts["mdt_exception"] = "emergency_lifesaving_surgery"
         procedure_code = raw.get("procedure_code")
         procedure_name = raw.get("procedure_name")
         if isinstance(procedure_code, str) and re.fullmatch(r"[0-9A-Za-z.\-]{1,32}", procedure_code):

@@ -15,6 +15,9 @@ from app.services.luxian_0609.decision_model import (
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
+)
 from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
@@ -745,6 +748,35 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
     assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
     assert dict(execution.customer_display_facts)["LX0609-040"]["mdt_exception"] == "emergency_lifesaving_surgery"
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=("LX0609-040",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-040", "name": "四级手术术前多学科讨论"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )[0]
+
+    assert result["status"] == "not_applicable"
+    assert result["reason_code"] == "trigger_absent_complete"
+    assert result["customer_display_facts"] == {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "四级",
+        "surgery_level_source": "structured_field",
+        "emergency_surgery_confirmed": True,
+        "mdt_exception": "emergency_lifesaving_surgery",
+        "mdt_discussion_state": "exempt",
+    }
 
 
 @pytest.mark.asyncio

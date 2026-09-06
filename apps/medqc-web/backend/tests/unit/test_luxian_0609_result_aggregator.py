@@ -3396,6 +3396,41 @@ def test_040_preserves_controlled_level_source_and_mdt_facts():
 
 
 @pytest.mark.parametrize(
+    ("overrides", "missing_field"),
+    (
+        ({"performed_surgery_confirmed": False}, None),
+        ({"procedure_kind": "non_surgical_operation"}, None),
+        ({"effective_surgery_level": "三级"}, None),
+        ({"emergency_surgery_confirmed": False}, None),
+        ({"mdt_exception": "PRIVATE-EMERGENCY-DETAIL"}, None),
+        ({}, "emergency_surgery_confirmed"),
+        ({}, "mdt_exception"),
+    ),
+)
+def test_040_rejects_malformed_emergency_exemption_facts(
+    overrides,
+    missing_field,
+):
+    raw = {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "四级",
+        "surgery_level_source": "hospital_performance",
+        "emergency_surgery_confirmed": True,
+        "mdt_exception": "emergency_lifesaving_surgery",
+        "mdt_discussion_state": "exempt",
+        **overrides,
+    }
+    if missing_field:
+        raw.pop(missing_field)
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-040",
+        raw=raw,
+    ) is None
+
+
+@pytest.mark.parametrize(
     "overrides",
     (
         {"performed_surgery_confirmed": False},
