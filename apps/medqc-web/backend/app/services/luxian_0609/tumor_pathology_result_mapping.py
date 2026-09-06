@@ -179,8 +179,65 @@ def safe_tumor_pathology_customer_display_facts(
     }[normalized](raw)
 
 
+def tumor_pathology_customer_fact_status_is_valid(
+    *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
+) -> bool:
+    """校验已裁决终态与肿瘤病理展示事实自洽，不重做业务判定。"""
+
+    if not is_tumor_pathology_customer_rule(rule_id):
+        return True
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status == "technical_error":
+        return True
+    if not isinstance(safe_facts, Mapping):
+        return False
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id in {"LX0609-013", "LX0609-027"}:
+        requirement_met = safe_facts.get("requirement_met")
+        return (
+            normalized_status in {"compliant", "non_compliant"}
+            and isinstance(requirement_met, bool)
+            and requirement_met == (normalized_status == "compliant")
+        )
+    if normalized_rule_id == "LX0609-019":
+        if (
+            safe_facts.get("verification_kind")
+            == "pathology_sampling_documentation_check"
+        ):
+            documented_sources = safe_facts.get("documented_sources")
+            return (
+                normalized_status == "compliant"
+                and safe_facts.get("requirement_met") is True
+                and isinstance(documented_sources, list)
+                and bool(documented_sources)
+            )
+        return (
+            normalized_status == "non_compliant"
+            and safe_facts.get("failure_kind") == "pathology_sampling_not_documented"
+        )
+    if normalized_rule_id == "LX0609-026":
+        field_results = safe_facts.get("field_results")
+        missing_fields = safe_facts.get("missing_order_fields")
+        if not isinstance(field_results, Mapping) or not isinstance(
+            missing_fields, list
+        ):
+            return False
+        values = tuple(field_results.values())
+        if missing_fields or "unknown" in values:
+            return normalized_status == "data_gap"
+        if "mismatched" in values:
+            return normalized_status == "non_compliant"
+        return (
+            values
+            and all(value == "matched" for value in values)
+            and normalized_status == "compliant"
+        )
+    return False
+
+
 __all__ = [
     "TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS",
     "is_tumor_pathology_customer_rule",
     "safe_tumor_pathology_customer_display_facts",
+    "tumor_pathology_customer_fact_status_is_valid",
 ]

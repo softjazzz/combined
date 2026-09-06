@@ -551,6 +551,10 @@ def finalize_luxian_0609_executor_customer_display_facts(
         critical_value_customer_fact_status_is_valid,
         is_critical_value_customer_rule,
     )
+    from .tumor_pathology_result_mapping import (
+        is_tumor_pathology_customer_rule,
+        tumor_pathology_customer_fact_status_is_valid,
+    )
     rule_id = str(finalized.get("rule_id") or finalized.get("rule_code") or "")
     if (
         safe_facts is not None
@@ -663,6 +667,16 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_critical_value_customer_rule(rule_id) and not critical_value_status_valid:
+        safe_facts = None
+    tumor_pathology_status_valid = (
+        is_tumor_pathology_customer_rule(rule_id)
+        and tumor_pathology_customer_fact_status_is_valid(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            safe_facts=safe_facts,
+        )
+    )
+    if is_tumor_pathology_customer_rule(rule_id) and not tumor_pathology_status_valid:
         safe_facts = None
     if raw_facts is None and surgery_gate_status_valid:
         finalized.pop("customer_display_facts", None)
