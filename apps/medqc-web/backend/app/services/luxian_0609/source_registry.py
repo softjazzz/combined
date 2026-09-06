@@ -538,6 +538,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-055": (
         "inpat_drug_order", "daily_course_record", "senior_course_record",
         "consultation_record", "labtest_master", "labtest_item_report",
+        "evaluation_context.horizon",
     ),
     "LX0609-056": (
         "daily_course_record", "senior_course_record", "consultation_record",

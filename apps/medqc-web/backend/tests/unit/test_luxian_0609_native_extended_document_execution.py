@@ -11,6 +11,9 @@ from app.services.luxian_0609.decision_binding import (
 from app.services.luxian_0609.decision_reducer import (
     CustomerFinalState,
 )
+from app.services.luxian_0609.customer_renderer import (
+    render_luxian_0609_customer_result,
+)
 from app.services.luxian_0609.evidence_material import (
     Luxian0609EvidenceMaterialStore,
     build_material_document_refs,
@@ -132,10 +135,10 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
 async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset()):
     rows_by_source = dict(rows_by_source)
     if (
-        rule_id == "LX0609-064"
+        rule_id in {"LX0609-055", "LX0609-064"}
         and "evaluation_context.horizon" not in rows_by_source
     ):
-        # 064 的既有行为测试都描述已完成的术后三日窗口；显式传入 horizon
+        # 055/064 的既有行为测试都描述已完成的观察窗口；显式传入 horizon
         # 的测试覆盖未成熟/缺失边界，避免测试夹具暗中回退 snapshot.created_at。
         rows_by_source["evaluation_context.horizon"] = ({
             "horizon_date": "2099-01-01",
@@ -172,7 +175,7 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
 async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=frozenset()):
     rows_by_source = dict(rows_by_source)
     if (
-        "LX0609-064" in rule_ids
+        {"LX0609-055", "LX0609-064"}.intersection(rule_ids)
         and "evaluation_context.horizon" not in rows_by_source
     ):
         rows_by_source["evaluation_context.horizon"] = ({
@@ -246,6 +249,12 @@ def test_052_binds_evaluation_horizon_without_expanding_053_sources() -> None:
         "labtest_item_report",
         "crisis_value_record",
     }
+
+
+def test_055_binds_evaluation_horizon_for_antimicrobial_effect_window() -> None:
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-055",))
+
+    assert "evaluation_context.horizon" in sources
 
 
 def test_071_binds_authoritative_order_and_daily_signature_change_sources() -> None:
@@ -4956,6 +4965,160 @@ async def test_055_falls_back_to_prescribed_time_when_planned_start_missing() ->
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("evaluation_time", "expected_reason"),
+    [
+        ("2026-06-02 10:00:00", "evaluation_window_not_started"),
+        ("2026-06-03 22:00:00", "evaluation_window_not_mature"),
+    ],
+)
+async def test_055_does_not_report_missing_evaluation_before_event_window_matures(
+    evaluation_time: str,
+    expected_reason: str,
+) -> None:
+    result, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": evaluation_time,
+                "horizon_date": evaluation_time[:10],
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == expected_reason
+    facts = dict(result.customer_display_facts)["LX0609-055"]
+    assert facts["unmatched_antimicrobials"] == []
+
+
+@pytest.mark.asyncio
+async def test_055_keeps_mature_missing_event_when_another_event_is_not_mature() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": (
+                {
+                    "order_id": "M-1",
+                    "generic_name": "美罗培南",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+                {
+                    "order_id": "V-1",
+                    "generic_name": "万古霉素",
+                    "planned_start_datetime": "2026-06-03 10:00:00",
+                },
+            ),
+            "daily_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-04 11:00:00",
+                "horizon_date": "2026-06-04",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "threshold_exceeded"
+    facts = dict(result.customer_display_facts)["LX0609-055"]
+    assert facts["unmatched_antimicrobials"] == ["美罗培南"]
+
+
+@pytest.mark.asyncio
+async def test_055_rejects_evaluation_horizon_before_antimicrobial_start() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-01 09:00:00",
+                "horizon_date": "2026-06-01",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_conflict"
+
+
+@pytest.mark.asyncio
+async def test_055_requires_evaluation_horizon() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (),
+            "evaluation_context.horizon": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_055_not_mature_window_survives_binding_aggregation_and_renderer() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-055",),
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-03 22:00:00",
+                "horizon_date": "2026-06-03",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-055",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "not_applicable"
+    assert canonical["reason_code"] == "evaluation_window_not_mature"
+    facts = canonical["customer_display_facts"]
+    assert facts["unmatched_antimicrobials"] == []
+    native_facts = dict(execution.customer_display_facts)["LX0609-055"]
+    assert native_facts["window_state"] == "evaluation_window_not_mature"
+    assert native_facts["event_windows"] == [{
+        "antimicrobial": "美罗培南",
+        "event_state": "not_mature",
+        "start_time": "2026-06-01 10:00:00",
+        "window_start_time": "2026-06-03 10:00:00",
+        "window_end_time": "2026-06-04 10:00:00",
+        "evaluation_time": "2026-06-03 22:00:00",
+        "elapsed_hours": 60.0,
+    }]
+    rendered = render_luxian_0609_customer_result(
+        decision=reduced[0], safe_customer_display_facts=native_facts
+    )
+    assert "效果评价窗口尚未结束" in rendered["findings"]
+    assert "尚未满72小时" in canonical["evidence"]
 
 
 @pytest.mark.asyncio

@@ -283,6 +283,48 @@ def _critical_value_evaluation_horizon(
     return horizon_date, horizon_time, None
 
 
+def _antimicrobial_effect_window_state(
+    *,
+    start_time: datetime,
+    horizon_date: date | None,
+    horizon_time: datetime | None,
+) -> tuple[str, float | None, Mapping[str, Any]]:
+    """按单次抗菌药启用事件判断 055 的 48～72 小时观察窗口。
+
+    日期粒度的冻结终点不能断言当天已经跨过具体时刻，故仅在截止日后
+    才进入成熟状态；这与现有检查检验时间窗的保守口径一致。
+    """
+
+    window_start = start_time + timedelta(hours=48)
+    window_end = start_time + timedelta(hours=72)
+    facts: dict[str, Any] = {
+        "start_time": start_time.isoformat(sep=" "),
+        "window_start_time": window_start.isoformat(sep=" "),
+        "window_end_time": window_end.isoformat(sep=" "),
+    }
+    if horizon_time is not None:
+        facts["evaluation_time"] = horizon_time.isoformat(sep=" ")
+        elapsed_hours = (horizon_time - start_time).total_seconds() / 3600
+        facts["elapsed_hours"] = round(elapsed_hours, 2)
+        if elapsed_hours < 0:
+            return "conflict", elapsed_hours, facts
+        if elapsed_hours < 48:
+            return "not_started", elapsed_hours, facts
+        if elapsed_hours < 72:
+            return "not_mature", elapsed_hours, facts
+        return "mature", elapsed_hours, facts
+    if horizon_date is None:
+        return "missing", None, facts
+    facts["evaluation_date"] = horizon_date.isoformat()
+    if horizon_date < start_time.date():
+        return "conflict", None, facts
+    if horizon_date < window_start.date():
+        return "not_started", None, facts
+    if horizon_date > window_end.date():
+        return "mature", None, facts
+    return "not_mature", None, facts
+
+
 def _fact_refs(
     snapshot: Luxian0609EvidenceSnapshot,
     source_keys: Sequence[str],
@@ -1132,7 +1174,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     horizon_rows, horizon_error = (
         _source_rows(evidence_materials, "evaluation_context.horizon")
-        if {"LX0609-051", "LX0609-052", "LX0609-064"}.intersection(selected)
+        if {"LX0609-051", "LX0609-052", "LX0609-055", "LX0609-064"}.intersection(selected)
         else ((), "")
     )
     (
@@ -1142,6 +1184,15 @@ async def execute_luxian_0609_native_extended_document_rules(
     ) = (
         _critical_value_evaluation_horizon(horizon_rows, horizon_error)
         if "LX0609-052" in selected
+        else (None, None, None)
+    )
+    (
+        antimicrobial_horizon_date,
+        antimicrobial_horizon_datetime,
+        antimicrobial_horizon_error,
+    ) = (
+        _critical_value_evaluation_horizon(horizon_rows, horizon_error)
+        if "LX0609-055" in selected
         else (None, None, None)
     )
     discharge_rows, discharge_error = _source_rows(
@@ -1407,12 +1458,51 @@ async def execute_luxian_0609_native_extended_document_rules(
                     row for row in course_rows
                     if _is_antimicrobial_effect_evaluation(row)
                 )
-                ambiguous_evaluation = len(order_events) > 1 and any(
+                event_windows: list[dict[str, Any]] = []
+                mature_events: list[tuple[Mapping[str, Any], str, datetime]] = []
+                immature_states: list[str] = []
+                if any(start is None for _, _, start in order_events):
+                    final_state, reason_code = "data_gap", "authoritative_time_missing"
+                elif antimicrobial_horizon_error:
+                    final_state, reason_code = "data_gap", antimicrobial_horizon_error
+                else:
+                    for order, name, start in order_events:
+                        assert start is not None
+                        state, _, window_facts = _antimicrobial_effect_window_state(
+                            start_time=start,
+                            horizon_date=antimicrobial_horizon_date,
+                            horizon_time=antimicrobial_horizon_datetime,
+                        )
+                        event_windows.append({
+                            "antimicrobial": name,
+                            "event_state": state,
+                            **window_facts,
+                        })
+                        if state == "conflict":
+                            final_state, reason_code = (
+                                "data_gap", "authoritative_time_conflict"
+                            )
+                            break
+                        if state == "missing":
+                            final_state, reason_code = (
+                                "data_gap", "authoritative_time_missing"
+                            )
+                            break
+                        if state == "mature":
+                            mature_events.append((order, name, start))
+                        else:
+                            immature_states.append(state)
+                    else:
+                        final_state = reason_code = ""
+                ambiguous_evaluation = len(mature_events) > 1 and any(
                     not _linked_order_id(row)
                     and (
                         not (mentioned := _antimicrobial_names_in(row))
                         or any(
-                            sum(name == event_name for _, event_name, _ in order_events) > 1
+                            sum(
+                                name == event_name
+                                for _, event_name, _ in mature_events
+                            ) > 1
                             for name in mentioned
                         )
                     )
@@ -1421,12 +1511,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                 intervals: list[float] = []
                 unmatched_names: list[str] = []
                 has_untimed_match = False
-                if any(start is None for _, _, start in order_events):
-                    final_state, reason_code = "data_gap", "authoritative_time_missing"
+                if final_state == "data_gap":
+                    pass
                 elif ambiguous_evaluation:
                     final_state, reason_code = "data_gap", "association_failed"
                 else:
-                    for order, name, start in order_events:
+                    for order, name, start in mature_events:
                         order_id = _clean(order.get("order_id"))
                         matching_rows = tuple(
                             row
@@ -1455,12 +1545,22 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 _row_time(row) is None for row in matching_rows
                             )
                     if not unmatched_names:
-                        final_state, reason_code = "compliant", "requirement_within_threshold"
+                        if immature_states:
+                            final_state = "not_applicable"
+                            reason_code = (
+                                "evaluation_window_not_mature"
+                                if "not_mature" in immature_states
+                                else "evaluation_window_not_started"
+                            )
+                        else:
+                            final_state, reason_code = (
+                                "compliant", "requirement_within_threshold"
+                            )
                     elif has_untimed_match:
                         final_state, reason_code = "data_gap", "authoritative_time_missing"
                     else:
                         final_state, reason_code = "non_compliant", "threshold_exceeded"
-                display.append((rule_id, {
+                display_facts: dict[str, Any] = {
                     "verification_kind": "antimicrobial_effect_evaluation_check",
                     "antimicrobials": list(dict.fromkeys(
                         name for _, name, _ in order_events
@@ -1469,7 +1569,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     "evaluation_intervals": [round(value, 2) for value in intervals],
                     "unmatched_antimicrobials": list(dict.fromkeys(unmatched_names)),
                     "association_ambiguous": ambiguous_evaluation,
-                }))
+                    "event_windows": event_windows,
+                }
+                if final_state == "not_applicable":
+                    display_facts["window_state"] = reason_code
+                display.append((rule_id, display_facts))
             elif rule_id == "LX0609-056":
                 special_orders = tuple(
                     row for row in antimicrobial_orders
@@ -1671,8 +1775,18 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ("inpat_drug_order", "senior_course_record", "consultation_record")
                     if rule_id == "LX0609-058"
                     else (
-                        "inpat_drug_order", "daily_course_record", "senior_course_record",
-                        "consultation_record", "labtest_master", "labtest_item_report",
+                        (
+                            "inpat_drug_order", "daily_course_record",
+                            "senior_course_record", "consultation_record",
+                            "labtest_master", "labtest_item_report",
+                            "evaluation_context.horizon",
+                        )
+                        if rule_id == "LX0609-055"
+                        else (
+                            "inpat_drug_order", "daily_course_record",
+                            "senior_course_record", "consultation_record",
+                            "labtest_master", "labtest_item_report",
+                        )
                     )
                 ),
                 final_state=final_state, reason_code=reason_code,

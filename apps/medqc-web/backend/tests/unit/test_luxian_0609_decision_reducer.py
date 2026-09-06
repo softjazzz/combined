@@ -451,6 +451,15 @@ def test_reason_taxonomy_is_immutable():
         )
 
 
+def test_evaluation_window_not_started_is_only_not_applicable_reason() -> None:
+    assert "evaluation_window_not_started" in ALLOWED_REASON_CODES_BY_FINAL_STATE[
+        "not_applicable"
+    ]
+    assert "evaluation_window_not_started" not in ALLOWED_REASON_CODES_BY_FINAL_STATE[
+        "data_gap"
+    ]
+
+
 def test_rule_decision_fingerprint_is_stable_and_dimension_bound():
     first = _decision()
     second = _decision()

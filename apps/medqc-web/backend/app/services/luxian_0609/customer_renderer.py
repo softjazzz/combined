@@ -1058,6 +1058,16 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已核对住院药物医嘱，未触发48～72小时效果评价要求。",
         "无需按本质控点处理。",
     ),
+    ("LX0609-055", "evaluation_window_not_started"): (
+        "抗菌药物启用后尚未进入48～72小时效果评价窗口",
+        "截至本次冻结评价时点，尚未满48小时，本次暂不适用。",
+        "待进入并完成评价窗口后，按同一资料范围重新质控。",
+    ),
+    ("LX0609-055", "evaluation_window_not_mature"): (
+        "抗菌药物48～72小时效果评价窗口尚未结束",
+        "截至本次冻结评价时点，尚未满72小时，本次暂不判定为质控问题。",
+        "待评价窗口结束后，按同一资料范围重新质控。",
+    ),
     ("LX0609-057", "trigger_absent_complete"): (
         "本次未发现经验性抗菌药物使用",
         "已核对抗菌药物医嘱及病程，未触发经验用药理由核对。",
@@ -2516,6 +2526,11 @@ def customer_finding_from_controlled_facts(
         medicines = joined("antimicrobials")
         intervals = joined("evaluation_intervals")
         unmatched = joined("unmatched_antimicrobials")
+        window_state = facts.get("window_state")
+        if window_state == "evaluation_window_not_started":
+            return f"已核对抗菌药物 {medicines}；尚未进入48～72小时效果评价窗口。"
+        if window_state == "evaluation_window_not_mature":
+            return f"已核对抗菌药物 {medicines}；效果评价窗口尚未结束。"
         if facts.get("association_ambiguous") is True:
             return f"已核对抗菌药物 {medicines}；现有效果评价未明确关联到具体药物计划开始/启用事件，暂无法逐项核对 48～72 小时评价。"
         if unmatched:

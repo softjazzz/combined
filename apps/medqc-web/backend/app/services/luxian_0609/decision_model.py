@@ -98,6 +98,7 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "trigger_absent_complete",
             "eligibility_not_met",
             "performed_event_absent",
+            "evaluation_window_not_started",
             "evaluation_window_not_mature",
         }
     ),
