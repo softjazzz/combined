@@ -189,7 +189,6 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
     } == {
         ("bloodtrans_record", "blood-freeze-1"),
         ("bloodtrans_record", "blood-freeze-2"),
-        ("daily_course_record", "daily-freeze-1"),
     }
 
 

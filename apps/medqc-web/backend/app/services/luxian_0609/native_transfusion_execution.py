@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 import re
+import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
 from .decision_model import (
@@ -14,7 +15,11 @@ from .decision_model import (
     QcDirection,
     RuleDecision,
 )
-from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .pretransfusion_assessment import (
@@ -47,6 +52,33 @@ _MAX_ROWS_PER_SOURCE = 8
 _MAX_ROW_CHARS = 1400
 _MAX_CONTEXT_CHARS = 18000
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
+_DOCUMENT_IDENTITY_FIELDS = (
+    "document_id",
+    "exam_id",
+    "test_id",
+    "labtest_id",
+    "report_id",
+    "pathology_exam_id",
+    "pathology_id",
+    "order_id",
+    "application_id",
+    "event_id",
+    "diagnosis_id",
+    "surgery_id",
+    "id",
+)
+
+
+def _declared_document_identity(value: Any, *, field_name: str) -> str:
+    """保留既有边缘空格容忍，但拒绝声明坐标中的控制字符。"""
+
+    raw = str(value or "")
+    if any(unicodedata.category(character) == "Cc" for character in raw):
+        raise ValueError(f"invalid {field_name} control character")
+    normalized = raw.strip()
+    if not normalized:
+        raise ValueError(f"missing {field_name}")
+    return normalized
 
 _PRETRANSFUSION_ASSESSMENT_PATTERN = re.compile(r"输血前(?:评估|评价)")
 _PRETRANSFUSION_PURPOSE_PATTERN = re.compile(
@@ -313,10 +345,85 @@ class _TransfusionRuleOutcome:
     executor_type: str
 
 
+def _row_has_document_identity(row: Mapping[str, Any], document_id: str) -> bool:
+    """按任一既有业务身份字段精确匹配，禁止空白归一化后的模糊命中。"""
+
+    return any(
+        str(row.get(field) or "").strip() == document_id
+        for field in _DOCUMENT_IDENTITY_FIELDS
+    )
+
+
+def _selected_document_identities(
+    *,
+    rule_id: str,
+    display_facts: Mapping[str, Any],
+) -> tuple[tuple[str, str], ...]:
+    """从执行器已选的内部文书坐标读取证据，不从来源级快照反推。"""
+
+    selected: list[tuple[str, str]] = []
+    raw_refs = display_facts.get("source_document_refs")
+    if raw_refs is not None:
+        if not isinstance(raw_refs, list):
+            raise ValueError("invalid selected transfusion document refs")
+        for raw_ref in raw_refs:
+            if not isinstance(raw_ref, Mapping):
+                raise ValueError("invalid selected transfusion document ref")
+            source_key = _declared_document_identity(
+                raw_ref.get("source_type"), field_name="selected transfusion source"
+            )
+            document_id = _declared_document_identity(
+                raw_ref.get("source_document_id"),
+                field_name="selected transfusion document id",
+            )
+            selected.append((source_key, document_id))
+
+    raw_ids = display_facts.get("source_document_ids")
+    if raw_ids is not None:
+        if rule_id not in {"LX0609-045", "LX0609-046"} or not isinstance(raw_ids, list):
+            raise ValueError("invalid selected transfusion document ids")
+        for raw_id in raw_ids:
+            document_id = _declared_document_identity(
+                raw_id, field_name="selected transfusion document id"
+            )
+            selected.append(("bloodtrans_record", document_id))
+    return tuple(dict.fromkeys(selected))
+
+
+def _material_document_refs_for_selected_identities(
+    *,
+    selected_identities: Sequence[tuple[str, str]],
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, ...]:
+    """将执行器选择的 source+ID 映射为同一快照既有逐行引用。
+
+    同一业务 ID 可能对应多条合法材料行；公共投影要求这些行必须一起被选择，
+    因而这里保留全部匹配的 ``document_ref``，不把重复 ID 误作歧义。
+    """
+
+    resolved: list[str] = []
+    for source_key, document_id in selected_identities:
+        try:
+            rows = materials.document_rows(source_key, snapshot=snapshot)
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, TypeError, ValueError) as exc:
+            raise ValueError("selected transfusion source is not bound to snapshot") from exc
+        matches = [
+            reference
+            for reference, row in rows
+            if _row_has_document_identity(row, document_id)
+        ]
+        if not matches:
+            raise ValueError("selected transfusion document is not bound to snapshot")
+        resolved.extend(matches)
+    return tuple(dict.fromkeys(resolved))
+
+
 def _typed_decision_from_outcome(
     *,
     outcome: _TransfusionRuleOutcome,
     snapshot: Luxian0609EvidenceSnapshot,
+    selected_document_refs: Sequence[str] = (),
 ) -> RuleDecision:
     """从受控内核 outcome 生成 typed decision，不经过客户结果 DTO。"""
 
@@ -333,11 +440,14 @@ def _typed_decision_from_outcome(
     allowed_source_keys = _typed_rule_source_keys(outcome.rule_id).intersection(
         binding_source_keys
     )
-    refs = tuple(
+    source_refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
         if observation.source_key in allowed_source_keys
     )
+    # 来源级观察引用继续保留给审计合同；公共逐行投影只消费 document_ref，
+    # 因而不会由这些观察引用重新猜测无关文书。
+    refs = tuple(dict.fromkeys((*source_refs, *selected_document_refs)))
     if status in {"compliant", "non_compliant", "not_applicable"} and not refs:
         raise ValueError("typed transfusion decision requires evidence refs")
 
@@ -798,20 +908,21 @@ def _source_document_refs(
     *,
     source_type: str,
     identity_fields: Sequence[str] = ("document_id",),
+    limit: int | None = 8,
 ) -> list[dict[str, str]]:
     refs: list[dict[str, str]] = []
     seen: set[str] = set()
     for row in rows:
         document_id = ""
         for field in identity_fields:
-            document_id = _clean(row.get(field))
+            document_id = str(row.get(field) or "").strip()
             if document_id:
                 break
         if not document_id or document_id in seen:
             continue
         seen.add(document_id)
         refs.append({"source_type": source_type, "source_document_id": document_id})
-        if len(refs) == 8:
+        if limit is not None and len(refs) == limit:
             break
     return refs
 
@@ -829,6 +940,7 @@ def _programmatic_041_status(
         trigger_refs = _source_document_refs(
             _source_document_rows(documents, "bloodtrans_record"),
             source_type="bloodtrans_record",
+            limit=None,
         )
         return (
             "non_compliant",
@@ -847,6 +959,11 @@ def _programmatic_041_status(
             "verification_kind": "transfusion_consent_present",
             "performed_transfusion_confirmed": True,
             "consent_count": len(consent_rows),
+            "source_document_refs": _source_document_refs(
+                consent_rows,
+                source_type="consent_form",
+                limit=None,
+            ),
         },
     )
 
@@ -1183,13 +1300,81 @@ def _programmatic_044_status(
     if structured is not None:
         return structured
 
-    entries = tuple(
-        entry
-        for source_key in _RULE_CONTEXT_SOURCES["LX0609-044"]
-        for entry in _source_entries(documents, source_key, limit=None)
+    sourced_entries: list[tuple[str, Mapping[str, Any], str]] = []
+    for source_key in _RULE_CONTEXT_SOURCES["LX0609-044"]:
+        for row in _source_document_rows(documents, source_key):
+            title = _clean(row.get("document_title") or row.get("title"))
+            content = _row_text(row)
+            entry = " ".join(value for value in (title, content) if value).strip()
+            if entry:
+                sourced_entries.append((source_key, row, entry[:_MAX_ROW_CHARS]))
+    entries = tuple(entry for _, _, entry in sourced_entries)
+
+    def selected_refs(
+        predicate: Any,
+    ) -> list[dict[str, str]]:
+        refs: list[dict[str, str]] = []
+        for source_key, row, entry in sourced_entries:
+            if predicate(entry):
+                refs.extend(
+                    _source_document_refs(
+                        [row], source_type=source_key, limit=None
+                    )
+                )
+        return refs
+
+    def display_facts(
+        status: str,
+        reason_code: str,
+        *,
+        refs: Sequence[Mapping[str, str]] = (),
+    ) -> Mapping[str, Any] | None:
+        facts = _programmatic_transfusion_display_facts(
+            rule_id="LX0609-044",
+            status=status,
+            reason_code=reason_code,
+            documents=documents,
+        )
+        if facts is None:
+            return None
+        result = dict(facts)
+        if refs:
+            result["source_document_refs"] = [dict(item) for item in refs]
+        else:
+            result.pop("source_document_refs", None)
+        return result
+
+    def with_bloodtrans_anchors(
+        refs: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, str]]:
+        return [
+            *(dict(item) for item in refs),
+            *_source_document_refs(
+                _source_document_rows(documents, "bloodtrans_record"),
+                source_type="bloodtrans_record",
+                limit=None,
+            ),
+        ]
+
+    has_explicit_missing = any(
+        _PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN.search(entry) is not None
+        for entry in entries
     )
-    if any(_PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN.search(entry) for entry in entries):
-        return "non_compliant", "pretransfusion_assessment_missing"
+    missing_refs = selected_refs(
+        lambda entry: _PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN.search(entry)
+        is not None
+    )
+    if has_explicit_missing:
+        return (
+            "non_compliant",
+            "pretransfusion_assessment_missing",
+            display_facts(
+                "non_compliant",
+                "pretransfusion_assessment_missing",
+                refs=with_bloodtrans_anchors(missing_refs),
+            )
+            or {},
+        )
 
     bloodtrans_entries = tuple(
         _source_entries(documents, "bloodtrans_record", limit=None)
@@ -1198,12 +1383,26 @@ def _programmatic_044_status(
         _source_entries(documents, "blood_application", limit=None)
     )
 
-    if any(
-        _PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry)
+    has_complete_assessment = any(
+        _PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry) is not None
         and all(pattern.search(entry) for pattern in _PRETRANSFUSION_CORE_PATTERNS)
         for entry in entries
-    ):
-        return "compliant", "pretransfusion_assessment_complete"
+    )
+    complete_refs = selected_refs(
+        lambda entry: _PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry) is not None
+        and all(pattern.search(entry) for pattern in _PRETRANSFUSION_CORE_PATTERNS)
+    )
+    if has_complete_assessment:
+        return (
+            "compliant",
+            "pretransfusion_assessment_complete",
+            display_facts(
+                "compliant",
+                "pretransfusion_assessment_complete",
+                refs=with_bloodtrans_anchors(complete_refs),
+            )
+            or {},
+        )
 
     has_marker = any(_PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry) for entry in entries)
     has_indication = any(
@@ -1227,7 +1426,20 @@ def _programmatic_044_status(
         and bloodtrans_entries
         and not has_application
     ):
-        return "non_compliant", "pretransfusion_assessment_missing"
+        return (
+            "non_compliant",
+            "pretransfusion_assessment_missing",
+            display_facts(
+                "non_compliant",
+                "pretransfusion_assessment_missing",
+                refs=_source_document_refs(
+                    _source_document_rows(documents, "bloodtrans_record"),
+                    source_type="bloodtrans_record",
+                    limit=None,
+                ),
+            )
+            or {},
+        )
     if not has_marker and not has_indication and not has_application:
         return "non_compliant", "pretransfusion_assessment_missing"
     if bloodtrans_entries and has_application and not has_marker:
@@ -1600,6 +1812,7 @@ class _PosttransfusionEvaluationAssessment:
     reason_code: str
     latest_end_time: datetime | None = None
     evaluation_time: datetime | None = None
+    selected_source_document_refs: tuple[tuple[str, str], ...] = ()
 
 
 def _programmatic_047_assessment(
@@ -1607,7 +1820,7 @@ def _programmatic_047_assessment(
 ) -> _PosttransfusionEvaluationAssessment:
     """按输血结束后24小时窗口判定，评价正文必须有可用的完成时间。"""
 
-    end_rows: list[tuple[datetime, bool, datetime | None]] = []
+    end_rows: list[tuple[datetime, bool, datetime | None, tuple[str, str] | None]] = []
     unresolved_end_marker = False
     explicit_missing_evaluation = False
     for row in _source_document_rows(documents, "bloodtrans_record"):
@@ -1638,6 +1851,11 @@ def _programmatic_047_assessment(
                 last_end,
                 _has_clinical_posttransfusion_evaluation(last_tail),
                 evaluation_time,
+                (
+                    ("bloodtrans_record", document_id)
+                    if (document_id := str(row.get("document_id") or row.get("id") or "").strip())
+                    else None
+                ),
             )
         )
 
@@ -1645,17 +1863,22 @@ def _programmatic_047_assessment(
         return _PosttransfusionEvaluationAssessment(
             "data_gap", "transfusion_end_time_unavailable"
         )
+    end_document_refs = tuple(
+        dict.fromkeys(ref for _, _, _, ref in end_rows if ref is not None)
+    )
     if explicit_missing_evaluation:
         return _PosttransfusionEvaluationAssessment(
-            "non_compliant", "posttransfusion_evaluation_missing"
+            "non_compliant",
+            "posttransfusion_evaluation_missing",
+            selected_source_document_refs=end_document_refs,
         )
 
-    latest_end = max(end_time for end_time, _, _ in end_rows)
-    qualified_evaluations: list[tuple[datetime, datetime]] = []
+    latest_end = max(end_time for end_time, _, _, _ in end_rows)
+    qualified_evaluations: list[tuple[datetime, datetime, tuple[str, str] | None]] = []
     missing_evaluation = False
     unusable_evaluation_time = False
     late_evaluation_found = False
-    for end_time, has_evaluation, evaluation_time in end_rows:
+    for end_time, has_evaluation, evaluation_time, document_ref in end_rows:
         if not has_evaluation:
             missing_evaluation = True
             continue
@@ -1663,14 +1886,14 @@ def _programmatic_047_assessment(
             unusable_evaluation_time = True
             continue
         if (evaluation_time - end_time).total_seconds() <= 24 * 3600:
-            qualified_evaluations.append((end_time, evaluation_time))
+            qualified_evaluations.append((end_time, evaluation_time, document_ref))
         else:
             late_evaluation_found = True
 
     if len(qualified_evaluations) == len(end_rows):
         latest_evaluation_time = min(
             evaluation_time
-            for end_time, evaluation_time in qualified_evaluations
+            for end_time, evaluation_time, _ in qualified_evaluations
             if end_time == latest_end
         )
         return _PosttransfusionEvaluationAssessment(
@@ -1678,6 +1901,7 @@ def _programmatic_047_assessment(
             "posttransfusion_evaluation_complete",
             latest_end_time=latest_end,
             evaluation_time=latest_evaluation_time,
+            selected_source_document_refs=end_document_refs,
         )
 
     # 多份独立输血记录必须各自有评价；同一记录内的成分输注允许在最终结束后总评。
@@ -1694,9 +1918,10 @@ def _programmatic_047_assessment(
                 else "posttransfusion_evaluation_late"
             ),
             latest_end_time=latest_end,
+            selected_source_document_refs=end_document_refs,
         )
 
-    qualified_daily_evaluations: list[datetime] = []
+    qualified_daily_evaluations: list[tuple[datetime, tuple[str, str] | None]] = []
     for row in _source_document_rows(documents, "daily_course_record"):
         record_time = _authoritative_record_time(row)
         text = _row_text(row)
@@ -1709,16 +1934,34 @@ def _programmatic_047_assessment(
             unusable_evaluation_time = True
             continue
         if (record_time - latest_end).total_seconds() <= 24 * 3600:
-            qualified_daily_evaluations.append(record_time)
+            document_id = str(row.get("document_id") or row.get("id") or "").strip()
+            qualified_daily_evaluations.append(
+                (
+                    record_time,
+                    ("daily_course_record", document_id) if document_id else None,
+                )
+            )
             continue
         late_evaluation_found = True
 
     if qualified_daily_evaluations:
+        selected_daily_time, selected_daily_ref = min(
+            qualified_daily_evaluations, key=lambda item: item[0]
+        )
+        selected_refs = tuple(
+            dict.fromkeys(
+                (
+                    *end_document_refs,
+                    *((selected_daily_ref,) if selected_daily_ref is not None else ()),
+                )
+            )
+        )
         return _PosttransfusionEvaluationAssessment(
             "compliant",
             "posttransfusion_evaluation_complete",
             latest_end_time=latest_end,
-            evaluation_time=min(qualified_daily_evaluations),
+            evaluation_time=selected_daily_time,
+            selected_source_document_refs=selected_refs,
         )
     if unusable_evaluation_time:
         return _PosttransfusionEvaluationAssessment(
@@ -1732,6 +1975,7 @@ def _programmatic_047_assessment(
             else "posttransfusion_evaluation_missing"
         ),
         latest_end_time=latest_end,
+        selected_source_document_refs=end_document_refs,
     )
 
 
@@ -2049,31 +2293,27 @@ def _programmatic_transfusion_display_facts(
             )
         return payload
     if rule_id == "LX0609-045":
+        payload: dict[str, Any] = {
+            "verification_kind" if status == "compliant" else "failure_kind": (
+                "transfusion_course_record_present"
+                if status == "compliant"
+                else "transfusion_course_record_missing"
+            ),
+            "performed_transfusion_confirmed": True,
+            "checked_sources": ["bloodtrans_record", "daily_course_record"],
+        }
         if status == "compliant":
-            payload: dict[str, Any] = {
-                "verification_kind": "transfusion_course_record_present",
-                "performed_transfusion_confirmed": True,
-                "record_count": len(records),
-                "checked_sources": ["bloodtrans_record", "daily_course_record"],
-            }
-            # 045 的判定只使用专用输血记录；把同一批已核对的文书 ID
-            # 作为内部证据引用交给聚合器，避免合规结论没有可定位证据。
-            source_document_ids = [
-                document_id
-                for record in records
-                if (document_id := _clean(record.get("document_id") or record.get("id")))
-            ]
-            if source_document_ids:
-                payload["source_document_ids"] = list(
-                    dict.fromkeys(source_document_ids)
-                )[:8]
-            return payload
-        if status == "non_compliant":
-            return {
-                "failure_kind": "transfusion_course_record_missing",
-                "performed_transfusion_confirmed": True,
-                "checked_sources": ["bloodtrans_record", "daily_course_record"],
-            }
+            payload["record_count"] = len(records)
+        # 045 的状态逐条读取专用输血记录；无论合规或缺项，都把这批实际
+        # 核对的文书交给同一 snapshot 的逐行引用绑定，日常病程不参与选择。
+        source_document_ids = [
+            document_id
+            for record in records
+            if (document_id := str(record.get("document_id") or record.get("id") or "").strip())
+        ]
+        if source_document_ids:
+            payload["source_document_ids"] = list(dict.fromkeys(source_document_ids))
+        return payload
     if rule_id == "LX0609-046":
         llm_component_refs = set(component_evidence_document_refs)
         checks_by_record = []
@@ -2120,7 +2360,7 @@ def _programmatic_transfusion_display_facts(
         if source_document_ids:
             payload["source_document_ids"] = list(
                 dict.fromkeys(source_document_ids)
-            )[:8]
+            )
         payload["verification_kind" if status == "compliant" else "failure_kind"] = (
             "transfusion_course_record_complete"
             if status == "compliant"
@@ -2138,9 +2378,10 @@ def _programmatic_transfusion_display_facts(
             "threshold_hours": 24,
             "checked_sources": ["bloodtrans_record", "daily_course_record"],
         }
-        source_refs = _source_document_refs(
-            records, source_type="bloodtrans_record"
-        )
+        source_refs = [
+            {"source_type": source_type, "source_document_id": document_id}
+            for source_type, document_id in assessment.selected_source_document_refs
+        ]
         if source_refs:
             facts["source_document_refs"] = source_refs
         if assessment.latest_end_time is not None:
@@ -2290,17 +2531,58 @@ async def execute_luxian_0609_native_transfusion_rules(
         controlled_facts = display_facts or _customer_display_facts_for_outcome(
             rule_id=rule_id, status=status, reason_code=reason_code
         )
-        if controlled_facts is not None:
-            customer_display_facts.append((rule_id, controlled_facts))
+        selected_document_refs: tuple[str, ...] = ()
+        if rule_id in typed_requested and controlled_facts is not None:
+            assert evidence_snapshot is not None
+            assert evidence_materials is not None
+            try:
+                selected_document_refs = _material_document_refs_for_selected_identities(
+                    selected_identities=_selected_document_identities(
+                        rule_id=rule_id,
+                        display_facts=controlled_facts,
+                    ),
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+            except ValueError:
+                # 执行器声称已选中的文书无法绑定到同一请求快照，属于合同/实现
+                # 错误，不得投影成临床资料缺口；同时丢弃原客户事实。
+                outcome = _TransfusionRuleOutcome(
+                    rule_id=rule_id,
+                    status="technical_error",
+                    reason_code="snapshot_mismatch",
+                    executor_type=executor_type,
+                )
+                controlled_facts = None
         if rule_id in typed_requested:
             assert evidence_snapshot is not None
-            decisions.append(
-                _typed_decision_from_outcome(
+            try:
+                decision = (
+                    _typed_decision_from_outcome(
+                        outcome=outcome,
+                        snapshot=evidence_snapshot,
+                        selected_document_refs=selected_document_refs,
+                    )
+                )
+            except ValueError:
+                # RuleDecision 的 fact_refs 是有上限的受控合同。逐笔文书过多时
+                # 不能静默丢弃已选证据，也不能让单条规则异常中断同一规则族；
+                # 降为本规则技术错误并清理不可投影的客户事实。
+                outcome = _TransfusionRuleOutcome(
+                    rule_id=rule_id,
+                    status="technical_error",
+                    reason_code="executor_exception",
+                    executor_type=executor_type,
+                )
+                controlled_facts = None
+                decision = _typed_decision_from_outcome(
                     outcome=outcome,
                     snapshot=evidence_snapshot,
                 )
-            )
-        else:
+            decisions.append(decision)
+        if controlled_facts is not None:
+            customer_display_facts.append((rule_id, controlled_facts))
+        if rule_id not in typed_requested:
             results.append(
                 _result(
                     outcome.rule_id,
