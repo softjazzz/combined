@@ -466,7 +466,7 @@ def evaluate_rule_007_typed(
             confidence=None,
         )
 
-    record_points: list[tuple[datetime, str]] = []
+    record_refs_by_time: dict[datetime, set[str]] = {}
     substantive_record_without_time = False
     for source_key in RULE_007_RECORD_SOURCES:
         observation = observations[source_key]
@@ -532,16 +532,13 @@ def evaluate_rule_007_typed(
             if parsed is not None:
                 document_ref = document_refs_by_row.get(id(row))
                 if document_ref:
-                    record_points.append((parsed, document_ref))
+                    record_refs_by_time.setdefault(parsed, set()).add(document_ref)
             elif row_text(row):
                 substantive_record_without_time = True
 
-    ordered_points = sorted(
-        (
-            record_time,
-            document_ref,
-        )
-        for record_time, document_ref in record_points
+    bounded_record_refs_by_time = {
+        record_time: document_refs
+        for record_time, document_refs in record_refs_by_time.items()
         if admission_time <= record_time
         and (
             (
@@ -551,9 +548,15 @@ def evaluate_rule_007_typed(
             )
             or (horizon_time is not None and record_time <= horizon_time)
         )
+    }
+    # 保持既有“同一权威时间只算一条查房记录”的时限语义；若同刻多份文书
+    # 都参与了这个时间点的判定，仍将其全部作为客户可定位证据投影。
+    ordered_times = sorted(bounded_record_refs_by_time)
+    refs.update(
+        document_ref
+        for document_refs in bounded_record_refs_by_time.values()
+        for document_ref in document_refs
     )
-    ordered_times = [item[0] for item in ordered_points]
-    refs.update(document_ref for _record_time, document_ref in ordered_points)
     # 完整来源没有任何可定位病程记录时，先区分规则是否成熟，再区分
     # “记录不存在”和“候选记录存在但时间缺失”。空来源本身不是时间缺口。
     if not ordered_times and horizon_time is not None:
@@ -594,7 +597,7 @@ def evaluate_rule_007_typed(
         and horizon_date is not None
         and any(
             admission_time <= record_time and record_time.date() == horizon_date
-            for record_time, _document_ref in record_points
+            for record_time in record_refs_by_time
         )
     )
     tail_start = exact_boundary_times[-1]
