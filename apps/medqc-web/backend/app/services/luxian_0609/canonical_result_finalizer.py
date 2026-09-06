@@ -15,82 +15,66 @@ _DATA_GAP_EXPLANATIONS = {
         "reason_label": "关键字段缺失",
         "missing_sources": [],
         "missing_fields": ["完成判定所需的关键字段"],
-        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
     },
     "source_unavailable": {
         "reason_label": "数据源未接入",
         "missing_sources": ["质控所需数据源"],
         "missing_fields": [],
-        "customer_message": "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。",
     },
     "source_empty": {
         "reason_label": "未读取到相关资料",
         "missing_sources": ["质控所需资料"],
         "missing_fields": [],
-        "customer_message": "本次未读取到完成本项质控所需的相关资料，暂时无法完成判定。",
     },
     "source_truncated": {
         "reason_label": "输入资料不完整",
         "missing_sources": ["超出读取范围的后续资料"],
         "missing_fields": [],
-        "customer_message": "相关资料数量超过本次读取范围，当前资料不完整，暂时无法完成本项质控。",
     },
     "source_readiness_unproven": {
         "reason_label": "数据同步状态未确认",
         "missing_sources": ["质控所需资料"],
         "missing_fields": [],
-        "customer_message": "本项质控所需资料的同步状态尚未确认，暂时无法判断资料是否完整。",
     },
     "association_failed": {
         "reason_label": "资料关联失败",
         "missing_sources": ["需要相互核对的事件与文书"],
         "missing_fields": [],
-        "customer_message": "已读取到相关资料，但暂时无法准确关联对应事件与文书，无法完成本项质控。",
     },
     "linkage_unresolved": {
         "reason_label": "关联资料不足",
         "missing_sources": ["需要相互核对的事件与文书"],
         "missing_fields": [],
-        "customer_message": "现有资料不足以确认事件与文书的对应关系，暂时无法完成本项质控。",
     },
     "authoritative_time_missing": {
         "reason_label": "权威时间缺失",
         "missing_sources": [],
         "missing_fields": ["用于计算质控时限的权威时间"],
-        "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
     },
     "target_report_missing": {
         "reason_label": "目标报告缺失",
         "missing_sources": ["对应的正式检查检验报告"],
         "missing_fields": [],
-        "customer_message": (
-            "已读取到目标检查检验医嘱，但未读取到对应的正式报告，"
-            "暂时无法核对24小时要求。"
-        ),
     },
     "authoritative_report_time_missing": {
         "reason_label": "报告时间缺失",
         "missing_sources": [],
         "missing_fields": ["检查检验报告的权威报告时间"],
-        "customer_message": "已读取到目标检查检验事件，但缺少权威报告时间，暂时无法核对24小时要求。",
     },
     "authoritative_time_conflict": {
         "reason_label": "权威时间冲突",
         "missing_sources": [],
         "missing_fields": ["相互一致的报告时间与评价截止时间"],
-        "customer_message": "报告时间与本次住院的评价截止时间存在冲突，暂时无法完成本项质控。",
     },
     "evaluation_window_not_mature": {
         "reason_label": "评价窗口尚未结束",
         "missing_sources": [],
         "missing_fields": [],
-        "customer_message": "截至本次评价日期尚未满规则要求的观察时限，本次暂不判定缺陷。",
     },
     "applicability_source_gap": {
         "reason_label": "适用性资料缺失",
         "missing_sources": ["判断质控点是否适用的关键资料"],
         "missing_fields": [],
-        "customer_message": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
     },
 }
 
@@ -99,18 +83,11 @@ _RULE_DATA_GAP_EXPLANATIONS = {
         "reason_label": "机构数据源未接入",
         "missing_sources": ["会诊申请时间"],
         "missing_fields": [],
-        "customer_message": (
-            "当前机构会诊接口未提供会诊申请时间，无法核对会诊记录是否在申请发出后24小时内完成。"
-        ),
     },
     ("LX0609-009", "candidate_scope_incomplete"): {
         "reason_label": "自动核对范围超限",
         "missing_sources": [],
         "missing_fields": [],
-        "customer_message": (
-            "本次病情变化候选超出单次自动核对的安全容量，暂未形成确定结论；"
-            "现有资料无需补充，请重新执行本项质控，如仍出现请联系系统管理员。"
-        ),
     },
     ("LX0609-028", "required_field_missing"): {
         "reason_label": "预防性抗菌药物时长字段不完整",
@@ -121,27 +98,16 @@ _RULE_DATA_GAP_EXPLANATIONS = {
             "抗菌药物实际给药时间",
             "抗菌药物实际停用时间",
         ],
-        "customer_message": (
-            "已读取手术及用药资料，但尚缺切口等级、预防性用药属性或抗菌药物实际给药/"
-            "停用时间中的至少一项；医嘱更新时间不能替代实际停用时间。"
-        ),
     },
     ("LX0609-031", "association_failed"): {
         "reason_label": "手术签名信息暂无法核对",
         "missing_sources": [],
         "missing_fields": ["主刀医师签名", "手术事件与手术记录的对应关系"],
-        "customer_message": (
-            "已读取手术主表和手术记录，但尚未取得可与每次手术对应的主刀医师签名，"
-            "暂时无法完成签名资格核对。"
-        ),
     },
     ("LX0609-048", "transfusion_comparison_fields_unavailable"): {
         "reason_label": "术中输血比对资料不完整",
         "missing_sources": [],
         "missing_fields": [],
-        "customer_message": (
-            "已确认存在术中输血，但三份文书的比对资料不完整，暂时无法完成一致性核对。"
-        ),
     },
 }
 
@@ -149,7 +115,6 @@ _DEFAULT_DATA_GAP_EXPLANATION = {
     "reason_label": "现有资料不足",
     "missing_sources": ["完成本项质控所需资料"],
     "missing_fields": [],
-    "customer_message": "现有资料不足，暂时无法完成本项质控；请补充或同步相关资料后重新评估。",
 }
 
 _CUSTOMER_SOURCE_LABELS = {
@@ -876,16 +841,13 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     missing_fields = list(
         consistent_value("missing_fields", defaults["missing_fields"])
     )
-    default_customer_message = defaults["customer_message"]
-    if (
-        rule_id == "LX0609-048"
-        and reason_code == "transfusion_comparison_fields_unavailable"
-        and missing_sources
-    ):
-        default_customer_message = (
-            f"已确认存在术中输血，但缺少{'、'.join(missing_sources)}，"
-            "暂时无法完成手术记录、麻醉记录单和术后首次病程记录的一致性核对。"
-        )
+    from .customer_renderer import data_gap_customer_message
+
+    default_customer_message = data_gap_customer_message(
+        rule_id=rule_id,
+        reason_code=reason_code,
+        missing_sources=missing_sources,
+    )
     customer_message = str(
         consistent_value("customer_message", default_customer_message)
     ).strip()

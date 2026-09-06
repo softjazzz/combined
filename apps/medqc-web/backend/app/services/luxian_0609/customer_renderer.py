@@ -103,6 +103,76 @@ _DATA_GAP_MESSAGES = {
         "请核对相关诊疗记录后重新评估。",
     ),
 }
+
+# Finalizer 使用本函数补全 data_gap 的客户可见文案；结构化缺口字段和冲突
+# 校验仍由 Finalizer 持有。这里不读取材料，也不解释业务状态。
+_FINALIZER_DATA_GAP_CUSTOMER_MESSAGES = {
+    "required_field_missing": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+    "source_unavailable": "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。",
+    "source_empty": "本次未读取到完成本项质控所需的相关资料，暂时无法完成判定。",
+    "source_truncated": "相关资料数量超过本次读取范围，当前资料不完整，暂时无法完成本项质控。",
+    "source_readiness_unproven": "本项质控所需资料的同步状态尚未确认，暂时无法判断资料是否完整。",
+    "association_failed": "已读取到相关资料，但暂时无法准确关联对应事件与文书，无法完成本项质控。",
+    "linkage_unresolved": "现有资料不足以确认事件与文书的对应关系，暂时无法完成本项质控。",
+    "authoritative_time_missing": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+    "target_report_missing": "已读取到目标检查检验医嘱，但未读取到对应的正式报告，暂时无法核对24小时要求。",
+    "authoritative_report_time_missing": "已读取到目标检查检验事件，但缺少权威报告时间，暂时无法核对24小时要求。",
+    "authoritative_time_conflict": "报告时间与本次住院的评价截止时间存在冲突，暂时无法完成本项质控。",
+    "evaluation_window_not_mature": "截至本次评价日期尚未满规则要求的观察时限，本次暂不判定缺陷。",
+    "applicability_source_gap": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
+}
+_FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
+    (
+        "LX0609-069",
+        "source_unavailable",
+    ): "当前机构会诊接口未提供会诊申请时间，无法核对会诊记录是否在申请发出后24小时内完成。",
+    (
+        "LX0609-009",
+        "candidate_scope_incomplete",
+    ): "本次病情变化候选超出单次自动核对的安全容量，暂未形成确定结论；现有资料无需补充，请重新执行本项质控，如仍出现请联系系统管理员。",
+    (
+        "LX0609-028",
+        "required_field_missing",
+    ): "已读取手术及用药资料，但尚缺切口等级、预防性用药属性或抗菌药物实际给药/停用时间中的至少一项；医嘱更新时间不能替代实际停用时间。",
+    (
+        "LX0609-031",
+        "association_failed",
+    ): "已读取手术主表和手术记录，但尚未取得可与每次手术对应的主刀医师签名，暂时无法完成签名资格核对。",
+    (
+        "LX0609-048",
+        "transfusion_comparison_fields_unavailable",
+    ): "已确认存在术中输血，但三份文书的比对资料不完整，暂时无法完成一致性核对。",
+}
+_DEFAULT_FINALIZER_DATA_GAP_CUSTOMER_MESSAGE = (
+    "现有资料不足，暂时无法完成本项质控；请补充或同步相关资料后重新评估。"
+)
+
+
+def data_gap_customer_message(
+    *, rule_id: str, reason_code: str, missing_sources: list[str]
+) -> str:
+    """返回 Finalizer data_gap 默认客户文案，不读取材料或改写判定。"""
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    normalized_reason_code = str(reason_code or "").strip().lower()
+    if (
+        normalized_rule_id == "LX0609-048"
+        and normalized_reason_code == "transfusion_comparison_fields_unavailable"
+        and missing_sources
+    ):
+        return (
+            f"已确认存在术中输血，但缺少{'、'.join(missing_sources)}，"
+            "暂时无法完成手术记录、麻醉记录单和术后首次病程记录的一致性核对。"
+        )
+    return _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES.get(
+        (normalized_rule_id, normalized_reason_code),
+        _FINALIZER_DATA_GAP_CUSTOMER_MESSAGES.get(
+            normalized_reason_code,
+            _DEFAULT_FINALIZER_DATA_GAP_CUSTOMER_MESSAGE,
+        ),
+    )
+
+
 _RULE_MISSING_ITEM_LABELS = {
     "LX0609-001": ("入院时间或入院记录时间",),
     "LX0609-002": ("入院时间、首次病程记录时间或有效正文",),

@@ -8,6 +8,7 @@ from app.services.luxian_0609.customer_renderer import (
     CUSTOMER_RESULT_KEYS,
     compliant_customer_finding,
     customer_finding_from_controlled_facts,
+    data_gap_customer_message,
     render_luxian_0609_customer_result,
 )
 from app.services.luxian_0609.decision_model import (
@@ -28,6 +29,147 @@ from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contra
 
 SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "reason_code", "missing_sources", "expected"),
+    [
+        (
+            "LX0609-054",
+            "required_field_missing",
+            [],
+            "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+        ),
+        (
+            "LX0609-054",
+            "source_unavailable",
+            [],
+            "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。",
+        ),
+        (
+            "LX0609-054",
+            "source_empty",
+            [],
+            "本次未读取到完成本项质控所需的相关资料，暂时无法完成判定。",
+        ),
+        (
+            "LX0609-054",
+            "source_truncated",
+            [],
+            "相关资料数量超过本次读取范围，当前资料不完整，暂时无法完成本项质控。",
+        ),
+        (
+            "LX0609-054",
+            "source_readiness_unproven",
+            [],
+            "本项质控所需资料的同步状态尚未确认，暂时无法判断资料是否完整。",
+        ),
+        (
+            "LX0609-054",
+            "association_failed",
+            [],
+            "已读取到相关资料，但暂时无法准确关联对应事件与文书，无法完成本项质控。",
+        ),
+        (
+            "LX0609-054",
+            "linkage_unresolved",
+            [],
+            "现有资料不足以确认事件与文书的对应关系，暂时无法完成本项质控。",
+        ),
+        (
+            "LX0609-054",
+            "authoritative_time_missing",
+            [],
+            "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+        ),
+        (
+            "LX0609-054",
+            "target_report_missing",
+            [],
+            "已读取到目标检查检验医嘱，但未读取到对应的正式报告，暂时无法核对24小时要求。",
+        ),
+        (
+            "LX0609-054",
+            "authoritative_report_time_missing",
+            [],
+            "已读取到目标检查检验事件，但缺少权威报告时间，暂时无法核对24小时要求。",
+        ),
+        (
+            "LX0609-054",
+            "authoritative_time_conflict",
+            [],
+            "报告时间与本次住院的评价截止时间存在冲突，暂时无法完成本项质控。",
+        ),
+        (
+            "LX0609-054",
+            "evaluation_window_not_mature",
+            [],
+            "截至本次评价日期尚未满规则要求的观察时限，本次暂不判定缺陷。",
+        ),
+        (
+            "LX0609-054",
+            "applicability_source_gap",
+            [],
+            "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
+        ),
+        (
+            "LX0609-069",
+            "source_unavailable",
+            [],
+            "当前机构会诊接口未提供会诊申请时间，无法核对会诊记录是否在申请发出后24小时内完成。",
+        ),
+        (
+            "LX0609-009",
+            "candidate_scope_incomplete",
+            [],
+            "本次病情变化候选超出单次自动核对的安全容量，暂未形成确定结论；现有资料无需补充，请重新执行本项质控，如仍出现请联系系统管理员。",
+        ),
+        (
+            "LX0609-028",
+            "required_field_missing",
+            [],
+            "已读取手术及用药资料，但尚缺切口等级、预防性用药属性或抗菌药物实际给药/停用时间中的至少一项；医嘱更新时间不能替代实际停用时间。",
+        ),
+        (
+            "LX0609-031",
+            "association_failed",
+            [],
+            "已读取手术主表和手术记录，但尚未取得可与每次手术对应的主刀医师签名，暂时无法完成签名资格核对。",
+        ),
+        (
+            "LX0609-048",
+            "transfusion_comparison_fields_unavailable",
+            [],
+            "已确认存在术中输血，但三份文书的比对资料不完整，暂时无法完成一致性核对。",
+        ),
+        (
+            "LX0609-048",
+            "transfusion_comparison_fields_unavailable",
+            ["麻醉记录单"],
+            "已确认存在术中输血，但缺少麻醉记录单，暂时无法完成手术记录、麻醉记录单和术后首次病程记录的一致性核对。",
+        ),
+        (
+            "LX0609-054",
+            "unexpected_gap",
+            [],
+            "现有资料不足，暂时无法完成本项质控；请补充或同步相关资料后重新评估。",
+        ),
+    ],
+)
+def test_data_gap_customer_message_freezes_finalizer_default_copy(
+    rule_id: str,
+    reason_code: str,
+    missing_sources: list[str],
+    expected: str,
+) -> None:
+    assert (
+        data_gap_customer_message(
+            rule_id=rule_id,
+            reason_code=reason_code,
+            missing_sources=missing_sources,
+        )
+        == expected
+    )
 
 
 def test_050_customer_finding_explains_local_diagnosis_scope_uncertainty() -> None:
