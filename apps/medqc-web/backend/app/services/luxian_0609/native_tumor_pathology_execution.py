@@ -1781,8 +1781,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if llm_client is None:
             emit_outcome(
                 rule_id,
-                "data_gap",
-                "tumor_llm_unavailable",
+                "technical_error",
+                "tumor_llm_failure",
                 executor_type="program",
             )
             continue

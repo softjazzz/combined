@@ -300,6 +300,41 @@ async def test_013_019_use_request_materials_without_family_live_query(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_typed_013_019_missing_semantic_client_is_technical_error_without_request():
+    """模型执行能力未配置是技术失败，不能伪装为临床资料不足。"""
+
+    session = _material_session(
+        surgery_rows=({"record_content": "术后一般情况平稳。"},),
+        daily_course_rows=({"record_content": "继续观察病情变化。"},),
+    )
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-013", "LX0609-019"),
+        wrapper_rules=[_wrapper("LX0609-013"), _wrapper("LX0609-019")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-013", "LX0609-019"),
+    )
+
+    assert result.results == ()
+    assert result.llm_call_count == 0
+    assert result.prompt_tokens == result.completion_tokens == result.total_tokens == 0
+    assert [
+        reduce_luxian_0609_rule_decision(decision).final_state.value
+        for decision in result.decisions
+    ] == ["technical_error", "technical_error"]
+    assert [decision.reason_code for decision in result.decisions] == [
+        "model_transport_error",
+        "model_transport_error",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_typed_013_complete_empty_target_sources_are_non_compliant_without_model():
     session = _material_session(empty_targets=True)
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
@@ -475,7 +510,8 @@ async def test_typed_019_material_change_updates_state_snapshot_and_refs(monkeyp
     ).final_state.value == "compliant"
     assert reduce_luxian_0609_rule_decision(
         negative.decisions[0]
-    ).final_state.value == "data_gap"
+    ).final_state.value == "technical_error"
+    assert negative.decisions[0].reason_code == "model_transport_error"
     assert positive.decisions[0].snapshot_hash != negative.decisions[0].snapshot_hash
     assert positive.decisions[0].fact_refs != negative.decisions[0].fact_refs
 
