@@ -72,6 +72,30 @@ def test_050_scope_uncertainty_renders_without_reclassifying_the_reason() -> Non
     assert result["is_compliant"] is None
 
 
+def test_054_order_without_confirmed_action_uses_neutral_not_applicable_copy() -> None:
+    """普通抗菌药医嘱不再触发054时，文案不得误称“没有医嘱”。"""
+
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-054",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="trigger_absent_complete",
+            fact_refs=(FACT_REF,),
+            evaluator_version="extended-document-v2",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "not_applicable"
+    assert result["reason_code"] == "trigger_absent_complete"
+    assert result["findings"] == "本次未发现需要核对理由的抗菌药物使用或调整动作"
+    assert "未发现抗菌药物医嘱" not in result["findings"]
+
+
 def test_058_customer_finding_distinguishes_expert_support_after_special_use() -> None:
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-058",
