@@ -56,7 +56,15 @@ def test_legacy_customer_copy_fails_closed_when_status_normalizer_is_noncanonica
         "app.services.luxian_0609_result_aggregator",
         fromlist=["_copy_customer_fields"],
     )
-    monkeypatch.setattr(module, "_status", lambda _item: "invalid_normalized_status")
+    legacy_adapter = __import__(
+        "app.services.luxian_0609_legacy_result_adapter",
+        fromlist=["_status"],
+    )
+    monkeypatch.setattr(
+        legacy_adapter,
+        "_status",
+        lambda _item: "invalid_normalized_status",
+    )
 
     result = module._copy_customer_fields(
         wrapper={"rule_id": "LX0609-999", "name": "状态合同守卫"},
@@ -324,6 +332,7 @@ def test_040_customer_evidence_uses_only_public_selected_fact_refs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.services.luxian_0609_result_aggregator as aggregator
+    import app.services.luxian_0609.canonical_result_finalizer as finalizer
 
     fact_ref = hashlib.sha256(b"040-selected-document").hexdigest()
     selected_evidence = [
@@ -336,7 +345,7 @@ def test_040_customer_evidence_uses_only_public_selected_fact_refs(
         return selected_evidence
 
     monkeypatch.setattr(
-        aggregator,
+        finalizer,
         "project_selected_document_evidence",
         project_selected_document_evidence,
     )
@@ -2326,6 +2335,7 @@ def test_continuity_customer_evidence_uses_only_public_selected_fact_refs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.services.luxian_0609_result_aggregator as aggregator
+    import app.services.luxian_0609.canonical_result_finalizer as finalizer
 
     fact_ref = hashlib.sha256(f"{rule_id}-selected".encode("utf-8")).hexdigest()
     document_id = f"selected-{rule_id}"
@@ -2339,7 +2349,7 @@ def test_continuity_customer_evidence_uses_only_public_selected_fact_refs(
         return selected_evidence
 
     monkeypatch.setattr(
-        aggregator,
+        finalizer,
         "project_selected_document_evidence",
         project_selected_document_evidence,
     )
@@ -2692,19 +2702,13 @@ def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monke
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     )
-    for function_name in (
-        "_copy_native_customer_fields",
-        "_copy_customer_fields",
-        "format_luxian_0609_evidence",
-        "apply_luxian_0609_result_schema",
-    ):
-        monkeypatch.setattr(
-            module,
-            function_name,
-            lambda *args, _name=function_name, **kwargs: pytest.fail(
-                f"typed decision reached legacy pipeline: {_name}"
-            ),
-        )
+    monkeypatch.setattr(
+        module,
+        "adapt_luxian_0609_legacy_customer_result",
+        lambda *args, **kwargs: pytest.fail(
+            "ReducedDecision entered the legacy delivery adapter"
+        ),
+    )
 
     traces = []
     result = module.aggregate_luxian_0609_results(
@@ -3853,18 +3857,21 @@ def test_legacy_source_level_evidence_freezes_generic_fallback_shapes() -> None:
     ]
 
 
-def test_aggregator_delegates_legacy_source_level_evidence_projection() -> None:
-    source = inspect.getsource(
-        __import__(
-            "app.services.luxian_0609_result_aggregator",
-            fromlist=["aggregate_luxian_0609_results"],
-        )
+def test_reduced_decision_delivery_is_owned_by_finalizer_not_aggregator() -> None:
+    import app.services.luxian_0609.canonical_result_finalizer as finalizer
+    import app.services.luxian_0609_result_aggregator as aggregator
+
+    aggregator_source = inspect.getsource(aggregator.aggregate_luxian_0609_results)
+    finalizer_source = inspect.getsource(
+        finalizer.finalize_luxian_0609_reduced_customer_result
     )
 
-    assert "project_legacy_source_level_evidence" in source
-    assert "evidence_materials.rows" not in source
-    assert "source_document_id" not in source
-    assert "_customer_evidence_from_reduced_decision" not in source
+    assert "finalize_luxian_0609_reduced_customer_result(" in aggregator_source
+    assert "project_selected_document_evidence" not in aggregator_source
+    assert "project_legacy_source_level_evidence" not in aggregator_source
+    assert "render_luxian_0609_customer_result" in finalizer_source
+    assert "project_selected_document_evidence" in finalizer_source
+    assert "project_legacy_source_level_evidence" in finalizer_source
 
 
 def test_001_customer_evidence_excludes_discharge_anchor_source():
@@ -5949,13 +5956,30 @@ def test_all_five_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
     )
+    finalizer_module = __import__(
+        "app.services.luxian_0609.canonical_result_finalizer",
+        fromlist=["finalize_luxian_0609_canonical_result"],
+    )
+    legacy_adapter = __import__(
+        "app.services.luxian_0609_legacy_result_adapter",
+        fromlist=["finalize_luxian_0609_canonical_result"],
+    )
     finalized_rule_ids: list[str] = []
 
     def finalize(result):
         finalized_rule_ids.append(str(result.get("rule_id") or ""))
         return {**result, "canonical_finalizer_called": True}
 
-    monkeypatch.setattr(module, "finalize_luxian_0609_canonical_result", finalize)
+    monkeypatch.setattr(
+        legacy_adapter,
+        "finalize_luxian_0609_canonical_result",
+        finalize,
+    )
+    monkeypatch.setattr(
+        finalizer_module,
+        "finalize_luxian_0609_canonical_result",
+        finalize,
+    )
     cases = (
         {
             "wrapper_rules": [{"rule_id": "LX0609-029"}],

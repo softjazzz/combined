@@ -5,9 +5,24 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 from types import NotImplementedType
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from ..luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
+from .customer_evidence_enrichment import (
+    enrich_customer_evidence,
+    project_legacy_source_level_evidence,
+    project_selected_document_evidence,
+)
+from .customer_renderer import (
+    customer_finding_from_controlled_facts,
+    render_luxian_0609_customer_result,
+)
+
+if TYPE_CHECKING:
+    from .decision_reducer import ReducedRuleDecision
+
+
+SafeTraceSink = Callable[[Mapping[str, Any]], None]
 
 
 _DATA_GAP_EXPLANATIONS = {
@@ -782,6 +797,93 @@ def finalize_luxian_0609_executor_customer_display_facts(
         else "model_invalid_output"
     )
     return finalized, True
+
+
+def finalize_luxian_0609_reduced_customer_result(
+    *,
+    decision: "ReducedRuleDecision",
+    raw_customer_display_facts: Mapping[str, Any] | None,
+    evidence_snapshot: Any,
+    evidence_materials: Any,
+    trace_sink: SafeTraceSink | None = None,
+) -> dict[str, Any]:
+    """交付一条已裁决的客户结果，集中事实、文案和证据的唯一所有权。
+
+    调用方只能提供 ``ReducedRuleDecision``、执行器原始事实和冻结证据会话；本
+    函数负责事实合同、Renderer、公共证据投影及最终 Canonical 收敛。这样聚合器
+    不再根据规则族选择事实合同或证据回退路径。
+    """
+
+    from .decision_reducer import ReducedRuleDecision
+
+    if not isinstance(decision, ReducedRuleDecision):
+        raise TypeError("decision must be a ReducedRuleDecision")
+    if raw_customer_display_facts is not None and not isinstance(
+        raw_customer_display_facts, Mapping
+    ):
+        raise ValueError("invalid customer display facts")
+
+    rule_id = decision.rule_id
+    safe_facts = None
+    finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(rule_id)
+    if raw_customer_display_facts is not None:
+        validated_facts = validate_luxian_0609_executor_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw_customer_display_facts,
+        )
+        if validated_facts is not NotImplemented:
+            safe_facts = validated_facts
+        if safe_facts is None and not finalizer_owns_facts:
+            raise ValueError("invalid customer display facts")
+
+    result = render_luxian_0609_customer_result(
+        decision=decision,
+        safe_customer_display_facts=safe_facts,
+        trace_sink=trace_sink,
+    )
+    if safe_facts is not None:
+        result["customer_display_facts"] = safe_facts
+        precise_findings = customer_finding_from_controlled_facts(
+            rule_id=rule_id,
+            facts=safe_facts,
+        )
+        if precise_findings:
+            result["findings"] = precise_findings
+
+    if (
+        raw_customer_display_facts is not None
+        or finalizer_validates_missing_executor_customer_display_facts(rule_id)
+    ):
+        result, handled = finalize_luxian_0609_executor_customer_display_facts(
+            result=result,
+            raw_facts=raw_customer_display_facts,
+            preserve_legacy_exception=True,
+        )
+        if handled and "customer_display_facts" not in result:
+            return finalize_luxian_0609_canonical_result(result)
+
+    selected_document_evidence = project_selected_document_evidence(
+        decision=decision,
+        evidence_snapshot=evidence_snapshot,
+        evidence_materials=evidence_materials,
+    )
+    if selected_document_evidence is not None:
+        customer_evidence = selected_document_evidence
+    elif finalizer_requires_public_fact_ref_evidence(rule_id):
+        customer_evidence = []
+    else:
+        customer_evidence = project_legacy_source_level_evidence(
+            decision=decision,
+            evidence_snapshot=evidence_snapshot,
+            evidence_materials=evidence_materials,
+        )
+    customer_evidence = enrich_customer_evidence(
+        customer_evidence,
+        evidence_materials=evidence_materials,
+    )
+    if customer_evidence:
+        result["customer_evidence"] = customer_evidence
+    return finalize_luxian_0609_canonical_result(result)
 
 
 def _missing_sources_from_customer_facts(result: Mapping[str, Any]) -> list[str]:
