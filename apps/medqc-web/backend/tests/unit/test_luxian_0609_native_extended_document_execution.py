@@ -355,6 +355,7 @@ async def test_051_active_inpatient_with_complete_empty_death_source_is_not_appl
         reduced=reduced,
     )
 
+    assert result.decisions[0].fact_refs
     assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced[0].reason_code == "trigger_absent_complete"
     assert canonical["status"] == "not_applicable"
@@ -1407,8 +1408,8 @@ async def test_065_binds_only_surgery_and_senior_round_sources() -> None:
 
 @pytest.mark.asyncio
 async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-068",
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-068",),
         {
             "inpat_registration": (
                 {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
@@ -1428,7 +1429,17 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT, reduced[0].reason_code
+    assert result.decisions[0].fact_refs
+    assert set(result.decisions[0].fact_refs).isdisjoint(snapshot.document_refs)
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-068",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert "customer_evidence" not in canonical
     assert dict(result.customer_display_facts)["LX0609-068"] == {
         "verification_kind": "senior_discharge_approval_present",
         "discharge_date": "2026-07-03",
@@ -1499,12 +1510,6 @@ async def test_068_accepts_complete_automatic_discharge_process_in_daily_course(
         "checked_source": "daily_course_record",
         "approval_present": True,
         "approval_path": "automatic_discharge",
-        "source_document_refs": [
-            {
-                "source_type": "daily_course_record",
-                "source_document_id": "daily-auto-discharge",
-            }
-        ],
     }
 
 
@@ -6920,7 +6925,6 @@ async def test_067_missing_predischarge_course_is_non_compliant() -> None:
         "discharge_date": "2026-07-03",
         "checked_dates": ["2026-07-02", "2026-07-03"],
         "course_present": False,
-        "source_document_refs": [],
     }
     canonical = _canonical_extended_result(
         rule_id="LX0609-067",
@@ -7053,6 +7057,101 @@ async def test_067_window_daily_course_is_the_only_customer_evidence() -> None:
 
 
 @pytest.mark.asyncio
+async def test_067_multiple_selected_courses_project_each_exact_coordinate() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "daily_course_record": ({
+                "document_id": "DAILY-WINDOW-067",
+                "record_time": "2026-07-02 09:00:00",
+                "record_content": "出院前日常病程记录",
+            },),
+            "senior_course_record": ({
+                "document_id": "SENIOR-WINDOW-067",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": "上级医师出院前查房记录",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-067",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+    selected_material_refs = {
+        reference
+        for source_key in ("daily_course_record", "senior_course_record")
+        for reference, _row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+    evidence_coordinates = {
+        (item["source_type"], item["source_document_id"])
+        for item in canonical["customer_evidence"]
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert set(execution.decisions[0].fact_refs) == selected_material_refs
+    assert evidence_coordinates == {
+        ("daily_course_record", "DAILY-WINDOW-067"),
+        ("senior_course_record", "SENIOR-WINDOW-067"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_067_duplicate_selected_document_id_never_guesses_customer_evidence() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-067",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            # 同一来源中同一 document_id 映射到两条材料行时，执行器不能猜测
+            # 哪一行才是实际参与出院前病程判定的文书。
+            "daily_course_record": (
+                {
+                    "document_id": "DAILY-DUPLICATE",
+                    "record_time": "2026-07-02 08:00:00",
+                    "record_content": "出院前病程记录 A",
+                },
+                {
+                    "document_id": "DAILY-DUPLICATE",
+                    "record_time": "2026-07-02 09:00:00",
+                    "record_content": "出院前病程记录 B",
+                },
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-067",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+    selected_material_refs = {
+        reference
+        for reference, _row in materials.document_rows(
+            "daily_course_record", snapshot=snapshot
+        )
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert execution.decisions[0].fact_refs
+    assert set(execution.decisions[0].fact_refs).isdisjoint(snapshot.document_refs)
+    assert not (selected_material_refs & set(execution.decisions[0].fact_refs))
+    assert "customer_evidence" not in canonical
+    assert execution.llm_call_count == execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_067_window_senior_course_excludes_old_daily_course_evidence() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-067",),
@@ -7114,6 +7213,8 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
         reduced=reduced,
     )
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert result.decisions[0].fact_refs
+    assert set(result.decisions[0].fact_refs).isdisjoint(snapshot.document_refs)
     assert "customer_evidence" not in canonical
 
 

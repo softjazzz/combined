@@ -361,6 +361,63 @@ def _fact_refs(
     )
 
 
+def _selected_course_document_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    selected_document_ids: Sequence[tuple[str, str]],
+) -> tuple[str, ...]:
+    """把已参与 067/068 判定的病程行绑定为同快照逐行引用。
+
+    该函数只把执行器已经选择的 ``(source_key, document_id)`` 映射到材料仓的真实
+    document ref；不按日期、标题或正文重新选择文书。无法定位时宁可不投影，
+    不能回退成整个来源 observation 或把内部 document_id 写进展示事实。
+    """
+
+    refs: list[str] = []
+    try:
+        for source_key, document_id in selected_document_ids:
+            if source_key not in {"daily_course_record", "senior_course_record"}:
+                return ()
+            document_id = _clean(document_id)
+            if not document_id:
+                return ()
+            matched = tuple(
+                reference
+                for reference, row in materials.document_rows(
+                    source_key,
+                    snapshot=snapshot,
+                )
+                if _clean(row.get("document_id") or row.get("id")) == document_id
+            )
+            # document_id 在同一来源中必须唯一。多个同名 ID 无法证明哪一行是
+            # 执行器实际选中的病程，不能把它们全部当作客户证据。
+            if len(matched) != 1:
+                return ()
+            refs.append(matched[0])
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return ()
+    return tuple(dict.fromkeys(refs))
+
+
+def _selected_course_or_consumed_source_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    selected_document_refs: Sequence[str],
+    consumed_source_keys: Sequence[str],
+) -> tuple[str, ...]:
+    """优先精确文书引用；不可定位时只保留已消费的来源快照引用。
+
+    来源快照引用用于 Binding 证明本次判定消费过相应来源，不能被公共文书
+    projector 转换成客户证据。它只用于“文书身份缺失/歧义但业务事实已成立”的
+    受控降级，绝不以来源级引用代替可定位的文书坐标。
+    """
+
+    if selected_document_refs:
+        return tuple(dict.fromkeys(selected_document_refs))
+    return _fact_refs(snapshot, consumed_source_keys)
+
+
 def _070_document_refs(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -2913,8 +2970,38 @@ async def execute_luxian_0609_native_extended_document_rules(
                 daily_rows=daily_rows,
                 senior_rows=senior_rows,
             )
+            selected_course_document_ids: tuple[tuple[str, str], ...] = ()
             if outcome.display_facts is not None:
-                display.append((rule_id, outcome.display_facts))
+                display_facts = dict(outcome.display_facts)
+                raw_selected_refs = display_facts.pop("source_document_refs", ())
+                if isinstance(raw_selected_refs, (list, tuple)):
+                    selected_course_document_ids = tuple(
+                        (
+                            _clean(item.get("source_type")),
+                            _clean(item.get("source_document_id")),
+                        )
+                        for item in raw_selected_refs
+                        if isinstance(item, Mapping)
+                    )
+                display.append((rule_id, display_facts))
+            selected_document_refs = _selected_course_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                selected_document_ids=selected_course_document_ids,
+            )
+            if outcome.final_state == "compliant":
+                consumed_source_keys = (
+                    "daily_course_record",
+                    "senior_course_record",
+                )
+            elif outcome.final_state == "not_applicable" and death_state == "present":
+                # 067 的已登记可绑定来源是住院登记；死亡记录只用于门控，
+                # 不能作为本规则的客户文书或越过规则资料白名单。
+                consumed_source_keys = ("inpat_registration",)
+            elif outcome.final_state == "not_applicable":
+                consumed_source_keys = ("inpat_registration", "discharge_record")
+            else:
+                consumed_source_keys = ()
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -2927,6 +3014,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ),
                     final_state=outcome.final_state,
                     reason_code=outcome.reason_code,
+                    document_refs=_selected_course_or_consumed_source_refs(
+                        snapshot=evidence_snapshot,
+                        selected_document_refs=selected_document_refs,
+                        consumed_source_keys=consumed_source_keys,
+                    ),
+                    # 无 ID 或重复 ID 时维持空的逐文书坐标。不能回退为整类来源
+                    # observation，否则公共投影会把未参与判定的病程展示为证据。
+                    exact_document_refs=True,
                 )
             )
             continue
@@ -2940,6 +3035,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                         source_keys=("inpat_registration", "death_record"),
                         final_state="not_applicable",
                         reason_code="trigger_absent_complete",
+                        document_refs=_fact_refs(
+                            evidence_snapshot,
+                            ("inpat_registration",),
+                        ),
+                        exact_document_refs=True,
                     )
                 )
                 continue
@@ -2953,12 +3053,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                         source_keys=("inpat_registration", "death_record"),
                         final_state="data_gap",
                         reason_code=death_error,
+                        exact_document_refs=True,
                     )
                 )
                 continue
             source_error = registration_error or discharge_error
             discharge_time = _discharge_time(registration_rows, discharge_rows)
             approval_match: tuple[str, str, Mapping[str, Any]] | None = None
+            selected_course_document_ids: tuple[tuple[str, str], ...] = ()
             render_display = False
             if source_error:
                 final_state, reason_code = "data_gap", source_error
@@ -3011,10 +3113,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                             or approval_match[2].get("id")
                         )
                         if document_id:
-                            approval_facts["source_document_refs"] = [{
-                                "source_type": approval_match[0],
-                                "source_document_id": document_id,
-                            }]
+                            selected_course_document_ids = (
+                                (approval_match[0], document_id),
+                            )
                     display.append(
                         (
                             rule_id,
@@ -3042,6 +3143,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                             },
                         )
                     )
+            selected_document_refs = _selected_course_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                selected_document_ids=selected_course_document_ids,
+            )
+            if final_state == "compliant" and approval_match is not None:
+                consumed_source_keys = (approval_match[0],)
+            elif final_state == "not_applicable":
+                consumed_source_keys = ("inpat_registration", "discharge_record")
+            else:
+                consumed_source_keys = ()
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -3054,6 +3166,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ),
                     final_state=final_state,
                     reason_code=reason_code,
+                    document_refs=_selected_course_or_consumed_source_refs(
+                        snapshot=evidence_snapshot,
+                        selected_document_refs=selected_document_refs,
+                        consumed_source_keys=consumed_source_keys,
+                    ),
+                    exact_document_refs=True,
                 )
             )
             continue
