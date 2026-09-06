@@ -804,9 +804,18 @@ def _typed_session(
     )
 
 
-def _typed_037_session(*, preanesthesia_content: str):
+def _typed_037_session(
+    *,
+    preanesthesia_content: str,
+    anesthesia_method: str | None = "全身麻醉",
+    mr_surgery_mode: str = "empty",
+):
     rows_by_source = {
-        "anesthesia_record": ({"anesthesia_method": "全身麻醉"},),
+        "anesthesia_record": (
+            ({"anesthesia_method": anesthesia_method},)
+            if anesthesia_method is not None
+            else ({},)
+        ),
         "preane_surveil_record": (
             {
                 "record_time": "2026-07-30 08:00:00",
@@ -825,6 +834,8 @@ def _typed_037_session(*, preanesthesia_content: str):
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
+        if source_key == "mr_surgery" and mr_surgery_mode == "error":
+            raise SourceEvidenceQueryError()
         return SnapshotSourceRows.create(
             source_key=source_key,
             rows=rows_by_source.get(source_key, ()),
@@ -880,6 +891,68 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
             ]
         },
     }
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_037_public_executor_fails_closed_when_method_is_unknown():
+    session = _typed_037_session(
+        preanesthesia_content=(
+            "ASA II级，气道评估正常，禁食禁饮已核对，否认麻醉史，"
+            "已完成麻醉风险告知。"
+        ),
+        anesthesia_method=None,
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-037",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-037",),
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-037",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert result.decisions[0].reason_code == "applicability_source_gap"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_037_public_executor_treats_mr_surgery_query_error_as_technical():
+    session = _typed_037_session(
+        preanesthesia_content=(
+            "ASA II级，气道评估正常，禁食禁饮已核对，否认麻醉史，"
+            "已完成麻醉风险告知。"
+        ),
+        mr_surgery_mode="error",
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-037",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-037",),
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-037",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "technical_error"
+    assert result.decisions[0].reason_code == "source_query_error"
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -1337,10 +1410,18 @@ def test_typed_039_missing_discussion_emits_controlled_customer_facts(monkeypatc
 
 
 class _RowsOnlyMaterials:
-    def __init__(self, rows_by_source: dict[str, tuple[dict, ...]]):
+    def __init__(
+        self,
+        rows_by_source: dict[str, tuple[dict, ...]],
+        *,
+        unavailable_sources: frozenset[str] = frozenset(),
+    ):
         self._rows_by_source = rows_by_source
+        self._unavailable_sources = unavailable_sources
 
     def rows(self, source_key: str) -> tuple[dict, ...]:
+        if source_key in self._unavailable_sources:
+            raise surgery_doc.EvidenceMaterialUnavailable()
         return self._rows_by_source.get(source_key, ())
 
 
@@ -1378,6 +1459,33 @@ def test_typed_anesthesia_trigger_uses_qualified_surgery_material(monkeypatch):
         "present",
         "静吸复合全麻",
         "mr_surgery",
+    )
+
+
+def test_typed_anesthesia_trigger_handles_unavailable_anesthesia_record_material(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda *_args, **_kwargs: ("absent", ""),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: (
+            "available" if source_key == "anesthesia_record" else "empty"
+        ),
+    )
+    materials = _RowsOnlyMaterials(
+        {},
+        unavailable_sources=frozenset({"anesthesia_record"}),
+    )
+
+    assert surgery_doc._typed_anesthesia_trigger(object(), materials) == (
+        "present",
+        "",
+        "anesthesia_record",
     )
 
 
@@ -2008,6 +2116,52 @@ def test_typed_anesthesia_mr_surgery_query_error_is_technical_error(
         "technical_error",
         "source_query_error",
     )
+
+
+@pytest.mark.parametrize("rule_id", ("LX0609-034", "LX0609-035"))
+def test_typed_anesthesia_consent_rules_do_not_require_mr_surgery_readiness(
+    monkeypatch,
+    rule_id: str,
+):
+    """知情同意书规则不因非依赖的手术主表故障改写既有口径。"""
+
+    gated_sources: list[str] = []
+
+    def source_gate(*, source_key: str, **_kwargs):
+        gated_sources.append(source_key)
+        if source_key == "mr_surgery":
+            return surgery_doc._SurgeryDocumentOutcome(
+                rule_id,
+                "technical_error",
+                "source_query_error",
+                "program",
+            )
+        return None
+
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", source_gate)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "全身麻醉")
+            if source_key == "anesthesia_record"
+            else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, _source_key: "available",
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id=rule_id,
+        snapshot=object(),
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "required_field_missing"
+    assert "mr_surgery" not in gated_sources
 
 
 def test_local_anesthesia_exception_reduces_to_eligibility_not_met():

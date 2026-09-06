@@ -534,9 +534,13 @@ def _typed_anesthesia_trigger(
 
         # 麻醉记录本身存在即可证明实施过麻醉；其结构化方式字段可作为
         # 手术主表方式的同级受控来源，不能依赖下游文本猜测。
+        try:
+            anesthesia_record_rows = materials.rows("anesthesia_record")
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            anesthesia_record_rows = ()
         anesthesia_record_methods = {
             _clean(row.get("anesthesia_method") or row.get("method"))
-            for row in materials.rows("anesthesia_record")
+            for row in anesthesia_record_rows
             if _clean(row.get("anesthesia_method") or row.get("method"))
         }
         if len(anesthesia_record_methods) == 1:
@@ -1136,9 +1140,13 @@ def _typed_terminal_outcome(
             ),
         )
 
-    # 麻醉记录和手术主表共同构成麻醉实施及方式的受控资料链。任一来源
-    # 查询失败时不能让另一个来源把技术故障掩盖成“未实施”或临床缺陷。
-    for source_key in ("anesthesia_record", "mr_surgery"):
+    # 034/035只核对麻醉知情同意书，不依赖麻醉方式；保持它们既有的
+    # anesthesia_record 门控。036-038还要依赖方式和手术主表，二者共同
+    # 构成受控资料链，查询失败不能被另一个来源掩盖。
+    required_source_keys = ["anesthesia_record"]
+    if rule_id in {"LX0609-036", "LX0609-037", "LX0609-038"}:
+        required_source_keys.append("mr_surgery")
+    for source_key in required_source_keys:
         blocker = _typed_source_gate(
             rule_id=rule_id,
             source_key=source_key,
