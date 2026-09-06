@@ -233,3 +233,34 @@ async def test_transfusion_freeze_no_event_and_source_error_keep_distinct_states
     assert all(item["criterion_results"] == [] for item in error_results)
     assert all("customer_evidence" not in item for item in error_results)
     assert error_results[0]["findings"] == "质控执行未完成"
+
+
+@pytest.mark.asyncio
+async def test_047_missing_evaluation_completion_time_stays_data_gap_through_aggregation() -> None:
+    """评价正文缺权威完成时间时，展示事实不得把资料缺口伪装成临床缺项。"""
+
+    execution, reduced, customer_results, _ = await _execute_and_aggregate(
+        rule_ids=("LX0609-047",),
+        rows_by_source={
+            "mr_bloodtrans": [
+                {"transfution_datetime": datetime(2026, 6, 5, 14, 20)}
+            ],
+            "bloodtrans_record": [
+                {
+                    "document_id": "blood-gap-047",
+                    "record_content": (
+                        "2026-06-05 16:10输血结束。"
+                        "输血后复查血红蛋白较前改善，未见输血不良反应。"
+                    ),
+                }
+            ],
+            "daily_course_record": [],
+        },
+    )
+
+    assert execution.results == ()
+    assert [item.final_state.value for item in reduced] == ["data_gap"]
+    assert [item.reason_code for item in reduced] == ["authoritative_time_missing"]
+    assert [item["status"] for item in customer_results] == ["data_gap"]
+    assert "customer_display_facts" not in customer_results[0]
+    assert "未找到输血结束后 24 小时内的效果评价" not in customer_results[0]["findings"]

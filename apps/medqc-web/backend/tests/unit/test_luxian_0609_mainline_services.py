@@ -3258,7 +3258,8 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
                     "2026年6月5日16:10输注完毕。"
                     "输血后复查血红蛋白较前改善，未见输血不良反应。"
                     f"{raw_body_marker}"
-                )
+                ),
+                "record_time": "2026-06-05 16:20:00",
             }
         ],
         "consent_form": [{"content": "输血治疗知情同意书，已完成风险告知及签名。"}],

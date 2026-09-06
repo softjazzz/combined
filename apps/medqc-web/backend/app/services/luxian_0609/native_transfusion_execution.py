@@ -368,6 +368,10 @@ def _typed_decision_from_outcome(
         )
     elif status == "data_gap":
         source_gap = "source_unavailable" in outcome.reason_code
+        authoritative_time_gap = (
+            outcome.rule_id == "LX0609-047"
+            and outcome.reason_code == "posttransfusion_evaluation_time_unavailable"
+        )
         dimensions = (
             (
                 ApplicabilityState.UNKNOWN
@@ -376,7 +380,13 @@ def _typed_decision_from_outcome(
             ),
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
-            "source_unavailable" if source_gap else "required_field_missing",
+            (
+                "source_unavailable"
+                if source_gap
+                else "authoritative_time_missing"
+                if authoritative_time_gap
+                else "required_field_missing"
+            ),
         )
     elif status == "evaluation_unknown":
         dimensions = (
@@ -1574,10 +1584,22 @@ def _has_clinical_posttransfusion_evaluation(text: str) -> bool:
     return any(pattern.search(text) for pattern in _POSTTRANSFUSION_CLINICAL_PATTERNS)
 
 
-def _programmatic_047_status(documents: Mapping[str, Any]) -> tuple[str, str]:
-    """按输血结束后24小时窗口判定，禁止普通观察或结束前记录冒充评价。"""
+@dataclass(frozen=True)
+class _PosttransfusionEvaluationAssessment:
+    """047 的唯一时间资格判定，供状态与客户事实投影共同使用。"""
 
-    end_rows: list[tuple[datetime, bool]] = []
+    status: str
+    reason_code: str
+    latest_end_time: datetime | None = None
+    evaluation_time: datetime | None = None
+
+
+def _programmatic_047_assessment(
+    documents: Mapping[str, Any],
+) -> _PosttransfusionEvaluationAssessment:
+    """按输血结束后24小时窗口判定，评价正文必须有可用的完成时间。"""
+
+    end_rows: list[tuple[datetime, bool, datetime | None]] = []
     unresolved_end_marker = False
     explicit_missing_evaluation = False
     for row in _source_document_rows(documents, "bloodtrans_record"):
@@ -1602,47 +1624,112 @@ def _programmatic_047_status(documents: Mapping[str, Any]) -> tuple[str, str]:
             explicit_missing_evaluation
             or _POSTTRANSFUSION_MISSING_PATTERN.search(last_tail) is not None
         )
+        evaluation_time = _authoritative_record_time(row)
         end_rows.append(
             (
                 last_end,
                 _has_clinical_posttransfusion_evaluation(last_tail),
+                evaluation_time,
             )
         )
 
     if unresolved_end_marker or not end_rows:
-        return "data_gap", "transfusion_end_time_unavailable"
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "transfusion_end_time_unavailable"
+        )
     if explicit_missing_evaluation:
-        return "non_compliant", "posttransfusion_evaluation_missing"
-    if all(has_evaluation for _, has_evaluation in end_rows):
-        return "compliant", "posttransfusion_evaluation_complete"
+        return _PosttransfusionEvaluationAssessment(
+            "non_compliant", "posttransfusion_evaluation_missing"
+        )
+
+    latest_end = max(end_time for end_time, _, _ in end_rows)
+    qualified_evaluations: list[tuple[datetime, datetime]] = []
+    missing_evaluation = False
+    unusable_evaluation_time = False
+    late_evaluation_found = False
+    for end_time, has_evaluation, evaluation_time in end_rows:
+        if not has_evaluation:
+            missing_evaluation = True
+            continue
+        if evaluation_time is None or evaluation_time < end_time:
+            unusable_evaluation_time = True
+            continue
+        if (evaluation_time - end_time).total_seconds() <= 24 * 3600:
+            qualified_evaluations.append((end_time, evaluation_time))
+        else:
+            late_evaluation_found = True
+
+    if len(qualified_evaluations) == len(end_rows):
+        latest_evaluation_time = min(
+            evaluation_time
+            for end_time, evaluation_time in qualified_evaluations
+            if end_time == latest_end
+        )
+        return _PosttransfusionEvaluationAssessment(
+            "compliant",
+            "posttransfusion_evaluation_complete",
+            latest_end_time=latest_end,
+            evaluation_time=latest_evaluation_time,
+        )
 
     # 多份独立输血记录必须各自有评价；同一记录内的成分输注允许在最终结束后总评。
     if len(end_rows) > 1:
-        return "non_compliant", "posttransfusion_evaluation_missing"
-
-    latest_end = end_rows[0][0]
-    late_evaluation_found = False
-    for row in _source_document_rows(documents, "daily_course_record"):
-        record_time = _parse_document_datetime(
-            row.get("record_time") or row.get("display_time")
+        if unusable_evaluation_time:
+            return _PosttransfusionEvaluationAssessment(
+                "data_gap", "posttransfusion_evaluation_time_unavailable"
+            )
+        return _PosttransfusionEvaluationAssessment(
+            "non_compliant",
+            (
+                "posttransfusion_evaluation_missing"
+                if missing_evaluation
+                else "posttransfusion_evaluation_late"
+            ),
+            latest_end_time=latest_end,
         )
+
+    qualified_daily_evaluations: list[datetime] = []
+    for row in _source_document_rows(documents, "daily_course_record"):
+        record_time = _authoritative_record_time(row)
         text = _row_text(row)
         if not (
-            record_time is not None
-            and record_time > latest_end
-            and _TRANSFUSION_CONTEXT_PATTERN.search(text)
+            _TRANSFUSION_CONTEXT_PATTERN.search(text)
             and _has_clinical_posttransfusion_evaluation(text)
         ):
             continue
+        if record_time is None or record_time < latest_end:
+            unusable_evaluation_time = True
+            continue
         if (record_time - latest_end).total_seconds() <= 24 * 3600:
-            return "compliant", "posttransfusion_evaluation_complete"
+            qualified_daily_evaluations.append(record_time)
+            continue
         late_evaluation_found = True
 
-    return (
-        ("non_compliant", "posttransfusion_evaluation_late")
-        if late_evaluation_found
-        else ("non_compliant", "posttransfusion_evaluation_missing")
+    if qualified_daily_evaluations:
+        return _PosttransfusionEvaluationAssessment(
+            "compliant",
+            "posttransfusion_evaluation_complete",
+            latest_end_time=latest_end,
+            evaluation_time=min(qualified_daily_evaluations),
+        )
+    if unusable_evaluation_time:
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "posttransfusion_evaluation_time_unavailable"
+        )
+    return _PosttransfusionEvaluationAssessment(
+        "non_compliant",
+        (
+            "posttransfusion_evaluation_late"
+            if late_evaluation_found
+            else "posttransfusion_evaluation_missing"
+        ),
+        latest_end_time=latest_end,
     )
+
+
+def _programmatic_047_status(documents: Mapping[str, Any]) -> tuple[str, str]:
+    assessment = _programmatic_047_assessment(documents)
+    return assessment.status, assessment.reason_code
 
 
 def _programmatic_048_status(
@@ -2033,31 +2120,11 @@ def _programmatic_transfusion_display_facts(
         )
         return payload
     if rule_id == "LX0609-047":
-        end_times: list[datetime] = []
-        evaluation_times: list[datetime] = []
-        for row in records:
-            events, _ = _transfusion_end_evidence(_row_text(row))
-            end_times.extend(value for value, _, _ in events)
-            if events and _has_clinical_posttransfusion_evaluation(_row_text(row)):
-                value = _parse_document_datetime(
-                    row.get("record_time") or row.get("display_time")
-                )
-                if value is not None:
-                    evaluation_times.append(value)
-        latest_end = max(end_times) if end_times else None
-        for row in _source_document_rows(documents, "daily_course_record"):
-            text = _row_text(row)
-            value = _parse_document_datetime(
-                row.get("record_time") or row.get("display_time")
-            )
-            if (
-                latest_end is not None
-                and value is not None
-                and value > latest_end
-                and _TRANSFUSION_CONTEXT_PATTERN.search(text)
-                and _has_clinical_posttransfusion_evaluation(text)
-            ):
-                evaluation_times.append(value)
+        assessment = _programmatic_047_assessment(documents)
+        if status == "data_gap":
+            # 权威评价时间缺失属于资料缺口，不能继续投影为“未找到评价”的
+            # 临床缺项事实；让 Canonical 的 authoritative_time_missing 走公共说明。
+            return None
         facts: dict[str, Any] = {
             "performed_transfusion_confirmed": True,
             "threshold_hours": 24,
@@ -2068,18 +2135,21 @@ def _programmatic_transfusion_display_facts(
         )
         if source_refs:
             facts["source_document_refs"] = source_refs
-        if latest_end is not None:
-            facts["transfusion_end_time"] = latest_end.isoformat(sep=" ")
-        eligible_evaluation_times = (
-            [value for value in evaluation_times if value >= latest_end]
-            if latest_end is not None
-            else []
-        )
-        if eligible_evaluation_times:
-            first_evaluation = min(eligible_evaluation_times)
-            facts["evaluation_time"] = first_evaluation.isoformat(sep=" ")
+        if assessment.latest_end_time is not None:
+            facts["transfusion_end_time"] = assessment.latest_end_time.isoformat(sep=" ")
+        if status == "compliant":
+            if (
+                assessment.status != "compliant"
+                or assessment.latest_end_time is None
+                or assessment.evaluation_time is None
+            ):
+                raise ValueError("047 compliant outcome requires qualified evaluation time")
+            facts["evaluation_time"] = assessment.evaluation_time.isoformat(sep=" ")
             facts["elapsed_hours"] = round(
-                (first_evaluation - latest_end).total_seconds() / 3600,
+                (
+                    assessment.evaluation_time - assessment.latest_end_time
+                ).total_seconds()
+                / 3600,
                 2,
             )
         facts["verification_kind" if status == "compliant" else "failure_kind"] = (
@@ -2088,6 +2158,17 @@ def _programmatic_transfusion_display_facts(
             else "posttransfusion_evaluation_missing"
         )
         return facts
+    return None
+
+
+def _authoritative_record_time(row: Mapping[str, Any]) -> datetime | None:
+    """读取可用于时限判定的文书完成时间，不接受适配层的非权威回退。"""
+
+    explicit_time = row.get("record_time") or row.get("display_time")
+    if explicit_time:
+        return _parse_document_datetime(explicit_time)
+    if str(row.get("time_basis") or "").strip() == "record_time":
+        return _parse_document_datetime(row.get("authored_at"))
     return None
 
 

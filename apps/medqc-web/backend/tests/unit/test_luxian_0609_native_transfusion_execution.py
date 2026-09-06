@@ -1023,7 +1023,8 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
                     "content": (
                         "2026年6月5日16:10输注完毕。"
                         "输血后复查血红蛋白较前改善，未见输血不良反应。"
-                    )
+                    ),
+                    "record_time": "2026-06-05 16:20:00",
                 }
             ]
         ),
@@ -1298,7 +1299,8 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
                         "content": (
                             "2026-01-01 16:10 输血结束后评价未见异常，"
                             "生命体征平稳，无输血不良反应。"
-                        )
+                        ),
+                        "record_time": "2026-01-01 16:20:00",
                     }
                 ]
             ),
@@ -1857,7 +1859,8 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
             "已说明输血风险。2026年6月5日14:20开始输注红细胞2U，"
             "2026年6月5日16:10输血结束。输血过程中严密观察，生命体征平稳，"
             "未见发热及输血不良反应。输血后复查血红蛋白改善。"
-        )
+        ),
+        "record_time": "2026-06-05 16:20:00",
     }
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
@@ -2079,6 +2082,139 @@ def test_047_explicit_missing_evaluation_uses_authoritative_end_time():
     ) == ("non_compliant", "posttransfusion_evaluation_missing")
 
 
+@pytest.mark.parametrize(
+    "record_time",
+    (
+        None,
+        "2026-06-05 15:59:59",
+    ),
+)
+def test_047_textual_evaluation_without_usable_completion_time_is_data_gap(
+    record_time,
+):
+    """正文评价不能代替输血结束后的权威完成时间。"""
+
+    row = {
+        "record_content": (
+            "2026-06-05 16:00:00输血结束；"
+            "输血后复查血红蛋白较前改善，未见输血不良反应。"
+        )
+    }
+    if record_time is not None:
+        row["record_time"] = record_time
+
+    assert transfusion._programmatic_047_status(
+        {"bloodtrans_record": [row], "daily_course_record": []}
+    ) == ("data_gap", "posttransfusion_evaluation_time_unavailable")
+
+
+def test_047_daily_course_authored_at_with_record_time_basis_is_compliant():
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {
+                    "record_content": "2026-06-05 16:00:00输血结束。",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "record_content": "输血后复查血红蛋白较前改善，未见输血不良反应。",
+                    "authored_at": "2026-06-05 16:20:00",
+                    "time_basis": "record_time",
+                }
+            ],
+        }
+    ) == ("compliant", "posttransfusion_evaluation_complete")
+
+
+@pytest.mark.parametrize(
+    "time_basis",
+    ("submit_time_fallback", "update_time_fallback", "content_text"),
+)
+def test_047_daily_course_non_authoritative_authored_at_stays_data_gap(time_basis):
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {
+                    "record_content": "2026-06-05 16:00:00输血结束。",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "record_content": "输血后复查血红蛋白较前改善，未见输血不良反应。",
+                    "authored_at": "2026-06-05 16:20:00",
+                    "time_basis": time_basis,
+                }
+            ],
+        }
+    ) == ("data_gap", "posttransfusion_evaluation_time_unavailable")
+
+
+def test_047_late_authoritative_evaluation_is_non_compliant():
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {
+                    "record_content": (
+                        "2026-06-05 16:00:00输血结束；"
+                        "输血后复查血红蛋白较前改善，未见输血不良反应。"
+                    ),
+                    "record_time": "2026-06-06 16:00:01",
+                }
+            ],
+            "daily_course_record": [],
+        }
+    ) == ("non_compliant", "posttransfusion_evaluation_late")
+
+
+def test_047_multiple_transfusions_do_not_use_earlier_evaluation_for_later_end():
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {
+                    "record_content": (
+                        "2026-06-05 10:00:00输血结束；"
+                        "输血后复查血红蛋白较前改善。"
+                    ),
+                    "record_time": "2026-06-05 10:20:00",
+                },
+                {
+                    "record_content": (
+                        "2026-06-05 16:00:00输血结束；"
+                        "输血后复查凝血功能改善。"
+                    ),
+                    "record_time": "2026-06-05 15:59:59",
+                },
+            ],
+            "daily_course_record": [],
+        }
+    ) == ("data_gap", "posttransfusion_evaluation_time_unavailable")
+
+
+def test_047_multiple_transfusions_with_same_end_time_require_each_evaluation():
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {
+                    "record_content": (
+                        "2026-06-05 16:00:00输血结束；"
+                        "输血后复查血红蛋白较前改善。"
+                    ),
+                    "record_time": "2026-06-05 16:20:00",
+                },
+                {
+                    "record_content": (
+                        "2026-06-05 16:00:00输血结束；"
+                        "输血后复查凝血功能改善。"
+                    ),
+                    "record_time": "2026-06-05 16:30:00",
+                },
+            ],
+            "daily_course_record": [],
+        }
+    ) == ("compliant", "posttransfusion_evaluation_complete")
+
+
 @pytest.mark.asyncio
 async def test_047_missing_authoritative_end_stays_data_gap_without_daily_projection(
     monkeypatch,
@@ -2166,7 +2302,8 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
                     "content": (
                         "2026年6月5日16:10输注完毕。"
                         "输血后复查血红蛋白较前改善，未见输血不良反应。"
-                    )
+                    ),
+                    "record_time": datetime(2026, 6, 5, 16, 20),
                 }
             ],
             daily_course_record=[
@@ -2188,6 +2325,10 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
     )
     assert same_record.results[0]["metadata"]["executor_type"] == "program"
     assert same_record.llm_call_count == 0
+    same_record_facts = dict(same_record.customer_display_facts)["LX0609-047"]
+    assert same_record_facts["transfusion_end_time"] == "2026-06-05 16:10:00"
+    assert same_record_facts["evaluation_time"] == "2026-06-05 16:20:00"
+    assert same_record_facts["elapsed_hours"] == 0.17
 
     later_course = await transfusion.execute_luxian_0609_native_transfusion_rules(
         rule_ids=("LX0609-047",),
@@ -2237,7 +2378,8 @@ async def test_047_accepts_controlled_timezone_and_postposition_forms(
                     "content": (
                         f"{end_text}，复查血红蛋白较前改善，"
                         "未见输血不良反应。"
-                    )
+                    ),
+                    "record_time": datetime(2026, 6, 5, 16, 20),
                 }
             ],
             daily_course_record=[{"content": "普通病程：继续观察。"}],
@@ -2289,7 +2431,9 @@ async def test_047_allows_final_summary_but_preserves_explicit_missing_statement
         rule_ids=("LX0609-047",),
         wrapper_rules=[_wrapper("LX0609-047")],
         evidence_payload=_documents(
-            bloodtrans_record=[{"content": content}],
+            bloodtrans_record=[
+                {"content": content, "record_time": datetime(2026, 6, 5, 16, 20)}
+            ],
             daily_course_record=[{"content": "普通病程：继续观察。"}],
         ),
         institute_id="safe-institute",
@@ -2325,7 +2469,10 @@ async def test_047_distinguishes_normal_evaluation_from_missing_documentation(
         wrapper_rules=[_wrapper("LX0609-047")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {"content": f"2026-06-05 16:10输血结束。{evaluation_text}"}
+                {
+                    "content": f"2026-06-05 16:10输血结束。{evaluation_text}",
+                    "record_time": datetime(2026, 6, 5, 16, 20),
+                }
             ],
             daily_course_record=[{"content": "普通病程：继续观察。"}],
         ),
