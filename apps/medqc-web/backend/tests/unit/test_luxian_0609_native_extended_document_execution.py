@@ -4703,7 +4703,7 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
             },),
             "daily_course_record": (
                 {"record_time": "2026-06-01 12:00:00", "record_content": "患者重症感染，已在用药前留取血培养。经验性联合美罗培南和万古霉素覆盖耐药菌，记录启用及联合用药理由。"},
-                {"record_time": "2026-06-04 09:00:00", "record_content": "用药72小时抗菌药物效果评价：抗感染治疗有效，体温下降、白细胞和CRP降低，停用万古霉素并继续美罗培南。"},
+                {"record_time": "2026-06-04 09:00:00", "record_content": "由于抗感染治疗有效、体温下降、白细胞和CRP降低，停用万古霉素并继续美罗培南。"},
             ),
             "consultation_record": ({
                 "record_time": "2026-06-01 09:00:00",
@@ -4738,7 +4738,7 @@ async def test_054_bare_antimicrobial_action_without_reason_is_non_compliant() -
 
 
 @pytest.mark.asyncio
-async def test_054_requires_action_and_reason_for_each_distinct_antimicrobial_event() -> None:
+async def test_054_unacted_second_order_does_not_create_a_second_trigger_event() -> None:
     result, reduced = await _evaluate(
         "LX0609-054",
         {
@@ -4753,39 +4753,16 @@ async def test_054_requires_action_and_reason_for_each_distinct_antimicrobial_ev
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced.reason_code == "requirement_violated"
-    facts = dict(result.customer_display_facts)["LX0609-054"]
-    assert facts["reason_documented"] is False
-    assert facts["unmatched_antimicrobials"] == ["万古霉素"]
-
-
-@pytest.mark.asyncio
-async def test_054_repeated_same_drug_orders_share_one_documented_use_reason() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-054",
-        {
-            "inpat_drug_order": (
-                {"order_id": "M-1", "generic_name": "美罗培南"},
-                {"order_id": "M-2", "generic_name": "美罗培南"},
-            ),
-            "daily_course_record": ({
-                "record_time": "2026-06-01 12:00:00",
-                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
-            },),
-        },
-    )
-
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
     facts = dict(result.customer_display_facts)["LX0609-054"]
     assert facts["reason_documented"] is True
+    assert facts["antimicrobials"] == ["美罗培南"]
     assert facts["unmatched_antimicrobials"] == []
-    assert facts["association_ambiguous"] is False
 
 
 @pytest.mark.asyncio
-async def test_054_repeated_same_drug_orders_without_reason_are_non_compliant() -> None:
+async def test_054_antimicrobial_orders_without_documented_action_are_not_applicable() -> None:
     result, reduced = await _evaluate(
         "LX0609-054",
         {
@@ -4798,11 +4775,95 @@ async def test_054_repeated_same_drug_orders_without_reason_are_non_compliant() 
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced.reason_code == "requirement_violated"
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert "LX0609-054" not in dict(result.customer_display_facts)
+
+
+@pytest.mark.asyncio
+async def test_054_multiple_same_drug_actions_cannot_share_one_unlinked_reason() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": (
+                {"order_id": "M-1", "generic_name": "美罗培南"},
+                {"order_id": "M-2", "generic_name": "美罗培南"},
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-01 12:00:00",
+                    "related_order_id": "M-1",
+                    "record_content": "启用美罗培南。",
+                },
+                {
+                    "record_time": "2026-06-02 12:00:00",
+                    "related_order_id": "M-2",
+                    "record_content": "更换为美罗培南。",
+                },
+                {
+                    "record_time": "2026-06-02 13:00:00",
+                    "record_content": "考虑重症感染，需要美罗培南覆盖耐药菌。",
+                },
+            ),
+            "senior_course_record": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
     facts = dict(result.customer_display_facts)["LX0609-054"]
     assert facts["reason_documented"] is False
     assert facts["unmatched_antimicrobials"] == ["美罗培南"]
+    assert facts["association_ambiguous"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "orders",
+    (
+        (),
+        ({"order_id": "P-1", "generic_name": "青霉素"},),
+    ),
+)
+async def test_054_action_without_a_matching_current_antimicrobial_order_is_data_gap(
+    orders,
+) -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": orders,
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+    facts = dict(result.customer_display_facts)["LX0609-054"]
+    assert facts["antimicrobials"] == ["美罗培南"]
+    assert facts["association_ambiguous"] is True
+
+
+@pytest.mark.asyncio
+async def test_054_explicit_action_with_same_record_reason_is_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": ({"order_id": "M-1", "generic_name": "美罗培南"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "考虑重症感染，启用美罗培南覆盖耐药菌。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-054"]
+    assert facts["reason_documented"] is True
+    assert facts["unmatched_antimicrobials"] == []
     assert facts["association_ambiguous"] is False
 
 
@@ -4826,6 +4887,42 @@ async def test_054_without_antimicrobial_is_not_applicable() -> None:
     assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "trigger_absent_complete"
     assert "LX0609-054" not in dict(result.customer_display_facts)
+
+
+@pytest.mark.asyncio
+async def test_054_order_only_case_survives_binding_aggregator_and_renderer() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-054",),
+        {
+            "inpat_drug_order": ({
+                "order_id": "M-1",
+                "generic_name": "美罗培南",
+                "order_status": "停止",
+                "update_time": "2026-06-02 12:00:00",
+            },),
+            "daily_course_record": (),
+            "senior_course_record": (),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-054",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert (canonical["status"], canonical["reason_code"]) == (
+        "not_applicable", "trigger_absent_complete"
+    )
+    assert "customer_display_facts" not in canonical
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+    rendered = render_luxian_0609_customer_result(decision=reduced[0])
+    assert (rendered["status"], rendered["reason_code"]) == (
+        "not_applicable", "trigger_absent_complete"
+    )
 
 
 @pytest.mark.asyncio

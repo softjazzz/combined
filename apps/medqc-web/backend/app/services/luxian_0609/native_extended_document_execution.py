@@ -151,6 +151,14 @@ _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
     "恶化", "调整方案", "更换抗菌药", "升级抗菌药", "降阶梯", "停用",
 )
 _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
+_ANTIMICROBIAL_REASON_ACTIONS = (
+    "超说明书", "停用", "更换", "联合", "启用", "使用", "给予", "继续",
+)
+_ANTIMICROBIAL_REASON_MARKERS = (
+    "因为", "由于", "考虑", "依据", "理由", "重症感染", "覆盖",
+    "培养", "药敏", "感染证据", "感染可能", "疑似感染", "因感染",
+    "感染指标升高", "无样可采", "耐药", "过敏", "肝功能", "肾功能",
+)
 _EMPIRIC_ANTIMICROBIAL_TRIGGER_PATTERN = re.compile(
     r"(?:经验性用药|经验用药|经验性抗感染(?:治疗)?|经验性抗菌治疗|经验性)"
 )
@@ -655,27 +663,133 @@ def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> 
     return any(any(marker in _material_text(row) for marker in markers) for row in rows)
 
 
-def _documented_antimicrobial_names(
-    rows: Sequence[Mapping[str, Any]],
-    antimicrobial_names: Sequence[str],
-) -> tuple[str, ...]:
-    """同一病程必须同时出现药物、用药动作和临床理由，禁止仅凭“启用”通过。"""
+@dataclass(frozen=True)
+class _AntimicrobialReasonAction:
+    """054 的一个可证明、已命名的抗菌药处置动作。"""
 
-    actions = ("使用", "启用", "停用", "更换", "联合", "超说明书")
-    reasons = (
-        "因为", "由于", "考虑", "依据", "理由", "重症感染", "覆盖",
-        "培养", "药敏", "感染证据", "无样可采",
+    row: Mapping[str, Any]
+    antimicrobial: str
+    action: str
+    order_id: str
+
+
+def _054_action_for_antimicrobial(text: str, antimicrobial: str) -> str | None:
+    """确认动作与药名属于同一局部文本，不能把同段别的药物动作借来触发。"""
+
+    positions = [
+        match.start() for match in re.finditer(re.escape(antimicrobial), text)
+    ]
+    for position in positions:
+        local_text = text[max(0, position - 16): position + len(antimicrobial) + 16]
+        for action in _ANTIMICROBIAL_REASON_ACTIONS:
+            if action in local_text:
+                return action
+    return None
+
+
+def _054_action_events(
+    rows: Sequence[Mapping[str, Any]],
+    antimicrobial_orders: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[_AntimicrobialReasonAction, ...], bool, tuple[str, ...]]:
+    """仅从病程里的“具体药物 + 明确动作”建立054触发事件。
+
+    医嘱的普通存在、order_status、update_time 都不表示这里要求的使用或调整
+    事实；不得据此推断停用或更换。
+    """
+
+    events: list[_AntimicrobialReasonAction] = []
+    mentioned_antimicrobials: list[str] = []
+    association_failed = False
+    for row in rows:
+        text = _material_text(row)
+        for antimicrobial in _antimicrobial_names_in(row):
+            if (action := _054_action_for_antimicrobial(text, antimicrobial)) is None:
+                continue
+            mentioned_antimicrobials.append(antimicrobial)
+            row_order_id = _linked_order_id(row)
+            if row_order_id:
+                candidates = tuple(
+                    order
+                    for order in antimicrobial_orders
+                    if (
+                        _linked_order_id(order) == row_order_id
+                        and antimicrobial in _antimicrobial_names_in(order)
+                    )
+                )
+            else:
+                candidates = tuple(
+                    order
+                    for order in antimicrobial_orders
+                    if antimicrobial in _antimicrobial_names_in(order)
+                )
+            if len(candidates) != 1:
+                # 病程动作本身不能证明属于本次哪条受控医嘱；不能凭 status 或
+                # update_time 补造关联，也不能让其他同名医嘱代为触发。
+                association_failed = True
+                continue
+            events.append(_AntimicrobialReasonAction(
+                row=row,
+                antimicrobial=antimicrobial,
+                action=action,
+                order_id=_linked_order_id(candidates[0]),
+            ))
+    return (
+        tuple(events),
+        association_failed,
+        tuple(dict.fromkeys(mentioned_antimicrobials)),
     )
-    return tuple(
-        name
-        for name in antimicrobial_names
-        if any(
-            name in (text := _material_text(row))
-            and any(action in text for action in actions)
-            and any(reason in text for reason in reasons)
-            for row in rows
-        )
+
+
+def _054_reason_documented(row: Mapping[str, Any]) -> bool:
+    return any(marker in _material_text(row) for marker in _ANTIMICROBIAL_REASON_MARKERS)
+
+
+def _054_event_reason_state(
+    *,
+    event: _AntimicrobialReasonAction,
+    all_events: Sequence[_AntimicrobialReasonAction],
+    course_rows: Sequence[Mapping[str, Any]],
+) -> str:
+    """返回单个054动作的理由状态：documented/missing/ambiguous。
+
+    同一条动作病程内的理由天然同源，优先认可。分开的理由必须有共同医嘱
+    标识，或在同名动作仅出现一次时以药名唯一归属；不能让同一条泛化理由
+    共享给多次同名动作。
+    """
+
+    if _054_reason_documented(event.row):
+        return "documented"
+
+    same_name_events = tuple(
+        candidate
+        for candidate in all_events
+        if candidate.antimicrobial == event.antimicrobial
     )
+    has_unresolvable_candidate = False
+    for row in course_rows:
+        if row is event.row or not _054_reason_documented(row):
+            continue
+        row_order_id = _linked_order_id(row)
+        row_names = _antimicrobial_names_in(row)
+        if event.order_id and row_order_id:
+            if event.order_id == row_order_id:
+                return "documented"
+            continue
+        if row_order_id or event.order_id:
+            # 只有一端带医嘱标识时，不能用同名猜测它们属于同一动作。
+            if event.antimicrobial in row_names:
+                has_unresolvable_candidate = True
+            continue
+        if event.antimicrobial in row_names:
+            if len(same_name_events) == 1:
+                return "documented"
+            has_unresolvable_candidate = True
+            continue
+        if len(all_events) == 1 and not row_names:
+            return "documented"
+        if not row_names:
+            has_unresolvable_candidate = True
+    return "ambiguous" if has_unresolvable_candidate else "missing"
 
 
 def _is_explicit_empiric_antimicrobial_use(row: Mapping[str, Any]) -> bool:
@@ -1527,33 +1641,67 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             if source_error:
                 final_state, reason_code = "data_gap", source_error
+            elif rule_id == "LX0609-054":
+                (
+                    action_events,
+                    action_association_failed,
+                    mentioned_action_names,
+                ) = _054_action_events(
+                    course_rows, antimicrobial_orders
+                )
+                if action_association_failed:
+                    final_state, reason_code = "data_gap", "association_failed"
+                elif not action_events:
+                    final_state, reason_code = (
+                        "not_applicable", "trigger_absent_complete"
+                    )
+                else:
+                    event_states = tuple(
+                        _054_event_reason_state(
+                            event=event,
+                            all_events=action_events,
+                            course_rows=course_rows,
+                        )
+                        for event in action_events
+                    )
+                    unmatched_names = tuple(dict.fromkeys(
+                        event.antimicrobial
+                        for event, state in zip(action_events, event_states)
+                        if state != "documented"
+                    ))
+                    association_ambiguous = "ambiguous" in event_states
+                    complete = not unmatched_names
+                    if association_ambiguous:
+                        final_state, reason_code = "data_gap", "association_failed"
+                    elif complete:
+                        final_state, reason_code = (
+                            "compliant", "requirement_satisfied"
+                        )
+                    else:
+                        final_state, reason_code = (
+                            "non_compliant", "requirement_violated"
+                        )
+                    display.append((rule_id, {
+                        "verification_kind": "antimicrobial_reason_documentation_check",
+                        "antimicrobials": list(dict.fromkeys(
+                            event.antimicrobial for event in action_events
+                        )),
+                        "action_count": len(action_events),
+                        "reason_documented": complete,
+                        "unmatched_antimicrobials": list(unmatched_names),
+                        "association_ambiguous": association_ambiguous,
+                    }))
+                if action_association_failed:
+                    display.append((rule_id, {
+                        "verification_kind": "antimicrobial_reason_documentation_check",
+                        "antimicrobials": list(mentioned_action_names),
+                        "action_count": len(action_events),
+                        "reason_documented": False,
+                        "unmatched_antimicrobials": list(mentioned_action_names),
+                        "association_ambiguous": True,
+                    }))
             elif not antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif rule_id == "LX0609-054":
-                used_names = tuple(
-                    name for name in _ANTIMICROBIALS
-                    if any(name in _material_text(row) for row in antimicrobial_orders)
-                )
-                documented_names = _documented_antimicrobial_names(
-                    course_rows, used_names
-                )
-                unmatched_names = tuple(
-                    name for name in used_names if name not in documented_names
-                )
-                complete = not unmatched_names
-                final_state = "compliant" if complete else "non_compliant"
-                reason_code = (
-                    "requirement_satisfied"
-                    if complete
-                    else "requirement_violated"
-                )
-                display.append((rule_id, {
-                    "verification_kind": "antimicrobial_reason_documentation_check",
-                    "antimicrobials": list(used_names),
-                    "reason_documented": complete,
-                    "unmatched_antimicrobials": list(unmatched_names),
-                    "association_ambiguous": False,
-                }))
             elif rule_id == "LX0609-055":
                 order_events = tuple(
                     (row, name, _antimicrobial_start_datetime(row))
