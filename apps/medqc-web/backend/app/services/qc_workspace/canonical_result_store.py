@@ -18,7 +18,6 @@ from ..luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_executor_customer_display_facts,
 )
 from ..luxian_0609.customer_renderer import RULE_SET_VERSION
-from ..luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
 from ..luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
 from ..luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
@@ -28,14 +27,6 @@ CANONICAL_RESULT_DELIVERY_MODE = "canonical_straight_through"
 LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = (
     "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
 )
-_LX025_MISSING_FIELDS = {
-    "implant_name",
-    "implant_type",
-    "implant_specification",
-    "implant_material",
-    "implant_quantity",
-    "implant_barcode",
-}
 _LX018_DIAGNOSTIC_DIMENSIONS = {
     "anatomic_site",
     "laterality",
@@ -261,7 +252,7 @@ def safe_customer_display_facts(
     *,
     rule_id: str,
 ) -> Dict[str, Any]:
-    """只允许规则专属枚举和计数进入客户 DTO，拒绝自由文本与病历原文。"""
+    """仅透传 Finalizer 已验证的客户展示事实。"""
 
     raw = item.get("customer_display_facts")
     if not isinstance(raw, dict):
@@ -270,165 +261,7 @@ def safe_customer_display_facts(
         rule_id=rule_id,
         raw=raw,
     )
-    if shared is NotImplemented:
-        shared = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw)
-    if shared is not None:
-        if rule_id == "LX0609-025" and not shared.get("missing_fields"):
-            return {}
-        return shared
-    if rule_id == "LX0609-025":
-        missing_fields = raw.get("missing_fields")
-        if not isinstance(missing_fields, list):
-            return {}
-        safe_missing_fields = [
-            value
-            for value in dict.fromkeys(missing_fields)
-            if isinstance(value, str) and value in _LX025_MISSING_FIELDS
-        ]
-        if not safe_missing_fields:
-            return {}
-        return {
-            "failure_kind": "implant_information_incomplete",
-            "source_label": "手术记录",
-            "missing_fields": safe_missing_fields,
-        }
-    if rule_id == "LX0609-024":
-        checked_sources = raw.get("checked_sources")
-        if (
-            raw.get("failure_kind") != "lymph_node_dissection_not_documented"
-            or raw.get("performed_surgery_confirmed") is not True
-            or raw.get("malignant_surgery_confirmed") is not True
-            or not isinstance(checked_sources, list)
-        ):
-            return {}
-        sources = list(
-            dict.fromkeys(
-                value
-                for value in checked_sources
-                if value
-                in {
-                    "surgery_record",
-                    "pathology_exam_master",
-                    "pathology_exam_report",
-                }
-            )
-        )
-        if not sources:
-            return {}
-        return {
-            "failure_kind": "lymph_node_dissection_not_documented",
-            "performed_surgery_confirmed": True,
-            "malignant_surgery_confirmed": True,
-            "checked_sources": sources,
-        }
-    if rule_id == "LX0609-028":
-        failure_kind = _safe_text(raw.get("failure_kind"))
-        start_time = _safe_text(raw.get("start_time"))
-        end_time = _safe_text(raw.get("end_time"))
-        duration_hours = raw.get("duration_hours")
-        threshold_hours = raw.get("threshold_hours")
-        if (
-            failure_kind
-            not in {
-                "prophylaxis_duration_over_48h",
-                "prophylaxis_extension_reason_missing",
-            }
-            or raw.get("incision_class") not in {"I", "II"}
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", start_time)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", end_time)
-            or not isinstance(duration_hours, (int, float))
-            or duration_hours <= 24
-            or threshold_hours not in {24, 48}
-        ):
-            return {}
-        if failure_kind == "prophylaxis_duration_over_48h" and (
-            threshold_hours != 48 or duration_hours <= 48
-        ):
-            return {}
-        if failure_kind == "prophylaxis_extension_reason_missing" and (
-            threshold_hours != 24 or duration_hours > 48
-        ):
-            return {}
-        return {
-            "failure_kind": failure_kind,
-            "incision_class": raw.get("incision_class"),
-            "start_time": start_time,
-            "end_time": end_time,
-            "duration_hours": round(float(duration_hours), 2),
-            "threshold_hours": threshold_hours,
-        }
-    if rule_id in {"LX0609-034", "LX0609-035"}:
-        checked_sources = raw.get("checked_sources")
-        if (
-            raw.get("failure_kind") != "anesthesia_consent_missing"
-            or raw.get("performed_anesthesia_confirmed") is not True
-            or raw.get("consent_state") != "missing"
-            or checked_sources != ["consent_form"]
-        ):
-            return {}
-        return {
-            "failure_kind": "anesthesia_consent_missing",
-            "performed_anesthesia_confirmed": True,
-            "consent_state": "missing",
-            "checked_sources": ["consent_form"],
-        }
-    if rule_id in {"LX0609-036", "LX0609-037"}:
-        missing_sources = raw.get("missing_visit_sources")
-        if (
-            raw.get("failure_kind") != "anesthesia_visit_missing"
-            or raw.get("performed_anesthesia_confirmed") is not True
-            or not isinstance(missing_sources, list)
-        ):
-            return {}
-        safe_sources = list(
-            dict.fromkeys(
-                source
-                for source in missing_sources
-                if source in {"preane_surveil_record", "postane_surveil_record"}
-            )
-        )
-        if not safe_sources:
-            return {}
-        return {
-            "failure_kind": "anesthesia_visit_missing",
-            "performed_anesthesia_confirmed": True,
-            "missing_visit_sources": safe_sources,
-        }
-    if rule_id == "LX0609-039":
-        checked_sources = raw.get("checked_sources")
-        if (
-            raw.get("failure_kind") != "preop_discussion_missing"
-            or raw.get("performed_surgery_confirmed") is not True
-            or raw.get("emergency_rescue_exception_absent") is not True
-            or checked_sources != ["presurg_discussion"]
-        ):
-            return {}
-        return {
-            "failure_kind": "preop_discussion_missing",
-            "performed_surgery_confirmed": True,
-            "emergency_rescue_exception_absent": True,
-            "checked_sources": ["presurg_discussion"],
-        }
-    surgery_document_targets = {
-        "LX0609-029": "presurg_summary",
-        "LX0609-030": "surgery_record",
-        "LX0609-032": "surgery_safecheck_record",
-    }
-    target_document = surgery_document_targets.get(rule_id)
-    if target_document is not None:
-        failure_kind = _safe_text(raw.get("failure_kind"))
-        if (
-            failure_kind not in {"surgery_document_missing", "surgery_document_blank"}
-            or _safe_text(raw.get("target_document")) != target_document
-            or raw.get("performed_surgery_confirmed") is not True
-        ):
-            return {}
-        return {
-            "failure_kind": failure_kind,
-            "target_document": target_document,
-            "performed_surgery_confirmed": True,
-        }
-    return {}
+    return dict(shared) if isinstance(shared, dict) else {}
 
 
 def safe_criterion_results(item: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -708,33 +541,6 @@ class CanonicalResultStore:
             if _safe_text(rule_id)
         }
         for record_items in grouped.values():
-            # 历史/兼容执行器可能只留下“确定问题”状态，却没有可审计事实。
-            # 在写入 Canonical 前安全降级为资料待核实，避免整批任务失败，
-            # 同时禁止无证据的确定问题进入客户结果。
-            for record_item in record_items:
-                candidate_rule_id = _safe_text(
-                    record_item.get("customer_rule_id")
-                    or record_item.get("qc_point_id")
-                    or record_item.get("rule_id")
-                    or record_item.get("rule_code")
-                ).upper()
-                candidate_status = canonical_customer_status(record_item)
-                if (
-                    candidate_status == "non_compliant"
-                    and candidate_rule_id.startswith("LX0609-")
-                    and not record_item.get("customer_display_facts")
-                    and not record_item.get("criterion_results")
-                    and (
-                        isinstance(record_item.get("diagnostic_trace"), dict)
-                        or isinstance(record_item.get("metadata"), dict)
-                    )
-                ):
-                    record_item["status"] = "data_gap"
-                    record_item["result_status"] = "data_gap"
-                    record_item["display_status"] = "data_gap"
-                    record_item["is_compliant"] = None
-                    record_item["reason_code"] = "historical_evidence_missing"
-
             delivered_rule_ids = [
                 _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
                 for item in record_items

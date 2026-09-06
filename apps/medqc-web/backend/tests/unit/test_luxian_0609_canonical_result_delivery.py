@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -40,6 +42,10 @@ from app.services.sample_validation_rule_sets import (
 )
 from app.services.qc_workspace.canonical_result_store import (
     envelope_item_from_rule_result,
+    safe_customer_display_facts,
+)
+from app.services.luxian_0609.canonical_result_finalizer import (
+    validate_luxian_0609_executor_customer_display_facts,
 )
 
 
@@ -79,6 +85,258 @@ class _BrokenReadSession:
 
     def close(self) -> None:
         return None
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "raw", "expected"),
+    [
+        (
+            "LX0609-024",
+            {
+                "failure_kind": "lymph_node_dissection_not_documented",
+                "performed_surgery_confirmed": True,
+                "malignant_surgery_confirmed": True,
+                "checked_sources": ["surgery_record"],
+            },
+            {
+                "failure_kind": "lymph_node_dissection_not_documented",
+                "performed_surgery_confirmed": True,
+                "malignant_surgery_confirmed": True,
+                "checked_sources": ["surgery_record"],
+            },
+        ),
+        (
+            "LX0609-025",
+            {
+                "failure_kind": "implant_information_incomplete",
+                "performed_surgery_confirmed": True,
+                "missing_fields": ["implant_material"],
+                "implant_event_details": [
+                    {
+                        "event_ref": "implant-event-1",
+                        "missing_fields": ["implant_material"],
+                        "implant_names": ["人工髋关节"],
+                        "source_document_id": "surgery-record-025",
+                    }
+                ],
+                "source_label": "手术记录",
+                "source_document_type": "surgery_record",
+                "source_document_id": "surgery-record-025",
+            },
+            {
+                "failure_kind": "implant_information_incomplete",
+                "performed_surgery_confirmed": True,
+                "source_label": "手术记录",
+                "source_document_type": "surgery_record",
+                "missing_fields": ["implant_material"],
+                "implant_event_details": [
+                    {
+                        "event_position": 1,
+                        "missing_fields": ["implant_material"],
+                        "implant_names": ["人工髋关节"],
+                    }
+                ],
+            },
+        ),
+        (
+            "LX0609-028",
+            {
+                "failure_kind": "prophylaxis_duration_over_48h",
+                "incision_class": "I",
+                "start_time": "2026-09-01 08:00:00",
+                "end_time": "2026-09-03 09:00:00",
+                "duration_hours": 49.0,
+                "threshold_hours": 48,
+            },
+            {
+                "failure_kind": "prophylaxis_duration_over_48h",
+                "incision_class": "I",
+                "start_time": "2026-09-01 08:00:00",
+                "end_time": "2026-09-03 09:00:00",
+                "duration_hours": 49.0,
+                "threshold_hours": 48,
+            },
+        ),
+        (
+            "LX0609-029",
+            {
+                "failure_kind": "surgery_document_missing",
+                "target_document": "presurg_summary",
+                "surgery_trigger_kind": "performed_surgery",
+                "performed_surgery_confirmed": True,
+            },
+            {
+                "failure_kind": "surgery_document_missing",
+                "target_document": "presurg_summary",
+                "surgery_trigger_kind": "performed_surgery",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+        (
+            "LX0609-030",
+            {
+                "failure_kind": "surgery_document_missing",
+                "target_document": "surgery_record",
+                "performed_surgery_confirmed": True,
+            },
+            {
+                "failure_kind": "surgery_document_missing",
+                "target_document": "surgery_record",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+        (
+            "LX0609-032",
+            {
+                "failure_kind": "surgery_document_blank",
+                "target_document": "surgery_safecheck_record",
+                "performed_surgery_confirmed": True,
+            },
+            {
+                "failure_kind": "surgery_document_blank",
+                "target_document": "surgery_safecheck_record",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+        (
+            "LX0609-034",
+            {
+                "failure_kind": "anesthesia_consent_missing",
+                "performed_anesthesia_confirmed": True,
+                "consent_state": "missing",
+                "checked_sources": ["consent_form"],
+            },
+            {
+                "failure_kind": "anesthesia_consent_missing",
+                "performed_anesthesia_confirmed": True,
+                "consent_state": "missing",
+                "checked_sources": ["consent_form"],
+            },
+        ),
+        (
+            "LX0609-035",
+            {
+                "failure_kind": "anesthesia_consent_missing",
+                "performed_anesthesia_confirmed": True,
+                "consent_state": "missing",
+                "checked_sources": ["consent_form"],
+            },
+            {
+                "failure_kind": "anesthesia_consent_missing",
+                "performed_anesthesia_confirmed": True,
+                "consent_state": "missing",
+                "checked_sources": ["consent_form"],
+            },
+        ),
+        (
+            "LX0609-036",
+            {
+                "failure_kind": "anesthesia_visit_missing",
+                "performed_anesthesia_confirmed": True,
+                "missing_visit_sources": ["preane_surveil_record"],
+            },
+            {
+                "failure_kind": "anesthesia_visit_missing",
+                "performed_anesthesia_confirmed": True,
+                "missing_visit_sources": ["preane_surveil_record"],
+            },
+        ),
+        (
+            "LX0609-037",
+            {
+                "failure_kind": "anesthesia_visit_missing",
+                "performed_anesthesia_confirmed": True,
+                "missing_visit_sources": ["postane_surveil_record"],
+            },
+            {
+                "failure_kind": "anesthesia_visit_missing",
+                "performed_anesthesia_confirmed": True,
+                "missing_visit_sources": ["postane_surveil_record"],
+            },
+        ),
+        (
+            "LX0609-039",
+            {
+                "failure_kind": "preop_discussion_missing",
+                "performed_surgery_confirmed": True,
+                "emergency_rescue_exception_absent": True,
+                "checked_sources": ["presurg_discussion"],
+            },
+            {
+                "failure_kind": "preop_discussion_missing",
+                "performed_surgery_confirmed": True,
+                "emergency_rescue_exception_absent": True,
+                "checked_sources": ["presurg_discussion"],
+            },
+        ),
+    ],
+)
+def test_store_projects_only_finalizer_validated_customer_facts(
+    rule_id: str,
+    raw: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    """Store 只搬运共享合同已经验证的事实，不再维护规则号 fallback。"""
+
+    validated = validate_luxian_0609_executor_customer_display_facts(
+        rule_id=rule_id,
+        raw=raw,
+    )
+
+    assert validated == expected
+    assert safe_customer_display_facts(
+        {"customer_display_facts": raw},
+        rule_id=rule_id,
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "raw"),
+    [
+        ("LX0609-025", {"missing_fields": ["implant_material"]}),
+        (
+            "LX0609-025",
+            {
+                "failure_kind": "implant_information_incomplete",
+                "performed_surgery_confirmed": True,
+                "missing_fields": ["implant_material"],
+                "implant_event_details": [
+                    {
+                        "event_ref": "implant-event-private",
+                        "missing_fields": ["implant_material"],
+                        "implant_names": ["人工髋关节"],
+                        "source_document_id": "surgery-record-025",
+                    }
+                ],
+                "source_label": "手术记录",
+                "source_document_type": "surgery_record",
+                "source_document_id": "surgery-record-025",
+                "patient_id": "PRIVATE-025",
+            },
+        ),
+        ("LX0609-999", {"failure_kind": "unknown"}),
+    ],
+)
+def test_store_rejects_unvalidated_or_unknown_customer_facts(
+    rule_id: str,
+    raw: dict[str, Any],
+) -> None:
+    assert safe_customer_display_facts(
+        {"customer_display_facts": raw},
+        rule_id=rule_id,
+    ) == {}
+
+
+def test_store_has_no_rule_specific_customer_fact_contract_or_aggregator_dependency() -> None:
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "app/services/qc_workspace/canonical_result_store.py"
+    ).read_text(encoding="utf-8")
+
+    assert re.search(r"LX0609-\d{3}", source) is None
+    assert "luxian_0609_result_aggregator import" not in source
+    assert "surgery_document_targets" not in source
+    assert "historical_evidence_missing" not in source
 
 
 def _selected_job(*, legacy_items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -1376,6 +1634,94 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
     )
 
     assert len(session.statements) == 2
+
+
+def test_writer_rejects_unexplained_current_lx0609_defect_without_rejudging_status():
+    """Store 不得将当前确定问题隐式重判为资料缺口。"""
+
+    session = _WriteSession()
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": "LX0609-025",
+        "schema_version": "lx0609-customer-result-v2",
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "display_status": "non_compliant",
+        "is_compliant": False,
+        "metadata": {"execution_source": "lx0609_native"},
+    }
+
+    with pytest.raises(ValueError, match="客户结果解释合同不完整"):
+        CustomQCWorkspaceService()._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps(
+                    {
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }
+                ),
+            },
+            items=[item],
+            now=datetime(2026, 8, 15, 10, 0, 0),
+        )
+
+    assert item["status"] == "non_compliant"
+    assert item["result_status"] == "non_compliant"
+    assert item.get("reason_code", "") == ""
+    assert session.statements == []
+
+
+def test_writer_persists_finalizer_validated_customer_facts_unchanged():
+    session = _WriteSession()
+    raw_facts = {
+        "failure_kind": "lymph_node_dissection_not_documented",
+        "performed_surgery_confirmed": True,
+        "malignant_surgery_confirmed": True,
+        "checked_sources": ["surgery_record"],
+    }
+    expected_facts = validate_luxian_0609_executor_customer_display_facts(
+        rule_id="LX0609-024",
+        raw=raw_facts,
+    )
+
+    CustomQCWorkspaceService()._write_record_result_envelopes(
+        session,
+        job_row={
+            "id": "job-current",
+            "created_by": "reviewer-a",
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+        },
+        items=[
+            {
+                "record_id": "visit-1",
+                "visit_id": "visit-1",
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "rule_id": "LX0609-024",
+                "status": "non_compliant",
+                "result_status": "non_compliant",
+                "display_status": "non_compliant",
+                "is_compliant": False,
+                "customer_display_facts": raw_facts,
+            }
+        ],
+        now=datetime(2026, 8, 15, 10, 0, 0),
+    )
+
+    envelope = json.loads(session.statements[-1].compile().params["envelope_json"])
+    assert expected_facts is not None
+    assert envelope["items"][0]["customer_display_facts"] == expected_facts
 
 
 def test_writer_marks_envelope_as_canonical_straight_through():
