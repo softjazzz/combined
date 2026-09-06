@@ -309,6 +309,13 @@ async def test_surgery_gate_freeze_absent_and_source_error_remain_distinct() -> 
     )
     assert absent.results == ()
     assert [item.final_state.value for item in absent_reduced] == ["not_applicable"] * len(RULE_IDS)
+    assert [item.reason_code for item in absent_reduced] == [
+        "performed_event_absent"
+    ] * len(RULE_IDS)
+    assert [item.evaluator_version for item in absent_reduced] == [
+        "surgery-timeliness-003-ruledecision-v1",
+        *["surgery-gate-ruledecision-shadow-v2"] * 5,
+    ]
     assert absent.llm_call_count == absent.total_tokens == 0
     with pytest.raises(ValueError, match="lx0609_025_display_fact_status_mismatch"):
         _aggregate(

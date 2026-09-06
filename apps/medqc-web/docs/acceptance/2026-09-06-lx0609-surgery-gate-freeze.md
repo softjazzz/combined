@@ -32,7 +32,8 @@
 
 ## 失败语义与成本冻结
 
-- 来源完整且无已实施手术：executor/Binding 的六条均为 `not_applicable`，无模型调用；但该形状目前**不能完成聚合**。聚合器残余的 025 严格 guard 要求 `implant_not_used` facts，而 gate 正确地不为无手术伪造植入物阴性事实，故抛出 `ValueError: lx0609_025_display_fact_status_mismatch`。冻结测试以精确 `pytest.raises` 记录这个已知缺陷；它不是业务验收通过。
+- 来源完整且无已实施手术：executor/Binding 的六条均为 `not_applicable / performed_event_absent`，无模型调用；003 的 evaluator 为 `surgery-timeliness-003-ruledecision-v1`，其余五条为 `surgery-gate-ruledecision-shadow-v2`。025 不产生 display facts；但该形状目前**不能完成聚合**。聚合器残余的 025 严格 guard 要求 `implant_not_used` facts，而 gate 正确地不为无手术伪造植入物阴性事实，故抛出 `ValueError: lx0609_025_display_fact_status_mismatch`。冻结测试以精确 `pytest.raises` 记录这个已知缺陷；它不是业务验收通过。
+- 已实施手术且受控文本事实明确“未植入”：025 走不同的文本事实分支，最终为 `not_applicable / trigger_absent_complete`，并且必须携带 `verification_kind=implant_not_used` 和 `performed_surgery_confirmed=true`。该分支不能因前一分支缺 facts 而被放宽。
 - `surgery_record` 查询异常：六条均为 `technical_error / source_query_error`，不伪造文书坐标。
 - 受控 LLM：成功、非法 JSON、经 parser 验证字段完整的合法 `unknown` 与超时分别走真实 executor；非法 JSON 为 `technical_error / model_invalid_output`、超时为 `technical_error / model_transport_error`，合法 `unknown` 为 `data_gap / required_field_missing`，不将模型异常改写为临床不合规。
 - 主样本、非法 JSON 与合法 `unknown` 样本均为一次联合调用：`llm_call_count=1`，`prompt_tokens=101`，`total_tokens=112`。超时样本同样记录一次调用，但没有模型 usage 回包，故 `prompt_tokens=completion_tokens=total_tokens=0`；纯无手术与来源异常路径不调用模型。
@@ -46,4 +47,4 @@
 3. `backend/app/services/luxian_0609_result_aggregator.py`；
 4. 必要时 `backend/app/services/luxian_0609/native_surgery_gate_execution.py`。
 
-025 的最小修复建议须另立任务：不可仅因 `not_applicable / trigger_absent_complete` 就接受缺失 display facts。该 canonical reason 既可表示“未实施手术”，也可表示“已实施且明确未植入”；不可要求执行器补造 `implant_not_used`，否则会把前者伪造成“已核验未植入”。应由执行器提供可区分的适用性事实或由 guard 读取等价的受控区分信号。迁移前还需额外冻结 025 多事件实际选中文书；本轮不改变其现有口径。
+025 的最小修复建议须另立任务：不可仅因 `not_applicable` 就接受缺失 display facts。无手术分支由受信 typed executor 的 `performed_event_absent + surgery-gate-ruledecision-shadow-v2` 区分；已实施且明确未植入分支为 `trigger_absent_complete + implant_not_used`。不可要求执行器补造 `implant_not_used`，否则会把前者伪造成“已核验未植入”。迁移前还需额外冻结 025 多事件实际选中文书；本轮不改变其现有口径。
