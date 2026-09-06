@@ -1657,6 +1657,127 @@ def _typed_document_refs(
         return ()
 
 
+def _typed_precise_source_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    source_keys: Sequence[str],
+) -> tuple[str, ...]:
+    """只绑定本次结论实际使用的事实与逐行材料，不回退到全来源快照。"""
+
+    selected_keys = frozenset(source_keys)
+    refs = [
+        fact.fact_id
+        for fact in snapshot.facts
+        if fact.source_key in selected_keys
+    ]
+    for source_key in source_keys:
+        refs.extend(
+            _typed_document_refs(
+                materials=materials,
+                snapshot=snapshot,
+                source_key=source_key,
+            )
+        )
+    return tuple(dict.fromkeys(refs))
+
+
+def _typed_precise_terminal_refs(
+    *,
+    outcome: _SurgeryDocumentOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, ...]:
+    """按规则已使用的触发和目标资料选择证据，绝不由下游补全来源。"""
+
+    rule_id = outcome.rule_id
+    if rule_id == "LX0609-029":
+        facts = outcome.customer_display_facts or {}
+        source_keys: list[str] = []
+        if facts.get("surgery_trigger_kind") == "surgery_order":
+            source_keys.append("inpat_nondrug_order")
+        elif facts.get("surgery_trigger_kind") == "performed_surgery":
+            source_keys.extend(
+                source_key
+                for source_key in ("surgery_record", "mr_surgery")
+                if _typed_fact_state(
+                    snapshot,
+                    fact_types=_SURGERY_FACT_TYPES,
+                    source_key=source_key,
+                )[0]
+                == "present"
+            )
+        if _typed_observation_state(snapshot, "presurg_summary") != "empty":
+            source_keys.append("presurg_summary")
+        refs = tuple(
+            dict.fromkeys(
+                (
+                    *outcome.fact_refs,
+                    *_typed_precise_source_refs(
+                        snapshot=snapshot,
+                        materials=materials,
+                        source_keys=source_keys,
+                    ),
+                )
+            )
+        )
+        if refs or outcome.status != "not_applicable":
+            return refs
+        # 没有手术医嘱且未实施手术时，只有来源级的明确空结果可证明不适用；
+        # 仍限定为本规则实际使用的三类触发来源。
+        return tuple(
+            observation.snapshot_ref.removeprefix("sha256:")
+            for observation in snapshot.observations
+            if observation.source_key
+            in {"inpat_nondrug_order", "surgery_record", "mr_surgery"}
+        )
+
+    if rule_id in {"LX0609-034", "LX0609-035", "LX0609-036", "LX0609-037"}:
+        _state, _method, trigger_source = _typed_anesthesia_trigger(snapshot, materials)
+        source_keys = [trigger_source] if trigger_source else []
+        if rule_id in {"LX0609-034", "LX0609-035"}:
+            if _typed_observation_state(snapshot, "consent_form") != "empty":
+                source_keys.append("consent_form")
+        else:
+            source_keys.extend(
+                source_key
+                for source_key in ("preane_surveil_record", "postane_surveil_record")
+                if _typed_observation_state(snapshot, source_key) != "empty"
+            )
+        return _typed_precise_source_refs(
+            snapshot=snapshot, materials=materials, source_keys=source_keys
+        )
+
+    if rule_id == "LX0609-038":
+        source_keys = (
+            ("anesthesia_record",)
+            if outcome.reason_code == "anesthesia_record_present"
+            else ("mr_surgery",)
+        )
+        return _typed_precise_source_refs(
+            snapshot=snapshot, materials=materials, source_keys=source_keys
+        )
+
+    if rule_id == "LX0609-039":
+        source_keys = [
+            source_key
+            for source_key in ("surgery_record", "mr_surgery")
+            if _typed_fact_state(
+                snapshot,
+                fact_types=_SURGERY_FACT_TYPES,
+                source_key=source_key,
+            )[0]
+            == "present"
+        ]
+        for source_key in ("rescue_record", "presurg_discussion"):
+            if _typed_observation_state(snapshot, source_key) != "empty":
+                source_keys.append(source_key)
+        return _typed_precise_source_refs(
+            snapshot=snapshot, materials=materials, source_keys=source_keys
+        )
+    return outcome.fact_refs
+
+
 def _typed_029_trigger_display_facts(*, performed_triggered: bool) -> dict[str, object]:
     """仅把实际触发来源投影为展示事实，禁止医嘱触发伪称已实施。"""
 
@@ -2154,6 +2275,15 @@ async def execute_luxian_0609_native_surgery_document_rules(
                     customer_display_facts.append(
                         (rule_id, outcome.customer_display_facts)
                     )
+            assert evidence_materials is not None
+            outcome = replace(
+                outcome,
+                fact_refs=_typed_precise_terminal_refs(
+                    outcome=outcome,
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                ),
+            )
             decisions.append(
                 _typed_decision_from_outcome(
                     outcome=outcome,
