@@ -1276,7 +1276,7 @@ async def test_064_does_not_judge_missing_future_postoperative_days_before_windo
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced.reason_code == "evaluation_window_not_mature"
 
 
@@ -1305,7 +1305,7 @@ async def test_064_window_maturity_gap_survives_customer_projection() -> None:
         reduced=reduced,
     )
 
-    assert canonical["status"] == "data_gap"
+    assert canonical["status"] == "not_applicable"
     assert canonical["reason_code"] == "evaluation_window_not_mature"
     assert canonical["customer_display_facts"] == {
         "verification_kind": "postoperative_three_day_window_not_mature",
@@ -1315,6 +1315,42 @@ async def test_064_window_maturity_gap_survives_customer_projection() -> None:
     }
     assert "术后连续3天评价窗口尚未结束" in canonical["findings"]
     assert "本次暂不判定病程记录缺失" in canonical["findings"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("horizon_rows", "reason_code"),
+    (
+        ((), "authoritative_time_missing"),
+        (
+            (
+                {
+                    "horizon_datetime": "2026-08-03 10:00:00",
+                    "horizon_date": "2026-08-04",
+                    "basis": "evaluation_as_of",
+                },
+            ),
+            "authoritative_time_conflict",
+        ),
+    ),
+)
+async def test_064_missing_or_conflicting_evaluation_horizon_remains_data_gap(
+    horizon_rows, reason_code
+) -> None:
+    _, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": ({
+                "document_id": "E-horizon",
+                "surgery_end_time": "2026-07-30 10:00:00+08",
+                "surgeon": "张医生",
+            },),
+            "evaluation_context.horizon": horizon_rows,
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == reason_code
 
 
 @pytest.mark.asyncio

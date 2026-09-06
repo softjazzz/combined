@@ -1063,7 +1063,7 @@ def _postoperative_window_gate(
         facts["evaluation_time"] = horizon_time.isoformat(sep=" ")
     else:
         facts["evaluation_date"] = horizon_date.isoformat()
-    return "data_gap", "evaluation_window_not_mature", facts
+    return "not_applicable", "evaluation_window_not_mature", facts
 
 
 def _person_tokens(row: Mapping[str, Any]) -> set[str]:
