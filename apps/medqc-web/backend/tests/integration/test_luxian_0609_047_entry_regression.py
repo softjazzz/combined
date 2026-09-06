@@ -61,6 +61,7 @@ class _Scenario:
     bloodtrans_rows: tuple[dict[str, Any], ...]
     expected_state: tuple[str, str]
     expected_document_ids: frozenset[str] = frozenset()
+    daily_rows: tuple[dict[str, Any], ...] = ()
 
 
 _SCENARIOS = (
@@ -135,6 +136,103 @@ _SCENARIOS = (
             {"BT-EARLY-MATURE-MISSING", "BT-LATE-WINDOW-OPEN"}
         ),
     ),
+    _Scenario(
+        name="two_nonoverlap_each_daily_evaluation_complete",
+        # 01-02 17:00 与 01-01 10:00 相隔超过24小时；不得把它误作重叠窗口。
+        horizon_date="2026-01-04",
+        bloodtrans_rows=(
+            {
+                "document_id": "BT-NONOVERLAP-A",
+                "record_time": "2026-01-01 10:10:00",
+                "record_content": "2026-01-01 10:00:00输血结束。",
+            },
+            {
+                "document_id": "BT-NONOVERLAP-B",
+                "record_time": "2026-01-02 16:10:00",
+                "record_content": "2026-01-02 16:00:00输血结束。",
+            },
+        ),
+        daily_rows=(
+            {
+                "document_id": "DC-NONOVERLAP-A",
+                "record_time": "2026-01-01 11:00:00",
+                "record_content": "输血后疗效评价：患者精神改善，未见不良反应。",
+            },
+            {
+                "document_id": "DC-NONOVERLAP-B",
+                "record_time": "2026-01-02 17:00:00",
+                "record_content": "输血后疗效评价：患者精神改善，未见不良反应。",
+            },
+        ),
+        expected_state=("compliant", "requirement_satisfied"),
+        expected_document_ids=frozenset(
+            {
+                "BT-NONOVERLAP-A",
+                "BT-NONOVERLAP-B",
+                "DC-NONOVERLAP-A",
+                "DC-NONOVERLAP-B",
+            }
+        ),
+    ),
+    _Scenario(
+        name="two_overlapping_one_unanchored_daily_is_association_gap",
+        horizon_date=FROZEN_DATE,
+        bloodtrans_rows=(
+            {
+                "document_id": "BT-OVERLAP-A",
+                "record_time": "2026-01-01 10:10:00",
+                "record_content": "2026-01-01 10:00:00输血结束。",
+            },
+            {
+                "document_id": "BT-OVERLAP-B",
+                "record_time": "2026-01-01 10:40:00",
+                "record_content": "2026-01-01 10:30:00输血结束。",
+            },
+        ),
+        daily_rows=(
+            {
+                "document_id": "DC-OVERLAP-AMBIGUOUS",
+                "record_time": "2026-01-01 11:00:00",
+                "record_content": "输血后疗效评价：患者精神改善，未见不良反应。",
+            },
+        ),
+        expected_state=("data_gap", "association_failed"),
+        expected_document_ids=frozenset(
+            {"BT-OVERLAP-A", "BT-OVERLAP-B", "DC-OVERLAP-AMBIGUOUS"}
+        ),
+    ),
+    _Scenario(
+        name="two_overlapping_explicit_end_anchors_are_complete",
+        horizon_date=FROZEN_DATE,
+        bloodtrans_rows=(
+            {
+                "document_id": "BT-ANCHOR-A",
+                "record_time": "2026-01-01 10:10:00",
+                "record_content": "2026-01-01 10:00:00输血结束。",
+            },
+            {
+                "document_id": "BT-ANCHOR-B",
+                "record_time": "2026-01-01 10:40:00",
+                "record_content": "2026-01-01 10:30:00输血结束。",
+            },
+        ),
+        daily_rows=(
+            {
+                "document_id": "DC-ANCHOR-A",
+                "record_time": "2026-01-01 11:00:00",
+                "record_content": "针对2026-01-01 10:00:00输血结束后疗效评价：患者精神改善，未见不良反应。",
+            },
+            {
+                "document_id": "DC-ANCHOR-B",
+                "record_time": "2026-01-01 11:05:00",
+                "record_content": "针对2026-01-01 10:30:00输血结束后疗效评价：患者精神改善，未见不良反应。",
+            },
+        ),
+        expected_state=("compliant", "requirement_satisfied"),
+        expected_document_ids=frozenset(
+            {"BT-ANCHOR-A", "BT-ANCHOR-B", "DC-ANCHOR-A", "DC-ANCHOR-B"}
+        ),
+    ),
 )
 
 
@@ -160,7 +258,7 @@ def _scenario_rows(
     if source_key == "bloodtrans_record":
         return [{**common, **row} for row in scenario.bloodtrans_rows]
     if source_key == "daily_course_record":
-        return []
+        return [{**common, **row} for row in scenario.daily_rows]
     return []
 
 

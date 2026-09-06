@@ -25,21 +25,30 @@ SQLite 和脱敏的 running 病历资料行，保留真实 API、detached worker
 所有断言均使用 typed 决策经 Canonical 映射后的状态/原因，不使用 native 内部 raw
 reason：
 
-| 情形                                     | 固定逐例 horizon | 目标 Canonical 状态 / 原因                      |
-| ---------------------------------------- | ---------------- | ----------------------------------------------- |
-| 已成熟且未记录评价                       | 2026-01-03       | `non_compliant / requirement_violated`          |
-| 24 小时窗口未成熟                        | 2026-01-02       | `not_applicable / evaluation_window_not_mature` |
-| 缺少可用 horizon                         | 无               | `data_gap / authoritative_time_missing`         |
-| 输血结束时间无法解析                     | 2026-01-03       | `data_gap / required_field_missing`             |
-| 早期事件已成熟且缺评价、较晚事件尚未成熟 | 2026-01-03       | `non_compliant / requirement_violated`          |
+| 情形                                           | 固定逐例 horizon | 目标 Canonical 状态 / 原因                      |
+| ---------------------------------------------- | ---------------- | ----------------------------------------------- |
+| 已成熟且未记录评价                             | 2026-01-03       | `non_compliant / requirement_violated`          |
+| 24 小时窗口未成熟                              | 2026-01-02       | `not_applicable / evaluation_window_not_mature` |
+| 缺少可用 horizon                               | 无               | `data_gap / authoritative_time_missing`         |
+| 输血结束时间无法解析                           | 2026-01-03       | `data_gap / required_field_missing`             |
+| 早期事件已成熟且缺评价、较晚事件尚未成熟       | 2026-01-03       | `non_compliant / requirement_violated`          |
+| 两次非重叠输血各有一份日常病程评价             | 2026-01-04       | `compliant / requirement_satisfied`             |
+| 两次重叠输血、一份无结束锚点的笼统日常病程评价 | 2026-01-03       | `data_gap / association_failed`                 |
+| 两次重叠输血、两份日常病程各含完整结束时间锚点 | 2026-01-03       | `compliant / requirement_satisfied`             |
 
-最后一行要求两个输血记录坐标都可从保存结果回读，防止最新未成熟事件遮蔽更早已成熟的
-缺评价事件。测试同时比较三种任务形状的 customer facts、criterion results、客户结论及
+“早期事件已成熟且缺评价、较晚事件尚未成熟”一行要求两个输血记录坐标都可从保存结果回读，
+防止最新未成熟事件遮蔽更早已成熟的缺评价事件。测试同时比较三种任务形状的 customer facts、criterion results、客户结论及
 资料坐标集合；资料缺口允许空集合。任务 JSON 保留脱敏夹具的 document id，保存后的
 公共 Envelope 会将它转为 `src_*` 安全坐标，因此任务与保存层比较 source/field/time
 三元组，三份已保存 Envelope 再比较完整安全坐标集合。
 保存引用校验复用 `build_customer_safe_source_ref`，并断言所有 `src_[0-9a-f]{24}`
 非空、不含原 document id；测试不自行计算 HMAC 或哈希。
+
+逐次关联的三个目标夹具不以“后一次评价仍落在前一次 24 小时窗口内”伪造唯一关联：非重叠
+情形固定为 01-01 10:00/11:00 与 01-02 16:00/17:00，两个时序区间彼此分离。重叠情形
+固定为 01-01 10:00 与 10:30；单份笼统评价必须保守地返回 `association_failed`，只有两份
+评价各自显式包含对应完整结束时间锚点时才能合规。关联缺口也必须交付两份输血记录和歧义
+日常病程的受控引用；不得凭空增加临床 display facts。
 
 ## 固定时点与实际传递
 
@@ -62,10 +71,9 @@ py -3.10 -m py_compile tests/integration/test_luxian_0609_047_entry_regression.p
 py -3.10 -m pytest -q tests/integration/test_luxian_0609_047_entry_regression.py
 ```
 
-实测：`5 passed, 15 warnings in 14.53s`。warnings 均为既有 FastAPI/Pydantic/SQLAlchemy
-弃用提示。测试数据库位于 pytest 临时目录，未写入本机业务库；未发生 LLM 调用或 token
-消耗。
+Root 初次实测当前入口冻结：`8 passed`（24.04 秒）。最终补丁与七个影响范围单测文件合跑为 `195 passed`（26.04 秒），其中本文件 8 项全部通过。八种资料形状各经单条任务 1 次、两病历批量
+2 次、样本验证 1 次，共 32 次真实 unified 链执行；新增 047 路径的模型调用和 Token 均为 0。
+该结果只验证合成输入、pytest 临时 SQLite 与受控 stub 下的真实 route/worker/engine/save 链路，
+不写入本机业务库；不是客户实际病历或真实模型的业务验收。
 
-主协调独立复跑本文件与既有输血族入口套件：`16 passed`（36.75 秒，15 条既有告警）。新 047 五种资料形状共经过 20 次真实 unified 执行（每种：单条 1 次、两病历批量 2 次、样本验证 1 次），新增 047 路径的模型调用和 Token 均为 0。真实模型和客户源库不在本次测试范围。
-
-窗口实现提交：`bec27288f`。本记录只证明该窗口修复在本地三种正式任务形状的传递和保存；047 多次输血跳过日常病程评价的旧关联缺陷仍待独立修复，不能据此标记整条规则或整个输血族业务问题已清零。
+窗口实现提交：`bec27288f`。本记录只证明窗口传递/保存与本次逐次关联候选在本地三种正式任务形状下的局部验收；最终补丁复跑的耗时由 Root 补充。不得据此标记整条规则或整个输血族业务问题已清零。
