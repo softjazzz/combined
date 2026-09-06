@@ -509,6 +509,7 @@ def finalizer_requires_public_fact_ref_evidence(rule_id: str) -> bool:
     from .antimicrobial_result_mapping import is_antimicrobial_customer_rule
     from .discharge_result_mapping import is_discharge_customer_rule
     from .postoperative_result_mapping import is_postoperative_customer_rule
+    from .transfusion_result_mapping import is_transfusion_public_fact_ref_evidence_rule
 
     return (
         is_discharge_customer_rule(rule_id)
@@ -516,6 +517,7 @@ def finalizer_requires_public_fact_ref_evidence(rule_id: str) -> bool:
         or is_basic_timeliness_customer_rule(rule_id)
         or is_antimicrobial_customer_rule(rule_id)
         or is_postoperative_customer_rule(rule_id)
+        or is_transfusion_public_fact_ref_evidence_rule(rule_id)
     )
 
 
@@ -572,6 +574,7 @@ def finalize_luxian_0609_executor_customer_display_facts(
         return finalized, False
     from .transfusion_result_mapping import (
         is_transfusion_customer_rule,
+        is_transfusion_public_fact_ref_evidence_rule,
         transfusion_customer_fact_status_is_valid,
     )
     from .surgery_gate_result_mapping import (
@@ -625,16 +628,18 @@ def finalize_luxian_0609_executor_customer_display_facts(
         postoperative_customer_fact_status_is_valid,
     )
     rule_id = str(finalized.get("rule_id") or finalized.get("rule_code") or "")
-    if (
-        safe_facts is not None
-        and is_transfusion_customer_rule(
-            str(finalized.get("rule_id") or finalized.get("rule_code") or "")
-        )
-        and not transfusion_customer_fact_status_is_valid(
-            rule_id=str(finalized.get("rule_id") or finalized.get("rule_code") or ""),
+    transfusion_status_valid = (
+        is_transfusion_customer_rule(rule_id)
+        and transfusion_customer_fact_status_is_valid(
+            rule_id=rule_id,
             status=str(finalized.get("status") or "").strip().lower(),
             safe_facts=safe_facts,
         )
+    )
+    if (
+        safe_facts is not None
+        and is_transfusion_customer_rule(rule_id)
+        and not transfusion_status_valid
     ):
         safe_facts = None
     surgery_gate_status_valid = (
@@ -777,7 +782,14 @@ def finalize_luxian_0609_executor_customer_display_facts(
     )
     if is_postoperative_customer_rule(rule_id) and not postoperative_status_valid:
         safe_facts = None
-    if raw_facts is None and (surgery_gate_status_valid or postoperative_status_valid):
+    if raw_facts is None and (
+        surgery_gate_status_valid
+        or postoperative_status_valid
+        or (
+            is_transfusion_public_fact_ref_evidence_rule(rule_id)
+            and transfusion_status_valid
+        )
+    ):
         finalized.pop("customer_display_facts", None)
         return finalized, True
     if safe_facts is not None:

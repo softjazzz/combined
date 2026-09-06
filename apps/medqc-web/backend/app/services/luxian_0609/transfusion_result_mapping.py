@@ -1,6 +1,6 @@
 """输血规则的安全客户事实合同。
 
-本模块只校验执行器已经得出的 041–048 客户展示事实，并剥离内部文书标识。
+本模块只校验执行器已经得出的 041–048、070 客户展示事实，并剥离内部文书标识。
 逐文书证据仍由 ``RuleDecision.fact_refs`` 经 Binding 和公共投影生成；这里不读取
 资料、不重新判定状态，也不构造客户证据 DTO。
 """
@@ -12,8 +12,12 @@ from typing import Any, Mapping
 
 
 TRANSFUSION_CUSTOMER_RULE_IDS = frozenset(
-    f"LX0609-{number:03d}" for number in range(41, 49)
+    (*[f"LX0609-{number:03d}" for number in range(41, 49)], "LX0609-070")
 )
+
+_PRETRANSFUSION_ALLOWED_ITEMS = {
+    "hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hcv", "hiv", "syphilis", "alt"
+}
 
 _SYSTEM_GAP_REASONS = {
     "LX0609-041": "consent_source_unavailable",
@@ -28,6 +32,12 @@ def is_transfusion_customer_rule(rule_id: str) -> bool:
     """返回由输血规则族拥有展示事实合同的规则。"""
 
     return str(rule_id or "").strip().upper() in TRANSFUSION_CUSTOMER_RULE_IDS
+
+
+def is_transfusion_public_fact_ref_evidence_rule(rule_id: str) -> bool:
+    """070 的客户证据只允许经过公共逐行 fact_refs 投影。"""
+
+    return str(rule_id or "").strip().upper() == "LX0609-070"
 
 
 def _controlled_list(
@@ -130,10 +140,11 @@ def _safe_042(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    allowed_items = {"hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hcv", "hiv", "syphilis", "alt"}
     kind = raw.get("verification_kind") or raw.get("failure_kind")
     if kind == "pretransfusion_items_complete":
-        checked = _controlled_list(raw.get("checked_items"), allowed=allowed_items)
+        checked = _controlled_list(
+            raw.get("checked_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+        )
         if (
             checked is None
             or raw.get("performed_transfusion_confirmed") is not True
@@ -162,7 +173,7 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }.get(str(kind))
     if list_key is None:
         return None
-    values = _controlled_list(raw.get(list_key), allowed=allowed_items)
+    values = _controlled_list(raw.get(list_key), allowed=_PRETRANSFUSION_ALLOWED_ITEMS)
     if values is None:
         return None
     result: dict[str, Any] = {"failure_kind": str(kind), list_key: values}
@@ -171,11 +182,165 @@ def _safe_043(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if isinstance(raw.get("transfusion_time"), str):
         result["transfusion_time"] = raw["transfusion_time"]
     if kind == "pretransfusion_items_incomplete":
-        required = _controlled_list(raw.get("required_items"), allowed=allowed_items)
+        required = _controlled_list(
+            raw.get("required_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+        )
         if required is None:
             return None
         result["required_items"] = required
     return result
+
+
+def _safe_070(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """保留 070 既有逐笔输血事实白名单，不解释检验业务。"""
+
+    def controlled_event_checks(value: Any) -> list[dict[str, Any]] | None:
+        if not isinstance(value, list) or not value or len(value) > 100:
+            return None
+        safe_events: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, Mapping):
+                return None
+            transfusion_time = item.get("transfusion_time")
+            latest_valid_test_time = item.get("latest_valid_test_time")
+            if (
+                not isinstance(transfusion_time, str)
+                or len(transfusion_time) > 160
+                or "\n" in transfusion_time
+                or (
+                    latest_valid_test_time is not None
+                    and (
+                        not isinstance(latest_valid_test_time, str)
+                        or len(latest_valid_test_time) > 160
+                        or "\n" in latest_valid_test_time
+                    )
+                )
+            ):
+                return None
+            safe_event: dict[str, Any] = {
+                "transfusion_time": transfusion_time,
+                "latest_valid_test_time": latest_valid_test_time,
+            }
+            for key in (
+                "missing_items",
+                "missing_time_items",
+                "late_items",
+                "outside_current_stay_items",
+            ):
+                values = _controlled_list(
+                    item.get(key), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+                )
+                if values is None:
+                    return None
+                safe_event[key] = values
+            safe_events.append(safe_event)
+        return safe_events
+
+    def append_event_facts(result: dict[str, Any]) -> dict[str, Any] | None:
+        event_count = raw.get("transfusion_event_count")
+        event_times = _controlled_list(raw.get("checked_transfusion_times"))
+        event_checks = controlled_event_checks(raw.get("event_checks"))
+        # 兼容逐笔 facts 尚未产生的历史结果；三项若仅出现部分则 fail-closed。
+        if (
+            raw.get("transfusion_event_count") is None
+            and raw.get("checked_transfusion_times") is None
+            and raw.get("event_checks") is None
+        ):
+            return result
+        if (
+            not isinstance(event_count, int)
+            or isinstance(event_count, bool)
+            or event_count <= 0
+            or event_times is None
+            or event_checks is None
+            or event_count != len(event_times)
+            or event_count != len(event_checks)
+        ):
+            return None
+        result.update(
+            {
+                "transfusion_event_count": event_count,
+                "checked_transfusion_times": event_times,
+                "event_checks": event_checks,
+            }
+        )
+        for key in ("failed_transfusion_times", "admission_time"):
+            value = raw.get(key)
+            if value is None:
+                continue
+            if key == "failed_transfusion_times":
+                values = _controlled_list(value)
+                if values is None:
+                    return None
+                result[key] = values
+            elif isinstance(value, str) and len(value) <= 160 and "\n" not in value:
+                result[key] = value
+            else:
+                return None
+        outside_items = _controlled_list(
+            raw.get("outside_current_stay_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+        )
+        if outside_items is not None:
+            result["outside_current_stay_items"] = outside_items
+        elif raw.get("outside_current_stay_items") is not None:
+            return None
+        return result
+
+    kind = raw.get("verification_kind") or raw.get("failure_kind")
+    if kind == "pretransfusion_items_complete":
+        checked = _controlled_list(
+            raw.get("checked_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+        )
+        if (
+            checked is None
+            or raw.get("performed_transfusion_confirmed") is not True
+            or not isinstance(raw.get("latest_test_time"), str)
+            or not isinstance(raw.get("transfusion_time"), str)
+            or any(
+                not isinstance(raw.get(key), bool)
+                for key in (
+                    "abo_present",
+                    "rh_present",
+                    "antibody_screen_present",
+                )
+            )
+        ):
+            return None
+        return append_event_facts(
+            {
+                "verification_kind": str(kind),
+                "performed_transfusion_confirmed": True,
+                "checked_items": checked,
+                "latest_test_time": raw["latest_test_time"],
+                "transfusion_time": raw["transfusion_time"],
+                "abo_present": raw["abo_present"],
+                "rh_present": raw["rh_present"],
+                "antibody_screen_present": raw["antibody_screen_present"],
+            }
+        )
+    list_key = {
+        "pretransfusion_items_incomplete": "missing_items",
+        "pretransfusion_tests_after_transfusion": "late_items",
+        "pretransfusion_test_time_missing": "missing_time_items",
+    }.get(str(kind))
+    if list_key is None:
+        return None
+    values = _controlled_list(raw.get(list_key), allowed=_PRETRANSFUSION_ALLOWED_ITEMS)
+    if values is None:
+        return None
+    result: dict[str, Any] = {"failure_kind": str(kind), list_key: values}
+    if raw.get("performed_transfusion_confirmed") is True:
+        result["performed_transfusion_confirmed"] = True
+    if isinstance(raw.get("transfusion_time"), str):
+        result["transfusion_time"] = raw["transfusion_time"]
+    if kind == "pretransfusion_items_incomplete":
+        required = _controlled_list(
+            raw.get("required_items"), allowed=_PRETRANSFUSION_ALLOWED_ITEMS
+        )
+        if required is None:
+            return None
+        result["required_items"] = required
+    return append_event_facts(result)
 
 
 def _safe_044(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -429,6 +594,7 @@ def safe_transfusion_customer_display_facts(
         "LX0609-046": _safe_046,
         "LX0609-047": _safe_047,
         "LX0609-048": _safe_048,
+        "LX0609-070": _safe_070,
     }.get(normalized_rule_id)
     safe = checker(raw) if checker is not None else None
     return safe if safe is not None else _safe_requirement_missing(normalized_rule_id, raw)
@@ -442,6 +608,20 @@ def transfusion_customer_fact_status_is_valid(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if normalized_rule_id not in TRANSFUSION_CUSTOMER_RULE_IDS:
         return True
+    if normalized_rule_id == "LX0609-070":
+        if status == "technical_error":
+            return True
+        if safe_facts is None:
+            # 未触发输血或资料源不可用时，执行器本来就不产生展示 facts。
+            return status in {"data_gap", "not_applicable"}
+        kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
+        expected_status = {
+            "pretransfusion_items_complete": "compliant",
+            "pretransfusion_items_incomplete": "non_compliant",
+            "pretransfusion_tests_after_transfusion": "non_compliant",
+            "pretransfusion_test_time_missing": "data_gap",
+        }.get(str(kind))
+        return expected_status is not None and status == expected_status
     if not isinstance(safe_facts, Mapping):
         return False
     kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
