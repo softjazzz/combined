@@ -286,7 +286,7 @@ def _copy_customer_fields(
         "not_executed",
         "technical_error",
     }:
-        status = "data_gap"
+        status = "technical_error"
     selected_metadata_raw = selected.get("metadata")
     selected_metadata_mapping = (
         selected_metadata_raw if isinstance(selected_metadata_raw, Mapping) else {}
@@ -1077,8 +1077,9 @@ def aggregate_luxian_0609_results(
                 selected = {
                     "rule_id": wrapper_id,
                     "rule_name": str(wrapper.get("name") or wrapper_id),
-                    "status": "uncertain",
-                    "is_compliant": False,
+                    "status": "technical_error",
+                    "reason_code": "missing_mapped_result",
+                    "is_compliant": None,
                     "findings": "当前自动判定未形成可靠结论，建议质控员确认。",
                     "evidence": "",
                     "suggestion": "请质控员结合相关病历文书和诊疗记录确认；必要时重新执行质控。",

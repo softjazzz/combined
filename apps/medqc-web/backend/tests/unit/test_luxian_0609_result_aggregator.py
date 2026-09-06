@@ -47,6 +47,49 @@ CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
 
 
+def test_legacy_customer_copy_fails_closed_when_status_normalizer_is_noncanonical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """旧映射适配器的防御分支不得把技术状态降为资料不足。"""
+
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["_copy_customer_fields"],
+    )
+    monkeypatch.setattr(module, "_status", lambda _item: "invalid_normalized_status")
+
+    result = module._copy_customer_fields(
+        wrapper={"rule_id": "LX0609-999", "name": "状态合同守卫"},
+        selected={"rule_id": "LEGACY-999", "metadata": {}},
+        mapped_results=[],
+        source="contract_guard",
+        gate_decision=None,
+    )
+
+    assert result["status"] == "technical_error"
+
+
+def test_missing_mapped_result_is_technical_error_not_uncertain() -> None:
+    """没有任何执行结果属于编排故障，不能伪装成临床语义不确定。"""
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[
+            {
+                "rule_id": "LX0609-999",
+                "name": "缺少映射执行结果",
+                "primary_execution_rule_id": "LEGACY-999",
+                "mapped_rule_ids": ["LEGACY-999"],
+            }
+        ],
+        execution_results=[],
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "missing_mapped_result"
+    assert result["metadata"]["technical_error_internal"] is True
+
+
 def test_031_projects_multi_surgery_signature_gaps_per_event() -> None:
     facts = {
         "failure_kind": "surgery_signature_fields_missing",
