@@ -399,6 +399,38 @@ def _070_document_refs(
     return tuple(dict.fromkeys(refs))
 
 
+def _death_document_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    selected_document_refs: Sequence[Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """将 051 已选文书和 060 死亡记录映射为同一快照内的逐行事实引用。
+
+    ``selected_document_refs`` 仅在执行器内部用于选择事实，绝不进入客户展示
+    facts。后续客户证据由 Binding 的 ``fact_refs`` 经公共投影统一生成。
+    """
+
+    selected_ids_by_source: dict[str, set[str]] = {}
+    for item in selected_document_refs:
+        source_key = _clean(item.get("source_type"))
+        document_id = _clean(item.get("source_document_id"))
+        if source_key in {"death_record", "death_discussion"} and document_id:
+            selected_ids_by_source.setdefault(source_key, set()).add(document_id)
+    if not selected_ids_by_source:
+        return ()
+    refs: list[str] = []
+    try:
+        for source_key, selected_ids in selected_ids_by_source.items():
+            for reference, row in materials.document_rows(source_key, snapshot=snapshot):
+                document_id = _clean(row.get("document_id") or row.get("id"))
+                if document_id in selected_ids:
+                    refs.append(reference)
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return ()
+    return tuple(dict.fromkeys(refs))
+
+
 def _decision(
     *,
     rule_id: str,
@@ -407,6 +439,7 @@ def _decision(
     final_state: str,
     reason_code: str,
     document_refs: Sequence[str] = (),
+    exact_document_refs: bool = False,
     criterion_results: Sequence[Any] = (),
 ) -> RuleDecision:
     dimensions = {
@@ -449,8 +482,10 @@ def _decision(
         evidence_state=evidence_state,
         qc_direction=direction,
         reason_code=reason_code,
-        fact_refs=tuple(
-            dict.fromkeys((*_fact_refs(snapshot, source_keys), *document_refs))
+        fact_refs=(
+            tuple(dict.fromkeys(document_refs))
+            if exact_document_refs
+            else tuple(dict.fromkeys((*_fact_refs(snapshot, source_keys), *document_refs)))
         ),
         evaluator_version="extended-document-v2",
         confidence=None,
@@ -2262,6 +2297,20 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-060":
             final_state = "compliant" if death_rows else "non_compliant"
+            death_document_refs = _death_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                selected_document_refs=tuple(
+                    {
+                        "source_type": "death_record",
+                        "source_document_id": _clean(
+                            row.get("document_id") or row.get("id")
+                        ),
+                    }
+                    for row in death_rows
+                    if _clean(row.get("document_id") or row.get("id"))
+                ),
+            )
             display.append((rule_id, {
                 "verification_kind": "death_record_presence_check",
                 "death_confirmed": True,
@@ -2279,6 +2328,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if death_rows
                         else "required_document_missing"
                     ),
+                    document_refs=death_document_refs,
+                    # 无可定位文书 ID 时仍保留原来源级事实引用，让 Binding
+                    # 维持既有临床结论；公共投影会因没有真实 ID 而不展示证据。
+                    exact_document_refs=bool(death_document_refs),
                 )
             )
             continue
@@ -2294,6 +2347,21 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
+            raw_selected_document_refs = (
+                outcome.display_facts.get("source_document_refs")
+                if isinstance(outcome.display_facts, Mapping)
+                else ()
+            )
+            selected_document_refs = (
+                tuple(item for item in raw_selected_document_refs if isinstance(item, Mapping))
+                if isinstance(raw_selected_document_refs, (list, tuple))
+                else ()
+            )
+            death_document_refs = _death_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                selected_document_refs=selected_document_refs,
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -2305,6 +2373,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ),
                     final_state=outcome.final_state,
                     reason_code=outcome.reason_code,
+                    document_refs=death_document_refs,
+                    # 没有真实文书 ID 时不能把正常资料缺失升级成技术错误；仅在
+                    # 已选择到同快照文书时收紧为逐行引用。
+                    exact_document_refs=bool(death_document_refs),
                 )
             )
             continue

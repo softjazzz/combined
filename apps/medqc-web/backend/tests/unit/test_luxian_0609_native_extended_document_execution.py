@@ -623,6 +623,14 @@ async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidenc
     assert canonical["customer_display_facts"]["discussion_time"] == (
         "2026-07-02 12:00:00"
     )
+    selected_fact_refs = tuple(
+        reference
+        for source_key in ("death_record", "death_discussion")
+        for reference, _row in materials.document_rows(source_key, snapshot=snapshot)
+        if reference in execution.decisions[0].fact_refs
+    )
+    assert execution.decisions[0].fact_refs == selected_fact_refs
+    assert len(selected_fact_refs) == 2
     assert canonical["customer_evidence"] == [
         {
             "source_type": "death_record",
