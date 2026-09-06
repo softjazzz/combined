@@ -37,7 +37,6 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609_result_aggregator import (
-    _customer_evidence_from_display_facts,
     aggregate_luxian_0609_results,
     safe_luxian_0609_customer_display_facts,
 )
@@ -287,7 +286,7 @@ def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
         envelope_item_from_rule_result(item)
 
 
-def test_040_display_facts_never_reproject_legacy_document_refs() -> None:
+def test_native_display_facts_never_reproject_private_document_refs() -> None:
     facts = {
         "failure_kind": "level4_mdt_absent",
         "performed_surgery_confirmed": True,
@@ -301,7 +300,23 @@ def test_040_display_facts_never_reproject_legacy_document_refs() -> None:
         ],
     }
 
-    assert _customer_evidence_from_display_facts(rule_id="LX0609-040", raw=facts) == []
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-040", "name": "MDT 讨论"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-040",
+                "status": "non_compliant",
+                "metadata": {
+                    "execution_source": "lx0609_native",
+                    "customer_display_facts": facts,
+                },
+            }
+        ],
+        format_evidence=False,
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "surgery-event-1" not in repr(result)
 
 
 def test_040_customer_evidence_uses_only_public_selected_fact_refs(
@@ -2346,16 +2361,15 @@ def test_continuity_customer_evidence_uses_only_public_selected_fact_refs(
     assert captured["decision"].fact_refs == (fact_ref,)
 
 
-def test_aggregator_contains_no_continuity_facts_or_legacy_evidence_branch() -> None:
+def test_aggregator_contains_no_continuity_facts_or_legacy_display_evidence_branch() -> None:
     import app.services.luxian_0609_result_aggregator as aggregator
 
     source = inspect.getsource(aggregator)
     for rule_id in ("LX0609-069", "LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"):
         assert rule_id not in source
     assert "controlled_consultation_events" not in source
-    assert "source_document_refs" not in inspect.getsource(
-        aggregator._customer_evidence_from_display_facts
-    )
+    assert "legacy_surgery_gate_customer_evidence" not in source
+    assert "_customer_evidence_from_display_facts" not in source
 
 
 def test_071_handoff_identity_gap_projects_strict_facts() -> None:
@@ -4273,10 +4287,7 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
 
     assert result["customer_display_facts"] == expected
     if rule_id == "LX0609-025":
-        assert result["customer_evidence"] == [{
-            "source_type": "surgery_record",
-            "source_document_id": "private-surgery-document-id",
-        }]
+        assert "customer_evidence" not in result
     assert "PRIVATE_" not in repr(result)
 
 

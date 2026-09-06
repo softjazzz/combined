@@ -23,9 +23,6 @@ from .luxian_0609.customer_evidence_enrichment import (
     project_selected_document_evidence,
 )
 from .luxian_0609.decision_reducer import ReducedRuleDecision
-from .luxian_0609.surgery_gate_result_mapping import (
-    legacy_surgery_gate_customer_evidence,
-)
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
     TRIGGER_ABSENT,
@@ -361,38 +358,6 @@ def _controlled_customer_findings(
     return customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
 
 
-def _customer_evidence_from_display_facts(
-    *, rule_id: str, raw: Any
-) -> list[dict[str, str]]:
-    """将已验证的内部文书 ID 交给客户投影层做不可逆引用。
-
-    此处不输出 ID 给客户；`custom_qc_workspace_service` 会统一将其 HMAC
-    为 `src_…`，与文书列表中的安全引用一一对应。
-    """
-
-    if not isinstance(raw, Mapping):
-        return []
-    verified_facts = validate_luxian_0609_executor_customer_display_facts(
-        rule_id=rule_id,
-        raw=raw,
-    )
-    if verified_facts is not NotImplemented:
-        legacy_evidence = legacy_surgery_gate_customer_evidence(
-            rule_id=rule_id,
-            raw=raw,
-            safe_facts=verified_facts,
-        )
-        return [] if legacy_evidence is None else legacy_evidence
-    # 先复用展示事实白名单验证业务形态；内部 ID 只在此函数中转成
-    # customer_evidence，绝不能进入 customer_display_facts。
-    if safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw) is None:
-        return []
-
-    return []
-
-
-
-
 def _valid_customer_evidence_document_id(value: Any) -> str:
     """仅允许内部已验证的文书 ID 进入后续安全签名环节。"""
 
@@ -514,36 +479,8 @@ def _customer_evidence_from_reduced_decision(
     return rows
 
 
-def _merge_customer_evidence(
-    *groups: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    """显式规则证据优先，通用 fact 反查只补足缺失引用。"""
-
-    merged: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for group in groups:
-        for item in group:
-            document_id = _valid_customer_evidence_document_id(
-                item.get("source_document_id")
-            )
-            source_type = str(item.get("source_type") or "").strip().lower()
-            if (
-                not document_id
-                or document_id in seen
-                or not _SAFE_SOURCE_TYPE.fullmatch(source_type)
-            ):
-                continue
-            seen.add(document_id)
-            merged.append(
-                {"source_type": source_type, "source_document_id": document_id}
-            )
-            if len(merged) >= 8:
-                return merged
-    return merged
-
-
 def _copy_native_customer_fields(
-    *, wrapper: dict[str, Any], selected: dict[str, Any], evidence_materials: Any = None
+    *, wrapper: dict[str, Any], selected: dict[str, Any]
 ) -> dict[str, Any]:
     """原生结果不携带旧映射诊断，并保留程序/模型执行类型。"""
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
@@ -685,12 +622,6 @@ def _copy_native_customer_fields(
     result.pop("customer_display_facts", None)
     if safe_display_facts:
         result["customer_display_facts"] = safe_display_facts
-    customer_evidence = _customer_evidence_from_display_facts(
-        rule_id=wrapper_id,
-        raw=raw_display_facts,
-    )
-    if customer_evidence:
-        result["customer_evidence"] = customer_evidence
     if (
         (finalizer_owns_facts and raw_display_facts is not None)
         or finalizer_validates_missing_executor_customer_display_facts(wrapper_id)
@@ -753,7 +684,6 @@ def aggregate_luxian_0609_results(
     )
     display_facts_by_rule: dict[str, dict[str, Any]] = {}
     raw_executor_display_facts_by_rule: dict[str, Mapping[str, Any]] = {}
-    customer_evidence_by_rule: dict[str, list[dict[str, str]]] = {}
     wrapper_rule_ids = {
         _norm_id(item.get("rule_id") or item.get("rule_code"))
         for item in wrapper_rules
@@ -800,12 +730,6 @@ def aggregate_luxian_0609_results(
                 )
             ):
                 raise Luxian0609CustomerDisplayFactsError(rule_id)
-        customer_evidence = _customer_evidence_from_display_facts(
-            rule_id=rule_id,
-            raw=facts,
-        )
-        if customer_evidence:
-            customer_evidence_by_rule[rule_id] = customer_evidence
     result_by_rule: dict[str, list[dict[str, Any]]] = {}
     for item in execution_results:
         key = _norm_id(item.get("rule_id") or item.get("rule_code"))
@@ -878,10 +802,7 @@ def aggregate_luxian_0609_results(
                         "evidence_materials"
                     ),
                 )
-                customer_evidence = _merge_customer_evidence(
-                    customer_evidence_by_rule.get(wrapper_id, []),
-                    decision_evidence,
-                )
+                customer_evidence = decision_evidence
             customer_evidence = enrich_customer_evidence(
                 customer_evidence,
                 evidence_materials=(audit_context or {}).get("evidence_materials"),
@@ -938,9 +859,6 @@ def aggregate_luxian_0609_results(
                 result = _copy_native_customer_fields(
                     wrapper=wrapper,
                     selected=selected,
-                    evidence_materials=(audit_context or {}).get(
-                        "evidence_materials"
-                    ),
                 )
                 raw_executor_facts = raw_executor_display_facts_by_rule.get(
                     wrapper_id
@@ -966,10 +884,6 @@ def aggregate_luxian_0609_results(
                         )
                         if precise_findings:
                             result["findings"] = precise_findings
-                    if wrapper_id in customer_evidence_by_rule:
-                        result["customer_evidence"] = customer_evidence_by_rule[
-                            wrapper_id
-                        ]
                 else:
                     # Finalizer 已因合同或状态冲突将本条安全降级。此处只能继续
                     # 装配，不能把循环前缓存的展示事实或证据重新写回。
