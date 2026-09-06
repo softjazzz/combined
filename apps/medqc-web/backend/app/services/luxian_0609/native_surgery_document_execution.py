@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -19,8 +19,10 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
 from .fact_schema import Assertion, EventStatus
 from .native_execution import build_luxian_0609_native_result
+from .planner import PlannedRule
 from .source_manifest import QueryStatus
 from .source_evidence_reader import (
     has_qualified_traditional_surgery_row,
@@ -48,7 +50,12 @@ EXECUTOR_KEY = "surgery_document"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_DOCUMENT_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "surgery-document-ruledecision-shadow-v2"
 _TYPED_RULE_SOURCE_KEYS = {
-    "LX0609-029": ("presurg_summary", "surgery_record", "mr_surgery"),
+    "LX0609-029": (
+        "presurg_summary",
+        "inpat_nondrug_order",
+        "surgery_record",
+        "mr_surgery",
+    ),
     "LX0609-034": ("anesthesia_record", "mr_surgery", "consent_form"),
     "LX0609-035": ("anesthesia_record", "mr_surgery", "consent_form"),
     "LX0609-036": (
@@ -162,6 +169,7 @@ class _SurgeryDocumentOutcome:
     reason_code: str
     executor_type: str
     customer_display_facts: Mapping[str, Any] | None = None
+    fact_refs: tuple[str, ...] = ()
 
 
 def _typed_binding_source_keys(rule_id: str) -> frozenset[str]:
@@ -184,7 +192,7 @@ def _typed_decision_from_outcome(
     source_keys = _typed_binding_source_keys(outcome.rule_id).intersection(
         _TYPED_RULE_SOURCE_KEYS[outcome.rule_id]
     )
-    refs = tuple(
+    refs = outcome.fact_refs or tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
         if observation.source_key in source_keys
@@ -1531,6 +1539,124 @@ def _try_associate_single_presurg_summary_to_surgeries(
     return len(performed), 1
 
 
+def _typed_029_order_trigger(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, tuple[str, ...]]:
+    """按 Planner 声明的医嘱 alternative 读取029触发事实。"""
+
+    planned_rule = PlannedRule.for_rule_id("LX0609-029")
+    order_requirement = next(
+        requirement
+        for requirement in planned_rule.trigger_requirements
+        if requirement.fact_type == "current_visit_surgery_order_confirmed"
+    )
+    order_facts = tuple(
+        fact
+        for fact in snapshot.facts
+        if fact.fact_type == order_requirement.fact_type
+        and fact.source_key in order_requirement.allowed_source_keys
+        and fact.trigger_scope.value == order_requirement.trigger_scope
+        and fact.current_visit_relevance.value
+        == order_requirement.current_visit_relevance
+    )
+    positive_facts = tuple(
+        fact
+        for fact in order_facts
+        if fact.assertion is Assertion.AFFIRMED
+        and fact.event_status.value in order_requirement.allowed_event_statuses
+    )
+    if positive_facts:
+        # FactV2 只表达来源整体状态；逐条阳性医嘱由 provider 的同一严格谓词
+        # 在冻结材料中选择，再交给公共证据投影还原真实医嘱 ID。
+        try:
+            observation = next(
+                (
+                    item
+                    for item in snapshot.observations
+                    if item.source_key == "inpat_nondrug_order"
+                ),
+                None,
+            )
+            if observation is None:
+                return "data_gap", ()
+            document_rows = materials.document_rows(
+                "inpat_nondrug_order", snapshot=snapshot
+            )
+            assertion, selected_ids = classify_current_visit_surgery_order_rows(
+                rows=tuple(row for _, row in document_rows),
+                completeness=observation.completeness,
+            )
+            if assertion != "affirmed":
+                return "data_gap", ()
+            selected_id_set = set(selected_ids)
+            selected_refs = tuple(
+                document_ref
+                for document_ref, row in document_rows
+                if next(
+                    (
+                        str(row.get(field) or "").strip()
+                        for field in ("order_id", "document_id", "id")
+                        if str(row.get(field) or "").strip()
+                    ),
+                    "",
+                )
+                in selected_id_set
+            )
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, ValueError):
+            selected_refs = ()
+        # Fact ref proves Planner-contract applicability; material refs are the sole
+        # customer-document coordinate input. The former intentionally has no ID.
+        return "applicable", tuple(
+            sorted({*(fact.fact_id for fact in positive_facts), *selected_refs})
+        )
+
+    observation = next(
+        (
+            item
+            for item in snapshot.observations
+            if item.source_key == "inpat_nondrug_order"
+        ),
+        None,
+    )
+    if observation is None:
+        return "data_gap", ()
+    if observation.query_state is QueryStatus.ERROR:
+        return "technical_error", ()
+    if (
+        observation.query_state is QueryStatus.UNAVAILABLE
+        or observation.completeness is not SourceCompleteness.COMPLETE
+    ):
+        return "data_gap", ()
+    if any(fact.assertion is Assertion.UNCERTAIN for fact in order_facts):
+        return "data_gap", ()
+    if observation.query_state is QueryStatus.EMPTY or any(
+        fact.assertion is Assertion.NEGATED for fact in order_facts
+    ):
+        return "not_applicable", ()
+    return "data_gap", ()
+
+
+def _typed_document_refs(
+    *,
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_key: str,
+) -> tuple[str, ...]:
+    """复用公共材料投影返回本次已核验的文书坐标。"""
+
+    try:
+        return tuple(
+            document_ref
+            for document_ref, _ in materials.document_rows(
+                source_key, snapshot=snapshot
+            )
+        )
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, ValueError):
+        return ()
+
+
 async def _typed_029_outcome(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -1541,22 +1667,33 @@ async def _typed_029_outcome(
     # 029 是纯存在性规则：已证明仅一台手术时，只看术前小结正文是否为
     # 非空、非占位值。多台手术缺少稳定关联时不得让任一小结覆盖全部事件。
     # 模型、标题、时间和长度均不得参与正文存在性判定。
-    applicability = resolve_surgery_applicability(
+    order_state, order_refs = _typed_029_order_trigger(
         snapshot=snapshot,
         materials=materials,
     )
-    if applicability.state != "applicable":
-        if applicability.state == "technical_error":
+    performed_applicability = resolve_surgery_applicability(
+        snapshot=snapshot,
+        materials=materials,
+    )
+    performed_triggered = performed_applicability.state == "applicable"
+    if order_state != "applicable" and not performed_triggered:
+        if (
+            order_state == "technical_error"
+            or performed_applicability.state == "technical_error"
+        ):
             outcome = _SurgeryDocumentOutcome(
                 "LX0609-029", "technical_error", "source_query_error", "program"
             )
-        elif applicability.state == "not_applicable":
+        elif (
+            order_state == "not_applicable"
+            and performed_applicability.state == "not_applicable"
+        ):
             outcome = _SurgeryDocumentOutcome(
                 "LX0609-029", "not_applicable", "performed_surgery_absent", "program"
             )
         else:
             outcome = _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", applicability.reason_code, "program"
+                "LX0609-029", "data_gap", "applicability_source_gap", "program"
             )
         return (
             outcome,
@@ -1566,7 +1703,7 @@ async def _typed_029_outcome(
         rule_id="LX0609-029", source_key="presurg_summary", snapshot=snapshot
     )
     if target_gate is not None:
-        return target_gate, 0, 0, 0, 0, 0.0
+        return replace(target_gate, fact_refs=order_refs), 0, 0, 0, 0, 0.0
     if _typed_observation_state(snapshot, "presurg_summary") == "empty":
         return (
             _SurgeryDocumentOutcome(
@@ -1579,6 +1716,7 @@ async def _typed_029_outcome(
                     "target_document": "presurg_summary",
                     "performed_surgery_confirmed": True,
                 },
+                order_refs,
             ),
             0, 0, 0, 0, 0.0,
         )
@@ -1587,28 +1725,52 @@ async def _typed_029_outcome(
     except EvidenceMaterialTruncated:
         return (
             _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", "preop_summary_source_truncated", "program"
+                "LX0609-029",
+                "data_gap",
+                "preop_summary_source_truncated",
+                "program",
+                None,
+                order_refs,
             ),
             0, 0, 0, 0, 0.0,
         )
     except EvidenceMaterialUnavailable:
         return (
             _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", "preop_summary_source_unavailable", "program"
+                "LX0609-029",
+                "data_gap",
+                "preop_summary_source_unavailable",
+                "program",
+                None,
+                order_refs,
             ),
             0, 0, 0, 0, 0.0,
         )
-    performed_event_count, count_reason = count_associated_performed_surgery_events(
-        materials
+    summary_refs = _typed_document_refs(
+        materials=materials, snapshot=snapshot, source_key="presurg_summary"
     )
-    if performed_event_count is None and count_reason != "association_failed":
-        return (
-            _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", count_reason, "program"
-            ),
-            0, 0, 0, 0, 0.0,
+    # 旧已实施手术路径仍使用 snapshot 坐标，保持没有传入 material store 的
+    # 既有绑定调用兼容；新增医嘱触发路径才输出已验证的逐文书坐标。
+    selected_refs = (
+        tuple(sorted({*order_refs, *summary_refs}))
+        if order_state == "applicable"
+        else ()
+    )
+    performed_event_count: int | None = 0
+    count_reason = ""
+    if performed_triggered:
+        performed_event_count, count_reason = count_associated_performed_surgery_events(
+            materials
         )
-    if (
+        if performed_event_count is None and count_reason != "association_failed":
+            return (
+                _SurgeryDocumentOutcome(
+                    "LX0609-029", "data_gap", count_reason, "program", None,
+                    selected_refs,
+                ),
+                0, 0, 0, 0, 0.0,
+            )
+    if performed_triggered and (
         (performed_event_count is None and count_reason == "association_failed")
         or (performed_event_count is not None and performed_event_count > 1)
     ):
@@ -1630,6 +1792,7 @@ async def _typed_029_outcome(
                             "target_document": "presurg_summary",
                             "performed_surgery_confirmed": True,
                         },
+                        selected_refs,
                     ),
                     0, 0, 0, 0, 0.0,
                 )
@@ -1639,7 +1802,12 @@ async def _typed_029_outcome(
             # 由 complete-empty 来源明确证明为逐台缺失，才允许输出不合规。
             return (
                 _SurgeryDocumentOutcome(
-                    "LX0609-029", "data_gap", "association_failed", "program"
+                    "LX0609-029",
+                    "data_gap",
+                    "association_failed",
+                    "program",
+                    None,
+                    selected_refs,
                 ),
                 0, 0, 0, 0, 0.0,
             )
@@ -1655,12 +1823,18 @@ async def _typed_029_outcome(
                     "target_document": "presurg_summary",
                     "performed_surgery_confirmed": True,
                 },
+                selected_refs,
             ),
             0, 0, 0, 0, 0.0,
         )
     return (
         _SurgeryDocumentOutcome(
-            "LX0609-029", "non_compliant", "preop_summary_blank", "program"
+            "LX0609-029",
+            "non_compliant",
+            "preop_summary_blank",
+            "program",
+            None,
+            selected_refs,
         ),
         0, 0, 0, 0, 0.0,
     )

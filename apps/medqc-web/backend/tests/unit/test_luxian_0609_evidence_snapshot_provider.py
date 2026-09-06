@@ -1005,6 +1005,103 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
     assert calls.count("surgery_record") == 1
 
 
+@pytest.mark.parametrize(
+    ("order_row", "expected_assertion"),
+    [
+        (
+            {
+                "order_id": "order-029-surgery",
+                "order_type": "手术",
+                "order_status": "新开",
+                "order_name": "任意文本不参与手术判断",
+            },
+            "affirmed",
+        ),
+        (
+            {
+                "order_id": "order-029-non-surgery",
+                "order_type": "检查",
+                "order_status": "新开",
+                "order_name": "名称包含手术也不能触发",
+            },
+            "negated",
+        ),
+        (
+            {
+                "order_id": "order-029-unknown",
+                "order_type": "待核实",
+                "order_status": "新开",
+            },
+            "uncertain",
+        ),
+    ],
+)
+def test_029_surgery_order_fact_uses_strict_type_and_status(
+    order_row: dict[str, str], expected_assertion: str
+) -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        return _rows(
+            source_key,
+            (order_row,) if source_key == "inpat_nondrug_order" else (),
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-029",),
+        institute_id="I-029",
+        patient_id="P-029",
+        visit_id="V-029",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    facts = tuple(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_surgery_order_confirmed"
+    )
+    assert len(facts) == 1
+    assert facts[0].assertion.value == expected_assertion
+    assert facts[0].event_status.value == (
+        "ordered" if expected_assertion == "affirmed" else "unknown"
+    )
+    assert facts[0].source_document_id == ""
+    assert facts[0].source_document_type == "inpat_nondrug_order"
+
+
+def test_029_surgery_order_fact_is_one_source_aggregate_for_multiple_orders() -> None:
+    """逐条阳性医嘱只留在材料坐标；FactV2 只能表达来源整体状态。"""
+
+    rows = (
+        {"order_id": "surgery-order-a", "order_type": "手术", "order_status": "新开"},
+        {"order_id": "surgery-order-b", "order_type": "手术", "order_status": "执行中"},
+    )
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        return _rows(source_key, rows if source_key == "inpat_nondrug_order" else ())
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-029",),
+        institute_id="I-029-multi",
+        patient_id="P-029-multi",
+        visit_id="V-029-multi",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    facts = tuple(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_surgery_order_confirmed"
+    )
+    assert len(facts) == 1
+    assert facts[0].assertion.value == "affirmed"
+    assert facts[0].source_document_id == ""
+
+
 def test_039_mr_surgery_typed_time_builds_hash_only_performed_fact() -> None:
     calls: list[str] = []
     typed_begin = datetime(2026, 1, 1, 8, 0, 0)
@@ -1180,6 +1277,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
     assert calls == sorted(calls)
     assert calls == [
         "anesthesia_record",
+        "inpat_nondrug_order",
         "mr_surgery",
         "postsurg_firstcourse_record",
         "presurg_discussion",
@@ -1190,6 +1288,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
     assert len(calls) == len(set(calls))
     assert {item.source_key for item in snapshot.observations} == {
         "anesthesia_record",
+        "inpat_nondrug_order",
         "mr_surgery",
         "postsurg_firstcourse_record",
         "presurg_discussion",
@@ -1207,8 +1306,14 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         "surgery_risk_assessment",
     }
     assert all(item.completeness is SourceCompleteness.UNPROVEN for item in snapshot.observations if item.source_key in unavailable)
-    assert len(snapshot.document_refs) == 7
-    assert snapshot.facts == ()
+    assert len(snapshot.document_refs) == 8
+    order_facts = tuple(
+        item
+        for item in snapshot.facts
+        if item.fact_type == "current_visit_surgery_order_confirmed"
+    )
+    assert len(order_facts) == 1
+    assert order_facts[0].assertion.value == "uncertain"
 
 
 def test_provider_reads_anesthesia_and_visit_sources_for_034_to_038() -> None:
@@ -1673,7 +1778,7 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
     entry = load_luxian_0609_source_registry()["bloodtrans_record"]
 
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v26"
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v27"
     assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
     assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
 

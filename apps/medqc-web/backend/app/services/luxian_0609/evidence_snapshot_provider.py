@@ -34,6 +34,7 @@ from .source_evidence_reader import (
     SnapshotSourceRows,
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
+    canonical_source_evidence,
     digest_source_evidence,
     has_trusted_performed_surgery,
     read_luxian_0609_snapshot_source_rows,
@@ -57,6 +58,107 @@ _EMERGENCY_RESCUE_NEGATIVE_PATTERN = re.compile(
 _EMERGENCY_RESCUE_POSITIVE_PATTERN = re.compile(
     r"(?:急诊|紧急).{0,12}(?:抢救|救命|挽救生命)"
 )
+_EFFECTIVE_SURGERY_ORDER_STATUSES = frozenset({"新开", "执行中", "停止"})
+_EXCLUDED_SURGERY_ORDER_STATUSES = frozenset({"取消", "撤销", "作废"})
+_KNOWN_NON_SURGERY_ORDER_TYPES = frozenset(
+    {"检查", "检验", "治疗", "护理", "嘱托", "转科", "其他"}
+)
+
+
+def classify_current_visit_surgery_order_rows(
+    *,
+    rows: tuple[Mapping[str, Any], ...],
+    completeness: SourceCompleteness,
+) -> tuple[str, tuple[str, ...]]:
+    """按029既定结构化口径判定手术医嘱，并返回仅供材料定位的原始 ID。
+
+    返回的 ID 绝不能写入 FactV2；它只用于把同一次冻结材料行还原为公共
+    证据投影所需的 document_ref。判定本身只依赖 ``order_type`` 和
+    ``order_status``，不从名称推断手术。
+    """
+
+    ordered_rows = tuple(sorted(rows, key=lambda row: canonical_source_evidence(dict(row))))
+    states: list[tuple[str, str]] = []
+    for row in ordered_rows:
+        source_document_id = next(
+            (
+                str(row.get(field) or "").strip()
+                for field in ("order_id", "document_id", "id")
+                if str(row.get(field) or "").strip()
+            ),
+            "",
+        )
+        order_type = str(row.get("order_type") or "").strip()
+        order_status = str(row.get("order_status") or "").strip()
+        if order_status in _EXCLUDED_SURGERY_ORDER_STATUSES:
+            states.append(("negated", source_document_id))
+        elif order_status not in _EFFECTIVE_SURGERY_ORDER_STATUSES:
+            states.append(("uncertain", source_document_id))
+        elif order_type == "手术":
+            states.append(("affirmed", source_document_id))
+        elif order_type in _KNOWN_NON_SURGERY_ORDER_TYPES:
+            states.append(("negated", source_document_id))
+        else:
+            states.append(("uncertain", source_document_id))
+
+    positive_ids = tuple(value for state, value in states if state == "affirmed")
+    uncertain_ids = tuple(value for state, value in states if state == "uncertain")
+    if positive_ids:
+        return "affirmed", positive_ids
+    if uncertain_ids or completeness is not SourceCompleteness.COMPLETE:
+        return "uncertain", uncertain_ids
+    return "negated", ()
+
+
+def _surgery_order_facts(
+    *,
+    rows: tuple[Mapping[str, Any], ...],
+    completeness: SourceCompleteness,
+    visit_ref: str,
+    source_snapshot_hash: str,
+    created_at: str,
+) -> tuple[FactV2, ...]:
+    """将受控医嘱类型投影为029的单一聚合手术医嘱事实。
+
+    只信任结构化 ``order_type == 手术`` 与既有有效医嘱状态；不从医嘱名称
+    猜测术式。完整来源中的全部已知非手术类型才能给出否定，其他情形保留未知。
+    """
+
+    assertion, _ = classify_current_visit_surgery_order_rows(
+        rows=rows,
+        completeness=completeness,
+    )
+    return (
+        FactV2.create(
+            visit_ref=visit_ref,
+            family="surgery_anesthesia",
+            fact_type="current_visit_surgery_order_confirmed",
+            normalized_value={"surgery_order": assertion == "affirmed"},
+            trigger_scope="current_visit",
+            current_visit_relevance="relevant",
+            assertion=assertion,
+            assertion_context="other",
+            event_status="ordered" if assertion == "affirmed" else "unknown",
+            source_key="inpat_nondrug_order",
+            # 这是来源聚合 Fact；逐条医嘱坐标只由 EvidenceMaterial 承载，
+            # 不能把真实 ID 或材料摘要塞入 Fact 合同。
+            source_document_id="",
+            source_document_type="inpat_nondrug_order",
+            record_time=None,
+            submit_time=None,
+            update_time=None,
+            quote="",
+            redaction_terms=(),
+            confidence=1.0,
+            extractor="deterministic",
+            extractor_version="snapshot-provider-surgery-order-v1",
+            fact_schema_version=FACT_SCHEMA_VERSION,
+            source_snapshot_hash=source_snapshot_hash,
+            created_at=created_at,
+            extensions={},
+            known_upstream_fact_ids=(),
+        ),
+    )
 
 
 def _explicit_emergency_rescue_state(
@@ -480,6 +582,20 @@ def build_luxian_0609_evidence_read_session(
             snapshot_ref=snapshot_ref,
         )
         observations.append(observation)
+        if source_key == "inpat_nondrug_order" and "LX0609-029" in selected_rule_ids:
+            facts.extend(
+                _surgery_order_facts(
+                    rows=result.rows,
+                    completeness=completeness,
+                    visit_ref=build_luxian_0609_visit_ref(
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                    ),
+                    source_snapshot_hash=snapshot_ref.removeprefix("sha256:"),
+                    created_at=created_at,
+                )
+            )
         if source_key == "surgery_inform_consent":
             facts.append(
                 FactV2.create(

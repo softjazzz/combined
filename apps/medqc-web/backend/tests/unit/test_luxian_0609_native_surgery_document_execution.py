@@ -13,6 +13,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
@@ -95,6 +96,7 @@ def _typed_029_session(
     summary_rows: tuple[dict, ...] = (),
     surgery_mode: str = "exact",
     mr_surgery_mode: str = "empty",
+    order_mode: str = "empty",
     summary_mode: str = "available",
     selected_rule_ids: tuple[str, ...] = ("LX0609-029",),
 ):
@@ -245,6 +247,58 @@ def _typed_029_session(
             if summary_mode == "unavailable":
                 raise SourceEvidenceUnavailable()
             rows = summary_rows if summary_mode == "available" else ()
+        elif source_key == "inpat_nondrug_order":
+            if order_mode == "error":
+                raise SourceEvidenceQueryError()
+            if order_mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            rows = (
+                (
+                    {
+                        "order_id": "surgery-order-029",
+                        "order_type": "手术",
+                        "order_status": "新开",
+                        "order_name": "腹腔镜下经腹膜前腹股沟疝补片修补术(TAPP)",
+                    },
+                )
+                if order_mode == "surgery"
+                else (
+                    (
+                        {
+                            "order_id": "2551076||445",
+                            "order_type": "手术",
+                            "order_status": "新开",
+                            "order_name": "腹腔镜下经腹膜前腹股沟疝补片修补术(TAPP)",
+                        },
+                    )
+                    if order_mode == "surgery_pipe_id"
+                else (
+                    (
+                        {
+                            "order_id": "non-surgery-order-029",
+                            "order_type": "检查",
+                            "order_status": "新开",
+                            "order_name": "中心静脉置管术",
+                        },
+                    )
+                    if order_mode == "non_surgery"
+                    else (
+                        (
+                            {
+                            "order_id": "unknown-order-029",
+                            "order_type": "待核实",
+                            "order_status": "新开",
+                            "order_name": "待定治疗项目",
+                            },
+                        )
+                        if order_mode == "unknown"
+                        else ()
+                    )
+                    )
+                )
+            )
+        elif source_key == "surgery_application":
+            rows = ()
         else:
             rows = ()
         return SnapshotSourceRows.create(
@@ -2618,3 +2672,231 @@ async def test_typed_scope_and_snapshot_material_binding_fail_closed():
             evidence_materials=other_session.materials,
             decision_rule_ids=("LX0609-039",),
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("summary_rows", "expected_state", "expected_reason"),
+    (
+        (
+            ({"document_id": "summary-029", "record_content": "术前小结正文完整。"},),
+            "compliant",
+            "requirement_satisfied",
+        ),
+        ((), "non_compliant", "required_document_missing"),
+        (
+            ({"document_id": "summary-029", "record_content": "   "},),
+            "non_compliant",
+            "defect_proven",
+        ),
+    ),
+)
+async def test_typed_029_surgery_order_only_triggers_and_binds_selected_evidence(
+    summary_rows: tuple[dict, ...],
+    expected_state: str,
+    expected_reason: str,
+) -> None:
+    """029 的医嘱触发必须走既有 any-of 合同，不等待已实施手术。"""
+
+    session = _typed_029_session(
+        surgery_mode="empty",
+        mr_surgery_mode="empty",
+        order_mode="surgery",
+        summary_rows=summary_rows,
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == result.total_tokens == 0
+    order_ref = session.materials.document_rows(
+        "inpat_nondrug_order", snapshot=session.snapshot
+    )[0][0]
+    order_fact = next(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_surgery_order_confirmed"
+    )
+    assert order_fact.source_document_id == ""
+    assert order_fact.fact_id in result.decisions[0].fact_refs
+    assert order_ref in result.decisions[0].fact_refs
+    if summary_rows:
+        summary_ref = session.materials.document_rows(
+            "presurg_summary", snapshot=session.snapshot
+        )[0][0]
+        assert summary_ref in result.decisions[0].fact_refs
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[_wrapper("LX0609-029")],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )[0]
+    coordinates = {
+        (item["source_type"], item["source_document_id"])
+        for item in canonical["customer_evidence"]
+    }
+    assert ("inpat_nondrug_order", "surgery-order-029") in coordinates
+    assert all(len(document_id) != 64 for _, document_id in coordinates)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("order_mode", "expected_state", "expected_reason"),
+    (
+        ("non_surgery", "not_applicable", "performed_event_absent"),
+        ("unknown", "data_gap", "applicability_source_gap"),
+        ("error", "technical_error", "source_query_error"),
+    ),
+)
+async def test_typed_029_surgery_order_trigger_failure_semantics(
+    order_mode: str,
+    expected_state: str,
+    expected_reason: str,
+) -> None:
+    session = _typed_029_session(
+        surgery_mode="empty",
+        mr_surgery_mode="empty",
+        order_mode=order_mode,
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_order_evidence_restores_real_pipe_delimited_id() -> None:
+    """材料摘要只能作内部 ref，客户证据必须恢复源医嘱坐标。"""
+
+    session = _typed_029_session(
+        surgery_mode="empty",
+        mr_surgery_mode="empty",
+        order_mode="surgery_pipe_id",
+        summary_rows=(
+            {"document_id": "summary-029-pipe", "record_content": "术前小结正文完整。"},
+        ),
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[_wrapper("LX0609-029")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[_wrapper("LX0609-029")],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )[0]
+
+    coordinates = {
+        (item["source_type"], item["source_document_id"])
+        for item in canonical["customer_evidence"]
+    }
+    assert ("inpat_nondrug_order", "2551076||445") in coordinates
+    assert all(len(document_id) != 64 for _, document_id in coordinates)
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_surgery_order_positive_wins_over_other_trigger_source_error() -> None:
+    session = _typed_029_session(
+        surgery_mode="error",
+        mr_surgery_mode="empty",
+        order_mode="surgery",
+        summary_rows=({"document_id": "summary-029", "record_content": "术前小结正文完整。"},),
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_surgery_order_does_not_mask_target_source_error() -> None:
+    session = _typed_029_session(
+        surgery_mode="empty",
+        mr_surgery_mode="empty",
+        order_mode="surgery",
+        summary_mode="error",
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "technical_error"
+    assert reduced[0].reason_code == "source_query_error"
+    assert result.llm_call_count == result.total_tokens == 0
