@@ -592,7 +592,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_nondrug_order",
         "daily_course_record",
     ),
-    "LX0609-072": ("inpat_nondrug_order",),
+    "LX0609-072": ("evaluation_context.horizon", "inpat_nondrug_order"),
     "LX0609-073": ("inpat_nondrug_order",),
     "LX0609-074": ("diagnosis",),
 })

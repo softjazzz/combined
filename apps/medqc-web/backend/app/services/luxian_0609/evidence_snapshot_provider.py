@@ -338,6 +338,7 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-047",
             "LX0609-051",
             "LX0609-052",
+            "LX0609-072",
             "LX0609-064",
         }.intersection(selected_rule_ids)
     )

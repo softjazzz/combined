@@ -919,6 +919,50 @@ def test_052_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
     )
 
 
+def test_072_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
+    """072 的缺文书判定必须使用生产 Evidence Session 提供的冻结终点。"""
+
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows_by_source = {
+            "inpat_registration": [{"admission_datetime": "2026-07-01 07:00:00"}],
+            "inpat_nondrug_order": [{
+                "order_name": "转科医嘱",
+                "prescribed_datetime": "2026-07-01 08:00:00",
+            }],
+        }
+        return _rows(source_key, rows_by_source.get(source_key, []))
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-072",),
+        institute_id="I-072",
+        patient_id="P-072",
+        visit_id="V-072",
+        source_schema=None,
+        created_at="2026-07-01T12:00:00",
+        evaluation_as_of_date="2026-07-01",
+        evaluation_horizon_policy="frozen_task_date",
+        row_reader=reader,
+    )
+
+    assert "inpat_registration" in calls
+    assert "inpat_nondrug_order" in calls
+    assert "evaluation_context.horizon" not in calls
+    assert session.materials.rows("evaluation_context.horizon") == (
+        {
+            "horizon_date": "2026-07-01",
+            "basis": "evaluation_as_of",
+            "row_ref": session.materials.rows("evaluation_context.horizon")[0]["row_ref"],
+        },
+    )
+    assert any(
+        fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts
+    )
+
+
 def test_non_007_does_not_query_unstable_order_fact() -> None:
     calls: list[str] = []
 

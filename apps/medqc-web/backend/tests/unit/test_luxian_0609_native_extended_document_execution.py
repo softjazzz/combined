@@ -135,10 +135,10 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
 async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset()):
     rows_by_source = dict(rows_by_source)
     if (
-        rule_id in {"LX0609-055", "LX0609-064"}
+        rule_id in {"LX0609-055", "LX0609-064", "LX0609-072"}
         and "evaluation_context.horizon" not in rows_by_source
     ):
-        # 055/064 的既有行为测试都描述已完成的观察窗口；显式传入 horizon
+        # 055/064/072 的既有行为测试都描述已完成的观察窗口；显式传入 horizon
         # 的测试覆盖未成熟/缺失边界，避免测试夹具暗中回退 snapshot.created_at。
         rows_by_source["evaluation_context.horizon"] = ({
             "horizon_date": "2099-01-01",
@@ -175,7 +175,7 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
 async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=frozenset()):
     rows_by_source = dict(rows_by_source)
     if (
-        {"LX0609-055", "LX0609-064"}.intersection(rule_ids)
+        {"LX0609-055", "LX0609-064", "LX0609-072"}.intersection(rule_ids)
         and "evaluation_context.horizon" not in rows_by_source
     ):
         rows_by_source["evaluation_context.horizon"] = ({
@@ -236,6 +236,15 @@ def test_064_binds_evaluation_horizon_for_postoperative_window_maturity() -> Non
     sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-064",))
 
     assert "evaluation_context.horizon" in sources
+
+
+def test_072_binds_evaluation_horizon_without_expanding_073_sources() -> None:
+    assert "evaluation_context.horizon" in resolve_luxian_0609_decision_support_source_keys(
+        ("LX0609-072",)
+    )
+    assert "evaluation_context.horizon" not in resolve_luxian_0609_decision_support_source_keys(
+        ("LX0609-073",)
+    )
 
 
 def test_052_binds_evaluation_horizon_without_expanding_053_sources() -> None:
@@ -2412,6 +2421,80 @@ async def test_072_does_not_treat_a_prior_admission_transfer_record_as_this_tran
 
 
 @pytest.mark.asyncio
+async def test_072_missing_transfer_record_waits_until_24_hour_window_is_mature() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
+            ),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-02",
+                "horizon_datetime": "2026-07-02 07:59:59",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.asyncio
+async def test_072_missing_transfer_record_is_noncompliant_after_24_hour_window() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
+            ),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-02",
+                "horizon_datetime": "2026-07-02 08:00:00",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("horizon_rows", "reason_code"),
+    [
+        ((), "authoritative_time_missing"),
+        (
+            (
+                {"horizon_date": "2026-07-02", "basis": "evaluation_as_of"},
+                {"horizon_date": "2026-07-03", "basis": "evaluation_as_of"},
+            ),
+            "authoritative_time_conflict",
+        ),
+    ],
+)
+async def test_072_missing_transfer_record_requires_one_authoritative_evaluation_horizon(
+    horizon_rows, reason_code
+) -> None:
+    _, reduced = await _evaluate(
+        "LX0609-072",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
+            ),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+            "evaluation_context.horizon": horizon_rows,
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == reason_code
+
+
+@pytest.mark.asyncio
 async def test_072_transfer_date_excludes_historical_record_even_when_recorded_later() -> None:
     """历史转科补录时间较新时，仍不能满足本次转科医嘱。"""
     _, reduced = await _evaluate(
@@ -2458,6 +2541,27 @@ async def test_073_requires_one_current_transfer_in_and_out_record() -> None:
         {
             "inpat_nondrug_order": ({"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},),
             "transfer_in_record": ({"record_time": "2026-07-01 09:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
+async def test_073_presence_rule_does_not_wait_for_072_evaluation_window() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-073",
+        {
+            "inpat_nondrug_order": (
+                {"order_name": "转科医嘱", "prescribed_datetime": "2026-07-01 08:00:00"},
+            ),
+            "transfer_out_record": ({"record_time": "2026-07-01 10:00:00"},),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-01",
+                "horizon_datetime": "2026-07-01 08:00:01",
+                "basis": "evaluation_as_of",
+            },),
         },
     )
 

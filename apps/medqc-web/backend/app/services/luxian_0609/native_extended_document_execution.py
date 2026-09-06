@@ -1507,7 +1507,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     horizon_rows, horizon_error = (
         _source_rows(evidence_materials, "evaluation_context.horizon")
-        if {"LX0609-051", "LX0609-052", "LX0609-055", "LX0609-064"}.intersection(selected)
+        if {"LX0609-051", "LX0609-052", "LX0609-055", "LX0609-064", "LX0609-072"}.intersection(selected)
         else ((), "")
     )
     (
@@ -1526,6 +1526,15 @@ async def execute_luxian_0609_native_extended_document_rules(
     ) = (
         _critical_value_evaluation_horizon(horizon_rows, horizon_error)
         if "LX0609-055" in selected
+        else (None, None, None)
+    )
+    (
+        transfer_horizon_date,
+        transfer_horizon_datetime,
+        transfer_horizon_error,
+    ) = (
+        _critical_value_evaluation_horizon(horizon_rows, horizon_error)
+        if "LX0609-072" in selected
         else (None, None, None)
     )
     discharge_rows, discharge_error = _source_rows(
@@ -3106,6 +3115,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                 nondrug_order_rows=nondrug_order_rows,
                 transfer_in_rows=transfer_in_rows,
                 transfer_out_rows=transfer_out_rows,
+                evaluation_horizon_date=transfer_horizon_date,
+                evaluation_horizon_datetime=transfer_horizon_datetime,
+                evaluation_horizon_error=transfer_horizon_error,
             )
             final_state, reason_code = outcome.final_state, outcome.reason_code
             if outcome.display_facts is not None:
@@ -3118,6 +3130,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "inpat_nondrug_order",
                         "transfer_in_record",
                         "transfer_out_record",
+                        *(
+                            ("evaluation_context.horizon",)
+                            if rule_id == "LX0609-072"
+                            else ()
+                        ),
                     ),
                     final_state=final_state,
                     reason_code=reason_code,

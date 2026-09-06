@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
 
 from ..source_evidence_reader import authoritative_document_time_value
@@ -173,6 +173,29 @@ def _display_facts(
     return facts
 
 
+def _transfer_window_state(
+    *,
+    order_time: datetime,
+    evaluation_horizon_date: date | None,
+    evaluation_horizon_datetime: datetime | None,
+    evaluation_horizon_error: str | None,
+) -> tuple[bool | None, str | None]:
+    """判断转科后 24 小时观察窗是否成熟，不用快照创建时间替代评价终点。"""
+
+    if evaluation_horizon_error:
+        return None, evaluation_horizon_error
+    if evaluation_horizon_datetime is not None:
+        if evaluation_horizon_datetime < order_time:
+            return None, "authoritative_time_conflict"
+        return evaluation_horizon_datetime >= order_time + timedelta(hours=24), None
+    if evaluation_horizon_date is None:
+        return None, "authoritative_time_missing"
+    if evaluation_horizon_date < order_time.date():
+        return None, "authoritative_time_conflict"
+    # 仅日期不能证明已越过当日的 24 小时时点，按保守口径继续等待。
+    return evaluation_horizon_date > (order_time + timedelta(hours=24)).date(), None
+
+
 def evaluate_transfer_documentation(
     *,
     rule_id: str,
@@ -182,6 +205,9 @@ def evaluate_transfer_documentation(
     nondrug_order_rows: Sequence[Mapping[str, Any]],
     transfer_in_rows: Sequence[Mapping[str, Any]],
     transfer_out_rows: Sequence[Mapping[str, Any]],
+    evaluation_horizon_date: date | None = None,
+    evaluation_horizon_datetime: datetime | None = None,
+    evaluation_horizon_error: str | None = None,
 ) -> TransferDocumentationOutcome:
     """按唯一转科医嘱关联转入/转出记录，不以旧住院记录满足本次事件。"""
 
@@ -219,6 +245,19 @@ def evaluate_transfer_documentation(
     if "multiple" in states:
         return TransferDocumentationOutcome("data_gap", "association_failed", facts)
     if "missing" in states or "historical" in states:
+        if rule_id == "LX0609-072":
+            window_mature, window_error = _transfer_window_state(
+                order_time=order_time,
+                evaluation_horizon_date=evaluation_horizon_date,
+                evaluation_horizon_datetime=evaluation_horizon_datetime,
+                evaluation_horizon_error=evaluation_horizon_error,
+            )
+            if window_error:
+                return TransferDocumentationOutcome("data_gap", window_error, facts)
+            if not window_mature:
+                return TransferDocumentationOutcome(
+                    "not_applicable", "evaluation_window_not_mature", facts
+                )
         return TransferDocumentationOutcome(
             "non_compliant", "required_document_missing", facts
         )
