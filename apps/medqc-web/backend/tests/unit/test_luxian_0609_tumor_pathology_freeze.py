@@ -326,8 +326,8 @@ async def test_tumor_pathology_freeze_empty_and_source_error_remain_distinct() -
 
 
 @pytest.mark.asyncio
-async def test_tumor_pathology_freeze_019_semantic_transport_failure_is_currently_data_gap() -> None:
-    """冻结现状缺陷：模型失败尚未按 technical_error 投影。"""
+async def test_tumor_pathology_freeze_019_semantic_transport_failure_is_technical_error() -> None:
+    """模型传输失败经正式 native→Binding 链稳定投影为技术失败。"""
 
     rows = _rows()
     rows["surgery_record"] = (
@@ -348,9 +348,9 @@ async def test_tumor_pathology_freeze_019_semantic_transport_failure_is_currentl
     assert execution.llm_call_count == 1
     assert execution.total_tokens == 0
     assert len(client.prompts) == 1
-    assert [item.final_state.value for item in reduced] == ["data_gap"]
-    assert [item.reason_code for item in reduced] == ["required_field_missing"]
-    assert [item["status"] for item in customer_results] == ["data_gap"]
+    assert [item.final_state.value for item in reduced] == ["technical_error"]
+    assert [item.reason_code for item in reduced] == ["model_transport_error"]
+    assert [item["status"] for item in customer_results] == ["technical_error"]
 
     errored, errored_reduced, errored_results, _session, client = await _execute_and_aggregate(
         rows_by_source=_rows(),
