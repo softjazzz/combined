@@ -648,7 +648,6 @@ def safe_luxian_0609_customer_display_facts(
         return safe_events
 
     extended_kinds_by_rule = {
-        "LX0609-050": {"uncertain_diagnosis_discussion_check", "uncertain_diagnosis_scope_unverified"},
         "LX0609-051": {
             "death_discussion_timeliness_check",
             "death_discussion_missing_after_deadline",
@@ -715,12 +714,6 @@ def safe_luxian_0609_customer_display_facts(
         },
     }
     extended_allowed_keys = {
-        "uncertain_diagnosis_discussion_check": {
-            "admission_time", "uncertain_record_times", "discussion_count",
-        },
-        "uncertain_diagnosis_scope_unverified": {
-            "admission_time", "uncertain_record_times", "discussion_count",
-        },
         "death_discussion_timeliness_check": {
             "death_time", "discussion_time", "threshold_hours", "actual_interval_hours",
         },
@@ -1070,37 +1063,6 @@ def safe_luxian_0609_customer_display_facts(
                     if evaluation_time is not None
                     else {"evaluation_date": evaluation_date}
                 ),
-            }
-        if kind in {
-            "uncertain_diagnosis_discussion_check",
-            "uncertain_diagnosis_scope_unverified",
-        }:
-            admission_time = raw.get("admission_time")
-            record_times = raw.get("uncertain_record_times")
-            discussion_count = raw.get("discussion_count")
-            timestamp_pattern = r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?"
-            if (
-                not isinstance(admission_time, str)
-                or re.fullmatch(timestamp_pattern, admission_time) is None
-                or not isinstance(record_times, (list, tuple))
-                or len(record_times) > 100
-                or any(not isinstance(value, str) or re.fullmatch(timestamp_pattern, value) is None for value in record_times)
-                or not isinstance(discussion_count, int)
-                or isinstance(discussion_count, bool)
-                or discussion_count < 0
-            ):
-                return None
-            try:
-                datetime.fromisoformat(admission_time.replace("Z", "+00:00"))
-                for value in record_times:
-                    datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError:
-                return None
-            return {
-                "verification_kind": kind,
-                "admission_time": admission_time,
-                "uncertain_record_times": list(record_times),
-                "discussion_count": discussion_count,
             }
         if kind == "special_antimicrobial_expert_support_check":
             expected_keys = {
