@@ -3429,8 +3429,8 @@ async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() ->
 
 @pytest.mark.asyncio
 async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain() -> None:
-    result, reduced = await _evaluate(
-        "LX0609-050",
+    snapshot, materials, result, reduced_items = await _evaluate_selected(
+        ("LX0609-050",),
         {
             "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
             "daily_course_record": ({
@@ -3440,8 +3440,20 @@ async def test_050_local_reason_pending_does_not_prove_case_diagnosis_uncertain(
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    reduced = reduced_items[0]
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-050",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced_items,
+    )
+
+    assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
     assert reduced.reason_code == "diagnosis_scope_uncertain"
+    assert canonical["status"] == "uncertain"
+    assert canonical["reason_code"] == "diagnosis_scope_uncertain"
+    assert "不能据此认定缺少疑难病例讨论" in canonical["findings"]
     assert dict(result.customer_display_facts)["LX0609-050"] == {
         "verification_kind": "uncertain_diagnosis_scope_unverified",
         "admission_time": "2026-06-01 08:00:00",

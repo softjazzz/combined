@@ -366,6 +366,11 @@ def _decision(
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
         ),
+        "uncertain": (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.CONFLICT,
+            QcDirection.UNKNOWN,
+        ),
         "technical_error": (
             ApplicabilityState.ERROR,
             EvidenceState.TECHNICAL_ERROR,
@@ -1307,7 +1312,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not uncertain_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif not strong_uncertain_rows:
-                final_state, reason_code = "data_gap", "diagnosis_scope_uncertain"
+                final_state, reason_code = "uncertain", "diagnosis_scope_uncertain"
             elif diffcase_rows:
                 final_state, reason_code = "compliant", "requirement_satisfied"
             else:

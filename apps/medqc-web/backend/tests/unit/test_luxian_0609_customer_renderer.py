@@ -51,13 +51,13 @@ def test_050_customer_finding_explains_local_diagnosis_scope_uncertainty() -> No
     assert "PRIVATE_MEDICAL_BODY" not in finding
 
 
-def test_050_scope_gap_uses_reason_specific_customer_copy() -> None:
+def test_050_scope_uncertainty_renders_without_reclassifying_the_reason() -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
             rule_id="LX0609-050",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.UNKNOWN,
-            evidence_state=EvidenceState.DATA_GAP,
+            evidence_state=EvidenceState.CONFLICT,
             qc_direction=QcDirection.UNKNOWN,
             reason_code="diagnosis_scope_uncertain",
             fact_refs=(FACT_REF,),
@@ -67,9 +67,9 @@ def test_050_scope_gap_uses_reason_specific_customer_copy() -> None:
 
     result = render_luxian_0609_customer_result(decision=decision)
 
-    assert result["findings"] == "病程出现局部待查表述，暂无法确认是否需要疑难病例讨论"
-    assert "不能据此认定缺少疑难病例讨论" in result["evidence"]
-    assert result["suggestion"] == "请人工核对入院满7天后的整体诊断状态。"
+    assert result["status"] == "uncertain"
+    assert result["reason_code"] == "diagnosis_scope_uncertain"
+    assert result["is_compliant"] is None
 
 
 def test_058_customer_finding_distinguishes_expert_support_after_special_use() -> None:
