@@ -211,6 +211,10 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_exam_lab_customer_rule,
         safe_exam_lab_customer_display_facts,
     )
+    from .transfusion_result_mapping import (
+        is_transfusion_customer_rule,
+        safe_transfusion_customer_display_facts,
+    )
 
     if is_consultation_customer_rule(rule_id):
         safe_facts = safe_consultation_customer_display_facts(
@@ -224,6 +228,16 @@ def validate_luxian_0609_executor_customer_display_facts(
         )
     if is_exam_lab_customer_rule(rule_id):
         safe_facts = safe_exam_lab_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
+        return (
+            safe_facts
+            if safe_facts is not None and not contains_private_identifier(safe_facts)
+            else None
+        )
+    if is_transfusion_customer_rule(rule_id):
+        safe_facts = safe_transfusion_customer_display_facts(
             rule_id=rule_id,
             raw=raw,
         )
@@ -248,8 +262,13 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
 
     from .consultation_customer_projection import is_consultation_customer_rule
     from .exam_lab_result_mapping import is_exam_lab_customer_rule
+    from .transfusion_result_mapping import is_transfusion_customer_rule
 
-    return is_consultation_customer_rule(rule_id) or is_exam_lab_customer_rule(rule_id)
+    return (
+        is_consultation_customer_rule(rule_id)
+        or is_exam_lab_customer_rule(rule_id)
+        or is_transfusion_customer_rule(rule_id)
+    )
 
 
 def finalize_luxian_0609_executor_customer_display_facts(
@@ -280,6 +299,22 @@ def finalize_luxian_0609_executor_customer_display_facts(
     )
     if safe_facts is NotImplemented:
         return finalized, False
+    from .transfusion_result_mapping import (
+        is_transfusion_customer_rule,
+        transfusion_customer_fact_status_is_valid,
+    )
+    if (
+        safe_facts is not None
+        and is_transfusion_customer_rule(
+            str(finalized.get("rule_id") or finalized.get("rule_code") or "")
+        )
+        and not transfusion_customer_fact_status_is_valid(
+            rule_id=str(finalized.get("rule_id") or finalized.get("rule_code") or ""),
+            status=str(finalized.get("status") or "").strip().lower(),
+            safe_facts=safe_facts,
+        )
+    ):
+        safe_facts = None
     if safe_facts is not None:
         finalized["customer_display_facts"] = safe_facts
         return finalized, True

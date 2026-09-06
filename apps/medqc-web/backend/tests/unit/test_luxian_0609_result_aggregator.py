@@ -268,32 +268,6 @@ def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
             },
             [{"source_type": "mr_surgery", "source_document_id": "surgery-event-1"}],
         ),
-        (
-            "LX0609-041",
-            {
-                "failure_kind": "transfusion_consent_missing",
-                "performed_transfusion_confirmed": True,
-                "checked_source": "blood_transfusion_consent",
-                "source_document_refs": [
-                    {"source_type": "bloodtrans_record", "source_document_id": "blood-1"}
-                ],
-            },
-            [{"source_type": "bloodtrans_record", "source_document_id": "blood-1"}],
-        ),
-        (
-            "LX0609-047",
-            {
-                "failure_kind": "posttransfusion_evaluation_missing",
-                "performed_transfusion_confirmed": True,
-                "threshold_hours": 24,
-                "checked_sources": ["bloodtrans_record", "daily_course_record"],
-                "transfusion_end_time": "2026-08-20 10:00:00",
-                "source_document_refs": [
-                    {"source_type": "bloodtrans_record", "source_document_id": "blood-1"}
-                ],
-            },
-            [{"source_type": "bloodtrans_record", "source_document_id": "blood-1"}],
-        ),
     ],
 )
 def test_determined_missing_results_keep_exact_trigger_evidence(
@@ -571,20 +545,6 @@ def test_native_003_044_accepts_current_executor_customer_fact_contract(
                 "performed_surgery_confirmed": False,
             },
         ),
-        (
-            "LX0609-044",
-            "compliant",
-            {
-                "failure_kind": "pretransfusion_assessment_incomplete",
-                "performed_transfusion_confirmed": True,
-                "checked_fields": [
-                    "indication",
-                    "laboratory_indicator",
-                    "risk_history_or_status",
-                ],
-                "missing_fields": ["indication"],
-            },
-        ),
     ],
 )
 def test_native_003_044_rejects_customer_fact_status_mismatch(
@@ -816,8 +776,11 @@ def test_010_new_contract_rejects_invalid_or_private_association_facts(
     assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-010", raw=facts) is None
 
 
-@pytest.mark.parametrize("entry_path", ("explicit", "native_metadata", "native_top_level"))
-def test_010_invalid_strict_contract_is_silently_discarded(entry_path) -> None:
+@pytest.mark.parametrize(
+    "entry_path",
+    ("explicit", "native_metadata", "native_top_level"),
+)
+def test_010_invalid_strict_contract_fails_closed(entry_path) -> None:
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
@@ -841,12 +804,24 @@ def test_010_invalid_strict_contract_is_silently_discarded(entry_path) -> None:
         else:
             execution_result["customer_display_facts"] = invalid
 
+    if entry_path == "explicit":
+        with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+            module.aggregate_luxian_0609_results(
+                wrapper_rules=[{"rule_id": "LX0609-010"}],
+                execution_results=[execution_result],
+                customer_display_facts=customer_display_facts,
+            )
+        assert "must-not-pass" not in str(exc_info.value)
+        return
+
     result = module.aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-010"}],
         execution_results=[execution_result],
         customer_display_facts=customer_display_facts,
     )[0]
 
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "model_invalid_output"
     assert "customer_display_facts" not in result
     assert "customer_evidence" not in result
     assert "must-not-pass" not in repr(result)
@@ -4231,7 +4206,10 @@ _STRICT_CUSTOMER_FACT_RULES = (
 )
 
 
-@pytest.mark.parametrize("entry_path", ("explicit", "native_metadata", "native_top_level"))
+@pytest.mark.parametrize(
+    "entry_path",
+    ("explicit", "native_metadata", "native_top_level", "native_explicit"),
+)
 @pytest.mark.parametrize("rule_id", _STRICT_CUSTOMER_FACT_RULES)
 def test_public_aggregation_rejects_invalid_customer_display_facts(
     rule_id, entry_path
@@ -4244,8 +4222,13 @@ def test_public_aggregation_rejects_invalid_customer_display_facts(
         "findings": "规则要求未满足。",
     }
     customer_display_facts = ()
-    if entry_path == "explicit":
+    if entry_path in {"explicit", "native_explicit"}:
         customer_display_facts = ((rule_id, invalid_facts),)
+        if entry_path == "native_explicit":
+            execution_result["metadata"] = {
+                "execution_source": "lx0609_native",
+                "executor_type": "program",
+            }
     else:
         execution_result["metadata"] = {
             "execution_source": "lx0609_native",
@@ -4255,6 +4238,18 @@ def test_public_aggregation_rejects_invalid_customer_display_facts(
             execution_result["metadata"]["customer_display_facts"] = invalid_facts
         else:
             execution_result["customer_display_facts"] = invalid_facts
+
+    if rule_id == "LX0609-043" and entry_path != "explicit":
+        result = aggregate_luxian_0609_results(
+            wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+            execution_results=[execution_result],
+            customer_display_facts=customer_display_facts,
+            format_evidence=False,
+        )[0]
+        assert result["status"] == "technical_error"
+        assert result["reason_code"] == "model_invalid_output"
+        assert private_marker not in repr(result)
+        return
 
     with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
         aggregate_luxian_0609_results(
@@ -4915,7 +4910,7 @@ def test_exam_lab_evidence_comes_only_from_reduced_fact_refs(
     assert "source_document_ids" not in result["customer_display_facts"]
 
 
-def test_native_045_display_facts_create_transfusion_evidence_refs():
+def test_native_045_display_facts_do_not_restore_legacy_evidence_projection():
     raw_facts = {
         "verification_kind": "transfusion_course_record_present",
         "performed_transfusion_confirmed": True,
@@ -4940,10 +4935,9 @@ def test_native_045_display_facts_create_transfusion_evidence_refs():
         ],
     )[0]
 
-    assert result["customer_evidence"] == [
-        {"source_type": "bloodtrans_record", "source_document_id": "bloodtrans-045-1"},
-        {"source_type": "bloodtrans_record", "source_document_id": "bloodtrans-045-2"},
-    ]
+    # 逐文书坐标只能由执行器 fact_refs 经 Binding/公共投影提供；本直接聚合
+    # 兼容输入没有该合同，不得根据 source_document_ids 重新猜测文书。
+    assert "customer_evidence" not in result
     assert "source_document_ids" not in result["customer_display_facts"]
 
 
@@ -5069,27 +5063,29 @@ def test_transfusion_system_gap_reason_cannot_be_borrowed_between_rules(
     rule_id, system_gap_reason
 ):
     private_marker = "PRIVATE_TRANSFUSION_TEXT"
-    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
-        aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": rule_id}],
-            execution_results=[{
-                "rule_id": rule_id,
-                "status": "data_gap",
-                "metadata": {
-                    "execution_source": "lx0609_native",
-                    "customer_display_facts": {
-                        "failure_kind": "system_data_contract_gap",
-                        "system_gap_reason": system_gap_reason,
-                        "gap_owner": "system_integration",
-                        "conclusion": "当前资料不完整。",
-                        "handling_suggestion": "请补齐资料。",
-                        "private_text": private_marker,
-                    },
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[{
+            "rule_id": rule_id,
+            "status": "data_gap",
+            "metadata": {
+                "execution_source": "lx0609_native",
+                "customer_display_facts": {
+                    "failure_kind": "system_data_contract_gap",
+                    "system_gap_reason": system_gap_reason,
+                    "gap_owner": "system_integration",
+                    "conclusion": "当前资料不完整。",
+                    "handling_suggestion": "请补齐资料。",
+                    "private_text": private_marker,
                 },
-            }],
-        )
+            },
+        }],
+    )[0]
 
-    assert private_marker not in str(exc_info.value)
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "model_invalid_output"
+    assert private_marker not in repr(result)
+    assert "customer_display_facts" not in result
 
 
 @pytest.mark.parametrize(
@@ -5132,11 +5128,11 @@ def test_transfusion_system_gap_facts_require_data_gap_status(
     else:
         kwargs["reduced_decisions"] = (_reduced_decision(rule_id),)
 
-    with pytest.raises(
-        ValueError,
-        match="^invalid transfusion customer display fact status$",
-    ):
-        aggregate_luxian_0609_results(**kwargs)
+    result = aggregate_luxian_0609_results(**kwargs)[0]
+
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "model_invalid_output"
+    assert "customer_display_facts" not in result
 
 
 @pytest.mark.parametrize(

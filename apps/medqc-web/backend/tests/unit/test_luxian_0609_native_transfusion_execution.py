@@ -489,17 +489,22 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
     assert complete.decisions[0].snapshot_hash == complete_session.snapshot.snapshot_hash
     assert incomplete.decisions[0].snapshot_hash == incomplete_session.snapshot.snapshot_hash
     assert complete.decisions[0].fact_refs != incomplete.decisions[0].fact_refs
+    complete_source_refs = {
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in complete_session.snapshot.observations
+    }
+    incomplete_source_refs = {
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in incomplete_session.snapshot.observations
+    }
+    # typed 045 既保留来源观察引用供审计，也新增同一 snapshot 的精确文书引用。
+    assert complete_source_refs.issubset(set(complete.decisions[0].fact_refs))
+    assert incomplete_source_refs.issubset(set(incomplete.decisions[0].fact_refs))
     assert set(complete.decisions[0].fact_refs).issubset(
-        {
-            item.snapshot_ref.removeprefix("sha256:")
-            for item in complete_session.snapshot.observations
-        }
+        complete_source_refs.union(complete_session.snapshot.document_refs)
     )
     assert set(incomplete.decisions[0].fact_refs).issubset(
-        {
-            item.snapshot_ref.removeprefix("sha256:")
-            for item in incomplete_session.snapshot.observations
-        }
+        incomplete_source_refs.union(incomplete_session.snapshot.document_refs)
     )
 
 
@@ -1455,6 +1460,9 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
     assert result.decisions[0].snapshot_hash == session.snapshot.snapshot_hash
     assert result.decisions[0].reason_code == "requirement_satisfied"
     assert result.decisions[0].fact_refs
+    assert set(result.decisions[0].fact_refs).intersection(
+        session.snapshot.document_refs
+    )
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -1931,6 +1939,7 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
         decisions=result.decisions,
         expected_rule_ids=("LX0609-046",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert canonical[0].final_state.value == "compliant"
     assert canonical[0].reason_code == "requirement_satisfied"

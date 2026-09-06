@@ -272,39 +272,13 @@ def _build_diagnostic_trace(
     )
 
 
-_TRANSFUSION_SYSTEM_GAP_REASONS = {
-    "LX0609-041": "consent_source_unavailable",
-    "LX0609-042": "consent_signature_contract_unavailable",
-    "LX0609-043": "pretransfusion_item_contract_unavailable",
-    "LX0609-044": "pretransfusion_assessment_source_unavailable",
-    "LX0609-048": "transfusion_comparison_fields_unavailable",
-}
-
-
-def _validate_transfusion_system_gap_fact_status(
+def _validate_lx0609_003_fact_status(
     *,
     rule_id: str,
     status: str,
     safe_facts: Mapping[str, Any] | None,
 ) -> None:
-    """系统资料缺口只能交付 data_gap，禁止与合规或确定问题并存。"""
-
-    if (
-        rule_id in _TRANSFUSION_SYSTEM_GAP_REASONS
-        and isinstance(safe_facts, Mapping)
-        and safe_facts.get("failure_kind") == "system_data_contract_gap"
-        and status != "data_gap"
-    ):
-        raise ValueError("invalid transfusion customer display fact status")
-
-
-def _validate_lx0609_003_044_fact_status(
-    *,
-    rule_id: str,
-    status: str,
-    safe_facts: Mapping[str, Any] | None,
-) -> None:
-    """003/044 的确定性事实必须与执行器终态方向一致。"""
+    """003 的确定性事实必须与执行器终态方向一致。"""
 
     if not isinstance(safe_facts, Mapping):
         return
@@ -314,10 +288,6 @@ def _validate_lx0609_003_044_fact_status(
         ("LX0609-003", "surgery_not_performed"): "not_applicable",
         ("LX0609-003", "surgery_record_late"): "non_compliant",
         ("LX0609-003", "surgery_record_within_threshold"): "compliant",
-        ("LX0609-044", "pretransfusion_assessment_complete"): "compliant",
-        ("LX0609-044", "pretransfusion_assessment_incomplete"): "non_compliant",
-        ("LX0609-044", "pretransfusion_assessment_missing"): "non_compliant",
-        ("LX0609-044", "pretransfusion_assessment_time_conflict"): "non_compliant",
     }.get((rule_id, kind))
     if expected_status is not None and status != expected_status:
         raise ValueError("invalid customer display fact status")
@@ -1755,90 +1725,7 @@ def safe_luxian_0609_customer_display_facts(
                 return None
         return safe
 
-    expected_transfusion_system_gap_reason = _TRANSFUSION_SYSTEM_GAP_REASONS.get(rule_id)
-    if (
-        expected_transfusion_system_gap_reason is not None
-        and raw.get("failure_kind") == "system_data_contract_gap"
-    ):
-        allowed_keys = {
-            "failure_kind",
-            "system_gap_reason",
-            "gap_owner",
-            "conclusion",
-            "handling_suggestion",
-        }
-        conclusion = raw.get("conclusion")
-        handling_suggestion = raw.get("handling_suggestion")
-        if (
-            set(raw) != allowed_keys
-            or raw.get("system_gap_reason")
-            != expected_transfusion_system_gap_reason
-            or raw.get("gap_owner") != "system_integration"
-            or not isinstance(conclusion, str)
-            or not conclusion.strip()
-            or len(conclusion) > 500
-            or "\n" in conclusion
-            or not isinstance(handling_suggestion, str)
-            or not handling_suggestion.strip()
-            or len(handling_suggestion) > 500
-            or "\n" in handling_suggestion
-        ):
-            return None
-        return {
-            "failure_kind": "system_data_contract_gap",
-            "system_gap_reason": expected_transfusion_system_gap_reason,
-            "gap_owner": "system_integration",
-        }
-
-    if rule_id == "LX0609-041":
-        if (
-            raw.get("verification_kind") == "transfusion_consent_present"
-            and raw.get("performed_transfusion_confirmed") is True
-            and isinstance(raw.get("consent_count"), int)
-        ):
-            return {
-                "verification_kind": "transfusion_consent_present",
-                "performed_transfusion_confirmed": True,
-                "consent_count": raw["consent_count"],
-            }
-        if (
-            raw.get("failure_kind") == "transfusion_consent_missing"
-            and raw.get("performed_transfusion_confirmed") is True
-            and raw.get("checked_source") == "blood_transfusion_consent"
-        ):
-            return {
-                "failure_kind": "transfusion_consent_missing",
-                "performed_transfusion_confirmed": True,
-                "checked_source": "blood_transfusion_consent",
-            }
-        return None
-    if rule_id == "LX0609-042":
-        allowed_fields = {
-            "patient_information", "diagnosis", "indication", "component", "risks",
-            "alternatives", "patient_or_agent_signature", "physician_signature", "signed_time",
-        }
-        if (
-            raw.get("verification_kind") == "transfusion_consent_complete"
-            and raw.get("performed_transfusion_confirmed") is True
-            and (fields := controlled_list(raw.get("checked_fields"), allowed=allowed_fields)) is not None
-        ):
-            return {
-                "verification_kind": "transfusion_consent_complete",
-                "performed_transfusion_confirmed": True,
-                "checked_fields": fields,
-            }
-        if (
-            raw.get("failure_kind") == "transfusion_consent_incomplete"
-            and raw.get("performed_transfusion_confirmed") is True
-            and (fields := controlled_list(raw.get("missing_fields"), allowed=allowed_fields)) is not None
-        ):
-            return {
-                "failure_kind": "transfusion_consent_incomplete",
-                "performed_transfusion_confirmed": True,
-                "missing_fields": fields,
-            }
-        return None
-    if rule_id in {"LX0609-043", "LX0609-070"}:
+    if rule_id == "LX0609-070":
         allowed_items = {"hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hcv", "hiv", "syphilis", "alt"}
 
         def controlled_event_checks(value: Any) -> list[dict[str, Any]] | None:
@@ -1977,253 +1864,6 @@ def safe_luxian_0609_customer_display_facts(
                 result["required_items"] = required
             return append_lx070_event_facts(result)
         return None
-    if rule_id in {"LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"}:
-        kind = raw.get("verification_kind") or raw.get("failure_kind")
-        if rule_id == "LX0609-044" and kind in {
-            "pretransfusion_assessment_complete",
-            "pretransfusion_assessment_incomplete",
-            "pretransfusion_assessment_missing",
-            "pretransfusion_assessment_time_conflict",
-            "pretransfusion_assessment_time_unavailable",
-        }:
-            legacy_fields = {
-                "indication",
-                "laboratory_indicator",
-                "risk_history_or_status",
-            }
-            application_fields = {"application_reason", "laboratory_indicator"}
-            allowed_fields = legacy_fields | application_fields
-            checked = controlled_list(raw.get("checked_fields"), allowed=allowed_fields)
-            missing = controlled_list(raw.get("missing_fields"), allowed=allowed_fields)
-            expected_fields = sorted(
-                application_fields
-                if checked == sorted(application_fields)
-                else legacy_fields
-            )
-            if (
-                missing is None
-                or raw.get("performed_transfusion_confirmed") is not True
-                or (
-                    kind != "pretransfusion_assessment_time_unavailable"
-                    and checked != expected_fields
-                )
-                or (
-                    kind == "pretransfusion_assessment_complete"
-                    and missing
-                )
-                or (
-                    kind in {
-                        "pretransfusion_assessment_incomplete",
-                        "pretransfusion_assessment_missing",
-                    }
-                    and not missing
-                )
-            ):
-                return None
-            result = {
-                "verification_kind" if kind == "pretransfusion_assessment_complete" else "failure_kind": kind,
-                "performed_transfusion_confirmed": True,
-                "checked_fields": checked or [],
-                "missing_fields": missing,
-            }
-            for time_key in ("application_time", "transfusion_time"):
-                value = raw.get(time_key)
-                if value is None:
-                    continue
-                if not isinstance(value, str):
-                    return None
-                try:
-                    datetime.fromisoformat(value.replace("Z", "+00:00"))
-                except ValueError:
-                    return None
-                result[time_key] = value
-            elapsed_minutes = raw.get("elapsed_minutes")
-            if elapsed_minutes is not None:
-                if type(elapsed_minutes) not in {int, float} or not (
-                    0 <= elapsed_minutes <= 525600
-                ):
-                    return None
-                result["elapsed_minutes"] = elapsed_minutes
-            missing_time_fields = controlled_list(
-                raw.get("missing_time_fields"),
-                allowed={"application_time", "transfusion_time"},
-            )
-            if missing_time_fields is not None:
-                result["missing_time_fields"] = missing_time_fields
-            return result
-        if rule_id == "LX0609-045" and kind in {
-            "transfusion_course_record_present", "transfusion_course_record_missing",
-        }:
-            sources = controlled_list(
-                raw.get("checked_sources"),
-                allowed={"bloodtrans_record", "daily_course_record"},
-            )
-            if sources is None or raw.get("performed_transfusion_confirmed") is not True:
-                return None
-            result = {
-                "verification_kind" if kind.endswith("present") else "failure_kind": kind,
-                "performed_transfusion_confirmed": True,
-                "checked_sources": sources,
-            }
-            if isinstance(raw.get("record_count"), int):
-                result["record_count"] = raw["record_count"]
-            return result
-        if rule_id == "LX0609-046" and kind in {
-            "transfusion_course_record_complete", "transfusion_course_record_incomplete",
-        }:
-            allowed_fields = {
-                "reason_or_indication", "start_and_end_time", "component", "dose",
-                "process_observation", "reaction_and_handling",
-            }
-            checked = controlled_list(raw.get("checked_fields"), allowed=allowed_fields)
-            missing = controlled_list(raw.get("missing_fields"), allowed=allowed_fields)
-            if checked is None or missing is None or raw.get("performed_transfusion_confirmed") is not True:
-                return None
-            record_count = raw.get("record_count")
-            if type(record_count) is not int or record_count < 0:
-                return None
-            result = {
-                "verification_kind" if kind == "transfusion_course_record_complete" else "failure_kind": kind,
-                "performed_transfusion_confirmed": True,
-                "record_count": record_count,
-                "checked_fields": checked,
-                "missing_fields": missing,
-            }
-            incomplete_record_count = raw.get("incomplete_record_count")
-            raw_missing_counts = raw.get("missing_field_record_counts")
-            if incomplete_record_count is not None or raw_missing_counts is not None:
-                if (
-                    type(incomplete_record_count) is not int
-                    or incomplete_record_count < 0
-                    or incomplete_record_count > record_count
-                    or not isinstance(raw_missing_counts, Mapping)
-                    or set(raw_missing_counts) != set(missing)
-                    or any(
-                        key not in allowed_fields
-                        or type(value) is not int
-                        or value < 1
-                        or value > incomplete_record_count
-                        for key, value in raw_missing_counts.items()
-                    )
-                    or (
-                        kind == "transfusion_course_record_complete"
-                        and incomplete_record_count != 0
-                    )
-                    or (
-                        kind == "transfusion_course_record_incomplete"
-                        and incomplete_record_count < 1
-                    )
-                ):
-                    return None
-                result["incomplete_record_count"] = incomplete_record_count
-                result["missing_field_record_counts"] = {
-                    key: raw_missing_counts[key] for key in missing
-                }
-            return result
-        if rule_id == "LX0609-047" and kind in {
-            "posttransfusion_evaluation_complete", "posttransfusion_evaluation_missing",
-        }:
-            sources = controlled_list(
-                raw.get("checked_sources"),
-                allowed={"bloodtrans_record", "daily_course_record"},
-            )
-            if sources is None or raw.get("performed_transfusion_confirmed") is not True or raw.get("threshold_hours") != 24:
-                return None
-            result = {
-                "verification_kind" if kind == "posttransfusion_evaluation_complete" else "failure_kind": kind,
-                "performed_transfusion_confirmed": True,
-                "threshold_hours": 24,
-                "checked_sources": sources,
-            }
-            for key in ("transfusion_end_time", "evaluation_time"):
-                if isinstance(raw.get(key), str):
-                    result[key] = raw[key]
-            if isinstance(raw.get("elapsed_hours"), (int, float)):
-                result["elapsed_hours"] = raw["elapsed_hours"]
-            return result
-    if rule_id == "LX0609-048":
-        kind = raw.get("verification_kind") or raw.get("failure_kind")
-        if kind == "intraoperative_transfusion_absent":
-            sources = controlled_list(raw.get("checked_sources"), allowed={"surgery_record", "anesthesia_record"})
-            return {"verification_kind": kind, "checked_sources": sources} if sources is not None else None
-        if kind in {"transfusion_comparison_material_missing", "transfusion_comparison_fields_missing"}:
-            result: dict[str, Any] = {"failure_kind": kind}
-            if kind.endswith("material_missing"):
-                sources = controlled_list(
-                    raw.get("missing_sources"),
-                    allowed={"surgery_record", "anesthesia_record", "postsurg_firstcourse_record"},
-                )
-                if sources is None:
-                    return None
-                result["missing_sources"] = sources
-            else:
-                missing = raw.get("missing_fields_by_source")
-                if not isinstance(missing, Mapping):
-                    return None
-                safe_missing: dict[str, list[str]] = {}
-                for source, values in missing.items():
-                    if source not in {"surgery_record", "anesthesia_record", "postsurg_firstcourse_record"}:
-                        return None
-                    fields = controlled_list(values, allowed={"components", "doses"})
-                    if fields is None:
-                        return None
-                    safe_missing[str(source)] = fields
-                result["missing_fields_by_source"] = safe_missing
-            return result
-        if kind in {"transfusion_records_consistent", "transfusion_records_inconsistent"}:
-            matrix = raw.get("comparison_matrix")
-            if not isinstance(matrix, Mapping):
-                return None
-            safe_matrix: dict[str, dict[str, list[str]]] = {}
-            for source in ("surgery_record", "anesthesia_record", "postsurg_firstcourse_record"):
-                fields = matrix.get(source)
-                if not isinstance(fields, Mapping):
-                    return None
-                components = controlled_list(fields.get("components"))
-                doses = controlled_list(fields.get("doses"))
-                if components is None or doses is None:
-                    return None
-                safe_matrix[source] = {"components": components, "doses": doses}
-            result = {
-                "verification_kind" if kind == "transfusion_records_consistent" else "failure_kind": kind,
-                "performed_intraoperative_transfusion_confirmed": True,
-                "comparison_matrix": safe_matrix,
-            }
-            fields_key = "checked_fields" if kind == "transfusion_records_consistent" else "differing_fields"
-            values = controlled_list(raw.get(fields_key), allowed={"components", "doses"})
-            if values is None:
-                return None
-            result[fields_key] = values
-            return result
-        return None
-    if rule_id in {"LX0609-044", "LX0609-046", "LX0609-047", "LX0609-048"}:
-        allowed = {
-            "LX0609-044": (
-                "pretransfusion_assessment",
-                ["bloodtrans_record", "blood_application", "course_record"],
-            ),
-            "LX0609-046": ("purpose_or_indication", ["bloodtrans_record"]),
-            "LX0609-047": (
-                "posttransfusion_evaluation",
-                ["bloodtrans_record", "course_record"],
-            ),
-            "LX0609-048": (
-                "postop_first_course_transfusion",
-                ["surgery_record", "postsurg_firstcourse_record"],
-            ),
-        }
-        requirement, checked_sources = allowed[rule_id]
-        if (
-            raw.get("failure_kind") != "transfusion_requirement_not_documented"
-            or raw.get("requirement") != requirement
-            or raw.get("checked_sources") != checked_sources
-        ):
-            return None
-        return {
-            "failure_kind": "transfusion_requirement_not_documented",
-            "requirement": requirement,
-            "checked_sources": list(checked_sources),
-        }
     if rule_id == "LX0609-013":
         trigger_sources = raw.get("pathology_trigger_sources")
         checked_sources = raw.get("checked_target_sources")
@@ -3849,8 +3489,6 @@ def _customer_evidence_from_display_facts(
     exact_trigger_sources = {
         "LX0609-033": {"surgery_record"},
         "LX0609-040": {"mr_surgery"},
-        "LX0609-041": {"bloodtrans_record"},
-        "LX0609-047": {"bloodtrans_record"},
     }
     allowed_exact_sources = exact_trigger_sources.get(rule_id)
     if allowed_exact_sources is not None:
@@ -3876,35 +3514,6 @@ def _customer_evidence_from_display_facts(
                 seen.add(key)
                 located.append(
                     {"source_type": source_type, "source_document_id": document_id}
-                )
-            return located
-    if rule_id == "LX0609-044":
-        allowed_source_types = {"blood_application", "bloodtrans_record"}
-        raw_refs = raw.get("source_document_refs")
-        if isinstance(raw_refs, list) and len(raw_refs) <= 2:
-            located: list[dict[str, str]] = []
-            seen: set[tuple[str, str]] = set()
-            for item in raw_refs:
-                if not isinstance(item, Mapping) or set(item) != {
-                    "source_type",
-                    "source_document_id",
-                }:
-                    return []
-                source_type = str(item.get("source_type") or "").strip()
-                document_id = valid_document_id(item.get("source_document_id"))
-                key = (source_type, document_id)
-                if (
-                    source_type not in allowed_source_types
-                    or not document_id
-                    or key in seen
-                ):
-                    return []
-                seen.add(key)
-                located.append(
-                    {
-                        "source_type": source_type,
-                        "source_document_id": document_id,
-                    }
                 )
             return located
     if (
@@ -4138,25 +3747,7 @@ def _customer_evidence_from_display_facts(
             if located:
                 return located
 
-    if rule_id not in {"LX0609-046", "LX0609-045"}:
-        return []
-    raw_ids = raw.get("source_document_ids")
-    if not isinstance(raw_ids, list):
-        return []
-    document_ids = tuple(
-        dict.fromkeys(
-            candidate
-            for value in raw_ids[:8]
-            if (candidate := valid_document_id(value))
-        )
-    )
-    # 这些来源行仅在显式存在 document_id 时进入此列表。类型无法可靠区分
-    # 时统一按 document 交给病历对照页按 source_ref 精确解析，禁止猜测标题。
-    source_type = "bloodtrans_record"
-    return [
-        {"source_type": source_type, "source_document_id": document_id}
-        for document_id in document_ids
-    ]
+    return []
 
 
 
@@ -4617,12 +4208,7 @@ def _copy_native_customer_fields(
     safe_display_facts = (
         supplied_safe_facts[0] if supplied_safe_facts else None
     )
-    _validate_transfusion_system_gap_fact_status(
-        rule_id=wrapper_id,
-        status=status,
-        safe_facts=safe_display_facts,
-    )
-    _validate_lx0609_003_044_fact_status(
+    _validate_lx0609_003_fact_status(
         rule_id=wrapper_id,
         status=status,
         safe_facts=safe_display_facts,
@@ -4794,6 +4380,12 @@ def aggregate_luxian_0609_results(
         _norm_id(item.get("rule_id") or item.get("rule_code"))
         for item in wrapper_rules
     }
+    native_direct_rule_ids = {
+        _norm_id(item.get("rule_id") or item.get("rule_code"))
+        for item in execution_results
+        if str((item.get("metadata") or {}).get("execution_source") or "")
+        == "lx0609_native"
+    }
     for rule_id, facts in customer_display_facts:
         if (
             rule_id in display_facts_by_rule
@@ -4832,8 +4424,17 @@ def aggregate_luxian_0609_results(
                 raw_copy_facts_by_rule[rule_id] = facts
             if rule_id == "LX0609-025":
                 raw_025_facts_by_rule[rule_id] = facts
-        elif not finalizer_owns_facts and not is_strict_display_contract:
-            raise Luxian0609CustomerDisplayFactsError(rule_id)
+        elif not is_strict_display_contract:
+            # 独立传入的事实不是执行器结果的延迟合同。若没有 Typed 决策或
+            # native 直接结果能交给 Finalizer，不能静默丢弃非法客户事实。
+            if (
+                not finalizer_owns_facts
+                or (
+                    rule_id not in reduced_by_rule
+                    and rule_id not in native_direct_rule_ids
+                )
+            ):
+                raise Luxian0609CustomerDisplayFactsError(rule_id)
         elif rule_id == "LX0609-025":
             raw_025_facts_by_rule[rule_id] = facts
         customer_evidence = _customer_evidence_from_display_facts(
@@ -4875,12 +4476,7 @@ def aggregate_luxian_0609_results(
                 raw_facts=raw_copy_facts_by_rule.get(wrapper_id),
                 safe_facts=display_facts_by_rule.get(wrapper_id),
             )
-            _validate_transfusion_system_gap_fact_status(
-                rule_id=wrapper_id,
-                status=str(result.get("status") or ""),
-                safe_facts=display_facts_by_rule.get(wrapper_id),
-            )
-            _validate_lx0609_003_044_fact_status(
+            _validate_lx0609_003_fact_status(
                 rule_id=wrapper_id,
                 status=str(result.get("status") or ""),
                 safe_facts=display_facts_by_rule.get(wrapper_id),
@@ -5017,30 +4613,43 @@ def aggregate_luxian_0609_results(
                         "evidence_materials"
                     ),
                 )
-                facts_for_render = (
-                    display_facts_by_rule.get(wrapper_id)
-                    or result.get("customer_display_facts")
+                raw_executor_facts = raw_executor_display_facts_by_rule.get(
+                    wrapper_id
                 )
-                if isinstance(facts_for_render, Mapping):
-                    result["customer_display_facts"] = dict(facts_for_render)
-                    precise_findings = _controlled_customer_findings(
-                        rule_id=wrapper_id,
-                        facts=facts_for_render,
+                if raw_executor_facts is not None:
+                    result, _handled = (
+                        finalize_luxian_0609_executor_customer_display_facts(
+                            result=result,
+                            raw_facts=raw_executor_facts,
+                        )
                     )
-                    if precise_findings:
-                        result["findings"] = precise_findings
-                _validate_transfusion_system_gap_fact_status(
-                    rule_id=wrapper_id,
-                    status=str(result.get("status") or ""),
-                    safe_facts=result.get("customer_display_facts"),
-                )
-                _validate_lx0609_003_044_fact_status(
-                    rule_id=wrapper_id,
-                    status=str(result.get("status") or ""),
-                    safe_facts=result.get("customer_display_facts"),
-                )
-                if wrapper_id in customer_evidence_by_rule:
-                    result["customer_evidence"] = customer_evidence_by_rule[wrapper_id]
+                if str(result.get("status") or "") != "technical_error":
+                    facts_for_render = (
+                        display_facts_by_rule.get(wrapper_id)
+                        or result.get("customer_display_facts")
+                    )
+                    if isinstance(facts_for_render, Mapping):
+                        result["customer_display_facts"] = dict(facts_for_render)
+                        precise_findings = _controlled_customer_findings(
+                            rule_id=wrapper_id,
+                            facts=facts_for_render,
+                        )
+                        if precise_findings:
+                            result["findings"] = precise_findings
+                    _validate_lx0609_003_fact_status(
+                        rule_id=wrapper_id,
+                        status=str(result.get("status") or ""),
+                        safe_facts=result.get("customer_display_facts"),
+                    )
+                    if wrapper_id in customer_evidence_by_rule:
+                        result["customer_evidence"] = customer_evidence_by_rule[
+                            wrapper_id
+                        ]
+                else:
+                    # Finalizer 已因合同或状态冲突将本条安全降级。此处只能继续
+                    # 装配，不能把循环前缓存的展示事实或证据重新写回。
+                    result.pop("customer_display_facts", None)
+                    result.pop("customer_evidence", None)
                 enriched_customer_evidence = enrich_customer_evidence(
                     list(result.get("customer_evidence") or []),
                     evidence_materials=(audit_context or {}).get(

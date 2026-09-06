@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+from datetime import datetime
+
+import pytest
+
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
-from app.services.luxian_0609_result_aggregator import (
-    _customer_evidence_from_display_facts,
-    safe_luxian_0609_customer_display_facts,
+from app.services.luxian_0609.customer_evidence_enrichment import (
+    project_selected_document_evidence,
 )
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
 
 
 def _documents(
@@ -167,30 +178,79 @@ def test_044_customer_projection_preserves_controlled_times_and_conflict_delta()
     }
 
 
-def test_044_projects_application_and_transfusion_record_locators() -> None:
-    raw = {
-        "verification_kind": "pretransfusion_assessment_complete",
-        "performed_transfusion_confirmed": True,
-        "checked_fields": ["application_reason", "laboratory_indicator"],
-        "missing_fields": [],
-        "application_time": "2026-08-20 09:00:00",
-        "transfusion_time": "2026-08-20 14:00:00",
-        "source_document_refs": [
+@pytest.mark.asyncio
+async def test_044_projects_application_and_transfusion_record_locators() -> None:
+    """044 的真实 native 决策经 Binding 和公共投影保留两份判定文书。"""
+
+    rows_by_source = {
+        "mr_bloodtrans": [
+            {"transfution_datetime": datetime(2026, 8, 20, 14, 0)}
+        ],
+        "blood_application": [
             {
-                "source_type": "blood_application",
-                "source_document_id": "BA-001",
-            },
+                "application_id": "BA-001",
+                "document_id": "BA-001",
+                "request_datetime": "2026-08-20 09:00:00",
+                "reason_for_blood": "纠正贫血",
+                "hemoglobin": "68 g/L",
+            }
+        ],
+        "bloodtrans_record": [
             {
-                "source_type": "bloodtrans_record",
-                "source_document_id": "BT-001",
-            },
+                "document_id": "BT-001",
+                "record_content": "2026-08-20 14:00输血开始，已实际输注红细胞2U。",
+                "record_time": "2026-08-20 14:10:00",
+            }
         ],
     }
 
-    assert _customer_evidence_from_display_facts(
-        rule_id="LX0609-044", raw=raw
-    ) == raw["source_document_refs"]
-    assert "source_document_refs" not in (
-        safe_luxian_0609_customer_display_facts(rule_id="LX0609-044", raw=raw)
-        or {}
+    def read(**kwargs: object) -> SnapshotSourceRows:
+        source_key = str(kwargs["source_key"])
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-044",),
+        institute_id="044-evidence-institute",
+        patient_id="044-evidence-patient",
+        visit_id="044-evidence-visit",
+        source_schema=None,
+        created_at="2026-09-06T12:00:00+08:00",
+        row_reader=read,
     )
+    execution = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[{"rule_id": "LX0609-044", "rule_name": "输血前评估"}],
+        evidence_payload=None,
+        institute_id="044-evidence-institute",
+        patient_id="044-evidence-patient",
+        visit_id="044-evidence-visit",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-044",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=("LX0609-044",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert len(reduced) == 1
+    assert reduced[0].final_state.value == "compliant"
+    projected = project_selected_document_evidence(
+        decision=reduced[0],
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    assert projected is not None
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in projected
+    } == {("blood_application", "BA-001"), ("bloodtrans_record", "BT-001")}
