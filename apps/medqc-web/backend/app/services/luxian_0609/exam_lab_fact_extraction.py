@@ -13,6 +13,9 @@ import json
 import re
 from typing import Any, Mapping, Sequence
 
+from .evidence_material import build_material_document_refs
+from .source_evidence_reader import canonical_source_evidence
+
 
 SCHEMA_VERSION = "lx0609-exam-lab-text-facts-v3"
 MULTI_EVENT_SCHEMA_VERSION = "lx0609-exam-lab-text-facts-v4"
@@ -388,6 +391,37 @@ def _safe_ref(source_key: str, index: int, row: Mapping[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _material_document_refs_by_row(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> Mapping[tuple[str, int], str]:
+    """将投影行稳定映射到同一 Evidence Session 的逐行文书引用。
+
+    ``build_material_document_refs`` 是 Snapshot/Material 的唯一逐行引用算法；
+    检查检验投影只复用该算法，不再另造 ``safe_ref`` 供 RuleDecision 使用。
+    排序及重复正文 occurrence 与材料仓保持一致，因此同一行不会被误投影为
+    同来源的另一份文书。
+    """
+
+    resolved: dict[tuple[str, int], str] = {}
+    for source_key, rows in rows_by_source.items():
+        indexed_rows = tuple(
+            (index, row)
+            for index, row in enumerate(rows, start=1)
+            if isinstance(row, Mapping)
+        )
+        normalized_rows = tuple(row for _, row in indexed_rows)
+        if not normalized_rows:
+            continue
+        refs = build_material_document_refs(source_key, normalized_rows)
+        ordered_positions = sorted(
+            range(len(normalized_rows)),
+            key=lambda index: canonical_source_evidence(dict(normalized_rows[index])),
+        )
+        for position, reference in zip(ordered_positions, refs):
+            resolved[(source_key, indexed_rows[position][0])] = reference
+    return resolved
+
+
 def _unique_role_time(
     rows: Sequence[Mapping[str, Any]], fields: Sequence[str]
 ) -> tuple[datetime | None, bool]:
@@ -446,6 +480,7 @@ def build_exam_lab_text_projection(
         str, tuple[str, str, int, Mapping[str, Any], str]
     ] = {}
     course_entries: list[tuple[int, str, int, Mapping[str, Any], str]] = []
+    material_document_refs = _material_document_refs_by_row(rows_by_source)
 
     for source_position, source_key in enumerate(source_order, start=1):
         rows = tuple(rows_by_source.get(source_key, ()))
@@ -739,7 +774,9 @@ def build_exam_lab_text_projection(
         if doc_ref not in target_refs:
             continue
         refs.add(doc_ref)
-        safe_refs[doc_ref] = _safe_ref(source_key, row_index, row)
+        safe_refs[doc_ref] = material_document_refs.get(
+            (source_key, row_index), _safe_ref(source_key, row_index, row)
+        )
         document_id = _clean(row.get("document_id"))
         if document_id:
             source_document_refs[doc_ref] = (source_key, document_id)
@@ -860,7 +897,9 @@ def build_exam_lab_text_projection(
             continue
         doc_ref = f"D{source_position:02d}-{row_index:02d}"
         refs.add(doc_ref)
-        safe_refs[doc_ref] = _safe_ref(source_key, row_index, row)
+        safe_refs[doc_ref] = material_document_refs.get(
+            (source_key, row_index), _safe_ref(source_key, row_index, row)
+        )
         document_id = _clean(row.get("document_id"))
         if document_id:
             source_document_refs[doc_ref] = (source_key, document_id)
@@ -1330,7 +1369,25 @@ def parse_exam_lab_fact_response(
             )
             if not normalized_course:
                 semantic = "absent"
-        normalized_evidence = tuple(sorted((*event_refs, *normalized_course)))
+        # 011/012/014/015 的事件证据只保留实际报告和实际命中的病程。主记录
+        # 与明细报告同时存在时，明细报告才是结果正文的权威载体；不能把同一
+        # 事件的全部辅助行一并投影到客户结果。没有明细报告时保留已绑定主记录。
+        report_source_keys = (
+            {"exam_item_report"}
+            if rule_id in {"LX0609-011", "LX0609-012"}
+            else {"labtest_item_report"}
+            if rule_id in {"LX0609-014", "LX0609-015"}
+            else set()
+        )
+        source_document_refs = projection.source_document_refs or {}
+        report_refs = {
+            ref
+            for ref in event_refs
+            if (located := source_document_refs.get(ref)) is not None
+            and located[0] in report_source_keys
+        }
+        selected_event_refs = report_refs or event_refs
+        normalized_evidence = tuple(sorted((*selected_event_refs, *normalized_course)))
         if (
             not normalized_evidence
             or (

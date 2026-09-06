@@ -799,6 +799,93 @@ def _target_source_document_ids(
     return tuple(dict.fromkeys(document_ids))
 
 
+def _selected_material_document_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    source_key: str,
+    predicate: Any,
+) -> tuple[str, ...]:
+    """从同一 Evidence Session 选择实际参与判定的逐行引用。
+
+    只读取材料仓已经冻结的行；不回查数据库、不按文书标题或时间猜测。调用方
+    提供的谓词必须只表达本规则已有的结构化触发/关联条件。
+    """
+
+    try:
+        rows = materials.document_rows(source_key, snapshot=snapshot)
+    except EvidenceMaterialUnavailable:
+        return ()
+    return tuple(
+        dict.fromkeys(
+            reference
+            for reference, row in rows
+            if isinstance(row, Mapping) and predicate(row)
+        )
+    )
+
+
+def _target_order_material_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    fact_kind: str,
+) -> tuple[str, ...]:
+    pattern = _target_order_pattern(fact_kind)
+    return _selected_material_document_refs(
+        snapshot=snapshot,
+        materials=materials,
+        source_key=_ORDER_SOURCE_KEY,
+        predicate=lambda row: (
+            not _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status")))
+            and bool(pattern.search(_clean(row.get("order_name"))))
+        ),
+    )
+
+
+def _lx010_association_material_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, ...]:
+    """010 关联失败仅绑定触发医嘱、目标检查主表及其正式报告。"""
+
+    refs = list(
+        _target_order_material_refs(
+            snapshot=snapshot,
+            materials=materials,
+            fact_kind="exam",
+        )
+    )
+    master_refs = _selected_material_document_refs(
+        snapshot=snapshot,
+        materials=materials,
+        source_key="exam_master",
+        predicate=_is_exam_master_target,
+    )
+    refs.extend(master_refs)
+    target_exam_ids: set[str] = set()
+    try:
+        master_rows = materials.document_rows("exam_master", snapshot=snapshot)
+    except EvidenceMaterialUnavailable:
+        master_rows = ()
+    for reference, row in master_rows:
+        if reference in master_refs and isinstance(row, Mapping):
+            exam_id = _clean(row.get("exam_id"))
+            if exam_id:
+                target_exam_ids.add(exam_id)
+    if target_exam_ids:
+        refs.extend(
+            _selected_material_document_refs(
+                snapshot=snapshot,
+                materials=materials,
+                source_key="exam_item_report",
+                predicate=lambda row: _clean(row.get("exam_id")) in target_exam_ids,
+            )
+        )
+    return tuple(dict.fromkeys(refs))
+
+
 def _trigger_order_summaries(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
@@ -910,13 +997,40 @@ def _single_text_fact_outcome(
 ) -> _ExamLabOutcome:
     """由一个事件的语义事实和权威字段时间生成事件级结果。"""
 
+    event = event_for_fact(projection, fact)
     safe_refs = projection.safe_refs or {}
+    selected_evidence_refs = fact.evidence_refs
+    if rule_id == "LX0609-010" and event is not None:
+        # 010 的语义事实用于确认“检查前原因”是否存在，但客户证据沿用既有
+        # 检查事件坐标，不把被模型命中的病程再作为第二份关键证据投影。
+        selected_evidence_refs = event.document_refs
+    elif rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
+        # 事件可能同时含主记录和结果明细；只要结果明细可定位，就由它代表
+        # 本次报告，避免同一事件将两类记录重复投影。病程只限模型实际命中的
+        # 同事件文书，015 的跨培养过滤已在事实解析器完成。
+        report_source_keys = (
+            {"exam_item_report"}
+            if rule_id in {"LX0609-011", "LX0609-012"}
+            else {"labtest_item_report"}
+        )
+        source_document_refs = projection.source_document_refs or {}
+        report_refs = tuple(
+            ref
+            for ref in fact.evidence_refs
+            if (located := source_document_refs.get(ref)) is not None
+            and located[0] in report_source_keys
+        )
+        event_refs = report_refs or (
+            event.document_refs if event is not None else fact.evidence_refs
+        )
+        selected_evidence_refs = tuple(
+            dict.fromkeys((*event_refs, *fact.course_doc_refs))
+        )
     refs = tuple(
         safe_refs[item]
-        for item in fact.evidence_refs
+        for item in selected_evidence_refs
         if item in safe_refs
     )
-    event = event_for_fact(projection, fact)
     if fact.applicability == "not_applicable":
         return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
     if fact.applicability != "applicable":
@@ -1068,6 +1182,9 @@ def _text_fact_outcome(
         )
         for fact in rule_facts
     )
+    all_event_refs = tuple(
+        dict.fromkeys(ref for item in outcomes for ref in item.fact_refs)
+    )
     for status in (
         "non_compliant",
         "technical_error",
@@ -1082,9 +1199,7 @@ def _text_fact_outcome(
                 rule_id,
                 status,
                 selected[0].reason_code,
-                tuple(dict.fromkeys(
-                    ref for item in selected for ref in item.fact_refs
-                )),
+                all_event_refs,
             )
     return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_text_fact_unknown")
 
@@ -1492,20 +1607,29 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 检查前原因才进入后续48小时病程语义抽取。
                 order_outcome = _order_exam_structure_outcome(rows_by_source)
                 if order_outcome is not None:
-                    order_display_facts = dict(
-                        _order_contract_display_facts(
-                            order_outcome,
-                            rows_by_source=rows_by_source,
-                        )
-                    )
-                    order_display_facts["trigger_orders"] = _trigger_order_summaries(
+                    trigger_orders = _trigger_order_summaries(
                         rows_by_source,
                         fact_kind="exam",
                     )
+                    order_display_facts: Mapping[str, Any] | None = None
+                    if trigger_orders:
+                        order_display_facts = {
+                            **_order_contract_display_facts(
+                                order_outcome,
+                                rows_by_source=rows_by_source,
+                            ),
+                            "trigger_orders": trigger_orders,
+                        }
                     emit_typed(
                         order_outcome.rule_id,
                         order_outcome.status,
                         order_outcome.reason_code,
+                        _lx010_association_material_refs(
+                            snapshot=evidence_snapshot,
+                            materials=evidence_materials,
+                        )
+                        if trigger_orders
+                        else (),
                         display_facts=order_display_facts,
                     )
                     typed_processed.add("LX0609-010")
@@ -1549,6 +1673,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 rule_id,
                                 "data_gap",
                                 "target_report_missing",
+                                _target_order_material_refs(
+                                    snapshot=evidence_snapshot,
+                                    materials=evidence_materials,
+                                    fact_kind=family,
+                                ),
                                 display_facts=_target_report_missing_display_facts(
                                     rule_id=rule_id,
                                     rows_by_source=rows_by_source,

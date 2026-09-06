@@ -392,7 +392,12 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
             )
             for evidence in item["customer_evidence"]
         ]
-        assert evidence_coordinates == expected_evidence_coordinates[item["rule_id"]]
+        # RuleDecision 对事实引用按稳定摘要排序；迁移后公共投影直接消费这些
+        # 引用，展示顺序可能与旧 raw 投影不同。坐标集合、数量与内容仍必须
+        # 完全等价，不能丢失或增加其他事件的文书。
+        expected_coordinates = expected_evidence_coordinates[item["rule_id"]]
+        assert len(evidence_coordinates) == len(expected_coordinates)
+        assert set(evidence_coordinates) == set(expected_coordinates)
         if item["rule_id"] == "LX0609-010":
             # 冻结迁移前 Canonical 行为：010 的合规事实只存在于执行上下文，
             # 当前聚合结果不重复保存 customer_display_facts。

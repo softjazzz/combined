@@ -221,7 +221,7 @@ def _payload(*, exam: str = "", culture: str = "") -> dict:
     }
 
 
-def test_result_mapping_binds_only_explicit_allowed_source_keys(monkeypatch):
+def test_result_mapping_does_not_turn_source_observation_into_document_ref(monkeypatch):
     snapshot, _ = _typed_session(monkeypatch)
 
     decision = build_exam_lab_rule_decision(
@@ -235,13 +235,47 @@ def test_result_mapping_binds_only_explicit_allowed_source_keys(monkeypatch):
         evaluator_version="exam-lab-ruledecision-shadow-v1",
     )
 
-    expected_ref = next(
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in snapshot.observations
-        if observation.source_key == "exam_master"
-    )
-    assert decision.fact_refs == (expected_ref,)
+    assert decision.fact_refs == ()
     assert decision.reason_code == "requirement_satisfied"
+
+
+def test_result_mapping_preserves_invalid_selected_fact_ref_for_binding_failure(
+    monkeypatch,
+):
+    """执行器选出的非快照文书引用只能污染本规则，不能回退为来源级引用。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EXAM-1",
+                "report_time": "2026-04-27 08:00:00",
+            },
+        ),
+    )
+    invalid_ref = "f" * 64
+    decision = build_exam_lab_rule_decision(
+        outcome=ExamLabOutcome(
+            rule_id="LX0609-011",
+            status="compliant",
+            reason_code="ignored_for_compliant",
+            fact_refs=(invalid_ref,),
+        ),
+        snapshot=snapshot,
+        allowed_source_keys=("exam_master", "exam_item_report"),
+        evaluator_version="exam-lab-ruledecision-shadow-v1",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-011",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert decision.fact_refs == (invalid_ref,)
+    assert reduced[0].final_state.value == "technical_error"
+    assert reduced[0].reason_code == "snapshot_mismatch"
 
 
 @pytest.mark.parametrize(
@@ -1567,6 +1601,7 @@ async def _run_010_public_native(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-010",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-010"}],
@@ -1945,6 +1980,9 @@ async def test_010_orphan_exam_order_id_fails_before_llm(monkeypatch):
     assert decision.final_state.value == "data_gap"
     assert decision.reason_code == "association_failed"
     assert canonical["status"] == "data_gap"
+    assert result.customer_display_facts == ()
+    assert "customer_display_facts" not in canonical
+    assert "customer_evidence" not in canonical
 
 
 @pytest.mark.asyncio
@@ -2161,7 +2199,13 @@ async def test_010_public_native_uses_order_exam_report_contract(
     }[expected_state]
     assert decision.reason_code == expected_reason_code
     assert canonical["status"] == expected_state
-    if expected_state in {"non_compliant", "data_gap"}:
+    if expected_failure_kind == "exam_order_exam_association_failed":
+        # 孤立检查主记录没有可触发医嘱；保留 data_gap 结论，但不产生已经
+        # 被旧 strict 合同拒绝的 010 客户事实或文书证据。
+        assert "LX0609-010" not in dict(result.customer_display_facts)
+        assert "customer_display_facts" not in canonical
+        assert "customer_evidence" not in canonical
+    elif expected_state in {"non_compliant", "data_gap"}:
         facts = dict(result.customer_display_facts)["LX0609-010"]
         assert facts["failure_kind"] == expected_failure_kind
     assert result.llm_call_count == (1 if expected_state == "compliant" else 0)
@@ -2593,6 +2637,7 @@ async def test_complete_empty_course_only_uses_one_model_call_for_imaging_state(
         decisions=result.decisions,
         expected_rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == [
@@ -2677,6 +2722,7 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
@@ -2700,13 +2746,13 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     assert canonical["customer_display_facts"]["reviewed_record_scope"] == (
         "首次病程记录及后续病程记录"
     )
-    assert [
+    assert {
         (item["source_type"], item["source_document_id"])
         for item in canonical["customer_evidence"]
-    ] == [
+    } == {
         ("exam_master", "ct-report-012"),
         ("daily_course_record", "course-012"),
-    ]
+    }
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
 
@@ -2760,6 +2806,7 @@ async def test_lx0609_012_definite_abnormal_finding_is_positive_without_literal_
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["compliant"]
@@ -2818,6 +2865,7 @@ async def test_lx0609_012_definite_abnormal_without_course_is_defect_after_matur
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
@@ -2875,6 +2923,7 @@ async def test_lx0609_012_mixed_normal_and_chronic_abnormal_report_is_positive(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["compliant"]
@@ -2954,6 +3003,7 @@ async def test_lx0609_015_structured_positive_culture_with_pending_observation_i
         decisions=result.decisions,
         expected_rule_ids=("LX0609-015",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-015"}],
@@ -3058,6 +3108,7 @@ async def test_lx0609_015_does_not_bind_independent_catheter_culture_action(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-015",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-015"}],
@@ -3245,6 +3296,7 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == [expected_state]
@@ -3311,6 +3363,7 @@ async def test_lx0609_012_not_mature_window_stays_not_applicable_through_canonic
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-012"}],
@@ -3379,6 +3432,7 @@ async def test_lx0609_012_complete_ambiguous_semantics_is_uncertain_in_canonical
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-012"}],
@@ -3893,6 +3947,7 @@ async def test_empty_exam_lab_tables_treat_unexecuted_orders_as_not_applicable(
         decisions=result.decisions,
         expected_rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == [
@@ -4066,6 +4121,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
         decisions=result.decisions,
         expected_rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["compliant"] * 5
@@ -4625,6 +4681,7 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-012",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert reduced[0].final_state.value == "non_compliant"
@@ -4654,6 +4711,97 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
         "response_record_count": 0,
         "applicable": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_012_mixed_data_gap_and_defect_projects_all_event_documents(
+    monkeypatch,
+):
+    """逐事件展示的资料缺口与缺陷必须共同绑定其实际报告文书。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "document_id": "CT-GAP-1",
+                "exam_id": "EXAM-GAP-1",
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-01 12:00:00",
+            },
+            {
+                "document_id": "MRI-DEFECT-2",
+                "exam_id": "EXAM-DEFECT-2",
+                "exam_name": "头颅MRI",
+                "report_time": "2026-04-04 12:00:00",
+                "exam_conclusion": "阳性：右侧基底节区异常信号。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-04 13:00:00",
+                "record_content": "住院期间一般病程。",
+            },
+        ),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
+    )
+    client = _Client([
+        {
+            "schema_version": "lx0609-exam-lab-text-facts-v4",
+            "facts": [
+                {
+                    "rule_id": "LX0609-012",
+                    "event_position": 1,
+                    "applicability": "unknown",
+                    "semantic_state": "unknown",
+                    "positive_state": "unknown",
+                    "course_doc_positions": [],
+                },
+                {
+                    "rule_id": "LX0609-012",
+                    "event_position": 2,
+                    "applicability": "applicable",
+                    "semantic_state": "absent",
+                    "positive_state": "positive",
+                    "course_doc_positions": [],
+                },
+            ],
+        }
+    ])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    assert reduced[0].final_state.value == "non_compliant"
+    assert [
+        item["event_status"]
+        for item in canonical[0]["customer_display_facts"]["event_results"]
+    ] == ["data_gap", "non_compliant"]
+    assert {
+        item["source_document_id"] for item in canonical[0]["customer_evidence"]
+    } == {"CT-GAP-1", "MRI-DEFECT-2"}
 
 
 @pytest.mark.asyncio

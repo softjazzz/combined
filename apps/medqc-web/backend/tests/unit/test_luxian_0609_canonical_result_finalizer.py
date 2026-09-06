@@ -146,6 +146,71 @@ def test_finalizer_preserves_existing_technical_reason_for_invalid_executor_fact
     assert finalized["reason_code"] == "snapshot_mismatch"
 
 
+def test_exam_lab_finalizer_strips_internal_refs_from_valid_facts() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+        finalizer_owns_executor_customer_display_facts,
+    )
+
+    assert finalizer_owns_executor_customer_display_facts("LX0609-012") is True
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-012",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+        },
+        raw_facts={
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "subject": "ct_mri",
+            "requirement": "positive_result_analysis_within_24h",
+            "event_phase": "report",
+            "checked_sources": ["exam_lab_report", "course_record"],
+            "source_document_ids": ["REPORT-1"],
+            "source_document_refs": [
+                {"source_type": "exam_item_report", "source_document_id": "REPORT-1"}
+            ],
+        },
+    )
+
+    assert handled is True
+    assert finalized["status"] == "non_compliant"
+    assert finalized["customer_display_facts"] == {
+        "failure_kind": "exam_lab_requirement_not_documented",
+        "subject": "ct_mri",
+        "requirement": "positive_result_analysis_within_24h",
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+    }
+
+
+def test_exam_lab_finalizer_fails_closed_for_invalid_facts_only() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+    )
+
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-015",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "findings": "不得保留",
+        },
+        raw_facts={
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "subject": "culture_susceptibility",
+            "requirement": "positive_result_analysis_within_24h",
+            "event_phase": "report",
+            "checked_sources": ["exam_lab_report", "course_record"],
+            "unexpected_private_field": "不得透传",
+        },
+    )
+
+    assert handled is True
+    assert finalized["status"] == "technical_error"
+    assert finalized["reason_code"] == "model_invalid_output"
+    assert "findings" not in finalized
+
+
 @pytest.mark.parametrize(
     "extra",
     [

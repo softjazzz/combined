@@ -29,6 +29,473 @@ class ExamLabOutcome:
     fact_refs: tuple[str, ...] = ()
 
 
+EXAM_LAB_CUSTOMER_RULE_IDS = frozenset(
+    {
+        "LX0609-010",
+        "LX0609-011",
+        "LX0609-012",
+        "LX0609-014",
+        "LX0609-015",
+    }
+)
+
+
+def is_exam_lab_customer_rule(rule_id: str) -> bool:
+    """返回由检查检验规则族拥有客户展示事实合同的规则。"""
+
+    return str(rule_id or "").strip().upper() in EXAM_LAB_CUSTOMER_RULE_IDS
+
+
+def _controlled_trigger_orders(value: Any) -> list[dict[str, str]] | None:
+    if not isinstance(value, list) or not value or len(value) > 8:
+        return None
+    orders: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, Mapping) or set(item) not in (
+            {"order_name"},
+            {"order_name", "order_time"},
+        ):
+            return None
+        order_name = item.get("order_name")
+        order_time = item.get("order_time")
+        if (
+            not isinstance(order_name, str)
+            or not order_name.strip()
+            or len(order_name) > 200
+            or "\n" in order_name
+            or (
+                order_time is not None
+                and (
+                    not isinstance(order_time, str)
+                    or not order_time.strip()
+                    or len(order_time) > 40
+                    or "\n" in order_time
+                )
+            )
+        ):
+            return None
+        order = {"order_name": order_name.strip()}
+        if order_time is not None:
+            order["order_time"] = order_time.strip()
+        orders.append(order)
+    return orders
+
+
+def safe_exam_lab_customer_display_facts(
+    *, rule_id: str, raw: Any
+) -> dict[str, Any] | None:
+    """验证并剥离检查检验客户事实中的内部文书标识。
+
+    这是 010/011/012/014/015 的唯一事实合同所有者。逐行文书证据由
+    RuleDecision ``fact_refs`` 经公共投影生成，故本函数只返回客户可见字段。
+    """
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id not in EXAM_LAB_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
+        return None
+
+    if (
+        normalized_rule_id == "LX0609-010"
+        and raw.get("requirement") == "order_course_report_consistency"
+    ):
+        allowed_public_keys = {
+            "failure_kind",
+            "verification_kind",
+            "subject",
+            "checked_sources",
+            "requirement",
+            "requirement_met",
+            "order_count",
+            "exam_master_count",
+            "uniquely_linked_order_count",
+            "unmatched_or_ambiguous_order_count",
+            "association_issue_kind",
+            "trigger_orders",
+        }
+        allowed_internal_keys = {"source_document_ids", "source_document_refs"}
+        if not set(raw).issubset(allowed_public_keys | allowed_internal_keys):
+            return None
+        failure_kind = raw.get("failure_kind")
+        verification_kind = raw.get("verification_kind")
+        allowed_failure_kinds = {
+            "exam_order_reason_missing",
+            "exam_course_without_order",
+            "exam_order_course_missing",
+            "exam_report_missing",
+            "exam_order_exam_association_failed",
+            "exam_order_contract_data_gap",
+        }
+        if (
+            (failure_kind is None) == (verification_kind is None)
+            or (failure_kind is not None and failure_kind not in allowed_failure_kinds)
+            or (
+                verification_kind is not None
+                and verification_kind != "exam_order_course_report_consistent"
+            )
+            or raw.get("subject") != "ct_mri"
+            or raw.get("checked_sources")
+            != ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"]
+            or type(raw.get("requirement_met")) is not bool
+            or bool(raw.get("requirement_met")) != (verification_kind is not None)
+        ):
+            return None
+        source_document_ids = raw.get("source_document_ids")
+        if source_document_ids is not None and (
+            not isinstance(source_document_ids, list)
+            or any(not isinstance(item, str) for item in source_document_ids)
+        ):
+            return None
+        source_document_refs = raw.get("source_document_refs")
+        if source_document_refs is not None:
+            if not isinstance(source_document_refs, list) or len(source_document_refs) > 8:
+                return None
+            for item in source_document_refs:
+                if (
+                    not isinstance(item, Mapping)
+                    or set(item) != {"source_type", "source_document_id"}
+                    or item.get("source_type") not in {"exam_master", "exam_item_report"}
+                    or not isinstance(item.get("source_document_id"), str)
+                ):
+                    return None
+        raw_trigger_orders = raw.get("trigger_orders")
+        trigger_orders = (
+            _controlled_trigger_orders(raw_trigger_orders)
+            if raw_trigger_orders is not None
+            else None
+        )
+        if raw_trigger_orders is not None and trigger_orders is None:
+            return None
+        facts: dict[str, Any] = {
+            "failure_kind" if failure_kind is not None else "verification_kind": (
+                failure_kind or verification_kind
+            ),
+            "subject": "ct_mri",
+            "checked_sources": [
+                "exam_lab_order",
+                "exam_master",
+                "exam_lab_report",
+                "course_record",
+            ],
+            "requirement": "order_course_report_consistency",
+            "requirement_met": bool(raw.get("requirement_met")),
+        }
+        if trigger_orders is not None:
+            facts["trigger_orders"] = trigger_orders
+        association_keys = (
+            "order_count",
+            "exam_master_count",
+            "uniquely_linked_order_count",
+            "unmatched_or_ambiguous_order_count",
+        )
+        is_association_failure = failure_kind == "exam_order_exam_association_failed"
+        if not is_association_failure and any(key in raw for key in association_keys):
+            return None
+        if not is_association_failure and "association_issue_kind" in raw:
+            return None
+        if is_association_failure:
+            counts = {key: raw.get(key) for key in association_keys}
+            if any(type(value) is not int or value < 0 for value in counts.values()):
+                return None
+            order_count = counts["order_count"]
+            master_count = counts["exam_master_count"]
+            uniquely_linked = counts["uniquely_linked_order_count"]
+            unmatched = counts["unmatched_or_ambiguous_order_count"]
+            if (
+                uniquely_linked > min(order_count, master_count)
+                or unmatched != order_count - uniquely_linked
+            ):
+                return None
+            issue_kind = raw.get("association_issue_kind")
+            if issue_kind not in {
+                "invalid_business_key",
+                "exam_master_without_order",
+                "ambiguous_exam_master_linkage",
+                "order_without_exam_master",
+                "mixed_association_failure",
+                "association_cardinality_mismatch",
+            }:
+                return None
+            facts.update(counts)
+            facts["association_issue_kind"] = issue_kind
+        return facts
+
+    if raw.get("failure_kind") == "exam_lab_target_report_missing":
+        expected_subject = (
+            "ct_mri"
+            if normalized_rule_id in {"LX0609-011", "LX0609-012"}
+            else "culture_susceptibility"
+        )
+        trigger_orders = _controlled_trigger_orders(raw.get("trigger_orders"))
+        if (
+            set(raw)
+            != {"failure_kind", "subject", "checked_sources", "trigger_orders"}
+            or raw.get("subject") != expected_subject
+            or raw.get("checked_sources") != ["exam_lab_order", "exam_lab_report"]
+            or trigger_orders is None
+        ):
+            return None
+        return {
+            "failure_kind": "exam_lab_target_report_missing",
+            "subject": expected_subject,
+            "checked_sources": ["exam_lab_order", "exam_lab_report"],
+            "trigger_orders": trigger_orders,
+        }
+
+    requirements = {
+        "LX0609-010": "reason_before_order",
+        "LX0609-011": "result_recording_within_24h",
+        "LX0609-012": "positive_result_analysis_within_24h",
+        "LX0609-014": "result_recording_within_24h",
+        "LX0609-015": "positive_result_analysis_within_24h",
+    }
+    expected_subject = (
+        "ct_mri"
+        if normalized_rule_id in {"LX0609-010", "LX0609-011", "LX0609-012"}
+        else "culture_susceptibility"
+    )
+    expected_phase = "order" if normalized_rule_id == "LX0609-010" else "report"
+    expected_sources = (
+        ["exam_lab_order", "course_record"]
+        if normalized_rule_id == "LX0609-010"
+        else ["exam_lab_report", "course_record"]
+    )
+    allowed_event_keys = {
+        "failure_kind",
+        "verification_kind",
+        "subject",
+        "requirement",
+        "event_phase",
+        "checked_sources",
+        "applicable",
+        "requirement_met",
+        "positive_state",
+        "report_time",
+        "response_record_time",
+        "threshold_hours",
+        "response_record_count",
+        "interval_hours",
+        "reviewed_record_scope",
+        "event_count",
+        "event_position",
+        "event_results",
+        "source_document_ids",
+        "source_document_refs",
+    }
+    if not set(raw).issubset(allowed_event_keys):
+        return None
+    source_document_ids = raw.get("source_document_ids")
+    if source_document_ids is not None and (
+        not isinstance(source_document_ids, list)
+        or len(source_document_ids) > 8
+        or any(
+            not isinstance(item, str)
+            or not item.strip()
+            or len(item) > 256
+            or "\n" in item
+            or "\r" in item
+            for item in source_document_ids
+        )
+    ):
+        return None
+    source_document_refs = raw.get("source_document_refs")
+    if source_document_refs is not None:
+        if not isinstance(source_document_refs, list) or len(source_document_refs) > 8:
+            return None
+        allowed_source_types = {
+            "exam_master",
+            "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
+            "first_course_record",
+            "daily_course_record",
+            "senior_course_record",
+            "rescue_record",
+        }
+        for item in source_document_refs:
+            if (
+                not isinstance(item, Mapping)
+                or set(item) != {"source_type", "source_document_id"}
+                or item.get("source_type") not in allowed_source_types
+                or not isinstance(item.get("source_document_id"), str)
+                or not item["source_document_id"].strip()
+                or len(item["source_document_id"]) > 256
+                or "\n" in item["source_document_id"]
+                or "\r" in item["source_document_id"]
+            ):
+                return None
+    failure_kind = raw.get("failure_kind")
+    verification_kind = raw.get("verification_kind")
+    if (
+        (
+            failure_kind != "exam_lab_requirement_not_documented"
+            and verification_kind
+            not in {"exam_lab_requirement_checked", "exam_lab_event_review_incomplete"}
+        )
+        or (failure_kind is not None and verification_kind is not None)
+        or raw.get("subject") != expected_subject
+        or raw.get("requirement") != requirements[normalized_rule_id]
+        or raw.get("event_phase") != expected_phase
+        or raw.get("checked_sources") != expected_sources
+    ):
+        return None
+    facts = {
+        "failure_kind" if failure_kind is not None else "verification_kind": (
+            "exam_lab_requirement_not_documented"
+            if failure_kind is not None
+            else verification_kind
+        ),
+        "subject": expected_subject,
+        "requirement": requirements[normalized_rule_id],
+        "event_phase": expected_phase,
+        "checked_sources": list(expected_sources),
+    }
+    for key in ("applicable", "requirement_met"):
+        value = raw.get(key)
+        if value is not None:
+            if not isinstance(value, bool):
+                return None
+            facts[key] = value
+    positive_state = raw.get("positive_state")
+    if positive_state is not None:
+        if positive_state not in {"positive", "negative", "not_relevant", "unknown"}:
+            return None
+        if (
+            positive_state == "unknown"
+            and verification_kind != "exam_lab_event_review_incomplete"
+        ):
+            return None
+        facts["positive_state"] = positive_state
+    for key in ("report_time", "response_record_time"):
+        value = raw.get(key)
+        if value is not None:
+            if not isinstance(value, str) or not re.fullmatch(
+                r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
+            ):
+                return None
+            facts[key] = value
+    threshold_hours = raw.get("threshold_hours")
+    if threshold_hours is not None:
+        if threshold_hours != 24:
+            return None
+        facts["threshold_hours"] = 24
+    response_count = raw.get("response_record_count")
+    if response_count is not None:
+        if not isinstance(response_count, int) or response_count < 0:
+            return None
+        facts["response_record_count"] = response_count
+    interval_hours = raw.get("interval_hours")
+    if interval_hours is not None:
+        if not isinstance(interval_hours, (int, float)) or interval_hours < 0:
+            return None
+        facts["interval_hours"] = round(float(interval_hours), 2)
+    reviewed_record_scope = raw.get("reviewed_record_scope")
+    if reviewed_record_scope is not None:
+        if reviewed_record_scope != "首次病程记录及后续病程记录":
+            return None
+        facts["reviewed_record_scope"] = reviewed_record_scope
+    event_count = raw.get("event_count")
+    event_position = raw.get("event_position")
+    if event_count is not None or event_position is not None:
+        if (
+            type(event_count) is not int
+            or type(event_position) is not int
+            or not 1 <= event_position <= event_count <= 32
+        ):
+            return None
+        facts["event_count"] = event_count
+        facts["event_position"] = event_position
+    raw_event_results = raw.get("event_results")
+    if raw_event_results is not None:
+        if (
+            not isinstance(raw_event_results, list)
+            or event_count is None
+            or len(raw_event_results) != event_count
+        ):
+            return None
+        allowed_event_keys = {
+            "event_position",
+            "event_status",
+            "report_time",
+            "positive_state",
+            "response_record_count",
+            "response_record_time",
+            "interval_hours",
+            "applicable",
+            "requirement_met",
+        }
+        safe_event_results: list[dict[str, Any]] = []
+        for expected_position, item in enumerate(raw_event_results, start=1):
+            if (
+                not isinstance(item, Mapping)
+                or set(item) - allowed_event_keys
+                or item.get("event_position") != expected_position
+                or item.get("event_status")
+                not in {
+                    "compliant",
+                    "non_compliant",
+                    "not_applicable",
+                    "data_gap",
+                    "evaluation_unknown",
+                }
+            ):
+                return None
+            safe_item: dict[str, Any] = {
+                "event_position": expected_position,
+                "event_status": item["event_status"],
+            }
+            for key in ("report_time", "response_record_time"):
+                value = item.get(key)
+                if value is not None:
+                    if not isinstance(value, str) or not re.fullmatch(
+                        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
+                    ):
+                        return None
+                    safe_item[key] = value
+            event_positive_state = item.get("positive_state")
+            if event_positive_state is not None:
+                if event_positive_state not in {
+                    "positive", "negative", "not_relevant", "unknown"
+                }:
+                    return None
+                if (
+                    event_positive_state == "unknown"
+                    and item["event_status"] not in {"data_gap", "evaluation_unknown"}
+                ):
+                    return None
+                safe_item["positive_state"] = event_positive_state
+            event_response_count = item.get("response_record_count")
+            if event_response_count is not None:
+                if type(event_response_count) is not int or event_response_count < 0:
+                    return None
+                safe_item["response_record_count"] = event_response_count
+            event_interval = item.get("interval_hours")
+            if event_interval is not None:
+                if (
+                    isinstance(event_interval, bool)
+                    or not isinstance(event_interval, (int, float))
+                    or event_interval < 0
+                ):
+                    return None
+                safe_item["interval_hours"] = round(float(event_interval), 2)
+            for key in ("applicable", "requirement_met"):
+                value = item.get(key)
+                if value is not None:
+                    if not isinstance(value, bool):
+                        return None
+                    safe_item[key] = value
+            safe_event_results.append(safe_item)
+        if (
+            verification_kind == "exam_lab_event_review_incomplete"
+            and not any(
+                item["event_status"] in {"data_gap", "evaluation_unknown"}
+                for item in safe_event_results
+            )
+        ):
+            return None
+        facts["event_results"] = safe_event_results
+    return facts
+
+
 def build_exam_lab_rule_decision(
     *,
     outcome: ExamLabOutcome,
@@ -38,15 +505,11 @@ def build_exam_lab_rule_decision(
 ) -> RuleDecision:
     """将受控结果映射为 RuleDecision；来源白名单必须由调用方显式提供。"""
 
-    allowed_keys = set(allowed_source_keys)
-    refs = tuple(dict.fromkeys((
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in snapshot.observations
-        if observation.source_key in allowed_keys
-    )))
-    # 模型选择的行级引用已在 projection parser 内严格校验，但它们不是
-    # EvidenceSnapshot 中可独立见证的 FactV2。RuleDecision 只能提交已绑定的
-    # 来源快照/FactV2 引用，否则统一 reducer 会按 snapshot_mismatch 拒绝。
+    selected_document_refs = tuple(dict.fromkeys(outcome.fact_refs))
+    # 事件级判定必须原样消费 executor 实际选中的逐行文书引用；Binding 会在
+    # 单规则边界验证其确属当前 Snapshot 的允许来源。空引用就是没有实际逐行
+    # 判定材料，不能退回为 observation 引用并诱导后续层猜测具体文书。
+    refs = selected_document_refs
     if outcome.status == "compliant":
         dimensions = (
             ApplicabilityState.APPLICABLE,
@@ -129,6 +592,22 @@ def build_exam_lab_rule_decision(
     else:
         raise ValueError("unsupported exam lab outcome")
     applicability, evidence_state, qc_direction, reason_code = dimensions
+    if (
+        not refs
+        and outcome.status == "not_applicable"
+        and reason_code == "trigger_absent_complete"
+    ):
+        # 没有触发事件时，允许来源快照仅用于证明相关完整资料已被核对。
+        # 这不是事件文书的回退：公共投影会将 trigger_absent_complete 映射为
+        # 空客户证据，后续层也不得据此反查或猜测具体文书。
+        allowed_keys = set(allowed_source_keys)
+        refs = tuple(
+            dict.fromkeys(
+                observation.snapshot_ref.removeprefix("sha256:")
+                for observation in snapshot.observations
+                if observation.source_key in allowed_keys
+            )
+        )
     return RuleDecision(
         rule_id=outcome.rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -315,8 +794,11 @@ def _clean(value: Any) -> str:
 
 
 __all__ = [
+    "EXAM_LAB_CUSTOMER_RULE_IDS",
     "ExamLabOutcome",
     "build_default_display_facts",
     "build_exam_lab_rule_decision",
     "build_text_outcome_display_facts",
+    "is_exam_lab_customer_rule",
+    "safe_exam_lab_customer_display_facts",
 ]

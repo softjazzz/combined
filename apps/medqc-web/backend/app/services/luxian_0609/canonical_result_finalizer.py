@@ -207,9 +207,23 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_consultation_customer_rule,
         safe_consultation_customer_display_facts,
     )
+    from .exam_lab_result_mapping import (
+        is_exam_lab_customer_rule,
+        safe_exam_lab_customer_display_facts,
+    )
 
     if is_consultation_customer_rule(rule_id):
         safe_facts = safe_consultation_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
+        return (
+            safe_facts
+            if safe_facts is not None and not contains_private_identifier(safe_facts)
+            else None
+        )
+    if is_exam_lab_customer_rule(rule_id):
+        safe_facts = safe_exam_lab_customer_display_facts(
             rule_id=rule_id,
             raw=raw,
         )
@@ -233,8 +247,9 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     """
 
     from .consultation_customer_projection import is_consultation_customer_rule
+    from .exam_lab_result_mapping import is_exam_lab_customer_rule
 
-    return is_consultation_customer_rule(rule_id)
+    return is_consultation_customer_rule(rule_id) or is_exam_lab_customer_rule(rule_id)
 
 
 def finalize_luxian_0609_executor_customer_display_facts(

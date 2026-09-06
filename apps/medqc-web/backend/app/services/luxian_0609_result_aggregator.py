@@ -85,10 +85,6 @@ _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
     "LX0609-038": frozenset({"anesthesia_record"}),
     # 011/012 和 014/015 的病程是已核对范围；未命中时不能把它们展示为
     # 支持结论的“关键证据”。客户可定位的触发证据仅为对应报告。
-    "LX0609-011": frozenset({"exam_master", "exam_item_report"}),
-    "LX0609-012": frozenset({"exam_master", "exam_item_report"}),
-    "LX0609-014": frozenset({"labtest_master", "labtest_item_report"}),
-    "LX0609-015": frozenset({"labtest_master", "labtest_item_report"}),
     # 068 的出院登记和出院记录只负责确定适用性；客户证据必须来自实际
     # 命中的出院前病程，不能因通用来源反查而展示成出院记录。
     "LX0609-068": frozenset({"daily_course_record", "senior_course_record"}),
@@ -2228,370 +2224,6 @@ def safe_luxian_0609_customer_display_facts(
             "requirement": requirement,
             "checked_sources": list(checked_sources),
         }
-    if (
-        rule_id == "LX0609-010"
-        and raw.get("requirement") == "order_course_report_consistency"
-    ):
-        allowed_public_keys = {
-            "failure_kind",
-            "verification_kind",
-            "subject",
-            "checked_sources",
-            "requirement",
-            "requirement_met",
-            "order_count",
-            "exam_master_count",
-            "uniquely_linked_order_count",
-            "unmatched_or_ambiguous_order_count",
-            "association_issue_kind",
-            "trigger_orders",
-        }
-        allowed_internal_keys = {"source_document_ids", "source_document_refs"}
-        if not set(raw).issubset(allowed_public_keys | allowed_internal_keys):
-            return None
-        failure_kind = raw.get("failure_kind")
-        verification_kind = raw.get("verification_kind")
-        allowed_failure_kinds = {
-            "exam_order_reason_missing",
-            "exam_course_without_order",
-            "exam_order_course_missing",
-            "exam_report_missing",
-            "exam_order_exam_association_failed",
-            "exam_order_contract_data_gap",
-        }
-        if (
-            (failure_kind is None) == (verification_kind is None)
-            or (
-                failure_kind is not None
-                and failure_kind not in allowed_failure_kinds
-            )
-            or (
-                verification_kind is not None
-                and verification_kind != "exam_order_course_report_consistent"
-            )
-            or raw.get("subject") != "ct_mri"
-            or raw.get("checked_sources")
-            != ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"]
-            or type(raw.get("requirement_met")) is not bool
-            or bool(raw.get("requirement_met")) != (verification_kind is not None)
-        ):
-            return None
-        source_document_ids = raw.get("source_document_ids")
-        if source_document_ids is not None and (
-            not isinstance(source_document_ids, list)
-            or any(not isinstance(item, str) for item in source_document_ids)
-        ):
-            return None
-        source_document_refs = raw.get("source_document_refs")
-        if source_document_refs is not None:
-            if not isinstance(source_document_refs, list) or len(source_document_refs) > 8:
-                return None
-            for item in source_document_refs:
-                if (
-                    not isinstance(item, Mapping)
-                    or set(item) != {"source_type", "source_document_id"}
-                    or item.get("source_type") not in {"exam_master", "exam_item_report"}
-                    or not isinstance(item.get("source_document_id"), str)
-                ):
-                    return None
-
-        raw_trigger_orders = raw.get("trigger_orders")
-        trigger_orders = (
-            controlled_trigger_orders(raw_trigger_orders)
-            if raw_trigger_orders is not None
-            else None
-        )
-        if raw_trigger_orders is not None and trigger_orders is None:
-            return None
-
-        result: dict[str, Any] = {
-            (
-                "failure_kind" if failure_kind is not None else "verification_kind"
-            ): failure_kind or verification_kind,
-            "subject": "ct_mri",
-            "checked_sources": [
-                "exam_lab_order",
-                "exam_master",
-                "exam_lab_report",
-                "course_record",
-            ],
-            "requirement": "order_course_report_consistency",
-            "requirement_met": bool(raw.get("requirement_met")),
-        }
-        if trigger_orders is not None:
-            result["trigger_orders"] = trigger_orders
-        association_keys = (
-            "order_count",
-            "exam_master_count",
-            "uniquely_linked_order_count",
-            "unmatched_or_ambiguous_order_count",
-        )
-        is_association_failure = failure_kind == "exam_order_exam_association_failed"
-        if not is_association_failure and any(key in raw for key in association_keys):
-            return None
-        if not is_association_failure and "association_issue_kind" in raw:
-            return None
-        if is_association_failure:
-            counts = {key: raw.get(key) for key in association_keys}
-            if any(type(value) is not int or value < 0 for value in counts.values()):
-                return None
-            order_count = counts["order_count"]
-            master_count = counts["exam_master_count"]
-            uniquely_linked = counts["uniquely_linked_order_count"]
-            unmatched = counts["unmatched_or_ambiguous_order_count"]
-            if (
-                uniquely_linked > min(order_count, master_count)
-                or unmatched != order_count - uniquely_linked
-            ):
-                return None
-            issue_kind = raw.get("association_issue_kind")
-            if issue_kind not in {
-                "invalid_business_key",
-                "exam_master_without_order",
-                "ambiguous_exam_master_linkage",
-                "order_without_exam_master",
-                "mixed_association_failure",
-                "association_cardinality_mismatch",
-            }:
-                return None
-            result.update(counts)
-            result["association_issue_kind"] = issue_kind
-        return result
-
-    if (
-        rule_id
-        in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
-        and raw.get("failure_kind") == "exam_lab_target_report_missing"
-    ):
-        expected_subject = (
-            "ct_mri" if rule_id in {"LX0609-011", "LX0609-012"}
-            else "culture_susceptibility"
-        )
-        trigger_orders = controlled_trigger_orders(raw.get("trigger_orders"))
-        if (
-            set(raw) != {
-                "failure_kind", "subject", "checked_sources", "trigger_orders"
-            }
-            or raw.get("subject") != expected_subject
-            or raw.get("checked_sources") != ["exam_lab_order", "exam_lab_report"]
-            or trigger_orders is None
-        ):
-            return None
-        return {
-            "failure_kind": "exam_lab_target_report_missing",
-            "subject": expected_subject,
-            "checked_sources": ["exam_lab_order", "exam_lab_report"],
-            "trigger_orders": trigger_orders,
-        }
-
-    if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
-        subject = raw.get("subject")
-        requirement = raw.get("requirement")
-        event_phase = raw.get("event_phase")
-        checked_sources = raw.get("checked_sources")
-        allowed_requirements = {
-            "LX0609-010": "reason_before_order",
-            "LX0609-011": "result_recording_within_24h",
-            "LX0609-012": "positive_result_analysis_within_24h",
-            "LX0609-014": "result_recording_within_24h",
-            "LX0609-015": "positive_result_analysis_within_24h",
-        }
-        expected_subject = (
-            "ct_mri" if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012"}
-            else "culture_susceptibility"
-        )
-        expected_phase = "order" if rule_id == "LX0609-010" else "report"
-        expected_sources = (
-            ["exam_lab_order", "course_record"]
-            if rule_id == "LX0609-010"
-            else ["exam_lab_report", "course_record"]
-        )
-        failure_kind = raw.get("failure_kind")
-        verification_kind = raw.get("verification_kind")
-        if (
-            (
-                failure_kind != "exam_lab_requirement_not_documented"
-                and verification_kind
-                not in {
-                    "exam_lab_requirement_checked",
-                    "exam_lab_event_review_incomplete",
-                }
-            )
-            or (failure_kind is not None and verification_kind is not None)
-            or subject != expected_subject
-            or requirement != allowed_requirements[rule_id]
-            or event_phase != expected_phase
-            or checked_sources != expected_sources
-        ):
-            return None
-        facts: dict[str, Any] = {
-            (
-                "failure_kind" if failure_kind is not None else "verification_kind"
-            ): (
-                "exam_lab_requirement_not_documented"
-                if failure_kind is not None
-                else verification_kind
-            ),
-            "subject": subject,
-            "requirement": requirement,
-            "event_phase": event_phase,
-            "checked_sources": list(checked_sources),
-        }
-        optional_bool_fields = ("applicable", "requirement_met")
-        for key in optional_bool_fields:
-            value = raw.get(key)
-            if value is not None:
-                if not isinstance(value, bool):
-                    return None
-                facts[key] = value
-        positive_state = raw.get("positive_state")
-        if positive_state is not None:
-            if positive_state not in {
-                "positive",
-                "negative",
-                "not_relevant",
-                "unknown",
-            }:
-                return None
-            if (
-                positive_state == "unknown"
-                and verification_kind != "exam_lab_event_review_incomplete"
-            ):
-                return None
-            facts["positive_state"] = positive_state
-        for key in ("report_time", "response_record_time"):
-            value = raw.get(key)
-            if value is not None:
-                if not isinstance(value, str) or not re.fullmatch(
-                    r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
-                ):
-                    return None
-                facts[key] = value
-        threshold_hours = raw.get("threshold_hours")
-        if threshold_hours is not None:
-            if threshold_hours != 24:
-                return None
-            facts["threshold_hours"] = 24
-        response_count = raw.get("response_record_count")
-        if response_count is not None:
-            if not isinstance(response_count, int) or response_count < 0:
-                return None
-            facts["response_record_count"] = response_count
-        interval_hours = raw.get("interval_hours")
-        if interval_hours is not None:
-            if not isinstance(interval_hours, (int, float)) or interval_hours < 0:
-                return None
-            facts["interval_hours"] = round(float(interval_hours), 2)
-        reviewed_record_scope = raw.get("reviewed_record_scope")
-        if reviewed_record_scope is not None:
-            if reviewed_record_scope != "首次病程记录及后续病程记录":
-                return None
-            facts["reviewed_record_scope"] = reviewed_record_scope
-        event_count = raw.get("event_count")
-        event_position = raw.get("event_position")
-        if event_count is not None or event_position is not None:
-            if (
-                type(event_count) is not int
-                or type(event_position) is not int
-                or not 1 <= event_position <= event_count <= 32
-            ):
-                return None
-            facts["event_count"] = event_count
-            facts["event_position"] = event_position
-        raw_event_results = raw.get("event_results")
-        if raw_event_results is not None:
-            if (
-                not isinstance(raw_event_results, list)
-                or event_count is None
-                or len(raw_event_results) != event_count
-            ):
-                return None
-            safe_event_results: list[dict[str, Any]] = []
-            allowed_event_keys = {
-                "event_position",
-                "event_status",
-                "report_time",
-                "positive_state",
-                "response_record_count",
-                "response_record_time",
-                "interval_hours",
-                "applicable",
-                "requirement_met",
-            }
-            for expected_position, item in enumerate(raw_event_results, start=1):
-                if (
-                    not isinstance(item, Mapping)
-                    or set(item) - allowed_event_keys
-                    or item.get("event_position") != expected_position
-                    or item.get("event_status")
-                    not in {
-                        "compliant",
-                        "non_compliant",
-                        "not_applicable",
-                        "data_gap",
-                        "evaluation_unknown",
-                    }
-                ):
-                    return None
-                safe_item: dict[str, Any] = {
-                    "event_position": expected_position,
-                    "event_status": item["event_status"],
-                }
-                for key in ("report_time", "response_record_time"):
-                    value = item.get(key)
-                    if value is not None:
-                        if not isinstance(value, str) or not re.fullmatch(
-                            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
-                        ):
-                            return None
-                        safe_item[key] = value
-                event_positive_state = item.get("positive_state")
-                if event_positive_state is not None:
-                    if event_positive_state not in {
-                        "positive",
-                        "negative",
-                        "not_relevant",
-                        "unknown",
-                    }:
-                        return None
-                    if (
-                        event_positive_state == "unknown"
-                        and item["event_status"]
-                        not in {"data_gap", "evaluation_unknown"}
-                    ):
-                        return None
-                    safe_item["positive_state"] = event_positive_state
-                event_response_count = item.get("response_record_count")
-                if event_response_count is not None:
-                    if type(event_response_count) is not int or event_response_count < 0:
-                        return None
-                    safe_item["response_record_count"] = event_response_count
-                event_interval = item.get("interval_hours")
-                if event_interval is not None:
-                    if (
-                        isinstance(event_interval, bool)
-                        or not isinstance(event_interval, (int, float))
-                        or event_interval < 0
-                    ):
-                        return None
-                    safe_item["interval_hours"] = round(float(event_interval), 2)
-                for key in ("applicable", "requirement_met"):
-                    value = item.get(key)
-                    if value is not None:
-                        if not isinstance(value, bool):
-                            return None
-                        safe_item[key] = value
-                safe_event_results.append(safe_item)
-            if (
-                verification_kind == "exam_lab_event_review_incomplete"
-                and not any(
-                    item["event_status"] in {"data_gap", "evaluation_unknown"}
-                    for item in safe_event_results
-                )
-            ):
-                return None
-            facts["event_results"] = safe_event_results
-        return facts
     if rule_id == "LX0609-013":
         trigger_sources = raw.get("pathology_trigger_sources")
         checked_sources = raw.get("checked_target_sources")
@@ -4506,48 +4138,7 @@ def _customer_evidence_from_display_facts(
             if located:
                 return located
 
-    if rule_id in {
-        "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
-    }:
-        allowed_source_types = {
-            "exam_master", "exam_item_report", "labtest_master", "labtest_item_report",
-            "first_course_record", "daily_course_record", "senior_course_record",
-            "rescue_record",
-        }
-        raw_refs = raw.get("source_document_refs")
-        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
-            located: list[dict[str, str]] = []
-            seen: set[tuple[str, str]] = set()
-            for item in raw_refs:
-                if not isinstance(item, Mapping):
-                    return []
-                located_source_type = str(item.get("source_type") or "").strip()
-                located_document_id = valid_document_id(item.get("source_document_id"))
-                key = (located_source_type, located_document_id)
-                if (
-                    located_source_type not in allowed_source_types
-                    or not located_document_id
-                ):
-                    return []
-                if key in seen:
-                    continue
-                seen.add(key)
-                located.append({
-                    "source_type": located_source_type,
-                    "source_document_id": located_document_id,
-                })
-            if located:
-                return located
-
-    if rule_id not in {
-        "LX0609-010",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-014",
-        "LX0609-015",
-        "LX0609-046",
-        "LX0609-045",
-    }:
+    if rule_id not in {"LX0609-046", "LX0609-045"}:
         return []
     raw_ids = raw.get("source_document_ids")
     if not isinstance(raw_ids, list):
@@ -4561,15 +4152,7 @@ def _customer_evidence_from_display_facts(
     )
     # 这些来源行仅在显式存在 document_id 时进入此列表。类型无法可靠区分
     # 时统一按 document 交给病历对照页按 source_ref 精确解析，禁止猜测标题。
-    source_type = (
-        "bloodtrans_record"
-        if rule_id in {"LX0609-045", "LX0609-046"}
-        else "exam_master"
-        if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012"}
-        else "labtest_item_report"
-        if rule_id in {"LX0609-014", "LX0609-015"}
-        else "document"
-    )
+    source_type = "bloodtrans_record"
     return [
         {"source_type": source_type, "source_document_id": document_id}
         for document_id in document_ids
@@ -5013,14 +4596,7 @@ def _copy_native_customer_fields(
         if contract_handled and finalizer_owns_facts:
             contract_failure = True
             continue
-        is_strict_010_contract = (
-            wrapper_id == "LX0609-010"
-            and isinstance(supplied_facts, Mapping)
-            and supplied_facts.get("requirement")
-            == "order_course_report_consistency"
-        )
-        if not is_strict_010_contract:
-            reject_invalid_display_facts()
+        reject_invalid_display_facts()
     if len(supplied_display_facts) == 2:
         if all(item is not None for item in supplied_safe_facts):
             if supplied_safe_facts[0] != supplied_safe_facts[1]:
@@ -5028,13 +4604,7 @@ def _copy_native_customer_fields(
                     contract_failure = True
                 else:
                     reject_invalid_display_facts()
-        elif not (
-            wrapper_id == "LX0609-010"
-            and all(isinstance(item, Mapping) for item in supplied_display_facts)
-            and all(item is None for item in supplied_safe_facts)
-            and dict(supplied_display_facts[0])
-            == dict(supplied_display_facts[1])
-        ):
+        else:
             if finalizer_owns_facts and any(supplied_contracts_handled):
                 contract_failure = True
             else:
@@ -5252,10 +4822,7 @@ def aggregate_luxian_0609_results(
             )
         ):
             raise ValueError("invalid copy customer display facts")
-        is_strict_display_contract = rule_id == "LX0609-025" or (
-            rule_id == "LX0609-010"
-            and facts.get("requirement") == "order_course_report_consistency"
-        )
+        is_strict_display_contract = rule_id == "LX0609-025"
         finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(rule_id)
         if finalizer_owns_facts:
             raw_executor_display_facts_by_rule[rule_id] = facts
@@ -5336,52 +4903,57 @@ def aggregate_luxian_0609_results(
                     result = finalize_luxian_0609_canonical_result(result)
                     customer_results.append(result)
                     continue
-            # 051/067/071 的执行器已经精确绑定实际采用的文书；禁止再按整个来源
-            # 回退，否则命中文书缺 ID 时可能误借同来源另一份记录的 ID。
-            decision_evidence = (
-                []
-                if wrapper_id in {
-                    "LX0609-025",
-                    "LX0609-051",
-                    "LX0609-067",
-                    "LX0609-068",
-                    "LX0609-071",
-                }
-                else _customer_evidence_from_reduced_decision(
-                    decision=reduced,
-                    evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
-                    evidence_materials=(audit_context or {}).get("evidence_materials"),
-                )
-            )
-            copy_pair_evidence = (
-                _customer_evidence_from_copy_pair_facts(
-                    facts=raw_copy_facts_by_rule.get(wrapper_id),
-                    evidence_materials=(audit_context or {}).get(
-                        "evidence_materials"
-                    ),
-                )
-                if wrapper_id == "LX0609-017"
-                else []
-            )
-            course_evidence = _customer_evidence_from_course_display_facts(
-                rule_id=wrapper_id,
-                facts=display_facts_by_rule.get(wrapper_id),
-                evidence_materials=(audit_context or {}).get("evidence_materials"),
-            )
-            customer_evidence = _merge_customer_evidence(
-                customer_evidence_by_rule.get(wrapper_id, []),
-                copy_pair_evidence,
-                course_evidence,
-                decision_evidence,
-            )
             selected_document_evidence = project_selected_document_evidence(
                 decision=reduced,
                 evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
                 evidence_materials=(audit_context or {}).get("evidence_materials"),
             )
             if selected_document_evidence is not None:
-                # 已有明确逐行选择时，不再接受旧事实或来源级推测补入其他文书。
-                customer_evidence = _merge_customer_evidence(selected_document_evidence)
+                # 已有明确逐行选择时，公共投影是唯一证据所有者。不得先让旧的
+                # 来源级反查或 display facts 补入文书，再以合并结果掩盖猜测。
+                customer_evidence = selected_document_evidence
+            else:
+                # 只有尚未迁移的旧合同才允许保留历史反查路径。
+                decision_evidence = (
+                    []
+                    if wrapper_id in {
+                        "LX0609-025",
+                        "LX0609-051",
+                        "LX0609-067",
+                        "LX0609-068",
+                        "LX0609-071",
+                    }
+                    else _customer_evidence_from_reduced_decision(
+                        decision=reduced,
+                        evidence_snapshot=(audit_context or {}).get(
+                            "evidence_snapshot"
+                        ),
+                        evidence_materials=(audit_context or {}).get(
+                            "evidence_materials"
+                        ),
+                    )
+                )
+                copy_pair_evidence = (
+                    _customer_evidence_from_copy_pair_facts(
+                        facts=raw_copy_facts_by_rule.get(wrapper_id),
+                        evidence_materials=(audit_context or {}).get(
+                            "evidence_materials"
+                        ),
+                    )
+                    if wrapper_id == "LX0609-017"
+                    else []
+                )
+                course_evidence = _customer_evidence_from_course_display_facts(
+                    rule_id=wrapper_id,
+                    facts=display_facts_by_rule.get(wrapper_id),
+                    evidence_materials=(audit_context or {}).get("evidence_materials"),
+                )
+                customer_evidence = _merge_customer_evidence(
+                    customer_evidence_by_rule.get(wrapper_id, []),
+                    copy_pair_evidence,
+                    course_evidence,
+                    decision_evidence,
+                )
             customer_evidence = enrich_customer_evidence(
                 customer_evidence,
                 evidence_materials=(audit_context or {}).get("evidence_materials"),

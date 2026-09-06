@@ -13,6 +13,7 @@ from app.services.luxian_0609.customer_evidence_enrichment import (
     enrich_customer_evidence,
 )
 from app.services.luxian_0609.canonical_result_finalizer import (
+    finalize_luxian_0609_executor_customer_display_facts,
     validate_luxian_0609_executor_customer_display_facts,
 )
 from app.services.luxian_0609.deterministic_gate import GateDecision, GateFactRef, GateReport
@@ -851,40 +852,30 @@ def test_010_invalid_strict_contract_is_silently_discarded(entry_path) -> None:
     assert "must-not-pass" not in repr(result)
 
 
-@pytest.mark.parametrize("entry_path", ("explicit", "native_metadata", "native_top_level"))
 @pytest.mark.parametrize("requirement", (None, "reason_before_order"))
-def test_010_non_strict_invalid_facts_fail_closed(entry_path, requirement) -> None:
+def test_010_invalid_executor_facts_are_isolated_as_technical_error(
+    requirement: str | None,
+) -> None:
+    """检查检验族的无效事实在 Finalizer 单规则边界收敛，不由聚合器抛出。"""
     private_marker = "PRIVATE_NON_STRICT_010_FACT"
     invalid = {"raw_private_text": private_marker}
     if requirement is not None:
         invalid["requirement"] = requirement
-    execution_result = {
-        "rule_id": "LX0609-010",
-        "status": "non_compliant",
-        "findings": "规则要求未满足。",
-    }
-    customer_display_facts = ()
-    if entry_path == "explicit":
-        customer_display_facts = (("LX0609-010", invalid),)
-    else:
-        execution_result["metadata"] = {
-            "execution_source": "lx0609_native",
-            "executor_type": "program",
-        }
-        if entry_path == "native_metadata":
-            execution_result["metadata"]["customer_display_facts"] = invalid
-        else:
-            execution_result["customer_display_facts"] = invalid
+    result, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-010",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "findings": "规则要求未满足。",
+        },
+        raw_facts=invalid,
+    )
 
-    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
-        aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-010"}],
-            execution_results=[execution_result],
-            customer_display_facts=customer_display_facts,
-        )
-
-    assert private_marker not in str(exc_info.value)
-    assert getattr(exc_info.value, "rule_id", "") == "LX0609-010"
+    assert handled is True
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "model_invalid_output"
+    assert "customer_display_facts" not in result
+    assert private_marker not in repr(result)
 
 
 def test_native_equal_dual_source_customer_facts_are_accepted() -> None:
@@ -908,7 +899,7 @@ def test_native_equal_dual_source_customer_facts_are_accepted() -> None:
     assert result["customer_display_facts"] == facts
 
 
-def test_native_conflicting_dual_source_safe_facts_fail_closed() -> None:
+def test_native_conflicting_dual_source_safe_facts_are_isolated_as_technical_error() -> None:
     top_level_facts = _010_association_facts()
     metadata_facts = {
         **_010_association_facts(),
@@ -916,47 +907,41 @@ def test_native_conflicting_dual_source_safe_facts_fail_closed() -> None:
         "unmatched_or_ambiguous_order_count": 6,
     }
 
-    with pytest.raises(ValueError, match="^invalid customer display facts$"):
-        aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-010"}],
-            execution_results=[
-                {
-                    "rule_id": "LX0609-010",
-                    "status": "non_compliant",
-                    "metadata": {
-                        "execution_source": "lx0609_native",
-                        "executor_type": "program",
-                        "customer_display_facts": metadata_facts,
-                    },
-                    "customer_display_facts": top_level_facts,
-                }
-            ],
-        )
+    result, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-010",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+        },
+        # 双来源不一致属于执行器合同失败；Finalizer 不选择任一来源。
+        raw_facts=top_level_facts,
+        contract_failure=metadata_facts != top_level_facts,
+    )
+
+    assert handled is True
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "model_invalid_output"
+    assert "customer_display_facts" not in result
 
 
-def test_native_conflicting_dual_source_010_strict_raw_facts_fail_closed() -> None:
+def test_native_conflicting_dual_source_010_private_facts_are_isolated() -> None:
     top_level_facts = {**_010_association_facts(), "private_text": "PRIVATE-A"}
     metadata_facts = {**_010_association_facts(), "private_text": "PRIVATE-B"}
 
-    with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
-        aggregate_luxian_0609_results(
-            wrapper_rules=[{"rule_id": "LX0609-010"}],
-            execution_results=[
-                {
-                    "rule_id": "LX0609-010",
-                    "status": "non_compliant",
-                    "metadata": {
-                        "execution_source": "lx0609_native",
-                        "executor_type": "program",
-                        "customer_display_facts": metadata_facts,
-                    },
-                    "customer_display_facts": top_level_facts,
-                }
-            ],
-        )
+    result, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-010",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+        },
+        raw_facts=top_level_facts,
+        contract_failure=metadata_facts != top_level_facts,
+    )
 
-    assert "PRIVATE-A" not in str(exc_info.value)
-    assert "PRIVATE-B" not in str(exc_info.value)
+    assert handled is True
+    assert result["status"] == "technical_error"
+    assert "PRIVATE-A" not in repr(result)
+    assert "PRIVATE-B" not in repr(result)
 
 
 def test_native_equal_dual_source_010_strict_raw_facts_are_discarded() -> None:
@@ -4170,40 +4155,6 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "missing_last_date": "2026-06-02",
             },
         ),
-        (
-            "LX0609-011",
-            {
-                "verification_kind": "exam_lab_requirement_checked",
-                "subject": "ct_mri",
-                "requirement": "result_recording_within_24h",
-                "event_phase": "report",
-                "checked_sources": ["exam_lab_report", "course_record"],
-                "applicable": True,
-                "requirement_met": True,
-                "positive_state": "not_relevant",
-                "threshold_hours": 24,
-                "response_record_count": 1,
-                "report_time": "2026-06-01 08:00:00",
-                "response_record_time": "2026-06-01 10:00:00",
-                "interval_hours": 2,
-                "raw_report_text": "PRIVATE_REPORT_TEXT",
-            },
-            {
-                "verification_kind": "exam_lab_requirement_checked",
-                "subject": "ct_mri",
-                "requirement": "result_recording_within_24h",
-                "event_phase": "report",
-                "checked_sources": ["exam_lab_report", "course_record"],
-                "applicable": True,
-                "requirement_met": True,
-                "positive_state": "not_relevant",
-                "threshold_hours": 24,
-                "response_record_count": 1,
-                "report_time": "2026-06-01 08:00:00",
-                "response_record_time": "2026-06-01 10:00:00",
-                "interval_hours": 2.0,
-            },
-        ),
     ],
 )
 def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
@@ -4271,7 +4222,6 @@ def test_consultation_native_invalid_facts_are_technical_error():
 _STRICT_CUSTOMER_FACT_RULES = (
     "LX0609-005",
     "LX0609-009",
-    "LX0609-011",
     "LX0609-030",
     "LX0609-040",
     "LX0609-043",
@@ -4315,6 +4265,30 @@ def test_public_aggregation_rejects_invalid_customer_display_facts(
         )
 
     assert private_marker not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("private_key", ("raw_private_text", "raw_report_text"))
+def test_011_invalid_executor_facts_are_isolated_as_technical_error(
+    private_key: str,
+) -> None:
+    private_marker = "PRIVATE_CUSTOMER_FACT_LX0609-011"
+    result, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-011",
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "findings": "规则要求未满足。",
+            "customer_evidence": [{"source_document_id": "PRIVATE-011"}],
+        },
+        raw_facts={private_key: private_marker},
+    )
+
+    assert handled is True
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "model_invalid_output"
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
+    assert private_marker not in repr(result)
 
 
 @pytest.mark.parametrize("rule_id", _STRICT_CUSTOMER_FACT_RULES)
@@ -4684,16 +4658,6 @@ def test_011_multi_event_details_reach_canonical_customer_finding():
                 "requirement_met": False,
             },
         ],
-        "source_document_refs": [
-            {
-                "source_type": "exam_item_report",
-                "source_document_id": "exam-one",
-            },
-            {
-                "source_type": "exam_item_report",
-                "source_document_id": "exam-two",
-            },
-        ],
     }
     result = __import__(
         "app.services.luxian_0609_result_aggregator",
@@ -4702,9 +4666,33 @@ def test_011_multi_event_details_reach_canonical_customer_finding():
         wrapper_rules=[{"rule_id": "LX0609-011", "name": "检查结果记录"}],
         execution_results=[],
         reduced_decisions=(
-            _reduced_decision("LX0609-011", direction=QcDirection.DEFECT),
+            _reduced_decision(
+                "LX0609-011",
+                direction=QcDirection.DEFECT,
+                fact_refs=("c" * 64, "d" * 64),
+            ),
         ),
         customer_display_facts=(("LX0609-011", raw_facts),),
+        audit_context={
+            "evidence_snapshot": SimpleNamespace(
+                facts=(
+                    SimpleNamespace(
+                        fact_id="c" * 64,
+                        source_snapshot_hash="a" * 64,
+                        source_key="exam_item_report",
+                        source_document_id="exam-one",
+                    ),
+                    SimpleNamespace(
+                        fact_id="d" * 64,
+                        source_snapshot_hash="a" * 64,
+                        source_key="exam_item_report",
+                        source_document_id="exam-two",
+                    ),
+                ),
+                observations=(),
+            ),
+            "evidence_materials": SimpleNamespace(rows=lambda _source_key: ()),
+        },
         format_evidence=False,
     )[0]
 
@@ -4714,10 +4702,13 @@ def test_011_multi_event_details_reach_canonical_customer_finding():
         "1）报告时间 2026-04-01 12:00:00：资料待核实，暂无法确认报告结果是否已记录；"
         "2）报告时间 2026-04-04 12:00:00：未找到报告后24小时内的报告结果记录。"
     )
-    assert result["customer_evidence"] == [
-        {"source_type": "exam_item_report", "source_document_id": "exam-one"},
-        {"source_type": "exam_item_report", "source_document_id": "exam-two"},
-    ]
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in result["customer_evidence"]
+    } == {
+        ("exam_item_report", "exam-one"),
+        ("exam_item_report", "exam-two"),
+    }
 
 
 def test_012_unknown_positive_state_is_limited_to_incomplete_review() -> None:
@@ -4771,49 +4762,6 @@ def test_012_unknown_event_positive_state_is_limited_to_data_gap(
 @pytest.mark.parametrize(
     ("rule_id", "raw_facts", "expected_evidence"),
     [
-        (
-            "LX0609-010",
-            {
-                "failure_kind": "exam_lab_requirement_not_documented",
-                "subject": "ct_mri",
-                "requirement": "reason_before_order",
-                "event_phase": "order",
-                "checked_sources": ["exam_lab_order", "course_record"],
-                "source_document_ids": ["private-exam-document-id"],
-            },
-            [{"source_type": "exam_master", "source_document_id": "private-exam-document-id"}],
-        ),
-        (
-            "LX0609-012",
-            {
-                "failure_kind": "exam_lab_requirement_not_documented",
-                "subject": "ct_mri",
-                "requirement": "positive_result_analysis_within_24h",
-                "event_phase": "report",
-                "checked_sources": ["exam_lab_report", "course_record"],
-                "reviewed_record_scope": "首次病程记录及后续病程记录",
-                "source_document_refs": [
-                    {
-                        "source_type": "exam_master",
-                        "source_document_id": "private-ct-report-document-id",
-                    },
-                    {
-                        "source_type": "daily_course_record",
-                        "source_document_id": "private-course-document-id",
-                    },
-                ],
-            },
-            [
-                {
-                    "source_type": "exam_master",
-                    "source_document_id": "private-ct-report-document-id",
-                },
-                {
-                    "source_type": "daily_course_record",
-                    "source_document_id": "private-course-document-id",
-                },
-            ],
-        ),
         (
             "LX0609-034",
             {
@@ -4874,6 +4822,95 @@ def test_native_display_facts_create_only_whitelisted_internal_evidence_refs(
     )[0]
 
     assert result["customer_evidence"] == expected_evidence
+    assert "source_document_id" not in result["customer_display_facts"]
+    assert "source_document_ids" not in result["customer_display_facts"]
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "raw_facts", "snapshot_facts", "expected_evidence"),
+    [
+        (
+            "LX0609-010",
+            {
+                "failure_kind": "exam_lab_requirement_not_documented",
+                "subject": "ct_mri",
+                "requirement": "reason_before_order",
+                "event_phase": "order",
+                "checked_sources": ["exam_lab_order", "course_record"],
+            },
+            (
+                ("exam-order-fact", "exam_master", "private-exam-document-id"),
+            ),
+            {("exam_master", "private-exam-document-id")},
+        ),
+        (
+            "LX0609-012",
+            {
+                "failure_kind": "exam_lab_requirement_not_documented",
+                "subject": "ct_mri",
+                "requirement": "positive_result_analysis_within_24h",
+                "event_phase": "report",
+                "checked_sources": ["exam_lab_report", "course_record"],
+                "reviewed_record_scope": "首次病程记录及后续病程记录",
+            },
+            (
+                ("exam-report-fact", "exam_master", "private-ct-report-document-id"),
+                ("course-record-fact", "daily_course_record", "private-course-document-id"),
+            ),
+            {
+                ("exam_master", "private-ct-report-document-id"),
+                ("daily_course_record", "private-course-document-id"),
+            },
+        ),
+    ],
+)
+def test_exam_lab_evidence_comes_only_from_reduced_fact_refs(
+    rule_id,
+    raw_facts,
+    snapshot_facts,
+    expected_evidence,
+) -> None:
+    fact_refs = tuple(
+        hashlib.sha256(fact_name.encode("utf-8")).hexdigest()
+        for fact_name, _source_type, _document_id in snapshot_facts
+    )
+    evidence_snapshot = SimpleNamespace(
+        facts=tuple(
+            SimpleNamespace(
+                fact_id=fact_ref,
+                source_snapshot_hash="a" * 64,
+                source_key=source_type,
+                source_document_id=document_id,
+            )
+            for fact_ref, (_fact_name, source_type, document_id) in zip(
+                fact_refs, snapshot_facts
+            )
+        ),
+        observations=(),
+    )
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision(
+                rule_id,
+                direction=QcDirection.DEFECT,
+                fact_refs=fact_refs,
+            ),
+        ),
+        customer_display_facts=((rule_id, raw_facts),),
+        audit_context={
+            "evidence_snapshot": evidence_snapshot,
+            "evidence_materials": SimpleNamespace(rows=lambda _source_key: ()),
+        },
+        format_evidence=False,
+    )[0]
+
+    assert result["customer_display_facts"] == raw_facts
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in result["customer_evidence"]
+    } == expected_evidence
     assert "source_document_id" not in result["customer_display_facts"]
     assert "source_document_ids" not in result["customer_display_facts"]
 
@@ -4951,29 +4988,22 @@ def test_native_018_invalid_customer_display_facts_fail_closed():
 
 
 def test_exam_lab_native_result_preserves_only_safe_explanation_facts():
-    aggregate = __import__(
-        "app.services.luxian_0609_result_aggregator",
-        fromlist=["aggregate_luxian_0609_results"],
-    ).aggregate_luxian_0609_results
-    result = aggregate(
-        wrapper_rules=[{"rule_id": "LX0609-011", "name": "检查结果记录"}],
-        execution_results=[{
+    result, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
             "rule_id": "LX0609-011",
             "status": "non_compliant",
-            "metadata": {
-                "execution_source": "lx0609_native",
-                "customer_display_facts": {
-                    "failure_kind": "exam_lab_requirement_not_documented",
-                    "subject": "ct_mri",
-                    "requirement": "result_recording_within_24h",
-                    "event_phase": "report",
-                    "checked_sources": ["exam_lab_report", "course_record"],
-                    "private_text": "PRIVATE_TEXT",
-                },
-            },
-        }],
-    )[0]
+            "reason_code": "requirement_violated",
+        },
+        raw_facts={
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "subject": "ct_mri",
+            "requirement": "result_recording_within_24h",
+            "event_phase": "report",
+            "checked_sources": ["exam_lab_report", "course_record"],
+        },
+    )
 
+    assert handled is True
     assert result["customer_display_facts"] == {
         "failure_kind": "exam_lab_requirement_not_documented",
         "subject": "ct_mri",
@@ -4981,7 +5011,7 @@ def test_exam_lab_native_result_preserves_only_safe_explanation_facts():
         "event_phase": "report",
         "checked_sources": ["exam_lab_report", "course_record"],
     }
-    assert "PRIVATE_TEXT" not in repr(result)
+    assert "private_text" not in repr(result)
 
 
 @pytest.mark.parametrize(
