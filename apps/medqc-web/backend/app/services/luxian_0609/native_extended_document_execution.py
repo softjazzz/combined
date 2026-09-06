@@ -1828,6 +1828,20 @@ async def execute_luxian_0609_native_extended_document_rules(
     } if set(selected).intersection(CRITICAL_VALUE_RULE_IDS) else {}
 
     for rule_id in selected:
+        if rule_id == "LX0609-059":
+            # 059 仍处于 pending_definition。正式编排不会派发它；若低层
+            # 兼容入口收到该规则，只能报告执行合同错误，不能交付临床缺陷。
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(),
+                    final_state="technical_error",
+                    reason_code="decision_contract_violation",
+                )
+            )
+            continue
+
         if rule_id == "LX0609-050":
             source_error = (
                 (registration_error and admission_error)
