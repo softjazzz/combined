@@ -82,6 +82,7 @@ _TIME_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:?\d{2})?)?"
 )
 _CUSTOMER_SOURCE_REF_PATTERN = re.compile(r"src_[0-9a-f]{24}")
+_SAFE_SOURCE_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 def _text(value: Any) -> str:
@@ -151,6 +152,118 @@ def project_selected_grouped_document_refs(
         seen.add(identity)
         projected.append({"source_type": source_type, "source_ref": source_ref})
     return projected
+
+
+def _valid_legacy_source_level_document_id(value: Any) -> str:
+    """仅允许内部已验证的文书 ID 进入后续安全签名环节。"""
+
+    candidate = str(value or "").strip()
+    return (
+        candidate
+        if candidate
+        and len(candidate) <= 256
+        and "\n" not in candidate
+        and "\r" not in candidate
+        else ""
+    )
+
+
+def project_legacy_source_level_evidence(
+    *,
+    decision: ReducedRuleDecision,
+    evidence_snapshot: Any,
+    evidence_materials: Any,
+) -> list[dict[str, str]]:
+    """投影尚未迁移旧合同的来源级证据；不新增任何 fallback。
+
+    只接受 decision 已引用的 FactV2 或来源快照。事实未携带单行 ID 时，仅在
+    同一冻结材料中该来源唯一对应一份文书时补回；多行、非法来源或非法 ID 均保持
+    无证据，不按标题、正文或 display facts 猜测文书。
+    """
+
+    facts = getattr(evidence_snapshot, "facts", ())
+    observations = getattr(evidence_snapshot, "observations", ())
+    if not decision.fact_refs:
+        return []
+    referenced = set(decision.fact_refs)
+    rows: list[dict[str, str]] = []
+    seen_document_ids: set[str] = set()
+    for fact in facts if isinstance(facts, tuple) else ():
+        fact_id = str(getattr(fact, "fact_id", "") or "")
+        source_snapshot_hash = str(
+            getattr(fact, "source_snapshot_hash", "") or ""
+        ).removeprefix("sha256:")
+        if fact_id not in referenced and source_snapshot_hash not in referenced:
+            continue
+        document_id = _valid_legacy_source_level_document_id(
+            getattr(fact, "source_document_id", "")
+        )
+        source_type = str(getattr(fact, "source_key", "") or "").strip().lower()
+        # 部分确定性事实只绑定来源快照，不携带单行文书 ID。仅当本次冻结
+        # 材料恰好一行且该行带有效 ID 时，才可安全补回当前 Bundle 的真实 ID；
+        # 多行（即使仅一个非空 ID 或复用同一 ID）时保持无证据，避免猜测行。
+        if (
+            not document_id
+            and evidence_materials is not None
+            and _SAFE_SOURCE_TYPE.fullmatch(source_type)
+        ):
+            try:
+                material_rows = tuple(evidence_materials.rows(source_type))
+            except Exception:
+                material_rows = ()
+            if len(material_rows) == 1 and isinstance(material_rows[0], Mapping):
+                document_id = _valid_legacy_source_level_document_id(
+                    material_rows[0].get("document_id") or material_rows[0].get("id")
+                )
+        if (
+            not document_id
+            or document_id in seen_document_ids
+            or not _SAFE_SOURCE_TYPE.fullmatch(source_type)
+        ):
+            continue
+        seen_document_ids.add(document_id)
+        rows.append(
+            {
+                "source_type": source_type,
+                "source_document_id": document_id,
+            }
+        )
+        if len(rows) >= 8:
+            return rows
+
+    # 一部分纯 Python 决策直接绑定来源快照而非 FactV2。仅当该来源在同一
+    # Evidence Session 内唯一对应一份原始文书，才可补出引用。
+    source_keys: set[str] = set()
+    if isinstance(observations, tuple):
+        for observation in observations:
+            snapshot_ref = str(
+                getattr(observation, "snapshot_ref", "") or ""
+            ).removeprefix("sha256:")
+            if snapshot_ref in referenced:
+                source_keys.add(
+                    str(getattr(observation, "source_key", "") or "").strip().lower()
+                )
+    for source_key in sorted(source_keys):
+        if not _SAFE_SOURCE_TYPE.fullmatch(source_key):
+            continue
+        try:
+            material_rows = tuple(evidence_materials.rows(source_key))
+        except Exception:
+            continue
+        if len(material_rows) != 1 or not isinstance(material_rows[0], Mapping):
+            continue
+        document_id = _valid_legacy_source_level_document_id(
+            material_rows[0].get("document_id") or material_rows[0].get("id")
+        )
+        if not document_id or document_id in seen_document_ids:
+            continue
+        seen_document_ids.add(document_id)
+        rows.append(
+            {"source_type": source_key, "source_document_id": document_id}
+        )
+        if len(rows) >= 8:
+            break
+    return rows
 
 
 def project_selected_document_evidence(

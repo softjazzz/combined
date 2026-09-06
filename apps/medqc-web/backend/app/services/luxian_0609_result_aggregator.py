@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING, Any, Mapping
 
 from .luxian_0609_evidence_formatter import format_luxian_0609_evidence
@@ -20,6 +19,7 @@ from .luxian_0609.canonical_result_finalizer import (
 )
 from .luxian_0609.customer_evidence_enrichment import (
     enrich_customer_evidence,
+    project_legacy_source_level_evidence,
     project_selected_document_evidence,
 )
 from .luxian_0609.decision_reducer import ReducedRuleDecision
@@ -67,11 +67,6 @@ _SENSITIVE_KEYS = {
     "record_content",
     "internal_data",
 }
-_SAFE_SOURCE_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
-# 旧兼容投影仍统一读取该表。已迁出的规则族不得在此增加规则专属来源选择。
-_EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {}
-
-
 def _norm_id(value: Any) -> str:
     return str(value or "").strip().upper()
 
@@ -356,127 +351,6 @@ def _controlled_customer_findings(
     from .luxian_0609.customer_renderer import customer_finding_from_controlled_facts
 
     return customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
-
-
-def _valid_customer_evidence_document_id(value: Any) -> str:
-    """仅允许内部已验证的文书 ID 进入后续安全签名环节。"""
-
-    candidate = str(value or "").strip()
-    return (
-        candidate
-        if candidate
-        and len(candidate) <= 256
-        and "\n" not in candidate
-        and "\r" not in candidate
-        else ""
-    )
-
-
-
-def _customer_evidence_from_reduced_decision(
-    *,
-    decision: ReducedRuleDecision,
-    evidence_snapshot: Any,
-    evidence_materials: Any,
-) -> list[dict[str, str]]:
-    """由 RuleDecision 的事实引用反查已存在的原始文书。
-
-    所有原生规则复用这一条路径：只接受 decision 已引用的 FactV2；若事实未携带
-    单行 ID，仅在同一冻结材料中该来源唯一对应一份文书时补回。这里不猜标题、
-    不以正文相似度选文书；真正不可逆的 ``src_…`` 引用仍由客户安全投影统一生成。
-    """
-
-    facts = getattr(evidence_snapshot, "facts", ())
-    observations = getattr(evidence_snapshot, "observations", ())
-    if not decision.fact_refs:
-        return []
-    referenced = set(decision.fact_refs)
-    exact_source_keys = _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE.get(
-        str(decision.rule_id or "").strip().upper()
-    )
-    rows: list[dict[str, str]] = []
-    seen_document_ids: set[str] = set()
-    for fact in facts if isinstance(facts, tuple) else ():
-        fact_id = str(getattr(fact, "fact_id", "") or "")
-        source_snapshot_hash = str(
-            getattr(fact, "source_snapshot_hash", "") or ""
-        ).removeprefix("sha256:")
-        if fact_id not in referenced and source_snapshot_hash not in referenced:
-            continue
-        document_id = _valid_customer_evidence_document_id(
-            getattr(fact, "source_document_id", "")
-        )
-        source_type = str(getattr(fact, "source_key", "") or "").strip().lower()
-        # 部分确定性事实只绑定来源快照，不携带单行文书 ID。仅当本次冻结
-        # 材料恰好一行且该行带有效 ID 时，才可安全补回当前 Bundle 的真实 ID；
-        # 多行（即使仅一个非空 ID 或复用同一 ID）时保持无证据，避免猜测行。
-        if (
-            not document_id
-            and evidence_materials is not None
-            and _SAFE_SOURCE_TYPE.fullmatch(source_type)
-        ):
-            try:
-                material_rows = tuple(evidence_materials.rows(source_type))
-            except Exception:
-                material_rows = ()
-            if len(material_rows) == 1 and isinstance(material_rows[0], Mapping):
-                document_id = _valid_customer_evidence_document_id(
-                    material_rows[0].get("document_id") or material_rows[0].get("id")
-                )
-        if (
-            not document_id
-            or document_id in seen_document_ids
-            or not _SAFE_SOURCE_TYPE.fullmatch(source_type)
-            or (exact_source_keys is not None and source_type not in exact_source_keys)
-        ):
-            continue
-        seen_document_ids.add(document_id)
-        rows.append(
-            {
-                "source_type": source_type,
-                "source_document_id": document_id,
-            }
-        )
-        if len(rows) >= 8:
-            return rows
-
-    # 一部分纯 Python 决策直接绑定来源快照而非 FactV2。例如 018 同时依赖
-    # 入院记录和初步诊断；这时仅当该来源在同一 Evidence Session 内唯一对应一份
-    # 原始文书，才可补出引用。多文书来源保持无引用，禁止猜测哪一份支持结论。
-    source_keys: set[str] = set()
-    if isinstance(observations, tuple):
-        for observation in observations:
-            snapshot_ref = str(
-                getattr(observation, "snapshot_ref", "") or ""
-            ).removeprefix("sha256:")
-            if snapshot_ref in referenced:
-                source_keys.add(
-                    str(getattr(observation, "source_key", "") or "").strip().lower()
-                )
-    for source_key in sorted(source_keys):
-        if (
-            not _SAFE_SOURCE_TYPE.fullmatch(source_key)
-            or (exact_source_keys is not None and source_key not in exact_source_keys)
-        ):
-            continue
-        try:
-            material_rows = tuple(evidence_materials.rows(source_key))
-        except Exception:
-            continue
-        if len(material_rows) != 1 or not isinstance(material_rows[0], Mapping):
-            continue
-        document_id = _valid_customer_evidence_document_id(
-            material_rows[0].get("document_id") or material_rows[0].get("id")
-        )
-        if not document_id or document_id in seen_document_ids:
-            continue
-        seen_document_ids.add(document_id)
-        rows.append(
-            {"source_type": source_key, "source_document_id": document_id}
-        )
-        if len(rows) >= 8:
-            break
-    return rows
 
 
 def _copy_native_customer_fields(
@@ -793,7 +667,7 @@ def aggregate_luxian_0609_results(
                 customer_evidence = []
             else:
                 # 只有尚未迁移的旧合同才允许保留历史反查路径。
-                decision_evidence = _customer_evidence_from_reduced_decision(
+                decision_evidence = project_legacy_source_level_evidence(
                     decision=reduced,
                     evidence_snapshot=(audit_context or {}).get(
                         "evidence_snapshot"

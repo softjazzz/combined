@@ -11,6 +11,7 @@ import pytest
 from app.services.luxian_0609 import native_consultation_episode_execution as consultation_episode
 from app.services.luxian_0609.customer_evidence_enrichment import (
     enrich_customer_evidence,
+    project_legacy_source_level_evidence,
 )
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_executor_customer_display_facts,
@@ -3719,6 +3720,151 @@ def test_reduced_decision_does_not_guess_when_source_has_multiple_documents():
     )[0]
 
     assert "customer_evidence" not in result
+
+
+def test_legacy_source_level_evidence_freezes_generic_fallback_shapes() -> None:
+    """旧合同只保留事实/快照已绑定且唯一材料可定位的历史行为。"""
+
+    def project(
+        *,
+        fact_refs: tuple[str, ...],
+        facts: tuple[object, ...] = (),
+        observations: tuple[object, ...] = (),
+        source_rows: dict[str, tuple[object, ...]] | None = None,
+    ) -> list[dict[str, str]]:
+        rows = source_rows or {}
+
+        def reference(value: str) -> str:
+            return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+        return project_legacy_source_level_evidence(
+            decision=_reduced_decision(
+                "LX0609-018", fact_refs=tuple(reference(item) for item in fact_refs)
+            ),
+            evidence_snapshot=SimpleNamespace(
+                facts=tuple(
+                    SimpleNamespace(
+                        fact_id=reference(str(fact.fact_id)),
+                        source_snapshot_hash=reference(
+                            str(fact.source_snapshot_hash)
+                        ),
+                        source_key=fact.source_key,
+                        source_document_id=fact.source_document_id,
+                    )
+                    for fact in facts
+                ),
+                observations=tuple(
+                    SimpleNamespace(
+                        source_key=observation.source_key,
+                        snapshot_ref="sha256:"
+                        + reference(
+                            str(observation.snapshot_ref).removeprefix("sha256:")
+                        ),
+                    )
+                    for observation in observations
+                ),
+            ),
+            evidence_materials=SimpleNamespace(
+                rows=lambda source_key: rows.get(source_key, ())
+            ),
+        )
+
+    assert project(
+        fact_refs=("fact-with-document",),
+        facts=(
+            SimpleNamespace(
+                fact_id="fact-with-document",
+                source_snapshot_hash="snapshot-unused",
+                source_key="admission_record",
+                source_document_id="fact-document-id",
+            ),
+        ),
+    ) == [{"source_type": "admission_record", "source_document_id": "fact-document-id"}]
+
+    unique_fact = SimpleNamespace(
+        fact_id="fact-needs-material",
+        source_snapshot_hash="snapshot-unused",
+        source_key="admission_record",
+        source_document_id="",
+    )
+    assert project(
+        fact_refs=("fact-needs-material",),
+        facts=(unique_fact,),
+        source_rows={"admission_record": ({"document_id": "unique-document-id"},)},
+    ) == [{"source_type": "admission_record", "source_document_id": "unique-document-id"}]
+    assert project(
+        fact_refs=("fact-needs-material",),
+        facts=(unique_fact,),
+        source_rows={
+            "admission_record": (
+                {"document_id": "first-document-id"},
+                {"document_id": "second-document-id"},
+            )
+        },
+    ) == []
+
+    assert project(
+        fact_refs=("observed-source",),
+        observations=(
+            SimpleNamespace(
+                source_key="admission_record",
+                snapshot_ref="sha256:observed-source",
+            ),
+        ),
+        source_rows={"admission_record": ({"id": "observed-document-id"},)},
+    ) == [{"source_type": "admission_record", "source_document_id": "observed-document-id"}]
+
+    assert project(
+        fact_refs=("invalid-document", "invalid-source"),
+        facts=(
+            SimpleNamespace(
+                fact_id="invalid-document",
+                source_snapshot_hash="snapshot-unused",
+                source_key="admission_record",
+                source_document_id="invalid\ndocument-id",
+            ),
+            SimpleNamespace(
+                fact_id="invalid-source",
+                source_snapshot_hash="snapshot-unused",
+                source_key="Admission Record!",
+                source_document_id="otherwise-valid-document-id",
+            ),
+        ),
+    ) == []
+
+    capped_facts = tuple(
+        SimpleNamespace(
+            fact_id=f"capped-fact-{index}",
+            source_snapshot_hash="snapshot-unused",
+            source_key="daily_course_record",
+            source_document_id=f"capped-document-{index}",
+        )
+        for index in range(1, 10)
+    )
+    assert project(
+        fact_refs=tuple(f"capped-fact-{index}" for index in range(1, 10)),
+        facts=capped_facts,
+    ) == [
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": f"capped-document-{index}",
+        }
+        for index in range(1, 9)
+    ]
+
+
+def test_aggregator_delegates_legacy_source_level_evidence_projection() -> None:
+    source = inspect.getsource(
+        __import__(
+            "app.services.luxian_0609_result_aggregator",
+            fromlist=["aggregate_luxian_0609_results"],
+        )
+    )
+
+    assert "project_legacy_source_level_evidence" in source
+    assert "evidence_materials.rows" not in source
+    assert "source_document_id" not in source
+    assert "_customer_evidence_from_reduced_decision" not in source
 
 
 def test_001_customer_evidence_excludes_discharge_anchor_source():
