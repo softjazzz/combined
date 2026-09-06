@@ -335,6 +335,41 @@ async def test_typed_013_019_missing_semantic_client_is_technical_error_without_
 
 
 @pytest.mark.asyncio
+async def test_direct_013_019_missing_semantic_client_is_llm_technical_error_without_request():
+    """兼容直出结果也必须把模型能力缺失标记为 llm 执行失败。"""
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-013", "LX0609-019"),
+        wrapper_rules=[_wrapper("LX0609-013"), _wrapper("LX0609-019")],
+        evidence_payload=_payload(
+            surgery_record=[{"content": "术后一般情况平稳。"}],
+            daily_course_record=[{"content": "继续观察病情变化。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=None,
+    )
+
+    assert result.decisions == ()
+    assert result.llm_call_count == 0
+    assert result.prompt_tokens == result.completion_tokens == result.total_tokens == 0
+    assert [item["status"] for item in result.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "tumor_llm_failure",
+        "tumor_llm_failure",
+    ]
+    assert [item["metadata"]["executor_type"] for item in result.results] == [
+        "llm",
+        "llm",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_typed_013_complete_empty_target_sources_are_non_compliant_without_model():
     session = _material_session(empty_targets=True)
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(

@@ -191,6 +191,7 @@ async def _execute_and_aggregate(
     failing_sources: frozenset[str] = frozenset(),
     llm_client: Any | None = None,
     without_llm: bool = False,
+    decision_trace_sink: Any | None = None,
 ) -> tuple[object, tuple[object, ...], list[dict[str, Any]], object, Any]:
     def read(**kwargs: object) -> SnapshotSourceRows:
         source_key = str(kwargs["source_key"])
@@ -246,6 +247,7 @@ async def _execute_and_aggregate(
             "evidence_snapshot": session.snapshot,
             "evidence_materials": session.materials,
         },
+        decision_trace_sink=decision_trace_sink,
     )
     return execution, reduced, customer_results, session, client
 
@@ -408,10 +410,12 @@ async def test_tumor_pathology_semantic_failures_are_technical_errors_through_bi
 async def test_tumor_pathology_missing_semantic_client_is_technical_error_through_binding() -> None:
     """模型执行能力缺失也必须沿正式主链投影为技术失败。"""
 
+    trace_events: list[dict[str, Any]] = []
     execution, reduced, customer_results, _session, returned_client = await _execute_and_aggregate(
         rows_by_source=_semantic_fallback_rows(),
         rule_ids=("LX0609-013", "LX0609-019"),
         without_llm=True,
+        decision_trace_sink=trace_events.append,
     )
 
     assert returned_client is None
@@ -429,6 +433,68 @@ async def test_tumor_pathology_missing_semantic_client_is_technical_error_throug
     assert [item["status"] for item in customer_results] == [
         "technical_error",
         "technical_error",
+    ]
+    assert [item.evaluator_version for item in execution.decisions] == [
+        "tumor-pathology-ruledecision-shadow-v1",
+        "tumor-pathology-ruledecision-shadow-v1",
+    ]
+    assert [event["executor_key"] for event in trace_events] == [
+        "tumor_pathology",
+        "tumor_pathology",
+    ]
+    assert [event["evaluator_version"] for event in trace_events] == [
+        "tumor-pathology-ruledecision-shadow-v1",
+        "tumor-pathology-ruledecision-shadow-v1",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tumor_pathology_direct_missing_semantic_client_freezes_llm_aggregation() -> None:
+    """兼容直出路径保留 llm 执行审计，不影响 typed 主链合同。"""
+
+    execution = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-013", "LX0609-019"),
+        wrapper_rules=[_wrapper("LX0609-013"), _wrapper("LX0609-019")],
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "pathology_exam_master": [{"specimen_name": "切除标本"}],
+                    "pathology_exam_report": [
+                        {
+                            "diagnosis": "结肠腺癌",
+                            "report_datetime": "2026-09-06 10:00:00",
+                        }
+                    ],
+                    "surgery_record": [{"content": "术后一般情况平稳。"}],
+                    "daily_course_record": [{"content": "继续观察病情变化。"}],
+                }
+            }
+        },
+        institute_id="tumor-freeze-institute",
+        patient_id="tumor-freeze-patient",
+        visit_id="tumor-freeze-visit",
+        source_schema=None,
+        llm_client=None,
+    )
+    customer_results = aggregate_luxian_0609_results(
+        wrapper_rules=[_wrapper("LX0609-013"), _wrapper("LX0609-019")],
+        execution_results=list(execution.results),
+        format_evidence=False,
+    )
+
+    assert execution.decisions == ()
+    assert execution.llm_call_count == 0
+    assert [item["metadata"]["executor_type"] for item in execution.results] == [
+        "llm",
+        "llm",
+    ]
+    assert [item["metadata"]["executor_type"] for item in customer_results] == [
+        "llm",
+        "llm",
+    ]
+    assert [item["metadata"]["aggregation_source"] for item in customer_results] == [
+        "native_llm",
+        "native_llm",
     ]
 
 

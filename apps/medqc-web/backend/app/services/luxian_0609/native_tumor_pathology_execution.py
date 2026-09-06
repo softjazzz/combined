@@ -179,6 +179,10 @@ _CONTROLLED_MESSAGES = {
         "当前肿瘤病理资料不足，暂不能形成可靠结论。",
         "请补齐相关资料后重新质控。",
     ),
+    "technical_error": (
+        "本项自动质控执行异常，未形成临床结论。",
+        "请联系系统管理员核查模型执行能力后重新质控。",
+    ),
 }
 
 
@@ -1783,7 +1787,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 rule_id,
                 "technical_error",
                 "tumor_llm_failure",
-                executor_type="program",
+                # 未发起请求不等于程序规则完成判定：此处失败的是受控语义执行器
+                # 的可用性，审计类型必须与传输/输出失败保持一致。
+                executor_type="llm",
             )
             continue
         llm_call_count += 1
