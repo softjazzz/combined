@@ -873,6 +873,52 @@ def test_051_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
     )
 
 
+def test_052_freezes_evaluation_horizon_in_the_same_evidence_session() -> None:
+    """052 的 6 小时窗口只读取任务冻结终点，053 不应触发该派生来源。"""
+
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows_by_source = {
+            "inpat_registration": [{"admission_datetime": "2026-07-30 08:00:00"}],
+            "labtest_item_report": [{
+                "item_name": "血钾",
+                "result_flag": "PH",
+                "report_time": "2026-08-05 14:00:00",
+            }],
+            "labtest_master": [],
+            "crisis_value_record": [],
+        }
+        return _rows(source_key, rows_by_source.get(source_key, []))
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-052",),
+        institute_id="I-052",
+        patient_id="P-052",
+        visit_id="V-052",
+        source_schema=None,
+        created_at="2026-08-05T19:00:00",
+        evaluation_as_of_date="2026-08-05",
+        evaluation_horizon_policy="frozen_task_date",
+        row_reader=reader,
+    )
+
+    assert "inpat_registration" in calls
+    assert "evaluation_context.horizon" not in calls
+    assert session.materials.rows("evaluation_context.horizon") == (
+        {
+            "horizon_date": "2026-08-05",
+            "basis": "evaluation_as_of",
+            "row_ref": session.materials.rows("evaluation_context.horizon")[0]["row_ref"],
+        },
+    )
+    assert any(
+        fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts
+    )
+
+
 def test_non_007_does_not_query_unstable_order_fact() -> None:
     calls: list[str] = []
 
@@ -1778,7 +1824,7 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
     entry = load_luxian_0609_source_registry()["bloodtrans_record"]
 
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v28"
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v29"
     assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
     assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
 

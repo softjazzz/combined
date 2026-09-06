@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v28"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v29"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -518,7 +518,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
         "diffcase_discussion_record",
     ),
+    # 052 需以任务冻结的评价终点判断危急值 6 小时观察窗是否已成熟；053
+    # 仅核对有无处置，保持既有来源与口径。
     "LX0609-052": (
+        "evaluation_context.horizon",
         "labtest_master",
         "labtest_item_report",
         "crisis_value_record",

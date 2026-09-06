@@ -454,7 +454,13 @@ def safe_luxian_0609_customer_display_facts(
         if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
             return None
         allowed_outcomes = (
-            {"timely", "overdue", "unhandled", "association_failed"}
+            {
+                "timely",
+                "overdue",
+                "unhandled",
+                "window_not_mature",
+                "association_failed",
+            }
             if timing_rule
             else {"handled", "unhandled", "association_failed"}
         )
@@ -687,6 +693,7 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-052": {
             "critical_value_timeliness_check",
             "critical_value_result_detail_missing",
+            "critical_value_evaluation_horizon_unavailable",
         },
         "LX0609-053": {
             "critical_value_disposition_presence_check",
@@ -765,7 +772,10 @@ def safe_luxian_0609_customer_display_facts(
         "critical_value_timeliness_check": {
             "critical_item_names", "critical_flags", "report_times", "disposition_times",
             "threshold_hours", "actual_interval_hours", "event_results",
+            "evaluation_window_mature", "deadline_times", "evaluation_time",
+            "evaluation_date",
         },
+        "critical_value_evaluation_horizon_unavailable": {"issue"},
         "critical_value_disposition_presence_check": {
             "critical_item_names", "critical_flags", "report_times", "disposition_times",
             "event_results",
@@ -1025,6 +1035,16 @@ def safe_luxian_0609_customer_display_facts(
                 "death_time": raw["death_time"],
                 "issue": raw["issue"],
             }
+        if kind == "critical_value_evaluation_horizon_unavailable":
+            if (
+                set(raw) != {"verification_kind", "issue"}
+                or raw.get("issue") not in {
+                    "authoritative_time_missing",
+                    "authoritative_time_conflict",
+                }
+            ):
+                return None
+            return {"verification_kind": kind, "issue": raw["issue"]}
         if kind == "postoperative_three_day_window_unavailable":
             issue = raw.get("issue")
             if set(raw) != {"verification_kind", "issue"} or issue not in {
@@ -1293,6 +1313,95 @@ def safe_luxian_0609_customer_display_facts(
             ):
                 return None
             safe["conflicting_discharge_times"] = list(conflict_times)
+        if kind == "critical_value_timeliness_check":
+            has_maturity = "evaluation_window_mature" in raw
+            expected_base_keys = {
+                "verification_kind",
+                "critical_item_names",
+                "critical_flags",
+                "report_times",
+                "disposition_times",
+                "threshold_hours",
+                "actual_interval_hours",
+                "event_results",
+            }
+            if not has_maturity:
+                if set(raw) != expected_base_keys:
+                    return None
+                for optional_key in (
+                    "evaluation_window_mature",
+                    "deadline_times",
+                    "evaluation_time",
+                    "evaluation_date",
+                ):
+                    safe.pop(optional_key, None)
+            else:
+                evaluation_time = raw.get("evaluation_time")
+                evaluation_date = raw.get("evaluation_date")
+                deadlines = raw.get("deadline_times")
+                expected_keys = {
+                    *expected_base_keys,
+                    "evaluation_window_mature",
+                    "deadline_times",
+                    *(
+                        ("evaluation_time",)
+                        if evaluation_time is not None
+                        else ("evaluation_date",)
+                    ),
+                }
+                if (
+                    set(raw) != expected_keys
+                    or raw.get("evaluation_window_mature") is not False
+                    or not isinstance(deadlines, (list, tuple))
+                    or len(deadlines) != len(safe.get("event_results") or ())
+                    or (evaluation_time is None) == (evaluation_date is None)
+                    or any(
+                        not isinstance(value, str) or not value
+                        for value in deadlines
+                    )
+                    or any(
+                        event.get("outcome") != "window_not_mature"
+                        for event in safe.get("event_results") or ()
+                    )
+                ):
+                    return None
+                try:
+                    parsed_deadlines = tuple(
+                        datetime.fromisoformat(value.replace("Z", "+00:00"))
+                        for value in deadlines
+                    )
+                    report_times = tuple(
+                        datetime.fromisoformat(
+                            str(event["report_time"]).replace("Z", "+00:00")
+                        )
+                        for event in safe["event_results"]
+                    )
+                    if evaluation_time is not None:
+                        parsed_evaluation_time = datetime.fromisoformat(
+                            str(evaluation_time).replace("Z", "+00:00")
+                        )
+                        if any(
+                            deadline - report != timedelta(hours=6)
+                            or parsed_evaluation_time >= deadline
+                            for report, deadline in zip(report_times, parsed_deadlines)
+                        ):
+                            return None
+                    else:
+                        parsed_evaluation_date = datetime.fromisoformat(
+                            f"{evaluation_date}T00:00:00"
+                        ).date()
+                        if any(
+                            deadline - report != timedelta(hours=6)
+                            or parsed_evaluation_date > deadline.date()
+                            for report, deadline in zip(report_times, parsed_deadlines)
+                        ):
+                            return None
+                except (TypeError, ValueError):
+                    return None
+                if evaluation_time is None:
+                    safe.pop("evaluation_time", None)
+                else:
+                    safe.pop("evaluation_date", None)
         if kind in {"antimicrobial_reason_documentation_check",
                     "antimicrobial_effect_evaluation_check"}:
             medicines = safe.get("antimicrobials")

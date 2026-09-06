@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Mapping
 
 
@@ -12,6 +12,10 @@ CRITICAL_VALUE_SOURCE_KEYS = (
     "labtest_master",
     "labtest_item_report",
     "crisis_value_record",
+)
+CRITICAL_VALUE_TIMELINESS_SOURCE_KEYS = (
+    *CRITICAL_VALUE_SOURCE_KEYS,
+    "evaluation_context.horizon",
 )
 _CRITICAL_MARKERS = ("PL", "PH")
 
@@ -40,6 +44,9 @@ class CriticalValueInput:
     lab_detail_count: int
     items: tuple[CriticalValueItem, ...]
     dispositions: tuple[CriticalValueDisposition, ...]
+    evaluation_horizon_date: date | None = None
+    evaluation_horizon_datetime: datetime | None = None
+    evaluation_horizon_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +176,7 @@ def _display_facts(
     critical_items: tuple[CriticalValueItem, ...],
     dispositions: tuple[CriticalValueDisposition, ...],
     event_results: tuple[dict[str, object], ...],
+    additional_facts: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     facts: dict[str, object] = {
         "verification_kind": (
@@ -200,7 +208,47 @@ def _display_facts(
             for item in event_results
             if isinstance(item.get("interval_hours"), (int, float))
         ]
+    if additional_facts:
+        facts.update(additional_facts)
     return facts
+
+
+def _critical_value_maturity(
+    *, event: _CriticalValueEvent, inputs: CriticalValueInput
+) -> tuple[bool | None, str | None, dict[str, object]]:
+    """返回某次未处置危急值的窗口成熟状态；日期终点不得推测当天时刻。"""
+
+    if inputs.evaluation_horizon_error:
+        return None, inputs.evaluation_horizon_error, {}
+    if event.report_time is None:
+        return None, "authoritative_time_missing", {}
+    deadline = event.report_time + timedelta(hours=6)
+    horizon_time = inputs.evaluation_horizon_datetime
+    horizon_date = inputs.evaluation_horizon_date
+    if horizon_time is not None:
+        if horizon_time < event.report_time:
+            return None, "authoritative_time_conflict", {}
+        return (
+            horizon_time >= deadline,
+            None,
+            {
+                "evaluation_time": horizon_time.isoformat(sep=" "),
+                "deadline_time": deadline.isoformat(sep=" "),
+            },
+        )
+    if horizon_date is not None:
+        if horizon_date < event.report_time.date():
+            return None, "authoritative_time_conflict", {}
+        # 仅有日期时，截止日当天无法确认是否已经越过具体截止时刻。
+        return (
+            horizon_date > deadline.date(),
+            None,
+            {
+                "evaluation_date": horizon_date.isoformat(),
+                "deadline_time": deadline.isoformat(sep=" "),
+            },
+        )
+    return None, "authoritative_time_missing", {}
 
 
 def evaluate_critical_value_rules(
@@ -227,6 +275,7 @@ def evaluate_critical_value_rules(
     for rule_id in selected:
         event_results: tuple[dict[str, object], ...] = ()
         display_facts: Mapping[str, object] | None = None
+        additional_display_facts: Mapping[str, object] | None = None
         if inputs.lab_item_error:
             final_state, reason_code = "data_gap", inputs.lab_item_error
         elif inputs.lab_report_count and not inputs.lab_detail_count:
@@ -360,8 +409,78 @@ def evaluate_critical_value_rules(
                 handled = bool(event_results) and all(
                     item["outcome"] == "timely" for item in event_results
                 )
-                final_state = "compliant" if handled else "non_compliant"
-                reason_code = "requirement_within_threshold" if handled else "threshold_exceeded"
+                unhandled_indexes = tuple(
+                    index
+                    for index, item in enumerate(event_results)
+                    if item["outcome"] == "unhandled"
+                )
+                if handled:
+                    final_state, reason_code = (
+                        "compliant",
+                        "requirement_within_threshold",
+                    )
+                elif not unhandled_indexes:
+                    # 已有超时处置记录时，违反事实已成立，不依赖评价终点。
+                    final_state, reason_code = "non_compliant", "threshold_exceeded"
+                else:
+                    maturity_checks = tuple(
+                        _critical_value_maturity(
+                            event=events[index], inputs=inputs
+                        )
+                        for index in unhandled_indexes
+                    )
+                    issue = next(
+                        (item[1] for item in maturity_checks if item[1]),
+                        None,
+                    )
+                    if issue:
+                        final_state, reason_code = "data_gap", issue
+                        display_facts = {
+                            "verification_kind": (
+                                "critical_value_evaluation_horizon_unavailable"
+                            ),
+                            "issue": issue,
+                        }
+                    elif any(item[0] for item in maturity_checks):
+                        final_state, reason_code = "non_compliant", "threshold_exceeded"
+                    else:
+                        final_state, reason_code = (
+                            "not_applicable",
+                            "evaluation_window_not_mature",
+                        )
+                        event_results = tuple(
+                            {
+                                **item,
+                                **(
+                                    {"outcome": "window_not_mature"}
+                                    if index in unhandled_indexes
+                                    else {}
+                                ),
+                            }
+                            for index, item in enumerate(event_results)
+                        )
+                        maturity_details = tuple(
+                            item[2] for item in maturity_checks
+                        )
+                        additional_display_facts = {
+                            "evaluation_window_mature": False,
+                            "deadline_times": [
+                                str(item.get("deadline_time") or "")
+                                for item in maturity_details
+                            ],
+                            **(
+                                {"evaluation_time": str(maturity_details[0]["evaluation_time"])}
+                                if len(maturity_details) == 1
+                                and "evaluation_time" in maturity_details[0]
+                                else {}
+                            ),
+                            **(
+                                {"evaluation_date": str(maturity_details[0]["evaluation_date"])}
+                                if len(maturity_details) == 1
+                                and "evaluation_date" in maturity_details[0]
+                                else {}
+                            ),
+                        }
 
         if critical_items and display_facts is None and not critical_marker_conflict:
             display_facts = _display_facts(
@@ -369,6 +488,7 @@ def evaluate_critical_value_rules(
                 critical_items=critical_items,
                 dispositions=inputs.dispositions,
                 event_results=event_results,
+                additional_facts=additional_display_facts,
             )
         outcomes.append(
             CriticalValueOutcome(
@@ -384,6 +504,7 @@ def evaluate_critical_value_rules(
 __all__ = [
     "CRITICAL_VALUE_RULE_IDS",
     "CRITICAL_VALUE_SOURCE_KEYS",
+    "CRITICAL_VALUE_TIMELINESS_SOURCE_KEYS",
     "CriticalValueInput",
     "CriticalValueItem",
     "CriticalValueDisposition",

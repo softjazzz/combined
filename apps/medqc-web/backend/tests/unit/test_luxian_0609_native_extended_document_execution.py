@@ -141,6 +141,16 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
             "horizon_date": "2099-01-01",
             "basis": "evaluation_as_of",
         },)
+    if (
+        rule_id == "LX0609-052"
+        and "evaluation_context.horizon" not in rows_by_source
+    ):
+        # 既有危急值夹具均描述已过 6 小时的完整观察窗口；显式注入冻结终点，
+        # 避免把旧测试的“未提供终点”误读成新口径下的资料不足。
+        rows_by_source["evaluation_context.horizon"] = ({
+            "horizon_date": "2099-01-01",
+            "basis": "evaluation_as_of",
+        },)
     snapshot, materials = _session(
         rows_by_source, unavailable_sources=unavailable_sources
     )
@@ -163,6 +173,14 @@ async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=fr
     rows_by_source = dict(rows_by_source)
     if (
         "LX0609-064" in rule_ids
+        and "evaluation_context.horizon" not in rows_by_source
+    ):
+        rows_by_source["evaluation_context.horizon"] = ({
+            "horizon_date": "2099-01-01",
+            "basis": "evaluation_as_of",
+        },)
+    if (
+        "LX0609-052" in rule_ids
         and "evaluation_context.horizon" not in rows_by_source
     ):
         rows_by_source["evaluation_context.horizon"] = ({
@@ -215,6 +233,19 @@ def test_064_binds_evaluation_horizon_for_postoperative_window_maturity() -> Non
     sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-064",))
 
     assert "evaluation_context.horizon" in sources
+
+
+def test_052_binds_evaluation_horizon_without_expanding_053_sources() -> None:
+    source_keys = resolve_luxian_0609_decision_support_source_keys(
+        ("LX0609-052", "LX0609-053")
+    )
+
+    assert "evaluation_context.horizon" in source_keys
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-053",))) == {
+        "labtest_master",
+        "labtest_item_report",
+        "crisis_value_record",
+    }
 
 
 def test_071_binds_authoritative_order_and_daily_signature_change_sources() -> None:
@@ -3478,6 +3509,198 @@ async def test_050_uses_admission_record_when_registration_time_is_missing() -> 
     facts = dict(result.customer_display_facts)["LX0609-050"]
     assert facts["admission_time"] == "2026-06-01 08:00:00"
     assert facts["discussion_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_052_unhandled_critical_value_before_exact_deadline_is_not_applicable() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-052",
+        {
+            "labtest_item_report": ({
+                "item_name": "血钾",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-01 19:59:59",
+                "horizon_date": "2026-06-01",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "evaluation_window_not_mature"
+    facts = dict(result.customer_display_facts)["LX0609-052"]
+    assert facts["evaluation_window_mature"] is False
+    assert facts["evaluation_time"] == "2026-06-01 19:59:59"
+    assert facts["deadline_times"] == ["2026-06-01 20:00:00"]
+    assert facts["event_results"][0]["outcome"] == "window_not_mature"
+
+
+@pytest.mark.asyncio
+async def test_052_date_only_horizon_on_deadline_day_does_not_guess_maturity() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-052",
+        {
+            "labtest_item_report": ({
+                "item_name": "血钾",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-06-01",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "evaluation_window_not_mature"
+    facts = dict(result.customer_display_facts)["LX0609-052"]
+    assert facts["evaluation_window_mature"] is False
+    assert facts["evaluation_date"] == "2026-06-01"
+
+
+@pytest.mark.asyncio
+async def test_052_missing_or_conflicting_evaluation_horizon_is_data_gap() -> None:
+    base = {
+        "labtest_item_report": ({
+            "item_name": "血钾",
+            "result_flag": "PH",
+            "report_time": "2026-06-01 14:00:00",
+        },),
+    }
+    missing_result, missing = await _evaluate(
+        "LX0609-052", {**base, "evaluation_context.horizon": ()}
+    )
+    conflicting_result, conflicting = await _evaluate(
+        "LX0609-052",
+        {
+            **base,
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-01 13:59:59",
+                "horizon_date": "2026-06-01",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert (missing.final_state, missing.reason_code) == (
+        CustomerFinalState.DATA_GAP,
+        "authoritative_time_missing",
+    )
+    assert dict(missing_result.customer_display_facts)["LX0609-052"] == {
+        "verification_kind": "critical_value_evaluation_horizon_unavailable",
+        "issue": "authoritative_time_missing",
+    }
+    assert (conflicting.final_state, conflicting.reason_code) == (
+        CustomerFinalState.DATA_GAP,
+        "authoritative_time_conflict",
+    )
+    assert dict(conflicting_result.customer_display_facts)["LX0609-052"] == {
+        "verification_kind": "critical_value_evaluation_horizon_unavailable",
+        "issue": "authoritative_time_conflict",
+    }
+
+
+@pytest.mark.asyncio
+async def test_052_mature_missing_disposition_stays_non_compliant_while_053_is_unchanged() -> None:
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": ({
+                "item_name": "血钾",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-06-02",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert [(item.final_state, item.reason_code) for item in reduced] == [
+        (CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+        (CustomerFinalState.NON_COMPLIANT, "required_document_missing"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_052_window_not_mature_survives_binding_aggregator_and_renderer() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": ({
+                "item_name": "血钾",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-01 19:00:00",
+                "horizon_date": "2026-06-01",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-052"}, {"rule_id": "LX0609-053"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    by_rule = {item["rule_id"]: item for item in canonical}
+    assert (by_rule["LX0609-052"]["status"], by_rule["LX0609-052"]["reason_code"]) == (
+        "not_applicable",
+        "evaluation_window_not_mature",
+    )
+    assert by_rule["LX0609-052"]["customer_display_facts"] == {
+        "verification_kind": "critical_value_timeliness_check",
+        "critical_item_names": ["血钾"],
+        "critical_flags": ["PH"],
+        "report_times": ["2026-06-01 14:00:00"],
+        "disposition_times": [],
+        "threshold_hours": 6,
+        "actual_interval_hours": [],
+        "event_results": [{
+            "critical_item_names": ["血钾"],
+            "critical_flags": ["PH"],
+            "report_time": "2026-06-01 14:00:00",
+            "outcome": "window_not_mature",
+        }],
+        "evaluation_window_mature": False,
+        "deadline_times": ["2026-06-01 20:00:00"],
+        "evaluation_time": "2026-06-01 19:00:00",
+    }
+    # 053 只核对处置存在性；052 新增评价终点不得改写其 Canonical 结果。
+    assert (
+        by_rule["LX0609-053"]["status"],
+        by_rule["LX0609-053"]["reason_code"],
+        by_rule["LX0609-053"]["customer_display_facts"],
+    ) == (
+        "non_compliant",
+        "required_document_missing",
+        {
+            "verification_kind": "critical_value_disposition_presence_check",
+            "critical_item_names": ["血钾"],
+            "critical_flags": ["PH"],
+            "report_times": ["2026-06-01 14:00:00"],
+            "disposition_times": [],
+            "event_results": [{
+                "critical_item_names": ["血钾"],
+                "critical_flags": ["PH"],
+                "report_time": "2026-06-01 14:00:00",
+                "outcome": "unhandled",
+            }],
+        },
+    )
 
 
 @pytest.mark.asyncio

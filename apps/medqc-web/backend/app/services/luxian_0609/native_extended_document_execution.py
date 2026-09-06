@@ -45,6 +45,7 @@ from .extended_document.transfer_documentation import (
 from .extended_document_critical_value import (
     CRITICAL_VALUE_RULE_IDS,
     CRITICAL_VALUE_SOURCE_KEYS,
+    CRITICAL_VALUE_TIMELINESS_SOURCE_KEYS,
     CriticalValueDisposition,
     CriticalValueInput,
     CriticalValueItem,
@@ -253,6 +254,33 @@ def _source_rows(
     except EvidenceMaterialUnavailable:
         return (), "source_unavailable"
     return tuple(dict(row) for row in rows), ""
+
+
+def _critical_value_evaluation_horizon(
+    horizon_rows: Sequence[Mapping[str, Any]],
+    horizon_error: str,
+) -> tuple[date | None, datetime | None, str | None]:
+    """读取 052 的单一冻结评价终点，拒绝缺失、重复及日期时间冲突。"""
+
+    if horizon_error:
+        return None, None, horizon_error
+    if not horizon_rows:
+        return None, None, "authoritative_time_missing"
+    if len(horizon_rows) != 1:
+        return None, None, "authoritative_time_conflict"
+    row = horizon_rows[0]
+    horizon_time = _parse_datetime(row.get("horizon_datetime"))
+    raw_date = _clean(row.get("horizon_date"))
+    try:
+        horizon_date = date.fromisoformat(raw_date) if raw_date else None
+    except ValueError:
+        horizon_date = None
+    if horizon_time is not None and horizon_date is not None:
+        if horizon_time.date() != horizon_date:
+            return None, None, "authoritative_time_conflict"
+    if horizon_time is None and horizon_date is None:
+        return None, None, "authoritative_time_missing"
+    return horizon_date, horizon_time, None
 
 
 def _fact_refs(
@@ -1099,8 +1127,17 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     horizon_rows, horizon_error = (
         _source_rows(evidence_materials, "evaluation_context.horizon")
-        if {"LX0609-051", "LX0609-064"}.intersection(selected)
+        if {"LX0609-051", "LX0609-052", "LX0609-064"}.intersection(selected)
         else ((), "")
+    )
+    (
+        critical_horizon_date,
+        critical_horizon_datetime,
+        critical_horizon_error,
+    ) = (
+        _critical_value_evaluation_horizon(horizon_rows, horizon_error)
+        if "LX0609-052" in selected
+        else (None, None, None)
     )
     discharge_rows, discharge_error = _source_rows(
         evidence_materials, "discharge_record"
@@ -1225,6 +1262,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for parsed in (_row_time(row),)
                     if parsed is not None
                 ),
+                evaluation_horizon_date=critical_horizon_date,
+                evaluation_horizon_datetime=critical_horizon_datetime,
+                evaluation_horizon_error=critical_horizon_error,
             ),
         )
     } if set(selected).intersection(CRITICAL_VALUE_RULE_IDS) else {}
@@ -1305,7 +1345,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                 display.append((rule_id, outcome.display_facts))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=CRITICAL_VALUE_SOURCE_KEYS,
+                source_keys=(
+                    CRITICAL_VALUE_TIMELINESS_SOURCE_KEYS
+                    if rule_id == "LX0609-052"
+                    else CRITICAL_VALUE_SOURCE_KEYS
+                ),
                 final_state=outcome.final_state, reason_code=outcome.reason_code,
             ))
             continue
