@@ -956,6 +956,8 @@ def _single_text_fact_outcome(
             rule_id,
             "non_compliant"
             if window_state is EvaluationWindowState.MATURE
+            else "not_applicable"
+            if window_state is EvaluationWindowState.NOT_MATURE
             else "data_gap",
             "exam_lab_text_fact"
             if window_state is EvaluationWindowState.MATURE
@@ -1007,6 +1009,8 @@ def _single_text_fact_outcome(
         rule_id,
         "non_compliant"
         if window_state is EvaluationWindowState.MATURE
+        else "not_applicable"
+        if window_state is EvaluationWindowState.NOT_MATURE
         else "data_gap",
         "exam_lab_text_fact"
         if window_state is EvaluationWindowState.MATURE

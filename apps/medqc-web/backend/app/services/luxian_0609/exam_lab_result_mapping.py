@@ -66,7 +66,9 @@ def build_exam_lab_rule_decision(
             ApplicabilityState.NOT_APPLICABLE,
             EvidenceState.SUFFICIENT,
             QcDirection.UNKNOWN,
-            "trigger_absent_complete",
+            "evaluation_window_not_mature"
+            if outcome.reason_code == "evaluation_window_not_mature"
+            else "trigger_absent_complete",
         )
     elif outcome.status == "data_gap":
         normalized_gap_reasons = {

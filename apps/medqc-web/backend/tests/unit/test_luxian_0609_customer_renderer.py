@@ -1978,7 +1978,6 @@ def test_lx0609_025_complete_contract_lists_only_five_frozen_fields() -> None:
     [
         ("authoritative_time_missing", "缺少本次住院的评价截止日期或有效出院时间"),
         ("authoritative_time_conflict", "存在先后冲突"),
-        ("evaluation_window_not_mature", "尚未满 24 小时"),
     ],
 )
 @pytest.mark.parametrize(
@@ -2008,6 +2007,32 @@ def test_exam_lab_window_gap_has_customer_readable_specific_explanation(
     assert result["status"] == "data_gap"
     assert result["reason_code"] == reason_code
     assert expected_evidence in result["evidence"]
+
+
+@pytest.mark.parametrize(
+    "rule_id",
+    ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+)
+def test_exam_lab_window_not_mature_is_customer_not_applicable(rule_id):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="evaluation_window_not_mature",
+            fact_refs=(FACT_REF,),
+            evaluator_version="exam-lab-ruledecision-shadow-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "not_applicable"
+    assert result["reason_code"] == "evaluation_window_not_mature"
+    assert "24 小时评价窗口尚未结束" in result["findings"]
+    assert "无需提前补写" in result["suggestion"]
 
 
 @pytest.mark.parametrize(

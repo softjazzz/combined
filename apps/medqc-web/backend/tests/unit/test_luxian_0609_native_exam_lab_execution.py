@@ -274,6 +274,24 @@ def test_result_mapping_preserves_specific_exam_lab_data_gap_reason(
     assert decision.reason_code == expected_reason
 
 
+def test_result_mapping_preserves_not_mature_reason_as_not_applicable(monkeypatch):
+    snapshot, _ = _typed_session(monkeypatch)
+
+    decision = build_exam_lab_rule_decision(
+        outcome=ExamLabOutcome(
+            rule_id="LX0609-012",
+            status="not_applicable",
+            reason_code="evaluation_window_not_mature",
+        ),
+        snapshot=snapshot,
+        allowed_source_keys=("exam_master", "exam_item_report"),
+        evaluator_version="exam-lab-ruledecision-shadow-v1",
+    )
+
+    assert decision.applicability.value == "not_applicable"
+    assert decision.reason_code == "evaluation_window_not_mature"
+
+
 def _wrapper(rule_id: str) -> dict:
     return {
         "rule_id": rule_id,
@@ -3169,6 +3187,69 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
 
 
 @pytest.mark.asyncio
+async def test_lx0609_012_not_mature_window_stays_not_applicable_through_canonical(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-26 10:00:00",
+                "exam_conclusion": "右肺占位，考虑恶性。",
+            },
+        ),
+        course_rows=(),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-27 09:59:59",
+                "horizon_date": "2026-04-27",
+            },
+        ),
+    )
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=_Client(
+            [
+                _fact_response(
+                    ("LX0609-012",),
+                    applicability="applicable",
+                    semantic_state="absent",
+                    positive_state="positive",
+                )
+            ]
+        ),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    assert result.decisions[0].applicability.value == "not_applicable"
+    assert reduced[0].final_state.value == "not_applicable"
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+    assert canonical[0]["status"] == "not_applicable"
+    assert canonical[0]["reason_code"] == "evaluation_window_not_mature"
+    assert "24 小时评价窗口尚未结束" in canonical[0]["findings"]
+
+
+@pytest.mark.asyncio
 async def test_noncompliant_exam_lab_facts_keep_only_explicit_report_document_ids(
     monkeypatch,
 ):
@@ -3316,8 +3397,8 @@ def test_post_rule_absence_needs_exact_mature_horizon_and_date_is_conservative()
         ).status
 
     assert outcome(precise=datetime(2026, 4, 27, 10)) == "non_compliant"
-    assert outcome(precise=datetime(2026, 4, 27, 9, 59, 59)) == "data_gap"
-    assert outcome(horizon_date=datetime(2026, 4, 27).date()) == "data_gap"
+    assert outcome(precise=datetime(2026, 4, 27, 9, 59, 59)) == "not_applicable"
+    assert outcome(horizon_date=datetime(2026, 4, 27).date()) == "not_applicable"
     assert outcome(horizon_date=datetime(2026, 4, 28).date()) == "non_compliant"
 
 
@@ -3379,13 +3460,14 @@ def test_evaluation_window_state_has_distinct_maturity_and_conflict_semantics(
 
 
 @pytest.mark.parametrize(
-    ("projection", "expected_reason"),
+    ("projection", "expected_status", "expected_reason"),
     [
         (
             ExamLabTextProjection(
                 context="", document_refs=frozenset(), course_times={},
                 horizon_unavailable_reason="authoritative_time_missing",
             ),
+            "data_gap",
             "authoritative_time_missing",
         ),
         (
@@ -3393,6 +3475,7 @@ def test_evaluation_window_state_has_distinct_maturity_and_conflict_semantics(
                 context="", document_refs=frozenset(), course_times={},
                 horizon_unavailable_reason="authoritative_time_conflict",
             ),
+            "data_gap",
             "authoritative_time_conflict",
         ),
         (
@@ -3400,12 +3483,14 @@ def test_evaluation_window_state_has_distinct_maturity_and_conflict_semantics(
                 context="", document_refs=frozenset(), course_times={},
                 precise_horizon=datetime(2026, 4, 27, 9),
             ),
+            "not_applicable",
             "evaluation_window_not_mature",
         ),
     ],
 )
-def test_lx012_data_gap_preserves_specific_evaluation_window_reason(
+def test_lx012_preserves_specific_evaluation_window_state_and_reason(
     projection,
+    expected_status,
     expected_reason,
 ):
     projection = ExamLabTextProjection(
@@ -3426,7 +3511,7 @@ def test_lx012_data_gap_preserves_specific_evaluation_window_reason(
         rule_id="LX0609-012", facts=(fact,), projection=projection
     )
 
-    assert outcome.status == "data_gap"
+    assert outcome.status == expected_status
     assert outcome.reason_code == expected_reason
 
 
@@ -3451,7 +3536,7 @@ def test_report_before_course_reference_needs_mature_horizon_before_defect():
             rule_id="LX0609-011", facts=(fact,), projection=projection
         ).status
 
-    assert outcome(datetime(2026, 4, 27, 9, 59, 59)) == "data_gap"
+    assert outcome(datetime(2026, 4, 27, 9, 59, 59)) == "not_applicable"
     assert outcome(datetime(2026, 4, 27, 10)) == "non_compliant"
 
 
