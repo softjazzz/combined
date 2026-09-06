@@ -1566,7 +1566,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             ),
             [],
             True,
-            "non_compliant",
+            "data_gap",
         ),
         (
             "LX0609-047",
@@ -2203,9 +2203,9 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     assert result.results[1]["metadata"]["reason_code"] == (
         "transfusion_purpose_or_indication_missing"
     )
-    assert result.results[2]["status"] == "non_compliant"
+    assert result.results[2]["status"] == "data_gap"
     assert result.results[2]["metadata"]["reason_code"] == (
-        "posttransfusion_evaluation_missing"
+        "posttransfusion_evaluation_time_unavailable"
     )
     assert dict(result.customer_display_facts) == {
         "LX0609-044": {
@@ -2243,19 +2243,6 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             "missing_fields": ["reason_or_indication"],
             "missing_field_record_counts": {"reason_or_indication": 1},
             "source_document_ids": ["blood-record-1"],
-        },
-        "LX0609-047": {
-            "failure_kind": "posttransfusion_evaluation_missing",
-            "performed_transfusion_confirmed": True,
-            "threshold_hours": 24,
-            "checked_sources": ["bloodtrans_record", "daily_course_record"],
-            "transfusion_end_time": "2026-06-05 16:10:00",
-            "source_document_refs": [
-                {
-                    "source_type": "bloodtrans_record",
-                    "source_document_id": "blood-record-1",
-                }
-            ],
         },
     }
     assert result.llm_call_count == 0
@@ -2333,7 +2320,7 @@ def test_047_explicit_missing_evaluation_uses_authoritative_end_time():
             ],
             "daily_course_record": [],
         }
-    ) == ("non_compliant", "posttransfusion_evaluation_missing")
+    ) == ("data_gap", "posttransfusion_evaluation_time_unavailable")
 
 
 @pytest.mark.parametrize(
@@ -2658,14 +2645,14 @@ async def test_047_accepts_controlled_timezone_and_postposition_forms(
                 "2026-06-05 10:00输血结束。未记录输血后评价。"
                 "2026-06-05 16:00输血结束。输血后复查血红蛋白改善。"
             ),
-            "non_compliant",
+            "data_gap",
         ),
         (
             (
                 "2026-06-05 10:00输血结束。输血后复查血红蛋白改善。"
                 "2026-06-05 16:00输血结束。未记录输血后评价。"
             ),
-            "non_compliant",
+            "data_gap",
         ),
         (
             (
@@ -2708,9 +2695,9 @@ async def test_047_allows_final_summary_but_preserves_explicit_missing_statement
         ("未见输血后评价异常。", "compliant"),
         ("无输血后评价异常。", "compliant"),
         ("输血后评价未见异常。", "compliant"),
-        ("未记录输血后评价。", "non_compliant"),
-        ("缺少输血后评价。", "non_compliant"),
-        ("未书写输血后评价。", "non_compliant"),
+        ("未记录输血后评价。", "data_gap"),
+        ("缺少输血后评价。", "data_gap"),
+        ("未书写输血后评价。", "data_gap"),
     ],
 )
 async def test_047_distinguishes_normal_evaluation_from_missing_documentation(
@@ -2772,9 +2759,9 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
         source_schema=None,
         llm_client=_Client([]),
     )
-    assert no_post_evaluation.results[0]["status"] == "non_compliant"
+    assert no_post_evaluation.results[0]["status"] == "data_gap"
     assert no_post_evaluation.results[0]["metadata"]["reason_code"] == (
-        "posttransfusion_evaluation_missing"
+        "posttransfusion_evaluation_time_unavailable"
     )
     assert no_post_evaluation.llm_call_count == 0
 
@@ -2856,7 +2843,7 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
             }
         ],
     )
-    assert weak_context.results[0]["status"] == "non_compliant"
+    assert weak_context.results[0]["status"] == "data_gap"
 
     unresolved_row = await _execute(
         blood_rows=[
@@ -2892,7 +2879,7 @@ async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
         ],
         daily_rows=[{"content": "普通病程：继续观察。"}],
     )
-    assert one_of_two_missing.results[0]["status"] == "non_compliant"
+    assert one_of_two_missing.results[0]["status"] == "data_gap"
     assert planned.llm_call_count == weak_context.llm_call_count == 0
     assert document_time.llm_call_count == unresolved_row.llm_call_count == 0
     assert one_of_two_missing.llm_call_count == 0

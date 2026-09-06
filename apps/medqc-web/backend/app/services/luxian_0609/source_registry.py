@@ -482,7 +482,12 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-044": ("bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record"),
     "LX0609-045": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
     "LX0609-046": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
-    "LX0609-047": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-047": (
+        "evaluation_context.horizon",
+        "bloodtrans_record",
+        "mr_bloodtrans",
+        "daily_course_record",
+    ),
     "LX0609-048": (
         "bloodtrans_record",
         "mr_bloodtrans",

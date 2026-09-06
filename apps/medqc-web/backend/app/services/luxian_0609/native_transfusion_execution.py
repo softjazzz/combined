@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 import json
 import re
 import unicodedata
@@ -48,6 +48,7 @@ _CONSERVATIVE_DATA_GAP_REASONS = {
 }
 
 _TRIGGER_SOURCES = ("mr_bloodtrans", "bloodtrans_record")
+_EVALUATION_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
 _MAX_ROWS_PER_SOURCE = 8
 _MAX_ROW_CHARS = 1400
 _MAX_CONTEXT_CHARS = 18000
@@ -274,6 +275,10 @@ def _typed_rule_source_keys(rule_id: str) -> frozenset[str]:
         physical_sources.update(
             _TYPED_SOURCE_ALIASES.get(logical_source, (logical_source,))
         )
+    if rule_id == "LX0609-047":
+        physical_sources.update(
+            resolve_luxian_0609_decision_support_source_keys((rule_id,))
+        )
     return frozenset(physical_sources)
 
 _CONTROLLED_MESSAGES = {
@@ -470,6 +475,9 @@ def _typed_decision_from_outcome(
             "eligibility_not_met"
             if outcome.rule_id == "LX0609-042"
             and outcome.reason_code == "transfusion_consent_absent"
+            else "evaluation_window_not_mature"
+            if outcome.rule_id == "LX0609-047"
+            and outcome.reason_code == "evaluation_window_not_mature"
             else "trigger_absent_complete"
         )
         dimensions = (
@@ -484,6 +492,10 @@ def _typed_decision_from_outcome(
             outcome.rule_id == "LX0609-047"
             and outcome.reason_code == "posttransfusion_evaluation_time_unavailable"
         )
+        authoritative_time_conflict = (
+            outcome.rule_id == "LX0609-047"
+            and outcome.reason_code == "posttransfusion_evaluation_horizon_conflict"
+        )
         dimensions = (
             (
                 ApplicabilityState.UNKNOWN
@@ -497,6 +509,8 @@ def _typed_decision_from_outcome(
                 if source_gap
                 else "authoritative_time_missing"
                 if authoritative_time_gap
+                else "authoritative_time_conflict"
+                if authoritative_time_conflict
                 else "required_field_missing"
             ),
         )
@@ -659,6 +673,31 @@ def _typed_documents_from_evidence_session(
             logical_states[logical_source] = "empty"
         else:
             logical_states[logical_source] = "missing"
+
+    if rule_id == "LX0609-047":
+        horizon_observation = observation_by_source.get(
+            _EVALUATION_HORIZON_SOURCE_KEY
+        )
+        if horizon_observation is None:
+            return None, "technical_error", "snapshot_mismatch"
+        if horizon_observation.query_state.value == "error":
+            return None, "technical_error", "source_query_error"
+        if (
+            horizon_observation.query_state.value == "unavailable"
+            or horizon_observation.completeness.value == "truncated"
+        ):
+            documents["__evaluation_horizon_rows__"] = []
+        else:
+            try:
+                documents["__evaluation_horizon_rows__"] = [
+                    dict(row)
+                    for row in materials.rows(_EVALUATION_HORIZON_SOURCE_KEY)
+                ]
+            except Exception:
+                return None, "technical_error", "snapshot_mismatch"
+        documents["__evaluation_horizon_reason__"] = str(
+            horizon_observation.reason_code or ""
+        ).strip()
 
     # 这里只构造同一快照内的材料和四态，不在辅助来源为空时提前终止。
     # 专用输血记录可能已足以给出确定结论；辅助来源四态只能在程序化判断
@@ -1815,6 +1854,67 @@ class _PosttransfusionEvaluationAssessment:
     selected_source_document_refs: tuple[tuple[str, str], ...] = ()
 
 
+def _047_evaluation_horizon(
+    documents: Mapping[str, Any],
+) -> tuple[datetime | None, date | None, str]:
+    """读取冻结快照内的评价终点，不以当前时间或当天末尾补足精度。"""
+
+    rows = documents.get("__evaluation_horizon_rows__")
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], Mapping):
+        return None, None, str(
+            documents.get("__evaluation_horizon_reason__") or "authoritative_time_missing"
+        )
+    row = rows[0]
+    horizon_datetime = _parse_document_datetime(row.get("horizon_datetime"))
+    raw_date = _clean(row.get("horizon_date"))
+    horizon_date: date | None = None
+    if raw_date:
+        try:
+            horizon_date = date.fromisoformat(raw_date)
+        except ValueError:
+            return None, None, "authoritative_time_missing"
+    if horizon_datetime is not None and horizon_date is not None:
+        if horizon_datetime.date() != horizon_date:
+            return None, None, "authoritative_time_conflict"
+    elif horizon_datetime is not None:
+        horizon_date = horizon_datetime.date()
+    if horizon_date is None:
+        return None, None, str(
+            documents.get("__evaluation_horizon_reason__") or "authoritative_time_missing"
+        )
+    return horizon_datetime, horizon_date, ""
+
+
+def _047_evaluation_time_is_after_horizon(
+    evaluation_time: datetime,
+    *,
+    horizon_datetime: datetime | None,
+    horizon_date: date,
+) -> bool:
+    return (
+        evaluation_time > horizon_datetime
+        if horizon_datetime is not None
+        else evaluation_time.date() > horizon_date
+    )
+
+
+def _047_window_is_mature(
+    end_time: datetime,
+    *,
+    horizon_datetime: datetime | None,
+    horizon_date: date,
+) -> tuple[bool, bool]:
+    """返回(已成熟, 终点是否早于输血结束)。日期精度必须保守处理。"""
+
+    if horizon_datetime is not None:
+        if horizon_datetime < end_time:
+            return False, True
+        return horizon_datetime > end_time + timedelta(hours=24), False
+    if horizon_date < end_time.date():
+        return False, True
+    return horizon_date > (end_time + timedelta(hours=24)).date(), False
+
+
 def _programmatic_047_assessment(
     documents: Mapping[str, Any],
 ) -> _PosttransfusionEvaluationAssessment:
@@ -1822,18 +1922,18 @@ def _programmatic_047_assessment(
 
     end_rows: list[tuple[datetime, bool, datetime | None, tuple[str, str] | None]] = []
     unresolved_end_marker = False
-    explicit_missing_evaluation = False
     for row in _source_document_rows(documents, "bloodtrans_record"):
         text = _row_text(row)
         events, row_unresolved = _transfusion_end_evidence(text)
         unresolved_end_marker = unresolved_end_marker or row_unresolved
         if not events:
             continue
+        row_explicit_missing_evaluation = False
         ordered_events = sorted(events, key=lambda event: event[1])
         for index, (_, _, marker_end) in enumerate(ordered_events[:-1]):
             next_marker_start = ordered_events[index + 1][1]
-            explicit_missing_evaluation = (
-                explicit_missing_evaluation
+            row_explicit_missing_evaluation = (
+                row_explicit_missing_evaluation
                 or _POSTTRANSFUSION_MISSING_PATTERN.search(
                     text[marker_end:next_marker_start]
                 )
@@ -1841,15 +1941,18 @@ def _programmatic_047_assessment(
             )
         last_end, _, last_marker_end = max(events, key=lambda event: event[0])
         last_tail = text[last_marker_end : last_marker_end + 360]
-        explicit_missing_evaluation = (
-            explicit_missing_evaluation
+        row_explicit_missing_evaluation = (
+            row_explicit_missing_evaluation
             or _POSTTRANSFUSION_MISSING_PATTERN.search(last_tail) is not None
         )
         evaluation_time = _authoritative_record_time(row)
         end_rows.append(
             (
                 last_end,
-                _has_clinical_posttransfusion_evaluation(last_tail),
+                (
+                    not row_explicit_missing_evaluation
+                    and _has_clinical_posttransfusion_evaluation(last_tail)
+                ),
                 evaluation_time,
                 (
                     ("bloodtrans_record", document_id)
@@ -1866,24 +1969,40 @@ def _programmatic_047_assessment(
     end_document_refs = tuple(
         dict.fromkeys(ref for _, _, _, ref in end_rows if ref is not None)
     )
-    if explicit_missing_evaluation:
-        return _PosttransfusionEvaluationAssessment(
-            "non_compliant",
-            "posttransfusion_evaluation_missing",
-            selected_source_document_refs=end_document_refs,
-        )
-
     latest_end = max(end_time for end_time, _, _, _ in end_rows)
+    horizon_datetime, horizon_date, horizon_error = _047_evaluation_horizon(documents)
+    if horizon_error == "authoritative_time_conflict":
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "posttransfusion_evaluation_horizon_conflict"
+        )
+    if horizon_date is not None and any(
+        _047_window_is_mature(
+            end_time,
+            horizon_datetime=horizon_datetime,
+            horizon_date=horizon_date,
+        )[1]
+        for end_time, _, _, _ in end_rows
+    ):
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "posttransfusion_evaluation_horizon_conflict"
+        )
     qualified_evaluations: list[tuple[datetime, datetime, tuple[str, str] | None]] = []
-    missing_evaluation = False
+    unqualified_end_times: list[datetime] = []
     unusable_evaluation_time = False
     late_evaluation_found = False
     for end_time, has_evaluation, evaluation_time, document_ref in end_rows:
         if not has_evaluation:
-            missing_evaluation = True
+            unqualified_end_times.append(end_time)
             continue
         if evaluation_time is None or evaluation_time < end_time:
             unusable_evaluation_time = True
+            continue
+        if horizon_date is not None and _047_evaluation_time_is_after_horizon(
+            evaluation_time,
+            horizon_datetime=horizon_datetime,
+            horizon_date=horizon_date,
+        ):
+            unqualified_end_times.append(end_time)
             continue
         if (evaluation_time - end_time).total_seconds() <= 24 * 3600:
             qualified_evaluations.append((end_time, evaluation_time, document_ref))
@@ -1904,19 +2023,42 @@ def _programmatic_047_assessment(
             selected_source_document_refs=end_document_refs,
         )
 
-    # 多份独立输血记录必须各自有评价；同一记录内的成分输注允许在最终结束后总评。
+    # 多份独立输血记录仍各自需要评价；本轮只补窗口成熟判定，不把日常
+    # 病程中的笼统评价跨记录关联，从而避免把同一评价分给多个输血事件。
     if len(end_rows) > 1:
         if unusable_evaluation_time:
             return _PosttransfusionEvaluationAssessment(
                 "data_gap", "posttransfusion_evaluation_time_unavailable"
             )
+        if late_evaluation_found:
+            return _PosttransfusionEvaluationAssessment(
+                "non_compliant",
+                "posttransfusion_evaluation_late",
+                latest_end_time=latest_end,
+                selected_source_document_refs=end_document_refs,
+            )
+        if horizon_error:
+            return _PosttransfusionEvaluationAssessment(
+                "data_gap", "posttransfusion_evaluation_time_unavailable"
+            )
+        assert horizon_date is not None
+        if any(
+            _047_window_is_mature(
+                end_time,
+                horizon_datetime=horizon_datetime,
+                horizon_date=horizon_date,
+            )[0]
+            for end_time in unqualified_end_times
+        ):
+            return _PosttransfusionEvaluationAssessment(
+                "non_compliant",
+                "posttransfusion_evaluation_missing",
+                latest_end_time=latest_end,
+                selected_source_document_refs=end_document_refs,
+            )
         return _PosttransfusionEvaluationAssessment(
-            "non_compliant",
-            (
-                "posttransfusion_evaluation_missing"
-                if missing_evaluation
-                else "posttransfusion_evaluation_late"
-            ),
+            "not_applicable",
+            "evaluation_window_not_mature",
             latest_end_time=latest_end,
             selected_source_document_refs=end_document_refs,
         )
@@ -1928,6 +2070,16 @@ def _programmatic_047_assessment(
         if not (
             _TRANSFUSION_CONTEXT_PATTERN.search(text)
             and _has_clinical_posttransfusion_evaluation(text)
+        ):
+            continue
+        if (
+            record_time is not None
+            and horizon_date is not None
+            and _047_evaluation_time_is_after_horizon(
+                record_time,
+                horizon_datetime=horizon_datetime,
+                horizon_date=horizon_date,
+            )
         ):
             continue
         if record_time is None or record_time < latest_end:
@@ -1967,13 +2119,28 @@ def _programmatic_047_assessment(
         return _PosttransfusionEvaluationAssessment(
             "data_gap", "posttransfusion_evaluation_time_unavailable"
         )
+    if late_evaluation_found:
+        return _PosttransfusionEvaluationAssessment(
+            "non_compliant",
+            "posttransfusion_evaluation_late",
+            latest_end_time=latest_end,
+            selected_source_document_refs=end_document_refs,
+        )
+    if horizon_error:
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "posttransfusion_evaluation_time_unavailable"
+        )
+    assert horizon_date is not None
+    mature, _ = _047_window_is_mature(
+        latest_end,
+        horizon_datetime=horizon_datetime,
+        horizon_date=horizon_date,
+    )
     return _PosttransfusionEvaluationAssessment(
-        "non_compliant",
-        (
-            "posttransfusion_evaluation_late"
-            if late_evaluation_found
-            else "posttransfusion_evaluation_missing"
-        ),
+        "non_compliant" if mature else "not_applicable",
+        "posttransfusion_evaluation_missing"
+        if mature
+        else "evaluation_window_not_mature",
         latest_end_time=latest_end,
         selected_source_document_refs=end_document_refs,
     )
@@ -2245,6 +2412,7 @@ def _programmatic_transfusion_display_facts(
     reason_code: str,
     documents: Mapping[str, Any],
     component_evidence_document_refs: Sequence[str] = (),
+    posttransfusion_assessment: _PosttransfusionEvaluationAssessment | None = None,
 ) -> Mapping[str, Any] | None:
     """从已参与裁决的同一份资料中生成受控事实，不回显正文。"""
 
@@ -2368,8 +2536,10 @@ def _programmatic_transfusion_display_facts(
         )
         return payload
     if rule_id == "LX0609-047":
-        assessment = _programmatic_047_assessment(documents)
-        if status == "data_gap":
+        assessment = posttransfusion_assessment or _programmatic_047_assessment(
+            documents
+        )
+        if status in {"data_gap", "not_applicable"}:
             # 权威评价时间缺失属于资料缺口，不能继续投影为“未找到评价”的
             # 临床缺项事实；让 Canonical 的 authoritative_time_missing 走公共说明。
             return None
@@ -2957,7 +3127,8 @@ async def execute_luxian_0609_native_transfusion_rules(
                 )
                 continue
         if rule_id == "LX0609-047":
-            status, reason_code = _programmatic_047_status(documents)
+            assessment = _programmatic_047_assessment(documents)
+            status, reason_code = assessment.status, assessment.reason_code
             emit_outcome(
                 rule_id,
                 status,
@@ -2968,6 +3139,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                     status=status,
                     reason_code=reason_code,
                     documents=documents,
+                    posttransfusion_assessment=assessment,
                 ),
             )
             continue
