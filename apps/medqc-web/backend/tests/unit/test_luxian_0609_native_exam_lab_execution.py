@@ -292,6 +292,31 @@ def test_result_mapping_preserves_not_mature_reason_as_not_applicable(monkeypatc
     assert decision.reason_code == "evaluation_window_not_mature"
 
 
+def test_result_mapping_exposes_semantic_unknown_as_uncertain(monkeypatch):
+    snapshot, _ = _typed_session(monkeypatch)
+
+    decision = build_exam_lab_rule_decision(
+        outcome=ExamLabOutcome(
+            rule_id="LX0609-012",
+            status="evaluation_unknown",
+            reason_code="exam_lab_text_fact_unknown",
+        ),
+        snapshot=snapshot,
+        allowed_source_keys=("exam_master", "exam_item_report"),
+        evaluator_version="exam-lab-ruledecision-shadow-v1",
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+
+    assert decision.applicability.value == "applicable"
+    assert decision.evidence_state.value == "conflict"
+    assert reduced[0].final_state.value == "evaluation_unknown"
+    assert reduced[0].reason_code == "semantic_output_unknown"
+
+
 def _wrapper(rule_id: str) -> dict:
     return {
         "rule_id": rule_id,
@@ -691,11 +716,16 @@ def test_text_fact_uses_authoritative_report_and_course_times_at_24h_boundary():
     ).status == "non_compliant"
 
 
-def test_positive_rule_unknown_never_folds_to_not_applicable_or_compliant():
+def test_positive_rule_with_complete_ambiguous_report_is_evaluation_unknown():
     projection = ExamLabTextProjection(
         context="", document_refs=frozenset({"L03-01"}), course_times={},
         culture_event=ExamLabSingleEvent(
-            "culture", ("L03-01",), None, datetime(2026, 4, 26, 10), frozenset()
+            "culture",
+            ("L03-01",),
+            None,
+            datetime(2026, 4, 26, 10),
+            frozenset(),
+            result_text_available=True,
         ),
     )
     unknown = ExamLabEventFact(
@@ -704,7 +734,56 @@ def test_positive_rule_unknown_never_folds_to_not_applicable_or_compliant():
 
     assert exam_lab._text_fact_outcome(
         rule_id="LX0609-015", facts=(unknown,), projection=projection
-    ).status == "data_gap"
+    ).status == "evaluation_unknown"
+
+
+def test_positive_rule_without_report_result_text_remains_data_gap():
+    projection = ExamLabTextProjection(
+        context="", document_refs=frozenset({"L03-01"}), course_times={},
+        culture_event=ExamLabSingleEvent(
+            "culture",
+            ("L03-01",),
+            None,
+            datetime(2026, 4, 26, 10),
+            frozenset(),
+            result_text_available=False,
+        ),
+    )
+    unknown = ExamLabEventFact(
+        "LX0609-015", "applicable", "unknown", "unknown", (), ("L03-01",),
+    )
+
+    outcome = exam_lab._text_fact_outcome(
+        rule_id="LX0609-015", facts=(unknown,), projection=projection
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "exam_lab_text_fact_unknown"
+
+
+def test_known_target_with_complete_but_ambiguous_course_semantics_is_unknown():
+    projection = ExamLabTextProjection(
+        context="", document_refs=frozenset({"E01-01", "D06-01"}),
+        course_times={"D06-01": datetime(2026, 4, 26, 13)},
+        imaging_event=ExamLabSingleEvent(
+            "exam",
+            ("E01-01",),
+            datetime(2026, 4, 26, 8),
+            datetime(2026, 4, 26, 10),
+            frozenset(),
+            result_text_available=True,
+        ),
+    )
+    unknown = ExamLabEventFact(
+        "LX0609-011", "applicable", "unknown", "not_relevant", (), ("E01-01",),
+    )
+
+    outcome = exam_lab._text_fact_outcome(
+        rule_id="LX0609-011", facts=(unknown,), projection=projection
+    )
+
+    assert outcome.status == "evaluation_unknown"
+    assert outcome.reason_code == "exam_lab_text_fact_unknown"
 
 
 def test_exam_lab_projection_repr_never_contains_raw_body_or_time():
@@ -3097,8 +3176,8 @@ async def test_lx0609_015_same_culture_action_remains_compliant(monkeypatch):
             "unknown",
             "unknown",
             "unknown",
-            "data_gap",
-            "required_field_missing",
+            "evaluation_unknown",
+            "semantic_output_unknown",
             1,
         ),
     ),
@@ -3182,7 +3261,10 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
             "evidence_materials": materials,
         },
     )
-    assert canonical[0]["status"] == expected_state
+    expected_canonical_state = (
+        "uncertain" if expected_state == "evaluation_unknown" else expected_state
+    )
+    assert canonical[0]["status"] == expected_canonical_state
     assert canonical[0]["reason_code"] == expected_reason
 
 
@@ -3247,6 +3329,73 @@ async def test_lx0609_012_not_mature_window_stays_not_applicable_through_canonic
     assert canonical[0]["status"] == "not_applicable"
     assert canonical[0]["reason_code"] == "evaluation_window_not_mature"
     assert "24 小时评价窗口尚未结束" in canonical[0]["findings"]
+
+
+@pytest.mark.asyncio
+async def test_lx0609_012_complete_ambiguous_semantics_is_uncertain_in_canonical(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-26 10:00:00",
+                "exam_conclusion": "右肺占位，性质待定。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "已查看胸部CT，是否调整方案待进一步评估。",
+            },
+        ),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 10:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=_Client(
+            [
+                _fact_response(
+                    ("LX0609-012",),
+                    applicability="applicable",
+                    semantic_state="unknown",
+                    positive_state="positive",
+                )
+            ]
+        ),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    assert result.decisions[0].evidence_state.value == "conflict"
+    assert reduced[0].final_state.value == "evaluation_unknown"
+    assert reduced[0].reason_code == "semantic_output_unknown"
+    assert canonical[0]["status"] == "uncertain"
+    assert canonical[0]["reason_code"] == "semantic_output_unknown"
 
 
 @pytest.mark.asyncio
@@ -4417,7 +4566,7 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
 async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
     monkeypatch,
 ):
-    """报告阳性未明确的事件只能作为资料缺口，不能拖垮同病例的确定问题。"""
+    """明确违规优先；资料完整但语义不明的事件保留待确认事实。"""
 
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -4481,7 +4630,7 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
     assert reduced[0].final_state.value == "non_compliant"
     display = dict(result.customer_display_facts)["LX0609-012"]
     assert [item["event_status"] for item in display["event_results"]] == [
-        "data_gap",
+        "evaluation_unknown",
         "non_compliant",
     ]
     assert display["event_results"][0]["positive_state"] == "unknown"
@@ -4499,10 +4648,11 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
     assert canonical[0]["status"] == "non_compliant"
     assert canonical[0]["customer_display_facts"]["event_results"][0] == {
         "event_position": 1,
-        "event_status": "data_gap",
+        "event_status": "evaluation_unknown",
         "report_time": "2026-04-01 12:00:00",
         "positive_state": "unknown",
         "response_record_count": 0,
+        "applicable": True,
     }
 
 
@@ -5340,7 +5490,8 @@ async def test_typed_and_legacy_rules_are_isolated_in_mixed_rollback_mode(monkey
 
     assert [item.rule_id for item in result.decisions] == ["LX0609-010"]
     assert result.decisions[0].qc_direction.value == "unknown"
-    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.decisions[0].evidence_state.value == "conflict"
+    assert result.decisions[0].reason_code == "semantic_output_unknown"
     assert [item["rule_id"] for item in result.results] == ["LX0609-014"]
     assert result.results[0]["status"] == "data_gap"
     assert result.llm_call_count == 1

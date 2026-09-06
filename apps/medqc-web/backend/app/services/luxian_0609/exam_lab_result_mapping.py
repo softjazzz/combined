@@ -213,7 +213,10 @@ def build_text_outcome_display_facts(
         rule_id not in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
         or (
             status not in {"compliant", "non_compliant", "not_applicable"}
-            and not (include_data_gap and status == "data_gap")
+            and not (
+                include_data_gap
+                and status in {"data_gap", "evaluation_unknown"}
+            )
         )
     ):
         return None
@@ -241,7 +244,7 @@ def build_text_outcome_display_facts(
             "exam_lab_requirement_not_documented"
             if status == "non_compliant"
             else "exam_lab_event_review_incomplete"
-            if status == "data_gap"
+            if status in {"data_gap", "evaluation_unknown"}
             else "exam_lab_requirement_checked"
         ),
         "subject": subject,

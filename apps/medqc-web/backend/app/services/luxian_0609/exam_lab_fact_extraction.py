@@ -85,6 +85,7 @@ class ExamLabSingleEvent:
     readable_text: bool = True
     # 用于多事件病程复用校验的最小事件身份文本（不作为对外证据）。
     identity_text: str = ""
+    result_text_available: bool = False
 
     def __repr__(self) -> str:
         return (
@@ -550,6 +551,34 @@ def build_exam_lab_text_projection(
         culture_indicator_negative = any(
             "阴性" in value for value in structured_culture_indicators
         )
+        result_fields = (
+            (
+                "description",
+                "result",
+                "exam_result",
+                "exam_impression",
+                "exam_conclusion",
+                "impression",
+                "conclusion",
+                "recommendation",
+                "abnormal_sign",
+            )
+            if family == "exam"
+            else (
+                "description",
+                "result",
+                "abnormal_indicator",
+                "organism_name",
+                "microbe_name",
+                "sensitivity_result",
+                "recommendation",
+            )
+        )
+        result_text_available = any(
+            _clean(row.get(field))
+            for row in rows
+            for field in result_fields
+        )
         if not target_confirmed:
             positive_hint = "unknown"
         elif family == "exam":
@@ -602,6 +631,7 @@ def build_exam_lab_text_projection(
                 and bool(explicit_non_target_pattern.search(material))
             ),
             readable_text=bool(material),
+            result_text_available=result_text_available,
             identity_text=identity_text,
         )
 

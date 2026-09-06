@@ -2529,6 +2529,7 @@ def safe_luxian_0609_customer_display_facts(
                         "non_compliant",
                         "not_applicable",
                         "data_gap",
+                        "evaluation_unknown",
                     }
                 ):
                     return None
@@ -2555,7 +2556,8 @@ def safe_luxian_0609_customer_display_facts(
                         return None
                     if (
                         event_positive_state == "unknown"
-                        and item["event_status"] != "data_gap"
+                        and item["event_status"]
+                        not in {"data_gap", "evaluation_unknown"}
                     ):
                         return None
                     safe_item["positive_state"] = event_positive_state
@@ -2583,7 +2585,7 @@ def safe_luxian_0609_customer_display_facts(
             if (
                 verification_kind == "exam_lab_event_review_incomplete"
                 and not any(
-                    item["event_status"] == "data_gap"
+                    item["event_status"] in {"data_gap", "evaluation_unknown"}
                     for item in safe_event_results
                 )
             ):

@@ -916,17 +916,34 @@ def _single_text_fact_outcome(
         for item in fact.evidence_refs
         if item in safe_refs
     )
+    event = event_for_fact(projection, fact)
     if fact.applicability == "not_applicable":
         return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
     if fact.applicability != "applicable":
-        return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_text_fact_unknown", refs)
+        return _ExamLabOutcome(
+            rule_id,
+            "evaluation_unknown"
+            if rule_id in {"LX0609-012", "LX0609-015"}
+            and event is not None
+            and event.target_confirmed
+            and event.result_text_available
+            else "data_gap",
+            "exam_lab_text_fact_unknown",
+            refs,
+        )
     if rule_id in {"LX0609-012", "LX0609-015"}:
         if fact.positive_state in {"negative", "not_relevant"}:
             return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
         if fact.positive_state != "positive":
-            return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_text_fact_unknown", refs)
+            return _ExamLabOutcome(
+                rule_id,
+                "evaluation_unknown"
+                if event is not None and event.result_text_available
+                else "data_gap",
+                "exam_lab_text_fact_unknown",
+                refs,
+            )
 
-    event = event_for_fact(projection, fact)
     role = "exam_time" if rule_id == "LX0609-010" else "report_time"
     if event is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_event_missing", refs)
@@ -965,7 +982,17 @@ def _single_text_fact_outcome(
             refs,
         )
     if fact.semantic_state != "present":
-        return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_text_fact_unknown", refs)
+        return _ExamLabOutcome(
+            rule_id,
+            "data_gap"
+            if event is None
+            or not event.result_text_available
+            or projection.course_time_incomplete
+            or projection.course_projection_truncated
+            else "evaluation_unknown",
+            "exam_lab_text_fact_unknown",
+            refs,
+        )
 
     course_times = tuple(
         projection.course_times.get(doc_ref) for doc_ref in fact.course_doc_refs
@@ -1041,7 +1068,14 @@ def _text_fact_outcome(
         )
         for fact in rule_facts
     )
-    for status in ("non_compliant", "data_gap", "compliant", "not_applicable"):
+    for status in (
+        "non_compliant",
+        "technical_error",
+        "data_gap",
+        "evaluation_unknown",
+        "compliant",
+        "not_applicable",
+    ):
         selected = tuple(item for item in outcomes if item.status == status)
         if selected:
             return _ExamLabOutcome(
