@@ -91,6 +91,7 @@ from ..services.sichuan_workspace_batch_worker import (
     _normalize_batch_output_mode,
     _normalize_max_refine_candidates,
     _normalize_run_mode,
+    _build_record_status_counts as _build_record_status_counts,
     _build_result_performance_profile,
     _sanitize_trace_value,
     _result_diagnostic_trace,
