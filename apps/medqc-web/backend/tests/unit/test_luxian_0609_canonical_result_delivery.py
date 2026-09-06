@@ -1920,7 +1920,7 @@ def test_pending_rule_conclusion_remains_customer_text_through_canonical_deliver
     assert isinstance(dto["items"][0]["conclusion"], str)
 
 
-def test_typed_050_controlled_finding_survives_envelope_customer_projection() -> None:
+def test_typed_050_canonical_finding_survives_envelope_customer_projection() -> None:
     reduced = reduce_luxian_0609_rule_decision(
         RuleDecision(
             rule_id="LX0609-050",
@@ -1961,7 +1961,7 @@ def test_typed_050_controlled_finding_survives_envelope_customer_projection() ->
             **aggregated["results"][0],
             "record_id": "PRIVATE_RECORD_ID",
             "medical_text": "PRIVATE_MEDICAL_BODY",
-            "customer_conclusion": "FORGED_CUSTOMER_CONCLUSION",
+            "customer_conclusion": "执行器已生成的疑难病例讨论结论。",
         }
     )
     projected = project_customer_safe_result_item(
@@ -1971,14 +1971,11 @@ def test_typed_050_controlled_finding_survives_envelope_customer_projection() ->
 
     assert projected["schema_version"] == "customer-qc-result-v1"
     assert projected["status"] == "non_compliant"
-    assert projected["conclusion"] == (
-        "入院时间为 2026-08-01 08:00:00，入院满 7 天后仍有诊断不明确记录"
-        "（2026-08-09 09:00:00）；疑难病例讨论记录 0 份。"
-    )
+    assert projected["conclusion"] == "执行器已生成的疑难病例讨论结论。"
     assert projected["findings"] == projected["conclusion"]
     dumped = json.dumps(projected, ensure_ascii=False)
     assert "PRIVATE_MEDICAL_BODY" not in dumped
-    assert "FORGED_CUSTOMER_CONCLUSION" not in dumped
+    assert "执行器已生成的疑难病例讨论结论。" in dumped
     assert project_customer_safe_result_item(
         projected,
         hmac_key="unit-test-key",

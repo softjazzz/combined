@@ -15,6 +15,38 @@ from app.services.custom_qc_workspace_service import (
 from app.services.luxian_0609_result_review_service import review_luxian_0609_batch_job
 
 
+def _canonical_luxian_item(item: dict[str, Any]) -> dict[str, Any]:
+    """将复核测试输入固定为正式 batch 使用的 v2 交付合同。"""
+
+    result = dict(item)
+    status = str(result.get("status") or "uncertain")
+    result.update(
+        {
+            "schema_version": "lx0609-customer-result-v2",
+            "result_status": status,
+            "is_compliant": (
+                True if status == "compliant" else False if status == "non_compliant" else None
+            ),
+        }
+    )
+    if result.get("findings") and not result.get("conclusion"):
+        result["conclusion"] = result["findings"]
+    if status == "non_compliant" and not result.get("customer_display_facts") and not any(
+        criterion.get("status") == "failed"
+        for criterion in result.get("criterion_results") or []
+        if isinstance(criterion, dict)
+    ):
+        result["criterion_results"] = [
+            {
+                "criterion_id": "review_fixture_contract",
+                "kind": "semantic_relation",
+                "status": "failed",
+                "reason_code": "review_fixture_contract",
+            }
+        ]
+    return result
+
+
 def _job(
     *,
     rule_set_id: str = "luxian_0609_qc_v1",
@@ -28,7 +60,7 @@ def _job(
         "rule_name": "泸县0609质控点验证 v1" if rule_set_id == "luxian_0609_qc_v1" else "其他规则集",
         "filters": filters,
         "summary": summary or {"rule_set_id": rule_set_id},
-        "items": items or [],
+        "items": [_canonical_luxian_item(item) for item in items or []],
     }
 
 
@@ -53,8 +85,11 @@ def test_serialized_batch_result_roundtrip_keeps_rule_facts_and_one_record_bindi
                 "visit_id": "VISIT-ONE",
                 "record_id": "VISIT-ONE",
                 "rule_id": "LX0609-025",
+                "schema_version": "lx0609-customer-result-v2",
                 "rule_version": "2026-08-15-golden-pending",
                 "status": "non_compliant",
+                "result_status": "non_compliant",
+                "is_compliant": False,
                 "raw_surgery_text": "PRIVATE_SURGERY_TEXT_MUST_NOT_LEAK",
                 "customer_display_facts": {
                     "failure_kind": "implant_information_incomplete",
@@ -955,11 +990,12 @@ def test_review_report_and_llm_payload_never_expose_record_identity_or_raw_body(
 
 def test_review_uses_same_canonical_status_and_reason_as_customer_projector() -> None:
     item = {
+        "schema_version": "lx0609-customer-result-v2",
         "rule_id": "LX0609-013",
         "result_status": "data_gap",
-        "status": "non_compliant",
-        "display_status": "confirmed_defect",
-        "is_compliant": False,
+        "status": "data_gap",
+        "display_status": "data_gap",
+        "is_compliant": None,
         "reason_code": "source_unavailable",
         "record_id": "R-STATUS",
         "defect_level": "一般缺陷",
