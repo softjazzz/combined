@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
@@ -403,6 +404,7 @@ async def test_025_uses_implant_fact_contract_for_na_and_missing_field(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-025",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert [item.final_state.value for item in reduced] == [expected_state]
@@ -451,6 +453,7 @@ async def test_025_ignores_barcode_and_delivers_identified_implant_name() -> Non
         decisions=native.decisions,
         expected_rule_ids=("LX0609-025",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-025"}],
@@ -470,6 +473,60 @@ async def test_025_ignores_barcode_and_delivers_identified_implant_name() -> Non
         "人工硬脑膜"
     ]
     assert "implant_barcode" not in native.customer_display_facts[0][1]["checked_fields"]
+    coordinate_by_ref = {
+        ref: (source_key, str(row.get("document_id") or "").strip())
+        for source_key in session.materials.safe_summary()["sources"]
+        for ref, row in session.materials.document_rows(
+            source_key, snapshot=session.snapshot
+        )
+    }
+    assert {
+        coordinate_by_ref[ref]
+        for ref in native.decisions[0].fact_refs
+        if ref in coordinate_by_ref
+    } == {("surgery_record", "surgery-025-identification")}
+    assert {
+        (
+            item.get("source_type"),
+            item.get("source_document_id"),
+        )
+        for item in canonical[0].get("customer_evidence", [])
+    } == {("surgery_record", "surgery-025-identification")}
+
+
+@pytest.mark.asyncio
+async def test_025_illegal_document_ref_fails_closed_as_technical_error() -> None:
+    """Binding 只能接受本次会话实际材料中的逐行文书坐标。"""
+
+    session = _session()
+    native = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-025",),
+        decision_rule_ids=("LX0609-025",),
+        wrapper_rules=[],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client({"schema_version": SCHEMA_VERSION, "events": [_event()]}),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(
+            replace(
+                native.decisions[0],
+                fact_refs=(*native.decisions[0].fact_refs, "0" * 64),
+            ),
+        ),
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "technical_error"
+    assert reduced[0].reason_code == "snapshot_mismatch"
 
 
 def test_025_rejects_implant_name_not_present_in_cited_document() -> None:
@@ -660,6 +717,7 @@ async def test_025_requires_all_five_surgery_record_fields_and_ignores_barcode()
         decisions=native.decisions,
         expected_rule_ids=("LX0609-025",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-025"}],
@@ -742,6 +800,7 @@ async def test_025_course_record_cannot_replace_unavailable_surgery_record() -> 
         decisions=native.decisions,
         expected_rule_ids=("LX0609-025",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-025"}],
@@ -785,6 +844,7 @@ async def test_025_unavailable_course_source_is_data_gap_without_llm_call() -> N
         decisions=result.decisions,
         expected_rule_ids=("LX0609-025",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["data_gap"]
