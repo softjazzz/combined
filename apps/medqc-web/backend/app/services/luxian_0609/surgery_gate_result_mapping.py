@@ -341,6 +341,65 @@ def safe_surgery_gate_customer_display_facts(*, rule_id: str, raw: Any) -> dict[
     return handler(raw) if handler else None
 
 
+def legacy_surgery_gate_customer_evidence(
+    *,
+    rule_id: str,
+    raw: Any,
+    safe_facts: Mapping[str, Any] | None,
+) -> list[dict[str, str]] | None:
+    """仅保留旧 aggregate 直调入口的 025 证据兼容。
+
+    新主链的客户证据仍只由 ``fact_refs`` 和公共投影产生。
+    这个函数不选择新证据，只在旧输入已经通过本族 facts
+    合同时，恢复迁移前已对外的手术记录坐标。
+    """
+
+    if rule_id != "LX0609-025":
+        return None
+    if not isinstance(raw, Mapping) or safe_facts is None:
+        return []
+
+    def valid_document_id(value: Any) -> str:
+        candidate = str(value or "").strip()
+        return (
+            candidate
+            if candidate
+            and len(candidate) <= 256
+            and "\n" not in candidate
+            and "\r" not in candidate
+            else ""
+        )
+
+    if raw.get("failure_kind") == "implant_information_incomplete":
+        event_details = raw.get("implant_event_details")
+        if not isinstance(event_details, list):
+            return []
+        located: list[dict[str, str]] = []
+        for item in event_details:
+            if not isinstance(item, Mapping):
+                return []
+            document_id = valid_document_id(item.get("source_document_id"))
+            if not document_id:
+                return []
+            located.append(
+                {
+                    "source_type": "surgery_record",
+                    "source_document_id": document_id,
+                }
+            )
+        return located
+
+    document_id = valid_document_id(raw.get("source_document_id"))
+    if raw.get("source_document_type") == "surgery_record" and document_id:
+        return [
+            {
+                "source_type": "surgery_record",
+                "source_document_id": document_id,
+            }
+        ]
+    return []
+
+
 def surgery_gate_customer_fact_status_is_valid(*, rule_id: str, status: str, reason_code: str, raw_facts: Any, safe_facts: Mapping[str, Any] | None) -> bool:
     """状态与 executor facts 的既有一致性合同，供 Finalizer fail-closed 使用。"""
     if rule_id == "LX0609-003" and isinstance(safe_facts, Mapping):

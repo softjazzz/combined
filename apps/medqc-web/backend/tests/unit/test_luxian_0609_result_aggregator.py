@@ -4185,7 +4185,10 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
 
     assert result["customer_display_facts"] == expected
     if rule_id == "LX0609-025":
-        assert "customer_evidence" not in result
+        assert result["customer_evidence"] == [{
+            "source_type": "surgery_record",
+            "source_document_id": "private-surgery-document-id",
+        }]
     assert "PRIVATE_" not in repr(result)
 
 

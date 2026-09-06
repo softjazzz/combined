@@ -26,6 +26,9 @@ from .luxian_0609.customer_evidence_enrichment import (
 )
 from .luxian_0609.decision_reducer import ReducedRuleDecision
 from .luxian_0609.source_evidence_reader import authoritative_document_time_value
+from .luxian_0609.surgery_gate_result_mapping import (
+    legacy_surgery_gate_customer_evidence,
+)
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
     TRIGGER_ABSENT,
@@ -2966,12 +2969,16 @@ def _customer_evidence_from_display_facts(
         raw=raw,
     )
     if verified_facts is not NotImplemented:
-        return []
+        legacy_evidence = legacy_surgery_gate_customer_evidence(
+            rule_id=rule_id,
+            raw=raw,
+            safe_facts=verified_facts,
+        )
+        return [] if legacy_evidence is None else legacy_evidence
     # 先复用展示事实白名单验证业务形态；内部 ID 只在此函数中转成
     # customer_evidence，绝不能进入 customer_display_facts。
     if safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw) is None:
         return []
-
 
     def valid_document_id(value: Any) -> str:
         candidate = str(value or "").strip()
