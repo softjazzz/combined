@@ -634,6 +634,7 @@ def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "presurg_summary",
+                "surgery_trigger_kind": "performed_surgery",
                 "performed_surgery_confirmed": True,
             },
             "已确认本次实施手术，但未找到对应的术前小结。",

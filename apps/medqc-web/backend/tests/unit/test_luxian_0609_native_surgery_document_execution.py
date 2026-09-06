@@ -381,6 +381,7 @@ async def test_typed_029_nonempty_summary_is_compliant_without_llm():
     assert dict(result.customer_display_facts)["LX0609-029"] == {
         "verification_kind": "surgery_document_present",
         "target_document": "presurg_summary",
+        "surgery_trigger_kind": "performed_surgery",
         "performed_surgery_confirmed": True,
     }
     assert result.llm_call_count == result.total_tokens == 0
@@ -639,6 +640,7 @@ async def test_typed_029_multiple_surgeries_and_empty_summary_is_non_compliant()
     assert dict(result.customer_display_facts)["LX0609-029"] == {
         "failure_kind": "surgery_document_missing",
         "target_document": "presurg_summary",
+        "surgery_trigger_kind": "performed_surgery",
         "performed_surgery_confirmed": True,
     }
     assert result.llm_call_count == result.total_tokens == 0
@@ -725,6 +727,7 @@ async def test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_l
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "presurg_summary",
+                "surgery_trigger_kind": "performed_surgery",
                 "performed_surgery_confirmed": True,
             },
         ),
@@ -2676,18 +2679,25 @@ async def test_typed_scope_and_snapshot_material_binding_fail_closed():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("summary_rows", "expected_state", "expected_reason"),
+    ("summary_rows", "expected_state", "expected_reason", "expected_finding"),
     (
         (
             ({"document_id": "summary-029", "record_content": "术前小结正文完整。"},),
             "compliant",
             "requirement_satisfied",
+            "已发现手术医嘱，术前小结已完整记录。",
         ),
-        ((), "non_compliant", "required_document_missing"),
+        (
+            (),
+            "non_compliant",
+            "required_document_missing",
+            "已发现手术医嘱，但未找到对应术前小结。",
+        ),
         (
             ({"document_id": "summary-029", "record_content": "   "},),
             "non_compliant",
             "defect_proven",
+            "已发现手术医嘱，但对应术前小结正文为空。",
         ),
     ),
 )
@@ -2695,6 +2705,7 @@ async def test_typed_029_surgery_order_only_triggers_and_binds_selected_evidence
     summary_rows: tuple[dict, ...],
     expected_state: str,
     expected_reason: str,
+    expected_finding: str,
 ) -> None:
     """029 的医嘱触发必须走既有 any-of 合同，不等待已实施手术。"""
 
@@ -2755,6 +2766,51 @@ async def test_typed_029_surgery_order_only_triggers_and_binds_selected_evidence
     }
     assert ("inpat_nondrug_order", "surgery-order-029") in coordinates
     assert all(len(document_id) != 64 for _, document_id in coordinates)
+    assert canonical["findings"] == expected_finding
+    assert "实施手术" not in canonical["findings"]
+
+
+@pytest.mark.asyncio
+async def test_typed_029_performed_surgery_trigger_keeps_implemented_surgery_copy() -> None:
+    """严格已实施手术触发仍保留其真实展示事实和客户文案。"""
+
+    session = _typed_029_session(
+        surgery_mode="exact",
+        mr_surgery_mode="empty",
+        order_mode="empty",
+        summary_rows=(),
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[_wrapper("LX0609-029")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[_wrapper("LX0609-029")],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )[0]
+
+    facts = canonical["customer_display_facts"]
+    assert facts["surgery_trigger_kind"] == "performed_surgery"
+    assert facts["performed_surgery_confirmed"] is True
+    assert "surgery_order_confirmed" not in facts
+    assert canonical["findings"] == "已确认本次实施手术，但未找到对应的术前小结。"
 
 
 @pytest.mark.asyncio

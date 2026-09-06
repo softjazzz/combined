@@ -1247,6 +1247,7 @@ def compliant_customer_finding(
     *,
     rule_id: str,
     criterion_results: Any = (),
+    safe_customer_display_facts: Mapping[str, Any] | None = None,
 ) -> str:
     """只根据规则身份和已校验子结论生成合规短句，供 Envelope 单次生成复用。"""
 
@@ -1254,6 +1255,23 @@ def compliant_customer_finding(
         finding = _lx018_criterion_finding(criterion_results)
         if finding:
             return finding
+    if (
+        rule_id == "LX0609-029"
+        and isinstance(safe_customer_display_facts, Mapping)
+        and safe_customer_display_facts.get("verification_kind")
+        == "surgery_document_present"
+        and safe_customer_display_facts.get("target_document") == "presurg_summary"
+    ):
+        if (
+            safe_customer_display_facts.get("surgery_trigger_kind") == "surgery_order"
+            and safe_customer_display_facts.get("surgery_order_confirmed") is True
+        ):
+            return "已发现手术医嘱，术前小结已完整记录。"
+        if (
+            safe_customer_display_facts.get("surgery_trigger_kind") == "performed_surgery"
+            and safe_customer_display_facts.get("performed_surgery_confirmed") is True
+        ):
+            return "已确认本次实施手术具备术前小结。"
     return _RULE_COMPLIANT_FINDINGS.get(
         rule_id,
         "已完成本质控点核对，未发现违反质控要求的情况。",
@@ -1723,12 +1741,31 @@ def customer_finding_from_controlled_facts(
         return "、".join(str(value) for value in values) if isinstance(values, list) else ""
 
     if rule_id == "LX0609-029":
-        if (
-            kind == "surgery_document_missing"
-            and facts.get("target_document") == "presurg_summary"
+        if facts.get("target_document") != "presurg_summary":
+            return ""
+        order_trigger = (
+            facts.get("surgery_trigger_kind") == "surgery_order"
+            and facts.get("surgery_order_confirmed") is True
+        )
+        performed_trigger = (
+            facts.get("surgery_trigger_kind") == "performed_surgery"
             and facts.get("performed_surgery_confirmed") is True
-        ):
-            return "已确认本次实施手术，但未找到对应的术前小结。"
+        )
+        if kind == "surgery_document_present":
+            if order_trigger:
+                return "已发现手术医嘱，术前小结已完整记录。"
+            if performed_trigger:
+                return "已确认本次实施手术具备术前小结。"
+        if kind == "surgery_document_missing":
+            if order_trigger:
+                return "已发现手术医嘱，但未找到对应术前小结。"
+            if performed_trigger:
+                return "已确认本次实施手术，但未找到对应的术前小结。"
+        if kind == "surgery_document_blank":
+            if order_trigger:
+                return "已发现手术医嘱，但对应术前小结正文为空。"
+            if performed_trigger:
+                return "已确认本次实施手术，但对应术前小结正文为空。"
         return ""
 
     if rule_id == "LX0609-031":
@@ -3063,6 +3100,7 @@ def render_luxian_0609_customer_result(
         findings = compliant_customer_finding(
             rule_id=decision.rule_id,
             criterion_results=decision.criterion_results,
+            safe_customer_display_facts=safe_customer_display_facts,
         )
     elif decision.final_state is CustomerFinalState.DATA_GAP:
         reason_specific_gap = _RULE_DATA_GAP_REASON_MESSAGES.get(

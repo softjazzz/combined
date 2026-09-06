@@ -3829,6 +3829,7 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 {
                     "failure_kind": "surgery_document_missing",
                     "target_document": "presurg_summary",
+                    "surgery_trigger_kind": "performed_surgery",
                     "performed_surgery_confirmed": True,
                 },
             ),

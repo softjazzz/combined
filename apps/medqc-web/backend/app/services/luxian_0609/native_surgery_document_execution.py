@@ -1657,6 +1657,20 @@ def _typed_document_refs(
         return ()
 
 
+def _typed_029_trigger_display_facts(*, performed_triggered: bool) -> dict[str, object]:
+    """仅把实际触发来源投影为展示事实，禁止医嘱触发伪称已实施。"""
+
+    if performed_triggered:
+        return {
+            "surgery_trigger_kind": "performed_surgery",
+            "performed_surgery_confirmed": True,
+        }
+    return {
+        "surgery_trigger_kind": "surgery_order",
+        "surgery_order_confirmed": True,
+    }
+
+
 async def _typed_029_outcome(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -1699,6 +1713,9 @@ async def _typed_029_outcome(
             outcome,
             0, 0, 0, 0, 0.0,
         )
+    trigger_display_facts = _typed_029_trigger_display_facts(
+        performed_triggered=performed_triggered
+    )
     target_gate = _typed_source_gate(
         rule_id="LX0609-029", source_key="presurg_summary", snapshot=snapshot
     )
@@ -1714,7 +1731,7 @@ async def _typed_029_outcome(
                 {
                     "failure_kind": "surgery_document_missing",
                     "target_document": "presurg_summary",
-                    "performed_surgery_confirmed": True,
+                    **trigger_display_facts,
                 },
                 order_refs,
             ),
@@ -1790,7 +1807,7 @@ async def _typed_029_outcome(
                         {
                             "failure_kind": "surgery_document_missing",
                             "target_document": "presurg_summary",
-                            "performed_surgery_confirmed": True,
+                            **trigger_display_facts,
                         },
                         selected_refs,
                     ),
@@ -1821,7 +1838,7 @@ async def _typed_029_outcome(
                 {
                     "verification_kind": "surgery_document_present",
                     "target_document": "presurg_summary",
-                    "performed_surgery_confirmed": True,
+                    **trigger_display_facts,
                 },
                 selected_refs,
             ),
@@ -1833,7 +1850,11 @@ async def _typed_029_outcome(
             "non_compliant",
             "preop_summary_blank",
             "program",
-            None,
+            {
+                "failure_kind": "surgery_document_blank",
+                "target_document": "presurg_summary",
+                **trigger_display_facts,
+            },
             selected_refs,
         ),
         0, 0, 0, 0, 0.0,
@@ -2117,25 +2138,9 @@ async def execute_luxian_0609_native_surgery_document_rules(
                 completion_tokens += completion
                 total_tokens += total
                 api_time += elapsed
-                if (
-                    outcome.status == "non_compliant"
-                    or outcome.customer_display_facts is not None
-                ):
+                if outcome.customer_display_facts is not None:
                     customer_display_facts.append(
-                        (
-                            rule_id,
-                            outcome.customer_display_facts
-                            if outcome.status == "compliant"
-                            else {
-                                "failure_kind": (
-                                    "surgery_document_blank"
-                                    if outcome.reason_code == "preop_summary_blank"
-                                    else "surgery_document_missing"
-                                ),
-                                "target_document": "presurg_summary",
-                                "performed_surgery_confirmed": True,
-                            },
-                        )
+                        (rule_id, outcome.customer_display_facts)
                     )
             else:
                 outcome = _typed_terminal_outcome(

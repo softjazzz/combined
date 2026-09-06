@@ -2712,26 +2712,41 @@ def safe_luxian_0609_customer_display_facts(
     target_document = surgery_document_targets.get(rule_id)
     if target_document is not None:
         failure_kind = raw.get("failure_kind")
+        trigger_kind = raw.get("surgery_trigger_kind")
+        if trigger_kind == "surgery_order":
+            trigger_fact = {"surgery_order_confirmed": True}
+        elif trigger_kind == "performed_surgery":
+            trigger_fact = {"performed_surgery_confirmed": True}
+        else:
+            return None
         if (
             raw.get("verification_kind") == "surgery_document_present"
             and raw.get("target_document") == target_document
-            and raw.get("performed_surgery_confirmed") is True
+            and all(raw.get(key) == value for key, value in trigger_fact.items())
+            and set(raw) == {
+                "verification_kind", "target_document", "surgery_trigger_kind", *trigger_fact
+            }
         ):
             return {
                 "verification_kind": "surgery_document_present",
                 "target_document": target_document,
-                "performed_surgery_confirmed": True,
+                "surgery_trigger_kind": trigger_kind,
+                **trigger_fact,
             }
         if (
             failure_kind not in {"surgery_document_missing", "surgery_document_blank"}
             or raw.get("target_document") != target_document
-            or raw.get("performed_surgery_confirmed") is not True
+            or not all(raw.get(key) == value for key, value in trigger_fact.items())
+            or set(raw) != {
+                "failure_kind", "target_document", "surgery_trigger_kind", *trigger_fact
+            }
         ):
             return None
         return {
             "failure_kind": failure_kind,
             "target_document": target_document,
-            "performed_surgery_confirmed": True,
+            "surgery_trigger_kind": trigger_kind,
+            **trigger_fact,
         }
     if rule_id == "LX0609-038":
         if (
