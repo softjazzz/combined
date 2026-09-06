@@ -45,15 +45,19 @@ class _RecordedLlm:
         *,
         content: str = '{"state":"unknown","confidence":0.5}',
         raises: bool = False,
+        response: object | None = None,
     ) -> None:
         self.content = content
         self.raises = raises
+        self.response = response
         self.calls: list[str] = []
 
-    async def generate(self, prompt: str) -> dict:
+    async def generate(self, prompt: str) -> object:
         self.calls.append(prompt)
         if self.raises:
             raise TimeoutError("controlled timeout")
+        if self.response is not None:
+            return self.response
         return {
             "choices": [{"message": {"content": self.content}}],
             "usage": {
@@ -332,37 +336,80 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
         "surgery_level_source": "structured_field",
         "mdt_discussion_state": "completed",
     }
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "mr_surgery",
-            "source_document_id": "SURGERY-EXACT",
-            "record_time": "2026-01-02 09:00:00",
-        },
-        {
-            "source_type": "presurg_discussion",
-            "source_document_id": "DISC-PRIVATE",
-            "record_time": "2026-01-01 09:00:00",
-            "field_path": "record_content",
-            "evidence_excerpt": "经多学科讨论后一致认为可实施手术。",
-            "excerpt_kind": "文书级依据",
-        },
+    evidence_by_coordinate = {
+        (
+            item["source_type"],
+            item["source_document_id"],
+            item.get("field_path", ""),
+            item["record_time"],
+        ): item
+        for item in result["customer_evidence"]
+    }
+    assert set(evidence_by_coordinate) == {
+        ("mr_surgery", "SURGERY-EXACT", "", "2026-01-02 09:00:00"),
+        (
+            "presurg_discussion",
+            "DISC-PRIVATE",
+            "record_content",
+            "2026-01-01 09:00:00",
+        ),
+    }
+    discussion_evidence = evidence_by_coordinate[
+        (
+            "presurg_discussion",
+            "DISC-PRIVATE",
+            "record_content",
+            "2026-01-01 09:00:00",
+        )
     ]
+    assert discussion_evidence["evidence_excerpt"] == "经多学科讨论后一致认为可实施手术。"
+    assert discussion_evidence["excerpt_kind"] == "文书级依据"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("name", "llm", "expected_calls", "expected_tokens"),
     (
-        ("模型超时", _RecordedLlm(raises=True), 1, 0),
-        ("模型非法JSON", _RecordedLlm(content="not-json"), 1, 132),
-        ("模型合法unknown", _RecordedLlm(), 1, 132),
+        "name",
+        "llm",
+        "expected_calls",
+        "expected_tokens",
+        "expected_reduced",
+        "expected_public",
+    ),
+    (
+        (
+            "模型超时",
+            _RecordedLlm(raises=True),
+            1,
+            0,
+            ("technical_error", "model_transport_error"),
+            ("technical_error", "model_transport_error"),
+        ),
+        (
+            "模型非法JSON",
+            _RecordedLlm(content="not-json"),
+            1,
+            132,
+            ("technical_error", "model_invalid_output"),
+            ("technical_error", "model_invalid_output"),
+        ),
+        (
+            "模型合法unknown",
+            _RecordedLlm(),
+            1,
+            132,
+            ("evaluation_unknown", "semantic_output_unknown"),
+            ("uncertain", "semantic_output_unknown"),
+        ),
     ),
 )
-async def test_mdt_model_failures_and_semantic_unknown_currently_collapse_to_one_data_gap(
+async def test_mdt_model_transport_protocol_and_semantic_unknown_are_distinct(
     name,
     llm,
     expected_calls,
     expected_tokens,
+    expected_reduced,
+    expected_public,
 ):
     session = _session(_ordinary_preop_rows())
     envelope, reduced, result = await _execute_and_project(session, llm)
@@ -372,15 +419,8 @@ async def test_mdt_model_failures_and_semantic_unknown_currently_collapse_to_one
     assert "请单一专科协助评估手术风险。" in llm.calls[0], name
     assert envelope.llm_call_count == expected_calls, name
     assert envelope.total_tokens == expected_tokens, name
-    # 这是冻结的阻塞反例：timeout、协议非法与语义 unknown 都丢失了失败语义。
-    assert (reduced.final_state.value, reduced.reason_code) == (
-        "data_gap",
-        "required_field_missing",
-    ), name
-    assert (result["status"], result["reason_code"]) == (
-        "data_gap",
-        "required_field_missing",
-    ), name
+    assert (reduced.final_state.value, reduced.reason_code) == expected_reduced, name
+    assert (result["status"], result["reason_code"]) == expected_public, name
 
 
 @pytest.mark.asyncio
@@ -420,23 +460,76 @@ async def test_mdt_incomplete_discussion_source_is_data_gap_without_model_call()
 
 
 @pytest.mark.asyncio
-async def test_mdt_missing_model_client_currently_collapses_to_required_field_missing():
+async def test_mdt_incomplete_source_preempts_semantic_evaluation_without_model_call():
+    session = _session(
+        _ordinary_preop_rows(),
+        failed_source="consultation_record",
+        unavailable=True,
+    )
+    unknown = _RecordedLlm()
+    envelope, reduced, result = await _execute_and_project(session, unknown)
+
+    assert len(unknown.calls) == envelope.llm_call_count == 0
+    assert envelope.total_tokens == 0
+    assert (reduced.final_state.value, reduced.reason_code) == (
+        "data_gap",
+        "source_unavailable",
+    )
+    assert (result["status"], result["reason_code"]) == (
+        "data_gap",
+        "source_unavailable",
+    )
+
+
+@pytest.mark.asyncio
+async def test_mdt_missing_model_client_is_model_transport_error():
     session = _session(_ordinary_preop_rows())
     envelope, reduced, result = await _execute_and_project(session, None)
 
     assert envelope.llm_call_count == 0
     assert (reduced.final_state.value, reduced.reason_code) == (
-        "data_gap",
-        "required_field_missing",
+        "technical_error",
+        "model_transport_error",
     )
     assert (result["status"], result["reason_code"]) == (
-        "data_gap",
-        "required_field_missing",
+        "technical_error",
+        "model_transport_error",
     )
 
 
 @pytest.mark.asyncio
-async def test_mdt_parser_does_not_validate_confidence_or_reason_code_types():
+@pytest.mark.parametrize(
+    ("name", "response"),
+    (
+        ("非Mapping响应", ["not-a-response"]),
+        (
+            "非法usage类型",
+            {
+                "choices": [{"message": {"content": '{"state":"present"}'}}],
+                "usage": {"prompt_tokens": "not-an-int"},
+            },
+        ),
+    ),
+)
+async def test_mdt_invalid_response_type_or_usage_is_safe_technical_error(name, response):
+    session = _session(_ordinary_preop_rows())
+    llm = _RecordedLlm(response=response)
+    envelope, reduced, result = await _execute_and_project(session, llm)
+
+    assert envelope.llm_call_count == 1
+    assert envelope.total_tokens == 0, name
+    assert (reduced.final_state.value, reduced.reason_code) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert (result["status"], result["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+
+
+@pytest.mark.asyncio
+async def test_mdt_unused_confidence_and_reason_code_remain_outside_this_fix_scope():
     session = _session(_ordinary_preop_rows())
     llm = _RecordedLlm(
         content='{"state":"present","confidence":"not-a-number","reason_code":[]}'

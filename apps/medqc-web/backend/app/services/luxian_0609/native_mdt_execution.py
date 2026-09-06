@@ -423,10 +423,23 @@ def _typed_decision_from_outcome(
             QcDirection.UNKNOWN,
             canonical_reason,
         )
+    elif outcome.status == "evaluation_unknown":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "semantic_output_unknown",
+        )
     elif outcome.status == "technical_error":
         canonical_reason = (
             outcome.reason_code
-            if outcome.reason_code in {"source_query_error", "snapshot_mismatch"}
+            if outcome.reason_code
+            in {
+                "source_query_error",
+                "snapshot_mismatch",
+                "model_transport_error",
+                "model_invalid_output",
+            }
             else "executor_exception"
         )
         dimensions = (
@@ -467,6 +480,7 @@ def _finalize(
     if typed_requested and conditional_blocker is not None and outcome.status in {
         "non_compliant",
         "data_gap",
+        "evaluation_unknown",
     }:
         outcome = conditional_blocker
     if typed_requested:
@@ -528,7 +542,7 @@ async def execute_luxian_0609_native_mdt_rule(
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     decision_rule_ids: Sequence[str] = (),
 ) -> NativeMdtExecutionResult:
-    """执行 040；所有来源异常和模型不确定均保守为 data_gap。"""
+    """执行 040；来源缺口、模型技术失败和语义未知按合同分别返回。"""
     typed_scope = tuple(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     )
@@ -807,7 +821,9 @@ async def execute_luxian_0609_native_mdt_rule(
         )
     if llm_client is None:
         return finish(
-            _MdtRuleOutcome("data_gap", "data_gap", "mdt_llm_unavailable")
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "model_transport_error", "llm"
+            )
         )
 
     eligible.sort(key=lambda item: (-item[0], item[1], item[2]))
@@ -827,12 +843,40 @@ async def execute_luxian_0609_native_mdt_rule(
         )
     except Exception:
         return finish(
-            _MdtRuleOutcome("data_gap", "data_gap", "mdt_llm_error", "llm"),
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "model_transport_error", "llm"
+            ),
             llm_call_count=1,
         )
-    prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
+    if not isinstance(response, Mapping):
+        return finish(
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "model_invalid_output", "llm"
+            ),
+            llm_call_count=1,
+        )
+    try:
+        prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
+    except (TypeError, ValueError, OverflowError):
+        return finish(
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "model_invalid_output", "llm"
+            ),
+            llm_call_count=1,
+        )
     payload = _llm_payload(response)
-    state = _clean((payload or {}).get("state")).lower()
+    if payload is None or not isinstance(payload.get("state"), str):
+        return finish(
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "model_invalid_output", "llm"
+            ),
+            llm_call_count=1,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        )
+    state = _clean(payload["state"]).lower()
     if state == "present":
         status, kind, reason = "compliant", "requirement_satisfied", "mdt_llm_present"
     elif state == "absent":
@@ -841,8 +885,23 @@ async def execute_luxian_0609_native_mdt_rule(
             "required_document_missing",
             "mdt_llm_absent",
         )
+    elif state == "unknown":
+        status, kind, reason = (
+            "evaluation_unknown",
+            "semantic_uncertain",
+            "semantic_output_unknown",
+        )
     else:
-        status, kind, reason = "data_gap", "data_gap", "mdt_llm_unknown"
+        return finish(
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "model_invalid_output", "llm"
+            ),
+            llm_call_count=1,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        )
     return finish(
         _MdtRuleOutcome(status, kind, reason, "llm"),
         llm_call_count=1,

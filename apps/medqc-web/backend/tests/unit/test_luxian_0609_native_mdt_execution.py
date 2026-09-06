@@ -858,7 +858,7 @@ async def test_ungraded_surgery_does_not_trigger_level4_mdt_rule(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_invalid_llm_output_stays_data_gap(monkeypatch):
+async def test_invalid_llm_output_is_technical_error(monkeypatch):
     monkeypatch.setattr(
         native_mdt_execution,
         "read_luxian_0609_native_source_rows",
@@ -890,8 +890,8 @@ async def test_invalid_llm_output_stays_data_gap(monkeypatch):
         llm_client=llm,
     )
 
-    assert execution.result["status"] == "data_gap"
-    assert execution.result["metadata"]["reason_code"] == "mdt_llm_unknown"
+    assert execution.result["status"] == "technical_error"
+    assert execution.result["metadata"]["reason_code"] == "model_invalid_output"
     assert execution.llm_call_count == 1
 
 
