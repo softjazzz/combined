@@ -15,6 +15,7 @@ from .luxian_0609_result_schema import (
 )
 from .luxian_0609.canonical_result_finalizer import (
     finalizer_owns_executor_customer_display_facts,
+    finalizer_validates_missing_executor_customer_display_facts,
     finalize_luxian_0609_canonical_result,
     finalize_luxian_0609_executor_customer_display_facts,
     validate_luxian_0609_executor_customer_display_facts,
@@ -25,7 +26,6 @@ from .luxian_0609.customer_evidence_enrichment import (
 )
 from .luxian_0609.decision_reducer import ReducedRuleDecision
 from .luxian_0609.source_evidence_reader import authoritative_document_time_value
-from .luxian_0609.surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
     TRIGGER_ABSENT,
@@ -272,69 +272,6 @@ def _build_diagnostic_trace(
     )
 
 
-def _validate_lx0609_003_fact_status(
-    *,
-    rule_id: str,
-    status: str,
-    safe_facts: Mapping[str, Any] | None,
-) -> None:
-    """003 的确定性事实必须与执行器终态方向一致。"""
-
-    if not isinstance(safe_facts, Mapping):
-        return
-    kind = safe_facts.get("verification_kind") or safe_facts.get("failure_kind")
-    expected_status = {
-        ("LX0609-003", "qualified_surgery_absent"): "not_applicable",
-        ("LX0609-003", "surgery_not_performed"): "not_applicable",
-        ("LX0609-003", "surgery_record_late"): "non_compliant",
-        ("LX0609-003", "surgery_record_within_threshold"): "compliant",
-    }.get((rule_id, kind))
-    if expected_status is not None and status != expected_status:
-        raise ValueError("invalid customer display fact status")
-
-
-def _validate_lx0609_025_fact_status(
-    *,
-    rule_id: str,
-    status: str,
-    reason_code: str,
-    raw_facts: Any,
-    safe_facts: Mapping[str, Any] | None,
-) -> None:
-    """025 判定事实必须与执行器状态一致；下游不得丢弃事实后继续交付。"""
-
-    if rule_id != "LX0609-025":
-        return
-    expected_kind = {
-        "non_compliant": "implant_information_incomplete",
-        "compliant": "implant_information_complete",
-        "not_applicable": "implant_not_used",
-    }.get(status)
-    if raw_facts is None:
-        if (
-            status == "not_applicable"
-            and reason_code == "performed_event_absent"
-        ):
-            return
-        if expected_kind is not None:
-            raise ValueError("lx0609_025_display_fact_status_mismatch")
-        return
-    if not isinstance(raw_facts, Mapping):
-        raise ValueError("lx0609_025_display_fact_status_mismatch")
-    kind = raw_facts.get("verification_kind") or raw_facts.get("failure_kind")
-    protected_kinds = {
-        "implant_information_incomplete",
-        "implant_information_complete",
-        "implant_not_used",
-    }
-    if kind in protected_kinds and safe_facts is None:
-        raise ValueError("lx0609_025_display_fact_status_mismatch")
-    if kind in protected_kinds and kind != expected_kind:
-        raise ValueError("lx0609_025_display_fact_status_mismatch")
-    if expected_kind is not None and kind != expected_kind:
-        raise ValueError("lx0609_025_display_fact_status_mismatch")
-
-
 def _validate_lx0609_017_fact_status(
     *,
     rule_id: str,
@@ -398,28 +335,7 @@ def _copy_customer_fields(
     raw_display_facts = selected.get("customer_display_facts")
     if raw_display_facts is None:
         raw_display_facts = selected_metadata_mapping.get("customer_display_facts")
-    safe_025_display_facts = (
-        safe_luxian_0609_customer_display_facts(
-            rule_id=wrapper_id,
-            raw=raw_display_facts,
-        )
-        if wrapper_id == "LX0609-025"
-        else None
-    )
-    _validate_lx0609_025_fact_status(
-        rule_id=wrapper_id,
-        status=status,
-        reason_code=str(
-            selected.get("reason_code")
-            or selected_metadata_mapping.get("reason_code")
-            or ""
-        ),
-        raw_facts=raw_display_facts,
-        safe_facts=safe_025_display_facts,
-    )
     metadata = _strip_sensitive(dict(selected.get("metadata") or {}))
-    if wrapper_id == "LX0609-025":
-        metadata.pop("customer_display_facts", None)
     if gate_decision is not None:
         metadata.update(gate_decision.to_metadata())
     metadata.update(
@@ -461,10 +377,12 @@ def _copy_customer_fields(
         "trigger_decision": diagnostic_trace.get("trigger_decision") or {},
         "postprocess_reason": diagnostic_trace.get("postprocess_reason") or "",
     }
-    if wrapper_id == "LX0609-025":
-        result.pop("customer_display_facts", None)
-        if safe_025_display_facts is not None:
-            result["customer_display_facts"] = safe_025_display_facts
+    if finalizer_validates_missing_executor_customer_display_facts(wrapper_id):
+        result, _handled = finalize_luxian_0609_executor_customer_display_facts(
+            result=result,
+            raw_facts=raw_display_facts,
+            preserve_legacy_exception=True,
+        )
     return result
 
 
@@ -755,11 +673,6 @@ def safe_luxian_0609_customer_display_facts(
         return safe_events
 
     extended_kinds_by_rule = {
-        "LX0609-031": {
-            "surgery_signature_confirmed",
-            "surgery_signature_fields_missing",
-            "surgery_signer_not_qualified",
-        },
         "LX0609-050": {"uncertain_diagnosis_discussion_check", "uncertain_diagnosis_scope_unverified"},
         "LX0609-051": {
             "death_discussion_timeliness_check",
@@ -826,13 +739,6 @@ def safe_luxian_0609_customer_display_facts(
         },
     }
     extended_allowed_keys = {
-        "surgery_signature_fields_missing": {
-            "failure_kind", "performed_surgery_confirmed", "surgery_events",
-        },
-        "surgery_signer_not_qualified": {
-            "failure_kind", "performed_surgery_confirmed", "surgeon_signature_matches",
-            "surgery_events",
-        },
         "uncertain_diagnosis_discussion_check": {
             "admission_time", "uncertain_record_times", "discussion_count",
         },
@@ -1000,68 +906,6 @@ def safe_luxian_0609_customer_display_facts(
             *extended_allowed_keys[kind],
         }:
             return None
-        if rule_id == "LX0609-031":
-            events = raw.get("surgery_events")
-            if kind == "surgery_signature_confirmed" and "surgery_events" not in raw:
-                allowed = {
-                    "verification_kind", "performed_surgery_confirmed",
-                    "surgeon_signature_matches", "first_assistant_exception_used",
-                }
-                if set(raw) != allowed or any(
-                    raw.get(key) is not True for key in (
-                        "performed_surgery_confirmed", "surgeon_signature_matches",
-                    )
-                ):
-                    return None
-                return dict(raw)
-            if (
-                raw.get("performed_surgery_confirmed") is not True
-                or not isinstance(events, (list, tuple))
-                or not events
-                or len(events) > 100
-                or set(raw) - {"failure_kind", "verification_kind",
-                               "performed_surgery_confirmed",
-                               "surgeon_signature_matches", "first_assistant_exception_used",
-                               "surgery_events"}
-            ):
-                return None
-            safe_events: list[dict[str, Any]] = []
-            for event in events:
-                if not isinstance(event, Mapping):
-                    return None
-                allowed = {"document_id", "surgery_name", "surgeon", "signer", "missing_fields"}
-                if set(event) - allowed:
-                    return None
-                surgery_name = event.get("surgery_name") or ""
-                surgeon = event.get("surgeon") or ""
-                signer = event.get("signer") or ""
-                missing = event.get("missing_fields")
-                if any(
-                    not isinstance(value, str) or len(value) > 160 or "\n" in value
-                    for value in (surgery_name, surgeon, signer)
-                ) or not isinstance(missing, list) or any(
-                    value not in {"surgeon", "surgeon_sign"} for value in missing
-                ):
-                    return None
-                safe_event = {
-                    "surgery_name": surgery_name,
-                    "surgeon": surgeon,
-                    "signer": signer,
-                    "missing_fields": list(dict.fromkeys(missing)),
-                }
-                safe_events.append(safe_event)
-            result = {
-                "verification_kind" if kind == "surgery_signature_confirmed" else "failure_kind": kind,
-                "performed_surgery_confirmed": True,
-                "surgery_events": safe_events,
-            }
-            if kind == "surgery_signer_not_qualified":
-                if raw.get("surgeon_signature_matches") is not False:
-                    return None
-                result["surgeon_signature_matches"] = False
-            elif raw.get("first_assistant_exception_used") is True:
-                result["first_assistant_exception_used"] = True
-            return result
         if kind == "postoperative_surgery_event_time_check":
             # 手术结束时间缺失是可解释的资料缺口，不应因原生逐台事件
             # 携带 document_id/surgery_name 等内部字段而让整个病例变成技术异常。
@@ -2056,75 +1900,6 @@ def safe_luxian_0609_customer_display_facts(
             "pathology_trigger_sources": safe_trigger_sources,
             "checked_target_sources": safe_checked_sources,
         }
-    if rule_id == "LX0609-024":
-        checked_sources = raw.get("checked_sources")
-        if (
-            raw.get("failure_kind") != "lymph_node_dissection_not_documented"
-            or raw.get("performed_surgery_confirmed") is not True
-            or raw.get("malignant_surgery_confirmed") is not True
-            or not isinstance(checked_sources, list)
-        ):
-            return None
-        safe_checked_sources = list(
-            dict.fromkeys(
-                source
-                for source in checked_sources
-                if source
-                in {
-                    "surgery_record",
-                    "pathology_exam_master",
-                    "pathology_exam_report",
-                }
-            )
-        )
-        if not safe_checked_sources:
-            return None
-        return {
-            "failure_kind": "lymph_node_dissection_not_documented",
-            "performed_surgery_confirmed": True,
-            "malignant_surgery_confirmed": True,
-            "checked_sources": safe_checked_sources,
-        }
-    if rule_id == "LX0609-028":
-        failure_kind = raw.get("failure_kind")
-        start_time = raw.get("start_time")
-        end_time = raw.get("end_time")
-        duration_hours = raw.get("duration_hours")
-        threshold_hours = raw.get("threshold_hours")
-        if (
-            failure_kind
-            not in {
-                "prophylaxis_duration_over_48h",
-                "prophylaxis_extension_reason_missing",
-            }
-            or raw.get("incision_class") not in {"I", "II"}
-            or not isinstance(start_time, str)
-            or not isinstance(end_time, str)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", start_time)
-            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", end_time)
-            or not isinstance(duration_hours, (int, float))
-            or duration_hours <= 24
-            or threshold_hours not in {24, 48}
-        ):
-            return None
-        if (
-            failure_kind == "prophylaxis_duration_over_48h"
-            and (threshold_hours != 48 or duration_hours <= 48)
-        ):
-            return None
-        if (
-            failure_kind == "prophylaxis_extension_reason_missing"
-            and (threshold_hours != 24 or duration_hours > 48)
-        ):
-            return None
-        return {
-            "failure_kind": failure_kind,
-            "incision_class": raw.get("incision_class"),
-            "start_time": start_time,
-            "end_time": end_time,
-            "duration_hours": round(float(duration_hours), 2),
-            "threshold_hours": threshold_hours,
-        }
     if rule_id in {"LX0609-034", "LX0609-035"}:
         if (
             rule_id == "LX0609-034"
@@ -2423,279 +2198,6 @@ def safe_luxian_0609_customer_display_facts(
             and not any(ord(char) < 32 for char in procedure_name)
         ):
             facts["procedure_name"] = procedure_name.strip()
-        return facts
-    if rule_id == "LX0609-025":
-        checked_implant_fields = list(LX0609_025_REQUIRED_FIELDS)
-        def controlled_implant_names(value: Any) -> list[str] | None:
-            if not isinstance(value, list) or len(value) > 12:
-                return None
-            safe_names: list[str] = []
-            for item in value:
-                if (
-                    not isinstance(item, str)
-                    or not 1 <= len(item.strip()) <= 80
-                    or any(ord(char) < 32 for char in item)
-                    or item.strip() in safe_names
-                ):
-                    return None
-                safe_names.append(item.strip())
-            return safe_names
-
-        def controlled_missing_fields(value: Any) -> list[str] | None:
-            if not isinstance(value, list) or not value:
-                return None
-            safe = [field for field in checked_implant_fields if field in value]
-            return safe if value == safe else None
-
-        def controlled_document_id(value: Any) -> str:
-            candidate = str(value or "").strip()
-            return (
-                candidate
-                if candidate
-                and len(candidate) <= 256
-                and "\n" not in candidate
-                and "\r" not in candidate
-                else ""
-            )
-
-        if (
-            raw.get("verification_kind") == "implant_not_used"
-            and raw.get("performed_surgery_confirmed") is True
-            and set(raw) == {
-                "verification_kind",
-                "performed_surgery_confirmed",
-                "source_label",
-            }
-            and raw.get("source_label") == "手术记录"
-        ):
-            return {
-                "verification_kind": "implant_not_used",
-                "performed_surgery_confirmed": True,
-                "source_label": "手术记录",
-            }
-        source_document_type = raw.get("source_document_type")
-        source_label = raw.get("source_label")
-        if source_document_type != "surgery_record" or source_label != "手术记录":
-            return None
-        identified_implants = raw.get("identified_implants")
-        if identified_implants is None:
-            safe_identified_implants: list[str] = []
-        else:
-            safe_identified_implants = controlled_implant_names(identified_implants) or []
-            if not safe_identified_implants:
-                return None
-        if (
-            raw.get("verification_kind") == "implant_information_complete"
-            and raw.get("performed_surgery_confirmed") is True
-            and raw.get("checked_fields") == checked_implant_fields
-            and controlled_document_id(raw.get("source_document_id"))
-            and set(raw)
-            == {
-                "verification_kind",
-                "performed_surgery_confirmed",
-                "checked_fields",
-                "identified_implants",
-                "source_label",
-                "source_document_type",
-                "source_document_id",
-            }
-        ):
-            facts = {
-                "verification_kind": "implant_information_complete",
-                "performed_surgery_confirmed": True,
-                "checked_fields": list(checked_implant_fields),
-                "source_label": "手术记录",
-                "source_document_type": source_document_type,
-                **(
-                    {"identified_implants": safe_identified_implants}
-                    if safe_identified_implants
-                    else {}
-                ),
-            }
-            return facts
-        missing = raw.get("missing_fields")
-        safe_missing_fields = controlled_missing_fields(missing)
-        raw_event_details = raw.get("implant_event_details")
-        if (
-            raw.get("failure_kind") != "implant_information_incomplete"
-            or raw.get("performed_surgery_confirmed") is not True
-            or safe_missing_fields is None
-            or not isinstance(raw_event_details, list)
-            or not 1 <= len(raw_event_details) <= 12
-            or frozenset(raw)
-            not in {
-                frozenset(
-                    {
-                        "failure_kind",
-                        "performed_surgery_confirmed",
-                        "missing_fields",
-                        "implant_event_details",
-                        "source_label",
-                        "source_document_type",
-                        "source_document_id",
-                    }
-                ),
-                frozenset(
-                    {
-                        "failure_kind",
-                        "performed_surgery_confirmed",
-                        "missing_fields",
-                        "identified_implants",
-                        "implant_event_details",
-                        "source_label",
-                        "source_document_type",
-                        "source_document_id",
-                    }
-                ),
-            }
-        ):
-            return None
-        safe_event_details: list[dict[str, Any]] = []
-        event_document_ids: list[str] = []
-        seen_event_refs: set[str] = set()
-        seen_document_ids: set[str] = set()
-        union_missing_fields: set[str] = set()
-        for event_position, event in enumerate(raw_event_details, start=1):
-            if not isinstance(event, Mapping) or set(event) != {
-                "event_ref",
-                "missing_fields",
-                "implant_names",
-                "source_document_id",
-            }:
-                return None
-            event_ref = str(event.get("event_ref") or "").strip()
-            source_document_id = controlled_document_id(event.get("source_document_id"))
-            event_missing_fields = controlled_missing_fields(event.get("missing_fields"))
-            event_implant_names = controlled_implant_names(event.get("implant_names"))
-            if (
-                not event_ref
-                or len(event_ref) > 64
-                or "\n" in event_ref
-                or "\r" in event_ref
-                or event_ref in seen_event_refs
-                or not source_document_id
-                or source_document_id in seen_document_ids
-                or event_missing_fields is None
-                or event_implant_names is None
-            ):
-                return None
-            seen_event_refs.add(event_ref)
-            seen_document_ids.add(source_document_id)
-            event_document_ids.append(source_document_id)
-            union_missing_fields.update(event_missing_fields)
-            safe_event_details.append(
-                {
-                    "event_position": event_position,
-                    "missing_fields": event_missing_fields,
-                    "implant_names": event_implant_names,
-                }
-            )
-        if safe_missing_fields != [
-            field for field in checked_implant_fields if field in union_missing_fields
-        ] or controlled_document_id(raw.get("source_document_id")) != event_document_ids[0]:
-            return None
-        facts = {
-            "failure_kind": "implant_information_incomplete",
-            "performed_surgery_confirmed": True,
-            "source_label": "手术记录",
-            "source_document_type": source_document_type,
-            "missing_fields": safe_missing_fields,
-            "implant_event_details": safe_event_details,
-            **(
-                {"identified_implants": safe_identified_implants}
-                if safe_identified_implants
-                else {}
-            ),
-        }
-        return facts
-    if rule_id == "LX0609-003":
-        if (
-            raw.get("failure_kind")
-            in {"qualified_surgery_absent", "surgery_not_performed"}
-            and raw.get("performed_surgery_confirmed") is False
-        ):
-            return {
-                "failure_kind": raw.get("failure_kind"),
-                "performed_surgery_confirmed": False,
-            }
-        surgery_end_time = raw.get("surgery_end_time")
-        record_time = raw.get("record_time")
-        elapsed_hours = raw.get("elapsed_hours")
-        if (
-            raw.get("failure_kind") not in {"surgery_record_late", "surgery_record_within_threshold"}
-            or raw.get("performed_surgery_confirmed") is not True
-            or not isinstance(surgery_end_time, str)
-            or not isinstance(record_time, str)
-            or not isinstance(elapsed_hours, (int, float))
-            or raw.get("threshold_hours") != 24
-        ):
-            return None
-        if raw.get("failure_kind") == "surgery_record_late" and elapsed_hours <= 24:
-            return None
-        if raw.get("failure_kind") == "surgery_record_within_threshold" and not (0 <= elapsed_hours <= 24):
-            return None
-        return {
-            "failure_kind": raw.get("failure_kind"),
-            "performed_surgery_confirmed": True,
-            "surgery_end_time": surgery_end_time,
-            "record_time": record_time,
-            "elapsed_hours": round(float(elapsed_hours), 2),
-            "threshold_hours": 24,
-            "source_label": "手术记录",
-        }
-    if rule_id == "LX0609-033":
-        if (
-            raw.get("verification_kind") == "surgery_consent_complete"
-            and raw.get("performed_surgery_confirmed") is True
-            and raw.get("checked_signature_roles") == ["patient", "surgeon"]
-        ):
-            return {
-                "verification_kind": "surgery_consent_complete",
-                "performed_surgery_confirmed": True,
-                "checked_signature_roles": ["patient", "surgeon"],
-            }
-        failure_kind = raw.get("failure_kind")
-        consent_state = raw.get("consent_state")
-        if failure_kind == "source_query_error":
-            source_labels = raw.get("source_labels")
-            allowed_source_labels = {"手术记录", "手术知情同意书"}
-            if (
-                raw.get("performed_surgery_confirmed") is not True
-                or not isinstance(source_labels, list)
-                or not source_labels
-                or len(source_labels) != len(set(source_labels))
-                or any(label not in allowed_source_labels for label in source_labels)
-            ):
-                return None
-            return {
-                "failure_kind": "source_query_error",
-                "source_labels": list(source_labels),
-                "performed_surgery_confirmed": True,
-            }
-        valid_pairs = {
-            ("surgery_consent_document_missing", "missing"),
-            ("surgery_consent_body_missing", "blank"),
-            ("surgery_consent_signature_missing", "signature_missing"),
-            ("surgery_consent_source_unproven", "source_unproven"),
-        }
-        if (
-            raw.get("performed_surgery_confirmed") is not True
-            or (failure_kind, consent_state) not in valid_pairs
-        ):
-            return None
-        facts: dict[str, Any] = {
-            "failure_kind": failure_kind,
-            "consent_state": consent_state,
-            "performed_surgery_confirmed": True,
-        }
-        if consent_state == "signature_missing":
-            roles = raw.get("missing_signature_roles")
-            if not isinstance(roles, list):
-                return None
-            safe_roles = [role for role in roles if role in {"patient", "surgeon"}]
-            if not safe_roles:
-                return None
-            facts["missing_signature_roles"] = safe_roles
         return facts
     if rule_id == "LX0609-007":
         failure_kind = raw.get("failure_kind")
@@ -3228,30 +2730,6 @@ def safe_luxian_0609_customer_display_facts(
             "target_document": target_document,
             "performed_surgery_confirmed": True,
         }
-    if rule_id == "LX0609-031":
-        if (
-            raw.get("verification_kind") == "surgery_signature_confirmed"
-            and raw.get("performed_surgery_confirmed") is True
-            and raw.get("surgeon_signature_matches") is True
-            and isinstance(raw.get("first_assistant_exception_used"), bool)
-        ):
-            return {
-                "verification_kind": "surgery_signature_confirmed",
-                "performed_surgery_confirmed": True,
-                "surgeon_signature_matches": True,
-                "first_assistant_exception_used": raw.get("first_assistant_exception_used"),
-            }
-        if (
-            raw.get("failure_kind") == "surgery_signer_not_qualified"
-            and raw.get("performed_surgery_confirmed") is True
-            and raw.get("surgeon_signature_matches") is False
-        ):
-            return {
-                "failure_kind": "surgery_signer_not_qualified",
-                "performed_surgery_confirmed": True,
-                "surgeon_signature_matches": False,
-            }
-        return None
     if rule_id == "LX0609-038":
         if (
             raw.get("verification_kind") == "anesthesia_record_present"
@@ -3507,10 +2985,7 @@ def _customer_evidence_from_display_facts(
         )
 
     source_document_id = valid_document_id(raw.get("source_document_id"))
-    exact_trigger_sources = {
-        "LX0609-033": {"surgery_record"},
-        "LX0609-040": {"mr_surgery"},
-    }
+    exact_trigger_sources = {"LX0609-040": {"mr_surgery"}}
     allowed_exact_sources = exact_trigger_sources.get(rule_id)
     if allowed_exact_sources is not None:
         raw_refs = raw.get("source_document_refs")
@@ -3558,26 +3033,7 @@ def _customer_evidence_from_display_facts(
                 {"source_type": end_source, "source_document_id": end_document_id}
             )
         return located
-    if rule_id == "LX0609-025" and raw.get("failure_kind") == "implant_information_incomplete":
-        raw_event_details = raw.get("implant_event_details")
-        if not isinstance(raw_event_details, list):
-            return []
-        located: list[dict[str, str]] = []
-        for item in raw_event_details:
-            if not isinstance(item, Mapping):
-                return []
-            event_document_id = valid_document_id(item.get("source_document_id"))
-            if not event_document_id:
-                return []
-            located.append(
-                {
-                    "source_type": "surgery_record",
-                    "source_document_id": event_document_id,
-                }
-            )
-        return located
     single_source_types = {
-        "LX0609-025": str(raw.get("source_document_type") or ""),
         "LX0609-034": "anesthesia_record",
         "LX0609-036": "anesthesia_record",
     }
@@ -4159,8 +3615,6 @@ def _copy_native_customer_fields(
     def reject_invalid_display_facts() -> None:
         if wrapper_id == "LX0609-017":
             raise ValueError("invalid copy customer display facts")
-        if wrapper_id == "LX0609-025":
-            raise ValueError("lx0609_025_display_fact_status_mismatch")
         raise Luxian0609CustomerDisplayFactsError(wrapper_id)
 
     status = _status(selected)
@@ -4229,11 +3683,6 @@ def _copy_native_customer_fields(
     safe_display_facts = (
         supplied_safe_facts[0] if supplied_safe_facts else None
     )
-    _validate_lx0609_003_fact_status(
-        rule_id=wrapper_id,
-        status=status,
-        safe_facts=safe_display_facts,
-    )
     if (
         wrapper_id == "LX0609-017"
         and raw_display_facts is not None
@@ -4265,17 +3714,6 @@ def _copy_native_customer_fields(
         )
         if not copy_pair_evidence:
             raise ValueError("invalid copy customer display facts")
-    _validate_lx0609_025_fact_status(
-        rule_id=wrapper_id,
-        status=status,
-        reason_code=str(
-            selected.get("reason_code")
-            or selected_metadata_mapping.get("reason_code")
-            or ""
-        ),
-        raw_facts=raw_display_facts,
-        safe_facts=safe_display_facts,
-    )
     selected_metadata = _strip_sensitive(dict(selected_metadata_mapping))
     # 原生结果可能同时带有旧链写入的顶层 executor_type 和当前执行器
     # 元数据。客户结果必须以当前元数据为准，并把同一个值投影到顶层，
@@ -4341,11 +3779,15 @@ def _copy_native_customer_fields(
     )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
-    if finalizer_owns_facts and raw_display_facts is not None:
+    if (
+        (finalizer_owns_facts and raw_display_facts is not None)
+        or finalizer_validates_missing_executor_customer_display_facts(wrapper_id)
+    ):
         result, _handled = finalize_luxian_0609_executor_customer_display_facts(
             result=result,
             raw_facts=raw_display_facts,
             contract_failure=contract_failure,
+            preserve_legacy_exception=True,
         )
     return result
 
@@ -4400,7 +3842,6 @@ def aggregate_luxian_0609_results(
     display_facts_by_rule: dict[str, dict[str, Any]] = {}
     raw_executor_display_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     raw_copy_facts_by_rule: dict[str, Mapping[str, Any]] = {}
-    raw_025_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     customer_evidence_by_rule: dict[str, list[dict[str, str]]] = {}
     wrapper_rule_ids = {
         _norm_id(item.get("rule_id") or item.get("rule_code"))
@@ -4440,7 +3881,6 @@ def aggregate_luxian_0609_results(
             )
         ):
             raise ValueError("invalid copy customer display facts")
-        is_strict_display_contract = rule_id == "LX0609-025"
         finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(rule_id)
         if finalizer_owns_facts:
             raw_executor_display_facts_by_rule[rule_id] = facts
@@ -4448,9 +3888,7 @@ def aggregate_luxian_0609_results(
             display_facts_by_rule[rule_id] = safe_facts
             if rule_id == "LX0609-017":
                 raw_copy_facts_by_rule[rule_id] = facts
-            if rule_id == "LX0609-025":
-                raw_025_facts_by_rule[rule_id] = facts
-        elif not is_strict_display_contract:
+        else:
             # 独立传入的事实不是执行器结果的延迟合同。若没有 Typed 决策或
             # native 直接结果能交给 Finalizer，不能静默丢弃非法客户事实。
             if (
@@ -4461,8 +3899,6 @@ def aggregate_luxian_0609_results(
                 )
             ):
                 raise Luxian0609CustomerDisplayFactsError(rule_id)
-        elif rule_id == "LX0609-025":
-            raw_025_facts_by_rule[rule_id] = facts
         customer_evidence = _customer_evidence_from_display_facts(
             rule_id=rule_id,
             raw=facts,
@@ -4490,22 +3926,10 @@ def aggregate_luxian_0609_results(
                 safe_customer_display_facts=display_facts_by_rule.get(wrapper_id),
                 trace_sink=decision_trace_sink,
             )
-            _validate_lx0609_025_fact_status(
-                rule_id=wrapper_id,
-                status=str(result.get("status") or ""),
-                reason_code=reduced.reason_code,
-                raw_facts=raw_025_facts_by_rule.get(wrapper_id),
-                safe_facts=display_facts_by_rule.get(wrapper_id),
-            )
             _validate_lx0609_017_fact_status(
                 rule_id=wrapper_id,
                 status=str(result.get("status") or ""),
                 raw_facts=raw_copy_facts_by_rule.get(wrapper_id),
-                safe_facts=display_facts_by_rule.get(wrapper_id),
-            )
-            _validate_lx0609_003_fact_status(
-                rule_id=wrapper_id,
-                status=str(result.get("status") or ""),
                 safe_facts=display_facts_by_rule.get(wrapper_id),
             )
             if wrapper_id in display_facts_by_rule:
@@ -4517,10 +3941,16 @@ def aggregate_luxian_0609_results(
                 if precise_findings:
                     result["findings"] = precise_findings
             raw_executor_facts = raw_executor_display_facts_by_rule.get(wrapper_id)
-            if raw_executor_facts is not None:
+            if (
+                raw_executor_facts is not None
+                or finalizer_validates_missing_executor_customer_display_facts(
+                    wrapper_id
+                )
+            ):
                 result, handled = finalize_luxian_0609_executor_customer_display_facts(
                     result=result,
                     raw_facts=raw_executor_facts,
+                    preserve_legacy_exception=True,
                 )
                 if handled and "customer_display_facts" not in result:
                     result = finalize_luxian_0609_canonical_result(result)
@@ -4540,7 +3970,6 @@ def aggregate_luxian_0609_results(
                 decision_evidence = (
                     []
                     if wrapper_id in {
-                        "LX0609-025",
                         "LX0609-051",
                         "LX0609-067",
                         "LX0609-068",
@@ -4648,6 +4077,7 @@ def aggregate_luxian_0609_results(
                         finalize_luxian_0609_executor_customer_display_facts(
                             result=result,
                             raw_facts=raw_executor_facts,
+                            preserve_legacy_exception=True,
                         )
                     )
                 if str(result.get("status") or "") != "technical_error":
@@ -4663,11 +4093,6 @@ def aggregate_luxian_0609_results(
                         )
                         if precise_findings:
                             result["findings"] = precise_findings
-                    _validate_lx0609_003_fact_status(
-                        rule_id=wrapper_id,
-                        status=str(result.get("status") or ""),
-                        safe_facts=result.get("customer_display_facts"),
-                    )
                     if wrapper_id in customer_evidence_by_rule:
                         result["customer_evidence"] = customer_evidence_by_rule[
                             wrapper_id

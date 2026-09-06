@@ -32,13 +32,13 @@
 
 ## 失败语义与成本冻结
 
-- 来源完整且无已实施手术：executor/Binding 的六条均为 `not_applicable / performed_event_absent`，无模型调用；003 的 evaluator 为 `surgery-timeliness-003-ruledecision-v1`，其余五条为 `surgery-gate-ruledecision-shadow-v2`。025 不产生 display facts；但该形状目前**不能完成聚合**。聚合器残余的 025 严格 guard 要求 `implant_not_used` facts，而 gate 正确地不为无手术伪造植入物阴性事实，故抛出 `ValueError: lx0609_025_display_fact_status_mismatch`。冻结测试以精确 `pytest.raises` 记录这个已知缺陷；它不是业务验收通过。
+- 来源完整且无已实施手术：executor/Binding 的六条均为 `not_applicable / performed_event_absent`，无模型调用；003 的 evaluator 为 `surgery-timeliness-003-ruledecision-v1`，其余五条为 `surgery-gate-ruledecision-shadow-v2`。025 不产生 display facts，并通过已独立提交的精确例外完成聚合；该例外只接受 typed `performed_event_absent + raw_facts is None`，不会把无手术伪造成“已核验未植入”。
 - 已实施手术且受控文本事实明确“未植入”：025 走不同的文本事实分支，最终为 `not_applicable / trigger_absent_complete`，并且必须携带 `verification_kind=implant_not_used` 和 `performed_surgery_confirmed=true`。该分支不能因前一分支缺 facts 而被放宽。
 - `surgery_record` 查询异常：六条均为 `technical_error / source_query_error`，不伪造文书坐标。
 - 受控 LLM：成功、非法 JSON、经 parser 验证字段完整的合法 `unknown` 与超时分别走真实 executor；非法 JSON 为 `technical_error / model_invalid_output`、超时为 `technical_error / model_transport_error`，合法 `unknown` 为 `data_gap / required_field_missing`，不将模型异常改写为临床不合规。
 - 主样本、非法 JSON 与合法 `unknown` 样本均为一次联合调用：`llm_call_count=1`，`prompt_tokens=101`，`total_tokens=112`。超时样本同样记录一次调用，但没有模型 usage 回包，故 `prompt_tokens=completion_tokens=total_tokens=0`；纯无手术与来源异常路径不调用模型。
 
-## HEAD 迁移审计基线（未实施）
+## HEAD 迁移审计基线
 
 静态审计基于 HEAD `f724cf093`。六条规则在规则合同、registry 与真实 native 执行中均为
 `executor_key=surgery_gate`；030/032 的并行工作区改动不属于本族，未计入。以下是聚合器当前
@@ -59,24 +59,20 @@
 文案分支，以及 Finalizer 现有的 028 `required_field_missing`、031 `association_failed` 缺口文案，
 不属于本轮归零目标。
 
-## 待验证与下一步
+## 行为等价迁移结果
 
-本冻结只覆盖固定脱敏资料的本地单元主链，尚未替代三正式 API 入口或客户实际文书定位验收。下一步仅可在新的授权下修改：
+- 聚合器由 4823 行降为 4248 行；本族 24 处显式规则号引用及 031 的死配置字段合同归零。
+- 新增 390 行的 `surgery_gate_result_mapping.py`，完整承载六条规则的客户安全 facts 合同，不是转发壳。
+- executor 负责状态、原因码、业务 facts 与实际选中文书 `fact_refs`；Binding 继续验证引用；现有公共 selected-document projector 统一生成客户证据坐标。
+- Aggregator 只调用通用 Finalizer、复制 Canonical 字段并完成装配，不再按本族规则号解释事实或选择文书。
+- 003 仅在评价窗口成熟且形成确定结论时选择实际手术记录；024 只选择真正贡献恶性肿瘤/淋巴结判断的手术行；031 保持逐台事实；033 空壳同意书只选择同意书文书。
+- 两台手术且知情同意书来源已证明完整为空时，两台手术都是独立的缺失触发事件，因此 033 客户证据按坐标集合保留两份真实手术记录；数组顺序不参与优先级判断。
+- 聚合器公开入口的既有严格异常合同保持不变；Finalizer 直接入口遇到非法合同仍安全收敛为 `technical_error`，未混入业务状态。
 
-1. `backend/app/services/luxian_0609/native_surgery_gate_execution.py`；
-2. `backend/app/services/luxian_0609/canonical_result_finalizer.py`；
-3. `backend/app/services/luxian_0609_result_aggregator.py`；
-4. `backend/tests/unit/test_luxian_0609_surgery_gate_freeze.py`，以及仅在接收边界改动时对应的
-   `test_luxian_0609_result_aggregator.py` / `test_luxian_0609_canonical_result_finalizer.py`。
+生产代码结构迁移后的本地回归：572 项聚焦单元测试通过；registry、执行失败语义和执行合同 62 项通过。未新增引擎、fallback、状态机、Prompt、数据库、API DTO 或前端解释逻辑。
 
-待补的冻结形状不是通过项：003 的超时/权威时间缺失及逐文书坐标；024 的淋巴结未记录；025 的
-五字段缺项、实际语义未知、已实施但明确未植入与多事件选中文书；028 的合规、不合规及 24/48
-小时边界；031 的术者不合格；033 的缺文书/正文/签名与资料不足。所有形状都须穿过真实
-native → Binding → 聚合 → 公共 projector，断言状态、原因、facts、客户文案、完整安全坐标和
-LLM 调用/token。
+## 正式入口边界
 
-025 的最小修复建议须另立任务，不可混入上述架构迁移：guard 不可仅因 `not_applicable` 就接受
-缺失 display facts，也不可要求 executor 补造 `implant_not_used`。仅真实无手术的 typed
-`performed_event_absent + raw_facts is None` 可作为精确例外；已实施且明确未植入仍为
-`trigger_absent_complete + implant_not_used`，并必须保留其阴性植入物事实。不得放宽所有 NA，
-否则会把无手术伪造成“已核验未植入”。
+003/024/031 为当前客户正式入口启用规则，必须验证 workspace 单条、批量和客户样本三入口一致。025/028 在当前客户配置中为暂停规则，正式 workspace 入口应稳定返回 `not_executed`，同时保留 executor → Binding → 公共投影的独立合同验收。033 当前仍由客户规则集主动排除；历史提交 `d11c13a47` 记录的原因是客户源库不提供手术知情同意书。直接删除排除会把“机构数据源未接入”系统性误判为“缺同意书”，因此不把解除 033 排除混入本次结构迁移。
+
+本族完成口径为：三条客户启用规则完成三入口验收；025/028 验证暂停投影与独立合同；033 完成 native → Binding → 公共投影 → Canonical 独立主链验收，并保留客户数据源保护。只有真实客户链路同时证明“有同意书、完整空查询、来源不可用”三种 readiness 轨迹后，才另立缺陷任务恢复 033 客户入口。

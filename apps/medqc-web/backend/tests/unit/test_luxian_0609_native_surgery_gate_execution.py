@@ -546,6 +546,7 @@ async def test_typed_003_missing_document_uses_formal_horizon_after_independent_
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == expected_state
@@ -582,6 +583,7 @@ async def test_typed_003_multiple_mr_surgery_events_with_same_end_time_are_data_
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "data_gap"
@@ -628,6 +630,7 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
@@ -726,6 +729,7 @@ async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == expected_state
@@ -813,6 +817,7 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
         decisions=result.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     expected_states = [expected_state] * 5
     # 033以“有手术记录”为规则前提；手术记录完整查询为空时由030负责，
@@ -891,6 +896,7 @@ async def test_033_unproven_readiness_with_empty_source_is_data_gap_without_mode
         decisions=result.decisions,
         expected_rule_ids=("LX0609-033",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     assert [item.final_state.value for item in reduced] == ["data_gap"]
     assert result.customer_display_facts == (
@@ -931,6 +937,7 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
         decisions=result.decisions,
         expected_rule_ids=("LX0609-033",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
     assert result.customer_display_facts == (
@@ -1027,6 +1034,7 @@ async def test_typed_024_025_028_033_share_one_current_surgery_fact_call() -> No
         decisions=result.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert [item.final_state.value for item in reduced] == [
         "compliant", "compliant", "data_gap", "compliant",
@@ -1223,6 +1231,7 @@ async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() ->
         decisions=result.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["not_applicable"]
@@ -1290,6 +1299,7 @@ async def test_typed_024_complete_uncoded_nonmalignant_diagnosis_stops_before_su
         decisions=result.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["not_applicable"]
@@ -1352,6 +1362,7 @@ async def test_joint_033_rejects_surgery_only_evidence_ref() -> None:
         decisions=result.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert {item.final_state.value for item in reduced} == {"technical_error"}
     assert {item.reason_code for item in result.decisions} == {"model_invalid_output"}
@@ -1415,6 +1426,7 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
         decisions=result.decisions,
         expected_rule_ids=selected,
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     states = {item.rule_id: item.final_state.value for item in reduced}
     assert states["LX0609-024"] == "data_gap"
@@ -1467,6 +1479,7 @@ async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_misma
         decisions=result.decisions,
         expected_rule_ids=("LX0609-028",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
@@ -1563,6 +1576,7 @@ async def test_typed_003_preserves_time_and_source_boundaries(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert result.results == ()
@@ -1626,6 +1640,7 @@ async def test_typed_003_uses_unique_mr_surgery_time_without_keyword_fallback():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "compliant"
@@ -1681,6 +1696,7 @@ async def test_typed_003_prefers_surgery_end_time_over_begin_time():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "compliant"
@@ -1714,6 +1730,7 @@ async def test_typed_003_accepts_customer_iso_timezone_surgery_end_time():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "compliant"
@@ -1762,6 +1779,7 @@ async def test_typed_003_normalizes_timestamptz_surgery_and_record_times_to_beij
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "compliant"
@@ -1794,6 +1812,7 @@ async def test_typed_003_begin_time_without_end_time_is_data_gap():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-003",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "data_gap"

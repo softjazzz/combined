@@ -162,6 +162,7 @@ class _SurgeryTextOutcome:
     status: str
     reason_code: str
     customer_display_facts: Mapping[str, Any] | None = None
+    selected_document_refs: tuple[str, ...] = ()
 
 
 def _clean(value: Any) -> str:
@@ -257,6 +258,52 @@ def _source_document_refs(
     return refs
 
 
+def _material_document_ref_for_row(
+    *,
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_key: str,
+    selected_row: Mapping[str, Any],
+) -> str:
+    """将已被判定器选中的那一行映射为同一材料仓文书引用。"""
+
+    try:
+        rows = materials.document_rows(source_key, snapshot=snapshot)
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, TypeError, ValueError):
+        return ""
+    for reference, row in rows:
+        if row == selected_row:
+            return reference
+    return ""
+
+
+def _projection_material_document_refs(
+    *,
+    projection: SurgeryTextProjection,
+    projection_refs: Sequence[str],
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> tuple[str, ...]:
+    """把受控 prompt 的 ``Sxx-yy`` 引用还原为同一材料仓逐行引用。"""
+
+    selected: list[str] = []
+    for projection_ref in projection_refs:
+        source_key = projection.document_source_keys.get(projection_ref)
+        document_id = _clean(projection.document_source_ids.get(projection_ref))
+        if not source_key or not document_id:
+            continue
+        try:
+            rows = materials.document_rows(source_key, snapshot=snapshot)
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, TypeError, ValueError):
+            continue
+        selected.extend(
+            material_ref
+            for material_ref, row in rows
+            if _clean(row.get("document_id") or row.get("id")) == document_id
+        )
+    return tuple(dict.fromkeys(selected))
+
+
 def _row_text(row: Mapping[str, Any]) -> str:
     approved_keys = (
         "content",
@@ -282,21 +329,46 @@ def _row_text(row: Mapping[str, Any]) -> str:
 def _deterministic_024_outcome(
     *,
     surgery_rows: Sequence[Mapping[str, Any]],
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
 ) -> _SurgeryTextOutcome | None:
     """只收口手术记录中高特异性的非恶性急救手术事实。"""
 
-    text = _clean(" ".join(_row_text(row) for row in surgery_rows))
-    if not text:
-        return None
+    row_texts = tuple((row, _row_text(row)) for row in surgery_rows)
+    text = _clean(" ".join(row_text for _, row_text in row_texts if row_text))
     if (
-        _TRAUMA_DIAGNOSIS_PATTERN.search(text)
-        and _RESCUE_SURGERY_PATTERN.search(text)
-        and not _MALIGNANT_SURGERY_PATTERN.search(text)
+        not text
+        or not _TRAUMA_DIAGNOSIS_PATTERN.search(text)
+        or not _RESCUE_SURGERY_PATTERN.search(text)
+        or _MALIGNANT_SURGERY_PATTERN.search(text)
     ):
-        return _SurgeryTextOutcome(
-            "LX0609-024", "not_applicable", "surgery_text_fact_absent"
+        return None
+    # 保持迁移前的整组手术文本判定，仅选择实际贡献“创伤/急救手术”
+    # 事实的行作为客户坐标，避免把同住院其他手术文书一并投影。
+    matching_rows = tuple(
+        row
+        for row, row_text in row_texts
+        if _TRAUMA_DIAGNOSIS_PATTERN.search(row_text)
+        or _RESCUE_SURGERY_PATTERN.search(row_text)
+    )
+    selected_document_refs = tuple(
+        ref
+        for row in matching_rows
+        if (
+            ref := _material_document_ref_for_row(
+                materials=materials,
+                snapshot=snapshot,
+                source_key="surgery_record",
+                selected_row=row,
+            )
         )
-    return None
+    )
+    return _SurgeryTextOutcome(
+        "LX0609-024",
+        "not_applicable",
+        "surgery_text_fact_absent",
+        selected_document_refs=selected_document_refs,
+    )
 
 
 def _structured_nonmalignant_diagnoses(
@@ -577,13 +649,35 @@ def _resolve_surgery_signature_outcome(
 ) -> tuple[str, str, Mapping[str, Any] | None]:
     """优先采用手术主表签名；仅对唯一且术者一致的事件使用文书表回退。"""
 
+    outcome, _source_key, _selected_rows = _resolve_surgery_signature_selection(
+        surgery_master_rows=surgery_master_rows,
+        surgery_record_rows=surgery_record_rows,
+    )
+    return outcome
+
+
+def _resolve_surgery_signature_selection(
+    *,
+    surgery_master_rows: Sequence[Mapping[str, Any]],
+    surgery_record_rows: Sequence[Mapping[str, Any]],
+) -> tuple[
+    tuple[str, str, Mapping[str, Any] | None],
+    str,
+    tuple[Mapping[str, Any], ...],
+]:
+    """返回签名判定及其实际采用的唯一来源行。"""
+
     if not surgery_master_rows:
-        return _surgery_signature_outcome(surgery_record_rows)
+        return (
+            _surgery_signature_outcome(surgery_record_rows),
+            "surgery_record",
+            tuple(surgery_record_rows),
+        )
     master_outcome = _surgery_signature_outcome(surgery_master_rows)
     if master_outcome[0] == "non_compliant":
-        return master_outcome
+        return master_outcome, "mr_surgery", tuple(surgery_master_rows)
     if not surgery_record_rows:
-        return "data_gap", "required_field_missing", None
+        return ("data_gap", "required_field_missing", None), "", ()
     if len(surgery_master_rows) != len(surgery_record_rows):
         # mr_surgery 可能是按术式拆分的明细表，行数不必与手术记录一一相等。
         # 当主表存在任何签名事实时，仍以主表为准，不能用一条手术记录覆盖
@@ -602,14 +696,18 @@ def _resolve_surgery_signature_outcome(
             for field in master_signature_fields
         )
         if not master_has_signature_fact:
-            return _surgery_signature_outcome(surgery_record_rows)
+            return (
+                _surgery_signature_outcome(surgery_record_rows),
+                "surgery_record",
+                tuple(surgery_record_rows),
+            )
         if master_outcome[0] in {"compliant", "non_compliant"}:
-            return master_outcome
-        return "data_gap", "required_field_missing", None
+            return master_outcome, "mr_surgery", tuple(surgery_master_rows)
+        return ("data_gap", "required_field_missing", None), "", ()
     if len(surgery_master_rows) != 1:
-        return master_outcome
+        return master_outcome, "mr_surgery", tuple(surgery_master_rows)
     if master_outcome[0] != "data_gap":
-        return master_outcome
+        return master_outcome, "mr_surgery", tuple(surgery_master_rows)
 
     master_surgeon = re.sub(
         r"[\s,，、;；:：]+", "", _clean(surgery_master_rows[0].get("surgeon"))
@@ -618,8 +716,12 @@ def _resolve_surgery_signature_outcome(
         r"[\s,，、;；:：]+", "", _clean(surgery_record_rows[0].get("surgeon"))
     )
     if master_surgeon and record_surgeon and master_surgeon != record_surgeon:
-        return "data_gap", "association_failed", None
-    return _surgery_signature_outcome(surgery_record_rows)
+        return ("data_gap", "association_failed", None), "", ()
+    return (
+        _surgery_signature_outcome(surgery_record_rows),
+        "surgery_record",
+        tuple(surgery_record_rows),
+    )
 
 
 def _authoritative_record_time(value: Any) -> datetime | None:
@@ -698,11 +800,11 @@ def _typed_003_decision(
         for key in source_keys
         if key in observations
     )
-
     def decision(
         final_state: str,
         reason_code: str,
         display_facts: Mapping[str, Any] | None = None,
+        selected_document_refs: tuple[str, ...] = (),
     ) -> RuleDecision:
         if display_facts is not None and customer_display_facts is not None:
             customer_display_facts.append(("LX0609-003", display_facts))
@@ -740,7 +842,7 @@ def _typed_003_decision(
             evidence_state=evidence_state,
             qc_direction=qc_direction,
             reason_code=reason_code,
-            fact_refs=refs,
+            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *refs))),
             evaluator_version=_TYPED_003_EVALUATOR_VERSION,
             confidence=None,
         )
@@ -788,6 +890,12 @@ def _typed_003_decision(
             # 结论。同一结束时间不能把多行不同手术事件压成一个时间点。
             if len(qualified_mr_rows) != 1:
                 return decision("data_gap", "association_failed")
+            selected_mr_ref = _material_document_ref_for_row(
+                materials=materials,
+                snapshot=snapshot,
+                source_key="mr_surgery",
+                selected_row=qualified_mr_rows[0],
+            )
             surgery_end_time = _authoritative_surgery_end_time(
                 source_key="mr_surgery", row=qualified_mr_rows[0]
             )
@@ -842,6 +950,9 @@ def _typed_003_decision(
                 "required_document_missing"
                 if mature
                 else "evaluation_window_not_mature",
+                selected_document_refs=(
+                    (selected_mr_ref,) if mature and selected_mr_ref else ()
+                ),
             )
         if (
             observations["mr_surgery"].query_state.value == "available"
@@ -904,7 +1015,7 @@ def _typed_003_decision(
             )
         return decision("data_gap", "authoritative_time_missing")
 
-    intervals: list[tuple[timedelta, datetime, datetime, str | None]] = []
+    intervals: list[tuple[timedelta, datetime, datetime, str | None, str]] = []
     incomplete_performed_row = False
     fallback_resolved = False
     for row in surgery_rows:
@@ -920,7 +1031,13 @@ def _typed_003_decision(
             incomplete_performed_row = True
             continue
         document_id = str(row.get("document_id") or "").strip() or None
-        intervals.append((interval, surgery_end_time, record_time, document_id))
+        document_ref = _material_document_ref_for_row(
+            materials=materials,
+            snapshot=snapshot,
+            source_key="surgery_record",
+            selected_row=row,
+        )
+        intervals.append((interval, surgery_end_time, record_time, document_id, document_ref))
 
     # 当 surgery_record 自身没有批准手术时间时，仅允许唯一 mr_surgery 时间
     # 与唯一手术记录时间配对；多记录无关联键时必须保守为数据不足。
@@ -953,7 +1070,13 @@ def _typed_003_decision(
                 document_id = (
                     str(surgery_rows[0].get("document_id") or "").strip() or None
                 )
-                intervals.append((interval, mr_end_times[0], record_times[0], document_id))
+                document_ref = _material_document_ref_for_row(
+                    materials=materials,
+                    snapshot=snapshot,
+                    source_key="surgery_record",
+                    selected_row=surgery_rows[0],
+                )
+                intervals.append((interval, mr_end_times[0], record_times[0], document_id, document_ref))
                 fallback_resolved = True
 
     late_interval = next(
@@ -965,7 +1088,7 @@ def _typed_003_decision(
         None,
     )
     if late_interval is not None:
-        interval, surgery_end_time, record_time, source_document_id = late_interval
+        interval, surgery_end_time, record_time, source_document_id, document_ref = late_interval
         display_facts: dict[str, Any] = {
             "failure_kind": "surgery_record_late",
             "performed_surgery_confirmed": True,
@@ -981,9 +1104,10 @@ def _typed_003_decision(
             "non_compliant",
             "threshold_exceeded",
             display_facts,
+            (document_ref,) if document_ref else (),
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
-        interval, surgery_end_time, record_time, source_document_id = min(
+        interval, surgery_end_time, record_time, source_document_id, document_ref = min(
             intervals,
             key=lambda item: item[2],
         )
@@ -1002,6 +1126,7 @@ def _typed_003_decision(
             "compliant",
             "requirement_within_threshold",
             display_facts,
+            (document_ref,) if document_ref else (),
         )
     mr_observation = observations["mr_surgery"]
     if mr_observation.query_state.value == "unavailable":
@@ -1038,13 +1163,13 @@ def _typed_conservative_surgery_gate_decision(
     refs = tuple(
         item.snapshot_ref.removeprefix("sha256:") for item in observations
     )
-
     def decision(
         *,
         applicability: ApplicabilityState,
         evidence_state: EvidenceState,
         qc_direction: QcDirection,
         reason_code: str,
+        selected_document_refs: tuple[str, ...] = (),
     ) -> RuleDecision:
         return RuleDecision(
             rule_id=rule_id,
@@ -1053,7 +1178,7 @@ def _typed_conservative_surgery_gate_decision(
             evidence_state=evidence_state,
             qc_direction=qc_direction,
             reason_code=reason_code,
-            fact_refs=refs,
+            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *refs))),
             evaluator_version=_TYPED_SURGERY_GATE_EVALUATOR_VERSION,
             confidence=None,
         )
@@ -1108,6 +1233,8 @@ def _typed_conservative_surgery_gate_decision(
         )
 
     if rule_id == "LX0609-031":
+        selected_signature_source = ""
+        selected_signature_rows: tuple[Mapping[str, Any], ...] = ()
         try:
             surgery_record_rows = tuple(materials.rows("surgery_record"))
             surgery_master_rows = tuple(materials.rows("mr_surgery"))
@@ -1124,10 +1251,26 @@ def _typed_conservative_surgery_gate_decision(
                 None,
             )
         else:
-            final_state, reason_code, display_facts = _resolve_surgery_signature_outcome(
+            (
+                (final_state, reason_code, display_facts),
+                selected_signature_source,
+                selected_signature_rows,
+            ) = _resolve_surgery_signature_selection(
                 surgery_master_rows=surgery_master_rows,
                 surgery_record_rows=surgery_record_rows,
             )
+        selected_signature_refs = tuple(
+            ref
+            for row in selected_signature_rows
+            if (
+                ref := _material_document_ref_for_row(
+                    materials=materials,
+                    snapshot=snapshot,
+                    source_key=selected_signature_source,
+                    selected_row=row,
+                )
+            )
+        ) if display_facts is not None else ()
         if display_facts is not None and customer_display_facts is not None:
             customer_display_facts.append((rule_id, display_facts))
         applicability, evidence_state, qc_direction = {
@@ -1158,6 +1301,7 @@ def _typed_conservative_surgery_gate_decision(
                 if final_state == "non_compliant"
                 else reason_code
             ),
+            selected_document_refs=selected_signature_refs,
         )
 
     # 其余规则仍缺少可审计的恶性手术关联、植入物实际使用、预防用药
@@ -1212,6 +1356,8 @@ def _surgery_text_outcome(
     rule_id: str,
     facts: Sequence[SurgeryEventFact],
     projection: SurgeryTextProjection,
+    materials: Luxian0609EvidenceMaterialStore | None = None,
+    snapshot: Luxian0609EvidenceSnapshot | None = None,
 ) -> _SurgeryTextOutcome:
     """LLM 只抽取事实；规则状态、边界和多事件优先级由 Python 合成。"""
 
@@ -1224,6 +1370,29 @@ def _surgery_text_outcome(
     missing_consent_signatures: set[str] = set()
     lymph_node_checked_sources: tuple[str, ...] = ()
     prophylaxis_display_facts: Mapping[str, Any] | None = None
+    selected_projection_refs = tuple(
+        dict.fromkeys(
+            evidence_ref
+            for fact in facts
+            for evidence_ref in fact.evidence_refs
+            if projection.document_source_keys.get(evidence_ref)
+            in (
+                _TYPED_TEXT_SOURCES[rule_id]
+                if rule_id == "LX0609-033"
+                else _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
+            )
+        )
+    )
+    selected_document_refs = (
+        _projection_material_document_refs(
+            projection=projection,
+            projection_refs=selected_projection_refs,
+            materials=materials,
+            snapshot=snapshot,
+        )
+        if materials is not None and snapshot is not None
+        else selected_projection_refs
+    )
     for fact in facts:
         if rule_id == "LX0609-024":
             if fact.surgery_occurrence == "planned":
@@ -1436,6 +1605,7 @@ def _surgery_text_outcome(
                 "malignant_surgery_confirmed": True,
                 "checked_sources": list(lymph_node_checked_sources),
             },
+            selected_document_refs,
         )
     if "non_compliant_over_48h" in event_states:
         return _SurgeryTextOutcome(
@@ -1443,6 +1613,7 @@ def _surgery_text_outcome(
             "non_compliant",
             "prophylaxis_over_48h",
             prophylaxis_display_facts,
+            selected_document_refs,
         )
     if "non_compliant_extension_missing" in event_states:
         return _SurgeryTextOutcome(
@@ -1450,6 +1621,7 @@ def _surgery_text_outcome(
             "non_compliant",
             "extension_reason_missing",
             prophylaxis_display_facts,
+            selected_document_refs,
         )
     # 025 尚未完成真实病例金标验收，必须保守失败关闭。多手术中只要
     # 任一事件无法唯一绑定一份正式手术记录或字段事实仍未知，整体即DG；
@@ -1459,6 +1631,7 @@ def _surgery_text_outcome(
             rule_id,
             "data_gap",
             "surgery_text_fact_unknown",
+            selected_document_refs=selected_document_refs,
         )
     for state, reason in (
         ("non_compliant", "surgery_text_fact_defect"),
@@ -1542,6 +1715,7 @@ def _surgery_text_outcome(
                 state,
                 reason,
                 customer_display_facts=display_facts,
+                selected_document_refs=selected_document_refs,
             )
     raise ValueError("unsupported surgery text outcome")
 
@@ -1580,11 +1754,17 @@ def _decision_from_surgery_outcome(
     }
     applicability, evidence_state, qc_direction, reason_code = mapping[outcome.status]
     source_keys = _TYPED_TEXT_SOURCES[outcome.rule_id]
-    refs = tuple(
-        item.snapshot_ref.removeprefix("sha256:")
-        for item in snapshot.observations
-        if item.source_key in source_keys
-    )
+    # 逐行文书引用是客户坐标的唯一输入；来源 snapshot ref 仅保留给 Binding
+    # 验证无正文/空来源的合法结论，公共 projector 不会把它投影成文书。
+    selected_document_refs = outcome.selected_document_refs
+    refs = tuple(dict.fromkeys((
+        *selected_document_refs,
+        *(
+            item.snapshot_ref.removeprefix("sha256:")
+            for item in snapshot.observations
+            if item.source_key in source_keys
+        ),
+    )))
     return RuleDecision(
         rule_id=outcome.rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -1959,6 +2139,8 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             deterministic_outcome = (
                 _deterministic_024_outcome(
                     surgery_rows=rows_by_source["surgery_record"],
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
                 )
                 if rule_id == "LX0609-024"
                 and states_by_source.get("surgery_record") == "available"
@@ -2025,6 +2207,30 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             elif rule_id == "LX0609-033":
                 consent_state = states_by_source.get("surgery_inform_consent")
                 consent_rows = rows_by_source["surgery_inform_consent"]
+                surgery_trigger_document_refs = tuple(
+                    ref
+                    for row in rows_by_source["surgery_record"]
+                    if (
+                        ref := _material_document_ref_for_row(
+                            materials=evidence_materials,
+                            snapshot=evidence_snapshot,
+                            source_key="surgery_record",
+                            selected_row=row,
+                        )
+                    )
+                )
+                consent_document_refs = tuple(
+                    ref
+                    for row in consent_rows
+                    if (
+                        ref := _material_document_ref_for_row(
+                            materials=evidence_materials,
+                            snapshot=evidence_snapshot,
+                            source_key="surgery_inform_consent",
+                            selected_row=row,
+                        )
+                    )
+                )
                 consent_observation = next(
                     (
                         item
@@ -2071,6 +2277,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                                     else {}
                                 ),
                             },
+                            selected_document_refs=surgery_trigger_document_refs,
                         )
                 elif consent_state != "available":
                     pending_outcomes[rule_id] = _SurgeryTextOutcome(
@@ -2098,6 +2305,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                             "consent_state": "blank",
                             "performed_surgery_confirmed": True,
                         },
+                        selected_document_refs=consent_document_refs,
                     )
                 else:
                     # 同一住院可存在多次手术及多份同意书。当前结构化来源
@@ -2235,6 +2443,8 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                                         rule_id=rule_id,
                                         facts=text_facts,
                                         projection=projection,
+                                        materials=evidence_materials,
+                                        snapshot=evidence_snapshot,
                                     )
                                 )
                                 if (

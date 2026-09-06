@@ -252,9 +252,23 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_transfusion_customer_rule,
         safe_transfusion_customer_display_facts,
     )
+    from .surgery_gate_result_mapping import (
+        is_surgery_gate_customer_rule,
+        safe_surgery_gate_customer_display_facts,
+    )
 
     if rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS:
         safe_facts = _safe_surgery_presence_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
+        return (
+            safe_facts
+            if safe_facts is not None and not contains_private_identifier(safe_facts)
+            else None
+        )
+    if is_surgery_gate_customer_rule(rule_id):
+        safe_facts = safe_surgery_gate_customer_display_facts(
             rule_id=rule_id,
             raw=raw,
         )
@@ -310,13 +324,23 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .consultation_customer_projection import is_consultation_customer_rule
     from .exam_lab_result_mapping import is_exam_lab_customer_rule
     from .transfusion_result_mapping import is_transfusion_customer_rule
+    from .surgery_gate_result_mapping import is_surgery_gate_customer_rule
 
     return (
         rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS
+        or is_surgery_gate_customer_rule(rule_id)
         or is_consultation_customer_rule(rule_id)
         or is_exam_lab_customer_rule(rule_id)
         or is_transfusion_customer_rule(rule_id)
     )
+
+
+def finalizer_validates_missing_executor_customer_display_facts(rule_id: str) -> bool:
+    """仅保留需验证缺事实例外的执行器合同，不扩大到其他规则族。"""
+
+    from .surgery_gate_result_mapping import requires_missing_facts_status_validation
+
+    return requires_missing_facts_status_validation(rule_id)
 
 
 def finalize_luxian_0609_executor_customer_display_facts(
@@ -324,6 +348,7 @@ def finalize_luxian_0609_executor_customer_display_facts(
     result: Mapping[str, Any],
     raw_facts: Any,
     contract_failure: bool = False,
+    preserve_legacy_exception: bool = False,
 ) -> tuple[dict[str, Any], bool]:
     """在单规则边界收敛执行器客户事实合同失败。
 
@@ -351,6 +376,12 @@ def finalize_luxian_0609_executor_customer_display_facts(
         is_transfusion_customer_rule,
         transfusion_customer_fact_status_is_valid,
     )
+    from .surgery_gate_result_mapping import (
+        is_surgery_gate_customer_rule,
+        legacy_surgery_gate_contract_error,
+        surgery_gate_customer_fact_status_is_valid,
+    )
+    rule_id = str(finalized.get("rule_id") or finalized.get("rule_code") or "")
     if (
         safe_facts is not None
         and is_transfusion_customer_rule(
@@ -363,6 +394,31 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     ):
         safe_facts = None
+    surgery_gate_status_valid = (
+        is_surgery_gate_customer_rule(rule_id)
+        and surgery_gate_customer_fact_status_is_valid(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            reason_code=str(finalized.get("reason_code") or "").strip(),
+            raw_facts=raw_facts,
+            safe_facts=safe_facts,
+        )
+    )
+    if preserve_legacy_exception:
+        legacy_error = legacy_surgery_gate_contract_error(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            reason_code=str(finalized.get("reason_code") or "").strip(),
+            raw_facts=raw_facts,
+            safe_facts=safe_facts,
+        )
+        if legacy_error:
+            raise ValueError(legacy_error)
+    if is_surgery_gate_customer_rule(rule_id) and not surgery_gate_status_valid:
+        safe_facts = None
+    if raw_facts is None and surgery_gate_status_valid:
+        finalized.pop("customer_display_facts", None)
+        return finalized, True
     if safe_facts is not None:
         finalized["customer_display_facts"] = safe_facts
         return finalized, True

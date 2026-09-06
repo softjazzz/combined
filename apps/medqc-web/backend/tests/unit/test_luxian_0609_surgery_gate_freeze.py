@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,10 +15,41 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SourceEvidenceQueryError,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.surgery_gate_result_mapping import (
+    safe_surgery_gate_customer_display_facts,
+)
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 
 
 RULE_IDS = ("LX0609-003", "LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031", "LX0609-033")
+
+
+def test_surgery_gate_rules_do_not_return_to_result_aggregator() -> None:
+    """迁移完成后，聚合器不得重新按本族规则号解释业务结果。"""
+
+    aggregator = (
+        Path(__file__).parents[2]
+        / "app"
+        / "services"
+        / "luxian_0609_result_aggregator.py"
+    ).read_text(encoding="utf-8")
+
+    assert all(rule_id not in aggregator for rule_id in RULE_IDS)
+
+
+def test_surgery_gate_031_keeps_single_event_signer_failure_contract() -> None:
+    assert safe_surgery_gate_customer_display_facts(
+        rule_id="LX0609-031",
+        raw={
+            "failure_kind": "surgery_signer_not_qualified",
+            "performed_surgery_confirmed": True,
+            "surgeon_signature_matches": False,
+        },
+    ) == {
+        "failure_kind": "surgery_signer_not_qualified",
+        "performed_surgery_confirmed": True,
+        "surgeon_signature_matches": False,
+    }
 
 
 def _wrapper(rule_id: str) -> dict[str, str]:
@@ -372,6 +404,87 @@ async def test_surgery_gate_freeze_two_surgeries_do_not_hide_an_unsigned_event()
     assert [item.reason_code for item in reduced] == ["required_field_missing"]
     assert [item["status"] for item in customer_results] == ["data_gap"]
     assert "surgery-gate-2" not in repr(customer_results)
+
+
+@pytest.mark.asyncio
+async def test_surgery_gate_freeze_031_only_projects_the_selected_signature_source() -> None:
+    """031 采用主表签名时，不得同时展示未参与判定的矛盾手术记录。"""
+
+    rows = _rows()
+    rows["surgery_record"][0].update(
+        {
+            "surgeon": "术者甲",
+            "surgeon_sign": "其他医师",
+        }
+    )
+    rows["mr_surgery"][0].update(
+        {
+            "document_id": "mr-surgery-gate-1",
+            "surgeon": "术者甲",
+            "main_surgery_sign": "术者甲",
+        }
+    )
+
+    execution, reduced, customer_results, _ = await _execute_and_aggregate(
+        rows_by_source=rows,
+        client=None,
+        rule_ids=("LX0609-031",),
+    )
+
+    assert execution.llm_call_count == execution.total_tokens == 0
+    assert [item.final_state.value for item in reduced] == ["compliant"]
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in customer_results[0]["customer_evidence"]
+    } == {("mr_surgery", "mr-surgery-gate-1")}
+
+
+@pytest.mark.asyncio
+async def test_surgery_gate_freeze_missing_consent_keeps_every_trigger_coordinate() -> None:
+    """033 完整空同意书来源时，每台已实施手术都是独立缺失触发事件。"""
+
+    rows = _rows()
+    rows["surgery_record"] = [
+        {
+            "document_id": "surgery-gate-1",
+            "surgery_begin_time": "2026-01-01 08:00:00+08:00",
+            "surgery_end_time": "2026-01-01 10:00:00+08:00",
+            "record_time": "2026-01-01 12:00:00+08:00",
+            "surgeon": "术者甲",
+            "surgeon_sign": "术者甲",
+            "record_content": "实施手术甲。",
+        },
+        {
+            "document_id": "surgery-gate-2",
+            "surgery_begin_time": "2026-01-02 08:00:00+08:00",
+            "surgery_end_time": "2026-01-02 10:00:00+08:00",
+            "record_time": "2026-01-02 12:00:00+08:00",
+            "surgeon": "术者乙",
+            "surgeon_sign": "术者乙",
+            "record_content": "实施手术乙。",
+        },
+    ]
+    rows["surgery_inform_consent"] = []
+
+    execution, reduced, customer_results, _ = await _execute_and_aggregate(
+        rows_by_source=rows,
+        client=None,
+        rule_ids=("LX0609-033",),
+    )
+
+    assert execution.llm_call_count == execution.total_tokens == 0
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert [item.reason_code for item in reduced] == ["requirement_violated"]
+    assert customer_results[0]["customer_display_facts"]["failure_kind"] == (
+        "surgery_consent_document_missing"
+    )
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in customer_results[0]["customer_evidence"]
+    } == {
+        ("surgery_record", "surgery-gate-1"),
+        ("surgery_record", "surgery-gate-2"),
+    }
 
 
 @pytest.mark.asyncio

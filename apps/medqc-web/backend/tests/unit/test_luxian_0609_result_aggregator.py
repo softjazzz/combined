@@ -248,18 +248,6 @@ def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
     ("rule_id", "facts", "expected"),
     [
         (
-            "LX0609-033",
-            {
-                "failure_kind": "surgery_consent_document_missing",
-                "consent_state": "missing",
-                "performed_surgery_confirmed": True,
-                "source_document_refs": [
-                    {"source_type": "surgery_record", "source_document_id": "surgery-1"}
-                ],
-            },
-            [{"source_type": "surgery_record", "source_document_id": "surgery-1"}],
-        ),
-        (
             "LX0609-040",
             {
                 "failure_kind": "level4_mdt_absent",
@@ -277,7 +265,7 @@ def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
         ),
     ],
 )
-def test_determined_missing_results_keep_exact_trigger_evidence(
+def test_legacy_determined_missing_results_keep_exact_trigger_evidence(
     rule_id, facts, expected
 ) -> None:
     assert _customer_evidence_from_display_facts(rule_id=rule_id, raw=facts) == expected
@@ -4197,10 +4185,7 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
 
     assert result["customer_display_facts"] == expected
     if rule_id == "LX0609-025":
-        assert result["customer_evidence"] == [{
-            "source_type": "surgery_record",
-            "source_document_id": "private-surgery-document-id",
-        }]
+        assert "customer_evidence" not in result
     assert "PRIVATE_" not in repr(result)
 
 
@@ -4450,26 +4435,76 @@ def test_025_multi_surgery_projection_keeps_event_facts_and_all_real_evidence() 
         "source_document_id": "surgery-document-a",
     }
 
+    def read(**kwargs: object) -> SnapshotSourceRows:
+        source_key = str(kwargs["source_key"])
+        rows = (
+            (
+                {
+                    "document_id": "surgery-document-a",
+                    "content": "第一台手术记录",
+                },
+                {
+                    "document_id": "surgery-document-b",
+                    "content": "第二台手术记录",
+                },
+            )
+            if source_key == "surgery_record"
+            else (
+                ({"document_id": "daily-course-document-must-not-merge", "content": "病程记录"},)
+                if source_key == "daily_course_record"
+                else ()
+            )
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-025",),
+        institute_id="aggregation-025-institute",
+        patient_id="aggregation-025-patient",
+        visit_id="aggregation-025-visit",
+        source_schema=None,
+        created_at="2026-09-06T10:00:00+08:00",
+        row_reader=read,
+    )
+    selected_document_refs = tuple(
+        ref
+        for ref, _row in session.materials.document_rows(
+            "surgery_record", snapshot=session.snapshot
+        )
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(
+            RuleDecision(
+                rule_id="LX0609-025",
+                snapshot_hash=session.snapshot.snapshot_hash,
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.SUFFICIENT,
+                qc_direction=QcDirection.DEFECT,
+                reason_code="requirement_violated",
+                fact_refs=selected_document_refs,
+                evaluator_version="aggregation-025-selected-evidence-v1",
+                confidence=None,
+            ),
+        ),
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
     result = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-025", "name": "植入物信息"}],
         execution_results=[],
-        reduced_decisions=(
-            _reduced_decision("LX0609-025", direction=QcDirection.DEFECT),
-        ),
+        reduced_decisions=reduced,
         customer_display_facts=(("LX0609-025", raw_facts),),
         format_evidence=False,
         audit_context={
-            "evidence_snapshot": SimpleNamespace(
-                facts=(
-                    SimpleNamespace(
-                        fact_id="daily-course-fact",
-                        source_snapshot_hash="b" * 64,
-                        source_key="daily_course_record",
-                        source_document_type="daily_course_record",
-                        source_document_id="daily-course-document-must-not-merge",
-                    ),
-                )
-            )
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
         },
     )[0]
 
@@ -4490,10 +4525,13 @@ def test_025_multi_surgery_projection_keeps_event_facts_and_all_real_evidence() 
             "implant_names": ["钛网"],
         },
     ]
-    assert result["customer_evidence"] == [
-        {"source_type": "surgery_record", "source_document_id": "surgery-document-a"},
-        {"source_type": "surgery_record", "source_document_id": "surgery-document-b"},
-    ]
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in result["customer_evidence"]
+    } == {
+        ("surgery_record", "surgery-document-a"),
+        ("surgery_record", "surgery-document-b"),
+    }
     assert "event_ref" not in repr(result["customer_display_facts"])
     assert "source_document_id" not in repr(result["customer_display_facts"])
     assert "barcode" not in repr(result).lower()
@@ -4538,6 +4576,44 @@ def test_025_invalid_event_projection_fails_closed(mutate) -> None:
     assert safe_luxian_0609_customer_display_facts(
         rule_id="LX0609-025", raw=facts
     ) is None
+
+
+def test_025_event_without_known_implant_name_keeps_migration_contract() -> None:
+    """事件级空名称表示名称字段缺失，不等于顶层已核验植入物集合为空。"""
+
+    facts = {
+        "failure_kind": "implant_information_incomplete",
+        "performed_surgery_confirmed": True,
+        "missing_fields": ["implant_name"],
+        "implant_event_details": [
+            {
+                "event_ref": "EVT-A",
+                "missing_fields": ["implant_name"],
+                "implant_names": [],
+                "source_document_id": "surgery-document-a",
+            }
+        ],
+        "source_label": "手术记录",
+        "source_document_type": "surgery_record",
+        "source_document_id": "surgery-document-a",
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-025", raw=facts
+    ) == {
+        "failure_kind": "implant_information_incomplete",
+        "performed_surgery_confirmed": True,
+        "source_label": "手术记录",
+        "source_document_type": "surgery_record",
+        "missing_fields": ["implant_name"],
+        "implant_event_details": [
+            {
+                "event_position": 1,
+                "missing_fields": ["implant_name"],
+                "implant_names": [],
+            }
+        ],
+    }
 
 
 @pytest.mark.parametrize(
@@ -4658,7 +4734,7 @@ def _025_reduced_for_status(status: str) -> ReducedRuleDecision:
     )
 
 
-def _aggregate_025_public_path(path: str, status: str, facts: dict | None) -> None:
+def _aggregate_025_public_path(path: str, status: str, facts: dict | None) -> dict:
     kwargs = {
         "wrapper_rules": [{"rule_id": "LX0609-025", "name": "植入物信息"}],
         "format_evidence": False,
@@ -4688,7 +4764,7 @@ def _aggregate_025_public_path(path: str, status: str, facts: dict | None) -> No
         elif facts is not None:
             result["customer_display_facts"] = facts
         kwargs["execution_results"] = [result]
-    aggregate_luxian_0609_results(**kwargs)
+    return aggregate_luxian_0609_results(**kwargs)[0]
 
 
 def _bound_025_not_applicable(reason_code: str):
