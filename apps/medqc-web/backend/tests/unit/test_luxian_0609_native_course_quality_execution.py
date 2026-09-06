@@ -3746,7 +3746,8 @@ async def test_course_009_precise_horizon_before_change_24h_deadline_is_not_matu
         },
     )[0]
 
-    assert canonical["status"] == "data_gap"
+    # 已确认变化事件与权威评价终点；仅因24小时窗口尚未结束，不能误报资料不足。
+    assert canonical["status"] == "not_applicable"
     assert canonical["reason_code"] == "evaluation_window_not_mature"
     assert canonical["customer_display_facts"] == {
         "failure_kind": "critical_change_window_not_mature",

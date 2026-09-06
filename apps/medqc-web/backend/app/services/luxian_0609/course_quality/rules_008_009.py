@@ -1257,6 +1257,16 @@ def _rule_009_semantic_decision(
             "requirement_violated",
             1.0,
         )
+    elif semantic_state == "window_not_mature":
+        # 触发事件与评价终点均已确认，只是事件后的24小时观察窗尚未结束。
+        # 这不是资料缺失，不能落入 data_gap。
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "evaluation_window_not_mature",
+            1.0,
+        )
     elif data_gap_reason != "required_field_missing":
         dimensions = (
             ApplicabilityState.APPLICABLE,
@@ -1350,7 +1360,7 @@ def _rule_009_change_event_decision(
                 return (
                     _rule_009_semantic_decision(
                         base_decision=base_decision,
-                        data_gap_reason="evaluation_window_not_mature",
+                        semantic_state="window_not_mature",
                     ),
                     {
                         "failure_kind": "critical_change_window_not_mature",
