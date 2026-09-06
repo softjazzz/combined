@@ -3178,11 +3178,7 @@ def safe_luxian_0609_customer_display_facts(
             if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
                 facts[key] = value
         return facts
-    surgery_document_targets = {
-        "LX0609-029": "presurg_summary",
-        "LX0609-030": "surgery_record",
-        "LX0609-032": "surgery_safecheck_record",
-    }
+    surgery_document_targets = {"LX0609-029": "presurg_summary"}
     target_document = surgery_document_targets.get(rule_id)
     if target_document is not None:
         failure_kind = raw.get("failure_kind")

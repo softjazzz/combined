@@ -274,11 +274,16 @@ def _typed_rule_decision(
     snapshot: Luxian0609EvidenceSnapshot,
     non_compliant_reason: str = "required_document_missing",
     reason_override: str = "",
+    selected_fact_refs: Sequence[str] | None = None,
 ) -> RuleDecision:
-    refs = tuple(
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in snapshot.observations
-        if observation.source_key in _TYPED_RULE_SOURCE_KEYS[rule_id]
+    refs = (
+        tuple(selected_fact_refs)
+        if selected_fact_refs is not None
+        else tuple(
+            observation.snapshot_ref.removeprefix("sha256:")
+            for observation in snapshot.observations
+            if observation.source_key in _TYPED_RULE_SOURCE_KEYS[rule_id]
+        )
     )
     if final_state in {"compliant", "non_compliant", "not_applicable"} and not refs:
         raise ValueError("typed surgery presence decision requires evidence refs")
@@ -341,6 +346,39 @@ def _typed_rule_decision(
         evaluator_version=_TYPED_EVALUATOR_VERSION,
         confidence=None,
     )
+
+
+def _selected_surgery_presence_fact_refs(
+    *,
+    rule_id: str,
+    final_state: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, ...] | None:
+    """为已判定的存在性结果选择同一会话内的真实文书坐标。
+
+    030 合规时覆盖全部手术记录；032 合规时再覆盖已由既有分钟关联
+    逻辑确认的核查表。缺核查表的 032 只保留手术事件坐标，不能由后层
+    反查或猜测。没有实际手术文书的既有状态继续使用来源观察坐标。
+    """
+
+    if final_state not in {"compliant", "non_compliant"}:
+        return None
+    source_keys = ["surgery_record"]
+    if rule_id == "LX0609-032" and final_state == "compliant":
+        source_keys.append("surgery_safecheck_record")
+    refs: list[str] = []
+    for source_key in source_keys:
+        refs.extend(
+            reference
+            for reference, _ in materials.document_rows(
+                source_key, snapshot=snapshot
+            )
+        )
+    selected = tuple(dict.fromkeys(refs))
+    if not selected:
+        raise ValueError("surgery presence selected evidence is empty")
+    return selected
 
 
 def execute_luxian_0609_native_rules(
@@ -498,6 +536,28 @@ def execute_luxian_0609_native_rules(
     if tuple(item["rule_id"] for item in all_results) != planned:
         return _technical_results(planned, reason_code="native_result_incomplete")
     typed_set = set(typed_selected)
+    selected_fact_refs_by_rule: dict[str, tuple[str, ...] | None] = {}
+    if evidence_snapshot is not None and evidence_materials is not None:
+        for rule_id in typed_set:
+            try:
+                selected_fact_refs_by_rule[rule_id] = (
+                    _selected_surgery_presence_fact_refs(
+                        rule_id=rule_id,
+                        final_state=final_state_by_rule_id[rule_id],
+                        snapshot=evidence_snapshot,
+                        materials=evidence_materials,
+                    )
+                )
+            except (
+                EvidenceMaterialTruncated,
+                EvidenceMaterialUnavailable,
+                TypeError,
+                ValueError,
+            ):
+                # C/NC 必须带执行器从本次材料中选定的逐文书坐标；不能静默
+                # 回退为来源观察 ref，否则公共投影会重新丢失客户定位。
+                final_state_by_rule_id[rule_id] = "technical_error"
+                reason_by_rule_id[rule_id] = "executor_exception"
     decisions = tuple(
         _typed_rule_decision(
             rule_id=str(item["rule_id"]),
@@ -508,6 +568,9 @@ def execute_luxian_0609_native_rules(
                 reason_by_rule_id[str(item["rule_id"])]
                 if final_state_by_rule_id[str(item["rule_id"])] == "data_gap"
                 else ""
+            ),
+            selected_fact_refs=selected_fact_refs_by_rule.get(
+                str(item["rule_id"])
             ),
         )
         for item in all_results

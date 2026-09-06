@@ -90,7 +90,11 @@ def _typed_session(
         source_registry_version=SOURCE_REGISTRY_VERSION,
         observations=observations,
         facts=(),
-        document_refs=(),
+        document_refs=tuple(
+            reference
+            for source_key, material in sources.items()
+            for reference in build_material_document_refs(source_key, material.rows)
+        ),
         created_at="2026-07-17T07:00:00+08:00",
     )
     return snapshot, Luxian0609EvidenceMaterialStore.create(
@@ -178,7 +182,14 @@ def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeyp
 
 
 def test_native_core_emits_direct_rule_decisions_on_shared_snapshot(monkeypatch):
-    snapshot, materials = _typed_session()
+    snapshot, materials = _typed_session(
+        surgery_record_rows=(
+            {
+                "document_id": "surgery-missing-content-1",
+                "record_content": "",
+            },
+        )
+    )
     snapshot_hash = snapshot.snapshot_hash
     plan = SimpleNamespace(
         planned_rules=[
@@ -329,17 +340,16 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         decisions=result.decisions,
         expected_rule_ids=("LX0609-032",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     assert reduced[0].final_state.value == "compliant"
     assert reduced[0].reason_code == "requirement_satisfied"
-    fact_refs_by_source = {
-        observation.source_key: observation.snapshot_ref.removeprefix("sha256:")
-        for observation in snapshot.observations
+    expected_document_refs = {
+        reference
+        for source_key in ("surgery_record", "surgery_safecheck_record")
+        for reference, _ in materials.document_rows(source_key, snapshot=snapshot)
     }
-    assert {
-        fact_refs_by_source["surgery_record"],
-        fact_refs_by_source["surgery_safecheck_record"],
-    }.issubset(set(result.decisions[0].fact_refs))
+    assert set(result.decisions[0].fact_refs) == expected_document_refs
     assert result.customer_display_facts == (
         (
             "LX0609-032",
@@ -727,6 +737,7 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-032",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
     assert reduced[0].final_state.value == expected_state
     assert reduced[0].reason_code == expected_reason

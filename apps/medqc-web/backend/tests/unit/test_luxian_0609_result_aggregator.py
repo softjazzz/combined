@@ -4197,13 +4197,92 @@ def test_consultation_native_invalid_facts_are_technical_error():
 _STRICT_CUSTOMER_FACT_RULES = (
     "LX0609-005",
     "LX0609-009",
-    "LX0609-030",
     "LX0609-040",
     "LX0609-043",
     "LX0609-054",
     "LX0609-064",
     "LX0609-071",
 )
+
+
+@pytest.mark.parametrize(
+    "entry_path",
+    ("explicit", "native_metadata", "native_top_level", "native_explicit"),
+)
+def test_030_invalid_customer_display_facts_preserves_all_entry_contracts(
+    entry_path: str,
+) -> None:
+    """030 已迁至 Finalizer；plain 输入保留拒绝，native 输入单条降级。"""
+
+    private_marker = f"PRIVATE_CUSTOMER_FACT_LX0609_030_{entry_path}"
+    invalid_facts = {"raw_private_text": private_marker}
+    execution_result: dict[str, Any] = {
+        "rule_id": "LX0609-030",
+        "status": "non_compliant",
+        "findings": "规则要求未满足。",
+    }
+    customer_display_facts: tuple[tuple[str, dict[str, str]], ...] = ()
+    if entry_path in {"explicit", "native_explicit"}:
+        customer_display_facts = (("LX0609-030", invalid_facts),)
+        if entry_path == "native_explicit":
+            execution_result["metadata"] = {
+                "execution_source": "lx0609_native",
+                "executor_type": "program",
+            }
+    else:
+        execution_result["metadata"] = {
+            "execution_source": "lx0609_native",
+            "executor_type": "program",
+        }
+        if entry_path == "native_metadata":
+            execution_result["metadata"]["customer_display_facts"] = invalid_facts
+        else:
+            execution_result["customer_display_facts"] = invalid_facts
+
+    if entry_path == "explicit":
+        with pytest.raises(ValueError, match="^invalid customer display facts$") as exc_info:
+            aggregate_luxian_0609_results(
+                wrapper_rules=[{"rule_id": "LX0609-030", "name": "LX0609-030"}],
+                execution_results=[execution_result],
+                customer_display_facts=customer_display_facts,
+                format_evidence=False,
+            )
+        assert private_marker not in str(exc_info.value)
+        return
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-030", "name": "LX0609-030"}],
+        execution_results=[execution_result],
+        customer_display_facts=customer_display_facts,
+        format_evidence=False,
+    )[0]
+
+    assert (result["status"], result["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
+    assert private_marker not in repr(result)
+
+
+def test_030_public_aggregation_allows_result_without_customer_display_facts() -> None:
+    """030 不要求所有状态都携带展示 facts，保持迁移前公共入口合同。"""
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-030", "name": "LX0609-030"}],
+        execution_results=[
+            {
+                "rule_id": "LX0609-030",
+                "status": "non_compliant",
+                "findings": "规则要求未满足。",
+            }
+        ],
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "non_compliant"
+    assert "customer_display_facts" not in result
 
 
 @pytest.mark.parametrize(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 import pytest
@@ -16,6 +17,10 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609_result_aggregator import (
     aggregate_luxian_0609_results,
+    safe_luxian_0609_customer_display_facts,
+)
+from app.services.luxian_0609.canonical_result_finalizer import (
+    validate_luxian_0609_executor_customer_display_facts,
 )
 
 
@@ -93,6 +98,18 @@ def _coordinates(result: dict[str, Any]) -> set[tuple[str, str, str, str]]:
             str(item.get("record_time") or ""),
         )
         for item in result.get("customer_evidence") or []
+    }
+
+
+def _material_refs(
+    session: Any, *sources: str
+) -> set[str]:
+    return {
+        reference
+        for source_key in sources
+        for reference, _ in session.materials.document_rows(
+            source_key, snapshot=session.snapshot
+        )
     }
 
 
@@ -227,7 +244,7 @@ def test_surgery_presence_freeze_through_typed_native_binding_and_canonical_proj
     expected_findings: tuple[str, str],
     expected_coordinates: tuple[set[tuple[str, str, str, str]], set[tuple[str, str, str, str]]],
 ) -> None:
-    _, execution, reduced, results = _execute_and_aggregate(
+    session, execution, reduced, results = _execute_and_aggregate(
         rows_by_source=rows_by_source
     )
 
@@ -256,7 +273,7 @@ def test_surgery_presence_freeze_through_typed_native_binding_and_canonical_proj
 
 
 def test_surgery_presence_freeze_two_surgeries_requires_explicit_minute_association() -> None:
-    _, execution, reduced, results = _execute_and_aggregate(
+    session, execution, reduced, results = _execute_and_aggregate(
         rows_by_source={
             "surgery_record": [
                 {
@@ -292,11 +309,26 @@ def test_surgery_presence_freeze_two_surgeries_requires_explicit_minute_associat
         "已确认本次手术具备手术记录。",
         "已确认本次手术具备手术安全核查表。",
     ]
-    # 当前 typed decisions 只绑定来源快照 ref；多文书时公共投影不能猜测文书，
-    # 因而精确关联成功仍冻结为空坐标集合，供后续迁移差分对比。
-    assert [_coordinates(item) for item in results] == [set(), set()]
+    # 执行器必须从同一 EvidenceSession 选择所有实际手术记录；032 还必须
+    # 绑定经现有分钟关联确认的两份核查表，公共投影不得由聚合器反查猜测。
+    assert [_coordinates(item) for item in results] == [
+        {
+            ("surgery_record", "SURG-1", "record_content", ""),
+            ("surgery_record", "SURG-2", "record_content", ""),
+        },
+        {
+            ("surgery_record", "SURG-1", "record_content", ""),
+            ("surgery_record", "SURG-2", "record_content", ""),
+            ("surgery_safecheck_record", "CHECK-1", "record_content", ""),
+            ("surgery_safecheck_record", "CHECK-2", "record_content", ""),
+        },
+    ]
+    assert set(reduced[0].fact_refs) == _material_refs(session, "surgery_record")
+    assert set(reduced[1].fact_refs) == _material_refs(
+        session, "surgery_record", "surgery_safecheck_record"
+    )
 
-    _, ambiguous_execution, ambiguous_reduced, ambiguous_results = (
+    ambiguous_session, ambiguous_execution, ambiguous_reduced, ambiguous_results = (
         _execute_and_aggregate(
             rows_by_source={
                 "surgery_record": [
@@ -333,7 +365,80 @@ def test_surgery_presence_freeze_two_surgeries_requires_explicit_minute_associat
         "已确认本次手术具备手术记录。",
         "当前缺少已实施手术与手术安全核查表的单台手术关联信息，暂时无法完成核对",
     ]
-    assert [_coordinates(item) for item in ambiguous_results] == [set(), set()]
+    assert [_coordinates(item) for item in ambiguous_results] == [
+        {
+            ("surgery_record", "SURG-1", "record_content", ""),
+            ("surgery_record", "SURG-2", "record_content", ""),
+        },
+        set(),
+    ]
+    assert set(ambiguous_reduced[0].fact_refs) == _material_refs(
+        ambiguous_session, "surgery_record"
+    )
+
+
+def test_surgery_presence_facts_are_finalizer_validated_and_aggregator_has_no_030_032_branch() -> None:
+    """030/032 的 facts 合同不再由聚合器重解释 target_document。"""
+
+    assert validate_luxian_0609_executor_customer_display_facts(
+        rule_id="LX0609-030",
+        raw={
+            "verification_kind": "surgery_document_present",
+            "target_document": "surgery_record",
+            "performed_surgery_confirmed": True,
+        },
+    ) == {
+        "verification_kind": "surgery_document_present",
+        "target_document": "surgery_record",
+        "performed_surgery_confirmed": True,
+    }
+    aggregator_contract_source = inspect.getsource(
+        safe_luxian_0609_customer_display_facts
+    )
+    assert "LX0609-030" not in aggregator_contract_source
+    assert "LX0609-032" not in aggregator_contract_source
+
+
+def test_surgery_presence_invalid_typed_facts_fail_closed_per_rule() -> None:
+    """typed/reduced 030 的非法 facts 只能由 Finalizer 降级，不能由聚合器抛出。"""
+
+    session, _execution, reduced, _results = _execute_and_aggregate(
+        rows_by_source={
+            "surgery_record": [
+                {
+                    "document_id": "SURG-INVALID-FACT-1",
+                    "surgery_begin_time": "2026-09-01 08:00:00+08",
+                    "record_content": "手术记录正文已经完整填写。",
+                }
+            ]
+        }
+    )
+
+    result = aggregate_luxian_0609_results(
+        wrapper_rules=[
+            rule
+            for rule in load_luxian_0609_rules()
+            if rule["rule_id"] == "LX0609-030"
+        ],
+        execution_results=[],
+        reduced_decisions=(reduced[0],),
+        customer_display_facts=(
+            ("LX0609-030", {"raw_private_text": "PRIVATE-030-FACT"}),
+        ),
+        format_evidence=False,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )[0]
+
+    assert (result["status"], result["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
+    assert "PRIVATE-030-FACT" not in repr(result)
 
 
 def test_surgery_presence_freeze_surgery_record_error_preserves_032_technical_error() -> None:
