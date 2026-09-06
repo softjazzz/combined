@@ -490,34 +490,11 @@ def project_customer_safe_result_item(
         or raw.get("rule_id")
         or raw.get("rule_code")
     ).upper()
-    try:
-        customer_display_facts, criterion_results = _validated_customer_explanation(
-            raw,
-            rule_id=rule_id,
-            status=status,
-        )
-    except ValueError as exc:
-        # 历史任务可能保存了“确定问题”状态，却没有同步保存可审计事实。
-        # 不应让整批任务因一条旧结果返回 409；也不能继续向客户展示无证据的确定问题。
-        # 仅将该条安全降级为资料待核实，保留 fail-closed 边界。
-        if (
-            status == "non_compliant"
-            and rule_id.startswith("LX0609-")
-            and not raw.get("customer_display_facts")
-            and not raw.get("criterion_results")
-            and (
-                isinstance(raw.get("diagnostic_trace"), dict)
-                or isinstance(raw.get("metadata"), dict)
-            )
-            and str(exc) == LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
-        ):
-            status = "data_gap"
-            raw["status"] = status
-            raw["result_status"] = status
-            raw["reason_code"] = "historical_evidence_missing"
-            customer_display_facts, criterion_results = {}, []
-        else:
-            raise
+    customer_display_facts, criterion_results = _validated_customer_explanation(
+        raw,
+        rule_id=rule_id,
+        status=status,
+    )
     generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     # 原始执行结果中的 customer_* 字段仍可能混入病历句子。只有已经通过本投影器
     # 生成的 DTO 才允许复用客户文案；首次投影一律按状态生成固定安全表述。
@@ -655,7 +632,37 @@ def iter_unique_customer_result_source_items(
             continue
         if not _is_current_rule_contract_result(item):
             continue
-        projected = project_customer_safe_result_item(item, hmac_key=hmac_key)
+        source_item = item
+        try:
+            projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
+        except ValueError as exc:
+            # 旧批任务偶有一条“确定问题”只保存了状态而未保存可审计解释；
+            # 该条不能把整批详情读成 409/500，也不能重判为 data_gap。
+            # 仅无当前 rule_version 的历史裸 payload 隔离为既有 technical_error，
+            # 当前 Canonical 结果仍按其原始合同 fail-closed。
+            is_bare_legacy_luxian_item = (
+                validate_luxian
+                and str(exc) == LX0609_CUSTOMER_RESULT_CONTRACT_ERROR
+                and _safe_text(item.get("rule_id") or item.get("rule_code")).startswith("LX0609-")
+                and _safe_text(item.get("status") or item.get("result_status")).lower() == "non_compliant"
+                and not item.get("customer_display_facts")
+                and not item.get("criterion_results")
+                and not _safe_text(item.get("rule_version"))
+                and (
+                    isinstance(item.get("diagnostic_trace"), dict)
+                    or isinstance(item.get("metadata"), dict)
+                )
+            )
+            if not is_bare_legacy_luxian_item:
+                raise
+            source_item = {
+                **item,
+                "status": "technical_error",
+                "result_status": "technical_error",
+                "is_compliant": None,
+                "reason_code": "canonical_result_envelope_invalid",
+            }
+            projected = project_customer_safe_result_item(source_item, hmac_key=hmac_key)
         identity = (
             _safe_text(projected.get("record_ref")),
             _safe_text(projected.get("rule_id")),
@@ -668,7 +675,7 @@ def iter_unique_customer_result_source_items(
         )
         current = unique_by_rule.get(identity)
         if current is None or authority > current[0]:
-            unique_by_rule[identity] = (authority, item)
+            unique_by_rule[identity] = (authority, source_item)
     return [item for _, item in unique_by_rule.values()]
 
 
