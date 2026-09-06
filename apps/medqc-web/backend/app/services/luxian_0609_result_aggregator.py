@@ -468,95 +468,7 @@ def safe_luxian_0609_customer_display_facts(
             )
         return safe_events
 
-    def controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
-        """只投影 064 客户逐台核对所需字段，拒绝原始文书和内部事件标识。"""
-
-        if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
-            return None
-        safe_events: list[dict[str, Any]] = []
-        for item in value:
-            if not isinstance(item, Mapping):
-                return None
-            surgery_end_time = item.get("surgery_end_time")
-            projected_surgery_time = item.get("surgery_time")
-            if (
-                surgery_end_time is not None
-                and projected_surgery_time is not None
-                and surgery_end_time != projected_surgery_time
-            ):
-                return None
-            surgery_time = (
-                surgery_end_time
-                if surgery_end_time is not None
-                else projected_surgery_time
-            )
-            surgeon_names = item.get("surgeon_names")
-            required_dates = item.get("required_postop_dates")
-            covered_dates = item.get("covered_postop_dates")
-            surgeon_round_present = item.get("surgeon_round_present")
-            if (
-                not isinstance(surgery_time, str)
-                or not surgery_time
-                or len(surgery_time) > 160
-                or "\n" in surgery_time
-                or not isinstance(surgeon_names, (list, tuple))
-                or len(surgeon_names) > 10
-                or any(
-                    not isinstance(name, str)
-                    or not name
-                    or len(name) > 80
-                    or "\n" in name
-                    for name in surgeon_names
-                )
-                or not isinstance(required_dates, (list, tuple))
-                or len(required_dates) != 3
-                or any(
-                    not isinstance(value, str)
-                    or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
-                    for value in required_dates
-                )
-                or len(set(required_dates)) != 3
-                or not isinstance(covered_dates, (list, tuple))
-                or any(
-                    not isinstance(value, str)
-                    or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
-                    for value in covered_dates
-                )
-                or not set(covered_dates).issubset(set(required_dates))
-                or not isinstance(surgeon_round_present, bool)
-            ):
-                return None
-            safe_event: dict[str, Any] = {
-                "surgery_time": surgery_time,
-                "surgeon_names": list(surgeon_names),
-                "required_postop_dates": list(required_dates),
-                "covered_postop_dates": list(covered_dates),
-                "surgeon_round_present": surgeon_round_present,
-            }
-            surgery_name = item.get("surgery_name")
-            if surgery_name:
-                if (
-                    not isinstance(surgery_name, str)
-                    or len(surgery_name) > 160
-                    or "\n" in surgery_name
-                ):
-                    return None
-                safe_event["surgery_name"] = surgery_name
-            safe_events.append(safe_event)
-        return safe_events
-
     extended_kinds_by_rule = {
-        "LX0609-064": {
-            "postoperative_three_day_coverage_check",
-            "postoperative_surgery_event_time_check",
-            "postoperative_three_day_window_not_mature",
-            "postoperative_three_day_window_unavailable",
-        },
-        "LX0609-065": {
-            "postoperative_senior_round_check",
-            "postoperative_surgery_event_time_check",
-        },
-        "LX0609-066": {"postoperative_first_course_presence_check"},
         "LX0609-069": {"consultation_timeliness_check"},
         "LX0609-071": {
             "physician_handoff_timeliness_check",
@@ -576,23 +488,6 @@ def safe_luxian_0609_customer_display_facts(
         },
     }
     extended_allowed_keys = {
-        "postoperative_three_day_coverage_check": {
-            "surgery_time", "required_postop_dates", "covered_postop_dates",
-            "surgeon_round_present",
-        },
-        "postoperative_three_day_window_not_mature": {
-            "surgery_times", "deadline_dates", "evaluation_time", "evaluation_date",
-        },
-        "postoperative_three_day_window_unavailable": {"issue"},
-        "postoperative_surgery_event_time_check": {
-            "performed_surgery_count", "missing_surgery_end_events",
-        },
-        "postoperative_senior_round_check": {
-            "surgery_time", "threshold_hours", "senior_round_times",
-        },
-        "postoperative_first_course_presence_check": {
-            "performed_surgery_count", "postoperative_first_course_count",
-        },
         "consultation_timeliness_check": {
             "threshold_hours", "actual_interval_hours", "request_times", "record_times",
             "event_results",
@@ -662,32 +557,6 @@ def safe_luxian_0609_customer_display_facts(
             *extended_allowed_keys[kind],
         }:
             return None
-        if kind == "postoperative_surgery_event_time_check":
-            # 手术结束时间缺失是可解释的资料缺口，不应因原生逐台事件
-            # 携带 document_id/surgery_name 等内部字段而让整个病例变成技术异常。
-            performed_count = raw.get("performed_surgery_count")
-            missing_events = raw.get("missing_surgery_end_events")
-            if (
-                set(raw) - {"surgery_events"}
-                != {"verification_kind", "performed_surgery_count", "missing_surgery_end_events"}
-                or type(performed_count) is not int
-                or not 0 <= performed_count <= 100
-                or not isinstance(missing_events, (list, tuple))
-                or not 1 <= len(missing_events) <= performed_count
-                or any(
-                    not isinstance(value, str)
-                    or not value.strip()
-                    or len(value) > 160
-                    or "\n" in value
-                    for value in missing_events
-                )
-            ):
-                return None
-            return {
-                "verification_kind": kind,
-                "performed_surgery_count": performed_count,
-                "missing_surgery_end_events": list(dict.fromkeys(missing_events)),
-            }
         if kind == "death_discussion_window_not_mature":
             death_time = raw.get("death_time")
             deadline_time = raw.get("deadline_time")
@@ -770,67 +639,6 @@ def safe_luxian_0609_customer_display_facts(
                 "death_time": raw["death_time"],
                 "issue": raw["issue"],
             }
-        if kind == "postoperative_three_day_window_unavailable":
-            issue = raw.get("issue")
-            if set(raw) != {"verification_kind", "issue"} or issue not in {
-                "authoritative_time_missing",
-                "authoritative_time_conflict",
-                "source_unavailable",
-                "source_truncated",
-            }:
-                return None
-            return {"verification_kind": kind, "issue": issue}
-        if kind == "postoperative_three_day_window_not_mature":
-            surgery_times = raw.get("surgery_times")
-            deadline_dates = raw.get("deadline_dates")
-            evaluation_time = raw.get("evaluation_time")
-            evaluation_date = raw.get("evaluation_date")
-            timestamp_pattern = (
-                r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}"
-                r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?"
-            )
-            expected_keys = (
-                {"verification_kind", "surgery_times", "deadline_dates", "evaluation_time"}
-                if evaluation_time is not None
-                else {"verification_kind", "surgery_times", "deadline_dates", "evaluation_date"}
-            )
-            if (
-                set(raw) != expected_keys
-                or not isinstance(surgery_times, (list, tuple))
-                or not 1 <= len(surgery_times) <= 100
-                or any(
-                    not isinstance(value, str)
-                    or re.fullmatch(timestamp_pattern, value) is None
-                    for value in surgery_times
-                )
-                or not isinstance(deadline_dates, (list, tuple))
-                or len(deadline_dates) != len(surgery_times)
-                or any(
-                    not isinstance(value, str)
-                    or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
-                    for value in deadline_dates
-                )
-                or (evaluation_time is None and evaluation_date is None)
-                or (evaluation_time is not None and evaluation_date is not None)
-            ):
-                return None
-            try:
-                if evaluation_time is not None:
-                    datetime.fromisoformat(evaluation_time.replace("Z", "+00:00"))
-                else:
-                    datetime.fromisoformat(f"{evaluation_date}T00:00:00")
-            except (TypeError, ValueError):
-                return None
-            return {
-                "verification_kind": kind,
-                "surgery_times": list(surgery_times),
-                "deadline_dates": list(deadline_dates),
-                **(
-                    {"evaluation_time": evaluation_time}
-                    if evaluation_time is not None
-                    else {"evaluation_date": evaluation_date}
-                ),
-            }
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
             # 061 的冲突列表只在确有多条权威时间时出现；保持普通结果的
@@ -884,18 +692,6 @@ def safe_luxian_0609_customer_display_facts(
                 safe[key] = list(value)
             else:
                 return None
-        if kind == "postoperative_three_day_coverage_check" and raw.get("surgery_events") is not None:
-            surgery_events = controlled_postoperative_events(raw.get("surgery_events"))
-            performed_surgery_count = raw.get("performed_surgery_count")
-            if (
-                surgery_events is None
-                or not isinstance(performed_surgery_count, int)
-                or isinstance(performed_surgery_count, bool)
-                or performed_surgery_count != len(surgery_events)
-            ):
-                return None
-            safe["performed_surgery_count"] = performed_surgery_count
-            safe["surgery_events"] = surgery_events
         if kind in {
             "transfer_record_timeliness_check",
             "transfer_record_presence_check",
