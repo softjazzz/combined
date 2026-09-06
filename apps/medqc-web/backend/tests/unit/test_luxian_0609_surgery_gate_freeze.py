@@ -272,8 +272,8 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
 async def test_surgery_gate_freeze_absent_and_source_error_remain_distinct() -> None:
     """完整空来源与查询异常不能在 Binding 或投影中混同。"""
 
-    # 先锁定真实 executor/Binding 输出，再精确记录聚合器仍有的 025 严格 facts
-    # 旧所有权：无手术不能伪造 implant_not_used，因此该链当前无法完成客户投影。
+    # 先锁定真实 executor/Binding 输出：无手术不能伪造 implant_not_used，
+    # performed_event_absent 的 025 应可在无客户事实时完成客户投影。
     def empty_read(**kwargs: object) -> SnapshotSourceRows:
         return SnapshotSourceRows.create(
             source_key=str(kwargs["source_key"]), rows=(), truncated=False, limit_rows=50
@@ -317,13 +317,16 @@ async def test_surgery_gate_freeze_absent_and_source_error_remain_distinct() -> 
         *["surgery-gate-ruledecision-shadow-v2"] * 5,
     ]
     assert absent.llm_call_count == absent.total_tokens == 0
-    with pytest.raises(ValueError, match="lx0609_025_display_fact_status_mismatch"):
-        _aggregate(
-            reduced=absent_reduced,
-            customer_display_facts=absent.customer_display_facts,
-            session=absent_session,
-            rule_ids=RULE_IDS,
-        )
+    absent_results = _aggregate(
+        reduced=absent_reduced,
+        customer_display_facts=absent.customer_display_facts,
+        session=absent_session,
+        rule_ids=RULE_IDS,
+    )
+    assert [item["status"] for item in absent_results] == ["not_applicable"] * len(RULE_IDS)
+    assert [item["reason_code"] for item in absent_results] == ["performed_event_absent"] * len(RULE_IDS)
+    absent_by_rule_id = {item["rule_id"]: item for item in absent_results}
+    assert "customer_display_facts" not in absent_by_rule_id["LX0609-025"]
 
     errored, errored_reduced, errored_results, _ = await _execute_and_aggregate(
         rows_by_source={}, client=None, failing_sources=frozenset({"surgery_record"})

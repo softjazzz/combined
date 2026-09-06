@@ -297,6 +297,7 @@ def _validate_lx0609_025_fact_status(
     *,
     rule_id: str,
     status: str,
+    reason_code: str,
     raw_facts: Any,
     safe_facts: Mapping[str, Any] | None,
 ) -> None:
@@ -310,6 +311,11 @@ def _validate_lx0609_025_fact_status(
         "not_applicable": "implant_not_used",
     }.get(status)
     if raw_facts is None:
+        if (
+            status == "not_applicable"
+            and reason_code == "performed_event_absent"
+        ):
+            return
         if expected_kind is not None:
             raise ValueError("lx0609_025_display_fact_status_mismatch")
         return
@@ -403,6 +409,11 @@ def _copy_customer_fields(
     _validate_lx0609_025_fact_status(
         rule_id=wrapper_id,
         status=status,
+        reason_code=str(
+            selected.get("reason_code")
+            or selected_metadata_mapping.get("reason_code")
+            or ""
+        ),
         raw_facts=raw_display_facts,
         safe_facts=safe_025_display_facts,
     )
@@ -4243,6 +4254,11 @@ def _copy_native_customer_fields(
     _validate_lx0609_025_fact_status(
         rule_id=wrapper_id,
         status=status,
+        reason_code=str(
+            selected.get("reason_code")
+            or selected_metadata_mapping.get("reason_code")
+            or ""
+        ),
         raw_facts=raw_display_facts,
         safe_facts=safe_display_facts,
     )
@@ -4463,6 +4479,7 @@ def aggregate_luxian_0609_results(
             _validate_lx0609_025_fact_status(
                 rule_id=wrapper_id,
                 status=str(result.get("status") or ""),
+                reason_code=reduced.reason_code,
                 raw_facts=raw_025_facts_by_rule.get(wrapper_id),
                 safe_facts=display_facts_by_rule.get(wrapper_id),
             )

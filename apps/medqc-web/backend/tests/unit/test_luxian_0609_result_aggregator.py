@@ -23,9 +23,16 @@ from app.services.luxian_0609.decision_model import (
     QcDirection,
     RuleDecision,
 )
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
 from app.services.luxian_0609.decision_reducer import (
     ReducedRuleDecision,
     reduce_luxian_0609_rule_decision,
+)
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
 )
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
@@ -4649,6 +4656,46 @@ def _aggregate_025_public_path(path: str, status: str, facts: dict | None) -> No
     aggregate_luxian_0609_results(**kwargs)
 
 
+def _bound_025_not_applicable(reason_code: str):
+    def read(**kwargs: object) -> SnapshotSourceRows:
+        return SnapshotSourceRows.create(
+            source_key=str(kwargs["source_key"]),
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-025",),
+        institute_id="aggregation-025-institute",
+        patient_id="aggregation-025-patient",
+        visit_id="aggregation-025-visit",
+        source_schema=None,
+        created_at="2026-09-06T10:00:00+08:00",
+        row_reader=read,
+    )
+    decision = RuleDecision(
+        rule_id="LX0609-025",
+        snapshot_hash=session.snapshot.snapshot_hash,
+        applicability=ApplicabilityState.NOT_APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code=reason_code,
+        fact_refs=(
+            session.snapshot.observations[0].snapshot_ref.removeprefix("sha256:"),
+        ),
+        evaluator_version="aggregation-025-defect-regression-v1",
+        confidence=None,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    return session, reduced
+
+
 _025_WRONG_SOURCE_FACTS = {
     **_025_facts_for_kind("implant_information_incomplete"),
     "source_label": "病程记录",
@@ -4660,6 +4707,63 @@ _025_PRIVATE_FACTS = {
 }
 
 
+@pytest.mark.parametrize(
+    ("reason_code", "facts", "should_pass"),
+    [
+        ("performed_event_absent", None, True),
+        ("trigger_absent_complete", None, False),
+        (
+            "trigger_absent_complete",
+            _025_facts_for_kind("implant_not_used"),
+            True,
+        ),
+    ],
+)
+def test_025_only_performed_event_absent_na_may_omit_facts_after_binding(
+    reason_code: str,
+    facts: dict | None,
+    should_pass: bool,
+) -> None:
+    """无手术 NA 不伪造阴性植入物；其余 NA 仍受严格 facts 合同约束。"""
+
+    session, reduced = _bound_025_not_applicable(reason_code)
+    kwargs = {
+        "wrapper_rules": [{"rule_id": "LX0609-025", "name": "植入物信息"}],
+        "execution_results": [],
+        "reduced_decisions": reduced,
+        "customer_display_facts": (("LX0609-025", facts),) if facts is not None else (),
+        "format_evidence": False,
+        "audit_context": {
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    }
+    if not should_pass:
+        with pytest.raises(
+            ValueError, match="lx0609_025_display_fact_status_mismatch"
+        ):
+            aggregate_luxian_0609_results(**kwargs)
+        return
+
+    result = aggregate_luxian_0609_results(**kwargs)[0]
+    assert (result["status"], result["reason_code"]) == (
+        "not_applicable",
+        reason_code,
+    )
+    if facts is None:
+        assert "customer_display_facts" not in result
+    else:
+        assert result["customer_display_facts"] == facts
+
+
+@pytest.mark.parametrize("path", ["compat", "native"])
+def test_025_na_without_reason_or_facts_remains_rejected(path: str) -> None:
+    with pytest.raises(
+        ValueError, match="lx0609_025_display_fact_status_mismatch"
+    ):
+        _aggregate_025_public_path(path, "not_applicable", None)
+
+
 @pytest.mark.parametrize("path", ["compat", "native", "reduced"])
 @pytest.mark.parametrize(
     ("status", "facts"),
@@ -4669,7 +4773,6 @@ _025_PRIVATE_FACTS = {
         ("not_applicable", _025_facts_for_kind("implant_information_incomplete")),
         ("non_compliant", None),
         ("compliant", None),
-        ("not_applicable", None),
         ("non_compliant", _025_WRONG_SOURCE_FACTS),
         ("non_compliant", _025_PRIVATE_FACTS),
     ],
