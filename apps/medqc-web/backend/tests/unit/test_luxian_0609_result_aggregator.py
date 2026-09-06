@@ -2042,7 +2042,7 @@ def _071_association_facts(source_document_refs) -> dict[str, object]:
     }
 
 
-def test_071_projects_only_strict_handoff_and_handover_refs() -> None:
+def test_071_does_not_project_legacy_handoff_and_handover_refs() -> None:
     facts = _071_association_facts([
         {
             "source_type": "handoff_record",
@@ -2061,7 +2061,7 @@ def test_071_projects_only_strict_handoff_and_handover_refs() -> None:
         customer_display_facts=(("LX0609-071", facts),),
     )[0]
 
-    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "customer_evidence" not in result
     assert "source_document_refs" not in result["customer_display_facts"]
 
 
@@ -2076,7 +2076,7 @@ def _071_derived_single_facts(source_document_refs) -> dict[str, object]:
     }
 
 
-def test_071_derived_single_event_projects_daily_and_handoff_evidence() -> None:
+def test_071_derived_single_event_does_not_project_legacy_document_refs() -> None:
     refs = [
         {"source_type": "daily_course_record", "source_document_id": "daily-b-071"},
         {"source_type": "handoff_record", "source_document_id": "handoff-a-071"},
@@ -2091,7 +2091,7 @@ def test_071_derived_single_event_projects_daily_and_handoff_evidence() -> None:
         customer_display_facts=(("LX0609-071", facts),),
     )[0]
 
-    assert result["customer_evidence"] == refs
+    assert "customer_evidence" not in result
     assert result["customer_display_facts"] == {
         key: value for key, value in facts.items() if key != "source_document_refs"
     }
@@ -2120,7 +2120,7 @@ def test_071_derived_single_event_rejects_invalid_or_excess_daily_refs(refs) -> 
     assert "customer_evidence" not in result
 
 
-def test_071_signature_timeline_gap_projects_strict_facts_and_daily_ref() -> None:
+def test_071_signature_timeline_gap_keeps_facts_without_legacy_daily_ref() -> None:
     facts = {
         "failure_kind": "physician_signature_timeline_incomplete",
         "daily_course_record_count": 2,
@@ -2143,7 +2143,130 @@ def test_071_signature_timeline_gap_projects_strict_facts_and_daily_ref() -> Non
     assert result["customer_display_facts"]["failure_kind"] == (
         "physician_signature_timeline_incomplete"
     )
-    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert "customer_evidence" not in result
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "raw_facts", "source_type"),
+    (
+        (
+            "LX0609-069",
+            {
+                "verification_kind": "consultation_timeliness_check",
+                "threshold_hours": 24,
+                "actual_interval_hours": [0.0],
+                "request_times": ["2026-07-01"],
+                "record_times": ["2026-07-01"],
+                "event_results": [
+                    {
+                        "sequence": 1,
+                        "request_time": "2026-07-01",
+                        "completion_time": "2026-07-01",
+                        "interval_seconds": 0,
+                        "outcome": "within_threshold",
+                    }
+                ],
+            },
+            "consultation_record",
+        ),
+        (
+            "LX0609-071",
+            {
+                "verification_kind": "physician_handoff_timeliness_check",
+                "change_time": "2026-07-01 08:00:00",
+                "handoff_times": ["2026-07-01 07:50:00"],
+                "handover_times": ["2026-07-01 14:00:00"],
+                "handover_threshold_hours": 24,
+            },
+            "handoff_record",
+        ),
+        (
+            "LX0609-072",
+            {
+                "failure_kind": "transfer_records_missing",
+                "transfer_order_count": 1,
+                "transfer_in_count": 0,
+                "transfer_out_count": 1,
+            },
+            "transfer_order",
+        ),
+        (
+            "LX0609-073",
+            {
+                "verification_kind": "transfer_record_presence_check",
+                "transfer_order_time": "2026-07-01 08:00:00",
+                "transfer_in_time": None,
+                "transfer_out_time": "2026-07-01 10:00:00",
+                "transfer_in_associated": False,
+                "transfer_out_associated": True,
+            },
+            "transfer_in_record",
+        ),
+        (
+            "LX0609-074",
+            {
+                "verification_kind": "diagnosis_change_documentation_check",
+                "diagnosis_change_count": 1,
+                "reason_recorded": True,
+                "basis_recorded": True,
+            },
+            "daily_course_record",
+        ),
+    ),
+)
+def test_continuity_customer_evidence_uses_only_public_selected_fact_refs(
+    rule_id: str,
+    raw_facts: dict[str, object],
+    source_type: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.luxian_0609_result_aggregator as aggregator
+
+    fact_ref = hashlib.sha256(f"{rule_id}-selected".encode("utf-8")).hexdigest()
+    document_id = f"selected-{rule_id}"
+    selected_evidence = [
+        {"source_type": source_type, "source_document_id": document_id}
+    ]
+    captured: dict[str, object] = {}
+
+    def project_selected_document_evidence(**kwargs: object) -> list[dict[str, str]]:
+        captured.update(kwargs)
+        return selected_evidence
+
+    monkeypatch.setattr(
+        aggregator,
+        "project_selected_document_evidence",
+        project_selected_document_evidence,
+    )
+    result = aggregator.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id, "name": rule_id}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision(
+                rule_id,
+                direction=QcDirection.DEFECT,
+                fact_refs=(fact_ref,),
+            ),
+        ),
+        customer_display_facts=((rule_id, raw_facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["customer_display_facts"] == raw_facts
+    assert result["customer_evidence"] == selected_evidence
+    assert captured["decision"].fact_refs == (fact_ref,)
+
+
+def test_aggregator_contains_no_continuity_facts_or_legacy_evidence_branch() -> None:
+    import app.services.luxian_0609_result_aggregator as aggregator
+
+    source = inspect.getsource(aggregator)
+    for rule_id in ("LX0609-069", "LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"):
+        assert rule_id not in source
+    assert "controlled_consultation_events" not in source
+    assert "source_document_refs" not in inspect.getsource(
+        aggregator._customer_evidence_from_display_facts
+    )
 
 
 def test_071_handoff_identity_gap_projects_strict_facts() -> None:

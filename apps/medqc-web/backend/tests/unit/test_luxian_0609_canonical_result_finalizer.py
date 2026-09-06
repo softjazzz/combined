@@ -46,6 +46,123 @@ def test_finalizer_delegates_consultation_facts_to_the_family_projection() -> No
     assert "source_document_id" not in str(facts)
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "raw_facts"),
+    (
+        (
+            "LX0609-069",
+            {
+                "verification_kind": "consultation_timeliness_check",
+                "threshold_hours": 24,
+                "actual_interval_hours": [0.0],
+                "request_times": ["2026-07-01"],
+                "record_times": ["2026-07-01"],
+                "event_results": [
+                    {
+                        "sequence": 1,
+                        "request_time": "2026-07-01",
+                        "completion_time": "2026-07-01",
+                        "interval_seconds": 0,
+                        "outcome": "within_threshold",
+                    }
+                ],
+            },
+        ),
+        (
+            "LX0609-071",
+            {
+                "verification_kind": "physician_handoff_timeliness_check",
+                "change_time": "2026-07-01 08:00:00",
+                "handoff_times": ["2026-07-01 07:50:00"],
+                "handover_times": ["2026-07-01 14:00:00"],
+                "handover_threshold_hours": 24,
+            },
+        ),
+        (
+            "LX0609-072",
+            {
+                "failure_kind": "transfer_records_missing",
+                "transfer_order_count": 1,
+                "transfer_in_count": 0,
+                "transfer_out_count": 1,
+            },
+        ),
+        (
+            "LX0609-073",
+            {
+                "verification_kind": "transfer_record_presence_check",
+                "transfer_order_time": "2026-07-01 08:00:00",
+                "transfer_in_time": None,
+                "transfer_out_time": "2026-07-01 10:00:00",
+                "transfer_in_associated": False,
+                "transfer_out_associated": True,
+            },
+        ),
+        (
+            "LX0609-074",
+            {
+                "verification_kind": "diagnosis_change_documentation_check",
+                "diagnosis_change_count": 1,
+                "reason_recorded": True,
+                "basis_recorded": True,
+            },
+        ),
+    ),
+)
+def test_finalizer_delegates_continuity_facts_to_the_family_mapping(
+    rule_id: str,
+    raw_facts: dict,
+) -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalizer_owns_executor_customer_display_facts,
+        finalizer_requires_public_fact_ref_evidence,
+        validate_luxian_0609_executor_customer_display_facts,
+    )
+    from app.services.luxian_0609.continuity_result_mapping import (
+        safe_continuity_customer_display_facts,
+    )
+
+    assert finalizer_owns_executor_customer_display_facts(rule_id) is True
+    assert finalizer_requires_public_fact_ref_evidence(rule_id) is True
+    assert validate_luxian_0609_executor_customer_display_facts(
+        rule_id=rule_id,
+        raw=raw_facts,
+    ) == safe_continuity_customer_display_facts(rule_id=rule_id, raw=raw_facts)
+
+
+@pytest.mark.parametrize(
+    "rule_id",
+    ("LX0609-069", "LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"),
+)
+def test_continuity_finalizer_converts_invalid_typed_facts_to_technical_error(
+    rule_id: str,
+) -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+        finalizer_rejects_invalid_public_executor_customer_display_facts,
+    )
+
+    assert finalizer_rejects_invalid_public_executor_customer_display_facts(rule_id)
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": rule_id,
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "findings": "不得保留的临床结论",
+            "customer_evidence": [{"source_document_id": "PRIVATE-CONTINUITY"}],
+        },
+        raw_facts={"raw_private_text": "PRIVATE-CONTINUITY-FACT"},
+    )
+
+    assert handled is True
+    assert (finalized["status"], finalized["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert "customer_display_facts" not in finalized
+    assert "customer_evidence" not in finalized
+
+
 def test_finalizer_converts_invalid_executor_facts_to_isolated_technical_error() -> None:
     from app.services.luxian_0609.canonical_result_finalizer import (
         finalize_luxian_0609_executor_customer_display_facts,

@@ -1,0 +1,256 @@
+"""LX0609 连续性/会诊族的客户安全 facts 合同。"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from datetime import datetime
+from math import isfinite
+from typing import Any
+
+
+CONTINUITY_CUSTOMER_RULE_IDS = frozenset(
+    {"LX0609-069", "LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"}
+)
+
+_KINDS_BY_RULE = {
+    "LX0609-069": frozenset({"consultation_timeliness_check"}),
+    "LX0609-071": frozenset({
+        "physician_handoff_timeliness_check", "physician_handoff_multi_event_check",
+        "physician_handoff_association_failed", "physician_handoff_record_time_missing",
+        "physician_handoff_identity_missing", "physician_signature_timeline_incomplete",
+        "physician_change_time_missing",
+    }),
+    "LX0609-072": frozenset({"transfer_record_timeliness_check", "transfer_records_missing"}),
+    "LX0609-073": frozenset({"transfer_record_presence_check", "transfer_records_missing"}),
+    "LX0609-074": frozenset({
+        "diagnosis_change_documentation_check", "diagnosis_change_association_failed",
+        "diagnosis_change_documentation_time_missing",
+    }),
+}
+
+_ALLOWED_KEYS = {
+    "consultation_timeliness_check": {"threshold_hours", "actual_interval_hours", "request_times", "record_times", "event_results"},
+    "physician_handoff_timeliness_check": {"change_time", "handoff_times", "handover_times", "handover_threshold_hours"},
+    "physician_handoff_multi_event_check": {"change_event_count", "handover_threshold_hours", "events"},
+    "physician_handoff_association_failed": {"change_event_count", "change_times", "handoff_record_count", "handoff_times", "handover_record_count", "handover_times", "handover_threshold_hours"},
+    "physician_handoff_record_time_missing": {"change_event_count", "handoff_record_count", "missing_handoff_time_count", "handover_record_count", "missing_handover_time_count", "handover_threshold_hours"},
+    "physician_change_time_missing": {"change_event_count", "timed_change_event_count", "missing_change_time_count", "change_times", "handoff_record_count", "handoff_times", "handover_record_count", "handover_times", "handover_threshold_hours"},
+    "physician_handoff_identity_missing": {"change_event_count", "change_times", "handoff_record_count", "handoff_times", "handover_record_count", "handover_times", "handover_threshold_hours"},
+    "physician_signature_timeline_incomplete": {"daily_course_record_count", "eligible_daily_course_count", "missing_title_count", "missing_time_count", "missing_signature_count"},
+    "transfer_record_timeliness_check": {"transfer_order_time", "transfer_in_time", "transfer_out_time", "threshold_hours", "transfer_in_interval_hours", "transfer_out_interval_hours"},
+    "transfer_record_presence_check": {"transfer_order_time", "transfer_in_time", "transfer_out_time", "transfer_in_associated", "transfer_out_associated"},
+    "transfer_records_missing": {"transfer_order_count", "transfer_in_count", "transfer_out_count"},
+    "diagnosis_change_documentation_check": {"diagnosis_change_count", "reason_recorded", "basis_recorded"},
+    "diagnosis_change_association_failed": {"diagnosis_record_count", "diagnosis_change_count", "association_issue"},
+    "diagnosis_change_documentation_time_missing": {"diagnosis_change_count", "untimed_document_count", "issue"},
+}
+
+
+def is_continuity_customer_rule(rule_id: str) -> bool:
+    return str(rule_id or "").strip().upper() in CONTINUITY_CUSTOMER_RULE_IDS
+
+
+def safe_continuity_customer_display_facts(
+    *, rule_id: str, raw: Any
+) -> dict[str, Any] | None:
+    """逐形状复制旧 Aggregator 的连续性事实白名单与自洽校验。"""
+
+    rule_id = str(rule_id or "").strip().upper()
+    if rule_id not in CONTINUITY_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
+        return None
+    kind_key = "verification_kind" if raw.get("verification_kind") else "failure_kind"
+    kind = raw.get(kind_key)
+    if kind not in _KINDS_BY_RULE[rule_id] or not isinstance(kind, str):
+        return None
+    if kind in {"physician_handoff_identity_missing", "physician_signature_timeline_incomplete"}:
+        if set(raw) != {kind_key, "source_document_refs", *_ALLOWED_KEYS[kind]}:
+            return None
+
+    safe: dict[str, Any] = {kind_key: kind}
+    for key in _ALLOWED_KEYS[kind]:
+        if key == "event_results":
+            events = _consultation_events(raw.get(key))
+            if events is None:
+                return None
+            safe[key] = events
+            continue
+        if kind == "physician_handoff_multi_event_check" and key == "events":
+            continue
+        value = raw.get(key)
+        safe_value = _safe_scalar_or_list(value)
+        if safe_value is _INVALID:
+            return None
+        safe[key] = safe_value
+
+    if kind in {"transfer_record_timeliness_check", "transfer_record_presence_check"}:
+        if not _valid_transfer_time(raw.get("transfer_order_time"), allow_none=False):
+            return None
+        if not all(_valid_transfer_time(raw.get(key), allow_none=True) for key in ("transfer_in_time", "transfer_out_time")):
+            return None
+        if kind == "transfer_record_timeliness_check":
+            intervals = (raw.get("transfer_in_interval_hours"), raw.get("transfer_out_interval_hours"))
+            if raw.get("threshold_hours") != 24 or any(not _valid_number(value, allow_none=True) for value in intervals):
+                return None
+        elif any(raw.get(key) not in {True, False, None} for key in ("transfer_in_associated", "transfer_out_associated")):
+            return None
+
+    if kind == "diagnosis_change_association_failed":
+        if not _positive_int(raw.get("diagnosis_record_count")) or not _nonnegative_int(raw.get("diagnosis_change_count")) or raw.get("association_issue") not in {"slot_missing", "same_time_conflict", "multiple_changes_unresolved"}:
+            return None
+    if kind == "diagnosis_change_documentation_time_missing":
+        if not _positive_int(raw.get("diagnosis_change_count")) or not _positive_int(raw.get("untimed_document_count")) or raw.get("issue") != "candidate_document_time_missing":
+            return None
+    if kind in {"physician_handoff_association_failed", "physician_handoff_identity_missing", "physician_change_time_missing"}:
+        if not _valid_handoff_association(kind, raw):
+            return None
+    if kind == "physician_signature_timeline_incomplete" and not _valid_signature_timeline(raw):
+        return None
+    if kind == "physician_handoff_multi_event_check":
+        events = _handoff_events(raw)
+        if events is None:
+            return None
+        safe["events"] = events
+    if kind == "physician_handoff_record_time_missing" and not _valid_missing_record_times(raw):
+        return None
+    return safe
+
+
+_INVALID = object()
+
+
+def _safe_scalar_or_list(value: Any) -> Any:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, float):
+        return round(value, 2)
+    if isinstance(value, str) and len(value) <= 160 and "\n" not in value:
+        return value
+    if isinstance(value, (list, tuple)) and len(value) <= 100 and all(
+        (isinstance(item, (int, float)) and not isinstance(item, bool))
+        or (isinstance(item, str) and len(item) <= 160 and "\n" not in item)
+        for item in value
+    ):
+        return list(value)
+    return _INVALID
+
+
+def _consultation_events(value: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
+        return None
+    safe = []
+    allowed = {"sequence", "request_time", "completion_time", "interval_seconds", "outcome"}
+    for sequence, item in enumerate(value, 1):
+        if not isinstance(item, Mapping) or set(item) != allowed:
+            return None
+        request, completion, seconds, outcome = (item.get(key) for key in ("request_time", "completion_time", "interval_seconds", "outcome"))
+        if (
+            item.get("sequence") != sequence
+            or not isinstance(request, str)
+            or not isinstance(completion, str)
+            or not request
+            or not completion
+            or len(request) > 40
+            or len(completion) > 40
+            or "\n" in request
+            or "\n" in completion
+            or not _valid_number(seconds, allow_none=False)
+            or outcome not in {"within_threshold", "threshold_exceeded", "time_conflict"}
+        ):
+            return None
+        try:
+            calculated = (
+                datetime.fromisoformat(completion.replace("Z", "+00:00"))
+                - datetime.fromisoformat(request.replace("Z", "+00:00"))
+            ).total_seconds()
+        except (TypeError, ValueError):
+            return None
+        expected = "time_conflict" if calculated < 0 else "within_threshold" if calculated <= 86400 else "threshold_exceeded"
+        if abs(float(seconds) - calculated) > 0.001 or outcome != expected:
+            return None
+        safe.append(dict(item))
+    return safe
+
+
+def _handoff_events(raw: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+    count, events = raw.get("change_event_count"), raw.get("events")
+    if not isinstance(count, int) or isinstance(count, bool) or not 2 <= count <= 4 or raw.get("handover_threshold_hours") != 24 or not isinstance(events, list) or len(events) != count:
+        return None
+    safe = []
+    allowed = {"event_position", "change_time", "handoff_time", "handover_time", "handover_interval_seconds", "outcome"}
+    for position, event in enumerate(events, 1):
+        if (
+            not isinstance(event, Mapping)
+            or set(event) != allowed
+            or event.get("event_position") != position
+            or not isinstance(event.get("change_time"), str)
+            or not event.get("change_time")
+            or len(event.get("change_time")) > 32
+        ):
+            return None
+        handoff, handover, seconds, outcome = event.get("handoff_time"), event.get("handover_time"), event.get("handover_interval_seconds"), event.get("outcome")
+        if (
+            (handoff is not None and (not isinstance(handoff, str) or not handoff or len(handoff) > 32 or "\n" in handoff))
+            or (handover is not None and (not isinstance(handover, str) or not handover or len(handover) > 32 or "\n" in handover))
+            or (seconds is not None and (not isinstance(seconds, int) or isinstance(seconds, bool) or seconds < 0))
+            or outcome not in {"completed_within_threshold", "handoff_missing", "handover_missing", "handover_late"}
+        ):
+            return None
+        if (outcome == "completed_within_threshold" and (handoff is None or handover is None or seconds is None or seconds > 86400)) or (outcome == "handoff_missing" and handoff is not None) or (outcome == "handover_missing" and (handoff is None or handover is not None)) or (outcome == "handover_late" and (handoff is None or handover is None or seconds is None or seconds <= 86400)):
+            return None
+        safe.append(dict(event))
+    return safe
+
+
+def _valid_handoff_association(kind: str, raw: Mapping[str, Any]) -> bool:
+    count, change_times = raw.get("change_event_count"), raw.get("change_times")
+    handoff_count, handoff_times = raw.get("handoff_record_count"), raw.get("handoff_times")
+    handover_count, handover_times = raw.get("handover_record_count"), raw.get("handover_times")
+    if not _positive_int(count) or not isinstance(change_times, (list, tuple)) or not _nonnegative_int(handoff_count) or not isinstance(handoff_times, (list, tuple)) or len(handoff_times) > handoff_count or not _nonnegative_int(handover_count) or not isinstance(handover_times, (list, tuple)) or len(handover_times) > handover_count or raw.get("handover_threshold_hours") != 24:
+        return False
+    if kind in {"physician_handoff_association_failed", "physician_handoff_identity_missing"} and len(change_times) != count:
+        return False
+    if kind == "physician_change_time_missing":
+        timed, missing = raw.get("timed_change_event_count"), raw.get("missing_change_time_count")
+        return _nonnegative_int(timed) and _positive_int(missing) and timed == len(change_times) and timed + missing == count
+    return True
+
+
+def _valid_signature_timeline(raw: Mapping[str, Any]) -> bool:
+    values = tuple(raw.get(key) for key in ("daily_course_record_count", "eligible_daily_course_count", "missing_title_count", "missing_time_count", "missing_signature_count"))
+    return all(_nonnegative_int(value) for value in values) and values[0] >= values[1] and values[0] >= values[2] and values[1] + values[2] <= values[0] and values[3] <= values[1] and values[4] <= values[1] and any(value > 0 for value in values[2:])
+
+
+def _valid_missing_record_times(raw: Mapping[str, Any]) -> bool:
+    values = tuple(raw.get(key) for key in ("change_event_count", "handoff_record_count", "missing_handoff_time_count", "handover_record_count", "missing_handover_time_count"))
+    return all(_nonnegative_int(value) for value in values) and values[0] > 1 and values[2] <= values[1] and values[4] <= values[3] and values[2] + values[4] > 0 and raw.get("handover_threshold_hours") == 24
+
+
+def _valid_transfer_time(value: Any, *, allow_none: bool) -> bool:
+    return (allow_none and value is None) or _valid_datetime(value, 32)
+
+
+def _valid_datetime(value: Any, length: int) -> bool:
+    if not isinstance(value, str) or not value or len(value) > length or "\n" in value or ("T" not in value and " " not in value):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def _valid_number(value: Any, *, allow_none: bool) -> bool:
+    return (allow_none and value is None) or (isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(float(value)))
+
+
+def _positive_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _nonnegative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+__all__ = ["CONTINUITY_CUSTOMER_RULE_IDS", "is_continuity_customer_rule", "safe_continuity_customer_display_facts"]
