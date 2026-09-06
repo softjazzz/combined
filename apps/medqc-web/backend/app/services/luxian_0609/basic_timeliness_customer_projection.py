@@ -320,8 +320,45 @@ def safe_basic_timeliness_customer_display_facts(
     return facts
 
 
+def basic_timeliness_customer_fact_status_is_valid(
+    *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
+) -> bool:
+    """校验基础时限族的已裁决状态与客户事实自洽，不重新判定业务事实。"""
+
+    if not is_basic_timeliness_customer_rule(rule_id):
+        return True
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status == "technical_error":
+        return True
+    if not isinstance(safe_facts, Mapping):
+        return False
+    failure_kind = safe_facts.get("failure_kind")
+    state = safe_facts.get("timeliness_state")
+    if failure_kind == "timeliness_requirement_satisfied":
+        return normalized_status == "compliant" and state == "within"
+    if failure_kind == "timeliness_requirement_not_met":
+        return normalized_status == "non_compliant" and state in {"missing", "late"}
+    if failure_kind == "evidence_time_conflict":
+        return normalized_status == "uncertain" and state == "before"
+    if str(rule_id or "").strip().upper() != "LX0609-004":
+        return False
+    if failure_kind == "rescue_record_missing_after_trigger":
+        return normalized_status == "data_gap"
+    if failure_kind in {
+        "rescue_end_time_missing",
+        "document_completion_time_missing",
+        "authoritative_time_conflict",
+    }:
+        expected_state = (
+            "conflict" if failure_kind == "authoritative_time_conflict" else "missing_time"
+        )
+        return normalized_status == "data_gap" and state == expected_state
+    return False
+
+
 __all__ = [
     "BASIC_TIMELINESS_CUSTOMER_RULE_IDS",
+    "basic_timeliness_customer_fact_status_is_valid",
     "is_basic_timeliness_customer_rule",
     "safe_basic_timeliness_customer_display_facts",
 ]

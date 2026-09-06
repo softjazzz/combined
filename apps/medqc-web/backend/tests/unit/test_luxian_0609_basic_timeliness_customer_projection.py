@@ -1,0 +1,166 @@
+from __future__ import annotations
+
+import pytest
+
+from app.services.luxian_0609.basic_timeliness_customer_projection import (
+    BASIC_TIMELINESS_CUSTOMER_RULE_IDS,
+    basic_timeliness_customer_fact_status_is_valid,
+    safe_basic_timeliness_customer_display_facts,
+)
+from app.services.luxian_0609.canonical_result_finalizer import (
+    finalize_luxian_0609_executor_customer_display_facts,
+    finalizer_owns_executor_customer_display_facts,
+    finalizer_requires_public_fact_ref_evidence,
+)
+
+
+_WITHIN_FACTS_BY_RULE = {
+    "LX0609-001": {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "admission_record",
+        "timeliness_state": "within",
+        "threshold_hours": 24,
+        "source_label": "入院记录",
+    },
+    "LX0609-002": {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "first_course_record",
+        "timeliness_state": "within",
+        "threshold_hours": 8,
+        "source_label": "首次病程记录",
+    },
+    "LX0609-004": {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "rescue_record",
+        "timeliness_state": "within",
+        "threshold_hours": 6,
+        "source_label": "抢救记录",
+    },
+    "LX0609-005": {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "attending_course_record",
+        "timeliness_state": "within",
+        "threshold_hours": 48,
+        "source_label": "主治医师首次查房记录",
+    },
+    "LX0609-006": {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "senior_course_record",
+        "timeliness_state": "within",
+        "threshold_hours": 72,
+        "source_label": "最高级别医师首次查房记录",
+    },
+}
+
+
+def _executor_result(rule_id: str, status: str) -> dict[str, str]:
+    return {
+        "rule_id": rule_id,
+        "status": status,
+        "reason_code": "executor_reason",
+        "findings": "执行器结论",
+        "customer_evidence": [{"source_type": "forbidden-on-contract-failure"}],
+    }
+
+
+@pytest.mark.parametrize("rule_id", sorted(BASIC_TIMELINESS_CUSTOMER_RULE_IDS))
+def test_all_basic_timeliness_rules_have_safe_compliant_fact_shape(rule_id: str):
+    raw_facts = _WITHIN_FACTS_BY_RULE[rule_id]
+
+    safe_facts = safe_basic_timeliness_customer_display_facts(
+        rule_id=rule_id,
+        raw=raw_facts,
+    )
+
+    assert safe_facts == raw_facts
+    assert basic_timeliness_customer_fact_status_is_valid(
+        rule_id=rule_id,
+        status="compliant",
+        safe_facts=safe_facts,
+    )
+
+
+@pytest.mark.parametrize("rule_id", sorted(BASIC_TIMELINESS_CUSTOMER_RULE_IDS))
+def test_all_basic_timeliness_rules_are_finalizer_facts_and_public_evidence_owners(
+    rule_id: str,
+):
+    assert finalizer_owns_executor_customer_display_facts(rule_id)
+    assert finalizer_requires_public_fact_ref_evidence(rule_id)
+
+
+def test_lx004_data_gap_fact_shape_is_accepted_without_reinterpreting_rescue_logic():
+    raw_facts = {
+        "failure_kind": "rescue_record_missing_after_trigger",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+    }
+
+    safe_facts = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-004",
+        raw=raw_facts,
+    )
+
+    assert safe_facts == raw_facts
+    assert basic_timeliness_customer_fact_status_is_valid(
+        rule_id="LX0609-004",
+        status="data_gap",
+        safe_facts=safe_facts,
+    )
+
+
+def test_lx001_uncertain_conflict_fact_shape_is_accepted():
+    raw_facts = {
+        "failure_kind": "evidence_time_conflict",
+        "target_document": "admission_record",
+        "source_label": "入院记录",
+        "timeliness_state": "before",
+        "threshold_hours": 24,
+        "anchor_time": "2026-06-01T09:00:00",
+        "observed_time": "2026-06-01T08:00:00",
+        "time_conflict_seconds": 3600,
+    }
+
+    safe_facts = safe_basic_timeliness_customer_display_facts(
+        rule_id="LX0609-001",
+        raw=raw_facts,
+    )
+
+    assert basic_timeliness_customer_fact_status_is_valid(
+        rule_id="LX0609-001",
+        status="uncertain",
+        safe_facts=safe_facts,
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "raw_facts"),
+    [
+        ("compliant", None),
+        ("non_compliant", _WITHIN_FACTS_BY_RULE["LX0609-001"]),
+        (
+            "compliant",
+            {
+                **_WITHIN_FACTS_BY_RULE["LX0609-001"],
+                "source_document_refs": ["forged-internal-ref"],
+            },
+        ),
+    ],
+    ids=["missing_facts", "contradictory_status", "private_fact_ref"],
+)
+def test_basic_timeliness_contract_failure_safely_downgrades_to_technical_error(
+    status: str,
+    raw_facts: object,
+):
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result=_executor_result("LX0609-001", status),
+        raw_facts=raw_facts,
+    )
+
+    assert handled is True
+    assert finalized["status"] == "technical_error"
+    assert finalized["result_status"] == "technical_error"
+    assert finalized["reason_code"] == "model_invalid_output"
+    assert finalized["is_compliant"] is None
+    assert "customer_display_facts" not in finalized
+    assert "customer_evidence" not in finalized
+    assert "findings" not in finalized

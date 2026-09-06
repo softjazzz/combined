@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -19,10 +17,7 @@ from app.services.luxian_0609.native_basic_timeliness import (
     execute_luxian_0609_native_basic_timeliness,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
-from app.services.luxian_0609_result_aggregator import (
-    Luxian0609CustomerDisplayFactsError,
-    aggregate_luxian_0609_results,
-)
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 
 
 def _frozen_session():
@@ -194,7 +189,7 @@ def test_finalizer_accepts_executor_safe_facts_and_rejects_internal_document_ids
     ) is None
 
 
-def test_aggregator_fails_closed_for_executor_facts_with_internal_document_id():
+def test_aggregator_safely_downgrades_executor_facts_with_internal_document_id():
     session = _frozen_session()
     execution = execute_luxian_0609_native_basic_timeliness(
         rule_ids=("LX0609-001",),
@@ -211,21 +206,26 @@ def test_aggregator_fails_closed_for_executor_facts_with_internal_document_id():
     )
     safe_facts = dict(execution.customer_display_facts[0][1])
 
-    with pytest.raises(Luxian0609CustomerDisplayFactsError):
-        aggregate_luxian_0609_results(
-            wrapper_rules=[
-                rule
-                for rule in load_luxian_0609_rules()
-                if rule["rule_id"] == "LX0609-001"
-            ],
-            execution_results=[],
-            reduced_decisions=reduced,
-            customer_display_facts=(
-                ("LX0609-001", {**safe_facts, "source_document_id": "FORGED"}),
-            ),
-            format_evidence=False,
-            audit_context={
-                "evidence_snapshot": session.snapshot,
-                "evidence_materials": session.materials,
-            },
-        )
+    results = aggregate_luxian_0609_results(
+        wrapper_rules=[
+            rule
+            for rule in load_luxian_0609_rules()
+            if rule["rule_id"] == "LX0609-001"
+        ],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=(
+            ("LX0609-001", {**safe_facts, "source_document_id": "FORGED"}),
+        ),
+        format_evidence=False,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )
+
+    assert len(results) == 1
+    assert results[0]["status"] == "technical_error"
+    assert results[0]["reason_code"] == "model_invalid_output"
+    assert "customer_display_facts" not in results[0]
+    assert "customer_evidence" not in results[0]

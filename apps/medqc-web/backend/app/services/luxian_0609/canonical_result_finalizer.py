@@ -445,6 +445,7 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .death_document_result_mapping import is_death_document_customer_rule
     from .discharge_result_mapping import is_discharge_customer_rule
     from .critical_value_result_mapping import is_critical_value_customer_rule
+    from .basic_timeliness_customer_projection import is_basic_timeliness_customer_rule
 
     return (
         rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS
@@ -459,6 +460,7 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
         or is_consultation_customer_rule(rule_id)
         or is_exam_lab_customer_rule(rule_id)
         or is_critical_value_customer_rule(rule_id)
+        or is_basic_timeliness_customer_rule(rule_id)
         or is_transfusion_customer_rule(rule_id)
     )
 
@@ -471,9 +473,14 @@ def finalizer_requires_public_fact_ref_evidence(rule_id: str) -> bool:
     """
 
     from .critical_value_result_mapping import is_critical_value_customer_rule
+    from .basic_timeliness_customer_projection import is_basic_timeliness_customer_rule
     from .discharge_result_mapping import is_discharge_customer_rule
 
-    return is_discharge_customer_rule(rule_id) or is_critical_value_customer_rule(rule_id)
+    return (
+        is_discharge_customer_rule(rule_id)
+        or is_critical_value_customer_rule(rule_id)
+        or is_basic_timeliness_customer_rule(rule_id)
+    )
 
 
 def finalizer_validates_missing_executor_customer_display_facts(rule_id: str) -> bool:
@@ -554,6 +561,10 @@ def finalize_luxian_0609_executor_customer_display_facts(
     from .tumor_pathology_result_mapping import (
         is_tumor_pathology_customer_rule,
         tumor_pathology_customer_fact_status_is_valid,
+    )
+    from .basic_timeliness_customer_projection import (
+        basic_timeliness_customer_fact_status_is_valid,
+        is_basic_timeliness_customer_rule,
     )
     rule_id = str(finalized.get("rule_id") or finalized.get("rule_code") or "")
     if (
@@ -677,6 +688,16 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_tumor_pathology_customer_rule(rule_id) and not tumor_pathology_status_valid:
+        safe_facts = None
+    basic_timeliness_status_valid = (
+        is_basic_timeliness_customer_rule(rule_id)
+        and basic_timeliness_customer_fact_status_is_valid(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            safe_facts=safe_facts,
+        )
+    )
+    if is_basic_timeliness_customer_rule(rule_id) and not basic_timeliness_status_valid:
         safe_facts = None
     if raw_facts is None and surgery_gate_status_valid:
         finalized.pop("customer_display_facts", None)
