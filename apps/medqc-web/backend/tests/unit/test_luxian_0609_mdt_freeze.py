@@ -23,10 +23,7 @@ from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
 )
-from app.services.luxian_0609_result_aggregator import (
-    Luxian0609CustomerDisplayFactsError,
-    aggregate_luxian_0609_results,
-)
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
@@ -275,7 +272,7 @@ async def test_mdt_typed_registry_binding_and_public_projection_are_frozen(
 
 
 @pytest.mark.asyncio
-async def test_mdt_emergency_exemption_is_blocked_by_current_public_facts_contract():
+async def test_mdt_emergency_exemption_is_projected_by_current_public_facts_contract():
     session = _session(
         {
             "mr_surgery": [_surgery()],
@@ -284,7 +281,7 @@ async def test_mdt_emergency_exemption_is_blocked_by_current_public_facts_contra
             ],
         }
     )
-    envelope, reduced, _ = await _execute_and_project(session, None, project=False)
+    envelope, reduced, result = await _execute_and_project(session, None)
 
     assert (reduced.final_state.value, reduced.reason_code) == (
         "not_applicable",
@@ -293,8 +290,16 @@ async def test_mdt_emergency_exemption_is_blocked_by_current_public_facts_contra
     assert dict(envelope.customer_display_facts)[RULE_ID]["mdt_exception"] == (
         "emergency_lifesaving_surgery"
     )
-    with pytest.raises(Luxian0609CustomerDisplayFactsError):
-        await _execute_and_project(session, None)
+    assert result["status"] == "not_applicable"
+    assert result["customer_display_facts"] == {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "四级",
+        "surgery_level_source": "structured_field",
+        "emergency_surgery_confirmed": True,
+        "mdt_exception": "emergency_lifesaving_surgery",
+        "mdt_discussion_state": "exempt",
+    }
 
 
 @pytest.mark.asyncio
