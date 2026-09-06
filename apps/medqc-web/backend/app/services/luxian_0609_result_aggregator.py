@@ -29,6 +29,9 @@ from .luxian_0609.source_evidence_reader import authoritative_document_time_valu
 from .luxian_0609.surgery_gate_result_mapping import (
     legacy_surgery_gate_customer_evidence,
 )
+from .luxian_0609.surgery_document_result_mapping import (
+    legacy_surgery_document_customer_evidence,
+)
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
     TRIGGER_ABSENT,
@@ -84,8 +87,6 @@ _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
     # 026 以诊断事实判定适用性，但客户实际需要核对的是化疗医嘱与病程记录。
     # 诊断仅作为触发来源，不能混入两类治疗记录的一致性证据。
     "LX0609-026": frozenset({"inpat_drug_order", "daily_course_record"}),
-    # 038 只核对麻醉记录单是否存在；手术/同意书仅参与麻醉适用性门控。
-    "LX0609-038": frozenset({"anesthesia_record"}),
     # 011/012 和 014/015 的病程是已核对范围；未命中时不能把它们展示为
     # 支持结论的“关键证据”。客户可定位的触发证据仅为对应报告。
     # 068 的出院登记和出院记录只负责确定适用性；客户证据必须来自实际
@@ -1903,238 +1904,6 @@ def safe_luxian_0609_customer_display_facts(
             "pathology_trigger_sources": safe_trigger_sources,
             "checked_target_sources": safe_checked_sources,
         }
-    if rule_id in {"LX0609-034", "LX0609-035"}:
-        if (
-            rule_id == "LX0609-034"
-            and raw.get("verification_kind") == "anesthesia_consent_present"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and raw.get("checked_sources") == ["consent_form"]
-        ):
-            return {
-                "verification_kind": "anesthesia_consent_present",
-                "performed_anesthesia_confirmed": True,
-                "checked_sources": ["consent_form"],
-            }
-        required_consent_fields = [
-            "patient_signature",
-            "physician_signature",
-            "patient_signature_time",
-            "physician_signature_time",
-        ]
-        if (
-            rule_id == "LX0609-035"
-            and raw.get("verification_kind") == "anesthesia_consent_complete"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and raw.get("checked_fields") == required_consent_fields
-        ):
-            return {
-                "verification_kind": "anesthesia_consent_complete",
-                "performed_anesthesia_confirmed": True,
-                "checked_fields": list(required_consent_fields),
-            }
-        if (
-            rule_id == "LX0609-035"
-            and raw.get("failure_kind") == "anesthesia_consent_incomplete"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and isinstance(raw.get("missing_fields"), list)
-        ):
-            missing_fields = list(
-                dict.fromkeys(
-                    value
-                    for value in raw["missing_fields"]
-                    if value in required_consent_fields
-                )
-            )
-            if not missing_fields:
-                return None
-            return {
-                "failure_kind": "anesthesia_consent_incomplete",
-                "performed_anesthesia_confirmed": True,
-                "missing_fields": missing_fields,
-            }
-        checked_sources = raw.get("checked_sources")
-        if (
-            raw.get("failure_kind") != "anesthesia_consent_missing"
-            or raw.get("performed_anesthesia_confirmed") is not True
-            or raw.get("consent_state") != "missing"
-            or checked_sources != ["consent_form"]
-        ):
-            return None
-        return {
-            "failure_kind": "anesthesia_consent_missing",
-            "performed_anesthesia_confirmed": True,
-            "consent_state": "missing",
-            "checked_sources": ["consent_form"],
-        }
-    if rule_id in {"LX0609-036", "LX0609-037"}:
-        if (
-            rule_id == "LX0609-036"
-            and raw.get("verification_kind") == "anesthesia_visits_present"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and raw.get("checked_sources")
-            == ["preane_surveil_record", "postane_surveil_record"]
-        ):
-            return {
-                "verification_kind": "anesthesia_visits_present",
-                "performed_anesthesia_confirmed": True,
-                "checked_sources": [
-                    "preane_surveil_record",
-                    "postane_surveil_record",
-                ],
-            }
-        if (
-            rule_id == "LX0609-037"
-            and raw.get("verification_kind") == "anesthesia_visits_complete"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and raw.get("checked_sources")
-            == ["preane_surveil_record", "postane_surveil_record"]
-            and raw.get("checked_fields_by_visit")
-            == {
-                "preanesthesia_visit": [
-                    "asa_level",
-                    "airway_assessment",
-                    "fasting_status",
-                    "anesthesia_history",
-                    "risk_discussion",
-                    "anesthetist_signature",
-                    "record_time",
-                ],
-                "postanesthesia_visit": [
-                    "consciousness_status",
-                    "respiratory_status",
-                    "circulatory_status",
-                    "complication_assessment",
-                    "anesthetist_signature",
-                    "record_time",
-                ],
-            }
-        ):
-            return {
-                "verification_kind": "anesthesia_visits_complete",
-                "performed_anesthesia_confirmed": True,
-                "checked_sources": [
-                    "preane_surveil_record",
-                    "postane_surveil_record",
-                ],
-                "checked_fields_by_visit": {
-                    "preanesthesia_visit": list(
-                        raw["checked_fields_by_visit"]["preanesthesia_visit"]
-                    ),
-                    "postanesthesia_visit": list(
-                        raw["checked_fields_by_visit"]["postanesthesia_visit"]
-                    ),
-                },
-            }
-        if (
-            rule_id == "LX0609-037"
-            and raw.get("failure_kind") == "anesthesia_visit_incomplete"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and isinstance(raw.get("missing_fields_by_visit"), Mapping)
-        ):
-            allowed_fields = {
-                "preanesthesia_visit": {
-                    "asa_level",
-                    "airway_assessment",
-                    "fasting_status",
-                    "anesthesia_history",
-                    "risk_discussion",
-                    "anesthetist_signature",
-                    "record_time",
-                },
-                "postanesthesia_visit": {
-                    "consciousness_status",
-                    "respiratory_status",
-                    "circulatory_status",
-                    "complication_assessment",
-                    "anesthetist_signature",
-                    "record_time",
-                },
-            }
-            safe_missing = {
-                visit: list(
-                    dict.fromkeys(
-                        field
-                        for field in raw["missing_fields_by_visit"].get(visit, [])
-                        if field in allowed
-                    )
-                )
-                for visit, allowed in allowed_fields.items()
-                if isinstance(raw["missing_fields_by_visit"].get(visit), list)
-            }
-            safe_missing = {
-                visit: fields for visit, fields in safe_missing.items() if fields
-            }
-            if safe_missing:
-                return {
-                    "failure_kind": "anesthesia_visit_incomplete",
-                    "performed_anesthesia_confirmed": True,
-                    "missing_fields_by_visit": safe_missing,
-                }
-        missing_sources = raw.get("missing_visit_sources")
-        if (
-            raw.get("failure_kind") != "anesthesia_visit_missing"
-            or raw.get("performed_anesthesia_confirmed") is not True
-            or not isinstance(missing_sources, list)
-        ):
-            return None
-        safe_sources = list(
-            dict.fromkeys(
-                source
-                for source in missing_sources
-                if source in {"preane_surveil_record", "postane_surveil_record"}
-            )
-        )
-        if not safe_sources:
-            return None
-        return {
-            "failure_kind": "anesthesia_visit_missing",
-            "performed_anesthesia_confirmed": True,
-            "missing_visit_sources": safe_sources,
-        }
-    if rule_id == "LX0609-039":
-        if (
-            raw.get("verification_kind")
-            == "preop_discussion_surgeon_participation_confirmed"
-            and raw.get("performed_surgery_confirmed") is True
-            and raw.get("emergency_rescue_exception_absent") is True
-            and raw.get("discussion_state") == "present"
-            and raw.get("surgeon_participation_state") == "confirmed"
-        ):
-            return {
-                "verification_kind": "preop_discussion_surgeon_participation_confirmed",
-                "performed_surgery_confirmed": True,
-                "emergency_rescue_exception_absent": True,
-                "discussion_state": "present",
-                "surgeon_participation_state": "confirmed",
-            }
-        if (
-            raw.get("failure_kind") == "surgeon_not_in_preop_discussion"
-            and raw.get("performed_surgery_confirmed") is True
-            and raw.get("emergency_rescue_exception_absent") is True
-            and raw.get("discussion_state") == "present"
-            and raw.get("surgeon_participation_state") == "absent"
-        ):
-            return {
-                "failure_kind": "surgeon_not_in_preop_discussion",
-                "performed_surgery_confirmed": True,
-                "emergency_rescue_exception_absent": True,
-                "discussion_state": "present",
-                "surgeon_participation_state": "absent",
-            }
-        checked_sources = raw.get("checked_sources")
-        if (
-            raw.get("failure_kind") != "preop_discussion_missing"
-            or raw.get("performed_surgery_confirmed") is not True
-            or raw.get("emergency_rescue_exception_absent") is not True
-            or checked_sources != ["presurg_discussion"]
-        ):
-            return None
-        return {
-            "failure_kind": "preop_discussion_missing",
-            "performed_surgery_confirmed": True,
-            "emergency_rescue_exception_absent": True,
-            "checked_sources": ["presurg_discussion"],
-        }
     if rule_id == "LX0609-040":
         performed = raw.get("performed_surgery_confirmed")
         procedure_kind = raw.get("procedure_kind")
@@ -2708,68 +2477,6 @@ def safe_luxian_0609_customer_display_facts(
             if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
                 facts[key] = value
         return facts
-    surgery_document_targets = {"LX0609-029": "presurg_summary"}
-    target_document = surgery_document_targets.get(rule_id)
-    if target_document is not None:
-        failure_kind = raw.get("failure_kind")
-        trigger_kind = raw.get("surgery_trigger_kind")
-        if trigger_kind == "surgery_order":
-            trigger_fact = {"surgery_order_confirmed": True}
-        elif trigger_kind == "performed_surgery":
-            trigger_fact = {"performed_surgery_confirmed": True}
-        else:
-            return None
-        if (
-            raw.get("verification_kind") == "surgery_document_present"
-            and raw.get("target_document") == target_document
-            and all(raw.get(key) == value for key, value in trigger_fact.items())
-            and set(raw) == {
-                "verification_kind", "target_document", "surgery_trigger_kind", *trigger_fact
-            }
-        ):
-            return {
-                "verification_kind": "surgery_document_present",
-                "target_document": target_document,
-                "surgery_trigger_kind": trigger_kind,
-                **trigger_fact,
-            }
-        if (
-            failure_kind not in {"surgery_document_missing", "surgery_document_blank"}
-            or raw.get("target_document") != target_document
-            or not all(raw.get(key) == value for key, value in trigger_fact.items())
-            or set(raw) != {
-                "failure_kind", "target_document", "surgery_trigger_kind", *trigger_fact
-            }
-        ):
-            return None
-        return {
-            "failure_kind": failure_kind,
-            "target_document": target_document,
-            "surgery_trigger_kind": trigger_kind,
-            **trigger_fact,
-        }
-    if rule_id == "LX0609-038":
-        if (
-            raw.get("verification_kind") == "anesthesia_record_present"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and raw.get("checked_sources") == ["anesthesia_record"]
-        ):
-            return {
-                "verification_kind": "anesthesia_record_present",
-                "performed_anesthesia_confirmed": True,
-                "checked_sources": ["anesthesia_record"],
-            }
-        if (
-            raw.get("failure_kind") == "anesthesia_record_missing"
-            and raw.get("performed_anesthesia_confirmed") is True
-            and raw.get("checked_sources") == ["anesthesia_record"]
-        ):
-            return {
-                "failure_kind": "anesthesia_record_missing",
-                "performed_anesthesia_confirmed": True,
-                "checked_sources": ["anesthesia_record"],
-            }
-        return None
     if rule_id == "LX0609-017":
         allowed_keys = {
             "failure_kind",
@@ -2984,6 +2691,13 @@ def _customer_evidence_from_display_facts(
         raw=raw,
     )
     if verified_facts is not NotImplemented:
+        surgery_document_evidence = legacy_surgery_document_customer_evidence(
+            rule_id=rule_id,
+            raw=raw,
+            safe_facts=verified_facts,
+        )
+        if surgery_document_evidence is not None:
+            return surgery_document_evidence
         legacy_evidence = legacy_surgery_gate_customer_evidence(
             rule_id=rule_id,
             raw=raw,
@@ -3055,21 +2769,6 @@ def _customer_evidence_from_display_facts(
                 {"source_type": end_source, "source_document_id": end_document_id}
             )
         return located
-    single_source_types = {
-        "LX0609-034": "anesthesia_record",
-        "LX0609-036": "anesthesia_record",
-    }
-    source_type = single_source_types.get(rule_id)
-    if rule_id == "LX0609-039":
-        candidate = str(raw.get("source_document_type") or "").strip()
-        source_type = (
-            candidate
-            if candidate in {"surgery_record", "mr_surgery"}
-            else ""
-        )
-    if source_type and source_document_id:
-        return [{"source_type": source_type, "source_document_id": source_document_id}]
-
     if rule_id == "LX0609-051":
         allowed_source_types = {"death_record", "death_discussion"}
         raw_refs = raw.get("source_document_refs")

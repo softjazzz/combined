@@ -3700,7 +3700,7 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
     ]
 
 
-def test_038_customer_evidence_excludes_anesthesia_trigger_consent_form():
+def test_038_customer_evidence_preserves_explicitly_selected_coordinates():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
@@ -3734,12 +3734,13 @@ def test_038_customer_evidence_excludes_anesthesia_trigger_consent_form():
         },
     )[0]
 
-    assert result["customer_evidence"] == [
-        {
-            "source_type": "anesthesia_record",
-            "source_document_id": "private-anesthesia-document-id",
-        }
-    ]
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in result["customer_evidence"]
+    } == {
+        ("anesthesia_record", "private-anesthesia-document-id"),
+        ("consent_form", "private-consent-document-id"),
+    }
 
 
 def test_026_customer_evidence_keeps_comparison_sources_and_excludes_diagnosis_trigger():

@@ -8,6 +8,7 @@ fixing known reason-code semantics; see the matching acceptance note.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import pytest
@@ -285,13 +286,11 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "performed_surgery_confirmed": True,
             },
             (
-                ("observation", "presurg_summary", "available", 1),
-                ("observation", "inpat_nondrug_order", "empty", 0),
-                ("observation", "mr_surgery", "available", 1),
-                ("observation", "surgery_record", "available", 1),
+                ("material", "presurg_summary", "summary-1"),
+                ("fact", "current_visit_surgery_confirmed", "surgery_record", "affirmed", "performed"),
+                ("material", "surgery_record", "surgery-1"),
             ),
             {
-                ("mr_surgery", "mr-surgery-1"),
                 ("presurg_summary", "summary-1"),
                 ("surgery_record", "surgery-1"),
             },
@@ -311,15 +310,8 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "consent_state": "missing",
                 "checked_sources": ["consent_form"],
             },
-            (
-                ("observation", "anesthesia_record", "available", 1),
-                ("observation", "consent_form", "empty", 0),
-                ("observation", "mr_surgery", "available", 1),
-            ),
-            {
-                ("anesthesia_record", "anesthesia-1"),
-                ("anesthesia_record", "mr-surgery-1"),
-            },
+            (("material", "mr_surgery", "mr-surgery-1"),),
+            {("mr_surgery", "mr-surgery-1")},
             "已实施麻醉，但未找到对应的麻醉知情同意书",
         ),
         (
@@ -337,12 +329,10 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "missing_fields": ["patient_signature", "patient_signature_time"],
             },
             (
-                ("observation", "consent_form", "available", 1),
-                ("observation", "anesthesia_record", "available", 1),
-                ("observation", "mr_surgery", "available", 1),
+                ("material", "mr_surgery", "mr-surgery-1"),
+                ("material", "consent_form", "consent-1"),
             ),
             {
-                ("anesthesia_record", "anesthesia-1"),
                 ("consent_form", "consent-1"),
                 ("mr_surgery", "mr-surgery-1"),
             },
@@ -363,14 +353,11 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "missing_visit_sources": ["postane_surveil_record"],
             },
             (
-                ("observation", "postane_surveil_record", "empty", 0),
-                ("observation", "anesthesia_record", "available", 1),
-                ("observation", "mr_surgery", "available", 1),
-                ("observation", "preane_surveil_record", "available", 1),
+                ("material", "mr_surgery", "mr-surgery-1"),
+                ("material", "preane_surveil_record", "pre-visit-1"),
             ),
             {
-                ("anesthesia_record", "anesthesia-1"),
-                ("anesthesia_record", "mr-surgery-1"),
+                ("mr_surgery", "mr-surgery-1"),
                 ("preane_surveil_record", "pre-visit-1"),
             },
             "已实施麻醉，但缺少麻醉术前或术后访视记录",
@@ -410,14 +397,11 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 },
             },
             (
-                ("observation", "anesthesia_record", "available", 1),
-                ("observation", "consent_form", "empty", 0),
-                ("observation", "mr_surgery", "available", 1),
-                ("observation", "postane_surveil_record", "available", 1),
-                ("observation", "preane_surveil_record", "available", 1),
+                ("material", "mr_surgery", "mr-surgery-1"),
+                ("material", "preane_surveil_record", "pre-visit-1"),
+                ("material", "postane_surveil_record", "post-visit-1"),
             ),
             {
-                ("anesthesia_record", "anesthesia-1"),
                 ("mr_surgery", "mr-surgery-1"),
                 ("postane_surveil_record", "post-visit-1"),
                 ("preane_surveil_record", "pre-visit-1"),
@@ -441,11 +425,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "performed_anesthesia_confirmed": True,
                 "checked_sources": ["anesthesia_record"],
             },
-            (
-                ("observation", "anesthesia_record", "available", 1),
-                ("observation", "consent_form", "empty", 0),
-                ("observation", "mr_surgery", "available", 1),
-            ),
+            (("material", "anesthesia_record", "anesthesia-1"),),
             {("anesthesia_record", "anesthesia-1")},
             "已确认本次麻醉具备麻醉记录单。",
         ),
@@ -477,12 +457,12 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "checked_sources": ["presurg_discussion"],
             },
             (
-                ("observation", "presurg_discussion", "empty", 0),
-                ("observation", "mr_surgery", "empty", 0),
-                ("observation", "rescue_record", "empty", 0),
-                ("observation", "surgery_record", "available", 2),
+                ("fact", "current_visit_emergency_rescue_surgery", "surgery_record", "negated", "unknown"),
+                ("material", "surgery_record", "surgery-1"),
+                ("fact", "current_visit_surgery_confirmed", "surgery_record", "affirmed", "performed"),
+                ("material", "surgery_record", "surgery-2"),
             ),
-            set(),
+            {("surgery_record", "surgery-1"), ("surgery_record", "surgery-2")},
             "发现质控问题",
         ),
     ),
@@ -632,7 +612,7 @@ async def test_surgery_document_family_freezes_not_applicable_data_gap_and_techn
         assert execution.total_tokens == 0
 
 
-def test_surgery_document_family_rule_set_and_aggregator_ownership_baseline() -> None:
+def test_surgery_document_family_rule_set_and_aggregator_ownership_is_zero() -> None:
     assert SURGERY_DOCUMENT_RULE_IDS == (
             "LX0609-029",
             "LX0609-034",
@@ -643,7 +623,15 @@ def test_surgery_document_family_rule_set_and_aggregator_ownership_baseline() ->
             "LX0609-039",
     )
 
-    # 迁移提交前只冻结“当前仍由聚合器生产”，不预置迁移后归零断言。
+    # 迁移完成后，聚合器不得再按本族规则号解释事实、状态或证据。
+    aggregator_source = (
+        Path(__file__).parents[2]
+        / "app"
+        / "services"
+        / "luxian_0609_result_aggregator.py"
+    ).read_text(encoding="utf-8")
+    assert all(rule_id not in aggregator_source for rule_id in SURGERY_DOCUMENT_RULE_IDS)
+
     assert safe_luxian_0609_customer_display_facts(
         rule_id="LX0609-038",
         raw={

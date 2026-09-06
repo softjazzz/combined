@@ -341,6 +341,7 @@ async def test_typed_029_ungraded_mr_operation_is_not_applicable_without_llm():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state == "not_applicable"
@@ -376,6 +377,7 @@ async def test_typed_029_nonempty_summary_is_compliant_without_llm():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert reduced[0].final_state == "compliant"
     assert dict(result.customer_display_facts)["LX0609-029"] == {
@@ -409,6 +411,7 @@ async def test_typed_029_accepts_database_timestamptz_with_nonempty_summary():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "compliant"
@@ -435,6 +438,7 @@ async def test_typed_029_multiple_surgery_rows_with_one_summary_requires_associa
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "data_gap"
@@ -470,6 +474,7 @@ async def test_typed_029_matches_named_summary_and_reports_unmatched_surgery():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "non_compliant"
@@ -497,6 +502,7 @@ async def test_typed_029_same_time_multiple_surgeries_with_one_summary_requires_
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "data_gap"
@@ -525,6 +531,7 @@ async def test_typed_029_cross_source_extra_surgery_requires_stable_event_covera
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "data_gap"
@@ -554,6 +561,7 @@ async def test_typed_029_cross_source_matched_code_name_and_times_is_one_event()
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "compliant"
@@ -582,6 +590,7 @@ async def test_typed_029_cross_source_one_to_two_events_requires_association():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "data_gap"
@@ -609,6 +618,7 @@ async def test_typed_029_duplicate_surgery_document_is_one_event():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "compliant"
@@ -633,6 +643,7 @@ async def test_typed_029_multiple_surgeries_and_empty_summary_is_non_compliant()
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "non_compliant"
@@ -678,6 +689,7 @@ async def test_typed_029_unavailable_second_surgery_source_blocks_single_event_c
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state == "data_gap"
@@ -718,6 +730,7 @@ async def test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_l
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
     assert reduced[0].final_state == "non_compliant"
     assert result.decisions[0].reason_code == "defect_proven"
@@ -773,6 +786,7 @@ async def test_typed_029_source_states_are_fail_closed_without_llm(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-029",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state == expected_state
@@ -939,6 +953,7 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-037",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "non_compliant"
@@ -980,6 +995,7 @@ async def test_typed_037_public_executor_fails_closed_when_method_is_unknown():
         decisions=result.decisions,
         expected_rule_ids=("LX0609-037",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "data_gap"
@@ -1011,6 +1027,7 @@ async def test_typed_037_public_executor_treats_mr_surgery_query_error_as_techni
         decisions=result.decisions,
         expected_rule_ids=("LX0609-037",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert reduced[0].final_state.value == "technical_error"
@@ -2439,6 +2456,7 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
             expected_rule_ids=(decision.rule_id,),
             snapshot=session.snapshot,
             decisions=(decision,),
+            evidence_materials=session.materials,
         )[0].final_state
         for decision in result.decisions
     ] == [
