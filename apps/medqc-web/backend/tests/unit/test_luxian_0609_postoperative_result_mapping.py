@@ -96,6 +96,14 @@ _FACTS_BY_CASE = {
             "surgery_events": [{"document_id": "PRIVATE-SURGERY"}],
         },
     ),
+    "065_horizon_missing": (
+        "LX0609-065",
+        "data_gap",
+        {
+            "verification_kind": "postoperative_senior_round_window_unavailable",
+            "issue": "source_unavailable",
+        },
+    ),
     "066_timely": (
         "LX0609-066",
         "compliant",

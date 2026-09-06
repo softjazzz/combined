@@ -2108,22 +2108,28 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             )
             continue
         status = "compliant" if is_compliant else "non_compliant"
+        display_facts = None
+        if rule_id == "LX0609-013":
+            display_facts = _pathology_result_display_facts(
+                status=status,
+                pathology_master=master,
+                pathology_report=report,
+                surgery_record=materials["surgery_record"],
+                daily_course_record=materials["daily_course_record"],
+            )
+        elif rule_id == "LX0609-019" and status == "non_compliant":
+            display_facts = _lx019_missing_sampling_display_facts(
+                pathology_master=master,
+                pathology_report=report,
+                surgery_record=materials["surgery_record"],
+                daily_course_record=materials["daily_course_record"],
+            )
         emit_outcome(
             rule_id,
             status,
             "tumor_customer_prompt",
             executor_type="llm",
-            display_facts=(
-                _pathology_result_display_facts(
-                    status=status,
-                    pathology_master=master,
-                    pathology_report=report,
-                    surgery_record=materials["surgery_record"],
-                    daily_course_record=materials["daily_course_record"],
-                )
-                if rule_id == "LX0609-013"
-                else None
-            ),
+            display_facts=display_facts,
             fact_refs=(
                 typed_context_document_refs(context_sources, materials)
                 if typed_rule

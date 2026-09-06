@@ -2484,6 +2484,10 @@ def _parse_executions(
             original_state = state
             raw_structured_refs = []
             raw_quotes = []
+        # Prompt 合同明确 execution_quotes 是可选的辅助摘录。模型省略该键与
+        # 显式返回空数组语义等价；仍拒绝字符串、对象等错误类型。
+        if raw_quotes is None:
+            raw_quotes = []
         if (
             recommendation_ref not in expected_refs
             or recommendation_ref in seen

@@ -25,6 +25,7 @@ _POSTOPERATIVE_KINDS_BY_RULE = {
         {
             "postoperative_senior_round_check",
             "postoperative_surgery_event_time_check",
+            "postoperative_senior_round_window_unavailable",
         }
     ),
     "LX0609-066": frozenset({"postoperative_first_course_presence_check"}),
@@ -287,7 +288,10 @@ def safe_postoperative_customer_display_facts(
         return _safe_three_day_coverage(raw)
     if kind == "postoperative_three_day_window_not_mature":
         return _safe_three_day_window_not_mature(raw)
-    if kind == "postoperative_three_day_window_unavailable":
+    if kind in {
+        "postoperative_three_day_window_unavailable",
+        "postoperative_senior_round_window_unavailable",
+    }:
         if set(raw) != {"verification_kind", "issue"} or raw.get("issue") not in _WINDOW_UNAVAILABLE_ISSUES:
             return None
         return {"verification_kind": kind, "issue": raw["issue"]}
@@ -315,7 +319,10 @@ def postoperative_customer_fact_status_is_valid(
         return normalized_status == "data_gap"
     if kind == "postoperative_three_day_window_not_mature":
         return normalized_status == "not_applicable"
-    if kind == "postoperative_three_day_window_unavailable":
+    if kind in {
+        "postoperative_three_day_window_unavailable",
+        "postoperative_senior_round_window_unavailable",
+    }:
         return normalized_status == "data_gap"
     if kind == "postoperative_three_day_coverage_check":
         complete = (

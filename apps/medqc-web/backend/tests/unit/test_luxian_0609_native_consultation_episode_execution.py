@@ -4803,6 +4803,51 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
 
 
 @pytest.mark.asyncio
+async def test_020_023_accepts_omitted_optional_execution_quotes():
+    """二阶段合同声明 execution_quotes 可选，省略时应按空数组处理。"""
+
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+        "inpat_drug_order": ({
+            "generic_name": "抗菌药物",
+            "order_name": "抗感染治疗",
+            "prescribed_datetime": "2026-07-03 09:00:00",
+        },),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        {
+            "executions": [{
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            }],
+        },
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "requirement_satisfied",
+        "requirement_satisfied",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_error():
     """二阶段模型合同非法时，绑定层必须保留技术错误。"""
 
