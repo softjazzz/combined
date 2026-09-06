@@ -562,7 +562,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     "LX0609-063": ("discharge_record",),
     "LX0609-064": ("evaluation_context.horizon", "mr_surgery"),
-    "LX0609-065": ("mr_surgery",),
+    "LX0609-065": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-066": ("mr_surgery",),
     # 070 的九项必须属于本次住院、且早于每一笔实际输血；住院登记、输血事件
     # 与检验结果均需进入同一 Evidence Session。

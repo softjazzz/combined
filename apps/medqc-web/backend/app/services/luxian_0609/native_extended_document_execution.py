@@ -1498,6 +1498,48 @@ def _postoperative_window_gate(
     return "not_applicable", "evaluation_window_not_mature", facts
 
 
+def _postoperative_senior_round_evaluation_horizon(
+    *,
+    surgery_events: Sequence[_PostoperativeSurgeryEvent],
+    horizon_rows: Sequence[Mapping[str, Any]],
+    horizon_error: str,
+) -> tuple[datetime | None, date | None, str]:
+    """返回065逐台72小时核对可用的冻结评价终点。"""
+
+    if horizon_error:
+        return None, None, horizon_error
+    if len(horizon_rows) != 1:
+        return None, None, "authoritative_time_missing"
+
+    row = horizon_rows[0]
+    horizon_time = _parse_datetime(row.get("horizon_datetime"))
+    raw_date = _clean(row.get("horizon_date"))
+    horizon_date: date | None = None
+    if raw_date:
+        try:
+            horizon_date = date.fromisoformat(raw_date)
+        except ValueError:
+            return None, None, "authoritative_time_missing"
+    if horizon_time is None and horizon_date is None:
+        return None, None, "authoritative_time_missing"
+    if horizon_time is not None and horizon_date is not None and horizon_time.date() != horizon_date:
+        return None, None, "authoritative_time_conflict"
+
+    for event in surgery_events:
+        assert event.surgery_end_time is not None
+        try:
+            before_surgery = (
+                horizon_time < event.surgery_end_time
+                if horizon_time is not None
+                else horizon_date < event.surgery_end_time.date()
+            )
+        except TypeError:
+            return None, None, "authoritative_time_conflict"
+        if before_surgery:
+            return None, None, "authoritative_time_conflict"
+    return horizon_time, horizon_date, ""
+
+
 def _person_tokens(row: Mapping[str, Any]) -> set[str]:
     return {
         _clean(row.get(key)).lower()
@@ -1564,7 +1606,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     horizon_rows, horizon_error = (
         _source_rows(evidence_materials, "evaluation_context.horizon")
-        if {"LX0609-051", "LX0609-052", "LX0609-055", "LX0609-064", "LX0609-072"}.intersection(selected)
+        if {"LX0609-051", "LX0609-052", "LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}.intersection(selected)
         else ((), "")
     )
     (
@@ -2746,6 +2788,18 @@ async def execute_luxian_0609_native_extended_document_rules(
             ) is not None:
                 final_state, reason_code, window_facts = window_gate
                 display.append((rule_id, window_facts))
+            elif rule_id == "LX0609-065" and (
+                senior_round_horizon := _postoperative_senior_round_evaluation_horizon(
+                    surgery_events=surgery_events,
+                    horizon_rows=horizon_rows,
+                    horizon_error=horizon_error,
+                )
+            )[2]:
+                final_state, reason_code = "data_gap", senior_round_horizon[2]
+                display.append((rule_id, {
+                    "verification_kind": "postoperative_senior_round_window_unavailable",
+                    "issue": reason_code,
+                }))
             elif (
                 (daily_error or senior_error)
                 if rule_id == "LX0609-064"
@@ -2767,11 +2821,24 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = "data_gap", "association_failed"
             else:
                 if rule_id == "LX0609-065":
+                    evaluation_time, evaluation_date, _ = (
+                        _postoperative_senior_round_evaluation_horizon(
+                            surgery_events=surgery_events,
+                            horizon_rows=horizon_rows,
+                            horizon_error=horizon_error,
+                        )
+                    )
                     event_facts: list[dict[str, Any]] = []
                     unmet_events: list[dict[str, Any]] = []
+                    not_mature_events: list[dict[str, Any]] = []
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
                         deadline = event.surgery_end_time + timedelta(hours=72)
+                        window_mature = (
+                            evaluation_time >= deadline
+                            if evaluation_time is not None
+                            else evaluation_date > deadline.date()
+                        )
                         senior_round_times = [
                             value.isoformat(sep=" ")
                             for row in senior_rows
@@ -2782,19 +2849,35 @@ async def execute_luxian_0609_native_extended_document_rules(
                             **_event_display_base(event),
                             "deadline": deadline.isoformat(sep=" "),
                             "senior_round_times": senior_round_times,
+                            "window_state": (
+                                "mature"
+                                if window_mature
+                                else "evaluation_window_not_mature"
+                            ),
                         }
                         event_facts.append(event_fact)
-                        if not senior_round_times:
+                        if not window_mature:
+                            not_mature_events.append({
+                                "document_id": event.document_id,
+                                "deadline": deadline.isoformat(sep=" "),
+                            })
+                        elif not senior_round_times:
                             unmet_events.append({
                                 "document_id": event.document_id,
                                 "senior_round_times": [],
                             })
-                    final_state = "compliant" if not unmet_events else "non_compliant"
-                    reason_code = (
-                        "requirement_satisfied"
-                        if not unmet_events
-                        else "required_document_missing"
-                    )
+                    if unmet_events:
+                        final_state, reason_code = (
+                            "non_compliant",
+                            "required_document_missing",
+                        )
+                    elif not_mature_events:
+                        final_state, reason_code = (
+                            "not_applicable",
+                            "evaluation_window_not_mature",
+                        )
+                    else:
+                        final_state, reason_code = "compliant", "requirement_satisfied"
                     senior_round_delivery_values = sorted({
                         value
                         for item in event_facts
@@ -2820,6 +2903,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "performed_surgery_count": len(surgery_events),
                         "surgery_events": event_facts,
                         "unmet_surgery_events": unmet_events,
+                        "not_mature_surgery_events": not_mature_events,
+                        **(
+                            {"evaluation_time": evaluation_time.isoformat(sep=" ")}
+                            if evaluation_time is not None
+                            else {"evaluation_date": evaluation_date.isoformat()}
+                        ),
                         **legacy_summary_facts,
                     }))
                 else:
@@ -2942,7 +3031,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        ("mr_surgery", "surgery_record", "senior_course_record")
+                        (
+                            "mr_surgery",
+                            "surgery_record",
+                            "senior_course_record",
+                        )
                         if rule_id == "LX0609-065"
                         else (
                             "mr_surgery",

@@ -135,10 +135,10 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
 async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset()):
     rows_by_source = dict(rows_by_source)
     if (
-        rule_id in {"LX0609-055", "LX0609-064", "LX0609-072"}
+        rule_id in {"LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}
         and "evaluation_context.horizon" not in rows_by_source
     ):
-        # 055/064/072 的既有行为测试都描述已完成的观察窗口；显式传入 horizon
+        # 055/064/065/072 的既有行为测试都描述已完成的观察窗口；显式传入 horizon
         # 的测试覆盖未成熟/缺失边界，避免测试夹具暗中回退 snapshot.created_at。
         rows_by_source["evaluation_context.horizon"] = ({
             "horizon_date": "2099-01-01",
@@ -175,7 +175,7 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
 async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=frozenset()):
     rows_by_source = dict(rows_by_source)
     if (
-        {"LX0609-055", "LX0609-064", "LX0609-072"}.intersection(rule_ids)
+        {"LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}.intersection(rule_ids)
         and "evaluation_context.horizon" not in rows_by_source
     ):
         rows_by_source["evaluation_context.horizon"] = ({
@@ -234,6 +234,12 @@ def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sourc
 
 def test_064_binds_evaluation_horizon_for_postoperative_window_maturity() -> None:
     sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-064",))
+
+    assert "evaluation_context.horizon" in sources
+
+
+def test_065_binds_evaluation_horizon_for_postoperative_window_maturity() -> None:
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-065",))
 
     assert "evaluation_context.horizon" in sources
 
@@ -1381,7 +1387,7 @@ async def test_064_missing_or_conflicting_evaluation_horizon_remains_data_gap(
 
 
 @pytest.mark.asyncio
-async def test_065_binds_only_surgery_and_senior_round_sources() -> None:
+async def test_065_binds_surgery_senior_round_and_evaluation_horizon_sources() -> None:
     _, reduced = await _evaluate(
         "LX0609-065",
         {
@@ -3341,6 +3347,12 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
         "2026-07-08 10:01:55",
         "2026-07-11 10:03:29",
     ]
+    horizon_fact_ref = next(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key == "evaluation_context.horizon"
+    )
+    assert horizon_fact_ref not in result.decisions[0].fact_refs
     assert "术后 72 小时内上级医师查房时间" in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
 
@@ -6752,6 +6764,139 @@ async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None
     assert dict(result.customer_display_facts)["LX0609-065"]["senior_round_times"] == [
         "共1台手术中，1台手术结束后72小时内未查到上级医师查房"
     ]
+
+
+@pytest.mark.asyncio
+async def test_065_does_not_report_missing_senior_round_before_72_hour_window_matures() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-065",
+        {
+            "mr_surgery": ({
+                "surgery_code": "01.2400X013",
+                "surgery_name": "硬脑膜外血肿清除术",
+                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgeon": "张医生",
+            },),
+            "senior_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-07-04 09:59:59",
+                "horizon_date": "2026-07-04",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "evaluation_window_not_mature"
+    facts = dict(result.customer_display_facts)["LX0609-065"]
+    assert facts["surgery_events"][0]["deadline"] == "2026-07-04 10:00:00"
+    assert facts["surgery_events"][0]["window_state"] == "evaluation_window_not_mature"
+
+
+@pytest.mark.asyncio
+async def test_065_reports_missing_senior_round_at_exact_72_hour_deadline() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-065",
+        {
+            "mr_surgery": ({
+                "surgery_code": "01.2400X013",
+                "surgery_name": "硬脑膜外血肿清除术",
+                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgeon": "张医生",
+            },),
+            "senior_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-07-04 10:00:00",
+                "horizon_date": "2026-07-04",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
+async def test_065_reports_mature_missing_surgery_even_when_another_surgery_is_not_mature() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-065",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "S-1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-01 10:00:00+08",
+                },
+                {
+                    "document_id": "S-2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-03 10:00:00+08",
+                },
+            ),
+            "senior_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-07-04 10:00:00",
+                "horizon_date": "2026-07-04",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    facts = dict(result.customer_display_facts)["LX0609-065"]
+    assert facts["unmet_surgery_events"] == [{
+        "document_id": "S-1",
+        "senior_round_times": [],
+    }]
+    assert facts["not_mature_surgery_events"] == [{
+        "document_id": "S-2",
+        "deadline": "2026-07-06 10:00:00",
+    }]
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT, reduced.reason_code
+
+
+@pytest.mark.asyncio
+async def test_065_requires_evaluation_horizon_before_missing_senior_round_is_reported() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-065",
+        {
+            "mr_surgery": ({
+                "surgery_code": "01.2400X013",
+                "surgery_name": "硬脑膜外血肿清除术",
+                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgeon": "张医生",
+            },),
+            "senior_course_record": (),
+            "evaluation_context.horizon": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_065_rejects_conflicting_evaluation_horizon_before_missing_senior_round_is_reported() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-065",
+        {
+            "mr_surgery": ({
+                "surgery_code": "01.2400X013",
+                "surgery_name": "硬脑膜外血肿清除术",
+                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgeon": "张医生",
+            },),
+            "senior_course_record": (),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-07-04 10:00:00",
+                "horizon_date": "2026-07-05",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_conflict"
 
 
 @pytest.mark.asyncio
