@@ -276,6 +276,10 @@ def validate_luxian_0609_executor_customer_display_facts(
         is_difficult_case_customer_rule,
         safe_difficult_case_customer_display_facts,
     )
+    from .death_document_result_mapping import (
+        is_death_document_customer_rule,
+        safe_death_document_customer_display_facts,
+    )
 
     if rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS:
         safe_facts = _safe_surgery_presence_customer_display_facts(
@@ -347,6 +351,16 @@ def validate_luxian_0609_executor_customer_display_facts(
             if safe_facts is not None and not contains_private_identifier(safe_facts)
             else None
         )
+    if is_death_document_customer_rule(rule_id):
+        safe_facts = safe_death_document_customer_display_facts(
+            rule_id=rule_id,
+            raw=raw,
+        )
+        return (
+            safe_facts
+            if safe_facts is not None and not contains_private_identifier(safe_facts)
+            else None
+        )
     if is_consultation_customer_rule(rule_id):
         safe_facts = safe_consultation_customer_display_facts(
             rule_id=rule_id,
@@ -400,6 +414,7 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
     from .course_quality_result_mapping import is_course_quality_customer_rule
     from .tumor_pathology_result_mapping import is_tumor_pathology_customer_rule
     from .difficult_case_result_mapping import is_difficult_case_customer_rule
+    from .death_document_result_mapping import is_death_document_customer_rule
 
     return (
         rule_id in _SURGERY_PRESENCE_DOCUMENT_TARGETS
@@ -409,6 +424,7 @@ def finalizer_owns_executor_customer_display_facts(rule_id: str) -> bool:
         or is_course_quality_customer_rule(rule_id)
         or is_tumor_pathology_customer_rule(rule_id)
         or is_difficult_case_customer_rule(rule_id)
+        or is_death_document_customer_rule(rule_id)
         or is_consultation_customer_rule(rule_id)
         or is_exam_lab_customer_rule(rule_id)
         or is_transfusion_customer_rule(rule_id)
@@ -477,6 +493,10 @@ def finalize_luxian_0609_executor_customer_display_facts(
     from .difficult_case_result_mapping import (
         difficult_case_customer_fact_status_is_valid,
         is_difficult_case_customer_rule,
+    )
+    from .death_document_result_mapping import (
+        death_document_customer_fact_status_is_valid,
+        is_death_document_customer_rule,
     )
     rule_id = str(finalized.get("rule_id") or finalized.get("rule_code") or "")
     if (
@@ -560,6 +580,16 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_difficult_case_customer_rule(rule_id) and not difficult_case_status_valid:
+        safe_facts = None
+    death_document_status_valid = (
+        is_death_document_customer_rule(rule_id)
+        and death_document_customer_fact_status_is_valid(
+            rule_id=rule_id,
+            status=str(finalized.get("status") or "").strip().lower(),
+            safe_facts=safe_facts,
+        )
+    )
+    if is_death_document_customer_rule(rule_id) and not death_document_status_valid:
         safe_facts = None
     if raw_facts is None and surgery_gate_status_valid:
         finalized.pop("customer_display_facts", None)

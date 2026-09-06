@@ -648,12 +648,6 @@ def safe_luxian_0609_customer_display_facts(
         return safe_events
 
     extended_kinds_by_rule = {
-        "LX0609-051": {
-            "death_discussion_timeliness_check",
-            "death_discussion_missing_after_deadline",
-            "death_discussion_window_not_mature",
-            "death_discussion_evaluation_horizon_unavailable",
-        },
         "LX0609-052": {
             "critical_value_timeliness_check",
             "critical_value_result_detail_missing",
@@ -671,7 +665,6 @@ def safe_luxian_0609_customer_display_facts(
             "antimicrobial_course_documentation_complete",
             "antimicrobial_course_documentation_missing",
         },
-        "LX0609-060": {"death_record_presence_check"},
         "LX0609-061": {"discharge_record_timeliness_check"},
         "LX0609-062": {"discharge_medication_completeness_check"},
         "LX0609-063": {"discharge_diagnosis_consistency_check"},
@@ -714,19 +707,6 @@ def safe_luxian_0609_customer_display_facts(
         },
     }
     extended_allowed_keys = {
-        "death_discussion_timeliness_check": {
-            "death_time", "discussion_time", "threshold_hours", "actual_interval_hours",
-        },
-        "death_discussion_missing_after_deadline": {
-            "death_time", "threshold_hours", "discussion_count",
-        },
-        "death_discussion_window_not_mature": {
-            "death_time", "deadline_time", "evaluation_time",
-            "evaluation_date", "remaining_seconds",
-        },
-        "death_discussion_evaluation_horizon_unavailable": {
-            "death_time", "issue",
-        },
         "critical_value_timeliness_check": {
             "critical_item_names", "critical_flags", "report_times", "disposition_times",
             "threshold_hours", "actual_interval_hours", "event_results",
@@ -763,7 +743,6 @@ def safe_luxian_0609_customer_display_facts(
         "antimicrobial_course_documentation_missing": {
             "antimicrobials", "course_documented",
         },
-        "death_record_presence_check": {"death_confirmed", "death_time", "death_record_count"},
         "discharge_record_timeliness_check": {
             "discharge_time", "discharge_time_source", "record_time", "threshold_hours",
             "actual_interval_hours",
@@ -1856,35 +1835,6 @@ def _customer_evidence_from_display_facts(
             else ""
         )
 
-    if rule_id == "LX0609-051":
-        allowed_source_types = {"death_record", "death_discussion"}
-        raw_refs = raw.get("source_document_refs")
-        if isinstance(raw_refs, list) and len(raw_refs) <= 2:
-            located: list[dict[str, str]] = []
-            seen_source_types: set[str] = set()
-            for item in raw_refs:
-                if not isinstance(item, Mapping):
-                    return []
-                located_source_type = str(item.get("source_type") or "").strip()
-                located_document_id = valid_document_id(
-                    item.get("source_document_id")
-                )
-                if (
-                    located_source_type not in allowed_source_types
-                    or located_source_type in seen_source_types
-                    or not located_document_id
-                ):
-                    return []
-                seen_source_types.add(located_source_type)
-                located.append(
-                    {
-                        "source_type": located_source_type,
-                        "source_document_id": located_document_id,
-                    }
-                )
-            if located:
-                return located
-
     if rule_id == "LX0609-067":
         if raw.get("course_present") is not True:
             return []
@@ -2494,7 +2444,6 @@ def aggregate_luxian_0609_results(
                 decision_evidence = (
                     []
                     if wrapper_id in {
-                        "LX0609-051",
                         "LX0609-067",
                         "LX0609-068",
                         "LX0609-071",
