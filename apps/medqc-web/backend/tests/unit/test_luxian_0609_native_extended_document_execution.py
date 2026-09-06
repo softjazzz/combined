@@ -7272,6 +7272,249 @@ async def test_066_requires_authoritative_postoperative_course_time_for_per_even
 
 
 @pytest.mark.asyncio
+async def test_064_fact_refs_only_include_event_covering_courses_and_surgeon_round() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-064",),
+        {
+            "surgery_record": ({
+                "document_id": "SURGERY-064",
+                "surgery_code": "01.2400X013",
+                "surgery_name": "开腹手术",
+                "surgery_end_time": "2026-07-01 10:00:00+08",
+                "surgeon": "张医生",
+            },),
+            "daily_course_record": (
+                {
+                    "document_id": "COURSE-064-DAY-1",
+                    "record_time": "2026-07-02 09:00:00",
+                    "author_name": "张医生",
+                    "record_content": "术后第一日查房，恢复平稳。",
+                },
+                {
+                    "document_id": "COURSE-064-DAY-2",
+                    "record_time": "2026-07-03 09:00:00",
+                    "record_content": "术后第二日恢复平稳。",
+                },
+                {
+                    "document_id": "COURSE-064-DAY-3",
+                    "record_time": "2026-07-04 09:00:00",
+                    "record_content": "术后第三日恢复平稳。",
+                },
+                {
+                    "document_id": "COURSE-064-OTHER",
+                    "record_time": "2026-07-10 09:00:00",
+                    "record_content": "无关后续病程。",
+                },
+            ),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-05",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    refs_by_document_id = {
+        row["document_id"]: reference
+        for source_key in ("surgery_record", "daily_course_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+    horizon_ref = next(
+        reference
+        for reference, _row in materials.document_rows(
+            "evaluation_context.horizon", snapshot=snapshot
+        )
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert execution.decisions[0].fact_refs == tuple(sorted((
+        refs_by_document_id["SURGERY-064"],
+        refs_by_document_id["COURSE-064-DAY-1"],
+        refs_by_document_id["COURSE-064-DAY-2"],
+        refs_by_document_id["COURSE-064-DAY-3"],
+    )))
+    assert refs_by_document_id["COURSE-064-OTHER"] not in execution.decisions[0].fact_refs
+    assert horizon_ref not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_065_fact_refs_only_include_event_and_matched_72_hour_senior_round() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-065",),
+        {
+            "surgery_record": ({
+                "document_id": "SURGERY-065",
+                "surgery_code": "01.2400X013",
+                "surgery_name": "开腹手术",
+                "surgery_end_time": "2026-07-01 10:00:00+08",
+                "surgeon": "张医生",
+            },),
+            "senior_course_record": (
+                {
+                    "document_id": "SENIOR-065-MATCH",
+                    "record_time": "2026-07-02 10:00:00",
+                    "record_content": "上级医师术后查房。",
+                },
+                {
+                    "document_id": "SENIOR-065-LATE",
+                    "record_time": "2026-07-05 10:01:00",
+                    "record_content": "无关的迟到查房。",
+                },
+            ),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-07-05 10:00:00",
+                "horizon_date": "2026-07-05",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    refs_by_document_id = {
+        row["document_id"]: reference
+        for source_key in ("surgery_record", "senior_course_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+    horizon_ref = next(
+        reference
+        for reference, _row in materials.document_rows(
+            "evaluation_context.horizon", snapshot=snapshot
+        )
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert execution.decisions[0].fact_refs == tuple(sorted((
+        refs_by_document_id["SURGERY-065"],
+        refs_by_document_id["SENIOR-065-MATCH"],
+    )))
+    assert refs_by_document_id["SENIOR-065-LATE"] not in execution.decisions[0].fact_refs
+    assert horizon_ref not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_066_noncompliant_fact_refs_only_include_surgery_without_first_course() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-066",),
+        {
+            "surgery_record": (
+                {
+                    "document_id": "SURGERY-066-WITH-COURSE",
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "手术甲",
+                    "surgery_end_time": "2026-07-01 10:00:00+08",
+                },
+                {
+                    "document_id": "SURGERY-066-MISSING",
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "手术乙",
+                    "surgery_end_time": "2026-07-02 10:00:00+08",
+                },
+            ),
+            "postsurg_firstcourse_record": ({
+                "document_id": "POSTOP-066-WITH-COURSE",
+                "record_time": "2026-07-01 11:00:00",
+                "record_content": "手术甲术后首次病程。",
+            },),
+        },
+    )
+
+    refs_by_document_id = {
+        row["document_id"]: reference
+        for source_key in ("surgery_record", "postsurg_firstcourse_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "required_document_missing"
+    assert execution.decisions[0].fact_refs == (
+        refs_by_document_id["SURGERY-066-MISSING"],
+    )
+    assert refs_by_document_id["SURGERY-066-WITH-COURSE"] not in execution.decisions[0].fact_refs
+    assert refs_by_document_id["POSTOP-066-WITH-COURSE"] not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-065",),
+        {
+            "surgery_record": (
+                {
+                    "document_id": "SURGERY-065-A",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-01 10:00:00+08",
+                    "surgeon": "张医生",
+                },
+                {
+                    "document_id": "SURGERY-065-B",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 10:00:00+08",
+                    "surgeon": "李医生",
+                },
+            ),
+            "senior_course_record": (
+                {
+                    "document_id": "SENIOR-065-A",
+                    "record_time": "2026-07-02 10:00:00",
+                    "record_content": "术后上级查房。",
+                },
+                {
+                    "document_id": "SENIOR-065-B",
+                    "record_time": "2026-07-09 10:00:00",
+                    "record_content": "术后上级查房。",
+                },
+                {
+                    "document_id": "SENIOR-065-OTHER",
+                    "record_time": "2026-07-15 10:00:00",
+                    "record_content": "无关查房。",
+                },
+            ),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-07-12 10:00:00",
+                "horizon_date": "2026-07-12",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    refs_by_document_id = {
+        row["document_id"]: reference
+        for source_key in ("surgery_record", "senior_course_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert execution.decisions[0].fact_refs == tuple(sorted((
+        refs_by_document_id["SURGERY-065-A"],
+        refs_by_document_id["SENIOR-065-A"],
+        refs_by_document_id["SURGERY-065-B"],
+        refs_by_document_id["SENIOR-065-B"],
+    )))
+    assert refs_by_document_id["SENIOR-065-OTHER"] not in execution.decisions[0].fact_refs
+
+
+def test_postoperative_invalid_exact_fact_ref_is_technical_failure_not_business_state() -> None:
+    snapshot, materials = _session({"surgery_record": ()})
+    decision = module._decision(
+        rule_id="LX0609-066",
+        snapshot=snapshot,
+        source_keys=(),
+        document_refs=("0" * 64,),
+        exact_document_refs=True,
+        final_state="non_compliant",
+        reason_code="required_document_missing",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-066",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "snapshot_mismatch"
+
+
+@pytest.mark.asyncio
 async def test_067_missing_predischarge_course_is_non_compliant() -> None:
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-067",),

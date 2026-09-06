@@ -1256,6 +1256,7 @@ class _PostoperativeSurgeryEvent:
     """064/065 的最小事件投影：正式手术记录一行即一台手术。"""
 
     source_key: str
+    row: Mapping[str, Any]
     document_id: str
     surgery_name: str
     surgery_end_time: datetime | None
@@ -1389,6 +1390,7 @@ def _postoperative_surgery_events(
     return tuple(
         _PostoperativeSurgeryEvent(
             source_key=source_key,
+            row=row,
             document_id=_clean(row.get("document_id") or row.get("id")) or f"{source_key}:{index}",
             surgery_name=_clean(
                 row.get("surgery_name")
@@ -1401,6 +1403,45 @@ def _postoperative_surgery_events(
         )
         for index, row in enumerate(source_rows, start=1)
     )
+
+
+def _postoperative_document_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    selected_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """把064/065/066实际消费的事件或病程唯一绑定为逐文书证据。"""
+
+    allowed_sources = (
+        "mr_surgery",
+        "surgery_record",
+        "daily_course_record",
+        "senior_course_record",
+        "postsurg_firstcourse_record",
+    )
+    refs: list[str] = []
+    for selected_row in selected_rows:
+        matches: list[str] = []
+        for source_key in allowed_sources:
+            try:
+                document_rows = materials.document_rows(source_key, snapshot=snapshot)
+            except (
+                EvidenceMaterialUnavailable,
+                EvidenceMaterialTruncated,
+                TypeError,
+                ValueError,
+            ):
+                continue
+            matches.extend(
+                reference
+                for reference, material_row in document_rows
+                if material_row == selected_row
+            )
+        if len(matches) != 1:
+            return ()
+        refs.append(matches[0])
+    return tuple(dict.fromkeys(refs))
 
 
 def _link_postoperative_first_course_records(
@@ -2758,6 +2799,11 @@ async def execute_luxian_0609_native_extended_document_rules(
         if rule_id == "LX0609-066":
             assert surgery_applicability is not None
             gate_outcome = _surgery_applicability_outcome(surgery_applicability)
+            surgery_events: tuple[_PostoperativeSurgeryEvent, ...] = ()
+            linked_events: tuple[
+                tuple[_PostoperativeSurgeryEvent, tuple[Mapping[str, Any], ...]], ...
+            ] = ()
+            linkage_error = ""
             if gate_outcome is not None:
                 final_state, reason_code = gate_outcome
             else:
@@ -2765,9 +2811,6 @@ async def execute_luxian_0609_native_extended_document_rules(
                     mr_surgery_rows=mr_surgery_rows,
                     surgery_record_rows=surgery_record_rows,
                 )
-                linked_events: tuple[
-                    tuple[_PostoperativeSurgeryEvent, tuple[Mapping[str, Any], ...]], ...
-                ] = ()
                 linkage_error = postop_first_error
                 if not linkage_error:
                     linked_events, linkage_error = _link_postoperative_first_course_records(
@@ -2813,15 +2856,43 @@ async def execute_luxian_0609_native_extended_document_rules(
                         else []
                     ),
                 }))
+            selected_postoperative_rows: list[Mapping[str, Any]] = []
+            if surgery_events:
+                if linkage_error:
+                    selected_postoperative_rows.extend(
+                        event.row for event in surgery_events
+                    )
+                elif final_state == "non_compliant":
+                    # 缺失首次病程时，客户证据只指向缺失的手术事件；已满足
+                    # 事件的病程不应被这条缺陷结论顺带投影。
+                    selected_postoperative_rows.extend(
+                        event.row
+                        for event, linked_rows in linked_events
+                        if not linked_rows
+                    )
+                else:
+                    selected_postoperative_rows.extend(
+                        event.row for event, _linked_rows in linked_events
+                    )
+                    selected_postoperative_rows.extend(
+                        row
+                        for _event, linked_rows in linked_events
+                        for row in linked_rows
+                    )
+            postoperative_document_refs = _postoperative_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                selected_rows=selected_postoperative_rows,
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        "mr_surgery",
-                        "surgery_record",
-                        "postsurg_firstcourse_record",
+                        () if selected_postoperative_rows else ("surgery_record",)
                     ),
+                    document_refs=postoperative_document_refs,
+                    exact_document_refs=bool(selected_postoperative_rows),
                     final_state=final_state,
                     reason_code=reason_code,
                 )
@@ -2835,6 +2906,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 mr_surgery_rows=mr_surgery_rows,
                 surgery_record_rows=surgery_record_rows,
             )
+            selected_postoperative_rows: list[Mapping[str, Any]] = []
             if gate_outcome is not None:
                 final_state, reason_code = gate_outcome
             elif not surgery_events:
@@ -2912,17 +2984,24 @@ async def execute_luxian_0609_native_extended_document_rules(
                     not_mature_events: list[dict[str, Any]] = []
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
+                        selected_postoperative_rows.append(event.row)
                         deadline = event.surgery_end_time + timedelta(hours=72)
                         window_mature = (
                             evaluation_time >= deadline
                             if evaluation_time is not None
                             else evaluation_date > deadline.date()
                         )
-                        senior_round_times = [
-                            value.isoformat(sep=" ")
+                        matched_senior_rows = tuple(
+                            row
                             for row in senior_rows
                             if (value := _row_time(row)) is not None
                             and event.surgery_end_time <= value <= deadline
+                        )
+                        selected_postoperative_rows.extend(matched_senior_rows)
+                        senior_round_times = [
+                            value.isoformat(sep=" ")
+                            for row in matched_senior_rows
+                            if (value := _row_time(row)) is not None
                         ]
                         event_fact = {
                             **_event_display_base(event),
@@ -2997,6 +3076,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     empty_body_events = []
                     for event in surgery_events:
                         assert event.surgery_end_time is not None
+                        selected_postoperative_rows.append(event.row)
                         required_dates = {
                             (event.surgery_end_time + timedelta(days=offset)).date()
                             for offset in (1, 2, 3)
@@ -3020,21 +3100,54 @@ async def execute_luxian_0609_native_extended_document_rules(
                             if _course_row_has_body(row)
                         )
                         covered_dates = _course_dates(postop_rows)
+                        for required_date in required_dates.intersection(covered_dates):
+                            # 每日覆盖只需一份实际有效病程；选择权威时间最早的一份
+                            # 作为该日期的客户证据，不投影同日的全部候选病程。
+                            selected_postoperative_rows.append(
+                                min(
+                                    (
+                                        row
+                                        for row in postop_rows
+                                        if _row_time(row) is not None
+                                        and _row_time(row).date() == required_date
+                                    ),
+                                    key=lambda row: _row_time(row) or datetime.max,
+                                )
+                            )
                         unresolved_empty_body_dates = empty_body_dates.difference(
                             covered_dates
                         )
-                        surgeon_round = bool(event.surgeon_tokens) and any(
-                            bool(
-                                event.surgeon_tokens.intersection(
+                        for empty_date in unresolved_empty_body_dates:
+                            selected_postoperative_rows.append(
+                                min(
+                                    (
+                                        row
+                                        for row in dated_postop_rows
+                                        if _row_time(row) is not None
+                                        and _row_time(row).date() == empty_date
+                                        and not _course_row_has_body(row)
+                                    ),
+                                    key=lambda row: _row_time(row) or datetime.max,
+                                )
+                            )
+                        surgeon_round_row = next(
+                            (
+                                row
+                                for row in postop_rows
+                                if event.surgeon_tokens
+                                and event.surgeon_tokens.intersection(
                                     _course_record_physician_tokens(row)
                                     | _title_round_physician_tokens(
                                         row,
                                         candidate_tokens=event.surgeon_tokens,
                                     )
                                 )
-                            )
-                            for row in postop_rows
+                            ),
+                            None,
                         )
+                        if surgeon_round_row is not None:
+                            selected_postoperative_rows.append(surgeon_round_row)
+                        surgeon_round = surgeon_round_row is not None
                         missing_dates = sorted(
                             item.isoformat()
                             for item in required_dates.difference(covered_dates)
@@ -3105,25 +3218,20 @@ async def execute_luxian_0609_native_extended_document_rules(
                             },
                         )
                     )
+            postoperative_document_refs = _postoperative_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                selected_rows=selected_postoperative_rows,
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        (
-                            "mr_surgery",
-                            "surgery_record",
-                            "senior_course_record",
-                        )
-                        if rule_id == "LX0609-065"
-                        else (
-                            "mr_surgery",
-                            "surgery_record",
-                            "daily_course_record",
-                            "senior_course_record",
-                            "evaluation_context.horizon",
-                        )
+                        () if selected_postoperative_rows else ("surgery_record",)
                     ),
+                    document_refs=postoperative_document_refs,
+                    exact_document_refs=bool(selected_postoperative_rows),
                     final_state=final_state,
                     reason_code=reason_code,
                 )
