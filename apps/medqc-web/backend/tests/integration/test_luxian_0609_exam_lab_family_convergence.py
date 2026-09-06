@@ -21,6 +21,7 @@ from typing import Any
 
 import pytest
 import sqlalchemy as sa
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database.models.cdm import (
@@ -29,13 +30,23 @@ from app.database.models.cdm import (
     MedicalRecordFrontpage,
 )
 from app.services import custom_qc_workspace_service as workspace_module
+from app.services import custom_qc_sample_pool_service as sample_pool_module
 from app.services import sichuan_qc_service
 from app.services import sichuan_workspace_batch_worker as batch_worker
+from app.routers import qc_sample_pools, qc_sichuan
+from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.luxian_0609 import execution as luxian_execution
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows
 from app.services.luxian_0609.native_exam_lab_execution import EXAM_LAB_RULE_IDS
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from tests.integration.test_luxian_0609_consultation_api_entry_flow import (
+    _api_app,
+    _envelope_customer_projection,
+    _install_sample_pool_sqlite,
+    _read_saved_envelope,
+    _wait_for_terminal_job,
+)
 
 
 RULE_ID = "LX0609-012"
@@ -87,6 +98,55 @@ class _RecordingClient:
         return {
             "choices": [
                 {"message": {"content": json.dumps(response, ensure_ascii=False)}}
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 10,
+                "total_tokens": 110,
+            },
+            "_api_time": 0.2,
+        }
+
+
+class _DeterministicExamLabFactClient:
+    """仅替代受控语义响应；prepare、engine、worker 与持久化仍为正式实现。"""
+
+    def __init__(self, rule_id: str) -> None:
+        self.rule_id = rule_id
+        self.prompts: list[str] = []
+
+    async def generate(self, prompt: str) -> dict[str, object]:
+        self.prompts.append(prompt)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "schema_version": "lx0609-exam-lab-text-facts-v3",
+                                "facts": [
+                                    {
+                                        "rule_id": self.rule_id,
+                                        "applicability": "applicable",
+                                        "semantic_state": "present",
+                                        "positive_state": (
+                                            "positive"
+                                            if self.rule_id
+                                            in {"LX0609-012", "LX0609-015"}
+                                            else "not_relevant"
+                                        ),
+                                        "course_doc_positions": [
+                                            1
+                                            if self.rule_id == "LX0609-010"
+                                            else 2
+                                        ],
+                                    }
+                                ],
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
             ],
             "usage": {
                 "prompt_tokens": 100,
@@ -278,6 +338,7 @@ async def test_exam_lab_family_freezes_canonical_facts_evidence_and_prompt_usage
     assert [item.reason_code for item in context.reduced_decisions] == [
         "requirement_satisfied"
     ] * 5
+    assert context.unified_engine_used is True
     assert context.native_llm_call_count == 1
     assert (
         context.native_prompt_tokens,
@@ -526,11 +587,56 @@ def _bundle_for_record(*, visit_id: str, patient_id: str) -> dict[str, Any]:
     }
 
 
+def _create_ready_exam_lab_sample_pool(
+    *, engine: sa.Engine, service: CustomQCSamplePoolService
+) -> tuple[str, str]:
+    """通过正式样本池服务建立只含脱敏三坐标的可运行样本。"""
+
+    pool = service.create_pool_with_items(
+        name="检查检验 API 入口隔离样本",
+        source_file="isolated-exam-lab-fixture.xlsx",
+        source_sheet="Sheet1",
+        created_by="api-entry-test-user",
+        scene="final",
+        rows=[
+            {
+                "row_no": 1,
+                "patient_name": "脱敏患者",
+                "manual_issue_text": "检查检验结果记录完整性核验",
+            }
+        ],
+    )
+    pool_id = str(pool["id"])
+    with Session(engine) as session:
+        item_id = session.execute(
+            sa.select(service._item_table.c.id).where(
+                service._item_table.c.pool_id == pool_id
+            )
+        ).scalar_one()
+        session.execute(
+            sa.update(service._item_table)
+            .where(service._item_table.c.id == item_id)
+            .values(
+                matched_institute_id=_RECORD_A["institute_id"],
+                matched_patient_id=_RECORD_A["patient_id"],
+                matched_visit_id=_RECORD_A["visit_id"],
+                match_status="matched",
+                sync_status="synced",
+                bundle_status="ready",
+            )
+        )
+        session.commit()
+    return pool_id, str(item_id)
+
+
 def _job_filters(
-    *, record_refs: list[dict[str, str]], sample_pool_id: str = ""
+    *,
+    rule_id: str,
+    record_refs: list[dict[str, str]],
+    sample_pool_id: str = "",
 ) -> dict[str, Any]:
     filters: dict[str, Any] = {
-        "rule_ids": [RULE_ID],
+        "rule_ids": [rule_id],
         "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
         "rule_set_name": "泸县0609质控",
         "rule_set_version": RULE_SET_VERSION,
@@ -541,11 +647,11 @@ def _job_filters(
         "bucket_strategy": "domain_family",
         "batch_output_mode": "full",
         "record_refs": record_refs,
-        "scoped_customer_rule_ids": [RULE_ID],
-        "selected_rule_ids": [RULE_ID],
+        "scoped_customer_rule_ids": [rule_id],
+        "selected_rule_ids": [rule_id],
         "record_rule_map": {
             f"{item['institute_id']}::{item['patient_id']}::{item['visit_id']}": [
-                RULE_ID
+                rule_id
             ]
             for item in record_refs
         },
@@ -566,6 +672,7 @@ async def _run_formal_job(
     workspace: CustomQCWorkspaceService,
     service: Any,
     name: str,
+    rule_id: str,
     record_refs: list[dict[str, str]],
     execution_mode: str,
     run_mode: str,
@@ -574,13 +681,17 @@ async def _run_formal_job(
     job = workspace.create_batch_job(
         draft={
             "id": f"EXAM-{name}",
-            "rule_code": RULE_ID,
+            "rule_code": rule_id,
             "name": "CT/MRI阳性结果分析",
             "scene": "final",
         },
         created_by="exam-lab-isolated-test",
         scope="final",
-        filters=_job_filters(record_refs=record_refs, sample_pool_id=sample_pool_id),
+        filters=_job_filters(
+            rule_id=rule_id,
+            record_refs=record_refs,
+            sample_pool_id=sample_pool_id,
+        ),
         record_ids=[item["visit_id"] for item in record_refs],
         record_refs=record_refs,
         total_records=len(record_refs),
@@ -603,12 +714,14 @@ async def _run_formal_job(
     return persisted
 
 
-def _canonical_saved_item(job: dict[str, Any], *, visit_id: str) -> dict[str, Any]:
+def _canonical_saved_item(
+    job: dict[str, Any], *, visit_id: str, rule_id: str
+) -> dict[str, Any]:
     items = [
         item
         for item in list(job.get("items") or [])
         if str(item.get("visit_id") or "") == visit_id
-        and str(item.get("rule_id") or "") == RULE_ID
+        and str(item.get("rule_id") or "") == rule_id
     ]
     assert len(items) == 1
     return items[0]
@@ -620,15 +733,33 @@ def _canonical_projection(item: dict[str, Any]) -> dict[str, Any]:
         "reason_code": item.get("reason_code"),
         "customer_display_facts": item.get("customer_display_facts"),
         "criterion_results": item.get("criterion_results"),
-        "customer_evidence": item.get("customer_evidence"),
+    }
+
+
+def _customer_evidence_coordinate_set(item: dict[str, Any]) -> set[tuple[str, str, str, str]]:
+    """证据数组排序不表达优先级；只冻结可定位的坐标集合。"""
+
+    return {
+        (
+            str(evidence.get("source_type") or ""),
+            str(
+                evidence.get("source_document_id")
+                or evidence.get("source_ref")
+                or ""
+            ),
+            str(evidence.get("field_path") or ""),
+            str(evidence.get("record_time") or ""),
+        )
+        for evidence in list(item.get("customer_evidence") or [])
     }
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", EXAM_LAB_RULE_IDS)
 async def test_exam_lab_formal_worker_is_consistent_across_three_business_entries(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rule_id: str
 ) -> None:
-    """同一检查资料经三入口均走 exam_lab executor 并保存同一 Canonical 结果。"""
+    """每条检查检验规则均经三入口走 exam_lab 并保存同一 Canonical 结果。"""
 
     workspace = _install_isolated_sqlite(monkeypatch, tmp_path)
     _fixture_evidence_session_builder(monkeypatch)
@@ -658,6 +789,7 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
             "source": "exam-lab-isolated",
         }
     )
+    service.adjudicator_client = _DeterministicExamLabFactClient(rule_id)
 
     native_phase_events: list[tuple[str, dict[str, Any]]] = []
     original_update_progress = workspace.update_batch_job_progress
@@ -675,7 +807,8 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
     single_job = await _run_formal_job(
         workspace=workspace,
         service=service,
-        name="single-rule",
+        name=f"single-rule-{rule_id}",
+        rule_id=rule_id,
         record_refs=[_RECORD_A],
         execution_mode="single",
         run_mode="serial",
@@ -683,7 +816,8 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
     pool_batch_job = await _run_formal_job(
         workspace=workspace,
         service=service,
-        name="record-pool-batch",
+        name=f"record-pool-batch-{rule_id}",
+        rule_id=rule_id,
         record_refs=[_RECORD_A, _RECORD_B],
         execution_mode="multi",
         run_mode="parallel",
@@ -691,7 +825,8 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
     sample_leaf_job = await _run_formal_job(
         workspace=workspace,
         service=service,
-        name="sample-validation-leaf",
+        name=f"sample-validation-leaf-{rule_id}",
+        rule_id=rule_id,
         record_refs=[_RECORD_A],
         execution_mode="multi",
         run_mode="parallel",
@@ -707,7 +842,9 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
         )
         assert job["status"] == "completed"
         assert not list(job.get("failed_records") or [])
-        item = _canonical_saved_item(job, visit_id=_RECORD_A["visit_id"])
+        item = _canonical_saved_item(
+            job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+        )
         assert item["status"] == "compliant"
         assert item["reason_code"] == "requirement_satisfied"
         assert (item.get("metadata") or {}).get("executor_key") == "exam_lab"
@@ -717,17 +854,27 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
         assert "legacy" not in str(item.get("metadata") or {}).lower()
         assert list(item.get("customer_evidence") or [])
 
-    single_item = _canonical_saved_item(single_job, visit_id=_RECORD_A["visit_id"])
-    pool_item = _canonical_saved_item(pool_batch_job, visit_id=_RECORD_A["visit_id"])
-    sample_item = _canonical_saved_item(sample_leaf_job, visit_id=_RECORD_A["visit_id"])
+    single_item = _canonical_saved_item(
+        single_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    pool_item = _canonical_saved_item(
+        pool_batch_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    sample_item = _canonical_saved_item(
+        sample_leaf_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
     assert _canonical_projection(single_item) == _canonical_projection(pool_item)
     assert _canonical_projection(single_item) == _canonical_projection(sample_item)
+    assert _customer_evidence_coordinate_set(single_item)
+    assert _customer_evidence_coordinate_set(single_item) == _customer_evidence_coordinate_set(
+        pool_item
+    ) == _customer_evidence_coordinate_set(sample_item)
 
     latest = workspace.get_latest_luxian_0609_record_result(
         institute_id=_RECORD_A["institute_id"],
         patient_id=_RECORD_A["patient_id"],
         visit_id=_RECORD_A["visit_id"],
-        expected_rule_ids=[RULE_ID],
+        expected_rule_ids=[rule_id],
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         rule_set_version=RULE_SET_VERSION,
     )
@@ -757,4 +904,224 @@ async def test_exam_lab_formal_worker_is_consistent_across_three_business_entrie
         re.fullmatch(r"src_[0-9a-f]{24}", str(item.get("source_ref") or ""))
         and "source_document_id" not in item
         for item in envelope_evidence
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("rule_id", EXAM_LAB_RULE_IDS)
+def test_exam_lab_asgi_entries_create_same_selection_and_dispatch_formal_worker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rule_id: str
+) -> None:
+    """每条检查检验规则均经三条实际创建路由保存同一 Canonical 结果。"""
+
+    workspace = _install_isolated_sqlite(monkeypatch, tmp_path)
+    engine = workspace_module.engine
+    sample_pool_service = _install_sample_pool_sqlite(monkeypatch, engine=engine)
+    _fixture_evidence_session_builder(monkeypatch)
+    settings = _formal_settings()
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: settings)
+    monkeypatch.setattr(sichuan_qc_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        batch_worker, "get_product_activation_service", lambda: _ActivationStub()
+    )
+    monkeypatch.setattr(
+        sichuan_qc_service,
+        "build_adjudicator_runtime_config",
+        lambda config: dict(config or {}),
+    )
+    monkeypatch.setattr(
+        batch_worker,
+        "load_running_final_bundle",
+        lambda *, institute_id, patient_id, visit_id, **_kwargs: _bundle_for_record(
+            visit_id=str(visit_id), patient_id=str(patient_id)
+        ),
+    )
+    monkeypatch.setattr(
+        sample_pool_module,
+        "get_settings",
+        lambda: SimpleNamespace(JWT_SECRET="isolated-api-entry-test-secret"),
+    )
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_pool_service)
+
+    service = sichuan_qc_service.SichuanQCService(
+        {
+            "provider_code": "isolated-test",
+            "model": "controlled-stub",
+            "allow_mock_when_unconfigured": True,
+            "source": "exam-lab-api-entry-isolated",
+        }
+    )
+    service.adjudicator_client = _DeterministicExamLabFactClient(rule_id)
+
+    async def provide_qc_service() -> Any:
+        return service
+
+    # 路由注入与 detached worker 都使用同一受控服务；派发函数保持生产实现。
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", provide_qc_service)
+    native_phase_events: list[tuple[str, dict[str, Any]]] = []
+    unified_execution_calls: list[tuple[tuple[str, tuple[str, ...]], ...]] = []
+    original_update_progress = workspace.update_batch_job_progress
+    original_unified_execute = luxian_execution.Luxian0609ExecutionEngine.execute
+
+    async def capture_unified_execute(
+        engine: luxian_execution.Luxian0609ExecutionEngine, *args: Any, **kwargs: Any
+    ) -> Any:
+        unified_execution_calls.append(
+            tuple(
+                (str(executor_key), tuple(rule_ids))
+                for executor_key, rule_ids in tuple(
+                    kwargs.get("executor_batches") or ()
+                )
+            )
+        )
+        return await original_unified_execute(engine, *args, **kwargs)
+
+    monkeypatch.setattr(
+        luxian_execution.Luxian0609ExecutionEngine,
+        "execute",
+        capture_unified_execute,
+    )
+
+    def capture_update_progress(**kwargs: Any) -> None:
+        stream_state = dict(
+            (kwargs.get("summary_patch") or {}).get("stream_state") or {}
+        )
+        if stream_state.get("kind") == "native_executor_phase":
+            native_phase_events.append((str(kwargs.get("job_id") or ""), stream_state))
+        original_update_progress(**kwargs)
+
+    monkeypatch.setattr(workspace, "update_batch_job_progress", capture_update_progress)
+    pool_id, sample_item_id = _create_ready_exam_lab_sample_pool(
+        engine=engine, service=sample_pool_service
+    )
+    app = _api_app(service=service)
+
+    def create_workspace_job(record_refs: list[dict[str, str]]) -> str:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/qc/sichuan/workspace/batch-jobs",
+                json={
+                    "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                    "rule_ids": [rule_id],
+                    "scope": "final",
+                    "record_refs": record_refs,
+                    "run_mode": "serial",
+                },
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        return str(response.json()["data"]["id"])
+
+    single_job_id = create_workspace_job([_RECORD_A])
+    single_job = _wait_for_terminal_job(workspace=workspace, job_id=single_job_id)
+    single_item = _canonical_saved_item(
+        single_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    single_envelope = _read_saved_envelope(
+        app=app,
+        job_id=single_job_id,
+        task_item=single_item,
+        record=_RECORD_A,
+        expected_rule_ids=[rule_id],
+    )
+
+    pool_job_id = create_workspace_job([_RECORD_A, _RECORD_B])
+    pool_job = _wait_for_terminal_job(workspace=workspace, job_id=pool_job_id)
+    pool_item = _canonical_saved_item(
+        pool_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    pool_envelope = _read_saved_envelope(
+        app=app,
+        job_id=pool_job_id,
+        task_item=pool_item,
+        record=_RECORD_A,
+        expected_rule_ids=[rule_id],
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v1/qc/sample-pools/{pool_id}/run",
+            json={
+                "validation_mode": "customer",
+                "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                "selected_rule_ids": [rule_id],
+                "sample_item_ids": [sample_item_id],
+                "record_refs": [_RECORD_A],
+                "group_by_luxian_family": False,
+            },
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["success"] is True
+    sample_job_id = str(response.json()["data"]["job_id"])
+    sample_job = _wait_for_terminal_job(workspace=workspace, job_id=sample_job_id)
+    sample_item = _canonical_saved_item(
+        sample_job, visit_id=_RECORD_A["visit_id"], rule_id=rule_id
+    )
+    sample_envelope = _read_saved_envelope(
+        app=app,
+        job_id=sample_job_id,
+        task_item=sample_item,
+        record=_RECORD_A,
+        expected_rule_ids=[rule_id],
+    )
+
+    record_a_key = json.dumps(
+        [_RECORD_A["institute_id"], _RECORD_A["patient_id"], _RECORD_A["visit_id"]],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    record_b_key = json.dumps(
+        [_RECORD_B["institute_id"], _RECORD_B["patient_id"], _RECORD_B["visit_id"]],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    for job, expected_record_keys in (
+        (single_job, {record_a_key}),
+        (pool_job, {record_a_key, record_b_key}),
+        (sample_job, {record_a_key}),
+    ):
+        assert job["status"] == "completed", job.get("error_message")
+        assert not list(job.get("failed_records") or [])
+        filters = dict(job.get("filters") or {})
+        assert filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+        assert filters.get("rule_ids") == [rule_id]
+        assert filters.get("selected_rule_ids") == [rule_id]
+        assert filters.get("scoped_customer_rule_ids") == [rule_id]
+        assert filters.get("record_rule_map") == {
+            record_key: [rule_id] for record_key in expected_record_keys
+        }
+        assert any(
+            event_job_id == job["id"]
+            and event.get("event") == "completed"
+            and event.get("executor_key") == "exam_lab"
+            for event_job_id, event in native_phase_events
+        )
+
+    for item in (single_item, pool_item, sample_item):
+        assert (item["status"], item["reason_code"]) == (
+            "compliant",
+            "requirement_satisfied",
+        )
+        assert (item.get("metadata") or {}).get("executor_key") == "exam_lab"
+        assert not item.get("llm_fallback")
+        assert not item.get("pack_fallback")
+        assert not (item.get("metadata") or {}).get("bundle_fallback")
+        assert "legacy" not in str(item.get("metadata") or {}).lower()
+
+    assert _canonical_projection(single_item) == _canonical_projection(pool_item)
+    assert _canonical_projection(single_item) == _canonical_projection(sample_item)
+    assert _customer_evidence_coordinate_set(single_item)
+    assert _customer_evidence_coordinate_set(single_item) == _customer_evidence_coordinate_set(
+        pool_item
+    ) == _customer_evidence_coordinate_set(sample_item)
+    assert _envelope_customer_projection(single_envelope) == _envelope_customer_projection(
+        pool_envelope
+    ) == _envelope_customer_projection(sample_envelope)
+    assert len(unified_execution_calls) == 4
+    assert all(
+        batches == (("exam_lab", (rule_id,)),)
+        for batches in unified_execution_calls
     )
