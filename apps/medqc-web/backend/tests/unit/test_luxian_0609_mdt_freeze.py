@@ -328,12 +328,10 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
                 "effective_surgery_level": "四级",
                 "surgery_level_source": "structured_field",
                 "mdt_discussion_state": "completed",
-                "source_document_refs": [
-                    {"source_type": "mr_surgery", "source_document_id": "SURGERY-EXACT"}
-                ],
             },
         ),
     )
+    assert "source_document_refs" not in dict(envelope.customer_display_facts)[RULE_ID]
     assert result["customer_display_facts"] == {
         "performed_surgery_confirmed": True,
         "procedure_kind": "surgery",

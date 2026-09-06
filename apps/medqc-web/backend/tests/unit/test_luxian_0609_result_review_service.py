@@ -769,43 +769,29 @@ def test_old_018_result_is_also_hidden_from_grouped_rule_results() -> None:
     assert projected["rule_results"][0]["items"][0]["rule_version"] == "2026-07-28"
 
 
-def test_customer_projector_preserves_only_controlled_lx025_missing_fields() -> None:
-    projected = project_customer_safe_result_item(
-        {
-            "record_id": "PRIVATE_RECORD",
-            "rule_id": "LX0609-025",
-            "status": "non_compliant",
-            "customer_display_facts": {
-                "missing_fields": [
-                    "implant_specification",
-                    "implant_material",
-                    "PRIVATE_FIELD",
-                ],
-                "source_label": "PRIVATE_SOURCE",
-                "raw_text": "PRIVATE_SURGERY_TEXT",
+def test_customer_projector_rejects_unvalidated_lx025_missing_fields() -> None:
+    with pytest.raises(ValueError):
+        project_customer_safe_result_item(
+            {
+                "record_id": "PRIVATE_RECORD",
+                "rule_id": "LX0609-025",
+                "status": "non_compliant",
+                "customer_display_facts": {
+                    "missing_fields": [
+                        "implant_specification",
+                        "implant_material",
+                        "PRIVATE_FIELD",
+                    ],
+                    "source_label": "PRIVATE_SOURCE",
+                    "raw_text": "PRIVATE_SURGERY_TEXT",
+                },
+                "customer_evidence": [{
+                    "source_type": "surgery_record",
+                    "source_document_id": "private-surgery-document-id",
+                }],
             },
-            "customer_evidence": [{
-                "source_type": "surgery_record",
-                "source_document_id": "private-surgery-document-id",
-            }],
-        },
-        hmac_key="unit-test-key",
-    )
-
-    assert projected["customer_display_facts"] == {
-        "failure_kind": "implant_information_incomplete",
-        "source_label": "手术记录",
-        "missing_fields": ["implant_specification", "implant_material"],
-    }
-    assert projected["evidence"] == [{
-        "source_type": "surgery_record",
-        "source_ref": "src_" + __import__("hmac").new(
-            b"unit-test-key",
-            b"src:private-surgery-document-id",
-            __import__("hashlib").sha256,
-        ).hexdigest()[:24],
-    }]
-    assert "PRIVATE" not in json.dumps(projected, ensure_ascii=False)
+            hmac_key="unit-test-key",
+        )
 
 
 def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -> None:

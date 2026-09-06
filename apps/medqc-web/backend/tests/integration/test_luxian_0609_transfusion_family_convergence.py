@@ -320,6 +320,7 @@ async def test_transfusion_049_prepare_partitions_phase_without_unified_engine_d
             "status": "not_executed",
             "is_compliant": None,
             "findings": "本质控点当前不参与正式结论，未生成合规或问题判定。",
+            "facts": {},
             "evidence": [],
             "suggestion": "待院方确认并发布业务口径后再启用本质控点。",
             "confidence": 0.0,
@@ -327,6 +328,7 @@ async def test_transfusion_049_prepare_partitions_phase_without_unified_engine_d
                 "execution_source": "lx0609_phase_gate",
                 "executor_type": "programmatic",
                 "reason_code": "policy_definition_pending",
+                "pending_reason_code": "charging_source_unavailable_customer_scope",
             },
         }
     ]

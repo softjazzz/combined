@@ -868,6 +868,7 @@ async def test_033_empty_complete_consent_source_is_non_compliant_without_llm_ca
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions, expected_rule_ids=("LX0609-033",),
         snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
@@ -895,6 +896,7 @@ async def test_033_empty_shell_rows_are_non_compliant_without_llm_or_body_leak()
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions, expected_rule_ids=("LX0609-033",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
@@ -931,6 +933,7 @@ async def test_033_surgery_record_consent_phrase_cannot_replace_independent_cons
         decisions=result.decisions,
         expected_rule_ids=("LX0609-033",),
         snapshot=session.snapshot,
+        evidence_materials=session.materials,
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]

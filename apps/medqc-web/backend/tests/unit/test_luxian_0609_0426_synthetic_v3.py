@@ -904,7 +904,7 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
         if row.get("visit_id") == visit_ids[25]
     )
     assert "未记录输血前评估" in incomplete_assessment["record_content"]
-    assert transfusion._programmatic_044_status(
+    assessment_status = transfusion._programmatic_044_status(
         {
             "bloodtrans_record": [incomplete_assessment],
             "blood_application": [
@@ -918,7 +918,12 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
                 if row.get("visit_id") == visit_ids[25]
             ],
         }
-    ) == ("non_compliant", "pretransfusion_assessment_missing")
+    )
+    assert assessment_status is not None
+    assert assessment_status[:2] == (
+        "non_compliant", "pretransfusion_assessment_missing"
+    )
+    assert assessment_status[2]["missing_fields"] == ["indication"]
     missing_item_status = transfusion.evaluate_pretransfusion_nine_items(
         {
             "mr_bloodtrans": [
@@ -961,7 +966,13 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
         }
     ) == ("non_compliant", "transfusion_course_record_missing")
     assert transfusion._programmatic_047_status(
-        {"bloodtrans_record": [missing_course], "daily_course_record": []}
+        {
+            "bloodtrans_record": [missing_course],
+            "daily_course_record": [],
+            "__evaluation_horizon_rows__": [
+                {"horizon_datetime": "2026-12-31 00:00:00"}
+            ],
+        }
     ) == ("non_compliant", "posttransfusion_evaluation_missing")
     incomplete_course = next(
         row

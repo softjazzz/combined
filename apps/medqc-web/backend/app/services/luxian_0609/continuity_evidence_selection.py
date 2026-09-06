@@ -144,7 +144,7 @@ def bind_handoff_evidence(
         and value.isoformat(sep=" ") in handover_times
     ]
     consumed: list[tuple[str, Mapping[str, Any]]] = []
-    if isinstance(events, Sequence):
+    if isinstance(events, Sequence) and events:
         for event in events:
             if not isinstance(event, Mapping):
                 continue
