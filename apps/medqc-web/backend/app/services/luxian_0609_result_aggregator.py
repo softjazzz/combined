@@ -13,6 +13,7 @@ from .luxian_0609_result_schema import (
 )
 from .luxian_0609.canonical_result_finalizer import (
     finalizer_owns_executor_customer_display_facts,
+    finalizer_rejects_invalid_public_executor_customer_display_facts,
     finalizer_requires_public_fact_ref_evidence,
     finalizer_validates_missing_executor_customer_display_facts,
     finalize_luxian_0609_canonical_result,
@@ -545,10 +546,6 @@ def safe_luxian_0609_customer_display_facts(
         return safe_events
 
     extended_kinds_by_rule = {
-        "LX0609-054": {"antimicrobial_reason_documentation_check"},
-        "LX0609-055": {"antimicrobial_effect_evaluation_check"},
-        "LX0609-057": {"empiric_antimicrobial_reason_check"},
-        "LX0609-058": {"special_antimicrobial_expert_support_check"},
         "LX0609-064": {
             "postoperative_three_day_coverage_check",
             "postoperative_surgery_event_time_check",
@@ -579,22 +576,6 @@ def safe_luxian_0609_customer_display_facts(
         },
     }
     extended_allowed_keys = {
-        "antimicrobial_reason_documentation_check": {
-            "antimicrobials", "reason_documented", "unmatched_antimicrobials",
-            "association_ambiguous",
-        },
-        "antimicrobial_effect_evaluation_check": {
-            "antimicrobials", "window_hours", "evaluation_intervals",
-            "unmatched_antimicrobials", "association_ambiguous",
-        },
-        "empiric_antimicrobial_reason_check": {
-            "antimicrobials", "empiric_use_confirmed", "reason_or_no_specimen_documented",
-        },
-        "special_antimicrobial_expert_support_check": {
-            "special_antimicrobials", "expert_support_present",
-            "first_antimicrobial_time", "expert_support_time", "support_before_use",
-            "unmatched_special_antimicrobials", "association_ambiguous",
-        },
         "postoperative_three_day_coverage_check": {
             "surgery_time", "required_postop_dates", "covered_postop_dates",
             "surgeon_round_present",
@@ -850,88 +831,6 @@ def safe_luxian_0609_customer_display_facts(
                     else {"evaluation_date": evaluation_date}
                 ),
             }
-        if kind == "special_antimicrobial_expert_support_check":
-            expected_keys = {
-                "verification_kind",
-                "special_antimicrobials",
-                "expert_support_present",
-                "first_antimicrobial_time",
-                "expert_support_time",
-                "support_before_use",
-                "unmatched_special_antimicrobials",
-                "association_ambiguous",
-            }
-            medicines = raw.get("special_antimicrobials")
-            unmatched = raw.get("unmatched_special_antimicrobials")
-            expert_present = raw.get("expert_support_present")
-            first_time = raw.get("first_antimicrobial_time")
-            support_time = raw.get("expert_support_time")
-            support_before_use = raw.get("support_before_use")
-            association_ambiguous = raw.get("association_ambiguous")
-            if (
-                set(raw) != expected_keys
-                or not isinstance(medicines, (list, tuple))
-                or not medicines
-                or len(medicines) > 20
-                or not all(
-                    isinstance(item, str) and 0 < len(item) <= 160 and "\n" not in item
-                    for item in medicines
-                )
-                or not isinstance(unmatched, (list, tuple))
-                or len(unmatched) > len(medicines)
-                or not all(item in medicines for item in unmatched)
-                or not isinstance(expert_present, bool)
-                or not isinstance(support_before_use, bool)
-                or not isinstance(association_ambiguous, bool)
-            ):
-                return None
-            try:
-                first_dt = (
-                    datetime.fromisoformat(str(first_time))
-                    if first_time is not None
-                    else None
-                )
-                support_dt = (
-                    datetime.fromisoformat(str(support_time))
-                    if support_time is not None
-                    else None
-                )
-            except ValueError:
-                return None
-            if (
-                (first_time is not None and first_dt is None)
-                or (support_time is not None and support_dt is None)
-                or (not expert_present and (support_time is not None or support_before_use))
-                or (
-                    support_before_use
-                    and (
-                        not expert_present
-                        or first_dt is None
-                        or support_dt is None
-                        or support_dt > first_dt
-                        or unmatched
-                        or association_ambiguous
-                    )
-                )
-                or (
-                    not unmatched
-                    and not association_ambiguous
-                    and first_dt is not None
-                    and support_dt is not None
-                    and support_before_use != (support_dt <= first_dt)
-                )
-            ):
-                return None
-            return {
-                "verification_kind": kind,
-                "special_antimicrobials": list(medicines),
-                "expert_support_present": expert_present,
-                "first_antimicrobial_time": first_time,
-                "expert_support_time": support_time,
-                "support_before_use": support_before_use,
-                "unmatched_special_antimicrobials": list(unmatched),
-                "association_ambiguous": association_ambiguous,
-            }
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
             # 061 的冲突列表只在确有多条权威时间时出现；保持普通结果的
@@ -984,18 +883,6 @@ def safe_luxian_0609_customer_display_facts(
             ):
                 safe[key] = list(value)
             else:
-                return None
-        if kind in {"antimicrobial_reason_documentation_check",
-                    "antimicrobial_effect_evaluation_check"}:
-            medicines = safe.get("antimicrobials")
-            unmatched = safe.get("unmatched_antimicrobials")
-            if (
-                not isinstance(medicines, list) or not medicines
-                or any(not isinstance(name, str) for name in medicines)
-                or not isinstance(unmatched, list)
-                or any(name not in medicines for name in unmatched)
-                or type(safe.get("association_ambiguous")) is not bool
-            ):
                 return None
         if kind == "postoperative_three_day_coverage_check" and raw.get("surgery_events") is not None:
             surgery_events = controlled_postoperative_events(raw.get("surgery_events"))
@@ -1773,14 +1660,26 @@ def _copy_native_customer_fields(
     ):
         if supplied_safe_facts_item is not None:
             continue
-        if contract_handled and finalizer_owns_facts:
+        if (
+            contract_handled
+            and finalizer_owns_facts
+            and not finalizer_rejects_invalid_public_executor_customer_display_facts(
+                wrapper_id
+            )
+        ):
             contract_failure = True
             continue
         reject_invalid_display_facts()
     if len(supplied_display_facts) == 2:
         if all(item is not None for item in supplied_safe_facts):
             if supplied_safe_facts[0] != supplied_safe_facts[1]:
-                if finalizer_owns_facts and any(supplied_contracts_handled):
+                if (
+                    finalizer_owns_facts
+                    and any(supplied_contracts_handled)
+                    and not finalizer_rejects_invalid_public_executor_customer_display_facts(
+                        wrapper_id
+                    )
+                ):
                     contract_failure = True
                 else:
                     reject_invalid_display_facts()
@@ -1959,6 +1858,9 @@ def aggregate_luxian_0609_results(
             # native 直接结果能交给 Finalizer，不能静默丢弃非法客户事实。
             if (
                 not finalizer_owns_facts
+                or finalizer_rejects_invalid_public_executor_customer_display_facts(
+                    rule_id
+                )
                 or (
                     rule_id not in reduced_by_rule
                     and rule_id not in native_direct_rule_ids
