@@ -2070,14 +2070,18 @@ def _programmatic_transfusion_display_facts(
             facts["source_document_refs"] = source_refs
         if latest_end is not None:
             facts["transfusion_end_time"] = latest_end.isoformat(sep=" ")
-        if evaluation_times:
-            first_evaluation = min(evaluation_times)
+        eligible_evaluation_times = (
+            [value for value in evaluation_times if value >= latest_end]
+            if latest_end is not None
+            else []
+        )
+        if eligible_evaluation_times:
+            first_evaluation = min(eligible_evaluation_times)
             facts["evaluation_time"] = first_evaluation.isoformat(sep=" ")
-            if latest_end is not None:
-                facts["elapsed_hours"] = round(
-                    (first_evaluation - latest_end).total_seconds() / 3600,
-                    2,
-                )
+            facts["elapsed_hours"] = round(
+                (first_evaluation - latest_end).total_seconds() / 3600,
+                2,
+            )
         facts["verification_kind" if status == "compliant" else "failure_kind"] = (
             "posttransfusion_evaluation_complete"
             if status == "compliant"
