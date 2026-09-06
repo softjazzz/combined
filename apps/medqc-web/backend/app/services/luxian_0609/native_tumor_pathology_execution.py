@@ -221,6 +221,7 @@ class _TumorRuleOutcome:
     status: str
     reason_code: str
     executor_type: str
+    fact_refs: tuple[str, ...] = ()
 
 
 def _typed_decision_from_outcome(
@@ -228,13 +229,17 @@ def _typed_decision_from_outcome(
     outcome: _TumorRuleOutcome,
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> RuleDecision:
-    refs = tuple(
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in snapshot.observations
-        if observation.source_key in _TYPED_RULE_SOURCE_KEYS[outcome.rule_id]
-    )
-    if outcome.status in {"compliant", "non_compliant", "not_applicable"} and not refs:
-        raise ValueError("typed tumor decision requires evidence refs")
+    # 文书选择是执行器的职责。禁止以规则允许的所有来源 Observation 代替
+    # 实际参与判定的文书，否则 Binding 会把适用性内部资料误投影给客户。
+    refs = tuple(dict.fromkeys(outcome.fact_refs))
+    if not refs and outcome.status == "not_applicable":
+        # 完整空来源没有可投影文书；保留来源级审计事实以证明“无触发”不是
+        # 执行器遗漏，同时公共投影不会把它伪造为客户文书证据。
+        refs = tuple(
+            observation.snapshot_ref.removeprefix("sha256:")
+            for observation in snapshot.observations
+            if observation.source_key in _TYPED_RULE_SOURCE_KEYS[outcome.rule_id]
+        )
 
     if outcome.status == "compliant":
         dimensions = (
@@ -549,6 +554,14 @@ def _discharge_stage(
 def _has_complete_pathology_result(material: SourceMaterial) -> bool:
     """最终结果和报告时间必须来自同一份报告，肉眼/镜下材料不能代替最终诊断。"""
 
+    return _complete_pathology_result_row(material) is not None
+
+
+def _complete_pathology_result_row(
+    material: SourceMaterial,
+) -> Mapping[str, Any] | None:
+    """返回实际构成病理最终结果触发的报告行。"""
+
     for row in material.rows:
         report_time = _clean(
             row.get("report_datetime")
@@ -571,12 +584,20 @@ def _has_complete_pathology_result(material: SourceMaterial) -> bool:
         if not result_text or _PATHOLOGY_PENDING_RESULT_PATTERN.search(result_text):
             continue
         if diagnosis or _PATHOLOGY_FINAL_RESULT_PATTERN.search(body):
-            return True
-    return False
+            return row
+    return None
 
 
 def _has_documented_pathology_sampling(*materials: SourceMaterial) -> bool:
     """仅接受已实施的取材/送检事实；计划、否定和空模板继续交由模型判断。"""
+
+    return _documented_pathology_sampling_row(*materials) is not None
+
+
+def _documented_pathology_sampling_row(
+    *materials: SourceMaterial,
+) -> Mapping[str, Any] | None:
+    """返回实际证明已取材/送检的第一份文书行，判定口径与布尔检查一致。"""
 
     for material in materials:
         for row in material.rows:
@@ -607,7 +628,7 @@ def _has_documented_pathology_sampling(*materials: SourceMaterial) -> bool:
                         if not _PATHOLOGY_SAMPLING_NEGATIVE_PATTERN.search(
                             local_window
                         ):
-                            return True
+                            return row
                 if not _PATHOLOGY_DIRECT_SEND_PATTERN.search(normalized):
                     continue
                 recent_context = " ".join(segments[max(0, index - 2) : index])
@@ -621,8 +642,8 @@ def _has_documented_pathology_sampling(*materials: SourceMaterial) -> bool:
                         combined_context
                     )
                 ):
-                    return True
-    return False
+                    return row
+    return None
 
 
 def _has_documented_pathology_result(
@@ -630,6 +651,17 @@ def _has_documented_pathology_result(
     *target_materials: SourceMaterial,
 ) -> bool:
     """只接受目标文书中明确的病理结果引用，并用最终诊断关键词交叉核对。"""
+
+    return _documented_pathology_result_row(
+        pathology_report, *target_materials
+    ) is not None
+
+
+def _documented_pathology_result_row(
+    pathology_report: SourceMaterial,
+    *target_materials: SourceMaterial,
+) -> Mapping[str, Any] | None:
+    """返回实际引用最终病理结果的目标文书行，判定口径与布尔检查一致。"""
 
     diagnosis_terms: list[str] = []
     for row in pathology_report.rows:
@@ -650,10 +682,10 @@ def _has_documented_pathology_result(
             if _PATHOLOGY_PENDING_RESULT_PATTERN.search(text):
                 continue
             if any(term in text for term in diagnosis_terms):
-                return True
+                return row
             if not diagnosis_terms and _PATHOLOGY_FINAL_RESULT_PATTERN.search(text):
-                return True
-    return False
+                return row
+    return None
 
 
 def _all_targets_explicitly_missing(
@@ -661,11 +693,30 @@ def _all_targets_explicitly_missing(
 ) -> bool:
     """只有每类现有目标文书都明确声明该事实未记录时才短路为缺陷。"""
 
-    return bool(target_materials) and all(
-        material.state == "present"
-        and any(pattern.search(_clean(_row_text(row))) for row in material.rows)
-        for material in target_materials
-    )
+    return bool(_explicitly_missing_target_rows(pattern, *target_materials))
+
+
+def _explicitly_missing_target_rows(
+    pattern: re.Pattern[str], *target_materials: SourceMaterial
+) -> tuple[Mapping[str, Any], ...]:
+    """仅在所有目标文书均明确缺失时，返回各自实际作出该结论的行。"""
+
+    selected: list[Mapping[str, Any]] = []
+    for material in target_materials:
+        if material.state != "present":
+            return ()
+        row = next(
+            (
+                candidate
+                for candidate in material.rows
+                if pattern.search(_clean(_row_text(candidate)))
+            ),
+            None,
+        )
+        if row is None:
+            return ()
+        selected.append(row)
+    return tuple(selected)
 
 
 def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
@@ -945,6 +996,8 @@ def _project_course_clause(
     projected["content"] = clause
     projected["record_content"] = clause
     projected["assembled_text"] = clause
+    # 仅供同一请求内的 document_rows 回投原始材料行；不得进入 Prompt、事实或客户 DTO。
+    projected["_source_material_row"] = row
     return projected
 
 
@@ -1019,7 +1072,13 @@ def _typed_chemotherapy_comparison(
     *,
     orders: SourceMaterial,
     course_records: SourceMaterial,
-) -> tuple[str, str, Mapping[str, Any] | None]:
+) -> tuple[
+    str,
+    str,
+    Mapping[str, Any] | None,
+    tuple[Mapping[str, Any], ...],
+    tuple[Mapping[str, Any], ...],
+]:
     """以结构化医嘱为权威值，逐项核对病程中的药名、剂量、用法和时间。"""
 
     chemotherapy_orders = tuple(
@@ -1034,9 +1093,9 @@ def _typed_chemotherapy_comparison(
         )
     )
     if not chemotherapy_orders:
-        return "data_gap", "chemotherapy_fact_unavailable", None
+        return "data_gap", "chemotherapy_fact_unavailable", None, (), ()
     if not any(_course_record_text(row) for row in course_records.rows):
-        return "data_gap", "chemotherapy_course_record_unavailable", None
+        return "data_gap", "chemotherapy_course_record_unavailable", (), ()
 
     field_results = {
         "drug_name": "matched",
@@ -1076,6 +1135,7 @@ def _typed_chemotherapy_comparison(
     for field in missing_order_fields:
         field_results[field] = "unknown"
     unresolved_event_count = 0
+    selected_course_rows: list[Mapping[str, Any]] = []
     if not missing_order_fields:
         course_clauses = _course_event_candidates(
             course_records.rows,
@@ -1117,6 +1177,7 @@ def _typed_chemotherapy_comparison(
                 unresolved_event_count += 1
                 continue
             claimed_clause_indexes.add(candidate_index)
+            selected_course_rows.append(candidate)
             comparison_text = _normalized_comparison_text(_row_text(candidate))
             for field in ("dose", "route"):
                 if _normalized_comparison_text(event[field]) not in comparison_text:
@@ -1137,14 +1198,44 @@ def _typed_chemotherapy_comparison(
         "unresolved_event_count": unresolved_event_count,
     }
     if missing_order_fields:
-        return "data_gap", "chemotherapy_order_fields_missing", facts
+        return (
+            "data_gap",
+            "chemotherapy_order_fields_missing",
+            facts,
+            chemotherapy_orders,
+            tuple(selected_course_rows),
+        )
     if unresolved_event_count:
-        return "data_gap", "chemotherapy_event_association_ambiguous", facts
+        return (
+            "data_gap",
+            "chemotherapy_event_association_ambiguous",
+            facts,
+            chemotherapy_orders,
+            tuple(selected_course_rows),
+        )
     if any(value == "unknown" for value in field_results.values()):
-        return "data_gap", "chemotherapy_time_unavailable", facts
+        return (
+            "data_gap",
+            "chemotherapy_time_unavailable",
+            facts,
+            chemotherapy_orders,
+            tuple(selected_course_rows),
+        )
     if any(value == "mismatched" for value in field_results.values()):
-        return "non_compliant", "chemotherapy_record_mismatch", facts
-    return "compliant", "chemotherapy_record_matches_order", facts
+        return (
+            "non_compliant",
+            "chemotherapy_record_mismatch",
+            facts,
+            chemotherapy_orders,
+            tuple(selected_course_rows),
+        )
+    return (
+        "compliant",
+        "chemotherapy_record_matches_order",
+        facts,
+        chemotherapy_orders,
+        tuple(selected_course_rows),
+    )
 
 
 def _typed_discharge_plan_outcome(
@@ -1258,6 +1349,49 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             )
         return typed_cache[source_key]
 
+    def typed_document_refs(
+        *selected: tuple[str, Sequence[Mapping[str, Any]]],
+    ) -> tuple[str, ...]:
+        """将执行器实际采用的材料行转换为同一会话已验证的文书引用。"""
+
+        if evidence_snapshot is None or evidence_materials is None:
+            return ()
+        refs: list[str] = []
+        for source_key, selected_rows in selected:
+            target_rows = {
+                id(
+                    row.get("_source_material_row")
+                    if isinstance(row.get("_source_material_row"), Mapping)
+                    else row
+                )
+                for row in selected_rows
+            }
+            if not target_rows:
+                continue
+            try:
+                document_rows = evidence_materials.document_rows(
+                    source_key,
+                    snapshot=evidence_snapshot,
+                )
+            except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable, ValueError):
+                continue
+            refs.extend(
+                document_ref
+                for document_ref, row in document_rows
+                if id(row) in target_rows
+            )
+        return tuple(dict.fromkeys(refs))
+
+    def typed_context_document_refs(
+        source_keys: Sequence[str],
+        materials: Mapping[str, SourceMaterial],
+    ) -> tuple[str, ...]:
+        """语义执行失败时保留真实送模上下文，不以来源级快照引用替代。"""
+
+        return typed_document_refs(
+            *( (source_key, materials[source_key].rows) for source_key in source_keys )
+        )
+
     wrappers_by_id = {
         str(wrapper.get("rule_id") or wrapper.get("rule_code") or "")
         .strip()
@@ -1276,12 +1410,14 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         *,
         executor_type: str,
         display_facts: Mapping[str, Any] | None = None,
+        fact_refs: Sequence[str] = (),
     ) -> None:
         outcome = _TumorRuleOutcome(
             rule_id=rule_id,
             status=status,
             reason_code=reason_code,
             executor_type=executor_type,
+            fact_refs=tuple(dict.fromkeys(fact_refs)),
         )
         if rule_id in typed_requested:
             assert evidence_snapshot is not None
@@ -1349,12 +1485,22 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     executor_type="program",
                 )
                 continue
-            if rule_id == "LX0609-013" and not _has_complete_pathology_result(report):
+            complete_pathology_report_row = (
+                _complete_pathology_result_row(report)
+                if rule_id == "LX0609-013"
+                else None
+            )
+            if rule_id == "LX0609-013" and complete_pathology_report_row is None:
                 emit_outcome(
                     rule_id,
                     "data_gap",
                     "pathology_final_result_or_report_time_unavailable",
                     executor_type="program",
+                    fact_refs=(
+                        typed_document_refs(("pathology_exam_report", report.rows))
+                        if typed_rule
+                        else ()
+                    ),
                 )
                 continue
             context_sources = (*_PATHOLOGY_SOURCES, *_PATHOLOGY_TARGET_SOURCES)
@@ -1460,7 +1606,13 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         executor_type="program",
                     )
                     continue
-                status, reason_code, display_facts = _typed_chemotherapy_comparison(
+                (
+                    status,
+                    reason_code,
+                    display_facts,
+                    selected_order_rows,
+                    selected_course_rows,
+                ) = _typed_chemotherapy_comparison(
                     orders=chemotherapy_orders,
                     course_records=course_records,
                 )
@@ -1470,6 +1622,10 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     reason_code,
                     executor_type="program",
                     display_facts=display_facts,
+                    fact_refs=typed_document_refs(
+                        ("inpat_drug_order", selected_order_rows),
+                        ("daily_course_record", selected_course_rows),
+                    ),
                 )
                 continue
             if typed_rule and rule_id == "LX0609-027":
@@ -1632,6 +1788,16 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     surgery_record=materials["surgery_record"],
                     daily_course_record=materials["daily_course_record"],
                 ),
+                fact_refs=(
+                        typed_document_refs(
+                            (
+                                "pathology_exam_report",
+                                (complete_pathology_report_row,),
+                            )
+                        )
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         if rule_id == "LX0609-019" and all(
@@ -1651,6 +1817,14 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 else "tumor_target_projection_unavailable",
                 executor_type="program",
                 display_facts=missing_sampling_facts,
+                fact_refs=(
+                    typed_document_refs(
+                        ("pathology_exam_master", master.rows),
+                        ("pathology_exam_report", report.rows),
+                    )
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         if rule_id in {"LX0609-013", "LX0609-019"}:
@@ -1680,6 +1854,13 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 reason_code,
                 executor_type="program",
                 display_facts=display_facts,
+                fact_refs=(
+                    typed_document_refs(
+                        ("discharge_record", materials["discharge_record"].rows)
+                    )
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         sampling_surgery = materials.get("surgery_record")
@@ -1701,10 +1882,25 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             )
             if live_surgery.state == "present":
                 sampling_surgery = live_surgery
-        if rule_id == "LX0609-019" and _has_documented_pathology_sampling(
-            sampling_surgery or materials["surgery_record"],
-            materials["daily_course_record"],
-        ):
+        sampling_materials = (
+            (
+                sampling_surgery or materials["surgery_record"],
+                materials["daily_course_record"],
+            )
+            if rule_id == "LX0609-019"
+            else ()
+        )
+        sampling_row = (
+            _documented_pathology_sampling_row(*sampling_materials)
+            if sampling_materials
+            else None
+        )
+        if rule_id == "LX0609-019" and sampling_row is not None:
+            sampling_source = (
+                "surgery_record"
+                if any(sampling_row is row for row in sampling_materials[0].rows)
+                else "daily_course_record"
+            )
             emit_outcome(
                 rule_id,
                 "compliant",
@@ -1716,21 +1912,61 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     surgery_record=sampling_surgery or materials["surgery_record"],
                     daily_course_record=materials["daily_course_record"],
                 ),
+                fact_refs=(
+                    typed_document_refs(
+                        ("pathology_exam_master", master.rows),
+                        ("pathology_exam_report", report.rows),
+                        (sampling_source, (sampling_row,)),
+                    )
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         if rule_id == "LX0609-013":
-            documented = _has_documented_pathology_result(
+            documented_row = _documented_pathology_result_row(
                 report,
                 materials["surgery_record"],
                 materials["daily_course_record"],
             )
-            explicitly_missing = _all_targets_explicitly_missing(
+            documented = documented_row is not None
+            explicitly_missing_rows = _explicitly_missing_target_rows(
                 _PATHOLOGY_RESULT_MISSING_PATTERN,
                 materials["surgery_record"],
                 materials["daily_course_record"],
             )
+            explicitly_missing = bool(explicitly_missing_rows)
             if documented or explicitly_missing:
                 status = "compliant" if documented else "non_compliant"
+                if documented_row is not None:
+                    target_source_rows = (
+                        (
+                            "surgery_record"
+                            if any(
+                                documented_row is row
+                                for row in materials["surgery_record"].rows
+                            )
+                            else "daily_course_record",
+                            (documented_row,),
+                        ),
+                    )
+                else:
+                    target_source_rows = tuple(
+                        (
+                            source_key,
+                            tuple(
+                                row
+                                for row in explicitly_missing_rows
+                                if any(
+                                    row is candidate for candidate in material.rows
+                                )
+                            ),
+                        )
+                        for source_key, material in (
+                            ("surgery_record", materials["surgery_record"]),
+                            ("daily_course_record", materials["daily_course_record"]),
+                        )
+                    )
                 emit_outcome(
                     rule_id,
                     status,
@@ -1745,13 +1981,29 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         surgery_record=materials["surgery_record"],
                         daily_course_record=materials["daily_course_record"],
                     ),
+                    fact_refs=(
+                        typed_document_refs(
+                            (
+                                "pathology_exam_report",
+                                (complete_pathology_report_row,),
+                            ),
+                            *target_source_rows,
+                        )
+                        if typed_rule
+                        else ()
+                    ),
                 )
                 continue
-        if rule_id == "LX0609-019" and _all_targets_explicitly_missing(
-            _PATHOLOGY_SAMPLING_MISSING_PATTERN,
-            materials["surgery_record"],
-            materials["daily_course_record"],
-        ):
+        missing_sampling_rows = (
+            _explicitly_missing_target_rows(
+                _PATHOLOGY_SAMPLING_MISSING_PATTERN,
+                materials["surgery_record"],
+                materials["daily_course_record"],
+            )
+            if rule_id == "LX0609-019"
+            else ()
+        )
+        if rule_id == "LX0609-019" and missing_sampling_rows:
             missing_sampling_facts = _lx019_missing_sampling_display_facts(
                 pathology_master=master,
                 pathology_report=report,
@@ -1766,6 +2018,16 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 else "tumor_target_projection_unavailable",
                 executor_type="program",
                 display_facts=missing_sampling_facts,
+                fact_refs=(
+                    typed_document_refs(
+                        ("pathology_exam_master", master.rows),
+                        ("pathology_exam_report", report.rows),
+                        ("surgery_record", (missing_sampling_rows[0],)),
+                        ("daily_course_record", (missing_sampling_rows[1],)),
+                    )
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         context = "\n".join(
@@ -1790,6 +2052,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 # 未发起请求不等于程序规则完成判定：此处失败的是受控语义执行器
                 # 的可用性，审计类型必须与传输/输出失败保持一致。
                 executor_type="llm",
+                fact_refs=(
+                    typed_context_document_refs(context_sources, materials)
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         llm_call_count += 1
@@ -1801,6 +2068,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 "technical_error",
                 "tumor_llm_failure",
                 executor_type="llm",
+                fact_refs=(
+                    typed_context_document_refs(context_sources, materials)
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         if not isinstance(response, Mapping):
@@ -1809,6 +2081,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 "technical_error",
                 "tumor_llm_invalid_output",
                 executor_type="llm",
+                fact_refs=(
+                    typed_context_document_refs(context_sources, materials)
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         prompt, completion, total, elapsed = _usage(response)
@@ -1823,6 +2100,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 "technical_error",
                 "tumor_llm_invalid_output",
                 executor_type="llm",
+                fact_refs=(
+                    typed_context_document_refs(context_sources, materials)
+                    if typed_rule
+                    else ()
+                ),
             )
             continue
         status = "compliant" if is_compliant else "non_compliant"
@@ -1841,6 +2123,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 )
                 if rule_id == "LX0609-013"
                 else None
+            ),
+            fact_refs=(
+                typed_context_document_refs(context_sources, materials)
+                if typed_rule
+                else ()
             ),
         )
 

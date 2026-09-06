@@ -294,6 +294,21 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
     ]
     assert {
         (item["source_type"], item["source_document_id"])
+        for item in by_rule_id["LX0609-013"]["customer_evidence"]
+    } == {
+        ("pathology_exam_report", "path-report-1"),
+        ("surgery_record", "surgery-1"),
+    }
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in by_rule_id["LX0609-019"]["customer_evidence"]
+    } == {
+        ("pathology_exam_master", "path-master-1"),
+        ("pathology_exam_report", "path-report-1"),
+        ("surgery_record", "surgery-1"),
+    }
+    assert {
+        (item["source_type"], item["source_document_id"])
         for item in by_rule_id["LX0609-026"]["customer_evidence"]
     } == {
         ("inpat_drug_order", "chemo-order-1"),
@@ -303,9 +318,6 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
         (item["source_type"], item["source_document_id"])
         for item in by_rule_id["LX0609-027"]["customer_evidence"]
     } == {
-        ("diagnosis", "diagnosis-1"),
-        ("discharge_record_diagnosis", "discharge-dx-1"),
-        ("pathology_exam_report", "path-report-1"),
         ("discharge_record", "discharge-1"),
     }
 
@@ -403,6 +415,16 @@ async def test_tumor_pathology_semantic_failures_are_technical_errors_through_bi
         "technical_error",
         "technical_error",
     ]
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for result in customer_results
+        for item in result["customer_evidence"]
+    } == {
+        ("pathology_exam_master", "path-master-1"),
+        ("pathology_exam_report", "path-report-1"),
+        ("surgery_record", "surgery-1"),
+        ("daily_course_record", "course-1"),
+    }
     assert len(client.prompts) == 2
 
 
