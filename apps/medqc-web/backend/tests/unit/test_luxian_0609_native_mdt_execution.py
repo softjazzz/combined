@@ -250,12 +250,6 @@ async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four
         "procedure_code": "01.2408",
         "procedure_name": "颅内血肿清除术",
         "mdt_discussion_state": "completed",
-        "source_document_refs": [
-            {
-                "source_type": "mr_surgery",
-                "source_document_id": "surgery-event-1",
-            }
-        ],
     }
 
 

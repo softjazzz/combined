@@ -1,9 +1,8 @@
-"""040 手术多学科讨论规则的客户事实合同与旧入口证据适配。
+"""040 手术多学科讨论规则的客户事实合同。
 
 本模块只接收 ``native_mdt_execution`` 已完成的判定事实：不读取资料、
 不重新计算手术等级或 MDT 状态。正式主链的文书选择始终由
-``fact_refs → Binding → 公共 selected-document projector`` 完成；此处只为
-仍存在的 aggregate 直调入口保留迁移前已经明确的 ``mr_surgery`` 坐标。
+``fact_refs → Binding → 公共 selected-document projector`` 完成。
 """
 
 from __future__ import annotations
@@ -124,45 +123,3 @@ def legacy_surgery_mdt_contract_error(
     if raw_facts is not None and safe_facts is None:
         return "invalid customer display facts"
     return ""
-
-
-def _valid_document_id(value: Any) -> str:
-    candidate = str(value or "").strip()
-    return (
-        candidate
-        if candidate and len(candidate) <= 256 and "\n" not in candidate and "\r" not in candidate
-        else ""
-    )
-
-
-def legacy_surgery_mdt_customer_evidence(
-    *, rule_id: str, raw: Any, safe_facts: Mapping[str, Any] | None
-) -> list[dict[str, str]] | None:
-    """保留旧 aggregate 直调中已存在的 040 手术触发坐标。
-
-    严格只接收 ``mr_surgery``；讨论、会诊等文书不能由裸展示 facts 猜测。
-    """
-
-    if not is_surgery_mdt_customer_rule(rule_id):
-        return None
-    if not isinstance(raw, Mapping) or safe_facts is None:
-        return []
-    raw_refs = raw.get("source_document_refs")
-    if not isinstance(raw_refs, list) or len(raw_refs) > 8:
-        return []
-    located: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for item in raw_refs:
-        if not isinstance(item, Mapping) or set(item) != {
-            "source_type",
-            "source_document_id",
-        }:
-            return []
-        source_type = str(item.get("source_type") or "").strip()
-        document_id = _valid_document_id(item.get("source_document_id"))
-        key = (source_type, document_id)
-        if source_type != "mr_surgery" or not document_id or key in seen:
-            return []
-        seen.add(key)
-        located.append({"source_type": source_type, "source_document_id": document_id})
-    return located

@@ -46,6 +46,14 @@ def test_finalizer_delegates_consultation_facts_to_the_family_projection() -> No
     assert "source_document_id" not in str(facts)
 
 
+def test_finalizer_requires_public_fact_ref_evidence_for_040() -> None:
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalizer_requires_public_fact_ref_evidence,
+    )
+
+    assert finalizer_requires_public_fact_ref_evidence("LX0609-040") is True
+
+
 @pytest.mark.parametrize(
     ("rule_id", "raw"),
     (

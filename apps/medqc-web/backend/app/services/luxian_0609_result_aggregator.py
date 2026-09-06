@@ -29,9 +29,6 @@ from .luxian_0609.surgery_gate_result_mapping import (
 from .luxian_0609.surgery_document_result_mapping import (
     legacy_surgery_document_customer_evidence,
 )
-from .luxian_0609.surgery_mdt_result_mapping import (
-    legacy_surgery_mdt_customer_evidence,
-)
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
     TRIGGER_ABSENT,
@@ -383,13 +380,6 @@ def _customer_evidence_from_display_facts(
         raw=raw,
     )
     if verified_facts is not NotImplemented:
-        surgery_mdt_evidence = legacy_surgery_mdt_customer_evidence(
-            rule_id=rule_id,
-            raw=raw,
-            safe_facts=verified_facts,
-        )
-        if surgery_mdt_evidence is not None:
-            return surgery_mdt_evidence
         surgery_document_evidence = legacy_surgery_document_customer_evidence(
             rule_id=rule_id,
             raw=raw,

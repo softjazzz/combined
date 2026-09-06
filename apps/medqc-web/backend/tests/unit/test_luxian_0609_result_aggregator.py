@@ -287,31 +287,77 @@ def test_canonical_projection_rejects_raw_recommendation_evidence_ids():
         envelope_item_from_rule_result(item)
 
 
-@pytest.mark.parametrize(
-    ("rule_id", "facts", "expected"),
-    [
-        (
-            "LX0609-040",
-            {
-                "failure_kind": "level4_mdt_absent",
-                "performed_surgery_confirmed": True,
-                "procedure_kind": "surgery",
-                "effective_surgery_level": "四级",
-                "surgery_level_source": "national_catalog",
-                "procedure_name": "四级手术",
-                "mdt_discussion_state": "missing",
-                "source_document_refs": [
-                    {"source_type": "mr_surgery", "source_document_id": "surgery-event-1"}
-                ],
-            },
-            [{"source_type": "mr_surgery", "source_document_id": "surgery-event-1"}],
-        ),
-    ],
-)
-def test_legacy_determined_missing_results_keep_exact_trigger_evidence(
-    rule_id, facts, expected
+def test_040_display_facts_never_reproject_legacy_document_refs() -> None:
+    facts = {
+        "failure_kind": "level4_mdt_absent",
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "四级",
+        "surgery_level_source": "national_catalog",
+        "procedure_name": "四级手术",
+        "mdt_discussion_state": "missing",
+        "source_document_refs": [
+            {"source_type": "mr_surgery", "source_document_id": "surgery-event-1"}
+        ],
+    }
+
+    assert _customer_evidence_from_display_facts(rule_id="LX0609-040", raw=facts) == []
+
+
+def test_040_customer_evidence_uses_only_public_selected_fact_refs(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert _customer_evidence_from_display_facts(rule_id=rule_id, raw=facts) == expected
+    import app.services.luxian_0609_result_aggregator as aggregator
+
+    fact_ref = hashlib.sha256(b"040-selected-document").hexdigest()
+    selected_evidence = [
+        {"source_type": "mr_surgery", "source_document_id": "surgery-event-040"}
+    ]
+    captured: dict[str, object] = {}
+
+    def project_selected_document_evidence(**kwargs: object) -> list[dict[str, str]]:
+        captured.update(kwargs)
+        return selected_evidence
+
+    monkeypatch.setattr(
+        aggregator,
+        "project_selected_document_evidence",
+        project_selected_document_evidence,
+    )
+    result = aggregator.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-040", "name": "手术 MDT"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision(
+                "LX0609-040",
+                direction=QcDirection.DEFECT,
+                fact_refs=(fact_ref,),
+            ),
+        ),
+        customer_display_facts=(
+            (
+                "LX0609-040",
+                {
+                    "performed_surgery_confirmed": True,
+                    "procedure_kind": "surgery",
+                    "effective_surgery_level": "四级",
+                    "surgery_level_source": "national_catalog",
+                    "mdt_discussion_state": "missing",
+                    "source_document_refs": [
+                        {
+                            "source_type": "mr_surgery",
+                            "source_document_id": "private-legacy-040",
+                        }
+                    ],
+                },
+            ),
+        ),
+        format_evidence=False,
+    )[0]
+
+    assert result["customer_evidence"] == selected_evidence
+    assert captured["decision"].fact_refs == (fact_ref,)
+    assert "source_document_refs" not in result["customer_display_facts"]
 
 
 def test_058_safe_projection_keeps_only_timed_expert_support_facts() -> None:

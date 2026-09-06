@@ -4,7 +4,6 @@ from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_executor_customer_display_facts,
 )
 from app.services.luxian_0609.surgery_mdt_result_mapping import (
-    legacy_surgery_mdt_customer_evidence,
     safe_surgery_mdt_customer_display_facts,
 )
 
@@ -32,25 +31,6 @@ def test_mdt_facts_remove_internal_ids_and_preserve_the_public_contract() -> Non
     ) == _MISSING_FACTS
 
 
-def test_mdt_legacy_direct_evidence_only_accepts_explicit_surgery_trigger() -> None:
-    raw = {
-        **_MISSING_FACTS,
-        "source_document_refs": [
-            {"source_type": "mr_surgery", "source_document_id": "SURGERY-040"}
-        ],
-    }
-    assert legacy_surgery_mdt_customer_evidence(
-        rule_id="LX0609-040", raw=raw, safe_facts=_MISSING_FACTS
-    ) == [{"source_type": "mr_surgery", "source_document_id": "SURGERY-040"}]
-
-    raw["source_document_refs"] = [
-        {"source_type": "presurg_discussion", "source_document_id": "DISCUSSION-040"}
-    ]
-    assert legacy_surgery_mdt_customer_evidence(
-        rule_id="LX0609-040", raw=raw, safe_facts=_MISSING_FACTS
-    ) == []
-
-
 def test_mdt_status_and_safe_facts_conflict_becomes_technical_error() -> None:
     finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
         result={
@@ -66,3 +46,24 @@ def test_mdt_status_and_safe_facts_conflict_becomes_technical_error() -> None:
     assert finalized["status"] == "technical_error"
     assert finalized["reason_code"] == "model_invalid_output"
     assert "findings" not in finalized
+
+
+def test_mdt_invalid_typed_facts_become_technical_error() -> None:
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-040",
+            "status": "non_compliant",
+            "reason_code": "preoperative_mdt_absent",
+            "findings": "不应保留",
+            "customer_evidence": [{"source_document_id": "PRIVATE-040"}],
+        },
+        raw_facts={"raw_private_text": "PRIVATE-MDT-040"},
+    )
+
+    assert handled is True
+    assert (finalized["status"], finalized["reason_code"]) == (
+        "technical_error",
+        "model_invalid_output",
+    )
+    assert "customer_display_facts" not in finalized
+    assert "customer_evidence" not in finalized

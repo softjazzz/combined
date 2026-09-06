@@ -494,6 +494,7 @@ def finalizer_requires_public_fact_ref_evidence(rule_id: str) -> bool:
     from .postoperative_result_mapping import is_postoperative_customer_rule
     from .transfusion_result_mapping import is_transfusion_public_fact_ref_evidence_rule
     from .continuity_result_mapping import is_continuity_customer_rule
+    from .surgery_mdt_result_mapping import is_surgery_mdt_customer_rule
 
     return (
         is_discharge_customer_rule(rule_id)
@@ -503,6 +504,7 @@ def finalizer_requires_public_fact_ref_evidence(rule_id: str) -> bool:
         or is_postoperative_customer_rule(rule_id)
         or is_transfusion_public_fact_ref_evidence_rule(rule_id)
         or is_continuity_customer_rule(rule_id)
+        or is_surgery_mdt_customer_rule(rule_id)
     )
 
 
