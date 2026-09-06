@@ -18,6 +18,12 @@ from .decision_model import (
     QcDirection,
     RuleDecision,
 )
+from .continuity_evidence_selection import (
+    bind_consultation_evidence,
+    bind_diagnosis_change_evidence,
+    bind_handoff_evidence,
+    bind_transfer_evidence,
+)
 from .evidence_material import (
     EvidenceMaterialTruncated,
     EvidenceMaterialUnavailable,
@@ -3463,13 +3469,33 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
+            consultation_binding = bind_consultation_evidence(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                consultation_rows=consultation_rows,
+                display_facts=outcome.display_facts,
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
-                    source_keys=("consultation_record",),
-                    final_state=outcome.final_state,
-                    reason_code=outcome.reason_code,
+                    source_keys=(
+                        ()
+                        if consultation_binding.document_refs
+                        else ("consultation_record",)
+                    ),
+                    document_refs=consultation_binding.document_refs,
+                    exact_document_refs=bool(consultation_binding.document_refs),
+                    final_state=(
+                        "technical_error"
+                        if consultation_binding.binding_failed
+                        else outcome.final_state
+                    ),
+                    reason_code=(
+                        "snapshot_mismatch"
+                        if consultation_binding.binding_failed
+                        else outcome.reason_code
+                    ),
                 )
             )
             continue
@@ -3489,17 +3515,35 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
+            handoff_binding = bind_handoff_evidence(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                handoff_rows=handoff_rows,
+                handover_rows=handover_rows,
+                display_facts=outcome.display_facts,
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        outcome.change_source_key,
-                        "handoff_record",
-                        "handover_record",
+                        (outcome.change_source_key,)
                     ),
-                    final_state=outcome.final_state,
-                    reason_code=outcome.reason_code,
+                    document_refs=handoff_binding.document_refs,
+                    # physician_change_event 尚未纳入客户文书投影白名单。保留它的
+                    # snapshot 判定锚点，并只让已匹配的交/接班文书进入公共证据；
+                    # 兼容字段待后续结构提交统一删除。
+                    exact_document_refs=False,
+                    final_state=(
+                        "technical_error"
+                        if handoff_binding.binding_failed
+                        else outcome.final_state
+                    ),
+                    reason_code=(
+                        "snapshot_mismatch"
+                        if handoff_binding.binding_failed
+                        else outcome.reason_code
+                    ),
                 )
             )
             continue
@@ -3520,34 +3564,53 @@ async def execute_luxian_0609_native_extended_document_rules(
             final_state, reason_code = outcome.final_state, outcome.reason_code
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
+            transfer_binding = bind_transfer_evidence(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                nondrug_order_rows=nondrug_order_rows,
+                transfer_in_rows=transfer_in_rows,
+                transfer_out_rows=transfer_out_rows,
+                display_facts=outcome.display_facts,
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        "inpat_nondrug_order",
-                        "transfer_in_record",
-                        "transfer_out_record",
-                        *(
-                            ("evaluation_context.horizon",)
-                            if rule_id == "LX0609-072"
-                            else ()
-                        ),
+                        () if transfer_binding.document_refs else ("inpat_nondrug_order",)
                     ),
-                    final_state=final_state,
-                    reason_code=reason_code,
+                    document_refs=transfer_binding.document_refs,
+                    exact_document_refs=bool(transfer_binding.document_refs),
+                    final_state=(
+                        "technical_error"
+                        if transfer_binding.binding_failed
+                        else final_state
+                    ),
+                    reason_code=(
+                        "snapshot_mismatch"
+                        if transfer_binding.binding_failed
+                        else reason_code
+                    ),
                 )
             )
             continue
 
         if rule_id == "LX0609-074":
+            change_events: list[tuple[datetime, str, Mapping[str, Any]]] = []
+            candidate_rows: tuple[
+                tuple[datetime | None, str, str, Mapping[str, Any]], ...
+            ] = ()
+            matching_course_indexes: tuple[tuple[int, ...], ...] = ()
+            uniquely_matched = False
             if diagnosis_error or daily_error or senior_error:
                 final_state, reason_code = (
                     "data_gap",
                     diagnosis_error or daily_error or senior_error,
                 )
             else:
-                diagnoses_by_slot: dict[tuple[str, str], list[tuple[datetime, str]]] = {}
+                diagnoses_by_slot: dict[
+                    tuple[str, str], list[tuple[datetime, str, Mapping[str, Any]]]
+                ] = {}
                 invalid_reason: str | None = None
                 association_issue: str | None = None
                 for row in diagnosis_rows:
@@ -3564,13 +3627,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                         break
                     diagnoses_by_slot.setdefault(
                         (diagnosis_type, diagnosis_no), []
-                    ).append((diagnosis_time, diagnosis_name))
+                    ).append((diagnosis_time, diagnosis_name, row))
 
-                change_events: list[tuple[datetime, str]] = []
                 if invalid_reason is None:
                     for slot_diagnoses in diagnoses_by_slot.values():
                         names_by_time: dict[datetime, set[str]] = {}
-                        for diagnosis_time, diagnosis_name in slot_diagnoses:
+                        for diagnosis_time, diagnosis_name, _row in slot_diagnoses:
                             names_by_time.setdefault(diagnosis_time, set()).add(diagnosis_name)
                         if any(len(names) > 1 for names in names_by_time.values()):
                             invalid_reason = "association_failed"
@@ -3578,14 +3640,24 @@ async def execute_luxian_0609_native_extended_document_rules(
                             break
                         ordered_diagnoses = sorted(
                             (
-                                (diagnosis_time, next(iter(names)))
+                                (
+                                    diagnosis_time,
+                                    next(iter(names)),
+                                    next(
+                                        row
+                                        for candidate_time, candidate_name, row
+                                        in slot_diagnoses
+                                        if candidate_time == diagnosis_time
+                                        and candidate_name in names
+                                    ),
+                                )
                                 for diagnosis_time, names in names_by_time.items()
                             ),
                             key=lambda item: item[0],
                         )
                         change_events.extend(
-                            (current_time, current_name)
-                            for (_, previous_name), (current_time, current_name) in zip(
+                            (current_time, current_name, current_row)
+                            for (_, previous_name, _), (current_time, current_name, current_row) in zip(
                                 ordered_diagnoses, ordered_diagnoses[1:]
                             )
                             if current_name != previous_name
@@ -3607,8 +3679,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                 else:
                     course_rows = tuple(
-                        (_row_time(row), _row_text(row))
-                        for row in (*daily_rows, *senior_rows)
+                        (_row_time(row), _row_text(row), source_key, row)
+                        for source_key, source_rows in (
+                            ("daily_course_record", daily_rows),
+                            ("senior_course_record", senior_rows),
+                        )
+                        for row in source_rows
                     )
                     reason_markers = (
                         "修正诊断",
@@ -3617,8 +3693,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     basis_markers = ("诊断依据", "依据为", "依据：", "依据:")
                     candidate_rows = tuple(
-                        (record_time, text)
-                        for record_time, text in course_rows
+                        (record_time, text, source_key, row)
+                        for record_time, text, source_key, row in course_rows
                         if any(marker in text for marker in reason_markers)
                         and any(marker in text for marker in basis_markers)
                     )
@@ -3626,7 +3702,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         changed_diagnosis_name = change_events[0][1]
                         has_changed_diagnosis_reference = any(
                             changed_diagnosis_name in text
-                            for _, text in candidate_rows
+                            for _, text, _source_key, _row in candidate_rows
                         )
                         if not has_changed_diagnosis_reference:
                             # 有带时间的理由/依据候选，但未提及本次变更后的
@@ -3640,13 +3716,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                         else:
                             has_reason_and_basis = any(
                                 record_time is not None and record_time >= change_events[0][0]
-                                for record_time, _ in candidate_rows
+                                for record_time, _text, _source_key, _row in candidate_rows
                             )
                         if (
                             has_changed_diagnosis_reference
                             and not has_reason_and_basis
                             and candidate_rows
-                            and all(record_time is None for record_time, _ in candidate_rows)
+                            and all(
+                                record_time is None
+                                for record_time, _text, _source_key, _row
+                                in candidate_rows
+                            )
                         ):
                             final_state, reason_code = (
                                 "data_gap",
@@ -3671,12 +3751,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                         matching_course_indexes = tuple(
                             tuple(
                                 index
-                                for index, (record_time, text) in enumerate(candidate_rows)
+                                for index, (record_time, text, _source_key, _row) in enumerate(candidate_rows)
                                 if record_time is not None
                                 and record_time >= change_time
                                 and diagnosis_name in text
                             )
-                            for change_time, diagnosis_name in change_events
+                            for change_time, diagnosis_name, _change_row in change_events
                         )
                         uniquely_matched = (
                             len(matching_course_indexes) == len(change_events)
@@ -3711,17 +3791,35 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "reason_recorded": has_reason_and_basis,
                             "basis_recorded": has_reason_and_basis,
                         }))
+            diagnosis_binding = bind_diagnosis_change_evidence(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                change_events=change_events,
+                candidate_rows=candidate_rows,
+                matching_course_indexes=matching_course_indexes,
+                uniquely_matched=uniquely_matched,
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        "diagnosis",
-                        "daily_course_record",
-                        "senior_course_record",
+                        ()
+                        if diagnosis_binding.document_refs
+                        else ("diagnosis",)
                     ),
-                    final_state=final_state,
-                    reason_code=reason_code,
+                    document_refs=diagnosis_binding.document_refs,
+                    exact_document_refs=bool(diagnosis_binding.document_refs),
+                    final_state=(
+                        "technical_error"
+                        if diagnosis_binding.binding_failed
+                        else final_state
+                    ),
+                    reason_code=(
+                        "snapshot_mismatch"
+                        if diagnosis_binding.binding_failed
+                        else reason_code
+                    ),
                 )
             )
             continue

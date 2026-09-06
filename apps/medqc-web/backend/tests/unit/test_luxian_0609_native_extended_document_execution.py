@@ -5,6 +5,9 @@ from datetime import datetime
 import pytest
 
 from app.services.luxian_0609 import native_extended_document_execution as module
+from app.services.luxian_0609.continuity_evidence_selection import (
+    ContinuityEvidenceBinding,
+)
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -647,7 +650,10 @@ async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidenc
     )
     assert execution.decisions[0].fact_refs == selected_fact_refs
     assert len(selected_fact_refs) == 2
-    assert canonical["customer_evidence"] == [
+    assert sorted(
+        canonical["customer_evidence"],
+        key=lambda item: (item["source_type"], item["source_document_id"]),
+    ) == sorted([
         {
             "source_type": "death_record",
             "source_document_id": "death-record-051",
@@ -658,7 +664,7 @@ async def test_051_uses_earliest_postdeath_discussion_and_only_its_exact_evidenc
             "source_document_id": "timely-discussion-051",
             "record_time": "2026-07-02 12:00:00",
         },
-    ]
+    ], key=lambda item: (item["source_type"], item["source_document_id"]))
     assert "late-discussion-051" not in repr(canonical)
     assert execution.llm_call_count == 0
     assert execution.total_tokens == 0
@@ -2040,16 +2046,14 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
             "outcome": "completed_within_threshold",
         },
     ]
-    assert canonical["customer_evidence"] == [
+    assert sorted(
+        canonical["customer_evidence"],
+        key=lambda item: (item["source_type"], item["source_document_id"]),
+    ) == sorted([
         {
             "source_type": "handoff_record",
             "source_document_id": "HANDOFF-1",
             "record_time": "2026-07-01 07:50:00",
-        },
-        {
-            "source_type": "handover_record",
-            "source_document_id": "HANDOVER-1",
-            "record_time": "2026-07-01 14:00:00",
         },
         {
             "source_type": "handoff_record",
@@ -2058,10 +2062,15 @@ async def test_071_multiple_change_events_are_checked_in_disjoint_event_windows(
         },
         {
             "source_type": "handover_record",
+            "source_document_id": "HANDOVER-1",
+            "record_time": "2026-07-01 14:00:00",
+        },
+        {
+            "source_type": "handover_record",
             "source_document_id": "HANDOVER-2",
             "record_time": "2026-07-03 14:00:00",
         },
-    ]
+    ], key=lambda item: (item["source_type"], item["source_document_id"]))
     assert "第1次变更" in canonical["findings"]
     assert "第2次变更" in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
@@ -7864,3 +7873,217 @@ async def test_075_invasive_order_without_course_record_delivers_defect_facts() 
         "ordered_procedures": ["中心静脉置管"],
         "course_documented": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_069_fact_refs_only_include_the_paired_consultation_documents() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-069",),
+        {
+            "consultation_record": (
+                {
+                    "document_id": "CONSULT-069-REQUEST",
+                    "document_title": "会诊申请单",
+                    "record_time": "2026-07-01 08:00:00",
+                },
+                {
+                    "document_id": "CONSULT-069-RECORD",
+                    "document_title": "会诊记录单",
+                    "record_time": "2026-07-01 14:00:00",
+                },
+                {
+                    "document_id": "CONSULT-069-UNRELATED",
+                    "document_title": "日常病程记录",
+                    "record_time": "2026-06-01 14:00:00",
+                },
+            ),
+        },
+    )
+    refs = {
+        row["document_id"]: ref
+        for ref, row in materials.document_rows("consultation_record", snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert set(execution.decisions[0].fact_refs) == {
+        refs["CONSULT-069-REQUEST"],
+        refs["CONSULT-069-RECORD"],
+    }
+    assert refs["CONSULT-069-UNRELATED"] not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ("LX0609-072", "LX0609-073"))
+async def test_transfer_fact_refs_exclude_horizon_and_unmatched_transfer_documents(
+    rule_id: str,
+) -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        (rule_id,),
+        {
+            "inpat_nondrug_order": (
+                {
+                    "document_id": "ORDER-TRANSFER-MATCH",
+                    "order_name": "转科医嘱",
+                    "prescribed_datetime": "2026-07-01 08:00:00",
+                },
+                {
+                    "document_id": "ORDER-TRANSFER-UNRELATED",
+                    "order_name": "普通医嘱",
+                    "prescribed_datetime": "2026-07-01 08:00:00",
+                },
+            ),
+            "transfer_in_record": (
+                {
+                    "document_id": "TRANSFER-IN-MATCH",
+                    "record_time": "2026-07-01 09:00:00",
+                },
+                {
+                    "document_id": "TRANSFER-IN-UNRELATED",
+                    "record_time": "2026-06-01 09:00:00",
+                },
+            ),
+            "transfer_out_record": (
+                {
+                    "document_id": "TRANSFER-OUT-MATCH",
+                    "record_time": "2026-07-01 10:00:00",
+                },
+                {
+                    "document_id": "TRANSFER-OUT-UNRELATED",
+                    "record_time": "2026-06-01 10:00:00",
+                },
+            ),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-07-03 08:00:00",
+                "horizon_date": "2026-07-03",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+    refs = {
+        row["document_id"]: ref
+        for source_key in (
+            "inpat_nondrug_order",
+            "transfer_in_record",
+            "transfer_out_record",
+        )
+        for ref, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert set(execution.decisions[0].fact_refs) == {
+        refs["ORDER-TRANSFER-MATCH"],
+        refs["TRANSFER-IN-MATCH"],
+        refs["TRANSFER-OUT-MATCH"],
+    }
+    horizon_refs = {
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key == "evaluation_context.horizon"
+    }
+    assert set(execution.decisions[0].fact_refs).isdisjoint(horizon_refs)
+    assert refs["TRANSFER-IN-UNRELATED"] not in execution.decisions[0].fact_refs
+    assert refs["TRANSFER-OUT-UNRELATED"] not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_074_fact_refs_only_include_changed_diagnosis_and_matching_course() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {
+            "diagnosis": (
+                {
+                    "document_id": "DIAGNOSIS-074-BEFORE",
+                    "diagnosis_datetime": "2026-07-01 08:00:00",
+                    "diagnosis_name": "肺部感染",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+                {
+                    "document_id": "DIAGNOSIS-074-CHANGE",
+                    "diagnosis_datetime": "2026-07-02 08:00:00",
+                    "diagnosis_name": "细菌性肺炎",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "document_id": "COURSE-074-MATCH",
+                    "record_time": "2026-07-02 09:00:00",
+                    "record_content": "补充诊断：细菌性肺炎。诊断依据为培养结果。",
+                },
+                {
+                    "document_id": "COURSE-074-UNRELATED",
+                    "record_time": "2026-07-02 10:00:00",
+                    "record_content": "患者一般情况尚可。",
+                },
+            ),
+        },
+    )
+    refs = {
+        row["document_id"]: ref
+        for source_key in ("diagnosis", "daily_course_record")
+        for ref, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert set(execution.decisions[0].fact_refs) == {
+        refs["DIAGNOSIS-074-CHANGE"],
+        refs["COURSE-074-MATCH"],
+    }
+    assert refs["DIAGNOSIS-074-BEFORE"] not in execution.decisions[0].fact_refs
+    assert refs["COURSE-074-UNRELATED"] not in execution.decisions[0].fact_refs
+
+
+def test_continuity_invalid_exact_fact_ref_is_technical_failure_not_business_state() -> None:
+    snapshot, materials = _session({"consultation_record": ()})
+    decision = module._decision(
+        rule_id="LX0609-069",
+        snapshot=snapshot,
+        source_keys=(),
+        document_refs=("0" * 64,),
+        exact_document_refs=True,
+        final_state="non_compliant",
+        reason_code="threshold_exceeded",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-069",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "snapshot_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_069_consumed_document_binding_failure_closes_as_technical_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        module,
+        "bind_consultation_evidence",
+        lambda **_kwargs: ContinuityEvidenceBinding((), binding_failed=True),
+    )
+    _, _, _execution, reduced = await _evaluate_selected(
+        ("LX0609-069",),
+        {
+            "consultation_record": (
+                {
+                    "document_id": "CONSULT-069-REQUEST-FAIL",
+                    "document_title": "会诊申请单",
+                    "record_time": "2026-07-01 08:00:00",
+                },
+                {
+                    "document_id": "CONSULT-069-RECORD-FAIL",
+                    "document_title": "会诊记录单",
+                    "record_time": "2026-07-01 14:00:00",
+                },
+            ),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "snapshot_mismatch"
