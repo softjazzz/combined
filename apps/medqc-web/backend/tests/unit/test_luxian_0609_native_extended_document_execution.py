@@ -6900,6 +6900,232 @@ async def test_065_rejects_conflicting_evaluation_horizon_before_missing_senior_
 
 
 @pytest.mark.asyncio
+async def test_055_fact_refs_only_include_matched_start_order_and_window_evaluation() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-055",),
+        {
+            "inpat_drug_order": ({
+                "document_id": "ORDER-055-M",
+                "order_id": "ORDER-055-M",
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": (
+                {
+                    "document_id": "COURSE-055-MATCH",
+                    "related_order_id": "ORDER-055-M",
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "美罗培南抗感染治疗效果评价：有效。",
+                },
+                {
+                    "document_id": "COURSE-055-OTHER",
+                    "related_order_id": "ORDER-055-OTHER",
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "美罗培南抗感染治疗效果评价：有效。",
+                },
+            ),
+            "evaluation_context.horizon": ({
+                "horizon_datetime": "2026-06-04 10:00:00",
+                "horizon_date": "2026-06-04",
+                "basis": "evaluation_as_of",
+            },),
+        },
+    )
+
+    order_ref = next(
+        reference
+        for reference, row in materials.document_rows(
+            "inpat_drug_order", snapshot=snapshot
+        )
+        if row["document_id"] == "ORDER-055-M"
+    )
+    matched_course_ref = next(
+        reference
+        for reference, row in materials.document_rows(
+            "daily_course_record", snapshot=snapshot
+        )
+        if row["document_id"] == "COURSE-055-MATCH"
+    )
+    unrelated_course_ref = next(
+        reference
+        for reference, row in materials.document_rows(
+            "daily_course_record", snapshot=snapshot
+        )
+        if row["document_id"] == "COURSE-055-OTHER"
+    )
+    horizon_ref = next(
+        reference
+        for reference, _row in materials.document_rows(
+            "evaluation_context.horizon", snapshot=snapshot
+        )
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert execution.decisions[0].fact_refs == tuple(
+        sorted((order_ref, matched_course_ref))
+    )
+    assert unrelated_course_ref not in execution.decisions[0].fact_refs
+    assert horizon_ref not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_054_fact_refs_only_include_trigger_action_matched_order_and_reason() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-054",),
+        {
+            "inpat_drug_order": ({
+                "document_id": "ORDER-054-MATCH",
+                "order_id": "ORDER-054-MATCH",
+                "generic_name": "美罗培南",
+            },),
+            "daily_course_record": (
+                {
+                    "document_id": "COURSE-054-ACTION",
+                    "related_order_id": "ORDER-054-MATCH",
+                    "record_content": "停用美罗培南。",
+                },
+                {
+                    "document_id": "COURSE-054-REASON",
+                    "related_order_id": "ORDER-054-MATCH",
+                    "record_content": "考虑感染已控制，停用理由已记录。",
+                },
+                {
+                    "document_id": "COURSE-054-OTHER",
+                    "related_order_id": "ORDER-054-OTHER",
+                    "record_content": "考虑感染，继续观察病情。",
+                },
+            ),
+        },
+    )
+
+    refs_by_document_id = {
+        row["document_id"]: reference
+        for source_key in ("inpat_drug_order", "daily_course_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert execution.decisions[0].fact_refs == tuple(sorted((
+        refs_by_document_id["ORDER-054-MATCH"],
+        refs_by_document_id["COURSE-054-ACTION"],
+        refs_by_document_id["COURSE-054-REASON"],
+    )))
+    assert refs_by_document_id["COURSE-054-OTHER"] not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_057_fact_refs_only_include_empiric_trigger_matched_order_and_reason() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-057",),
+        {
+            "inpat_drug_order": ({
+                "document_id": "ORDER-057-MATCH",
+                "order_id": "ORDER-057-MATCH",
+                "generic_name": "美罗培南",
+            },),
+            "daily_course_record": (
+                {
+                    "document_id": "COURSE-057-TRIGGER",
+                    "related_order_id": "ORDER-057-MATCH",
+                    "record_content": "经验性用药，使用美罗培南。",
+                },
+                {
+                    "document_id": "COURSE-057-REASON",
+                    "related_order_id": "ORDER-057-MATCH",
+                    "record_content": "考虑感染可能，理由已记录。",
+                },
+                {
+                    "document_id": "COURSE-057-OTHER",
+                    "related_order_id": "ORDER-057-OTHER",
+                    "record_content": "考虑感染可能，理由已记录。",
+                },
+            ),
+        },
+    )
+
+    refs_by_document_id = {
+        row["document_id"]: reference
+        for source_key in ("inpat_drug_order", "daily_course_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert execution.decisions[0].fact_refs == tuple(sorted((
+        refs_by_document_id["ORDER-057-MATCH"],
+        refs_by_document_id["COURSE-057-TRIGGER"],
+        refs_by_document_id["COURSE-057-REASON"],
+    )))
+    assert refs_by_document_id["COURSE-057-OTHER"] not in execution.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_058_noncompliant_fact_refs_include_only_order_and_late_matched_support() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-058",),
+        {
+            "inpat_drug_order": ({
+                "document_id": "ORDER-058-MATCH",
+                "order_id": "ORDER-058-MATCH",
+                "generic_name": "美罗培南",
+                "planned_start_datetime": "2026-06-01 10:00:00",
+            },),
+            "consultation_record": (
+                {
+                    "document_id": "CONSULT-058-LATE",
+                    "related_order_id": "ORDER-058-MATCH",
+                    "record_time": "2026-06-01 11:00:00",
+                    "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+                },
+                {
+                    "document_id": "CONSULT-058-OTHER",
+                    "related_order_id": "ORDER-058-OTHER",
+                    "record_time": "2026-06-01 09:00:00",
+                    "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+                },
+            ),
+        },
+    )
+
+    refs_by_document_id = {
+        row["document_id"]: reference
+        for source_key in ("inpat_drug_order", "consultation_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert execution.decisions[0].fact_refs == tuple(sorted((
+        refs_by_document_id["ORDER-058-MATCH"],
+        refs_by_document_id["CONSULT-058-LATE"],
+    )))
+    assert refs_by_document_id["CONSULT-058-OTHER"] not in execution.decisions[0].fact_refs
+
+
+def test_antimicrobial_invalid_exact_fact_ref_is_technical_failure_not_business_state() -> None:
+    snapshot, materials = _session({"inpat_drug_order": ()})
+    decision = module._decision(
+        rule_id="LX0609-055",
+        snapshot=snapshot,
+        source_keys=(),
+        document_refs=("0" * 64,),
+        exact_document_refs=True,
+        final_state="non_compliant",
+        reason_code="threshold_exceeded",
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-055",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "snapshot_mismatch"
+
+
+@pytest.mark.asyncio
 async def test_066_missing_postoperative_first_course_is_non_compliant() -> None:
     result, reduced = await _evaluate(
         "LX0609-066",

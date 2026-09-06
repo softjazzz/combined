@@ -841,6 +841,7 @@ class _AntimicrobialReasonAction:
     antimicrobial: str
     action: str
     order_id: str
+    order: Mapping[str, Any]
 
 
 def _054_action_for_antimicrobial(text: str, antimicrobial: str) -> str | None:
@@ -902,6 +903,7 @@ def _054_action_events(
                 antimicrobial=antimicrobial,
                 action=action,
                 order_id=_linked_order_id(candidates[0]),
+                order=candidates[0],
             ))
     return (
         tuple(events),
@@ -919,7 +921,7 @@ def _054_event_reason_state(
     event: _AntimicrobialReasonAction,
     all_events: Sequence[_AntimicrobialReasonAction],
     course_rows: Sequence[Mapping[str, Any]],
-) -> str:
+) -> tuple[str, Mapping[str, Any] | None]:
     """返回单个054动作的理由状态：documented/missing/ambiguous。
 
     同一条动作病程内的理由天然同源，优先认可。分开的理由必须有共同医嘱
@@ -928,7 +930,7 @@ def _054_event_reason_state(
     """
 
     if _054_reason_documented(event.row):
-        return "documented"
+        return "documented", event.row
 
     same_name_events = tuple(
         candidate
@@ -943,7 +945,7 @@ def _054_event_reason_state(
         row_names = _antimicrobial_names_in(row)
         if event.order_id and row_order_id:
             if event.order_id == row_order_id:
-                return "documented"
+                return "documented", row
             continue
         if row_order_id or event.order_id:
             # 只有一端带医嘱标识时，不能用同名猜测它们属于同一动作。
@@ -952,14 +954,14 @@ def _054_event_reason_state(
             continue
         if event.antimicrobial in row_names:
             if len(same_name_events) == 1:
-                return "documented"
+                return "documented", row
             has_unresolvable_candidate = True
             continue
         if len(all_events) == 1 and not row_names:
-            return "documented"
+            return "documented", row
         if not row_names:
             has_unresolvable_candidate = True
-    return "ambiguous" if has_unresolvable_candidate else "missing"
+    return ("ambiguous" if has_unresolvable_candidate else "missing"), None
 
 
 def _is_explicit_empiric_antimicrobial_use(row: Mapping[str, Any]) -> bool:
@@ -1032,7 +1034,7 @@ def _empiric_reason_documented(
     event_row: Mapping[str, Any],
     order_row: Mapping[str, Any],
     course_rows: Sequence[Mapping[str, Any]],
-) -> bool:
+) -> Mapping[str, Any] | None:
     """理由只能来自可归属该经验用药事件的病程，不以培养/药敏调整代替。"""
 
     order_id = _linked_order_id(order_row)
@@ -1044,14 +1046,54 @@ def _empiric_reason_documented(
         row_order_id = _linked_order_id(row)
         if row_order_id and order_id:
             if row_order_id == order_id:
-                return True
+                return row
             continue
         row_names = _antimicrobial_names_in(row)
         if row_names and any(name in order_names for name in row_names):
-            return True
+            return row
         if row is event_row and len(order_names) == 1:
-            return True
-    return False
+            return row
+    return None
+
+
+def _antimicrobial_document_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    selected_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """仅把执行器实际消费的抗菌药行映射为同快照、逐文书引用。
+
+    选择结果必须在允许来源中唯一命中；重复或无法定位时返回空集。调用方会把
+    “已消费却不能精确坐标化”交给 Binding 判为技术错误，绝不回退为整类文书或
+    投影内部 ``source_document_refs``。未消费任何文书的否定结论则另行使用受控
+    的源级判定锚点，不能与前一种技术失败混淆。
+    """
+
+    allowed_sources = (
+        "inpat_drug_order",
+        "daily_course_record",
+        "senior_course_record",
+        "consultation_record",
+    )
+    refs: list[str] = []
+    for selected_row in selected_rows:
+        matches: list[str] = []
+        for source_key in allowed_sources:
+            try:
+                document_rows = materials.document_rows(source_key, snapshot=snapshot)
+            except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+                # 未消费该来源时，它的不可用不应抹掉另一来源已精确定位的文书。
+                continue
+            matches.extend(
+                reference
+                for reference, material_row in document_rows
+                if material_row == selected_row
+            )
+        if len(matches) != 1:
+            return ()
+        refs.append(matches[0])
+    return tuple(dict.fromkeys(refs))
 
 
 def _linked_order_id(row: Mapping[str, Any]) -> str:
@@ -1838,6 +1880,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         }:
             antimicrobial_orders = _antimicrobial_orders(drug_order_rows)
             course_rows = (*daily_rows, *senior_rows)
+            selected_antimicrobial_evidence_rows: list[Mapping[str, Any]] = []
             source_error = drug_order_error or (
                 "" if rule_id == "LX0609-058" else daily_error or senior_error
             )
@@ -1858,13 +1901,22 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "not_applicable", "trigger_absent_complete"
                     )
                 else:
-                    event_states = tuple(
+                    reason_outcomes = tuple(
                         _054_event_reason_state(
                             event=event,
                             all_events=action_events,
                             course_rows=course_rows,
                         )
                         for event in action_events
+                    )
+                    event_states = tuple(state for state, _row in reason_outcomes)
+                    selected_antimicrobial_evidence_rows.extend(
+                        row
+                        for event, (_state, reason_row) in zip(
+                            action_events, reason_outcomes
+                        )
+                        for row in (event.row, event.order, reason_row)
+                        if row is not None
                     )
                     unmatched_names = tuple(dict.fromkeys(
                         event.antimicrobial
@@ -1909,6 +1961,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                     (row, name, _antimicrobial_start_datetime(row))
                     for row in antimicrobial_orders
                     for name in _antimicrobial_names_in(row)
+                )
+                # 即使评价窗尚未成熟，开始医嘱仍是这项否定结论实际消费的
+                # 业务事实；horizon 仅决定窗口状态，绝不成为客户证据。
+                selected_antimicrobial_evidence_rows.extend(
+                    order
+                    for order, _name, start in order_events
+                    if start is not None
                 )
                 effect_evaluation_rows = tuple(
                     row for row in course_rows
@@ -1994,6 +2053,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                             for row in matching_rows
                             if (value := _row_time(row)) is not None and value >= start
                         ]
+                        selected_antimicrobial_evidence_rows.extend(
+                            row
+                            for row in matching_rows
+                            if (value := _row_time(row)) is not None
+                            and 48 <= (value - start).total_seconds() / 3600 <= 72
+                        )
                         intervals.extend(event_intervals)
                         if not any(48 <= value <= 72 for value in event_intervals):
                             unmatched_names.append(name)
@@ -2074,7 +2139,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "not_applicable", "trigger_absent_complete"
                     )
                 else:
-                    complete = all(
+                    reason_rows = tuple(
                         _empiric_reason_documented(
                             event_row=event_row,
                             order_row=order_row,
@@ -2082,6 +2147,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                         )
                         for event_row, order_row in empiric_contexts
                     )
+                    selected_antimicrobial_evidence_rows.extend(
+                        row
+                        for (event_row, order_row), reason_row in zip(
+                            empiric_contexts, reason_rows
+                        )
+                        for row in (event_row, order_row, reason_row)
+                        if row is not None
+                    )
+                    complete = all(reason_row is not None for reason_row in reason_rows)
                     final_state = "compliant" if complete else "non_compliant"
                     reason_code = "requirement_satisfied" if complete else "requirement_violated"
                     display.append((rule_id, {
@@ -2105,6 +2179,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                 special_names = tuple(dict.fromkeys(
                     name for _, name, _ in special_events
                 ))
+                selected_antimicrobial_evidence_rows.extend(
+                    order for order, _name, _start in special_events
+                )
                 expert_support_rows = tuple(
                     row
                     for row in (*consultation_rows, *senior_rows)
@@ -2165,6 +2242,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                             value for row in matching_rows
                             if (value := _lx0609_058_row_time(row)) is not None
                         )
+                        selected_antimicrobial_evidence_rows.extend(matching_rows)
                         if any(value <= start for value in matching_times):
                             continue
                         unmatched_names.append(name)
@@ -2227,27 +2305,28 @@ async def execute_luxian_0609_native_extended_document_rules(
                     "antimicrobials": list(used_names),
                     "course_documented": complete,
                 }))
+            antimicrobial_document_refs = _antimicrobial_document_refs(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+                selected_rows=selected_antimicrobial_evidence_rows,
+            )
+            has_selected_antimicrobial_evidence = bool(
+                selected_antimicrobial_evidence_rows
+            )
             decisions.append(_decision(
-                rule_id=rule_id, snapshot=evidence_snapshot,
+                rule_id=rule_id,
+                snapshot=evidence_snapshot,
+                # 没有实际消费文书的“触发未发生”结论只保留单一源级锚点；
+                # 一旦消费了行，则必须使用精确文书坐标，空/非法坐标由 Binding
+                # 明确作为技术失败处理，不能伪装为原业务状态。
                 source_keys=(
-                    ("inpat_drug_order", "senior_course_record", "consultation_record")
-                    if rule_id == "LX0609-058"
-                    else (
-                        (
-                            "inpat_drug_order", "daily_course_record",
-                            "senior_course_record", "consultation_record",
-                            "labtest_master", "labtest_item_report",
-                            "evaluation_context.horizon",
-                        )
-                        if rule_id == "LX0609-055"
-                        else (
-                            "inpat_drug_order", "daily_course_record",
-                            "senior_course_record", "consultation_record",
-                            "labtest_master", "labtest_item_report",
-                        )
-                    )
+                    () if has_selected_antimicrobial_evidence
+                    else ("inpat_drug_order",)
                 ),
-                final_state=final_state, reason_code=reason_code,
+                document_refs=antimicrobial_document_refs,
+                exact_document_refs=has_selected_antimicrobial_evidence,
+                final_state=final_state,
+                reason_code=reason_code,
             ))
             continue
 
