@@ -496,6 +496,10 @@ def _typed_decision_from_outcome(
             outcome.rule_id == "LX0609-047"
             and outcome.reason_code == "posttransfusion_evaluation_horizon_conflict"
         )
+        association_gap = (
+            outcome.rule_id == "LX0609-047"
+            and outcome.reason_code == "association_failed"
+        )
         dimensions = (
             (
                 ApplicabilityState.UNKNOWN
@@ -511,6 +515,8 @@ def _typed_decision_from_outcome(
                 if authoritative_time_gap
                 else "authoritative_time_conflict"
                 if authoritative_time_conflict
+                else "association_failed"
+                if association_gap
                 else "required_field_missing"
             ),
         )
@@ -1987,14 +1993,19 @@ def _programmatic_047_assessment(
             "data_gap", "posttransfusion_evaluation_horizon_conflict"
         )
     qualified_evaluations: list[tuple[datetime, datetime, tuple[str, str] | None]] = []
-    unqualified_end_times: list[datetime] = []
+    qualified_by_index: dict[int, tuple[datetime, tuple[str, str] | None]] = {}
+    pending_indices: list[int] = []
+    unusable_indices: set[int] = set()
     unusable_evaluation_time = False
     late_evaluation_found = False
-    for end_time, has_evaluation, evaluation_time, document_ref in end_rows:
+    late_evaluation_indices: set[int] = set()
+    for index, (end_time, has_evaluation, evaluation_time, document_ref) in enumerate(end_rows):
         if not has_evaluation:
-            unqualified_end_times.append(end_time)
+            pending_indices.append(index)
             continue
         if evaluation_time is None or evaluation_time < end_time:
+            pending_indices.append(index)
+            unusable_indices.add(index)
             unusable_evaluation_time = True
             continue
         if horizon_date is not None and _047_evaluation_time_is_after_horizon(
@@ -2002,12 +2013,15 @@ def _programmatic_047_assessment(
             horizon_datetime=horizon_datetime,
             horizon_date=horizon_date,
         ):
-            unqualified_end_times.append(end_time)
+            pending_indices.append(index)
             continue
         if (evaluation_time - end_time).total_seconds() <= 24 * 3600:
             qualified_evaluations.append((end_time, evaluation_time, document_ref))
+            qualified_by_index[index] = (evaluation_time, document_ref)
         else:
             late_evaluation_found = True
+            late_evaluation_indices.add(index)
+            pending_indices.append(index)
 
     if len(qualified_evaluations) == len(end_rows):
         latest_evaluation_time = min(
@@ -2023,19 +2037,153 @@ def _programmatic_047_assessment(
             selected_source_document_refs=end_document_refs,
         )
 
-    # 多份独立输血记录仍各自需要评价；本轮只补窗口成熟判定，不把日常
-    # 病程中的笼统评价跨记录关联，从而避免把同一评价分给多个输血事件。
+    # 多份独立输血记录按结束事件关联日常病程；任何笼统评价都不得扇出。
     if len(end_rows) > 1:
-        if unusable_evaluation_time:
+        pending = set(pending_indices)
+        daily_state = _logical_source_state(documents, "daily_course_record")
+        if pending and daily_state == "error":
             return _PosttransfusionEvaluationAssessment(
-                "data_gap", "posttransfusion_evaluation_time_unavailable"
+                "technical_error", "source_query_error"
             )
-        if late_evaluation_found:
+        if pending and daily_state == "unavailable":
+            return _PosttransfusionEvaluationAssessment(
+                "data_gap", "transfusion_source_unavailable"
+            )
+        associated_daily: dict[int, tuple[datetime, tuple[str, str] | None]] = {}
+        ambiguous_pending_indices: set[int] = set()
+        ambiguous_daily_refs: list[tuple[str, str]] = []
+        unusable_daily_indices: set[int] = set()
+        unusable_daily_refs: list[tuple[str, str]] = []
+        for row in _source_document_rows(documents, "daily_course_record"):
+            text = _row_text(row)
+            if not (
+                _TRANSFUSION_CONTEXT_PATTERN.search(text)
+                and _has_clinical_posttransfusion_evaluation(text)
+            ):
+                continue
+            record_time = _authoritative_record_time(row)
+            daily_ref = (
+                ("daily_course_record", document_id)
+                if (document_id := str(row.get("document_id") or row.get("id") or "").strip())
+                else None
+            )
+            if horizon_date is not None and record_time is not None and _047_evaluation_time_is_after_horizon(
+                record_time,
+                horizon_datetime=horizon_datetime,
+                horizon_date=horizon_date,
+            ):
+                continue
+            anchors, unresolved_anchor = _transfusion_end_evidence(text)
+            anchored_indices = {
+                index
+                for anchor_time, _, _ in anchors
+                for index, (end_time, _, _, _) in enumerate(end_rows)
+                if anchor_time == end_time
+            }
+            if unresolved_anchor:
+                affected_indices = set(pending)
+                if affected_indices:
+                    ambiguous_pending_indices.update(affected_indices)
+                    if daily_ref is not None:
+                        ambiguous_daily_refs.append(daily_ref)
+                continue
+            if len({anchor_time for anchor_time, _, _ in anchors}) > 1:
+                affected_indices = anchored_indices.intersection(pending)
+                if affected_indices:
+                    ambiguous_pending_indices.update(affected_indices)
+                    if daily_ref is not None:
+                        ambiguous_daily_refs.append(daily_ref)
+                continue
+            if anchors and not anchored_indices:
+                continue
+            if record_time is None:
+                affected_indices = anchored_indices.intersection(pending)
+                if not anchors:
+                    affected_indices = set(pending)
+                if affected_indices:
+                    unusable_daily_indices.update(affected_indices)
+                    if daily_ref is not None:
+                        unusable_daily_refs.append(daily_ref)
+                continue
+            candidate_indices = {
+                index
+                for index, (end_time, _, _, _) in enumerate(end_rows)
+                if (not anchors or index in anchored_indices)
+                and 0 <= (record_time - end_time).total_seconds() <= 24 * 3600
+            }
+            if not candidate_indices:
+                if anchored_indices.intersection(pending):
+                    anchored_pending = anchored_indices.intersection(pending)
+                    if any(
+                        record_time < end_rows[index][0]
+                        for index in anchored_pending
+                    ):
+                        unusable_daily_indices.update(anchored_pending)
+                        if daily_ref is not None:
+                            unusable_daily_refs.append(daily_ref)
+                    else:
+                        late_evaluation_indices.update(anchored_pending)
+                continue
+            if len(candidate_indices) > 1 and candidate_indices.intersection(pending):
+                ambiguous_pending_indices.update(candidate_indices.intersection(pending))
+                if daily_ref is not None:
+                    ambiguous_daily_refs.append(daily_ref)
+                continue
+            candidate_index = next(iter(candidate_indices))
+            if candidate_index in pending:
+                previous = associated_daily.get(candidate_index)
+                if previous is None or (record_time, daily_ref or ("", "")) < (
+                    previous[0],
+                    previous[1] or ("", ""),
+                ):
+                    associated_daily[candidate_index] = (record_time, daily_ref)
+        pending.difference_update(associated_daily)
+        if pending.intersection(ambiguous_pending_indices):
+            return _PosttransfusionEvaluationAssessment(
+                "data_gap",
+                "association_failed",
+                selected_source_document_refs=tuple(
+                    dict.fromkeys((*end_document_refs, *ambiguous_daily_refs))
+                ),
+            )
+        if pending.intersection(unusable_indices | unusable_daily_indices):
+            return _PosttransfusionEvaluationAssessment(
+                "data_gap",
+                "posttransfusion_evaluation_time_unavailable",
+                selected_source_document_refs=tuple(
+                    dict.fromkeys((*end_document_refs, *unusable_daily_refs))
+                ),
+            )
+        if pending.intersection(late_evaluation_indices):
             return _PosttransfusionEvaluationAssessment(
                 "non_compliant",
                 "posttransfusion_evaluation_late",
                 latest_end_time=latest_end,
                 selected_source_document_refs=end_document_refs,
+            )
+        if not pending:
+            evaluations = dict(qualified_by_index)
+            evaluations.update(
+                {
+                    index: (evaluation_time, daily_ref)
+                    for index, (evaluation_time, daily_ref) in associated_daily.items()
+                }
+            )
+            selected_refs = tuple(
+                dict.fromkeys(
+                    (*end_document_refs, *(ref for _, ref in associated_daily.values() if ref))
+                )
+            )
+            return _PosttransfusionEvaluationAssessment(
+                "compliant",
+                "posttransfusion_evaluation_complete",
+                latest_end_time=latest_end,
+                evaluation_time=min(
+                    evaluation_time
+                    for index, (evaluation_time, _) in evaluations.items()
+                    if end_rows[index][0] == latest_end
+                ),
+                selected_source_document_refs=selected_refs,
             )
         if horizon_error:
             return _PosttransfusionEvaluationAssessment(
@@ -2048,7 +2196,8 @@ def _programmatic_047_assessment(
                 horizon_datetime=horizon_datetime,
                 horizon_date=horizon_date,
             )[0]
-            for end_time in unqualified_end_times
+            for index in pending
+            for end_time in (end_rows[index][0],)
         ):
             return _PosttransfusionEvaluationAssessment(
                 "non_compliant",
@@ -2539,9 +2688,9 @@ def _programmatic_transfusion_display_facts(
         assessment = posttransfusion_assessment or _programmatic_047_assessment(
             documents
         )
-        if status in {"data_gap", "not_applicable"}:
+        if status not in {"compliant", "non_compliant"}:
             # 权威评价时间缺失属于资料缺口，不能继续投影为“未找到评价”的
-            # 临床缺项事实；让 Canonical 的 authoritative_time_missing 走公共说明。
+            # 临床缺项事实；技术失败也同样不得投影临床缺项。
             return None
         facts: dict[str, Any] = {
             "performed_transfusion_confirmed": True,
@@ -2691,6 +2840,7 @@ async def execute_luxian_0609_native_transfusion_rules(
         *,
         executor_type: str,
         display_facts: Mapping[str, Any] | None = None,
+        selected_source_document_refs: Sequence[tuple[str, str]] = (),
     ) -> None:
         outcome = _TransfusionRuleOutcome(
             rule_id=rule_id,
@@ -2702,15 +2852,25 @@ async def execute_luxian_0609_native_transfusion_rules(
             rule_id=rule_id, status=status, reason_code=reason_code
         )
         selected_document_refs: tuple[str, ...] = ()
-        if rule_id in typed_requested and controlled_facts is not None:
+        fact_identities = (
+            _selected_document_identities(
+                rule_id=rule_id,
+                display_facts=controlled_facts,
+            )
+            if rule_id in typed_requested and controlled_facts is not None
+            else ()
+        )
+        selected_identities = tuple(
+            dict.fromkeys(
+                (*fact_identities, *selected_source_document_refs)
+            )
+        )
+        if rule_id in typed_requested and selected_identities:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
             try:
                 selected_document_refs = _material_document_refs_for_selected_identities(
-                    selected_identities=_selected_document_identities(
-                        rule_id=rule_id,
-                        display_facts=controlled_facts,
-                    ),
+                    selected_identities=selected_identities,
                     snapshot=evidence_snapshot,
                     materials=evidence_materials,
                 )
@@ -3134,6 +3294,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                 status,
                 reason_code,
                 executor_type="program",
+                selected_source_document_refs=assessment.selected_source_document_refs,
                 display_facts=_programmatic_transfusion_display_facts(
                     rule_id=rule_id,
                     status=status,
