@@ -152,7 +152,7 @@ describe('QCOverviewView', () => {
     authState.isDemoAccount = false
   })
 
-  it('以客户可读范围、运营优先 KPI 和结构化队列展示权威 clinical_qc 数据', async () => {
+  it('以客户可读范围和真实 KPI 展示概况，不重复病历池', async () => {
     const wrapper = mountView()
     await flushHomeLoad()
 
@@ -160,50 +160,28 @@ describe('QCOverviewView', () => {
     expect(wrapper.get('[data-testid="home-scope"]').text()).toContain('泸县0609质控点')
     expect(wrapper.get('[data-testid="home-scope"]').text()).not.toContain('luxian_0609_qc_v1')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('18')
-    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
-    expect(wrapper.get('[data-testid="priority-queue"]').text()).toContain('测试患者')
-    const priorityRow = wrapper.get('.qc-home-priority-row')
-    expect(priorityRow.get('[data-testid="priority-defect-count"]').text()).toContain('确定问题2')
-    expect(priorityRow.get('[data-testid="priority-data-gap-count"]').text()).toContain(
-      '资料待核实1',
-    )
-    expect(priorityRow.get('[data-testid="priority-completed-at"]').text()).toContain('08-08 09:20')
-    expect(priorityRow.get('[data-testid="priority-open-result"]').text()).toContain('查看质控结果')
+    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('有确定问题的病历')
+    expect(wrapper.find('[data-testid="priority-queue"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('测试患者')
     expect(wrapper.text()).not.toContain('较昨日')
     expect(wrapper.text()).not.toContain('近7天')
     expect(wrapper.find('[data-testid="home-trend"]').exists()).toBe(false)
   })
 
-  it('从优先复核行进入对应病历的质控结果页', async () => {
+  it('三个工作入口进入对应页面，病历池保留筛选条件', async () => {
     const wrapper = mountView()
     await flushHomeLoad()
-
-    const action = wrapper.get('button.qc-home-priority-row')
-    expect(action.attributes('aria-label')).toBe('查看测试患者的质控结果')
-    expect(action.text()).toContain('01')
-    expect(action.text()).toContain('查看质控结果')
-
-    await action.trigger('click')
-
-    expect(routerPush).toHaveBeenCalledTimes(1)
-    expect(routerPush).toHaveBeenCalledWith({
-      path: '/workstation-v4/records/final',
-      query: {
-        record_key: '["H1","P1","V1"]',
-        visit_id: 'V1',
-      },
+    const entries = wrapper.findAll('.qc-home-shortcuts button')
+    expect(entries).toHaveLength(3)
+    await entries[0].trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith({
+      path: '/workstation-v4/worklist',
+      query: { source: 'dashboard', department: undefined, keyword: undefined },
     })
-  })
-
-  it('将科室作为队列独立列展示，患者副行仅保留住院号', async () => {
-    const wrapper = mountView()
-    await flushHomeLoad()
-
-    const queue = wrapper.get('[data-testid="priority-queue"]')
-    expect(queue.get('.qc-home-priority-columns').text()).toContain('科室')
-    expect(queue.get('[data-testid="priority-department"]').text()).toBe('神经外科')
-    expect(queue.get('.qc-home-priority-row__identity').text()).toContain('住院号 V1')
-    expect(queue.get('.qc-home-priority-row__identity').text()).not.toContain('神经外科')
+    await entries[1].trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v4/records/running')
+    await entries[2].trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v4/records/final')
   })
 
   it('以运营优先顺序展示四项 KPI，且只保留标题与数值', async () => {
@@ -211,22 +189,20 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
 
     expect(wrapper.get('[data-testid="home-kpis"]').attributes('aria-label')).toBe('质控指标汇总')
-    const cards = wrapper.findAll('.qc-metric-card-strip__card')
+    const cards = wrapper.findAll('.qc-home-metrics > div')
     expect(cards).toHaveLength(4)
     expect(
       cards.map((card) => ({
         label: card.get('span').text(),
         value: card.get('strong').text(),
-        tone: card.classes().find((className) => className.startsWith('is-')),
       })),
     ).toEqual([
-      { label: '高风险待复核', value: '2', tone: 'is-danger' },
-      { label: '待质控', value: '3', tone: 'is-warning' },
-      { label: '已完成', value: '13', tone: 'is-success' },
-      { label: '纳入病历', value: '18', tone: 'is-brand' },
+      { label: '有确定问题的病历', value: '2份' },
+      { label: '待质控', value: '3份' },
+      { label: '已完成', value: '13份' },
+      { label: '纳入病历', value: '18份' },
     ])
-    expect(wrapper.findAll('.qc-metric-card-strip__icon')).toHaveLength(4)
-    expect(wrapper.findAll('.qc-metric-card-strip__helper').map((item) => item.text())).toEqual([
+    expect(wrapper.findAll('.qc-home-metrics p').map((item) => item.text())).toEqual([
       '含确定问题的病历',
       '尚未生成最终结果',
       '已生成正式质控结果',
@@ -241,7 +217,7 @@ describe('QCOverviewView', () => {
     const health = wrapper.get('[data-testid="data-health"]').text()
     expect(health).toContain('技术异常2 份')
     expect(health).toContain('资料同步待核实')
-    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
+    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('有确定问题的病历')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('2')
   })
 
@@ -335,8 +311,8 @@ describe('QCOverviewView', () => {
     expect(workload).toContain('缺陷总数')
     expect(workload).toContain('12')
     expect(workload).not.toContain('结果校验异常')
-    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
-    expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('结果校验异常')
+    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('有确定问题的病历')
+    expect(wrapper.find('[data-testid="priority-queue"]').exists()).toBe(false)
   })
 
   it('点击科室待办行后切换到该科室范围', async () => {
@@ -483,8 +459,9 @@ describe('QCOverviewView', () => {
     await flushHomeLoad()
 
     const workspace = wrapper.get('[data-testid="home-workspace"]')
-    expect(workspace.find('[data-testid="priority-queue"]').exists()).toBe(true)
-    expect(workspace.find('[data-testid="data-health"]').exists()).toBe(true)
+    expect(workspace.findAll('button')).toHaveLength(3)
+    expect(workspace.find('[data-testid="data-health"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="data-health"]').exists()).toBe(true)
     expect(workspace.find('[data-testid="defect-analysis-chart"]').exists()).toBe(false)
 
     const analysis = wrapper.get('[data-testid="home-analysis"]')

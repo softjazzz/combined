@@ -5,7 +5,13 @@
         <section class="qc-home-header workstation-surface-enter">
           <div class="qc-home-header__copy">
             <h1>质控首页概览</h1>
+            <p class="qc-home-header__subtitle">查看质控概况与问题分布，进入对应工作台</p>
           </div>
+          <button type="button" class="qc-home-start" @click="openRecordPool">
+            选择病历质控 <ArrowRight :size="16" aria-hidden="true" />
+          </button>
+        </section>
+        <section class="qc-home-filter-bar" aria-label="首页统计范围筛选">
           <HomeHeroBar
             v-model:keyword="keyword"
             v-model:department-filter="departmentFilter"
@@ -27,12 +33,7 @@
         >
           <strong>暂时无法加载质控首页</strong>
           <span>请稍后刷新；不会以旧任务或缓存数据替代当前结果。</span>
-          <a-button
-            size="small"
-            @click="void fetchHome()"
-          >
-            重新加载
-          </a-button>
+          <a-button size="small" @click="void fetchHome()"> 重新加载 </a-button>
         </section>
 
         <section
@@ -50,195 +51,48 @@
         </section>
 
         <template v-else-if="clinicalQc">
-          <QcMetricCardStrip
-            class="qc-home-kpi-strip workstation-surface-enter"
+          <section
+            class="qc-home-kpi-strip qc-home-metrics workstation-surface-enter"
             data-testid="home-kpis"
             aria-label="质控指标汇总"
-            :cards="kpiCards"
-          />
-
-          <section
-            class="qc-home-grid qc-home-workspace workstation-surface-enter"
-            data-testid="home-workspace"
           >
-            <section
-              class="qc-home-panel qc-home-panel--queue"
-              data-testid="priority-queue"
-            >
-              <header class="qc-home-panel__head">
-                <div>
-                  <h2>病历质控队列</h2>
-                  <p>优先展示需要复核的病历，直接进入对应的质控结果。</p>
-                </div>
-                <button
-                  type="button"
-                  class="qc-home-panel-link"
-                  @click="openRecordPool"
-                >
-                  全部病历
-                  <ArrowRight :size="15" />
-                </button>
-              </header>
-
-              <div
-                class="qc-home-scope qc-home-priority-scope"
-                data-testid="home-scope"
-              >
-                <span class="qc-home-scope__label">当前范围</span>
-                <span>{{ scopeHospitalText }}</span>
-                <i />
-                <span>{{ scopeDepartmentText }}</span>
-                <i />
-                <span>{{ scopeSceneText }}</span>
-                <i />
-                <span class="qc-home-scope__rule-set">泸县0609质控点</span>
-                <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
-              </div>
-
-              <div
-                v-if="clinicalQc.priority_items.length"
-                class="qc-home-priority-list"
-              >
-                <div
-                  class="qc-home-priority-columns"
-                  aria-hidden="true"
-                >
-                  <span>患者 / 病历</span>
-                  <span>科室</span>
-                  <span>确定问题</span>
-                  <span>资料待核实</span>
-                  <span>最近质控</span>
-                  <span>操作</span>
-                </div>
-                <button
-                  v-for="(item, index) in clinicalQc.priority_items"
-                  :key="item.record_key"
-                  type="button"
-                  class="qc-home-priority-row"
-                  :aria-label="`查看${item.patient_name || '该病历'}的质控结果`"
-                  @click="openQcResult(item)"
-                >
-                  <span class="qc-home-priority-row__rank">{{
-                    String(index + 1).padStart(2, '0')
-                  }}</span>
-                  <div class="qc-home-priority-row__identity">
-                    <strong>{{ item.patient_name || '未返回患者姓名' }}</strong>
-                    <span>住院号 {{ item.visit_id }}</span>
-                  </div>
-                  <span
-                    class="qc-home-priority-row__department"
-                    data-testid="priority-department"
-                  >{{ item.department || '未分科室' }}</span>
-                  <div
-                    class="qc-home-priority-row__metric is-defect"
-                    data-testid="priority-defect-count"
-                  >
-                    <span>确定问题</span>
-                    <strong>{{ countOf(item, 'non_compliant') }}</strong>
-                    <small>项</small>
-                  </div>
-                  <div
-                    class="qc-home-priority-row__metric is-gap"
-                    data-testid="priority-data-gap-count"
-                  >
-                    <span>资料待核实</span>
-                    <strong>{{ countOf(item, 'data_gap') }}</strong>
-                    <small>项</small>
-                  </div>
-                  <div
-                    class="qc-home-priority-row__time"
-                    data-testid="priority-completed-at"
-                  >
-                    <span>最近质控</span>
-                    <strong>{{ formatPriorityTime(item.completed_at) }}</strong>
-                  </div>
-                  <span
-                    class="qc-home-priority-row__action"
-                    data-testid="priority-open-result"
-                  >
-                    查看质控结果
-                    <ChevronRight
-                      :size="16"
-                      aria-hidden="true"
-                    />
-                  </span>
-                </button>
-              </div>
-              <a-empty
-                v-else
-                description="当前范围内没有需要优先复核的病历"
-                :image-style="{ height: '72px' }"
-              />
-            </section>
-
-            <aside class="qc-home-side-stack">
-              <section
-                class="qc-home-panel qc-home-panel--health"
-                data-testid="data-health"
-              >
-                <header class="qc-home-panel__head">
-                  <div>
-                    <h2>运行与数据</h2>
-                    <p>用于判断数据与任务是否可正常使用，不代表医疗结论。</p>
-                  </div>
-                </header>
-                <dl class="qc-home-health-list">
-                  <div data-testid="health-status-item">
-                    <span class="qc-home-health-list__icon is-brand">
-                      <Database :size="18" />
-                    </span>
-                    <div>
-                      <dt>资料同步</dt>
-                      <dd>{{ sourceStateText }}</dd>
-                    </div>
-                    <small>当前尚无权威同步状态</small>
-                  </div>
-                  <div data-testid="health-status-item">
-                    <span class="qc-home-health-list__icon is-brand">
-                      <Activity :size="18" />
-                    </span>
-                    <div>
-                      <dt>质控任务</dt>
-                      <dd>{{ runningTaskText }}</dd>
-                    </div>
-                    <small>运行状态尚未接入首页</small>
-                  </div>
-                  <div
-                    v-if="!isDemoPresentation"
-                    data-testid="health-status-item"
-                  >
-                    <span class="qc-home-health-list__icon is-danger">
-                      <TriangleAlert :size="18" />
-                    </span>
-                    <div>
-                      <dt>技术异常</dt>
-                      <dd
-                        :class="{ 'is-danger': clinicalQc.data_health.technical_error_total > 0 }"
-                      >
-                        {{ clinicalQc.data_health.technical_error_total }} 份
-                      </dd>
-                    </div>
-                    <small>仅反映结果交付状态</small>
-                  </div>
-                  <div data-testid="health-status-item">
-                    <span class="qc-home-health-list__icon is-success">
-                      <CircleCheckBig :size="18" />
-                    </span>
-                    <div>
-                      <dt>最近成功质控</dt>
-                      <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
-                    </div>
-                    <small>最近一次可用结果生成时间</small>
-                  </div>
-                </dl>
-              </section>
-            </aside>
+            <div v-for="card in kpiCards" :key="card.key" :class="`qc-home-metric--${card.key}`">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}<small>份</small></strong>
+              <p>{{ card.helper }}</p>
+            </div>
           </section>
 
-          <section
-            class="qc-home-analysis workstation-surface-enter"
-            data-testid="home-analysis"
-          >
+          <div class="qc-home-scope qc-home-priority-scope" data-testid="home-scope">
+            <span class="qc-home-scope__label">当前范围</span>
+            <span>{{ scopeHospitalText }}</span>
+            <i />
+            <span>{{ scopeDepartmentText }}</span>
+            <i />
+            <span>{{ scopeSceneText }}</span>
+            <i />
+            <span class="qc-home-scope__rule-set">泸县0609质控点</span>
+            <span class="qc-home-scope__time"
+              >生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span
+            >
+          </div>
+
+          <nav class="qc-home-shortcuts" data-testid="home-workspace" aria-label="质控工作入口">
+            <button type="button" @click="openRecordPool">
+              <span><strong>病历池</strong><small>查找病历 · 选择质控范围</small></span
+              ><ArrowRight :size="18" />
+            </button>
+            <button type="button" @click="router.push('/workstation-v4/records/running')">
+              <span><strong>运行病历质控</strong><small>查看在院病历质控结果</small></span
+              ><ArrowRight :size="18" />
+            </button>
+            <button type="button" @click="router.push('/workstation-v4/records/final')">
+              <span><strong>终末病历质控</strong><small>查看已出院病历质控结果</small></span
+              ><ArrowRight :size="18" />
+            </button>
+          </nav>
+
+          <section class="qc-home-analysis workstation-surface-enter" data-testid="home-analysis">
             <section
               class="qc-home-panel qc-home-defect-analysis"
               data-testid="defect-analysis-chart"
@@ -246,19 +100,14 @@
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="defect-analysis-title">
-                    质控缺陷分析
-                  </h2>
+                  <h2 id="defect-analysis-title">质控缺陷分析</h2>
                   <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
                 </div>
               </header>
               <div class="qc-home-defect-analysis__toolbar">
                 <div class="qc-home-defect-analysis__control">
                   <span>统计对象</span>
-                  <div
-                    role="group"
-                    aria-label="统计对象"
-                  >
+                  <div role="group" aria-label="统计对象">
                     <button
                       type="button"
                       :class="{ 'is-active': analysisObject === 'department' }"
@@ -279,10 +128,7 @@
                 </div>
                 <div class="qc-home-defect-analysis__control">
                   <span>分析指标</span>
-                  <div
-                    role="group"
-                    aria-label="分析指标"
-                  >
+                  <div role="group" aria-label="分析指标">
                     <button
                       type="button"
                       :class="{ 'is-active': analysisMetric === 'total' }"
@@ -303,10 +149,7 @@
                 </div>
                 <div class="qc-home-defect-analysis__control">
                   <span>排序</span>
-                  <div
-                    role="group"
-                    aria-label="排序方式"
-                  >
+                  <div role="group" aria-label="排序方式">
                     <button
                       type="button"
                       :class="{ 'is-active': analysisSort === 'metric' }"
@@ -334,10 +177,7 @@
                   </div>
                 </div>
               </div>
-              <div
-                v-if="defectAnalysisItems.length"
-                class="qc-home-defect-analysis__list"
-              >
+              <div v-if="defectAnalysisItems.length" class="qc-home-defect-analysis__list">
                 <component
                   :is="analysisObject === 'department' ? 'button' : 'div'"
                   v-for="item in defectAnalysisItems"
@@ -358,13 +198,12 @@
                 >
                   <div class="qc-home-defect-analysis__meta">
                     <strong>{{ item.name }}</strong>
-                    <span>纳入 {{ item.recordsTotal }} 份 · 完成
-                      {{ item.completedRecordTotal }} 份</span>
+                    <span
+                      >纳入 {{ item.recordsTotal }} 份 · 完成
+                      {{ item.completedRecordTotal }} 份</span
+                    >
                   </div>
-                  <div
-                    class="qc-home-defect-analysis__metric"
-                    aria-hidden="true"
-                  >
+                  <div class="qc-home-defect-analysis__metric" aria-hidden="true">
                     <div class="qc-home-defect-analysis__track">
                       <i :style="{ width: `${defectAnalysisPercent(item)}%` }" />
                     </div>
@@ -380,10 +219,7 @@
                     aria-hidden="true"
                   />
                 </component>
-                <p
-                  v-if="hiddenDefectAnalysisCount"
-                  class="qc-home-defect-analysis__note"
-                >
+                <p v-if="hiddenDefectAnalysisCount" class="qc-home-defect-analysis__note">
                   仅展示前 8 项；其余 {{ hiddenDefectAnalysisCount }} 个{{
                     analysisObjectLabel
                   }}已收起。
@@ -403,16 +239,11 @@
             >
               <header class="qc-home-panel__head">
                 <div>
-                  <h2 id="qc-conclusion-title">
-                    结论结构
-                  </h2>
+                  <h2 id="qc-conclusion-title">结论结构</h2>
                   <p>已完成病历中的规则结论。</p>
                 </div>
               </header>
-              <div
-                v-if="conclusionSegments.length"
-                class="qc-home-conclusion__content"
-              >
+              <div v-if="conclusionSegments.length" class="qc-home-conclusion__content">
                 <div
                   class="qc-home-conclusion__ring"
                   role="img"
@@ -424,28 +255,15 @@
                     <span>规则结论</span>
                   </div>
                 </div>
-                <ul
-                  class="qc-home-conclusion__legend"
-                  aria-label="已完成病历中的规则结论图例"
-                >
-                  <li
-                    v-for="segment in conclusionSegments"
-                    :key="segment.status"
-                  >
-                    <i
-                      :style="{ background: segment.color }"
-                      aria-hidden="true"
-                    />
+                <ul class="qc-home-conclusion__legend" aria-label="已完成病历中的规则结论图例">
+                  <li v-for="segment in conclusionSegments" :key="segment.status">
+                    <i :style="{ background: segment.color }" aria-hidden="true" />
                     <span>{{ segment.label }} {{ segment.value }}</span>
                     <small>{{ segment.percent }}%</small>
                   </li>
                 </ul>
               </div>
-              <a-empty
-                v-else
-                description="暂无已完成质控结论"
-                :image-style="{ height: '58px' }"
-              />
+              <a-empty v-else description="暂无已完成质控结论" :image-style="{ height: '58px' }" />
             </section>
           </section>
 
@@ -461,6 +279,58 @@
               </div>
             </header>
           </section>
+          <section class="qc-home-panel qc-home-panel--health" data-testid="data-health">
+            <header class="qc-home-panel__head">
+              <div>
+                <h2>数据与服务状态</h2>
+                <p>用于判断数据与任务是否可正常使用，不代表医疗结论。</p>
+              </div>
+            </header>
+            <dl class="qc-home-health-list">
+              <div data-testid="health-status-item">
+                <span class="qc-home-health-list__icon is-brand">
+                  <Database :size="18" />
+                </span>
+                <div>
+                  <dt>资料同步</dt>
+                  <dd>{{ sourceStateText }}</dd>
+                </div>
+                <small>当前尚无权威同步状态</small>
+              </div>
+              <div data-testid="health-status-item">
+                <span class="qc-home-health-list__icon is-brand">
+                  <Activity :size="18" />
+                </span>
+                <div>
+                  <dt>质控任务</dt>
+                  <dd>{{ runningTaskText }}</dd>
+                </div>
+                <small>运行状态尚未接入首页</small>
+              </div>
+              <div v-if="!isDemoPresentation" data-testid="health-status-item">
+                <span class="qc-home-health-list__icon is-danger">
+                  <TriangleAlert :size="18" />
+                </span>
+                <div>
+                  <dt>技术异常</dt>
+                  <dd :class="{ 'is-danger': clinicalQc.data_health.technical_error_total > 0 }">
+                    {{ clinicalQc.data_health.technical_error_total }} 份
+                  </dd>
+                </div>
+                <small>仅反映结果交付状态</small>
+              </div>
+              <div data-testid="health-status-item">
+                <span class="qc-home-health-list__icon is-success">
+                  <CircleCheckBig :size="18" />
+                </span>
+                <div>
+                  <dt>最近成功质控</dt>
+                  <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
+                </div>
+                <small>最近一次可用结果生成时间</small>
+              </div>
+            </dl>
+          </section>
         </template>
 
         <section
@@ -472,12 +342,7 @@
             <template #description>
               <p>请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
             </template>
-            <a-button
-              type="primary"
-              @click="openRecordPool"
-            >
-              进入病历池
-            </a-button>
+            <a-button type="primary" @click="openRecordPool"> 进入病历池 </a-button>
           </a-empty>
         </section>
       </main>
@@ -502,11 +367,9 @@ import { useAuthStore } from '@/stores/auth'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePhysicianItem,
-  ClinicalQcHomePriorityItem,
   WorkstationHomePayload,
 } from '@/views/workstation-v2/types'
 import HomeHeroBar from './components/HomeHeroBar.vue'
-import QcMetricCardStrip from './components/QcMetricCardStrip.vue'
 
 interface KpiCard {
   key: string
@@ -582,7 +445,7 @@ const kpiCards = computed<KpiCard[]>(() => {
   return [
     {
       key: 'risk',
-      label: '高风险待复核',
+      label: '有确定问题的病历',
       value: Number(kpis?.high_risk_review_total || 0),
       helper: '含确定问题的病历',
       icon: TriangleAlert,
@@ -708,10 +571,6 @@ const defectAnalysisMaximum = computed(() =>
   ),
 )
 
-function countOf(item: ClinicalQcHomePriorityItem, status: string): number {
-  return Math.max(0, Number(item.status_counts?.[status] || 0))
-}
-
 function defectAnalysisPercent(item: DefectAnalysisItem): number {
   const value = analysisMetric.value === 'average' ? item.averageDefectCount : item.defectTotal
   return Number(((value / defectAnalysisMaximum.value) * 100).toFixed(1))
@@ -733,13 +592,6 @@ function formatDateTime(value?: string | null): string {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : '暂未返回'
 }
 
-function formatPriorityTime(value?: string | null): string {
-  if (!value) return '暂未返回'
-  const parsed = dayjs(value)
-  if (!parsed.isValid()) return '暂未返回'
-  return parsed.isSame(dayjs(), 'day') ? parsed.format('HH:mm') : parsed.format('MM-DD HH:mm')
-}
-
 function disabledFutureDate(current: Dayjs) {
   return current.isAfter(dayjs(), 'day')
 }
@@ -755,21 +607,11 @@ function applyRouteFilters() {
 
 function openRecordPool() {
   void router.push({
-    path: '/workstation-v4',
+    path: '/workstation-v4/worklist',
     query: {
       source: 'dashboard',
       department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
       keyword: keyword.value.trim() || undefined,
-    },
-  })
-}
-
-function openQcResult(item: ClinicalQcHomePriorityItem) {
-  void router.push({
-    path: '/workstation-v4/records/final',
-    query: {
-      record_key: item.record_key,
-      visit_id: item.visit_id,
     },
   })
 }
@@ -840,7 +682,88 @@ watch([departmentFilter, keyword], () => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 17px 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.qc-home-header__subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #7b8592;
+}
+.qc-home-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #0066cc;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.qc-home-start:hover {
+  background: #005bb8;
+}
+.qc-home-start:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 3px;
+}
+.qc-home-filter-bar {
+  padding: 12px 0;
+  border-bottom: 1px solid #e3eaf2;
+}
+.qc-home-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 18px 0;
+  border: 1px solid #e3eaf2;
+  border-radius: 10px;
+  background: #fff;
+}
+.qc-home-metrics > div {
+  padding: 0 22px;
+  border-right: 1px solid #e8edf3;
+}
+.qc-home-metrics > div:last-child {
+  border: 0;
+}
+.qc-home-metrics span {
+  font-size: 13px;
+  color: #627084;
+}
+.qc-home-metrics strong {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #263547;
+}
+.qc-home-metrics small {
+  margin-left: 7px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #7b8592;
+}
+.qc-home-metrics p {
+  margin: 0;
+  font-size: 12px;
+  color: #7b8592;
+}
+.qc-home-metric--risk strong {
+  color: #b74b50;
+}
+@media (max-width: 780px) {
+  .qc-home-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 0;
+  }
 }
 .qc-home-header__copy {
   min-width: 230px;
@@ -907,17 +830,17 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-panel {
   padding: 20px 22px;
+  border-radius: 10px;
+  box-shadow: none;
 }
 .qc-home-side-stack {
   display: grid;
   gap: 18px;
-  height: 100%;
-  align-content: stretch;
+  align-content: start;
 }
 .qc-home-panel--health {
   display: grid;
-  height: 100%;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto;
 }
 .qc-home-panel--queue .qc-home-panel__head {
   border-bottom: 0;
@@ -948,174 +871,13 @@ watch([departmentFilter, keyword], () => {
 .qc-home-panel-link:hover {
   color: #004f9e;
 }
-.qc-home-panel-link:focus-visible,
-.qc-home-priority-row:focus-visible {
+.qc-home-panel-link:focus-visible {
   outline: 2px solid rgba(0, 102, 204, 0.42);
   outline-offset: 2px;
 }
 .qc-home-panel h2 {
   font-size: 17px;
   line-height: 22px;
-}
-.qc-home-priority-list {
-  display: grid;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.075);
-  border-radius: 12px;
-}
-.qc-home-priority-columns {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) 105px 96px 106px 84px 82px;
-  gap: 10px;
-  padding: 11px 12px 9px 42px;
-  background: rgba(0, 0, 0, 0.018);
-  color: rgba(29, 29, 31, 0.42);
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 16px;
-}
-.qc-home-priority-columns span:not(:first-child, :nth-child(2)) {
-  text-align: right;
-}
-.qc-home-priority-row {
-  display: grid;
-  grid-template-columns: 30px minmax(180px, 1fr) 105px 96px 106px 84px 82px;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 74px;
-  padding: 11px 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
-  border-top: 0;
-  border-right: 0;
-  border-left: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition:
-    background 160ms ease,
-    color 160ms ease;
-}
-.qc-home-priority-row:last-child {
-  border-bottom: 0;
-}
-.qc-home-priority-row:hover {
-  background: rgba(0, 102, 204, 0.035);
-}
-.qc-home-priority-row__rank {
-  color: rgba(29, 29, 31, 0.32);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-align: center;
-}
-.qc-home-priority-row__identity {
-  min-width: 0;
-}
-.qc-home-priority-row__identity strong,
-.qc-home-priority-row__identity span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.qc-home-priority-row__department {
-  color: rgba(29, 29, 31, 0.64);
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-  text-align: left;
-}
-.qc-home-priority-row__identity strong {
-  color: #1d1d1f;
-  font-size: 15px;
-  line-height: 22px;
-}
-.qc-home-priority-row__identity span {
-  margin-top: 3px;
-  color: rgba(29, 29, 31, 0.55);
-  font-size: 12px;
-  line-height: 18px;
-}
-.qc-home-priority-row__metric {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  justify-content: flex-end;
-  min-width: 0;
-  white-space: nowrap;
-}
-.qc-home-priority-row__metric.is-defect,
-.qc-home-priority-row__metric.is-gap {
-  padding: 5px 7px;
-  border: 1px solid rgba(29, 29, 31, 0.09);
-  border-radius: 8px;
-  background: rgba(29, 29, 31, 0.035);
-  color: rgba(29, 29, 31, 0.68);
-}
-.qc-home-priority-row__metric span,
-.qc-home-priority-row__metric small {
-  color: rgba(29, 29, 31, 0.5);
-  font-size: 11px;
-}
-.qc-home-priority-row__metric strong {
-  color: #1d1d1f;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  line-height: 20px;
-}
-
-/* 首页 KPI 仅保留统一的中性卡片色；结论图表继续使用状态语义色。 */
-.qc-home-kpi-strip :deep(.qc-metric-card-strip__card .qc-metric-card-strip__value) {
-  color: #1d1d1f;
-}
-.qc-home-kpi-strip :deep(.qc-metric-card-strip__card .qc-metric-card-strip__icon) {
-  background: rgba(0, 102, 204, 0.065);
-  color: #486581;
-}
-.qc-home-priority-row__time {
-  min-width: 0;
-  text-align: right;
-}
-.qc-home-priority-row__time span,
-.qc-home-priority-row__time strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.qc-home-priority-row__time span {
-  display: none;
-  color: rgba(29, 29, 31, 0.42);
-  font-size: 11px;
-  line-height: 16px;
-}
-.qc-home-priority-row__time strong {
-  margin-top: 2px;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-}
-.qc-home-priority-row__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  color: #0066cc;
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-.qc-home-priority-row__action svg {
-  transition: transform 160ms ease;
-}
-.qc-home-priority-row:hover .qc-home-priority-row__action svg {
-  transform: translateX(2px);
 }
 .qc-home-priority-scope {
   gap: 7px;
@@ -1181,8 +943,8 @@ watch([departmentFilter, keyword], () => {
   color: #dc2626;
 }
 .qc-home-health-list__icon.is-success {
-  background: rgba(16, 185, 129, 0.085);
-  color: #047857;
+  background: rgba(0, 102, 204, 0.06);
+  color: #66819e;
 }
 .qc-home-health-list .is-danger {
   color: #dc2626;
@@ -1483,47 +1245,6 @@ button.qc-home-defect-analysis__row:focus-visible {
     min-height: auto;
   }
 }
-@media (max-width: 1100px) {
-  .qc-home-priority-row {
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-    gap: 10px;
-  }
-  .qc-home-priority-columns {
-    display: none;
-  }
-  .qc-home-priority-row__identity {
-    grid-column: 2;
-  }
-  .qc-home-priority-row__department {
-    grid-column: 2;
-    grid-row: 2;
-    text-align: left;
-  }
-  .qc-home-priority-row__metric.is-defect {
-    grid-column: 3;
-    grid-row: 1;
-  }
-  .qc-home-priority-row__metric.is-gap,
-  .qc-home-priority-row__time {
-    grid-column: 2;
-  }
-  .qc-home-priority-row__metric.is-gap {
-    grid-row: 3;
-    justify-content: flex-start;
-  }
-  .qc-home-priority-row__time {
-    grid-row: 4;
-    text-align: left;
-  }
-  .qc-home-priority-row__time span {
-    display: block;
-  }
-  .qc-home-priority-row__action {
-    grid-column: 3;
-    grid-row: 2 / span 3;
-    align-self: center;
-  }
-}
 @media (max-width: 980px) {
   .qc-home-header {
     align-items: flex-start;
@@ -1586,6 +1307,63 @@ button.qc-home-defect-analysis__row:focus-visible {
   .qc-home-scope__time {
     width: 100%;
     margin-left: 0;
+  }
+}
+.qc-home-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.qc-home-shortcuts button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid #e3eaf2;
+  border-radius: 10px;
+  background: #fff;
+  color: #0066cc;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.qc-home-shortcuts strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #263547;
+}
+.qc-home-shortcuts small {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #758296;
+}
+.qc-home-shortcuts button:hover {
+  background: #f6faff;
+  border-color: #bed4ee;
+}
+.qc-home-shortcuts button:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 3px;
+}
+.qc-home-panel--health .qc-home-health-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+.qc-home-panel--health .qc-home-health-list > div {
+  border-bottom: 0;
+}
+@media (max-width: 980px) {
+  .qc-home-panel--health .qc-home-health-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  .qc-home-shortcuts,
+  .qc-home-panel--health .qc-home-health-list {
+    grid-template-columns: 1fr;
   }
 }
 </style>
