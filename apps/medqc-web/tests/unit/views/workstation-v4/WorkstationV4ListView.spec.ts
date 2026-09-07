@@ -121,7 +121,7 @@ const BatchTablePanelStub = defineComponent({
       default: false,
     },
   },
-  emits: ['filter-qc'],
+  emits: ['filter-qc', 'update:selectedRowKeys', 'batch-extract', 'open-record'],
   setup(_props, { attrs, slots }) {
     return () =>
       h('div', attrs, [
@@ -230,13 +230,13 @@ function mountListView(overrides: Record<string, unknown> = {}) {
 }
 
 describe('WorkstationV4ListView filters', () => {
-  it('keeps QC result metrics out of the record pool and uses a compact operational subtitle', () => {
+  it('keeps QC result metrics and redundant subtitles out of the record pool', () => {
     const wrapper = mountListView({
       workbenchRows: [],
       displayServerTotal: 1,
     })
 
-    expect(wrapper.text()).toContain('筛选病历，发起质控')
+    expect(wrapper.find('.wv4-analysis-overview__subtitle').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('已完成质控')
     expect(wrapper.text()).not.toContain('确定问题')
     expect(wrapper.text()).not.toContain('资料待补')
@@ -251,10 +251,11 @@ describe('WorkstationV4ListView filters', () => {
     const surface = wrapper.find('.wv4-record-pool-hero')
     expect(surface.attributes('aria-labelledby')).toBe('workstation-list-overview-title')
     expect(surface.find('#workstation-list-overview-title').text()).toBe('病历池')
-    expect(surface.find('.workbench-dept-filter__count').text()).toBe('100')
-    expect(surface.find('.workbench-dept-filter__count').attributes('aria-label')).toBe(
-      '当前科室共 100 份病历',
-    )
+    expect(surface.find('.workbench-dept-filter__count').exists()).toBe(false)
+    expect(surface.findAll('.workbench-dept-select__count')).toHaveLength(0)
+    expect(surface.find('#record-pool-dept-label').text()).toBe('科室')
+    expect(surface.find('#record-pool-doctor-label').text()).toBe('主管医师')
+    expect(surface.find('#record-pool-date-label').text()).toBe('入出院日期')
     expect(wrapper.classes()).toContain('record-pool-refined')
     expect(surface.find('.wv4-record-pool-filter__notice').exists()).toBe(false)
     expect(surface.find('.wv4-record-pool-filter__summary').text()).toContain('当前筛选')
@@ -328,6 +329,22 @@ describe('WorkstationV4ListView filters', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('filter-qc')).toHaveLength(1)
+  })
+
+  it('forwards cleared selection and selected-record tasks without changing identity keys', async () => {
+    const recordKey = '["H-1","P-1","V-1"]'
+    const wrapper = mountListView({ selectedWorkbenchKeys: [recordKey] })
+    const table = wrapper.findComponent({ name: 'BatchTablePanel' })
+
+    table.vm.$emit('update:selectedRowKeys', [])
+    table.vm.$emit('batch-extract', [recordKey])
+    table.vm.$emit('open-record', recordKey)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('update:selectedRowKeys')).toEqual([[[]]])
+    expect(wrapper.emitted('batch-extract')).toEqual([[[recordKey]]])
+    expect(wrapper.emitted('open-record')).toEqual([[recordKey]])
+    expect(wrapper.props('selectedWorkbenchKeys')).toEqual([recordKey])
   })
 
   it('keeps the stage queue batch action wording and selection behavior unchanged', () => {

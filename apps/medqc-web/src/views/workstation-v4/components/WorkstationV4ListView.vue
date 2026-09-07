@@ -18,7 +18,7 @@
                 <h3 id="workstation-list-overview-title" class="wv4-analysis-overview__title">
                   {{ overviewTitle }}
                 </h3>
-                <p class="wv4-analysis-overview__subtitle">
+                <p v-if="isStageQueueMode" class="wv4-analysis-overview__subtitle">
                   {{ overviewSubtitle }}
                 </p>
                 <div
@@ -73,17 +73,26 @@
                   </template>
                 </a-input>
 
-                <a-range-picker
+                <div
                   v-if="!isStageQueueMode"
-                  :value="dateRange || undefined"
-                  class="workbench-date-row__range"
-                  size="large"
-                  allow-clear
-                  value-format="YYYY-MM-DD"
-                  format="YYYY-MM-DD"
-                  :placeholder="['开始日期', '结束日期']"
-                  @update:value="emit('update:dateRange', normalizeDateRange($event))"
-                />
+                  class="record-pool-date-field"
+                  role="group"
+                  aria-labelledby="record-pool-date-label"
+                >
+                  <span id="record-pool-date-label" class="record-pool-field-label"
+                    >入出院日期</span
+                  >
+                  <a-range-picker
+                    :value="dateRange || undefined"
+                    class="workbench-date-row__range"
+                    size="large"
+                    allow-clear
+                    value-format="YYYY-MM-DD"
+                    format="YYYY-MM-DD"
+                    :placeholder="['开始日期', '结束日期']"
+                    @update:value="emit('update:dateRange', normalizeDateRange($event))"
+                  />
+                </div>
 
                 <div
                   v-if="!isStageQueueMode"
@@ -113,9 +122,15 @@
                   <a-select-option value="longest"> 住院最久优先 </a-select-option>
                   <a-select-option value="recent"> 最近入院优先 </a-select-option>
                 </a-select>
-
                 <div class="workbench-dept-filter">
+                  <span
+                    v-if="!isStageQueueMode"
+                    id="record-pool-dept-label"
+                    class="record-pool-field-label"
+                    >科室</span
+                  >
                   <a-select
+                    :aria-labelledby="!isStageQueueMode ? 'record-pool-dept-label' : undefined"
                     :value="activeDept"
                     class="workbench-dept-select"
                     size="large"
@@ -132,11 +147,14 @@
                     >
                       <span class="workbench-dept-select__option">
                         <span class="workbench-dept-select__name">{{ dept.name }}</span>
-                        <span class="workbench-dept-select__count">{{ dept.total }}</span>
+                        <span v-if="isStageQueueMode" class="workbench-dept-select__count">{{
+                          dept.total
+                        }}</span>
                       </span>
                     </a-select-option>
                   </a-select>
                   <span
+                    v-if="isStageQueueMode"
                     class="workbench-dept-filter__count"
                     :aria-label="`当前科室共 ${activeDepartmentTotal} 份病历`"
                   >
@@ -145,7 +163,11 @@
                 </div>
 
                 <div v-if="!isStageQueueMode" class="workbench-doctor-filter">
+                  <span id="record-pool-doctor-label" class="record-pool-field-label"
+                    >主管医师</span
+                  >
                   <a-select
+                    aria-labelledby="record-pool-doctor-label"
                     :value="activeDoctor"
                     class="workbench-doctor-select"
                     size="large"
@@ -162,7 +184,6 @@
                     >
                       <span class="workbench-dept-select__option">
                         <span class="workbench-dept-select__name">{{ doctor.name }}</span>
-                        <span class="workbench-dept-select__count">{{ doctor.total }}</span>
                       </span>
                     </a-select-option>
                   </a-select>

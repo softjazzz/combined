@@ -320,20 +320,72 @@ describe('BatchTablePanel 病历池列表', () => {
     expect(wrapper.emitted('open-record')).toEqual([['["H-2","P-2","V-100"]']])
   })
 
-  it('renders only patient, department, hospitalization and action columns in record-pool mode', () => {
+  it('separates status and admission/discharge dates into scannable record-pool columns', () => {
     const wrapper = mountTable()
     const table = wrapper.getComponent({ name: 'ATable' })
     const keys = (table.props('columns') as Array<{ key: string }>).map((column) => column.key)
 
-    expect(keys).toEqual(['patient', 'department', 'admissionDischarge', 'action'])
-    expect(wrapper.text()).toContain('2026-08-01')
-    expect(wrapper.text()).toContain('2026-08-08')
-    expect(wrapper.text()).toContain('已出院')
-    expect(wrapper.text()).toContain('入院')
-    expect(wrapper.text()).toContain('出院')
+    expect(keys).toEqual([
+      'patient',
+      'department',
+      'hospitalizationStatus',
+      'admissionDate',
+      'dischargeDate',
+      'action',
+    ])
+    expect(wrapper.get('[data-column="admissionDate"]').text()).toBe('2026-08-01')
+    expect(wrapper.get('[data-column="dischargeDate"]').text()).toBe('2026-08-08')
+    expect(wrapper.get('[data-column="hospitalizationStatus"]').text()).toBe('已出院')
     expect(wrapper.text()).not.toContain('资料同步状态待核实')
     expect(wrapper.text()).not.toContain('已完成 · 75 条规则')
     expect(wrapper.text()).not.toContain('确定问题 2 项')
+  })
+
+  it('preserves the combined admission/discharge column in stage queues', async () => {
+    const wrapper = mountTable()
+    await wrapper.setProps({ recordPoolMode: false })
+    const table = wrapper.getComponent({ name: 'ATable' })
+    expect((table.props('columns') as Array<{ key: string }>).map(({ key }) => key)).toEqual([
+      'patient',
+      'department',
+      'stageStatus',
+      'risk',
+      'admissionDischarge',
+      'updatedAt',
+      'action',
+    ])
+    const dates = wrapper.get('[data-column="admissionDischarge"]')
+    expect(dates.text()).toContain('已出院')
+    expect(dates.text()).toContain('2026-08-01')
+    expect(dates.text()).toContain('2026-08-08')
+  })
+
+  it.each([
+    { status: 'unknown' as const, statusLabel: '待核验', dateLabel: '状态待核验' },
+    { status: 'discharged' as const, statusLabel: '已出院', dateLabel: '时间待同步' },
+    { status: 'inpatient' as const, statusLabel: '在院', dateLabel: '尚未出院' },
+  ])(
+    'preserves $status semantics in the separate status and date cells',
+    async ({ status, statusLabel, dateLabel }) => {
+      const wrapper = mountTable()
+      await wrapper.setProps({
+        rows: [{ ...wrapper.props('rows')[0], hospitalizationStatus: status, dischargeDate: '-' }],
+      })
+
+      expect(wrapper.get('[data-column="hospitalizationStatus"]').text()).toBe(statusLabel)
+      expect(wrapper.get('[data-column="dischargeDate"]').text()).toBe(dateLabel)
+      expect(wrapper.get('[data-column="admissionDate"]').text()).toBe('2026-08-01')
+    },
+  )
+
+  it('keeps the complete long visit identifier available as a title', async () => {
+    const wrapper = mountTable()
+    const visitId = 'LX0609_DERIVED_359787_V1_WITH_LONG_IDENTIFIER'
+    await wrapper.setProps({ rows: [{ ...wrapper.props('rows')[0], visitId }] })
+
+    const identifier = wrapper.get('.batch-table-panel__visit-id')
+    expect(identifier.text()).toBe(visitId)
+    expect(identifier.attributes('title')).toBe(visitId)
   })
 
   it('marks records without a discharge date as inpatient and explains the missing date', async () => {

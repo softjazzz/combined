@@ -7,14 +7,17 @@
         <div class="batch-table-panel__toolbar-meta min-w-0">
           <div class="flex flex-wrap items-center gap-2.5">
             <div class="batch-table-panel__title">
-              {{ title }}
+              {{ recordPoolMode ? '病历列表' : title }}
             </div>
-            <span class="batch-table-panel__summary-pill">当前 {{ rows.length }} 条</span>
+            <span class="batch-table-panel__summary-pill"
+              >{{ recordPoolMode ? '本页' : '当前' }} {{ rows.length }}
+              {{ recordPoolMode ? '份' : '条' }}</span
+            >
             <span
-              v-if="showSelection"
+              v-if="showSelection && (!recordPoolMode || selectedRowKeys.length > 0)"
               class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected"
             >
-              已选 {{ selectedRowKeys.length }} 条
+              已选 {{ selectedRowKeys.length }} {{ recordPoolMode ? '份' : '条' }}
             </span>
             <a-button
               v-if="recordPoolMode && showSelection && selectedRowKeys.length > 0"
@@ -122,12 +125,16 @@
               :alt="`${record.patientName || '患者'}头像`"
             />
             <span class="batch-table-panel__patient-meta">
-              <span class="batch-table-panel__patient-name">
+              <span class="batch-table-panel__patient-name" :title="record.patientName">
                 {{ record.patientName }}
               </span>
               <span class="batch-table-panel__visit-line">
                 <span class="batch-table-panel__visit-label">住院号：</span>
-                <span class="batch-table-panel__visit-id font-mono">
+                <span
+                  class="batch-table-panel__visit-id font-mono"
+                  :title="record.visitId"
+                  :tabindex="recordPoolMode ? 0 : undefined"
+                >
                   {{ record.visitId }}
                 </span>
                 <span
@@ -153,6 +160,24 @@
         </template>
         <template v-else-if="column.key === 'risk'">
           <span class="batch-table-panel__risk">{{ record.riskReason }}</span>
+        </template>
+        <template v-else-if="column.key === 'hospitalizationStatus'">
+          <span
+            class="batch-table-panel__hospitalization-status"
+            :class="hospitalizationStatusClass(record)"
+          >
+            {{ hospitalizationStatusLabel(record) }}
+          </span>
+        </template>
+        <template v-else-if="column.key === 'admissionDate'">
+          <span class="batch-table-panel__standalone-date" :title="record.admissionDate">
+            {{ displayHospitalDate(record.admissionDate) }}
+          </span>
+        </template>
+        <template v-else-if="column.key === 'dischargeDate'">
+          <span class="batch-table-panel__standalone-date" :title="record.dischargeDate">
+            {{ dischargeDateLabel(record) }}
+          </span>
         </template>
         <template v-else-if="column.key === 'admissionDischarge'">
           <div class="batch-table-panel__hospitalization">
@@ -297,7 +322,7 @@ const showBatchActions = computed(
     showClearFiltersAction.value,
 )
 const tableScroll = computed(() => ({
-  x: recordPoolMode.value ? 760 : 980,
+  x: recordPoolMode.value ? 1040 : 980,
   y: showSelection.value ? undefined : 440,
 }))
 const displayRows = computed(() => {
@@ -417,14 +442,16 @@ const stageColumns = [
 ]
 
 const recordPoolColumns = [
-  { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 320 },
-  { title: '科室', key: 'department', dataIndex: 'department', width: 200 },
+  { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient', width: 300 },
+  { title: '科室', key: 'department', dataIndex: 'department', width: 190 },
   {
-    title: '住院状态 / 入出院',
-    key: 'admissionDischarge',
-    dataIndex: 'admissionDischarge',
-    width: 230,
+    title: '住院状态',
+    key: 'hospitalizationStatus',
+    dataIndex: 'hospitalizationStatus',
+    width: 110,
   },
+  { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: 140 },
+  { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: 140 },
   { title: '操作', key: 'action', dataIndex: 'action', width: 100 },
 ]
 
