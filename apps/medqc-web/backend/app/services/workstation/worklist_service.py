@@ -626,11 +626,11 @@ class WorkstationAggregationService:
     ) -> tuple[list[Dict[str, Any]], int]:
         """读取当前版本已完成根任务的 Canonical 事件，缺失只进入数据健康。"""
 
-        from ..custom_qc_workspace_service import (
-            CustomQCWorkspaceService,
-            _CANONICAL_RESULT_DELIVERY_MODE,
+        from ..custom_qc_workspace_service import CustomQCWorkspaceService
+        from ..qc_workspace.canonical_result_store import (
+            CANONICAL_RESULT_DELIVERY_MODE as _CANONICAL_RESULT_DELIVERY_MODE,
             _CUSTOMER_STATUSES,
-            _RECORD_RESULT_ENVELOPE_SCHEMA,
+            RECORD_RESULT_ENVELOPE_SCHEMA as _RECORD_RESULT_ENVELOPE_SCHEMA,
         )
 
         workspace_service = CustomQCWorkspaceService()

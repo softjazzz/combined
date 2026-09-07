@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from unittest.mock import MagicMock
 
 from app.services.workstation.worklist_service import WorkstationAggregationService
 
@@ -8,6 +9,21 @@ from app.services.workstation.worklist_service import WorkstationAggregationServ
 class _FakeSession:
     def close(self) -> None:
         return None
+
+
+def test_analytics_real_event_loader_handles_empty_database():
+    """保留真实读取函数及依赖导入，防止模块迁移后被聚合 Mock 掩盖。"""
+    session = MagicMock()
+    session.execute.return_value.mappings.return_value.all.return_value = []
+    service = WorkstationAggregationService(session_factory=lambda: session)
+    assert service._load_luxian_0609_analytics_events(
+        session,
+        records_by_identity={},
+        completed_from=None,
+        completed_to=None,
+        job_id=None,
+    ) == ([], 0)
+    session.execute.assert_called_once()
 
 
 def _record(
