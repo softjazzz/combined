@@ -1602,14 +1602,16 @@ watch(
 
 .rule-conclusion-block {
   display: block;
-  margin-top: 9px;
-  padding-top: 8px;
+  margin-top: 14px;
+  padding: 12px 14px;
   border-top: 0;
+  border-radius: 6px;
+  background: #f7f9fc;
 }
 
 .rule-conclusion-label {
   display: block;
-  margin-bottom: 3px;
+  margin-bottom: 7px;
   color: #627187;
   font-size: 12px;
   line-height: 17px;
@@ -1899,7 +1901,7 @@ watch(
   padding: 0 !important;
   border: 0;
   border-radius: 6px;
-  background: #f5f8fc;
+  background: transparent;
 }
 
 .fact-block-header {
@@ -1925,15 +1927,36 @@ watch(
 }
 
 .decision-fact-block .fact-list {
-  padding: 9px 10px 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  padding: 0 10px 8px;
+}
+
+.decision-fact-block .fact-list dt,
+.decision-fact-block .fact-list dd {
+  min-width: 0;
+  min-height: 36px;
+  padding: 8px 0;
+  border-bottom: 1px solid #edf1f5;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.decision-fact-block .fact-list dt:last-of-type,
+.decision-fact-block .fact-list dd:last-of-type {
+  border-bottom: 0;
 }
 
 .decision-fact-block .fact-list dt {
+  padding-right: 16px;
   color: rgba(20, 42, 68, 0.58);
   font-weight: 550;
 }
 
 .decision-fact-block .fact-list dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   color: rgba(20, 42, 68, 0.9);
   font-weight: 550;
 }
