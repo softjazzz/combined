@@ -119,7 +119,11 @@
             ></span
           >
           <button type="button" class="full-result-button" @click="openFull">
-            打开完整质控结果<ArrowRight :size="16" />
+            <span class="full-result-label">
+              <FileText :size="17" aria-hidden="true" />
+              查看完整质控结果
+            </span>
+            <ArrowRight :size="16" aria-hidden="true" />
           </button>
         </footer>
       </template>
@@ -552,14 +556,32 @@ summary {
 }
 .full-result-button {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  border: 1px solid rgba(0, 102, 204, 0.2);
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: #fff;
-  color: #0066cc;
+  background: #eaf2fc;
+  color: #245788;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+.full-result-button:hover {
+  background: #dfeafb;
+}
+.full-result-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.full-result-button > svg {
+  flex-shrink: 0;
+  color: #527da7;
 }
 button:focus-visible,
 summary:focus-visible {
