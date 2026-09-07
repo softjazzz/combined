@@ -327,6 +327,20 @@ describe('SingleRecordQcResultPanel', () => {
     expect(action.attributes('aria-expanded')).toBe('false')
   })
 
+  it('展开报告后说明完整展示，操作栏位于所有详情之后', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [{ ...items[0]!, conclusion: '完整说明。'.repeat(50) }] },
+    })
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    expect(wrapper.get('.rule-conclusion-block').classes()).toContain('is-text-expanded')
+    expect(wrapper.find('.text-expand-action').exists()).toBe(false)
+    const row = wrapper.get('[data-testid="single-record-result-row"]').element
+    expect(row.lastElementChild?.classList.contains('result-card-actions')).toBe(true)
+    expect(
+      wrapper.get('[data-testid="single-record-evidence-disclosure"]').attributes('open'),
+    ).toBeUndefined()
+  })
+
   it('直接展示 016 Canonical facts 中的实际相似度、阈值和比对范围', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
@@ -390,9 +404,9 @@ describe('SingleRecordQcResultPanel', () => {
     expect(factBlock.get('[data-testid="single-record-decision-facts-header"]').text()).toContain(
       '判定事实',
     )
-    expect(factBlock.get('[data-testid="single-record-decision-facts-header"]').text()).toContain(
-      '本次质控采用的关键判定信息',
-    )
+    expect(
+      factBlock.get('[data-testid="single-record-decision-facts-header"]').text(),
+    ).not.toContain('本次质控采用的关键判定信息')
     expect(factBlock.text()).toContain('问题说明病程记录相似度达到判定阈值')
     expect(factBlock.text()).toContain('实际相似度100%')
     expect(factBlock.text()).toContain('判定阈值70%')
