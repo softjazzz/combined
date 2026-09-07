@@ -2369,6 +2369,12 @@ async def review_workspace_batch_job(
     job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+        job = _hydrate_luxian_canonical_batch_job_or_409(
+            workspace=workspace,
+            job=job,
+        )
     try:
         review_report = review_luxian_0609_batch_job(job)
     except ValueError as exc:
@@ -2387,6 +2393,19 @@ async def review_workspace_batch_job(
     )
     if not _is_workspace_batch_job(updated_job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    updated_filters = (
+        updated_job.get("filters")
+        if isinstance(updated_job.get("filters"), dict)
+        else {}
+    )
+    if (
+        str(updated_filters.get("rule_set_key") or "").strip()
+        == LUXIAN_0609_RULE_SET_KEY
+    ):
+        updated_job = _hydrate_luxian_canonical_batch_job_or_409(
+            workspace=workspace,
+            job=updated_job,
+        )
     return success_response(
         data={
             "job": _workspace_batch_response_item(updated_job),

@@ -7,11 +7,19 @@ import pytest
 from fastapi import HTTPException
 
 from app.routers import qc_sichuan
+from app.services.luxian_0609_result_schema import CUSTOMER_SCHEMA_VERSION
 
 
 class _WorkspaceReviewStub:
-    def __init__(self, job: dict[str, Any] | None) -> None:
+    def __init__(
+        self,
+        job: dict[str, Any] | None,
+        *,
+        canonical_items: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.job = job
+        self.canonical_items = canonical_items
+        self.canonical_load_count = 0
         self.updated_report: dict[str, Any] | None = None
 
     def get_batch_job(self, *, job_id: str, created_by: str) -> dict[str, Any] | None:
@@ -33,6 +41,17 @@ class _WorkspaceReviewStub:
         self.job = {**self.job, "summary": summary}
         return dict(self.job)
 
+    def _load_batch_job_canonical_items(
+        self,
+        *,
+        job: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        assert self.job is not None and job["id"] == self.job["id"]
+        self.canonical_load_count += 1
+        if self.canonical_items is None:
+            raise ValueError("canonical envelope missing")
+        return [dict(item) for item in self.canonical_items]
+
 
 class _CanonicalReadStub:
     def __init__(self, items: list[dict[str, Any]]) -> None:
@@ -41,6 +60,34 @@ class _CanonicalReadStub:
     def _load_batch_job_canonical_items(self, *, job: dict[str, Any]):
         assert job["id"] == "job-canonical"
         return list(self.items)
+
+
+def _canonical_item(
+    *,
+    rule_id: str,
+    status: str,
+    reason_code: str,
+    record_ref_suffix: str = "a",
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "schema_version": CUSTOMER_SCHEMA_VERSION,
+        "record_ref": "rec_" + record_ref_suffix * 24,
+        "rule_id": rule_id,
+        "rule_version": "2026-06-09",
+        "status": status,
+        "result_status": status,
+        "display_status": status,
+        "is_compliant": (
+            True
+            if status in {"compliant", "not_applicable"}
+            else False
+            if status == "non_compliant"
+            else None
+        ),
+        "reason_code": reason_code,
+        **extra,
+    }
 
 
 def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summary_projection() -> None:
@@ -98,32 +145,35 @@ def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
 
 
 @pytest.mark.parametrize("compact", [False, True], ids=["detail", "list"])
-def test_workspace_response_rejects_historical_malformed_result_with_safe_409(
+def test_workspace_response_omits_historical_malformed_result_without_leaking_private_text(
     compact: bool,
 ) -> None:
     private_text = "患者张三原始病历不得出现在响应中"
 
-    with pytest.raises(HTTPException) as exc_info:
-        qc_sichuan._workspace_batch_response_item(
-            {
-                "id": "job-malformed",
-                "rule_set_key": "luxian_0609_qc_v1",
-                "status": "completed",
-                "items": [
-                    {
-                        "record_id": "private-record-id",
-                        "rule_id": "LX0609-001",
-                        "status": "non_compliant",
-                        "customer_conclusion": private_text,
-                    }
-                ],
-            },
-            compact=compact,
-        )
+    response = qc_sichuan._workspace_batch_response_item(
+        {
+            "id": "job-malformed",
+            "rule_set_key": "luxian_0609_qc_v1",
+            "status": "completed",
+            "items": [
+                {
+                    "record_id": "private-record-id",
+                    "rule_id": "LX0609-001",
+                    "status": "non_compliant",
+                    "customer_conclusion": private_text,
+                }
+            ],
+        },
+        compact=compact,
+    )
 
-    assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == "历史质控结果交付合同不完整，无法安全展示"
-    assert private_text not in str(exc_info.value.detail)
+    if compact:
+        assert response["items"] == []
+    else:
+        assert [item["status"] for item in response["items"]] == [
+            "technical_error"
+        ]
+    assert private_text not in str(response)
 
 
 def test_workspace_response_does_not_swallow_unrelated_projection_errors(
@@ -206,17 +256,20 @@ async def test_review_luxian_workspace_batch_job_persists_report(monkeypatch: py
             "draft_id": "sichuan-rule-library",
             "status": "completed",
             "filters": {"rule_set_key": "luxian_0609_qc_v1"},
-            "items": [
-                {
-                    "rule_id": "LX0609-020",
-                    "rule_name": "会诊记录：有会诊记录单无请会诊执行记录",
-                    "status": "uncertain",
-                    "record_id": "visit-001",
-                    "evidence": "未见会诊申请单或会诊记录单。",
-                }
-            ],
+            "items": [_canonical_item(
+                rule_id="LX0609-020",
+                status="compliant",
+                reason_code="requirement_satisfied",
+            )],
             "summary": {"rule_count": 1},
-        }
+        },
+        canonical_items=[
+            _canonical_item(
+                rule_id="LX0609-020",
+                status="uncertain",
+                reason_code="semantic_low_confidence",
+            )
+        ],
     )
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
@@ -230,7 +283,41 @@ async def test_review_luxian_workspace_batch_job_persists_report(monkeypatch: py
     assert response["data"]["review_report"]["scope"] == "luxian_0609_qc_v1"
     assert response["data"]["review_report"]["summary"]["p1"] == 1
     assert workspace.updated_report is not None
+    assert workspace.canonical_load_count == 2
     assert response["data"]["job"]["summary"]["review_report"]["findings"][0]["suggested_status"] == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_review_luxian_workspace_batch_job_rejects_missing_canonical_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _WorkspaceReviewStub(
+        {
+            "id": "job-lx-missing-envelope",
+            "draft_id": "sichuan-rule-library",
+            "status": "completed",
+            "filters": {"rule_set_key": "luxian_0609_qc_v1"},
+            "items": [
+                {
+                    "rule_id": "LX0609-020",
+                    "status": "uncertain",
+                    "reason_code": "semantic_low_confidence",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sichuan.review_workspace_batch_job(
+            _request(),
+            "job-lx-missing-envelope",
+            current_user={"id": "u-1"},
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "批量质控 Canonical 结果不完整，无法安全展示"
+    assert workspace.updated_report is None
 
 
 @pytest.mark.asyncio
@@ -243,7 +330,7 @@ async def test_review_non_luxian_workspace_batch_job_returns_422(monkeypatch: py
             "filters": {"rule_set_key": "sc_content_v1"},
             "items": [{"rule_id": "SC-001", "status": "non_compliant"}],
             "summary": {"rule_count": 1},
-        }
+        },
     )
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
@@ -328,7 +415,27 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
                     "raw_debug": {"patient_name": "指标泄漏"},
                 },
             },
-        }
+        },
+        canonical_items=[
+            _canonical_item(
+                rule_id="LX0609-021",
+                status="ai_suggested_non_compliant",
+                reason_code="semantic_low_confidence",
+                record_ref_suffix="a",
+            ),
+            _canonical_item(
+                rule_id="LX0609-029",
+                status="data_gap",
+                reason_code="source_unavailable",
+                record_ref_suffix="b",
+            ),
+            _canonical_item(
+                rule_id="LX0609-032",
+                status="technical_error",
+                reason_code="source_query_error",
+                record_ref_suffix="c",
+            ),
+        ],
     )
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 

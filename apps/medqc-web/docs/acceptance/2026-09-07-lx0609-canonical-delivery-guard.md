@@ -27,15 +27,25 @@
 
 ## 自动化验收
 
-- 聚焦回归：805 项通过。
-  - 会诊 020/023：166 项。
-  - Canonical、聚合与正式编排：638 项。
-  - 批量详情 Envelope 汇总：1 项。
-- LX0609 全量影响范围：4992 项通过、1 项跳过。
+- Canonical 读取、复核、批量详情及批任务接口聚焦回归：153 项通过。
+- LX0609 全量影响范围按以下可复现命令执行：
+
+```powershell
+$files = Get-ChildItem -LiteralPath 'backend\tests' -Recurse -Filter 'test_luxian_0609*.py' |
+    Sort-Object FullName |
+    Select-Object -ExpandProperty FullName
+py -3.10 -m pytest -q --disable-warnings @files
+```
+
+- 测试文件：145 个；
+- 收集并通过：4958 项；
+- 失败：0 项；
+- 耗时：234.91 秒。
 - 严格边界测试使用会立即失败的 adapter 替身，证明缺少 `ReducedDecision` 时没有触碰 legacy adapter。
 - 正式编排测试确认 `delivery_mode=canonical_straight_through` 被显式传入聚合器并写入编排结果。
+- 批量结果复核入口先从已校验的 Canonical Envelope 读取结果；Envelope 缺失时返回 409，不读取任务行中的旧 `items`。
 - 编码检查、ESLint 和 TypeScript 类型检查通过。
-- 全量前端单测为 835 项通过、5 项失败；失败集中在当前工作区既有的结果页/反馈组件测试，与本次后端交付链修改无调用关系，因此本记录不将整个发布门标记为全绿。
+- 全量前端单测为 840 项通过、0 项失败。
 
 ## 本机真实病历验收
 
@@ -43,6 +53,7 @@
 
 - 病历数：5。
 - 每份结果数：72；总结果数：360。
+- 72 条是当前客户交付完整范围：规则总表 77 条，扣除客户明确排除的 `033/034/035/041/042` 后为 72 条；其中 66 条正式执行，6 条按阶段策略输出 `not_executed`。这 5 条不是执行遗漏。
 - 任务状态：`completed`。
 - 5 个 Record Result Envelope 均为 `canonical_straight_through`，每个包含 72 条结果。
 - Canonical 状态分布：`compliant=55`、`non_compliant=21`、`not_applicable=111`、`data_gap=143`、`not_executed=30`、`technical_error=0`。
