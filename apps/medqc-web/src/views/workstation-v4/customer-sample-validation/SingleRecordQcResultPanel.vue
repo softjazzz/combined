@@ -1,12 +1,6 @@
 <template>
-  <aside
-    class="single-record-result-panel"
-    aria-label="质控结果"
-  >
-    <header
-      class="result-toolbar"
-      data-testid="single-record-result-toolbar"
-    >
+  <aside class="single-record-result-panel" aria-label="质控结果">
+    <header class="result-toolbar" data-testid="single-record-result-toolbar">
       <div class="toolbar-top">
         <div class="toolbar-summary">
           <strong>质控结果</strong>
@@ -66,18 +60,11 @@
       </template>
     </header>
 
-    <div
-      v-if="!hasVisibleResults"
-      class="empty-state"
-    >
+    <div v-if="!hasVisibleResults" class="empty-state">
       {{ viewItems.length ? '当前分类下没有质控结果' : '当前没有可展示的质控结果' }}
     </div>
 
-    <div
-      v-else
-      class="result-list"
-      :class="{ 'is-grouped': isGroupedPresentation }"
-    >
+    <div v-else class="result-list" :class="{ 'is-grouped': isGroupedPresentation }">
       <article
         v-for="item in renderedItems"
         v-show="shouldRenderDocumentGroupItem(item.key)"
@@ -117,12 +104,7 @@
               :stroke-width="2"
               aria-hidden="true"
             />
-            <ChevronRight
-              v-else
-              :size="17"
-              :stroke-width="2"
-              aria-hidden="true"
-            />
+            <ChevronRight v-else :size="17" :stroke-width="2" aria-hidden="true" />
           </button>
         </div>
         <button
@@ -140,16 +122,10 @@
           @click="isExpandable(item) && toggle(item.key)"
         >
           <span class="result-main">
-            <span
-              class="result-row-header"
-              data-testid="single-record-result-row-header"
-            >
+            <span class="result-row-header" data-testid="single-record-result-row-header">
               <span class="result-row-meta">
                 <span class="status-cell">
-                  <span
-                    class="status-pill"
-                    :class="`is-${item.tone}`"
-                  >{{
+                  <span class="status-pill" :class="`is-${item.tone}`">{{
                     item.displayStatus
                   }}</span>
                 </span>
@@ -161,32 +137,17 @@
                   {{ displayEvidence(item).length }}处证据
                 </span>
               </span>
-              <span
-                v-if="isExpandable(item)"
-                class="toggle-mark"
-                :class="{ 'has-feedback-entry': feedbackEnabled }"
-                aria-hidden="true"
-              >
-                <span
-                  v-if="feedbackEnabled"
-                  class="feedback-entry-hint"
-                  data-testid="single-record-feedback-entry-hint"
-                >可反馈</span>
+              <span v-if="isExpandable(item)" class="toggle-mark" aria-hidden="true">
                 <ChevronUp
                   v-if="expandedKey === item.key"
                   :size="17"
                   :stroke-width="2"
                   aria-hidden="true"
                 />
-                <ChevronRight
-                  v-else
-                  :size="17"
-                  :stroke-width="2"
-                  aria-hidden="true"
-                />
+                <ChevronRight v-else :size="17" :stroke-width="2" aria-hidden="true" />
               </span>
             </span>
-            <strong class="rule-name">{{ item.rule_name }}</strong>
+            <strong class="rule-name" :title="item.rule_name">{{ displayRuleTitle(item) }}</strong>
             <span
               v-if="copyMatchHeadline(item)"
               class="copy-match-headline"
@@ -201,21 +162,14 @@
                   <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.leftTime }}</time>
                 </span>
-                <ArrowRight
-                  aria-hidden="true"
-                  :size="16"
-                  :stroke-width="2"
-                />
+                <ArrowRight aria-hidden="true" :size="16" :stroke-width="2" />
                 <span>
                   <strong>{{ copyMatchHeadline(item)?.rightLabel }}</strong>
                   <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.rightTime }}</time>
                 </span>
               </span>
-              <span
-                class="copy-match-headline-metrics"
-                data-testid="copy-match-headline-metrics"
-              >
+              <span class="copy-match-headline-metrics" data-testid="copy-match-headline-metrics">
                 <span class="is-primary">
                   相似度 <strong>{{ copyMatchHeadline(item)?.similarity }}</strong>
                 </span>
@@ -233,75 +187,68 @@
               :class="{ 'is-text-expanded': expandedTextKey === item.key }"
             >
               <span class="rule-conclusion-label">判定说明</span>
-              <span
-                class="rule-conclusion"
-                data-testid="single-record-result-conclusion"
-              >{{
+              <span class="rule-conclusion" data-testid="single-record-result-conclusion">{{
                 resultHeadline(item)
               }}</span>
-              <span
-                v-if="needsTextExpansion(item)"
-                class="text-expand-action"
-                role="button"
-                tabindex="0"
-                @click.stop="toggleText(item.key)"
-                @keydown.enter.stop="toggleText(item.key)"
-              >
-                {{ expandedTextKey === item.key ? '收起说明' : '查看全文' }}
-              </span>
             </span>
           </span>
         </button>
-        <button
-          v-if="isDocumentGroupExpandedForItem(item.key)"
-          type="button"
-          class="result-row-debug-copy"
-          data-testid="copy-single-qc-debug-result"
-          title="复制本条脱敏调试信息"
-          :aria-label="`复制${item.rule_name}的脱敏调试信息`"
-          :disabled="Boolean(debugCopyingKey)"
-          @click="copySingleDebugResult(item)"
-        >
-          <Copy
-            aria-hidden="true"
-            :size="13"
-            :stroke-width="2"
-          />
-          <span>{{ debugCopyingKey === item.key ? '复制中' : '复制本条' }}</span>
-        </button>
+        <footer v-if="isDocumentGroupExpandedForItem(item.key)" class="result-card-actions">
+          <button
+            v-if="needsTextExpansion(item) && !copyMatchHeadline(item)"
+            type="button"
+            class="text-expand-action"
+            :aria-expanded="expandedTextKey === item.key"
+            @click="toggleText(item.key)"
+          >
+            {{ expandedTextKey === item.key ? '收起判定说明' : '展开判定说明' }}
+          </button>
+          <button
+            v-if="feedbackEnabled"
+            type="button"
+            class="result-feedback-action"
+            data-testid="single-record-feedback-entry-hint"
+            :aria-expanded="expandedKey === item.key"
+            @click="toggle(item.key)"
+          >
+            反馈与详情
+          </button>
+          <button
+            v-if="isDocumentGroupExpandedForItem(item.key)"
+            type="button"
+            class="result-row-debug-copy"
+            data-testid="copy-single-qc-debug-result"
+            title="复制本条脱敏调试信息"
+            :aria-label="`复制${item.rule_name}的脱敏调试信息`"
+            :disabled="Boolean(debugCopyingKey)"
+            @click="copySingleDebugResult(item)"
+          >
+            <Copy aria-hidden="true" :size="13" :stroke-width="2" />
+            <span>{{ debugCopyingKey === item.key ? '复制中' : '复制本条' }}</span>
+          </button>
+        </footer>
 
         <section
           v-if="
             isDocumentGroupExpandedForItem(item.key) &&
-              expandedKey === item.key &&
-              isExpandable(item)
+            expandedKey === item.key &&
+            isExpandable(item)
           "
           class="result-detail"
         >
           <div
             v-if="
               isCompliantResult(item) &&
-                (hasTimelinessResult(item) ||
-                  item.criterion_results?.length ||
-                  hasCompliantNarrative(item))
+              (hasTimelinessResult(item) ||
+                item.criterion_results?.length ||
+                hasCompliantNarrative(item))
             "
             class="compliant-detail"
             data-testid="single-record-compliant-detail"
           >
-            <div
-              v-if="hasCompliantNarrative(item)"
-              class="summary-narrative compliant-narrative"
-            >
-              <DetailBlock
-                v-if="item.detail"
-                :title="detailTitle(item)"
-                :content="item.detail"
-              />
-              <DetailBlock
-                v-if="item.actual"
-                :title="actualTitle(item)"
-                :content="item.actual"
-              />
+            <div v-if="hasCompliantNarrative(item)" class="summary-narrative compliant-narrative">
+              <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
+              <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
               <DetailBlock
                 v-if="item.standard"
                 :title="standardTitle(item)"
@@ -323,24 +270,13 @@
           <div
             v-if="
               !isCompliantResult(item) &&
-                (item.detail || item.actual || item.standard || hasTimelinessResult(item))
+              (item.detail || item.actual || item.standard || hasTimelinessResult(item))
             "
             class="decision-summary"
           >
-            <div
-              v-if="item.detail || item.actual || item.standard"
-              class="summary-narrative"
-            >
-              <DetailBlock
-                v-if="item.detail"
-                :title="detailTitle(item)"
-                :content="item.detail"
-              />
-              <DetailBlock
-                v-if="item.actual"
-                :title="actualTitle(item)"
-                :content="item.actual"
-              />
+            <div v-if="item.detail || item.actual || item.standard" class="summary-narrative">
+              <DetailBlock v-if="item.detail" :title="detailTitle(item)" :content="item.detail" />
+              <DetailBlock v-if="item.actual" :title="actualTitle(item)" :content="item.actual" />
               <DetailBlock
                 v-if="item.standard"
                 :title="standardTitle(item)"
@@ -417,10 +353,7 @@
                   </span>
                 </header>
                 <dl class="fact-list">
-                  <template
-                    v-for="row in remainingDisplayFactRows(item)"
-                    :key="row.key"
-                  >
+                  <template v-for="row in remainingDisplayFactRows(item)" :key="row.key">
                     <dt>{{ row.label }}</dt>
                     <dd>{{ row.value }}</dd>
                   </template>
@@ -448,19 +381,12 @@
                     </div>
                     <div class="copy-pair-documents">
                       <span>{{ pair.leftLabel }} · {{ pair.leftTime }}</span>
-                      <ArrowRight
-                        aria-hidden="true"
-                        :size="14"
-                        :stroke-width="1.8"
-                      />
+                      <ArrowRight aria-hidden="true" :size="14" :stroke-width="1.8" />
                       <span>{{ pair.rightLabel }} · {{ pair.rightTime }}</span>
                     </div>
                   </article>
                 </div>
-                <p
-                  v-if="displayEvidence(item).length"
-                  class="copy-pair-hint"
-                >
+                <p v-if="displayEvidence(item).length" class="copy-pair-hint">
                   下方关键证据可分别定位这些病程原文。
                 </p>
               </section>
@@ -470,10 +396,7 @@
               >
                 <h4>待补资料</h4>
                 <dl class="fact-list">
-                  <template
-                    v-for="row in dataGapRows(item)"
-                    :key="row.key"
-                  >
+                  <template v-for="row in dataGapRows(item)" :key="row.key">
                     <dt>{{ row.label }}</dt>
                     <dd>{{ row.value }}</dd>
                   </template>
@@ -497,10 +420,7 @@
                     {{ displayEvidence(item).length }} 份，可定位原文
                   </small>
                 </summary>
-                <div
-                  v-if="displayEvidence(item).length"
-                  class="evidence-list"
-                >
+                <div v-if="displayEvidence(item).length" class="evidence-list">
                   <button
                     v-for="evidence in displayEvidence(item)"
                     :key="evidence.source_ref"
@@ -524,39 +444,23 @@
                       >
                         已定位到文书，未定位到具体片段
                       </span>
-                      <span
-                        v-else-if="evidence.field_path"
-                        class="evidence-path"
-                      >{{
+                      <span v-else-if="evidence.field_path" class="evidence-path">{{
                         evidence.field_path
                       }}</span>
-                      <span
-                        v-else
-                        class="evidence-path"
-                      >点击定位原文核对</span>
+                      <span v-else class="evidence-path">点击定位原文核对</span>
                     </span>
                     <span class="evidence-action">
                       定位原文
-                      <ChevronRight
-                        aria-hidden="true"
-                        :size="14"
-                        :stroke-width="2"
-                      />
+                      <ChevronRight aria-hidden="true" :size="14" :stroke-width="2" />
                     </span>
                   </button>
                 </div>
-                <p
-                  v-else
-                  class="muted"
-                >
+                <p v-else class="muted">
                   {{ emptyEvidenceText(item) }}
                 </p>
               </details>
 
-              <details
-                v-if="item.model_analysis"
-                class="medical-analysis model-analysis"
-              >
+              <details v-if="item.model_analysis" class="medical-analysis model-analysis">
                 <summary>模型分析 / 医学判断</summary>
                 <p>{{ item.model_analysis }}</p>
               </details>
@@ -987,9 +891,7 @@ async function copySingleDebugResult(item: SingleRecordQcResultViewItem) {
   if (debugCopyingKey.value) return
   debugCopyingKey.value = item.key
   try {
-    const copied = await copyQcResultDebugText(
-      buildQcResultDebugText([item], props.debugContext),
-    )
+    const copied = await copyQcResultDebugText(buildQcResultDebugText([item], props.debugContext))
     if (copied) message.success('本条脱敏质控调试信息已复制')
     else message.error('复制失败，请检查浏览器剪贴板权限')
   } finally {
@@ -1122,6 +1024,20 @@ function toggleText(key: string) {
   expandedTextKey.value = expandedTextKey.value === key ? '' : key
 }
 
+function displayRuleTitle(item: SingleRecordQcResultViewItem): string {
+  const source = isGroupedPresentation.value
+    ? documentGroupForItem(item.key)?.sourceDocument
+    : undefined
+  if (!source) return item.rule_name
+  for (const separator of ['：', ':']) {
+    const prefix = `${source}${separator}`
+    if (item.rule_name.startsWith(prefix)) {
+      return item.rule_name.slice(prefix.length).trim() || item.rule_name
+    }
+  }
+  return item.rule_name
+}
+
 function evidenceLabel(evidence: SingleRecordQcEvidence) {
   const labels: Record<string, string> = {
     admission_record: '入院记录',
@@ -1173,9 +1089,9 @@ function isExpandable(item: SingleRecordQcResultViewItem) {
   if (!isCompliantResult(item)) return true
   return Boolean(
     hasTimelinessResult(item) ||
-    item.criterion_results?.length ||
-    hasCompliantNarrative(item) ||
-    hasCompliantSupportingDetails(item),
+      item.criterion_results?.length ||
+      hasCompliantNarrative(item) ||
+      hasCompliantSupportingDetails(item),
   )
 }
 
@@ -1263,9 +1179,10 @@ watch(
 
 .toolbar-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
-  min-width: max-content;
+  min-width: 0;
 }
 
 .toolbar-summary strong {
@@ -1284,11 +1201,10 @@ watch(
 
 .result-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   min-width: 0;
   padding: 5px 10px 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
 .status-pill {
@@ -1377,34 +1293,10 @@ watch(
   box-shadow: 0 3px 9px rgba(0, 102, 204, 0.2);
 }
 
-.result-tab.is-non_compliant:not(.is-active) {
-  border-color: rgba(239, 68, 68, 0.14);
-  background: rgba(239, 68, 68, 0.055);
-  color: #c62828;
-}
-
-.result-tab.is-pending:not(.is-active),
-.result-tab.is-data_gap:not(.is-active) {
-  border-color: rgba(245, 158, 11, 0.18);
-  background: rgba(245, 158, 11, 0.07);
-  color: #9a6200;
-}
-
-.result-tab.is-uncertain:not(.is-active) {
-  border-color: rgba(0, 102, 204, 0.14);
-  background: rgba(0, 102, 204, 0.055);
-  color: #245f9e;
-}
-
-.result-tab.is-not_applicable:not(.is-active) {
-  background: rgba(0, 0, 0, 0.035);
-  color: rgba(29, 29, 31, 0.58);
-}
-
-.result-tab.is-compliant:not(.is-active) {
-  border-color: rgba(16, 185, 129, 0.14);
-  background: rgba(16, 185, 129, 0.055);
-  color: #087443;
+.result-tab:not(.is-active) {
+  border-color: #e5eaf0;
+  background: #f7f9fc;
+  color: #52647b;
 }
 
 .result-tab b {
@@ -1500,7 +1392,7 @@ watch(
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
   isolation: isolate;
@@ -1536,12 +1428,9 @@ watch(
 }
 
 .result-row:hover {
-  border-color: rgba(0, 102, 204, 0.38);
-  background: #f8fbff;
-  box-shadow:
-    0 4px 14px rgba(0, 102, 204, 0.12),
-    0 8px 24px rgba(15, 23, 42, 0.08);
-  transform: translateY(-2px);
+  border-color: rgba(0, 102, 204, 0.22);
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .result-row:hover::before,
@@ -1553,9 +1442,7 @@ watch(
 .result-row.is-expanded {
   border-color: rgba(0, 102, 204, 0.34);
   background: #fff;
-  box-shadow:
-    0 4px 14px rgba(0, 102, 204, 0.12),
-    0 8px 24px rgba(15, 23, 42, 0.07);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .result-trigger {
@@ -1602,14 +1489,11 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding-right: 78px;
+  padding-right: 0;
 }
 
 .result-row-debug-copy {
-  position: absolute;
-  z-index: 3;
-  top: 10px;
-  right: 11px;
+  margin-left: auto;
   display: inline-flex;
   height: 28px;
   align-items: center;
@@ -1649,9 +1533,7 @@ watch(
 }
 
 .rule-code {
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.035);
-  padding: 1px 5px;
+  padding: 1px 0;
   color: rgba(29, 29, 31, 0.46);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-size: 12px;
@@ -1697,28 +1579,13 @@ watch(
   }
 }
 
-.toggle-mark.has-feedback-entry {
-  width: auto;
-  gap: 3px;
-  padding: 0 7px 0 8px;
-  border-radius: 999px;
-}
-
-.feedback-entry-hint {
-  color: #0066cc;
-  font-size: 10.5px;
-  font-weight: 650;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
 .rule-name {
   display: block;
   min-width: 0;
   margin-top: 9px;
   color: #1d1d1f;
-  font-size: 14px;
-  line-height: 22px;
+  font-size: 16px;
+  line-height: 25px;
   font-weight: 700;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1740,14 +1607,14 @@ watch(
   display: block;
   margin-top: 9px;
   padding-top: 8px;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  border-top: 0;
 }
 
 .rule-conclusion-label {
   display: block;
   margin-bottom: 3px;
-  color: rgba(29, 29, 31, 0.46);
-  font-size: 11px;
+  color: #627187;
+  font-size: 12px;
   line-height: 17px;
   font-weight: 650;
   letter-spacing: 0.04em;
@@ -1757,12 +1624,25 @@ watch(
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
 }
 
-.text-expand-action {
+.result-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 14px;
+  padding: 10px 0 12px;
+  border-top: 1px solid #edf0f4;
+}
+
+.text-expand-action,
+.result-feedback-action {
   display: inline-block;
-  margin-top: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   color: #0066cc;
   font-size: 12px;
   line-height: 18px;
@@ -1863,10 +1743,6 @@ watch(
 }
 
 .result-row:not(.is-expanded) .rule-name {
-  -webkit-line-clamp: 2;
-}
-
-.result-row:not(.is-expanded) .rule-conclusion {
   -webkit-line-clamp: 2;
 }
 
@@ -2312,8 +2188,8 @@ watch(
   }
 
   .rule-name {
-    font-size: 14px;
-    line-height: 22px;
+    font-size: 16px;
+    line-height: 25px;
   }
 
   .rule-conclusion {

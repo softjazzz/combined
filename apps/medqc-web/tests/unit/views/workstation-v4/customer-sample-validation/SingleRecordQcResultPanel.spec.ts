@@ -284,13 +284,47 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
 
-  it('演示反馈开启时，在折叠结果上明确提示可反馈', () => {
+  it('反馈入口位于卡片底部，点击只展开详情而不提交反馈', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: { items: [items[0]!], feedbackEnabled: true },
     })
 
-    expect(wrapper.get('[data-testid="single-record-feedback-entry-hint"]').text()).toBe('可反馈')
+    const feedback = wrapper.get(
+      '.result-card-actions [data-testid="single-record-feedback-entry-hint"]',
+    )
+    expect(feedback.text()).toBe('反馈与详情')
     expect(wrapper.find('[data-testid="qc-result-feedback"]').exists()).toBe(false)
+    await feedback.trigger('click')
+    expect(wrapper.find('.result-detail').exists()).toBe(true)
+    expect(wrapper.emitted('submit-feedback')).toBeUndefined()
+  })
+
+  it('仅在分组标题重复时简化展示标题，不修改原始规则名称', () => {
+    const item = { ...items[0]!, source_document: '手术记录', rule_name: '手术记录：完成时限核对' }
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [item], presentationMode: 'grouped' },
+    })
+    expect(wrapper.get('.rule-name').text()).toBe('完成时限核对')
+    expect(wrapper.get('.rule-name').attributes('title')).toBe(item.rule_name)
+    expect(item.rule_name).toBe('手术记录：完成时限核对')
+    const flat = mount(SingleRecordQcResultPanel, { props: { items: [item] } })
+    expect(flat.get('.rule-name').text()).toBe(item.rule_name)
+  })
+
+  it('判定说明使用独立按钮展开，保留原文且不触发详情选择', async () => {
+    const conclusion = '完整判定说明。'.repeat(40)
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [{ ...items[0]!, conclusion }] },
+    })
+    const action = wrapper.get('button.text-expand-action')
+    expect(action.text()).toBe('展开判定说明')
+    await action.trigger('click')
+    expect(action.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('.rule-conclusion').text()).toBe(conclusion)
+    expect(wrapper.emitted('select')).toBeUndefined()
+    expect(wrapper.find('.result-detail').exists()).toBe(false)
+    await action.trigger('click')
+    expect(action.attributes('aria-expanded')).toBe('false')
   })
 
   it('直接展示 016 Canonical facts 中的实际相似度、阈值和比对范围', async () => {
