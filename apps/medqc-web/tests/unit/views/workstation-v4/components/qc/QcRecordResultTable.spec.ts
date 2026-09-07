@@ -34,15 +34,37 @@ describe('QcRecordResultTable', () => {
     expect(renderedRows[0].attributes('data-record-key')).toBe(rows[0].recordKey)
   })
 
-  it('复用病历池的头像与患者主次信息层级', () => {
+  it('运行病历使用专属外观且隐藏头像和重复标签，住院号保留完整悬停文本', () => {
     const wrapper = mount(QcRecordResultTable, {
-      props: { carePhase: 'inpatient', rows },
+      props: {
+        carePhase: 'inpatient',
+        rows: [{ ...rows[0], visitId: 'LONG-VISIT-ID-202608090001' }],
+      },
     })
 
+    expect(wrapper.classes()).toContain('qc-record-result-table--inpatient')
+    expect(wrapper.find('.qc-record-result-table__avatar').exists()).toBe(false)
+    expect(wrapper.find('.qc-record-result-table__visit-label').exists()).toBe(false)
+    expect(wrapper.get('.qc-record-result-table__patient-name').text()).toBe('患者甲')
+    expect(wrapper.get('.qc-record-result-table__visit-id').attributes('title')).toBe(
+      'LONG-VISIT-ID-202608090001',
+    )
+    expect(wrapper.get('.qc-record-result-table__summary').text()).toBe(rows[0].issueSummary)
+  })
+
+  it('出院病历保留头像、住院号标签及已有结果按钮样式钩子', () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: { carePhase: 'discharged', rows },
+    })
+
+    expect(wrapper.classes()).not.toContain('qc-record-result-table--inpatient')
     expect(wrapper.find('.qc-record-result-table__patient-cell').exists()).toBe(true)
     expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
     expect(wrapper.get('.qc-record-result-table__patient-name').text()).toBe('患者甲')
     expect(wrapper.get('.qc-record-result-table__visit-line').text()).toContain('住院号：V-1')
+    expect(wrapper.get('button').classes()).toContain(
+      'qc-record-result-table__result-button--available',
+    )
   })
 
   it('支持逐行选择与当前页全选，并且勾选不会打开结果', async () => {
@@ -55,6 +77,10 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.emitted('open-result')).toBeUndefined()
 
     await wrapper.setProps({ selectedRecordKeys: [rows[0].recordKey] })
+    expect(wrapper.get('tr[data-record-key]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('tr[data-record-key]').classes()).toContain(
+      'qc-record-result-table__row--selected',
+    )
     await wrapper.get('input[aria-label="选择当前页全部病历"]').setValue(false)
     expect(wrapper.emitted('update:selectedRecordKeys')?.at(-1)).toEqual([[]])
   })
@@ -92,6 +118,18 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.find('.qc-record-result-table__table').classes()).toContain(
       'qc-record-result-table__table',
     )
+  })
+
+  it('运行病历保留整行键盘打开结果行为', async () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', rows },
+    })
+
+    const row = wrapper.get('tr[data-record-key]')
+    expect(row.attributes('tabindex')).toBe('0')
+    await row.trigger('keydown', { key: 'Enter' })
+    await row.trigger('keydown', { key: ' ' })
+    expect(wrapper.emitted('open-result')).toEqual([[rows[0].recordKey], [rows[0].recordKey]])
   })
 
   it('明确区分资料待核实、未质控和结果校验异常，且未知来源不伪装为资料缺失', () => {

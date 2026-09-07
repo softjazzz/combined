@@ -1,0 +1,268 @@
+/* 仅运行病历页：保留终末页及共享组件的既有外观。 */
+.running-qc-refined {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
+  align-items: center;
+  column-gap: 24px;
+  padding: 30px 32px;
+  background: #fff;
+  color: #202b3b;
+}
+
+.running-qc-refined .qc-record-result-list-view__header {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.running-qc-refined h1 {
+  font-size: 24px;
+  line-height: 34px;
+  font-weight: 600;
+  color: #171d29;
+}
+
+.running-qc-refined .qc-record-result-list-view__scope {
+  margin: 0;
+  font-weight: 400;
+  border-radius: 6px;
+  background: #edf5ff;
+}
+
+.running-qc-refined .qc-record-result-list-view__view-switch {
+  margin: 0;
+  background: #f4f7fb;
+  border-color: #e7ecf3;
+}
+
+.running-qc-refined .qc-record-result-list-view__view-switch button {
+  font-weight: 500;
+  padding: 0 16px;
+}
+
+.running-qc-refined .qc-record-result-list-view__metrics {
+  grid-column: 1 / -1;
+  margin: 26px 0 24px;
+  gap: 0;
+  padding: 20px 0;
+  border-block: 1px solid #e8edf3;
+}
+
+.running-qc-refined :deep(.qc-metric-card-strip__card) {
+  padding: 0 24px;
+  border: 0;
+  border-right: 1px solid #e8edf3;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.running-qc-refined :deep(.qc-metric-card-strip__card:first-child) {
+  padding-left: 0;
+}
+.running-qc-refined :deep(.qc-metric-card-strip__card:last-child) {
+  border-right: 0;
+}
+.running-qc-refined :deep(.qc-metric-card-strip__label) {
+  font-size: 13px;
+  font-weight: 400;
+  color: #58677b;
+}
+.running-qc-refined :deep(.qc-metric-card-strip__icon) {
+  display: none;
+}
+.running-qc-refined :deep(.qc-metric-card-strip__value) {
+  font-size: 30px;
+  line-height: 38px;
+  font-weight: 600;
+  margin: 6px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.running-qc-refined :deep(.qc-metric-card-strip__helper) {
+  font-size: 12px;
+  font-weight: 400;
+  color: #778397;
+}
+
+.running-qc-refined .qc-record-result-list-view__workbench,
+.running-qc-refined > :deep(.qc-result-analysis) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.running-qc-refined .qc-record-result-list-view__workbench {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+}
+.running-qc-refined .qc-record-result-list-view__toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 22px 16px;
+  padding: 0 0 16px;
+  border-bottom: 0;
+}
+.running-qc-refined .qc-record-result-list-view__filters {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.65fr) minmax(310px, 1.1fr) auto;
+  align-items: end;
+  gap: 16px;
+  padding: 0 0 22px;
+  border-bottom: 1px solid #edf0f4;
+}
+.running-qc-refined .qc-record-result-list-view__filter-field,
+.running-qc-refined .qc-record-result-list-view__date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.running-qc-refined .qc-record-result-list-view__field-label {
+  color: #58677b;
+  font-size: 13px;
+  line-height: 18px;
+}
+.running-qc-refined .qc-record-result-list-view__date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.running-qc-refined .qc-record-result-list-view__filters input,
+.running-qc-refined .qc-record-result-list-view__filters select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  background: #fff;
+  border-color: #dfe6ef;
+  color: #344359;
+  font-weight: 400;
+}
+.running-qc-refined .qc-record-result-list-view__filters input[type='date'] {
+  flex: 1;
+  width: 0;
+}
+.running-qc-refined .qc-record-result-list-view__date-separator {
+  display: inline;
+}
+.running-qc-refined .qc-record-result-list-view__filters input::placeholder {
+  color: #8794a6;
+}
+.running-qc-refined .qc-record-result-list-view__query-button {
+  padding: 0 24px;
+  height: 38px;
+  background: #edf5ff;
+  border-color: #cfe1f7;
+  color: #0066cc;
+  font-weight: 500;
+}
+.running-qc-refined .qc-record-result-list-view__query-button:hover:not(:disabled) {
+  background: #e1efff;
+}
+.running-qc-refined .qc-record-result-list-view__list-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  color: #778397;
+  font-size: 13px;
+}
+.running-qc-refined .qc-record-result-list-view__list-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #202b3b;
+}
+.running-qc-refined .qc-record-result-list-view__selected-count {
+  color: #0066cc;
+}
+.running-qc-refined .qc-record-result-list-view__toolbar-actions {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.running-qc-refined .qc-record-result-list-view__export-trigger,
+.running-qc-refined .qc-record-result-list-view__refresh-button {
+  border-color: #dfe6ef;
+  background: #fff;
+  border-radius: 8px;
+  color: #526075;
+  font-weight: 500;
+  box-shadow: none;
+}
+.running-qc-refined .qc-record-result-list-view__export-trigger:hover:not(:disabled),
+.running-qc-refined .qc-record-result-list-view__refresh-button:hover:not(:disabled) {
+  background: #f4f8fc;
+  color: #0066cc;
+}
+.running-qc-refined
+  .qc-record-result-list-view__qc-control
+  :deep(.qc-run-selected-control__trigger) {
+  border-radius: 8px;
+  box-shadow: none;
+}
+.running-qc-refined .qc-record-result-list-view__task-status {
+  padding: 0;
+}
+.running-qc-refined .qc-record-result-list-view__pagination {
+  padding: 18px 0;
+  border-color: #e8edf3;
+}
+.running-qc-refined :is(input, select, button):focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 3px;
+}
+
+@media (max-width: 1200px) {
+  .running-qc-refined {
+    padding: 24px;
+  }
+  .running-qc-refined .qc-record-result-list-view__filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .running-qc-refined .qc-record-result-list-view__query-button {
+    justify-self: end;
+  }
+}
+@media (max-width: 760px) {
+  .running-qc-refined {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px;
+  }
+  .running-qc-refined .qc-record-result-list-view__view-switch {
+    justify-self: start;
+  }
+  .running-qc-refined .qc-record-result-list-view__header {
+    flex-wrap: wrap;
+  }
+  .running-qc-refined .qc-record-result-list-view__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 20px;
+    margin: 0;
+  }
+  .running-qc-refined :deep(.qc-metric-card-strip__card:nth-child(3)) {
+    padding-left: 0;
+  }
+  .running-qc-refined :deep(.qc-metric-card-strip__card:nth-child(2)) {
+    border-right: 0;
+  }
+  .running-qc-refined .qc-record-result-list-view__toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .running-qc-refined .qc-record-result-list-view__filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .running-qc-refined .qc-record-result-list-view__query-button {
+    justify-self: stretch;
+  }
+}

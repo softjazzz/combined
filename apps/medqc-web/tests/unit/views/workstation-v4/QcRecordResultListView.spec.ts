@@ -223,6 +223,31 @@ describe('QcRecordResultListView', () => {
     },
   )
 
+  it('运行页分离筛选与列表操作，明确已选范围，不改变终末页外观', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(wrapper.classes()).toContain('running-qc-refined')
+    expect(
+      wrapper.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
+    ).toEqual(['关键词', '科室', '入院日期'])
+    expect(
+      wrapper
+        .find('.qc-record-result-list-view__filters .qc-record-result-list-view__export-trigger')
+        .exists(),
+    ).toBe(false)
+    expect(wrapper.find('.qc-record-result-list-view__selected-count').exists()).toBe(false)
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+    expect(wrapper.get('.qc-record-result-list-view__selected-count').text()).toBe('已选 1 份')
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(false)
+    expect(wrapper.find('.qc-record-result-list-view__selected-count').exists()).toBe(false)
+
+    const finalView = mountView('discharged')
+    await flushPromises()
+    expect(finalView.classes()).not.toContain('running-qc-refined')
+    expect(finalView.find('.qc-record-result-list-view__list-heading').exists()).toBe(false)
+    expect(finalView.find('.qc-record-result-list-view__field-label').exists()).toBe(false)
+  })
+
   it('使用服务端全量汇总，并只展示三坐标和 recordKey 完整的病历行', async () => {
     const wrapper = mountView('inpatient')
     await flushPromises()
@@ -237,7 +262,8 @@ describe('QcRecordResultListView', () => {
       '资料待核实',
     ])
     expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
-    expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者乙头像')
+    expect(wrapper.find('.qc-record-result-table__avatar').exists()).toBe(false)
+    expect(wrapper.text()).toContain('患者乙')
     expect(wrapper.text()).not.toContain('不得展示')
     expect(wrapper.text()).not.toContain('来源未知')
     expect(wrapper.text()).not.toContain('资料完整')

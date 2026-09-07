@@ -1,16 +1,14 @@
 <template>
   <div
     class="qc-record-result-table"
+    :class="{ 'qc-record-result-table--inpatient': carePhase === 'inpatient' }"
     data-testid="qc-record-result-table"
   >
     <div class="qc-record-result-table__scroll">
       <table class="qc-record-result-table__table">
         <thead>
           <tr>
-            <th
-              scope="col"
-              class="qc-record-result-table__selection-heading"
-            >
+            <th scope="col" class="qc-record-result-table__selection-heading">
               <input
                 type="checkbox"
                 aria-label="选择当前页全部病历"
@@ -18,29 +16,16 @@
                 :disabled="rows.length === 0"
                 @click.stop
                 @change="togglePageSelection"
-              >
+              />
             </th>
-            <th scope="col">
-              患者 / 住院号
-            </th>
-            <th scope="col">
-              科室 / 床位
-            </th>
+            <th scope="col">患者 / 住院号</th>
+            <th scope="col">科室 / 床位</th>
             <th scope="col">
               {{ timeColumnLabel }}
             </th>
-            <th scope="col">
-              问题摘要
-            </th>
-            <th scope="col">
-              最近质控
-            </th>
-            <th
-              scope="col"
-              class="qc-record-result-table__action-heading"
-            >
-              查看结果
-            </th>
+            <th scope="col">问题摘要</th>
+            <th scope="col">最近质控</th>
+            <th scope="col" class="qc-record-result-table__action-heading">查看结果</th>
           </tr>
         </thead>
         <tbody>
@@ -65,29 +50,33 @@
                 :checked="selectedRecordKeys.includes(row.recordKey)"
                 @click.stop
                 @change="toggleRowSelection(row.recordKey, $event)"
-              >
+              />
             </td>
             <td>
               <div class="qc-record-result-table__patient-cell">
                 <img
+                  v-if="carePhase !== 'inpatient'"
                   class="qc-record-result-table__avatar"
                   :src="patientAvatarSrc(row)"
                   :alt="`${row.patientName || '患者'}头像`"
-                >
+                />
                 <span class="qc-record-result-table__patient-meta">
                   <span class="qc-record-result-table__patient-name">
                     {{ row.patientName || '患者信息待接入' }}
                   </span>
                   <span class="qc-record-result-table__visit-line">
-                    <span class="qc-record-result-table__visit-label">住院号：</span>
-                    <span class="qc-record-result-table__visit-id">{{
-                      row.visitId || '待接入'
-                    }}</span>
+                    <span
+                      v-if="carePhase !== 'inpatient'"
+                      class="qc-record-result-table__visit-label"
+                      >住院号：</span
+                    >
+                    <span
+                      class="qc-record-result-table__visit-id"
+                      :title="carePhase === 'inpatient' ? row.visitId : undefined"
+                      >{{ row.visitId || '待接入' }}</span
+                    >
                   </span>
-                  <span
-                    v-if="row.sourceLabel"
-                    class="qc-record-result-table__source-state"
-                  >{{
+                  <span v-if="row.sourceLabel" class="qc-record-result-table__source-state">{{
                     row.sourceLabel
                   }}</span>
                 </span>
@@ -97,18 +86,12 @@
               <span class="qc-record-result-table__department">
                 {{ row.department || '未分科室' }}
               </span>
-              <span
-                v-if="row.bedNumber"
-                class="qc-record-result-table__bed-number"
-              >{{
+              <span v-if="row.bedNumber" class="qc-record-result-table__bed-number">{{
                 row.bedNumber
               }}</span>
             </td>
             <td>{{ displayTime(row) }}</td>
-            <td
-              class="qc-record-result-table__summary"
-              :title="row.issueSummary"
-            >
+            <td class="qc-record-result-table__summary" :title="row.issueSummary">
               {{ row.issueSummary }}
             </td>
             <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
@@ -126,10 +109,7 @@
               </button>
             </td>
           </tr>
-          <tr
-            v-if="rows.length === 0"
-            class="qc-record-result-table__empty-row"
-          >
+          <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
             <td colspan="7">
               {{ emptyMessage }}
             </td>
@@ -165,7 +145,13 @@ export interface QcRecordResultRow {
   admissionTime?: string
   dischargeTime?: string
   resultStatus:
-    'priority' | 'data-gap' | 'uncertain' | 'technical-error' | 'not-run' | 'completed' | 'unknown'
+    | 'priority'
+    | 'data-gap'
+    | 'uncertain'
+    | 'technical-error'
+    | 'not-run'
+    | 'completed'
+    | 'unknown'
   resultLabel: string
   issueSummary: string
   latestQcTime?: string
@@ -461,6 +447,103 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
   padding: 48px 16px;
   color: rgba(29, 29, 31, 0.52);
   text-align: center;
+}
+
+/* 运行病历使用安静的数据行；出院病历继续沿用原有展示。 */
+.qc-record-result-table--inpatient .qc-record-result-table__table th {
+  height: 44px;
+  background: #f8fafc;
+  font-weight: 500;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__row td {
+  padding-top: 15px;
+  padding-bottom: 15px;
+  border-bottom-color: rgba(29, 29, 31, 0.065);
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(2) {
+  min-width: 190px;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(3) {
+  min-width: 130px;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(4),
+.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(6) {
+  min-width: 160px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__summary {
+  min-width: 230px;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__patient-meta {
+  gap: 4px;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__patient-name {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__visit-id {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__department {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__row:hover {
+  background: #f8fafc;
+  box-shadow: none;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__row--selected,
+.qc-record-result-table--inpatient .qc-record-result-table__row--selected:hover {
+  background: #edf4fc;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__row:focus-visible {
+  background: #edf4fc;
+  box-shadow: inset 3px 0 0 #0066cc;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__result-button {
+  border-color: transparent;
+  background: transparent;
+  color: #64748b;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__result-button--available {
+  background: rgba(0, 102, 204, 0.055);
+  color: #0066cc;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__result-button:hover {
+  border-color: rgba(0, 102, 204, 0.14);
+  background: rgba(0, 102, 204, 0.09);
+  color: #0066cc;
+  transform: none;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__result-button:focus-visible,
+.qc-record-result-table--inpatient input:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 3px;
 }
 
 @media (max-width: 768px) {

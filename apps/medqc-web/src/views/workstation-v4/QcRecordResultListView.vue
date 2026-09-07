@@ -1,5 +1,5 @@
 <template>
-  <main class="qc-record-result-list-view">
+  <main class="qc-record-result-list-view" :class="{ 'running-qc-refined': isInpatient }">
     <section class="qc-record-result-list-view__header">
       <div>
         <h1>{{ pageTitle }}</h1>
@@ -7,10 +7,7 @@
       <span class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
     </section>
 
-    <nav
-      class="qc-record-result-list-view__view-switch"
-      aria-label="质控结果视图"
-    >
+    <nav class="qc-record-result-list-view__view-switch" aria-label="质控结果视图">
       <button
         type="button"
         data-testid="qc-result-view-records"
@@ -37,50 +34,52 @@
       :cards="metricCards"
     />
 
-    <section
-      v-if="activeView === 'records'"
-      class="qc-record-result-list-view__workbench"
-    >
+    <section v-if="activeView === 'records'" class="qc-record-result-list-view__workbench">
       <div class="qc-record-result-list-view__toolbar">
-        <div
-          class="qc-record-result-list-view__filters"
-          aria-label="病历筛选条件"
-        >
-          <input
-            v-model="searchText"
-            placeholder="搜索患者、住院号、科室"
-            aria-label="关键词筛选"
-            @keydown.enter.prevent="applyFilters"
+        <div class="qc-record-result-list-view__filters" aria-label="病历筛选条件">
+          <label
+            class="qc-record-result-list-view__filter-field qc-record-result-list-view__search-field"
           >
-          <select
-            v-model="activeDept"
-            aria-label="科室筛选"
-            @change="applyFilters"
+            <span v-if="isInpatient" class="qc-record-result-list-view__field-label">关键词</span>
+            <input
+              v-model="searchText"
+              type="search"
+              placeholder="搜索患者、住院号、科室"
+              aria-label="关键词筛选"
+              @keydown.enter.prevent="applyFilters"
+            />
+          </label>
+          <label class="qc-record-result-list-view__filter-field">
+            <span v-if="isInpatient" class="qc-record-result-list-view__field-label">科室</span>
+            <select v-model="activeDept" aria-label="科室筛选" @change="applyFilters">
+              <option value="全部科室">全部科室</option>
+              <option v-for="department in departmentOptions" :key="department" :value="department">
+                {{ department }}
+              </option>
+            </select>
+          </label>
+          <div
+            class="qc-record-result-list-view__date-field"
+            role="group"
+            :aria-label="isInpatient ? '入院日期范围' : '出院日期范围'"
           >
-            <option value="全部科室">
-              全部科室
-            </option>
-            <option
-              v-for="department in departmentOptions"
-              :key="department"
-              :value="department"
-            >
-              {{ department }}
-            </option>
-          </select>
-          <input
-            type="date"
-            aria-label="开始日期筛选"
-            :value="startDate"
-            @change="updateStartDate"
-          >
-          <span class="qc-record-result-list-view__date-separator">至</span>
-          <input
-            type="date"
-            aria-label="结束日期筛选"
-            :value="endDate"
-            @change="updateEndDate"
-          >
+            <span v-if="isInpatient" class="qc-record-result-list-view__field-label">入院日期</span>
+            <div class="qc-record-result-list-view__date-inputs">
+              <input
+                type="date"
+                aria-label="开始日期筛选"
+                :value="startDate"
+                @change="updateStartDate"
+              />
+              <span class="qc-record-result-list-view__date-separator">至</span>
+              <input
+                type="date"
+                aria-label="结束日期筛选"
+                :value="endDate"
+                @change="updateEndDate"
+              />
+            </div>
+          </div>
           <button
             class="qc-record-result-list-view__query-button"
             type="button"
@@ -90,11 +89,18 @@
             查询
           </button>
         </div>
-        <div class="qc-record-result-list-view__toolbar-actions">
-          <div
-            class="qc-record-result-list-view__export-menu"
-            @focusout="handleExportMenuFocusOut"
+        <div v-if="isInpatient" class="qc-record-result-list-view__list-heading">
+          <h2>病历结果</h2>
+          <span>本页 {{ rows.length }} 份</span>
+          <span
+            v-if="selectedCount > 0"
+            class="qc-record-result-list-view__selected-count"
+            role="status"
+            >已选 {{ selectedCount }} 份</span
           >
+        </div>
+        <div class="qc-record-result-list-view__toolbar-actions">
+          <div class="qc-record-result-list-view__export-menu" @focusout="handleExportMenuFocusOut">
             <button
               class="qc-record-result-list-view__export-trigger"
               type="button"
@@ -105,15 +111,9 @@
               @click="exportMenuOpen = !exportMenuOpen"
               @keydown.esc="exportMenuOpen = false"
             >
-              <Download
-                :size="15"
-                aria-hidden="true"
-              />
+              <Download :size="15" aria-hidden="true" />
               {{ exporting ? '正在导出…' : '导出 Excel' }}
-              <ChevronDown
-                :size="14"
-                aria-hidden="true"
-              />
+              <ChevronDown :size="14" aria-hidden="true" />
             </button>
             <div
               v-if="exportMenuOpen"
@@ -175,10 +175,7 @@
         @update:selected-record-keys="updateSelectedRecordKeys"
       />
 
-      <footer
-        v-if="serverTotal > 0"
-        class="qc-record-result-list-view__pagination"
-      >
+      <footer v-if="serverTotal > 0" class="qc-record-result-list-view__pagination">
         <span>共 {{ serverTotal }} 份病历</span>
         <div>
           <button
@@ -972,7 +969,7 @@ function closeResultDrawer() {
   font-size: 13px;
 }
 
-.qc-record-result-list-view__filters input:first-child {
+.qc-record-result-list-view__filters input[type='search'] {
   min-width: 260px;
   padding: 0 11px;
 }
@@ -1097,7 +1094,7 @@ function closeResultDrawer() {
     flex-direction: column;
   }
 
-  .qc-record-result-list-view__filters input:first-child,
+  .qc-record-result-list-view__filters input[type='search'],
   .qc-record-result-list-view__filters select,
   .qc-record-result-list-view__filters input[type='date'] {
     width: 100%;
@@ -1132,5 +1129,15 @@ function closeResultDrawer() {
   .qc-record-result-list-view__scope {
     align-self: flex-start;
   }
+}
+</style>
+
+<style scoped>
+@import './styles/running-qc-refined.css';
+
+.qc-record-result-list-view__filter-field,
+.qc-record-result-list-view__date-field,
+.qc-record-result-list-view__date-inputs {
+  display: contents;
 }
 </style>
