@@ -4,6 +4,7 @@
     :class="{
       'workstation-layout--overview': isQcOverviewRoute,
       'workstation-layout--record-pool': route.path === '/workstation-v4/worklist',
+      'workstation-layout--review': route.path === '/workstation-v4/records/running',
     }"
   >
     <!-- 侧边栏 -->
@@ -1285,4 +1286,8 @@ watch(
 .workstation-layout--record-pool .sidebar-container :deep(.ant-layout-sider-trigger) {
   background: transparent !important;
 }
+</style>
+
+<style scoped>
+@import './workstation-review-shell.css';
 </style>

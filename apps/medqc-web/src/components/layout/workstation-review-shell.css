@@ -1,0 +1,55 @@
+/* 仅运行病历页导航材质，不删改菜单与权限。 */
+.workstation-layout--review .sidebar-container {
+  background: #f2f7fd !important;
+  border-right: 1px solid #e1e8f1 !important;
+  box-shadow: none !important;
+}
+.workstation-layout--review .brand-card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.workstation-layout--review .sidebar-container :deep(.ant-menu) {
+  background: transparent !important;
+}
+.workstation-layout--review .sidebar-container :deep(.ant-menu-sub.ant-menu-inline) {
+  margin: 0 0 10px !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.workstation-layout--review .sidebar-container :deep(.ant-menu-submenu-title),
+.workstation-layout--review .sidebar-container :deep(.ant-menu-title-content) {
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+.workstation-layout--review
+  .sidebar-container
+  :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #53647a !important;
+}
+.workstation-layout--review
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item) {
+  height: 37px !important;
+  line-height: 37px !important;
+  margin: 1px 0 !important;
+  border-radius: 5px !important;
+  color: #4f6075 !important;
+}
+.workstation-layout--review .sidebar-container :deep(.ant-menu-item-selected) {
+  background: #e2efff !important;
+  color: #0066cc !important;
+}
+.workstation-layout--review .sidebar-container :deep(.ant-menu-item-icon),
+.workstation-layout--review .sidebar-container :deep(.sidebar-icon) {
+  color: #6d7e92 !important;
+}
+.workstation-layout--review .sidebar-container :deep(.ant-menu-item-selected .sidebar-icon) {
+  color: #0066cc !important;
+}

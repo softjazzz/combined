@@ -24,6 +24,67 @@ const rows = [
 ]
 
 describe('QcRecordResultTable', () => {
+  it('紧凑复核模式为五列，合并患者科室信息并保留完整提示与摘要', () => {
+    const issueSummary = '确定问题 2 · 待核实 18 · 自定义说明'
+    const wrapper = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', compactReview: true, rows: [{ ...rows[0], issueSummary }] },
+    })
+    expect(wrapper.findAll('thead th').map((item) => item.text())).toEqual([
+      '',
+      '患者 / 科室',
+      '问题摘要',
+      '最近质控',
+      '预览',
+    ])
+    expect(wrapper.findAll('tbody td')).toHaveLength(5)
+    expect(wrapper.get('.qc-record-result-table__compact-meta').attributes('title')).toBe(
+      'V-1 · 重症医学科 · 12 床',
+    )
+    expect(wrapper.get('.qc-record-result-table__summary').attributes('title')).toBe(issueSummary)
+    expect(
+      wrapper.findAll('.qc-record-result-table__summary-item').map((item) => item.text()),
+    ).toEqual(['确定问题 2', '待核实 18', '自定义说明'])
+    expect(wrapper.text()).not.toContain('2026-08-09 08:00')
+    expect(wrapper.text()).toContain('2026-08-12 11:30')
+  })
+
+  it('紧凑列表的当前预览与批量勾选独立，鼠标和键盘勾选不打开预览', async () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: {
+        carePhase: 'inpatient',
+        compactReview: true,
+        activeRecordKey: rows[0].recordKey,
+        rows,
+      },
+    })
+    const row = wrapper.get('tr[data-record-key]')
+    expect(row.classes()).toContain('qc-record-result-table__row--active')
+    expect(row.classes()).not.toContain('qc-record-result-table__row--selected')
+    const checkbox = wrapper.get('tbody input')
+    await checkbox.trigger('click')
+    await checkbox.trigger('change')
+    await checkbox.trigger('keydown', { key: ' ' })
+    await checkbox.trigger('keydown', { key: 'Enter' })
+    await checkbox.setValue(true)
+    expect(wrapper.emitted('open-result')).toBeUndefined()
+    expect(wrapper.emitted('update:selectedRecordKeys')?.at(-1)).toEqual([[rows[0].recordKey]])
+    await wrapper.setProps({ selectedRecordKeys: [rows[0].recordKey], activeRecordKey: undefined })
+    expect(row.classes()).not.toContain('qc-record-result-table__row--active')
+    expect(row.classes()).toContain('qc-record-result-table__row--selected')
+    await row.trigger('click')
+    await wrapper.get('button[aria-label="查看病历预览"]').trigger('click')
+    expect(wrapper.emitted('open-result')).toEqual([[rows[0].recordKey], [rows[0].recordKey]])
+  })
+
+  it('紧凑空态跨五列，默认空态仍跨七列', () => {
+    const compact = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', compactReview: true, rows: [] },
+    })
+    const normal = mount(QcRecordResultTable, { props: { carePhase: 'inpatient', rows: [] } })
+    expect(compact.get('tbody td').attributes('colspan')).toBe('5')
+    expect(normal.get('tbody td').attributes('colspan')).toBe('7')
+  })
+
   it('运行页只按展示分隔符分组摘要，保留原文和未知说明，不影响终末页', () => {
     const issueSummary = '确定问题 2 · 待核实 18 · 待判断 1 · 自定义说明'
     const wrapper = mount(QcRecordResultTable, {

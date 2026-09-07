@@ -37,6 +37,7 @@ vi.mock('@/stores/auth', () => ({
 
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
 import QcRunSelectedControl from '@/views/workstation-v4/components/qc/QcRunSelectedControl.vue'
+import QcRecordReviewPreview from '@/views/workstation-v4/components/qc/QcRecordReviewPreview.vue'
 
 const ResultDrawerStub = defineComponent({
   name: 'QCRecordResultComparisonDrawer',
@@ -170,6 +171,7 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
       stubs: {
         QCRecordResultComparisonDrawer: ResultDrawerStub,
         QcRecordResultAnalysisPanel: ResultAnalysisStub,
+        QcRecordReviewPreview: true,
       },
     },
   })
@@ -207,7 +209,12 @@ describe('QcRecordResultListView', () => {
       await flushPromises()
 
       expect(wrapper.text()).toContain(title)
-      expect(wrapper.text()).toContain(scope)
+      if (carePhase === 'inpatient') {
+        expect(wrapper.get('.review-workbench-scope').text()).toBe('在院')
+        expect(wrapper.get('.review-workbench-scope').attributes('title')).toBe(scope)
+      } else {
+        expect(wrapper.text()).toContain(scope)
+      }
       expect(wrapper.find('.qc-record-result-list-view__header').text()).not.toContain(
         removedEyebrow,
       )
@@ -252,15 +259,17 @@ describe('QcRecordResultListView', () => {
     const wrapper = mountView('inpatient')
     await flushPromises()
 
-    expect(
-      wrapper.findAll('.qc-metric-card-strip__card strong').map((item) => item.text()),
-    ).toEqual(['20', '14', '4', '5'])
-    expect(wrapper.findAll('.qc-metric-card-strip__label').map((item) => item.text())).toEqual([
-      '纳入病历',
-      '已完成质控',
-      '需优先复核',
-      '资料待核实',
+    expect(wrapper.findAll('.review-workbench-metrics strong').map((item) => item.text())).toEqual([
+      '20',
+      '14',
+      '4',
+      '5',
     ])
+    expect(
+      wrapper
+        .findAll('.review-workbench-metrics > div > span:first-child')
+        .map((item) => item.text()),
+    ).toEqual(['纳入病历', '已完成质控', '确定问题', '资料待核实'])
     expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
     expect(wrapper.find('.qc-record-result-table__avatar').exists()).toBe(false)
     expect(wrapper.text()).toContain('患者乙')
@@ -269,11 +278,43 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.text()).not.toContain('资料完整')
   })
 
+  it('预览焦点与多选独立，刷新移除原病历后回到有效首行', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    const preview = wrapper.getComponent(QcRecordReviewPreview)
+    const firstKey = preview.props('row')!.recordKey
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+    expect(preview.props('row')!.recordKey).toBe(firstKey)
+    const target = wrapper
+      .findAll('tbody tr[data-record-key]')
+      .find((row) => row.attributes('data-record-key').includes('V-priority'))!
+    await target.trigger('click')
+    expect(preview.props('row')!.visitId).toBe('V-priority')
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+    const payload = response()
+    payload.data.records = payload.data.records.filter((record) => record.visit_id === 'V-data-gap')
+    mocks.getRaw.mockResolvedValue(payload)
+    await wrapper.get('.qc-record-result-list-view__refresh-button').trigger('click')
+    await flushPromises()
+    expect(preview.props('row')!.visitId).toBe('V-data-gap')
+  })
+
+  it('切换结果分析不销毁运行任务的进度挂载节点', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    const target = wrapper.get('#qc-record-result-task-status-inpatient').element
+    await wrapper.get('[data-testid="qc-result-view-analysis"]').trigger('click')
+    expect(wrapper.get('#qc-record-result-task-status-inpatient').element).toBe(target)
+    await wrapper.get('[data-testid="qc-result-view-records"]').trigger('click')
+    expect(wrapper.get('#qc-record-result-task-status-inpatient').element).toBe(target)
+    expect(wrapper.findAll('#qc-record-result-task-status-inpatient')).toHaveLength(1)
+  })
+
   it('按 Canonical 摘要严格区分临床问题、资料待核实、待判断、未质控和交付异常', async () => {
     const wrapper = mountView('inpatient')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('需优先复核')
+    expect(wrapper.get('.review-metric--priority').text()).toBe('确定问题4项')
     expect(wrapper.text()).toContain('确定问题 2 · 待核实 1 · 待判断 3')
     expect(wrapper.text()).toContain('资料待核实')
     expect(wrapper.text()).toContain('待判断')
@@ -291,10 +332,12 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     const renderedTimes = wrapper
-      .findAll('tbody tr[data-record-key] td:nth-child(6)')
+      .findAll('tbody tr[data-record-key] td:nth-child(4)')
       .map((item) => item.text())
     expect(renderedTimes.slice(0, 2)).toEqual(['2026-08-17 16:49', '2026-08-17 16:49'])
-    expect(wrapper.text()).toContain('2026-08-09 08:00')
+    expect(wrapper.getComponent(QcRecordReviewPreview).props('row')?.admissionTime).toBe(
+      '2026-08-09 08:00',
+    )
   })
 
   it('关键词、科室和日期过滤重置为第一页并只使用服务端请求', async () => {
@@ -414,6 +457,16 @@ describe('QcRecordResultListView', () => {
     const rows = wrapper.findAll('tbody tr[data-record-key]')
     await rows[0]!.find('button').trigger('click')
 
+    const preview = wrapper.getComponent(QcRecordReviewPreview)
+    expect(preview.props('row')).toMatchObject({
+      instituteId: 'H-2',
+      patientId: 'P-2',
+      visitId: 'V-shared',
+    })
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+    preview.vm.$emit('open-full', preview.props('row')!.recordKey)
+    await flushPromises()
+
     const drawer = wrapper.getComponent(ResultDrawerStub)
     expect(drawer.props('open')).toBe(true)
     expect(drawer.props('presentationMode')).toBe('grouped')
@@ -461,10 +514,10 @@ describe('QcRecordResultListView', () => {
     const notRunRow = wrapper
       .findAll('tbody tr[data-record-key]')
       .find((row) => row.attributes('data-record-key').includes('V-not-run'))!
-    expect(notRunRow.find('button').text()).toBe('暂无结果')
+    expect(notRunRow.text()).toContain('暂无结果')
     await notRunRow.trigger('click')
 
-    expect(wrapper.get('[role="status"]').text()).toContain('这份病历暂无已保存质控结果')
+    expect(wrapper.getComponent(QcRecordReviewPreview).props('row')?.resultStatus).toBe('not-run')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
   })
 

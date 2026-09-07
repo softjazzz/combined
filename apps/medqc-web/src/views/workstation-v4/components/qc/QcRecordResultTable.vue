@@ -1,7 +1,10 @@
 <template>
   <div
     class="qc-record-result-table"
-    :class="{ 'qc-record-result-table--inpatient': carePhase === 'inpatient' }"
+    :class="{
+      'qc-record-result-table--inpatient': carePhase === 'inpatient',
+      'qc-record-result-table--compact-review': compactReview,
+    }"
     data-testid="qc-record-result-table"
   >
     <div class="qc-record-result-table__scroll">
@@ -18,14 +21,18 @@
                 @change="togglePageSelection"
               />
             </th>
-            <th scope="col">患者 / 住院号</th>
-            <th scope="col">科室 / 床位</th>
             <th scope="col">
+              {{ compactReview ? '患者 / 科室' : '患者 / 住院号' }}
+            </th>
+            <th v-if="!compactReview" scope="col">科室 / 床位</th>
+            <th v-if="!compactReview" scope="col">
               {{ timeColumnLabel }}
             </th>
             <th scope="col">问题摘要</th>
             <th scope="col">最近质控</th>
-            <th scope="col" class="qc-record-result-table__action-heading">查看结果</th>
+            <th scope="col" class="qc-record-result-table__action-heading">
+              {{ compactReview ? '预览' : '查看结果' }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -35,13 +42,15 @@
             class="qc-record-result-table__row"
             :class="{
               'qc-record-result-table__row--selected': selectedRecordKeys.includes(row.recordKey),
+              'qc-record-result-table__row--active':
+                compactReview && activeRecordKey === row.recordKey,
             }"
             :data-record-key="row.recordKey"
             :aria-selected="selectedRecordKeys.includes(row.recordKey)"
             tabindex="0"
             @click="openResult(row.recordKey)"
-            @keydown.enter.prevent="openResult(row.recordKey)"
-            @keydown.space.prevent="openResult(row.recordKey)"
+            @keydown.enter.self.prevent="openResult(row.recordKey)"
+            @keydown.space.self.prevent="openResult(row.recordKey)"
           >
             <td class="qc-record-result-table__selection-cell">
               <input
@@ -61,10 +70,27 @@
                   :alt="`${row.patientName || '患者'}头像`"
                 />
                 <span class="qc-record-result-table__patient-meta">
-                  <span class="qc-record-result-table__patient-name">
+                  <span
+                    class="qc-record-result-table__patient-name"
+                    :title="compactReview ? row.patientName : undefined"
+                  >
                     {{ row.patientName || '患者信息待接入' }}
                   </span>
-                  <span class="qc-record-result-table__visit-line">
+                  <span
+                    v-if="compactReview"
+                    class="qc-record-result-table__compact-meta"
+                    :title="
+                      [row.visitId || '待接入', row.department || '未分科室', row.bedNumber]
+                        .filter(Boolean)
+                        .join(' · ')
+                    "
+                    >{{
+                      [row.visitId || '待接入', row.department || '未分科室', row.bedNumber]
+                        .filter(Boolean)
+                        .join(' · ')
+                    }}</span
+                  >
+                  <span v-else class="qc-record-result-table__visit-line">
                     <span
                       v-if="carePhase !== 'inpatient'"
                       class="qc-record-result-table__visit-label"
@@ -82,7 +108,7 @@
                 </span>
               </div>
             </td>
-            <td>
+            <td v-if="!compactReview">
               <span class="qc-record-result-table__department">
                 {{ row.department || '未分科室' }}
               </span>
@@ -90,7 +116,9 @@
                 row.bedNumber
               }}</span>
             </td>
-            <td>{{ displayTime(row) }}</td>
+            <td v-if="!compactReview">
+              {{ displayTime(row) }}
+            </td>
             <td class="qc-record-result-table__summary" :title="row.issueSummary">
               <span v-if="carePhase === 'inpatient'" class="qc-record-result-table__summary-items">
                 <template v-for="(part, index) in row.issueSummary.split(' · ')" :key="index">
@@ -113,14 +141,18 @@
                     row.resultStatus !== 'not-run',
                 }"
                 type="button"
+                :aria-label="compactReview ? '查看病历预览' : undefined"
                 @click.stop="openResult(row.recordKey)"
               >
-                {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
+                <ChevronRight v-if="compactReview" :size="17" aria-hidden="true" />
+                <template v-else>
+                  {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
+                </template>
               </button>
             </td>
           </tr>
           <tr v-if="rows.length === 0" class="qc-record-result-table__empty-row">
-            <td colspan="7">
+            <td :colspan="compactReview ? 5 : 7">
               {{ emptyMessage }}
             </td>
           </tr>
@@ -132,6 +164,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ChevronRight } from 'lucide-vue-next'
 
 import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
@@ -174,10 +207,13 @@ const props = withDefaults(
     rows: QcRecordResultRow[]
     selectedRecordKeys?: string[]
     emptyMessage?: string
+    compactReview?: boolean
+    activeRecordKey?: string
   }>(),
   {
     selectedRecordKeys: () => [],
     emptyMessage: '暂无符合当前范围的病历',
+    compactReview: false,
   },
 )
 
@@ -595,6 +631,68 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
   outline-offset: 3px;
 }
 
+/* 仅主从复核列表合并元数据，横向溢出由表内承接。 */
+.qc-record-result-table--compact-review .qc-record-result-table__table {
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  min-width: 600px;
+  table-layout: fixed;
+}
+
+.qc-record-result-table--compact-review .qc-record-result-table__table th,
+.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(n) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: none;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.qc-record-result-table--compact-review th:nth-child(1) {
+  width: 36px;
+}
+.qc-record-result-table--compact-review th:nth-child(2) {
+  width: 185px;
+}
+.qc-record-result-table--compact-review th:nth-child(4) {
+  width: 148px;
+}
+.qc-record-result-table--compact-review th:nth-child(5) {
+  width: 46px;
+}
+
+.qc-record-result-table--compact-review .qc-record-result-table__patient-name,
+.qc-record-result-table__compact-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-record-result-table__compact-meta {
+  color: #64748b;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-record-result-table--compact-review .qc-record-result-table__summary-item {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.qc-record-result-table--compact-review .qc-record-result-table__result-button {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.qc-record-result-table--compact-review .qc-record-result-table__row--active,
+.qc-record-result-table--compact-review .qc-record-result-table__row--active:hover {
+  box-shadow: inset 3px 0 0 #0066cc;
+}
+
 @media (max-width: 768px) {
   .qc-record-result-table__scroll {
     margin: 0 -16px;
@@ -604,6 +702,10 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
   .qc-record-result-table__table td {
     padding-right: 14px;
     padding-left: 14px;
+  }
+
+  .qc-record-result-table--compact-review .qc-record-result-table__scroll {
+    margin: 0;
   }
 }
 </style>

@@ -2,9 +2,15 @@
   <main class="qc-record-result-list-view" :class="{ 'running-qc-refined': isInpatient }">
     <section class="qc-record-result-list-view__header">
       <div>
-        <h1>{{ pageTitle }}</h1>
+        <h1>
+          {{ pageTitle
+          }}<span v-if="isInpatient" class="review-workbench-scope" title="固定范围：在院"
+            >在院</span
+          >
+        </h1>
+        <p v-if="isInpatient" class="review-workbench-subtitle">查看质控结果 · 复核病历问题</p>
       </div>
-      <span class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
+      <span v-if="!isInpatient" class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
     </section>
 
     <nav class="qc-record-result-list-view__view-switch" aria-label="质控结果视图">
@@ -28,10 +34,34 @@
       </button>
     </nav>
 
+    <div v-if="isInpatient" class="review-workbench-primary">
+      <QcRunSelectedControl
+        :care-phase="carePhase"
+        :record-refs="selectedQcRecordRefs"
+        :selected-count="selectedCount"
+        :status-target="`#qc-record-result-task-status-${carePhase}`"
+        @completed="refreshAfterSelectedQc"
+      />
+    </div>
+
     <QcMetricCardStrip
+      v-if="!isInpatient"
       class="qc-record-result-list-view__metrics"
       aria-label="质控结果汇总"
       :cards="metricCards"
+    />
+    <section v-else class="review-workbench-metrics" aria-label="质控结果汇总">
+      <div v-for="metric in metricItems" :key="metric.key" :class="`review-metric--${metric.key}`">
+        <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
+        <strong>{{ metric.value }}</strong>
+        <span>{{ metric.key === 'records' || metric.key === 'completed' ? '份' : '项' }}</span>
+      </div>
+    </section>
+
+    <div
+      v-if="isInpatient"
+      :id="`qc-record-result-task-status-${carePhase}`"
+      class="qc-record-result-list-view__task-status review-workbench-task-status"
     />
 
     <section v-if="activeView === 'records'" class="qc-record-result-list-view__workbench">
@@ -65,6 +95,7 @@
           >
             <span v-if="isInpatient" class="qc-record-result-list-view__field-label">入院日期</span>
             <div class="qc-record-result-list-view__date-inputs">
+              <span v-if="isInpatient" class="review-date-label">入院</span>
               <input
                 type="date"
                 aria-label="开始日期筛选"
@@ -88,16 +119,6 @@
           >
             查询
           </button>
-        </div>
-        <div v-if="isInpatient" class="qc-record-result-list-view__list-heading">
-          <h2>病历结果</h2>
-          <span>本页 {{ rows.length }} 份</span>
-          <span
-            v-if="selectedCount > 0"
-            class="qc-record-result-list-view__selected-count"
-            role="status"
-            >已选 {{ selectedCount }} 份</span
-          >
         </div>
         <div class="qc-record-result-list-view__toolbar-actions">
           <div class="qc-record-result-list-view__export-menu" @focusout="handleExportMenuFocusOut">
@@ -149,7 +170,7 @@
           >
             刷新
           </button>
-          <div class="qc-record-result-list-view__qc-control">
+          <div v-if="!isInpatient" class="qc-record-result-list-view__qc-control">
             <QcRunSelectedControl
               :care-phase="carePhase"
               :record-refs="selectedQcRecordRefs"
@@ -162,39 +183,62 @@
       </div>
 
       <div
+        v-if="!isInpatient"
         :id="`qc-record-result-task-status-${carePhase}`"
         class="qc-record-result-list-view__task-status"
       />
 
-      <QcRecordResultTable
-        :care-phase="carePhase"
-        :rows="rows"
-        :selected-record-keys="selectedRecordKeys"
-        :empty-message="emptyMessage"
-        @open-result="handleOpenResult"
-        @update:selected-record-keys="updateSelectedRecordKeys"
-      />
+      <div :class="{ 'review-workbench-split': isInpatient }">
+        <div :class="{ 'review-workbench-list': isInpatient }">
+          <div v-if="isInpatient" class="qc-record-result-list-view__list-heading">
+            <h2>病历结果</h2>
+            <span>共 {{ serverTotal }} 份 · 本页 {{ rows.length }} 份</span>
+            <span
+              v-if="selectedCount > 0"
+              class="qc-record-result-list-view__selected-count"
+              role="status"
+              >已选 {{ selectedCount }} 份</span
+            >
+          </div>
+          <QcRecordResultTable
+            :care-phase="carePhase"
+            :compact-review="isInpatient"
+            :active-record-key="activePreviewKey"
+            :rows="rows"
+            :selected-record-keys="selectedRecordKeys"
+            :empty-message="emptyMessage"
+            @open-result="handleSelectPreview"
+            @update:selected-record-keys="updateSelectedRecordKeys"
+          />
 
-      <footer v-if="serverTotal > 0" class="qc-record-result-list-view__pagination">
-        <span>共 {{ serverTotal }} 份病历</span>
-        <div>
-          <button
-            type="button"
-            :disabled="loading || currentPage <= 1"
-            @click="goToPage(currentPage - 1)"
-          >
-            上一页
-          </button>
-          <span>第 {{ currentPage }} / {{ serverTotalPages }} 页</span>
-          <button
-            type="button"
-            :disabled="loading || currentPage >= serverTotalPages"
-            @click="goToPage(currentPage + 1)"
-          >
-            下一页
-          </button>
+          <footer v-if="serverTotal > 0" class="qc-record-result-list-view__pagination">
+            <span>共 {{ serverTotal }} 份病历</span>
+            <div>
+              <button
+                type="button"
+                :disabled="loading || currentPage <= 1"
+                @click="goToPage(currentPage - 1)"
+              >
+                上一页
+              </button>
+              <span>第 {{ currentPage }} / {{ serverTotalPages }} 页</span>
+              <button
+                type="button"
+                :disabled="loading || currentPage >= serverTotalPages"
+                @click="goToPage(currentPage + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </footer>
         </div>
-      </footer>
+        <QcRecordReviewPreview
+          v-if="isInpatient"
+          :row="previewRow"
+          :refresh-key="previewRefreshKey"
+          @open-full="handleOpenResult"
+        />
+      </div>
 
       <p
         v-if="detailNotice || exportNotice"
@@ -242,6 +286,7 @@ import QcRecordResultTable, {
   type QcRecordResultRow,
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
+import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
 import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
@@ -369,6 +414,26 @@ const rows = computed<QcRecordResultRow[]>(() => {
   return resultRows.sort(compareLatestQcTimeDesc)
 })
 const selectedCount = computed(() => selectedRecordKeys.value.length)
+const activePreviewKey = ref('')
+const previewRefreshKey = ref(0)
+const previewRow = computed(
+  () => rows.value.find((row) => row.recordKey === activePreviewKey.value) ?? null,
+)
+watch(
+  rows,
+  (next) => {
+    if (!next.some((row) => row.recordKey === activePreviewKey.value)) {
+      activePreviewKey.value = next[0]?.recordKey ?? ''
+    }
+    previewRefreshKey.value += 1
+  },
+  { immediate: true },
+)
+
+function handleSelectPreview(recordKey: string) {
+  if (!isInpatient.value) return handleOpenResult(recordKey)
+  activePreviewKey.value = recordKey
+}
 
 const emptyMessage = computed(() => {
   if (loading.value) return '正在加载质控结果…'
