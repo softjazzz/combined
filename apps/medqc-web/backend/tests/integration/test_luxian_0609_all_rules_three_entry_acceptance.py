@@ -46,6 +46,29 @@ _RECORD_B = {"institute_id": "LX075-HOSPITAL", "patient_id": "LX075-PATIENT-B", 
 _ROUTER_QC_SERVICE_DEPENDENCY = qc_sichuan.get_qc_service
 
 
+@pytest.fixture(autouse=True)
+def _guard_canonical_delivery(monkeypatch):
+    """三个生产入口均须显式交付 Canonical，不能依赖聚合器默认值。"""
+    from app.services import luxian_0609_result_aggregator as aggregator
+    from app.services.luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
+
+    original = luxian_execution.aggregate_luxian_0609_results
+    calls = []
+
+    def guarded_aggregate(**kwargs):
+        assert kwargs.get('delivery_mode') == CANONICAL_RESULT_DELIVERY_MODE
+        calls.append(kwargs['delivery_mode'])
+        return original(**kwargs)
+
+    def forbidden_adapter(**kwargs):
+        pytest.fail('正式三入口不得进入 legacy adapter')
+
+    monkeypatch.setattr(luxian_execution, 'aggregate_luxian_0609_results', guarded_aggregate)
+    monkeypatch.setattr(aggregator, 'adapt_luxian_0609_legacy_customer_result', forbidden_adapter)
+    yield
+    assert len(calls) >= 3, '验收必须实际经过三个入口的聚合交付'
+
+
 class _ActivationStub:
     def enforce(self) -> None:
         return None

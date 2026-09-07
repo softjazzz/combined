@@ -132,6 +132,24 @@ def test_canonical_delivery_missing_reduced_decision_never_calls_legacy_adapter(
     assert result["metadata"]["technical_error_internal"] is True
 
 
+def test_canonical_delivery_partial_reduced_scope_keeps_missing_rule_technical(monkeypatch):
+    import app.services.luxian_0609_result_aggregator as module
+
+    monkeypatch.setattr(
+        module, 'adapt_luxian_0609_legacy_customer_result',
+        lambda **kwargs: pytest.fail('partial Canonical scope entered legacy adapter'),
+    )
+    results = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{'rule_id': 'LX0609-001'}, {'rule_id': 'LX0609-002'}],
+        execution_results=[{'rule_id': 'LX0609-002', 'status': 'compliant'}],
+        reduced_decisions=(_reduced_decision('LX0609-001'),),
+        delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
+    )
+    assert [item['rule_id'] for item in results] == ['LX0609-001', 'LX0609-002']
+    assert results[1]['status'] == 'technical_error'
+    assert results[1]['reason_code'] == 'decision_contract_violation'
+
+
 def test_canonical_delivery_accepts_explicit_pending_result_without_legacy_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
