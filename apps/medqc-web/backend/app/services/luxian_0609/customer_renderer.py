@@ -11,6 +11,10 @@ from ..luxian_0609_rule_catalog import (
     LUXIAN_0609_RULE_SET_KEY,
     get_luxian_0609_rule,
 )
+from ..luxian_0609_result_schema import (
+    CUSTOMER_SCHEMA_VERSION,
+    RULE_SET_VERSION,
+)
 from .decision_reducer import CustomerFinalState, ReducedRuleDecision
 from .customer_remediation import (
     build_customer_remediation_suggestion,
@@ -20,8 +24,6 @@ from .source_gap_contract import customer_gap_message
 from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 
 
-CUSTOMER_SCHEMA_VERSION = "lx0609-customer-result-v2"
-RULE_SET_VERSION = "2026-06-09"
 CUSTOMER_RESULT_KEYS = frozenset(
     {
         "rule_id",

@@ -546,6 +546,27 @@ def _project_customer_safe_batch_job_or_409(job: Dict[str, Any]) -> Dict[str, An
         ) from exc
 
 
+def _hydrate_luxian_canonical_batch_job_or_409(
+    *, workspace: Any, job: Dict[str, Any]
+) -> Dict[str, Any]:
+    """详情读取只消费通过 Envelope 校验的 Canonical 结果。"""
+
+    if str(job.get("status") or "").strip().lower() != "completed":
+        return job
+    try:
+        canonical_items = workspace._load_batch_job_canonical_items(job=job)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="批量质控 Canonical 结果不完整，无法安全展示",
+        ) from exc
+    hydrated = dict(job)
+    hydrated["items"] = canonical_items
+    hydrated["children"] = []
+    hydrated["child_jobs"] = []
+    return hydrated
+
+
 def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
@@ -2024,6 +2045,12 @@ async def get_workspace_batch_job(
         shared_read = job is not None
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+        job = _hydrate_luxian_canonical_batch_job_or_409(
+            workspace=workspace,
+            job=job,
+        )
     response_data = (
         {
             **_project_customer_safe_batch_job_or_409(job),

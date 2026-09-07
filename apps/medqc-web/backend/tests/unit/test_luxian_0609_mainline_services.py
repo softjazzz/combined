@@ -271,6 +271,35 @@ def test_orchestrated_aggregation_projects_usage_executor_key_without_forging_un
     assert "executor_key" not in by_rule_id["LX0609-002"]["metadata"]
 
 
+def test_formal_orchestration_explicitly_delivers_canonical_mode(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _capture_aggregate(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "aggregate_luxian_0609_results",
+        _capture_aggregate,
+    )
+    context = luxian_execution.Luxian0609ExecutionContext(
+        enabled=True,
+        delivery_mode=luxian_execution.CANONICAL_RESULT_DELIVERY_MODE,
+    )
+
+    delivered = luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []},
+        context=context,
+        visit_id="V",
+        model_name="unused",
+        evidence_payload=None,
+    )
+
+    assert captured["delivery_mode"] == "canonical_straight_through"
+    assert delivered["luxian_0609_delivery_mode"] == "canonical_straight_through"
+
+
 @pytest.mark.parametrize(
     ("attributions", "customer_result", "error_match"),
     (

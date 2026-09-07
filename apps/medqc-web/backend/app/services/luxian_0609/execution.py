@@ -21,6 +21,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from .decision_model import RuleDecision
 from .decision_reducer import ReducedRuleDecision
+from ..luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
@@ -133,6 +134,9 @@ class Luxian0609ExecutionContext:
     diagnostic_semantic_snapshots: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     treatment_order_consistency_shadow: Mapping[str, Any] | None = None
     implant_information_shadow: Mapping[str, Any] | None = None
+    # 历史离线适配对象未声明正式主链；只有 prepare 读取到正式主链声明后
+    # 才显式切换为 Canonical，避免测试/诊断脚本被误当作客户任务。
+    delivery_mode: str = "legacy_compatible"
 
 
 def _build_execution_usage_attribution(
@@ -935,6 +939,17 @@ async def prepare_luxian_0609_execution(
         diagnostic_semantic_snapshots=tuple(native_diagnostic_semantic_snapshots),
         treatment_order_consistency_shadow=treatment_order_consistency_shadow,
         implant_information_shadow=implant_information_shadow,
+        delivery_mode=(
+            CANONICAL_RESULT_DELIVERY_MODE
+            if bool(
+                getattr(
+                    settings,
+                    "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED",
+                    False,
+                )
+            )
+            else "legacy_compatible"
+        ),
     )
 
 
@@ -1011,6 +1026,13 @@ def aggregate_luxian_0609_orchestrated_results(
             "evidence_materials": context.evidence_materials,
         },
         reduced_decisions=context.reduced_decisions,
+        canonical_results=tuple(
+            item
+            for item in context.native_results
+            if str(item.get("status") or "").strip().lower()
+            in {"not_executed", "technical_error"}
+        ),
+        delivery_mode=context.delivery_mode,
         customer_display_facts=context.customer_display_facts,
         decision_trace_sink=decision_trace_sink,
     )
@@ -1044,6 +1066,7 @@ def aggregate_luxian_0609_orchestrated_results(
                     raise ValueError("conflicting customer result executor_key")
                 metadata["executor_key"] = executor_key
     orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
+    orchestrated["luxian_0609_delivery_mode"] = context.delivery_mode
     orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
     orchestrated["results"] = customer_results
     orchestrated["display_rule_ids"] = [

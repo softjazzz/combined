@@ -998,3 +998,47 @@ def finalize_luxian_0609_canonical_result(
     if status == "data_gap":
         _complete_data_gap_explanation(finalized)
     return finalized
+
+
+def finalize_luxian_0609_missing_decision_result(
+    *, wrapper: Mapping[str, Any]
+) -> dict[str, Any]:
+    """把正式 Canonical 主链缺少裁决收敛为纯技术失败。
+
+    该入口只处理交付合同失败，不读取旧执行结果、临床事实或证据；因此不会
+    把编排缺陷伪装成资料不足，也不会把聚合器重新变成规则解释器。
+    """
+
+    from ..luxian_0609_result_schema import (
+        CUSTOMER_SCHEMA_VERSION,
+        RULE_SET_VERSION,
+    )
+    from ..luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+
+    rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+    if not rule_id:
+        raise ValueError("canonical wrapper requires rule_id")
+    return finalize_luxian_0609_canonical_result({
+        "rule_id": rule_id,
+        "rule_code": rule_id,
+        "qc_point_id": rule_id,
+        "rule_name": str(wrapper.get("name") or wrapper.get("rule_name") or rule_id).strip(),
+        "rule_version": str(wrapper.get("rule_version") or "").strip(),
+        "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+        "rule_set_version": RULE_SET_VERSION,
+        "schema_version": CUSTOMER_SCHEMA_VERSION,
+        "status": "technical_error",
+        "reason_code": "decision_contract_violation",
+        "findings": "质控执行结果不完整，本项未形成可交付的判定。",
+        "evidence": "",
+        "suggestion": "请重试本次质控；若仍失败，请检查规则执行与裁决绑定链路。",
+        "confidence": 0.0,
+        "evidence_items": [],
+        "criterion_results": [],
+        "metadata": {
+            "execution_source": "lx0609_canonical_delivery_guard",
+            "executor_type": "program",
+            "reason_code": "decision_contract_violation",
+            "technical_error_internal": True,
+        },
+    })

@@ -4848,6 +4848,119 @@ async def test_020_023_accepts_omitted_optional_execution_quotes():
 
 
 @pytest.mark.asyncio
+async def test_020_023_reasks_only_omitted_recommendation_once():
+    """合法的部分输出只补问遗漏建议，最终仍要求完整合同。"""
+
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与两项明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
+    })
+    first_episode = _episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "source_quote": "复查血常规",
+            },
+            {
+                "recommendation_ref": "consultation_record-1#r2",
+                "action_type": "test",
+                "source_quote": "复查肝功能",
+            },
+        ],
+    )
+    first_execution = _execution({
+        "recommendation_ref": "consultation_record-1#r1",
+        "execution_record_state": "specific_trace",
+        "trace_refs": ["daily_course_record-1"],
+        "execution_state": "absent",
+        "structured_action_refs": [],
+        "confidence": "high",
+    })
+    missing_execution = _execution({
+        "recommendation_ref": "consultation_record-1#r2",
+        "execution_record_state": "specific_trace",
+        "trace_refs": ["daily_course_record-1"],
+        "execution_state": "absent",
+        "structured_action_refs": [],
+        "confidence": "high",
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[first_episode]),
+        first_execution,
+        missing_execution,
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "requirement_satisfied",
+        "requirement_satisfied",
+    ]
+    assert result.llm_call_count == 3
+    assert "consultation_record-1#r1" not in client.prompts[2]
+    assert "consultation_record-1#r2" in client.prompts[2]
+
+
+@pytest.mark.asyncio
+async def test_020_023_omission_retry_still_incomplete_is_technical_error():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与两项明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
+    })
+    first_episode = _episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[
+            {"recommendation_ref": "consultation_record-1#r1", "action_type": "test", "source_quote": "复查血常规"},
+            {"recommendation_ref": "consultation_record-1#r2", "action_type": "test", "source_quote": "复查肝功能"},
+        ],
+    )
+    client = _PlannedStageClient(
+        _payload(episodes=[first_episode]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "no_trace",
+            "trace_refs": [],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "confidence": "high",
+        }),
+        {"executions": []},
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "model_invalid_output",
+        "model_invalid_output",
+    ]
+    assert result.llm_call_count == 3
+
+
+@pytest.mark.asyncio
 async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_error():
     """二阶段模型合同非法时，绑定层必须保留技术错误。"""
 

@@ -34,6 +34,45 @@ class _WorkspaceReviewStub:
         return dict(self.job)
 
 
+class _CanonicalReadStub:
+    def __init__(self, items: list[dict[str, Any]]) -> None:
+        self.items = items
+
+    def _load_batch_job_canonical_items(self, *, job: dict[str, Any]):
+        assert job["id"] == "job-canonical"
+        return list(self.items)
+
+
+def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summary_projection() -> None:
+    canonical_item = {
+        "schema_version": "lx0609-customer-result-v2",
+        "record_ref": "rec_" + "a" * 24,
+        "rule_id": "LX0609-001",
+        "rule_version": "2026-06-09",
+        "status": "compliant",
+        "result_status": "compliant",
+        "display_status": "compliant",
+        "is_compliant": True,
+        "reason_code": "requirement_satisfied",
+    }
+    raw_job = {
+        "id": "job-canonical",
+        "status": "completed",
+        "items": [{"rule_id": "LX0609-001", "status": "technical_error"}],
+    }
+
+    hydrated = qc_sichuan._hydrate_luxian_canonical_batch_job_or_409(
+        workspace=_CanonicalReadStub([canonical_item]),
+        job=raw_job,
+    )
+    projected = qc_sichuan._workspace_batch_response_item({
+        **hydrated,
+        "rule_set_key": "luxian_0609_qc_v1",
+    })
+
+    assert projected["summary"]["status_counts"] == {"compliant": 1}
+    assert projected["summary"]["result_count"] == 1
+
 def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
     response = qc_sichuan._workspace_batch_response_item(
         {

@@ -42,6 +42,7 @@ from app.services.luxian_0609_result_aggregator import (
     safe_luxian_0609_customer_display_facts,
 )
 from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+from app.services.luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
 
 CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
@@ -96,6 +97,68 @@ def test_missing_mapped_result_is_technical_error_not_uncertain() -> None:
     assert result["status"] == "technical_error"
     assert result["reason_code"] == "missing_mapped_result"
     assert result["metadata"]["technical_error_internal"] is True
+
+
+def test_canonical_delivery_missing_reduced_decision_never_calls_legacy_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """正式任务缺少 ReducedDecision 时只能形成技术失败。"""
+
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["adapt_luxian_0609_legacy_customer_result"],
+    )
+    monkeypatch.setattr(
+        module,
+        "adapt_luxian_0609_legacy_customer_result",
+        lambda **_kwargs: pytest.fail("canonical delivery touched legacy adapter"),
+    )
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{
+            "rule_id": "LX0609-001",
+            "name": "入院记录时限",
+            "rule_version": "2026-06-09",
+        }],
+        execution_results=[{
+            "rule_id": "LX0609-001",
+            "status": "compliant",
+        }],
+        delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
+    )[0]
+
+    assert result["status"] == "technical_error"
+    assert result["reason_code"] == "decision_contract_violation"
+    assert result["metadata"]["technical_error_internal"] is True
+
+
+def test_canonical_delivery_accepts_explicit_pending_result_without_legacy_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.luxian_0609.phase_scope import (
+        build_luxian_0609_pending_definition_result,
+    )
+
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["adapt_luxian_0609_legacy_customer_result"],
+    )
+    monkeypatch.setattr(
+        module,
+        "adapt_luxian_0609_legacy_customer_result",
+        lambda **_kwargs: pytest.fail("canonical delivery touched legacy adapter"),
+    )
+    pending = build_luxian_0609_pending_definition_result("LX0609-025")
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-025"}],
+        execution_results=[pending],
+        canonical_results=(pending,),
+        delivery_mode=CANONICAL_RESULT_DELIVERY_MODE,
+    )[0]
+
+    assert result["status"] == "not_executed"
+    assert result["result_status"] == "not_executed"
 
 
 def test_031_projects_multi_surgery_signature_gaps_per_event() -> None:

@@ -17,13 +17,19 @@ from ..case_identity import CaseRef
 from ..luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_executor_customer_display_facts,
 )
-from ..luxian_0609.customer_renderer import RULE_SET_VERSION
-from ..luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
-from ..luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from ..luxian_0609_result_schema import (
+    CANONICAL_RESULT_DELIVERY_MODE,
+    CANONICAL_RESULT_STATUSES,
+    CUSTOMER_SCHEMA_VERSION,
+    RULE_SET_VERSION,
+)
+from ..luxian_0609_rule_catalog import (
+    LUXIAN_0609_RULE_SET_KEY,
+    get_luxian_0609_rule,
+)
 
 
 RECORD_RESULT_ENVELOPE_SCHEMA = "lx0609-record-result-envelope-v1"
-CANONICAL_RESULT_DELIVERY_MODE = "canonical_straight_through"
 LX0609_CUSTOMER_RESULT_CONTRACT_ERROR = (
     "LX0609 客户结果解释合同不完整，拒绝交付确定问题"
 )
@@ -732,7 +738,23 @@ class CanonicalResultStore:
             if not canonical_envelope_items_are_consistent(envelope["items"]):
                 raise ValueError("canonical_result_envelope_invalid")
             for raw_item in envelope["items"]:
-                canonical_items.append({**raw_item, "record_ref": record_ref})
+                # Envelope 已通过 schema、delivery_mode 和逐项状态合同校验；
+                # 旧候选包的条目级 schema 标记曾在批任务落盘时被遗漏。读取时
+                # 只继承已验证的 Envelope 合同，不重新解释任何业务状态。
+                normalized_item = {
+                    **raw_item,
+                    "schema_version": CUSTOMER_SCHEMA_VERSION,
+                    "record_ref": record_ref,
+                }
+                if not _safe_text(normalized_item.get("rule_version")):
+                    catalog_rule = get_luxian_0609_rule(
+                        _safe_text(normalized_item.get("rule_id"))
+                    )
+                    if catalog_rule is not None:
+                        normalized_item["rule_version"] = _safe_text(
+                            catalog_rule.get("rule_version")
+                        )
+                canonical_items.append(normalized_item)
 
         actual_refs = set(rows_by_ref)
         if expected_refs and actual_refs != expected_refs:

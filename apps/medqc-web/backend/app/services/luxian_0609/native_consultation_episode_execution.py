@@ -440,6 +440,20 @@ class _SemanticInvalid(Exception):
     pass
 
 
+class _ExecutionCoverageIncomplete(_SemanticInvalid):
+    """二阶段结构合法，但遗漏了部分既定建议。"""
+
+    def __init__(
+        self,
+        *,
+        parsed: tuple[_ExecutionAssessment, ...],
+        missing_refs: frozenset[str],
+    ) -> None:
+        super().__init__("execution recommendation coverage incomplete")
+        self.parsed = parsed
+        self.missing_refs = missing_refs
+
+
 class _SemanticUnresolved(Exception):
     pass
 
@@ -2456,7 +2470,7 @@ def _parse_executions(
         and candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
         for ref in prompt_candidate_refs
     )
-    if not isinstance(raw, list) or len(raw) != len(expected_refs):
+    if not isinstance(raw, list) or len(raw) > len(expected_refs):
         raise _SemanticInvalid()
     parsed: list[_ExecutionAssessment] = []
     seen: set[str] = set()
@@ -2630,7 +2644,10 @@ def _parse_executions(
             tuple(trace_refs),
         ))
     if seen != expected_refs:
-        raise _SemanticInvalid()
+        raise _ExecutionCoverageIncomplete(
+            parsed=tuple(parsed),
+            missing_refs=frozenset(expected_refs.difference(seen)),
+        )
     return tuple(parsed)
 
 
@@ -3537,12 +3554,64 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             completion_tokens += next_completion
                             total_tokens += next_total
                             api_time += response_time or (time.perf_counter() - started)
-                            execution_assessments = _parse_executions(
-                                _payload(response),
-                                completed=completed_recommendations,
-                                allowed_refs=allowed_refs,
-                                candidates=projection.candidates,
-                            )
+                            try:
+                                execution_assessments = _parse_executions(
+                                    _payload(response),
+                                    completed=completed_recommendations,
+                                    allowed_refs=allowed_refs,
+                                    candidates=projection.candidates,
+                                )
+                            except _ExecutionCoverageIncomplete as incomplete:
+                                # 模型偶发只漏回一部分建议。只把缺失建议连同其
+                                # 受控候选重问一次；首轮合法结果不重复发送，也不
+                                # 把缺项默认解释为未执行。补问仍不完整则由外层按
+                                # model_invalid_output 失败关闭。
+                                missing_completed = tuple(
+                                    item
+                                    for item in completed_recommendations
+                                    if item.recommendation.recommendation_ref
+                                    in incomplete.missing_refs
+                                )
+                                missing_prompt, missing_allowed_refs = _execution_prompt(
+                                    completed=missing_completed,
+                                    candidates=projection.candidates,
+                                )
+                                calls += 1
+                                missing_started = time.perf_counter()
+                                missing_response = await llm_client.generate(missing_prompt)
+                                if not isinstance(missing_response, Mapping):
+                                    raise _SemanticInvalid()
+                                (
+                                    missing_prompt_tokens,
+                                    missing_completion_tokens,
+                                    missing_total_tokens,
+                                    missing_response_time,
+                                ) = _usage(missing_response)
+                                prompt_tokens += missing_prompt_tokens
+                                completion_tokens += missing_completion_tokens
+                                total_tokens += missing_total_tokens
+                                api_time += missing_response_time or (
+                                    time.perf_counter() - missing_started
+                                )
+                                completed_missing_assessments = _parse_executions(
+                                    _payload(missing_response),
+                                    completed=missing_completed,
+                                    allowed_refs=missing_allowed_refs,
+                                    candidates=projection.candidates,
+                                )
+                                assessment_by_ref = {
+                                    item.recommendation_ref: item
+                                    for item in (
+                                        *incomplete.parsed,
+                                        *completed_missing_assessments,
+                                    )
+                                }
+                                execution_assessments = tuple(
+                                    assessment_by_ref[
+                                        item.recommendation.recommendation_ref
+                                    ]
+                                    for item in completed_recommendations
+                                )
                             conflict_refs = {
                                 item.recommendation_ref
                                 for item in execution_assessments

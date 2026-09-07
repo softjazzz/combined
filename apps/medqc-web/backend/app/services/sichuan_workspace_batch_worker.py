@@ -2558,9 +2558,15 @@ async def run_sichuan_workspace_batch_job(
                         "status": status,
                         **(
                             {
+                                "schema_version": str(
+                                    eval_item.get("schema_version") or ""
+                                ),
                                 "result_status": str(
                                     eval_item.get("result_status") or status
-                                )
+                                ),
+                                "display_status": str(
+                                    eval_item.get("display_status") or status
+                                ),
                             }
                             if use_luxian_customer_results
                             else {}

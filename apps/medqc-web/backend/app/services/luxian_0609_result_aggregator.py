@@ -4,8 +4,11 @@ from typing import TYPE_CHECKING, Any, Mapping
 
 from .luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
 from .luxian_0609.canonical_result_finalizer import (
+    finalize_luxian_0609_canonical_result,
+    finalize_luxian_0609_missing_decision_result,
     finalize_luxian_0609_reduced_customer_result,
 )
+from .luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
 from .luxian_0609.decision_reducer import ReducedRuleDecision
 from .luxian_0609_legacy_result_adapter import (
     Luxian0609CustomerDisplayFactsError,
@@ -76,6 +79,8 @@ def aggregate_luxian_0609_results(
     format_evidence: bool = True,
     audit_context: dict[str, Any] | None = None,
     reduced_decisions: tuple[ReducedRuleDecision, ...] = (),
+    canonical_results: tuple[Mapping[str, Any], ...] = (),
+    delivery_mode: str = "legacy_compatible",
     customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = (),
     decision_trace_sink: DecisionTraceSink | None = None,
 ) -> list[dict[str, Any]]:
@@ -85,6 +90,8 @@ def aggregate_luxian_0609_results(
     legacy adapter 内保持兼容。此处不解释业务状态、事实或证据。
     """
 
+    if delivery_mode not in {"legacy_compatible", CANONICAL_RESULT_DELIVERY_MODE}:
+        raise ValueError("invalid LX0609 delivery mode")
     reduced_by_rule = _index_reduced_decisions(
         wrapper_rules=wrapper_rules,
         reduced_decisions=reduced_decisions,
@@ -94,6 +101,19 @@ def aggregate_luxian_0609_results(
         for item in wrapper_rules
         if _norm_id(item.get("rule_id") or item.get("rule_code"))
     }
+    canonical_by_rule: dict[str, dict[str, Any]] = {}
+    for item in canonical_results:
+        if not isinstance(item, Mapping):
+            raise ValueError("invalid canonical result")
+        rule_id = _norm_id(item.get("rule_id") or item.get("rule_code"))
+        if (
+            not rule_id
+            or rule_id not in wrapper_rule_ids
+            or rule_id in canonical_by_rule
+            or rule_id in reduced_by_rule
+        ):
+            raise ValueError("invalid canonical result scope")
+        canonical_by_rule[rule_id] = finalize_luxian_0609_canonical_result(item)
     raw_display_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     for rule_id, facts in customer_display_facts:
         normalized_rule_id = _norm_id(rule_id)
@@ -106,12 +126,11 @@ def aggregate_luxian_0609_results(
         raw_display_facts_by_rule[normalized_rule_id] = facts
 
     result_by_rule: dict[str, list[dict[str, Any]]] = {}
-    for item in execution_results:
-        key = _norm_id(item.get("rule_id") or item.get("rule_code"))
-        # 已裁决 wrapper 的交付绝不能读取旧执行 payload；否则即使最终不选择
-        # 它，也会让正式主链触碰 legacy 对象。
-        if key and key not in reduced_by_rule:
-            result_by_rule.setdefault(key, []).append(dict(item))
+    if delivery_mode == "legacy_compatible":
+        for item in execution_results:
+            key = _norm_id(item.get("rule_id") or item.get("rule_code"))
+            if key and key not in reduced_by_rule:
+                result_by_rule.setdefault(key, []).append(dict(item))
 
     decisions = gate_decisions or {}
     customer_results: list[dict[str, Any]] = []
@@ -133,6 +152,15 @@ def aggregate_luxian_0609_results(
                     ),
                     trace_sink=decision_trace_sink,
                 )
+            )
+            continue
+
+        if delivery_mode == CANONICAL_RESULT_DELIVERY_MODE:
+            canonical = canonical_by_rule.get(wrapper_id)
+            customer_results.append(
+                canonical
+                if canonical is not None
+                else finalize_luxian_0609_missing_decision_result(wrapper=wrapper)
             )
             continue
 

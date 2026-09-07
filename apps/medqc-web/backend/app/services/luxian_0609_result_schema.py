@@ -10,6 +10,8 @@ from .luxian_0609_trigger_gate import Luxian0609GateDecision
 RULE_SET_VERSION = "2026-06-09"
 RULE_VERSION = "v1"
 SCHEMA_VERSION = "luxian_0609_evidence_schema_v1"
+CUSTOMER_SCHEMA_VERSION = "lx0609-customer-result-v2"
+CANONICAL_RESULT_DELIVERY_MODE = "canonical_straight_through"
 
 CANONICAL_RESULT_STATUSES = (
     "non_compliant",

@@ -16,6 +16,14 @@ from ..luxian_0609_rule_master import (
     Luxian0609RuleMasterEntry,
     load_luxian_0609_rule_master,
 )
+from ..luxian_0609_result_schema import (
+    CUSTOMER_SCHEMA_VERSION,
+    RULE_SET_VERSION,
+)
+from ..luxian_0609_rule_catalog import (
+    LUXIAN_0609_RULE_SET_KEY,
+    get_luxian_0609_rule,
+)
 
 
 def _clean(value: object) -> str:
@@ -97,9 +105,21 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
     entry = get_luxian_0609_phase_scope(rule_id)
     if entry is None or entry.phase_status != "pending_definition":
         raise ValueError("rule is not an LX0609 pending definition")
+    wrapper = get_luxian_0609_rule(entry.rule_id)
+    if wrapper is None:
+        raise ValueError("pending rule is missing from the LX0609 catalog")
     return {
         "rule_id": entry.rule_id,
+        "rule_code": entry.rule_id,
+        "qc_point_id": entry.rule_id,
+        "rule_name": _clean(wrapper.get("name")),
+        "rule_version": _clean(wrapper.get("rule_version")),
+        "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+        "rule_set_version": RULE_SET_VERSION,
+        "schema_version": CUSTOMER_SCHEMA_VERSION,
         "status": "not_executed",
+        "result_status": "not_executed",
+        "display_status": "not_executed",
         "is_compliant": None,
         "findings": "本质控点当前不参与正式结论，未生成合规或问题判定。",
         "facts": {},

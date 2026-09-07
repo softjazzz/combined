@@ -313,25 +313,20 @@ async def test_transfusion_049_prepare_partitions_phase_without_unified_engine_d
     assert context.package_plan.not_executed_rule_ids == ("LX0609-049",)
     assert context.package_plan.native_executor_batches == ()
     assert context.unified_engine_used is False
+    assert context.delivery_mode == "canonical_straight_through"
     assert executable_rules == []
-    assert context.native_results == [
-        {
-            "rule_id": "LX0609-049",
-            "status": "not_executed",
-            "is_compliant": None,
-            "findings": "本质控点当前不参与正式结论，未生成合规或问题判定。",
-            "facts": {},
-            "evidence": [],
-            "suggestion": "待院方确认并发布业务口径后再启用本质控点。",
-            "confidence": 0.0,
-            "metadata": {
-                "execution_source": "lx0609_phase_gate",
-                "executor_type": "programmatic",
-                "reason_code": "policy_definition_pending",
-                "pending_reason_code": "charging_source_unavailable_customer_scope",
-            },
-        }
-    ]
+    assert len(context.native_results) == 1
+    pending = context.native_results[0]
+    assert pending["rule_id"] == "LX0609-049"
+    assert pending["status"] == pending["result_status"] == "not_executed"
+    assert pending["schema_version"] == "lx0609-customer-result-v2"
+    assert pending["rule_set_key"] == LUXIAN_0609_RULE_SET_KEY
+    assert pending["metadata"] == {
+        "execution_source": "lx0609_phase_gate",
+        "executor_type": "programmatic",
+        "reason_code": "policy_definition_pending",
+        "pending_reason_code": "charging_source_unavailable_customer_scope",
+    }
 
 
 @pytest.mark.parametrize("rule_id", ("LX0609-041", "LX0609-042"))
