@@ -901,10 +901,10 @@ async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation
 
 
 @pytest.mark.asyncio
-async def test_document_identity_separates_real_rows_without_application_id(
+async def test_document_identity_allows_semantic_merge_without_application_id(
     monkeypatch,
 ):
-    rows = _rows("第一次会诊申请与意见", "第二次会诊申请与意见")
+    rows = _rows("会诊申请与意见", "同次会诊意见的同步文书")
     rows[0]["document_id"] = "DOC-REAL-1"
     rows[1]["document_id"] = "DOC-REAL-2"
     monkeypatch.setattr(
@@ -932,15 +932,68 @@ async def test_document_identity_separates_real_rows_without_application_id(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == [
-        "technical_error",
-        "technical_error",
-    ]
-    assert {item["metadata"]["reason_code"] for item in result.results} == {
-        "model_invalid_output"
-    }
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 1
     assert "DOC-REAL-1" not in client.prompts[0]
     assert "DOC-REAL-2" not in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_020_document_copies_share_one_semantically_confirmed_event(monkeypatch):
+    rows = _rows("会诊医生甲建议复查血常规", "同次会诊意见同步记录")
+    rows[0]["document_id"] = "CONSULT-COPY-1"
+    rows[1]["document_id"] = "CONSULT-COPY-2"
+    monkeypatch.setattr(
+        episode, "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else (
+            _rows("已按会诊意见复查血常规", hour_start=3)
+            if source_key == "daily_course_record" else []
+        ),
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1", "consultation_record-2"],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "linked_specific",
+            "structured_action_refs": [],
+            "execution_quotes": ["复查血常规"],
+            "confidence": "high",
+        }),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert facts["completed_opinion_episode_count"] == 1
+    assert facts["recommendation_count"] == 1
+    assert result.llm_call_count == 2
+    assert all("CONSULT-COPY" not in prompt for prompt in client.prompts)
+
+
+@pytest.mark.asyncio
+async def test_document_identity_does_not_resolve_uncertain_event_association(monkeypatch):
+    rows = _rows("会诊意见文书", "可能是同步意见，也可能另一次会诊")
+    for index, row in enumerate(rows, 1):
+        row["document_id"] = f"CONSULT-UNRESOLVED-{index}"
+    monkeypatch.setattr(
+        episode, "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(_payload(
+        episodes=[], unresolved=["consultation_record-1", "consultation_record-2"],
+    ))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -956,10 +1009,10 @@ async def test_document_identity_allows_independent_real_events_without_applicat
         lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
     )
     client = _Client(
-        _document_payload(
-            _document_fact("consultation_record-1"),
-            _document_fact("consultation_record-2"),
-        )
+        _payload(episodes=[
+            _episode("consultation_record-1", ["consultation_record-1"]),
+            _episode("consultation_record-2", ["consultation_record-2"]),
+        ])
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -977,13 +1030,12 @@ async def test_document_identity_allows_independent_real_events_without_applicat
         item["event_group_ref"]
         for item in prompt_payload["consultation_documents"]
     ]
-    assert len(set(event_groups)) == 2
-    assert all(event_groups)
+    assert event_groups == ["", ""]
     assert all("DOC-REAL" not in group for group in event_groups)
 
 
 @pytest.mark.asyncio
-async def test_many_real_documents_without_application_id_use_compact_fact_contract(
+async def test_many_real_documents_without_application_id_keep_semantic_event_contract(
     monkeypatch,
 ):
     rows = _rows(*(f"真实会诊文书{index}" for index in range(1, 14)))
@@ -994,30 +1046,21 @@ async def test_many_real_documents_without_application_id_use_compact_fact_contr
         "read_luxian_0609_native_source_rows",
         lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
     )
-    facts = [
-        _document_fact(
+    client = _Client(_payload(
+        episodes=[_episode(
             "consultation_record-1",
+            ["consultation_record-1"],
             application="vague",
             opinion="clear",
             recommendations=[{
-                "recommendation_ref": "MODEL-CREATED-ID-MUST-BE-IGNORED",
+                "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
                 "source_quote": "并非文书中的连续原句",
                 "normalized_action": "复查血常规检查",
             }],
-        ),
-        *(
-            _document_fact(
-                f"consultation_record-{index}",
-                scope="non_target",
-                application="absent",
-                opinion="absent",
-                recommendations=[],
-            )
-            for index in range(2, 14)
-        ),
-    ]
-    client = _Client(_document_payload(*facts))
+        )],
+        non_target=[f"consultation_record-{index}" for index in range(2, 14)],
+    ))
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021", "LX0609-022"),
@@ -1033,9 +1076,8 @@ async def test_many_real_documents_without_application_id_use_compact_fact_contr
         "compliant",
     ]
     assert result.llm_call_count == 1
-    assert "consultation_event_facts" in client.prompts[0]
-    assert "member_refs" not in client.prompts[0]
-    assert "禁止输出recommendation_ref" in client.prompts[0]
+    assert "consultation_event_facts" not in client.prompts[0]
+    assert "member_refs" in client.prompts[0]
     assert all(f"DOC-REAL-{index}" not in client.prompts[0] for index in range(1, 14))
 
 
@@ -2877,13 +2919,17 @@ async def test_020_accepts_episode_bound_explicit_non_execution_decision_in_opin
         },
     ]
     client = _SequentialClient(
-        _document_payload(
-            _document_fact(
+        _payload(episodes=[
+            _episode(
                 "consultation_record-1",
+                ["consultation_record-1"],
                 application="absent",
-                recommendations=recommendations,
+                recommendations=[
+                    {**item, "recommendation_ref": f"consultation_record-1#r{index}"}
+                    for index, item in enumerate(recommendations, 1)
+                ],
             )
-        ),
+        ]),
         {
             "executions": [
                 {
@@ -2961,9 +3007,13 @@ async def test_023_rechecks_high_generic_label_that_conflicts_with_concrete_acti
         },
     ]
     client = _SequentialClient(
-        _document_payload(
-            _document_fact("consultation_record-1", recommendations=recommendations)
-        ),
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[
+                {**item, "recommendation_ref": f"consultation_record-1#r{index}"}
+                for index, item in enumerate(recommendations, 1)
+            ],
+        )]),
         {
             "executions": [
                 {
@@ -4034,10 +4084,10 @@ async def test_confirmed_missing_execution_is_not_hidden_by_another_unknown_reco
         lambda *, source_key, **_: source_rows[source_key],
     )
     client = _SequentialClient(
-        _document_payload(
-            _document_fact("consultation_record-1"),
-            _document_fact("consultation_record-2"),
-        ),
+        _payload(episodes=[
+            _episode("consultation_record-1", ["consultation_record-1"]),
+            _episode("consultation_record-2", ["consultation_record-2"]),
+        ]),
         {"executions": [
             {
                 "recommendation_ref": "consultation_record-1#r1",
@@ -4086,10 +4136,10 @@ async def test_confirmed_generic_execution_is_not_hidden_by_another_unknown_reco
         lambda *, source_key, **_: source_rows[source_key],
     )
     client = _SequentialClient(
-        _document_payload(
-            _document_fact("consultation_record-1"),
-            _document_fact("consultation_record-2"),
-        ),
+        _payload(episodes=[
+            _episode("consultation_record-1", ["consultation_record-1"]),
+            _episode("consultation_record-2", ["consultation_record-2"]),
+        ]),
         {"executions": [
             {
                 "recommendation_ref": "consultation_record-1#r1",

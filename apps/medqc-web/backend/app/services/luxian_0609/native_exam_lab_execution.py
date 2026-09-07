@@ -474,6 +474,35 @@ def _parse_current_visit_time(value: Any) -> datetime | None:
         return None
 
 
+def _culture_absence_gap(
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str | None, tuple[str, ...]]:
+    """无报告事件时校验叙述来源；培养提及只阻止断言无事件，不生成报告事实。"""
+
+    sources = tuple(
+        _typed_source(source_key=key, snapshot=snapshot, materials=materials)
+        for key in (*_COURSE_SOURCE_KEYS, "consultation_record")
+    )
+    if any(source.state == "error" for source in sources):
+        return "source_query_error", ()
+    if any(source.state in {"missing", "unavailable", "truncated"} for source in sources):
+        return "culture_source_unavailable", ()
+    mention_refs = tuple(
+        ref
+        for key in (*_COURSE_SOURCE_KEYS, "consultation_record")
+        for ref in _selected_material_document_refs(
+            snapshot=snapshot, materials=materials, source_key=key,
+            predicate=lambda row: bool(_CULTURE_TRIGGER_PATTERN.search(_row_text(row))),
+        )
+    )
+    if mention_refs:
+        # 包括计划、否定或历史提及：仅凭关键词不能可靠建立本次培养报告，
+        # 也不能无视叙述直接认定无事件。保留关联缺口，不判阳性或病历缺陷。
+        return "association_failed", mention_refs
+    return None, ()
+
+
 def _target_order_pattern(fact_kind: str) -> re.Pattern[str]:
     return _EXAM_ORDER_NAME_PATTERN if fact_kind == "exam" else _CULTURE_TRIGGER_PATTERN
 
@@ -743,6 +772,9 @@ def _decision_from_outcome(
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> RuleDecision:
     allowed_source_keys = set(_TYPED_RULE_SOURCE_KEYS[outcome.rule_id])
+    if outcome.rule_id in {"LX0609-014", "LX0609-015"}:
+        # 会诊仅参与“无培养事件”的反证校验，不作为报告正文的替代来源。
+        allowed_source_keys.add("consultation_record")
     if outcome.rule_id == "LX0609-010" and outcome.reason_code == "association_failed":
         # 关联失败只由医嘱、检查主表和报告支持；病程来源不能作为该结论的关键证据。
         allowed_source_keys = {_ORDER_SOURCE_KEY, *_EXAM_SOURCE_KEYS}
@@ -1549,7 +1581,17 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 emit_typed(rule_id, "data_gap", f"{fact_kind}_source_unavailable")
                 typed_processed.add(rule_id)
             elif typed_state == "absent":
-                emit_typed(rule_id, "not_applicable", f"{fact_kind}_fact_absent")
+                absence_gap, absence_refs = (
+                    _culture_absence_gap(evidence_snapshot, evidence_materials)
+                    if fact_kind == "culture" else (None, ())
+                )
+                emit_typed(
+                    rule_id,
+                    "technical_error" if absence_gap == "source_query_error"
+                    else "data_gap" if absence_gap else "not_applicable",
+                    absence_gap or f"{fact_kind}_fact_absent",
+                    absence_refs,
+                )
                 typed_processed.add(rule_id)
             else:
                 # 结构化触发 present/unknown 都进入裁剪正文事实提取；unknown
@@ -1661,7 +1703,22 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 for rule_id in eligible_rule_ids:
                     family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
                     events = events_for_family(projection, family)
-                    if not events:
+                    absence_gap, absence_refs = (
+                        _culture_absence_gap(evidence_snapshot, evidence_materials)
+                        if family == "culture" and (
+                            (not events and not _effective_target_orders(rows_by_source, fact_kind=family))
+                            or bool(events) and all(event.target_explicitly_absent for event in events)
+                        ) else (None, ())
+                    )
+                    if absence_gap:
+                        emit_typed(
+                            rule_id,
+                            "technical_error" if absence_gap == "source_query_error" else "data_gap",
+                            absence_gap,
+                            absence_refs,
+                        )
+                        typed_processed.add(rule_id)
+                    elif not events:
                         if family == "exam":
                             emit_typed(
                                 rule_id,

@@ -364,6 +364,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     "LX0609-014": (
+        "consultation_record",
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.exam_lab_order",
@@ -375,6 +376,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     "LX0609-015": (
+        "consultation_record",
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.exam_lab_order",

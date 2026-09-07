@@ -267,11 +267,23 @@ async def test_formal_unified_chain_freezes_mixed_022_episodes_and_prompt_usage(
         _consultation_row("CONSULT-MIX-3", "2026-07-02 11:00:00", "第三次会诊意见。"),
     ]
     client = RecordingClient(
-        _episode_facts(
-            _fact("consultation_record-1", opinion_state="clear"),
-            _fact("consultation_record-2", opinion_state="vague"),
-            _fact("consultation_record-3", opinion_state="missing"),
-        )
+        {
+            "episodes": [
+                {
+                    "episode_ref": f"consultation_record-{index}",
+                    "member_refs": [f"consultation_record-{index}"],
+                    "application_refs": [],
+                    "opinion_refs": [f"consultation_record-{index}"],
+                    "application_state": "absent",
+                    "opinion_state": state,
+                    "confidence": "high",
+                    "recommendations": [],
+                }
+                for index, state in enumerate(("clear", "vague", "missing"), 1)
+            ],
+            "non_target_refs": [],
+            "unresolved_refs": [],
+        }
     )
     context, delivered = await _run_formal_chain(
         monkeypatch,
@@ -296,7 +308,8 @@ async def test_formal_unified_chain_freezes_mixed_022_episodes_and_prompt_usage(
         context.native_total_tokens
     )
     assert len(client.prompts) == 1
-    assert "consultation_event_facts" in client.prompts[0]
+    assert "member_refs" in client.prompts[0]
+    assert "consultation_event_facts" not in client.prompts[0]
     assert all(
         f'"ref": "consultation_record-{index}"' in client.prompts[0]
         and row["record_content"] in client.prompts[0]

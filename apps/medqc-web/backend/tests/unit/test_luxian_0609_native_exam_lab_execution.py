@@ -56,6 +56,7 @@ _TYPED_SOURCE_KEYS = (
     "daily_course_record",
     "senior_course_record",
     "rescue_record",
+    "consultation_record",
     "inpat_registration.discharge_horizon",
     "evaluation_context.horizon",
 )
@@ -71,6 +72,7 @@ def _typed_session(
     nondrug_order_rows: tuple[dict, ...] = (),
     course_rows: tuple[dict, ...] | None = None,
     rescue_rows: tuple[dict, ...] = (),
+    consultation_rows: tuple[dict, ...] = (),
     discharge_horizon_rows: tuple[dict, ...] = (),
     evaluation_horizon_rows: tuple[dict, ...] = (),
     source_states: dict[str, str] | None = None,
@@ -111,6 +113,7 @@ def _typed_session(
         ),
         "senior_course_record": (),
         "rescue_record": rescue_rows,
+        "consultation_record": consultation_rows,
         "inpat_registration.discharge_horizon": discharge_horizon_rows,
         "evaluation_context.horizon": evaluation_horizon_rows,
     }

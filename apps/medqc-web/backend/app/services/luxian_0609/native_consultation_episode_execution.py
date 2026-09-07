@@ -728,14 +728,8 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
         )
         document_id = _clean(row.get("document_id"))
         event_identity_mode = "business" if business_tokens else "semantic"
-        if not business_tokens and document_id:
-            # 客户真实 CDM 没有 application_id/consultation_id；但
-            # consultation_record 的一行就是一份有稳定 document_id 的会诊
-            # 文书。此时用文书身份限定事件边界，禁止模型把两份独立会诊
-            # 文书合并。这里只在 Python 内使用原始 ID，提示词只看到请求内
-            # 的匿名 event_group_ref，绝不伪造 application_id。
-            business_tokens = frozenset((f"document:{document_id}",))
-            event_identity_mode = "document"
+        # document_id 只定位文书，不能证明不同文书属于不同会诊事件。
+        # 缺少会诊/申请业务键时沿用语义归并及不确定口径，不能按行数计次。
         projected.append(({
             "ref": f"{_SOURCE_KEY}-{index}",
             "document_id": document_id,
