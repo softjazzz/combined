@@ -1,0 +1,77 @@
+{
+  "manifest.json": {
+    "schema_version": "qc-diagnostic-render-v1",
+    "package_id": "00000000-0000-4000-8000-000000000001",
+    "git_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "build_id": "synthetic-regression-v1",
+    "rule_ids": ["LX0609-032", "LX0609-066"],
+    "replay_capability": "render_only",
+    "capture_completeness": "partial",
+    "missing_components": ["execution_inputs", "model_responses"],
+    "redaction_policy_version": "synthetic-v1",
+    "files": {}
+  },
+  "issue.json": {
+    "category": "customer_wording",
+    "source": "synthetic_regression"
+  },
+  "privacy-report.json": {
+    "data_class": "synthetic",
+    "contains_identity_mapping": false
+  },
+  "model-calls.json": {
+    "calls": []
+  },
+  "inputs.json": {
+    "rules": [
+      {
+        "rule_id": "LX0609-032",
+        "decision": {
+          "snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "applicability": "not_applicable",
+          "evidence_state": "sufficient",
+          "qc_direction": "unknown",
+          "reason_code": "trigger_absent_complete",
+          "fact_refs": [],
+          "evaluator_version": "synthetic-v1",
+          "confidence": null
+        },
+        "display_facts": {}
+      },
+      {
+        "rule_id": "LX0609-066",
+        "decision": {
+          "snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "applicability": "applicable",
+          "evidence_state": "sufficient",
+          "qc_direction": "satisfied",
+          "reason_code": "requirement_satisfied",
+          "fact_refs": [],
+          "evaluator_version": "synthetic-v1",
+          "confidence": null
+        },
+        "display_facts": {
+          "verification_kind": "postoperative_first_course_presence_check",
+          "performed_surgery_count": 1,
+          "postoperative_first_course_count": 2
+        }
+      }
+    ]
+  },
+  "results.json": {
+    "rules": [
+      {
+        "rule_id": "LX0609-032",
+        "status": "not_applicable",
+        "reason_code": "trigger_absent_complete",
+        "findings": "本次未发现已实施手术，不要求形成手术安全核查表"
+      },
+      {
+        "rule_id": "LX0609-066",
+        "status": "compliant",
+        "reason_code": "requirement_satisfied",
+        "findings": "已确认实施手术 1 台，找到术后首次病程记录 2 份，数量及关联关系符合要求。"
+      }
+    ]
+  }
+}

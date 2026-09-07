@@ -3141,6 +3141,13 @@ def _emit_safe_trace(
         return
 
 
+def not_applicable_customer_message(*, rule_id: str, reason_code: str) -> tuple[str, str, str]:
+    """查询既有不适用文案；离线诊断无需因此加载目录背后的执行/资料组件。"""
+    return _RULE_NOT_APPLICABLE_MESSAGES.get(
+        (rule_id, reason_code), _CUSTOMER_MESSAGES[CustomerFinalState.NOT_APPLICABLE],
+    )
+
+
 def render_luxian_0609_customer_result(
     *,
     decision: ReducedRuleDecision,
@@ -3222,9 +3229,8 @@ def render_luxian_0609_customer_result(
             evidence = "已分别核对主诉字数及主诉与入院第一诊断的诊断指向。"
             suggestion = "请精简主诉，并确保主诉提供的诊断线索能够支持入院第一诊断。"
     elif decision.final_state is CustomerFinalState.NOT_APPLICABLE:
-        findings, evidence, suggestion = _RULE_NOT_APPLICABLE_MESSAGES.get(
-            (decision.rule_id, decision.reason_code),
-            (findings, evidence, suggestion),
+        findings, evidence, suggestion = not_applicable_customer_message(
+            rule_id=decision.rule_id, reason_code=decision.reason_code,
         )
     elif decision.final_state is CustomerFinalState.EVALUATION_UNKNOWN:
         findings, evidence, suggestion = _RULE_UNCERTAIN_MESSAGES.get(
