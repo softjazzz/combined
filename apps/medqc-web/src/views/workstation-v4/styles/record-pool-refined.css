@@ -30,6 +30,7 @@
   font-size: 30px;
   line-height: 1.3;
   letter-spacing: -0.6px;
+  font-weight: 600;
 }
 
 .record-pool-refined .wv4-analysis-overview__subtitle {
@@ -173,6 +174,92 @@
 .record-pool-refined :deep(.ant-btn) {
   border-radius: 8px;
   box-shadow: none !important;
+}
+
+/* 统一功能区的视觉节奏，覆盖历史 large 控件的粗字重。 */
+.record-pool-refined .wv4-record-pool-hero :deep(.ant-input),
+.record-pool-refined .wv4-record-pool-hero :deep(.ant-select-selection-item),
+.record-pool-refined .wv4-record-pool-hero :deep(.ant-picker-input > input),
+.record-pool-refined .wv4-record-pool-hero :deep(.ant-segmented-item-label),
+.record-pool-refined .wv4-record-pool-hero :deep(.ant-btn) {
+  font-weight: 400 !important;
+  font-size: 14px !important;
+}
+
+.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
+  min-width: 88px;
+  padding-inline: 16px;
+}
+.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-selected) {
+  color: #0066cc;
+  box-shadow: 0 1px 3px rgb(30 64 110 / 8%);
+}
+.record-pool-refined .wv4-filter-actions__button.ant-btn-primary {
+  background: #f4f8ff !important;
+  border-color: #cddff7 !important;
+  color: #0066cc !important;
+}
+.record-pool-refined .workbench-dept-filter__count {
+  background: transparent;
+  border: 0;
+  color: #68778b;
+  font-weight: 400;
+}
+
+.record-pool-refined :deep(.batch-table-panel__toolbar) {
+  gap: 16px;
+}
+.record-pool-refined :deep(.batch-table-panel__action) {
+  height: 38px !important;
+  padding-inline: 18px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+.record-pool-refined :deep(.batch-table-panel__action--primary:disabled) {
+  color: #8a95a5 !important;
+  background: #f2f5f9 !important;
+  border-color: #e5eaf1 !important;
+}
+.record-pool-refined :deep(.batch-table-panel__summary-pill) {
+  font-size: 13px !important;
+  color: #647184;
+}
+.record-pool-refined :deep(.batch-table-panel__summary-pill--selected) {
+  color: #0066cc;
+}
+.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
+  padding-block: 13px;
+  font-size: 13px !important;
+  color: #556275 !important;
+  background: #f8faff !important;
+}
+.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th::before) {
+  display: none;
+}
+.record-pool-refined :deep(.batch-table-panel__hospitalization-status),
+.record-pool-refined :deep(.batch-table-panel__date-line),
+.record-pool-refined :deep(.batch-table-panel__date-label) {
+  font-size: 12px !important;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.record-pool-refined :deep(.batch-table-panel__visit-id) {
+  color: #687487;
+  font-variant-numeric: tabular-nums;
+}
+.record-pool-refined :deep(.ant-table-tbody > tr > td) {
+  transition: background-color 160ms ease;
+}
+.record-pool-refined :deep(.ant-btn:focus-visible),
+.record-pool-refined :deep(.ant-checkbox-input:focus-visible + .ant-checkbox-inner) {
+  outline: 2px solid #0066cc;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-pool-refined :deep(.ant-table-tbody > tr > td) {
+    transition: none;
+  }
 }
 
 .record-pool-refined .wv4-record-pool-main__list {
