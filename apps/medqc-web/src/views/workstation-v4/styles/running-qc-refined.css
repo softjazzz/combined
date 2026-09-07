@@ -5,7 +5,7 @@
   align-content: start;
   align-items: center;
   column-gap: 24px;
-  padding: 30px 32px;
+  padding: 24px 32px;
   background: #fff;
   color: #202b3b;
 }
@@ -13,7 +13,7 @@
 .running-qc-refined .qc-record-result-list-view__header {
   justify-content: flex-start;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -32,8 +32,11 @@
 .running-qc-refined .qc-record-result-list-view__scope {
   margin: 0;
   font-weight: 400;
-  border-radius: 6px;
-  background: #edf5ff;
+  background: transparent;
+  border-left: 1px solid #dfe6ef;
+  border-radius: 0;
+  color: #61728a;
+  padding: 0 0 0 14px;
 }
 
 .running-qc-refined .qc-record-result-list-view__view-switch {
@@ -49,10 +52,12 @@
 
 .running-qc-refined .qc-record-result-list-view__metrics {
   grid-column: 1 / -1;
-  margin: 26px 0 24px;
+  margin: 20px 0;
   gap: 0;
-  padding: 20px 0;
-  border-block: 1px solid #e8edf3;
+  padding: 18px 0;
+  border: 1px solid #e7eef7;
+  border-radius: 12px;
+  background: linear-gradient(110deg, #f3f8ff 0%, #fafcff 60%, #f7faff 100%);
 }
 
 .running-qc-refined :deep(.qc-metric-card-strip__card) {
@@ -65,7 +70,7 @@
   backdrop-filter: none;
 }
 .running-qc-refined :deep(.qc-metric-card-strip__card:first-child) {
-  padding-left: 0;
+  padding-left: 24px;
 }
 .running-qc-refined :deep(.qc-metric-card-strip__card:last-child) {
   border-right: 0;
@@ -73,16 +78,16 @@
 .running-qc-refined :deep(.qc-metric-card-strip__label) {
   font-size: 13px;
   font-weight: 400;
-  color: #58677b;
+  color: #52647d;
 }
 .running-qc-refined :deep(.qc-metric-card-strip__icon) {
   display: none;
 }
 .running-qc-refined :deep(.qc-metric-card-strip__value) {
-  font-size: 30px;
-  line-height: 38px;
+  font-size: 28px;
+  line-height: 34px;
   font-weight: 600;
-  margin: 6px 0 2px;
+  margin: 4px 0 2px;
   font-variant-numeric: tabular-nums;
 }
 .running-qc-refined :deep(.qc-metric-card-strip__helper) {
@@ -107,24 +112,24 @@
 .running-qc-refined .qc-record-result-list-view__toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 22px 16px;
+  gap: 16px;
   padding: 0 0 16px;
   border-bottom: 0;
 }
 .running-qc-refined .qc-record-result-list-view__filters {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.65fr) minmax(310px, 1.1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(170px, 240px) 330px auto;
   align-items: end;
   gap: 16px;
-  padding: 0 0 22px;
+  padding: 0 0 18px;
   border-bottom: 1px solid #edf0f4;
 }
 .running-qc-refined .qc-record-result-list-view__filter-field,
 .running-qc-refined .qc-record-result-list-view__date-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 .running-qc-refined .qc-record-result-list-view__field-label {
@@ -135,8 +140,13 @@
 .running-qc-refined .qc-record-result-list-view__date-inputs {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
+  height: 38px;
+  padding: 0 4px;
+  border: 1px solid #dfe6ef;
+  border-radius: 8px;
+  background: #fff;
 }
 .running-qc-refined .qc-record-result-list-view__filters input,
 .running-qc-refined .qc-record-result-list-view__filters select {
@@ -151,6 +161,10 @@
 .running-qc-refined .qc-record-result-list-view__filters input[type='date'] {
   flex: 1;
   width: 0;
+  height: 34px;
+  border: 0;
+  border-radius: 5px;
+  padding: 0 6px;
 }
 .running-qc-refined .qc-record-result-list-view__date-separator {
   display: inline;
@@ -251,7 +265,7 @@
     margin: 0;
   }
   .running-qc-refined :deep(.qc-metric-card-strip__card:nth-child(3)) {
-    padding-left: 0;
+    padding-left: 24px;
   }
   .running-qc-refined :deep(.qc-metric-card-strip__card:nth-child(2)) {
     border-right: 0;
