@@ -179,7 +179,7 @@ describe('single-record-result-model 病历质控报告分组', () => {
     ).toThrowError('单病历质控结果缺少规则身份')
   })
 
-  it('严格拆分确定问题、资料待核实、待判断、系统异常和其他结果', () => {
+  it('严格拆分确定问题、资料待核实、待判断、合规、不适用、系统异常和其他结果', () => {
     const statuses: SingleRecordQcResultItem['status'][] = [
       'non_compliant',
       'data_gap',
@@ -205,8 +205,10 @@ describe('single-record-result-model 病历质控报告分组', () => {
       nonCompliant: 1,
       dataGap: 1,
       uncertain: 3,
+      compliant: 1,
+      notApplicable: 1,
       technicalError: 1,
-      other: 4,
+      other: 2,
     })
     expect(
       presentation.sectionsByTab.non_compliant
@@ -223,6 +225,16 @@ describe('single-record-result-model 病历质控报告分组', () => {
         .flatMap((group) => group.items)
         .map((item) => item.status),
     ).toEqual(['uncertain', 'evaluation_unknown', 'ai_suggested_non_compliant'])
+    expect(
+      presentation.sectionsByTab.compliant
+        .flatMap((group) => group.items)
+        .map((item) => item.status),
+    ).toEqual(['compliant'])
+    expect(
+      presentation.sectionsByTab.not_applicable
+        .flatMap((group) => group.items)
+        .map((item) => item.status),
+    ).toEqual(['not_applicable'])
     expect(
       presentation.sectionsByTab.all.flatMap((group) => group.items).map((item) => item.status),
     ).toEqual(statuses)

@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
@@ -76,6 +76,8 @@ const ResultAnalysisStub = defineComponent({
       )
   },
 })
+
+const mountedWrappers: Array<{ unmount: () => void }> = []
 
 function response() {
   return {
@@ -161,7 +163,8 @@ function response() {
 }
 
 function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
-  return mount(QcRecordResultListView, {
+  const wrapper = mount(QcRecordResultListView, {
+    attachTo: document.body,
     props: { carePhase },
     global: {
       stubs: {
@@ -170,6 +173,8 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
       },
     },
   })
+  mountedWrappers.push(wrapper)
+  return wrapper
 }
 
 describe('QcRecordResultListView', () => {
@@ -182,6 +187,14 @@ describe('QcRecordResultListView', () => {
       success: true,
       data: new Blob(['xlsx']),
     })
+  })
+
+  afterEach(() => {
+    mountedWrappers
+      .splice(0)
+      .reverse()
+      .forEach((wrapper) => wrapper.unmount())
+    document.body.innerHTML = ''
   })
 
   it.each([

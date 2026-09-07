@@ -509,7 +509,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('[data-testid^="single-record-report-tab-"]').exists()).toBe(false)
   })
 
-  it('分组模式按客户文书主题展示四类报告页签，技术异常只进入系统状态和全部规则', async () => {
+  it('分组模式按客户文书主题展示六类报告页签，技术异常只进入系统状态和全部规则', async () => {
     const groupedItems = [
       {
         rule_id: 'LX0609-025',
@@ -555,7 +555,7 @@ describe('SingleRecordQcResultPanel', () => {
 
     expect(
       wrapper.findAll('[data-testid^="single-record-report-tab-"]').map((tab) => tab.text()),
-    ).toEqual(['确定问题1', '资料待核实1', '待判断1', '全部规则5'])
+    ).toEqual(['确定问题1', '资料待核实1', '待判断1', '合规1', '不适用0', '全部规则5'])
     expect(
       wrapper
         .get('[data-testid="single-record-report-tab-non_compliant"]')

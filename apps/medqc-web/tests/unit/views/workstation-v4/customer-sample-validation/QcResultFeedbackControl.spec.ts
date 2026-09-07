@@ -2,6 +2,7 @@ import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import QcResultFeedbackControl from '@/views/workstation-v4/customer-sample-validation/QcResultFeedbackControl.vue'
+import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-validation/useQcResultFeedback'
 
 const { useAuthStoreMock, getFeedbackMock, saveFeedbackMock } = vi.hoisted(() => ({
   useAuthStoreMock: vi.fn(),
@@ -21,27 +22,27 @@ vi.mock('@/api/qc-result-feedback-demo', async () => {
   }
 })
 
-describe('QcResultFeedbackControl', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    useAuthStoreMock.mockReturnValue({
-      user: {
-        id: 'admin-001',
-        email: 'admin@medqc.com',
-        is_demo_account: true,
-      },
-    })
-    getFeedbackMock.mockResolvedValue({ success: true, data: {} })
-    saveFeedbackMock.mockResolvedValue({
-      success: true,
-      data: {
-        rule_id: 'LX0609-001',
-        original_status: 'non_compliant',
-        feedback_type: 'correct',
-      },
-    })
+beforeEach(() => {
+  vi.clearAllMocks()
+  useAuthStoreMock.mockReturnValue({
+    user: {
+      id: 'admin-001',
+      email: 'admin@medqc.com',
+      is_demo_account: true,
+    },
   })
+  getFeedbackMock.mockResolvedValue({ success: true, data: {} })
+  saveFeedbackMock.mockResolvedValue({
+    success: true,
+    data: {
+      rule_id: 'LX0609-001',
+      original_status: 'non_compliant',
+      feedback_type: 'correct',
+    },
+  })
+})
 
+describe('QcResultFeedbackControl', () => {
   it('准确反馈可以直接提交', async () => {
     const wrapper = mount(QcResultFeedbackControl)
 
@@ -173,8 +174,6 @@ describe('QcResultFeedbackControl', () => {
 
 describe('useQcResultFeedback', () => {
   it('只为精确演示账号加载一次病历反馈，错误不回显用户说明', async () => {
-    const { useQcResultFeedback } =
-      await import('@/views/workstation-v4/customer-sample-validation/useQcResultFeedback')
     getFeedbackMock.mockResolvedValue({
       success: false,
       message: '保存失败：13800138000',
@@ -193,11 +192,10 @@ describe('useQcResultFeedback', () => {
     expect(getFeedbackMock).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).not.toContain('13800138000')
     expect(wrapper.text()).toContain('反馈暂时无法使用')
+    wrapper.unmount()
   })
 
   it('非演示账号不加载也不提供反馈能力', async () => {
-    const { useQcResultFeedback } =
-      await import('@/views/workstation-v4/customer-sample-validation/useQcResultFeedback')
     useAuthStoreMock.mockReturnValue({
       user: { id: 'user-002', email: 'qc@example.com', is_demo_account: true },
     })
@@ -214,5 +212,6 @@ describe('useQcResultFeedback', () => {
     await flushPromises()
     expect(getFeedbackMock).not.toHaveBeenCalled()
     expect(wrapper.text()).toBe('disabled')
+    wrapper.unmount()
   })
 })

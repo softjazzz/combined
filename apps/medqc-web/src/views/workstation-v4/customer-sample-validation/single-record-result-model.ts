@@ -209,7 +209,11 @@ export interface SingleRecordQcStatusSummary {
  * “待处理”统一承接需要人工关注、资料补充或技术排查的保守状态。
  */
 export type SingleRecordQcResultTabKey =
-  'all' | 'non_compliant' | 'pending' | 'not_applicable' | 'compliant'
+  | 'all'
+  | 'non_compliant'
+  | 'pending'
+  | 'not_applicable'
+  | 'compliant'
 
 export interface SingleRecordQcStatusTab {
   key: SingleRecordQcResultTabKey
@@ -379,6 +383,8 @@ export function buildSingleRecordQcPresentation(
         nonCompliantItems.length -
         dataGapItems.length -
         uncertainItems.length -
+        compliantItems.length -
+        notApplicableItems.length -
         technicalErrorCount,
     },
     sectionsByTab: {
