@@ -1694,9 +1694,8 @@ def _typed_precise_terminal_refs(
     if rule_id == "LX0609-029":
         facts = outcome.customer_display_facts or {}
         source_keys: list[str] = []
-        if facts.get("surgery_trigger_kind") == "surgery_order":
-            source_keys.append("inpat_nondrug_order")
-        elif facts.get("surgery_trigger_kind") == "performed_surgery":
+        # 医嘱触发的阳性行已在 outcome.fact_refs 中，不能追加整表无关医嘱。
+        if facts.get("surgery_trigger_kind") == "performed_surgery":
             source_keys.extend(
                 source_key
                 for source_key in ("surgery_record", "mr_surgery")

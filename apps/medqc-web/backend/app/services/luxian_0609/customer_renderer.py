@@ -2241,6 +2241,13 @@ def customer_finding_from_controlled_facts(
             )
             if unknown_count < 0:
                 return ""
+            if facts["recommendation_count"] == 0 and facts.get("relation_state") in {
+                "source_incomplete", "association_unresolved"
+            }:
+                return (
+                    f"已识别{facts['completed_opinion_episode_count']}次会诊，"
+                    "但资料或对应关系不足，尚无法完成建议及执行情况核对。"
+                )
             result_parts = [
                 f"{facts['specific_execution_count']}条已找到明确执行记录"
             ]
