@@ -79,13 +79,52 @@ describe('QcRecordReviewPreview', () => {
       patientId: 'P-1',
       visitId: 'V-1',
     })
-    expect(wrapper.get('[data-tab="non_compliant"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('select').element.value).toBe('non_compliant')
     expect(wrapper.text()).toContain('后端已保存的结论')
     expect(wrapper.text()).toContain('入院记录')
     await wrapper.get('.preview-item .text-button').trigger('click')
     await wrapper.get('.full-result-button').trigger('click')
     expect(wrapper.emitted('open-full')).toEqual([[row.recordKey], [row.recordKey]])
     expect(wrapper.text()).not.toContain('定位成功')
+  })
+
+  it('全文展开复用同一说明节点，建议独立折叠且完整分段', async () => {
+    const data = payload()
+    data.items[0].suggestion =
+      '修改对象：会诊记录 需要补充：执行结果 推荐写法：依据事实记录 注意事项：不要倒签'
+    getLatestResult.mockResolvedValue({ success: true, data })
+    const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    await flushPromises()
+    const summary = wrapper.get('.item-summary').element
+    expect(wrapper.get('.suggestion-details').attributes('open')).toBeUndefined()
+    expect(wrapper.get('.suggestion-details summary').text()).toContain('点击查看')
+    expect(wrapper.findAll('.suggestion-content p')).toHaveLength(4)
+    await wrapper.get('.expand-button').trigger('click')
+    expect(wrapper.get('.item-summary').element).toBe(summary)
+    expect(wrapper.get('.item-summary').classes()).toContain('is-expanded')
+    expect(wrapper.text().split('后端已保存的结论')).toHaveLength(2)
+    expect(wrapper.get('.suggestion-content').text()).toContain('不要倒签')
+    await wrapper.get('.expand-button').trigger('click')
+    expect(wrapper.get('.item-summary').classes()).not.toContain('is-expanded')
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['入院记录：缺少签名', '缺少签名'],
+    ['入院记录:缺少签名', '缺少签名'],
+    ['其他文书：缺少签名', '其他文书：缺少签名'],
+    ['入院记录：', '入院记录：'],
+  ])('标题只移除确切文书前缀：%s', async (name, expected) => {
+    const data = payload()
+    data.items[0].rule_name = name
+    getLatestResult.mockResolvedValue({ success: true, data })
+    const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    await flushPromises()
+    expect(wrapper.get('.item-heading h3').text()).toBe(expected)
+    expect(wrapper.get('.item-heading h3').attributes('title')).toBe(name)
+    expect(wrapper.get('.item-meta').text()).toContain('入院记录')
+    expect(data.items[0].rule_name).toBe(name)
+    wrapper.unmount()
   })
 
   it.each([
@@ -162,14 +201,14 @@ describe('QcRecordReviewPreview', () => {
     })
     const wrapper = mount(QcRecordReviewPreview, { props: { row } })
     await flushPromises()
-    expect(wrapper.get('[data-tab="pending"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('select').element.value).toBe('pending')
     expect(wrapper.get('[data-tab="pending"]').text()).toContain('5')
     expect(wrapper.text()).toContain('技术异常')
     expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(3)
     expect(wrapper.findAll('[data-tab]')).toHaveLength(5)
-    await wrapper.get('[data-tab="compliant"]').trigger('click')
+    await wrapper.get('select').setValue('compliant')
     expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(1)
-    await wrapper.get('[data-tab="all"]').trigger('click')
+    await wrapper.get('select').setValue('all')
     expect(wrapper.text()).toContain('共 7 项')
   })
 

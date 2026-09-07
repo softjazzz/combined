@@ -36,18 +36,14 @@
       </div>
       <div v-else-if="!ready" class="preview-state">暂无已保存质控结果，请先运行质控</div>
       <template v-else>
-        <nav class="status-tabs" aria-label="质控状态筛选">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            type="button"
-            :aria-pressed="activeTab === tab.key"
-            :data-tab="tab.key"
-            @click="activeTab = tab.key"
-          >
-            {{ tab.label }} <span>{{ tab.count }}</span>
-          </button>
-        </nav>
+        <div class="status-tabs">
+          <span>问题预览</span>
+          <select v-model="activeTab" aria-label="质控状态筛选">
+            <option v-for="tab in tabs" :key="tab.key" :value="tab.key" :data-tab="tab.key">
+              {{ tab.label }} · {{ tab.count }}
+            </option>
+          </select>
+        </div>
         <div class="preview-results" aria-live="polite">
           <p v-if="!filteredItems.length" class="preview-state">该状态暂无质控项</p>
           <article
@@ -57,26 +53,49 @@
             data-testid="preview-item"
           >
             <div class="item-heading">
-              <span class="status-label" :data-tone="item.tone">{{ item.displayStatus }}</span>
-              <h3>{{ item.rule_name || item.rule_id }}</h3>
+              <div class="item-meta">
+                <span v-if="item.source_document" class="item-source"
+                  >{{ item.source_document }}<span aria-hidden="true"> · </span></span
+                >
+                <span class="status-label" :data-tone="item.tone">{{ item.displayStatus }}</span>
+              </div>
+              <h3 :title="item.rule_name || item.rule_id">
+                {{ displayRuleTitle(item) }}
+              </h3>
             </div>
-            <p class="item-summary">
+            <p class="section-label">判定说明</p>
+            <p class="item-summary" :class="{ 'is-expanded': expandedItems.includes(item.key) }">
               {{ item.conclusionText || '暂无结论说明' }}
             </p>
             <p v-if="documentLabels(item)" class="document-label">
               <FileText :size="14" />{{ documentLabels(item) }}
             </p>
-            <details>
-              <summary>展开结果全文</summary>
-              <p class="full-text">
-                {{ item.conclusionText || '暂无结论说明' }}
-              </p>
-              <p v-if="item.detail" class="full-text">
+            <button
+              type="button"
+              class="expand-button"
+              :aria-expanded="expandedItems.includes(item.key)"
+              @click="toggleExplanation(item.key)"
+            >
+              {{ expandedItems.includes(item.key) ? '收起说明' : '查看完整说明' }}
+            </button>
+            <div v-if="expandedItems.includes(item.key)" class="explanation-extra">
+              <p v-if="item.detail && item.detail !== item.conclusionText" class="full-text">
                 {{ item.detail }}
               </p>
               <p v-if="item.actual" class="full-text">实际情况：{{ item.actual }}</p>
               <p v-if="item.standard" class="full-text">质控标准：{{ item.standard }}</p>
-              <p v-if="item.suggestion" class="full-text">建议：{{ item.suggestion }}</p>
+            </div>
+            <details v-if="item.suggestion" class="suggestion-details">
+              <summary>处理建议<span class="suggestion-hint">点击查看</span></summary>
+              <div class="suggestion-content">
+                <p
+                  v-for="(paragraph, index) in suggestionParagraphs(item.suggestion)"
+                  :key="index"
+                  class="full-text"
+                >
+                  {{ paragraph }}
+                </p>
+              </div>
             </details>
             <button type="button" class="text-button" @click="openFull">
               查看原文与结果<ArrowUpRight :size="14" />
@@ -121,6 +140,19 @@ const loading = ref(false)
 const ready = ref(false)
 const loadError = ref('')
 const activeTab = ref<SingleRecordQcResultTabKey>('all')
+const expandedItems = ref<string[]>([])
+function toggleExplanation(key: string) {
+  expandedItems.value = expandedItems.value.includes(key)
+    ? expandedItems.value.filter((entry) => entry !== key)
+    : [...expandedItems.value, key]
+}
+// 仅在既有建议的明确标签前换行，不改写或删减建议内容。
+function suggestionParagraphs(text: string): string[] {
+  return text
+    .split(/\n+|(?=(?:修改对象|需要补充|推荐写法|注意事项)[：:])/u)
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
 let requestSequence = 0
 const viewItems = computed(() => buildSingleRecordQcResultItems(items.value))
 const tabs = computed(() => buildSingleRecordQcStatusTabs(viewItems.value))
@@ -140,6 +172,19 @@ function documentLabels(item: SingleRecordQcResultItem): string {
   ].join(' · ')
 }
 
+function displayRuleTitle(item: SingleRecordQcResultItem): string {
+  const title = (item.rule_name || item.rule_id).trim()
+  const source = item.source_document?.trim()
+  if (!source) return title
+  for (const separator of ['：', ':']) {
+    const prefix = `${source}${separator}`
+    if (title.startsWith(prefix) && title.slice(prefix.length).trim()) {
+      return title.slice(prefix.length).trim()
+    }
+  }
+  return title
+}
+
 function openFull() {
   if (ready.value && props.row) emit('open-full', props.row.recordKey)
 }
@@ -148,6 +193,7 @@ async function loadResult() {
   const sequence = ++requestSequence
   const row = props.row
   items.value = []
+  expandedItems.value = []
   ready.value = false
   loading.value = false
   loadError.value = ''
@@ -216,13 +262,13 @@ onBeforeUnmount(() => {
   background: #fff;
   font-size: 14px;
   line-height: 1.6;
+  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
 }
 .preview-heading {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 18px 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 .preview-heading h2 {
   margin: 0;
@@ -230,23 +276,25 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 .patient-context {
-  padding: 18px 20px;
+  padding: 0 20px 18px;
 }
 .patient-context h3 {
   margin: 0 0 12px;
-  color: var(--ws-primary, #0066cc);
-  font-size: 18px;
+  color: #253247;
+  font-size: 16px;
   font-weight: 600;
 }
 dl {
   margin: 0;
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
 }
 dl div {
-  display: grid;
-  grid-template-columns: 70px minmax(0, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 12px;
 }
 dt,
 .preview-footer > span,
@@ -259,29 +307,29 @@ dd {
 }
 .status-tabs {
   display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding: 0 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 20px;
+  background: transparent;
 }
 button {
   font: inherit;
   cursor: pointer;
 }
-.status-tabs button {
-  flex: none;
-  padding: 10px 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: rgba(29, 29, 31, 0.6);
-}
-.status-tabs button[aria-pressed='true'] {
-  color: #0066cc;
-  border-bottom-color: #0066cc;
-}
-.status-tabs span {
+.status-tabs select {
+  padding: 5px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  background: white;
+  color: #52647b;
+  font: inherit;
   font-size: 12px;
+}
+.status-tabs > span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #38465a;
 }
 .preview-results {
   padding: 0 20px;
@@ -291,15 +339,28 @@ button {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 .item-heading {
-  display: flex;
+  display: grid;
   gap: 8px;
   align-items: baseline;
 }
 .item-heading h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #253247;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+.item-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.item-source {
+  color: #7b8796;
 }
 .status-label {
   flex: none;
@@ -318,11 +379,58 @@ button {
 .item-summary {
   margin: 8px 0;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
   white-space: pre-line;
+  color: #465366;
+  font-size: 13px;
+  line-height: 1.8;
+  font-weight: 400;
+}
+.item-summary.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+.section-label {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #465366;
+}
+.expand-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0066cc;
+  font-size: 12px;
+}
+.suggestion-details {
+  margin-top: 14px;
+  padding: 12px 0;
+  border-block: 1px solid #edf0f4;
+}
+.suggestion-details summary {
+  color: #465366;
+  font-size: 13px;
+  font-weight: 600;
+}
+.suggestion-hint {
+  float: right;
+  color: #7b8796;
+  font-size: 12px;
+  font-weight: 400;
+}
+.suggestion-details[open] .suggestion-hint {
+  display: none;
+}
+.suggestion-content {
+  padding: 4px 0;
+  font-size: 13px;
+  color: #526174;
+  line-height: 1.8;
+  font-weight: 400;
 }
 .document-label {
   display: flex;

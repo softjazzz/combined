@@ -8,7 +8,7 @@
   padding: 20px 28px;
   background: #fff;
   color: #253247;
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
 }
 .running-qc-refined .qc-record-result-list-view__header {
   align-items: baseline;
@@ -83,10 +83,9 @@
   display: grid;
   grid-template-columns: repeat(4, max-content);
   margin: 16px 0 0;
-  padding: 13px 16px;
-  border: 1px solid #edf1f6;
-  border-radius: 8px;
-  background: #f8fafd;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
 }
 .review-workbench-task-status {
   grid-column: 1 / -1;
@@ -109,7 +108,7 @@
 .review-workbench-metrics strong {
   margin-left: 8px;
   color: #233247;
-  font-size: 24px;
+  font-size: 18px;
   line-height: 28px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;

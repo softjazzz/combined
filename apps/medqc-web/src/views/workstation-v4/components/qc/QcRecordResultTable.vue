@@ -633,7 +633,7 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 
 /* 仅主从复核列表合并元数据，横向溢出由表内承接。 */
 .qc-record-result-table--compact-review .qc-record-result-table__table {
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
   min-width: 600px;
   table-layout: fixed;
 }
@@ -675,11 +675,17 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__summary-item {
+  background: transparent;
+  padding: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: normal;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__summary-separator {
+  display: inline;
+  color: #c4ccd7;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__result-button {
