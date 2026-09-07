@@ -283,7 +283,10 @@ export function toSingleRecordQcResultViewItem(
     key: `${text(item.rule_id) || 'unknown-rule'}-${index}`,
     // 最终状态来自后端保存的 RuleDecision；展示解释缺失不应篡改该状态。
     // 否则会把真实的不合规错误地从“确定问题”汇总中隐藏。
-    displayStatus: text(item.display_status) || presentation.label,
+    // 接口可能将内部枚举放入展示字段；仅保留中文标签，不向客户暴露英文状态。
+    displayStatus: /\p{Script=Han}/u.test(text(item.display_status))
+      ? text(item.display_status)
+      : presentation.label,
     tone: presentation.tone,
     sortOrder: presentation.sortOrder,
     conclusionText: text(item.conclusion),

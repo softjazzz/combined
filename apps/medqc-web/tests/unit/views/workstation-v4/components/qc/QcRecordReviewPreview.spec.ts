@@ -53,6 +53,18 @@ function deferred() {
 }
 
 describe('QcRecordReviewPreview', () => {
+  it('接口展示字段返回英文枚举时使用中文状态，不改变状态筛选', async () => {
+    const data = payload()
+    data.items[0].display_status = 'non_compliant'
+    getLatestResult.mockResolvedValue({ success: true, data })
+    const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    await flushPromises()
+    expect(wrapper.get('.status-label').text()).toBe('确定问题')
+    expect(wrapper.text()).not.toContain('non_compliant')
+    expect(wrapper.get('select').element.value).toBe('non_compliant')
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     vi.stubGlobal(
       'matchMedia',
