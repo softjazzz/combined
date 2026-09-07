@@ -92,7 +92,17 @@
             </td>
             <td>{{ displayTime(row) }}</td>
             <td class="qc-record-result-table__summary" :title="row.issueSummary">
-              {{ row.issueSummary }}
+              <span v-if="carePhase === 'inpatient'" class="qc-record-result-table__summary-items">
+                <template v-for="(part, index) in row.issueSummary.split(' · ')" :key="index">
+                  <span v-if="index > 0" class="qc-record-result-table__summary-separator">{{
+                    ' · '
+                  }}</span>
+                  <span class="qc-record-result-table__summary-item">{{ part }}</span>
+                </template>
+              </span>
+              <template v-else>
+                {{ row.issueSummary }}
+              </template>
             </td>
             <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
             <td class="qc-record-result-table__action-cell">
@@ -457,8 +467,8 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__row td {
-  padding-top: 15px;
-  padding-bottom: 15px;
+  padding-top: 10px;
+  padding-bottom: 10px;
   border-bottom-color: rgba(29, 29, 31, 0.065);
 }
 
@@ -479,10 +489,49 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 
 .qc-record-result-table--inpatient .qc-record-result-table__summary {
   min-width: 230px;
+  max-width: 340px;
+  white-space: normal;
+}
+
+.qc-record-result-table__summary-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.qc-record-result-table__summary-separator {
+  display: none;
+}
+.qc-record-result-table__summary-item {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #f2f5f9;
+  color: #52647b;
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox'] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #bdcbdd;
+  border-radius: 4px;
+  background: #fff;
+  vertical-align: middle;
+}
+.qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:checked {
+  appearance: auto;
+  accent-color: #0066cc;
+}
+.qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:disabled {
+  background: #f1f4f8;
+  cursor: not-allowed;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__patient-meta {
-  gap: 4px;
+  gap: 2px;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__patient-name {
@@ -501,7 +550,7 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 
 .qc-record-result-table--inpatient .qc-record-result-table__department {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__row:hover {
@@ -529,7 +578,7 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button--available {
-  background: rgba(0, 102, 204, 0.055);
+  background: transparent;
   color: #0066cc;
 }
 

@@ -24,6 +24,22 @@ const rows = [
 ]
 
 describe('QcRecordResultTable', () => {
+  it('运行页只按展示分隔符分组摘要，保留原文和未知说明，不影响终末页', () => {
+    const issueSummary = '确定问题 2 · 待核实 18 · 待判断 1 · 自定义说明'
+    const wrapper = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', rows: [{ ...rows[0], issueSummary }] },
+    })
+    expect(
+      wrapper.findAll('.qc-record-result-table__summary-item').map((item) => item.text()),
+    ).toEqual(['确定问题 2', '待核实 18', '待判断 1', '自定义说明'])
+    expect(wrapper.get('.qc-record-result-table__summary').attributes('title')).toBe(issueSummary)
+    const finalView = mount(QcRecordResultTable, {
+      props: { carePhase: 'discharged', rows: [{ ...rows[0], issueSummary }] },
+    })
+    expect(finalView.find('.qc-record-result-table__summary-item').exists()).toBe(false)
+    expect(finalView.get('.qc-record-result-table__summary').text()).toBe(issueSummary)
+  })
+
   it('每份病历只渲染一行并使用后端三坐标 recordKey', () => {
     const wrapper = mount(QcRecordResultTable, {
       props: { carePhase: 'inpatient', rows },
