@@ -230,13 +230,13 @@ function mountListView(overrides: Record<string, unknown> = {}) {
 }
 
 describe('WorkstationV4ListView filters', () => {
-  it('keeps QC result metrics out of the record pool and directs users to the result worklists', () => {
+  it('keeps QC result metrics out of the record pool and uses a compact operational subtitle', () => {
     const wrapper = mountListView({
       workbenchRows: [],
       displayServerTotal: 1,
     })
 
-    expect(wrapper.text()).toContain('质控结果请在运行病历质控或终末病历质控中查看')
+    expect(wrapper.text()).toContain('筛选病历，发起质控')
     expect(wrapper.text()).not.toContain('已完成质控')
     expect(wrapper.text()).not.toContain('确定问题')
     expect(wrapper.text()).not.toContain('资料待补')
@@ -255,9 +255,14 @@ describe('WorkstationV4ListView filters', () => {
     expect(surface.find('.workbench-dept-filter__count').attributes('aria-label')).toBe(
       '当前科室共 100 份病历',
     )
-    expect(surface.find('.wv4-record-pool-filter__notice').text()).toContain(
-      '病历范围由服务端统一筛选',
-    )
+    expect(wrapper.classes()).toContain('record-pool-refined')
+    expect(surface.find('.wv4-record-pool-filter__notice').exists()).toBe(false)
+    expect(surface.find('.wv4-record-pool-filter__summary').text()).toContain('当前筛选')
+    expect(
+      surface
+        .find('.wv4-analysis-overview__header .wv4-record-pool-filter__sync-shortcut')
+        .exists(),
+    ).toBe(true)
   })
 
   it('uses the compact record-pool table instead of quality-result columns', () => {

@@ -1,5 +1,5 @@
 <template>
-  <section class="batch-table-panel">
+  <section class="batch-table-panel" :class="{ 'batch-table-panel--record-pool': recordPoolMode }">
     <div class="batch-table-panel__header px-4 py-2">
       <div
         class="batch-table-panel__toolbar flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
@@ -16,6 +16,16 @@
             >
               已选 {{ selectedRowKeys.length }} 条
             </span>
+            <a-button
+              v-if="recordPoolMode && showSelection && selectedRowKeys.length > 0"
+              type="link"
+              size="small"
+              class="batch-table-panel__clear-selection"
+              data-testid="clear-record-selection"
+              @click="emit('update:selectedRowKeys', [])"
+            >
+              清除选择
+            </a-button>
           </div>
         </div>
 
@@ -106,6 +116,7 @@
         <template v-if="column.key === 'patient'">
           <div class="batch-table-panel__patient-cell">
             <img
+              v-if="!recordPoolMode"
               class="batch-table-panel__avatar"
               :src="patientAvatarSrc(record)"
               :alt="`${record.patientName || '患者'}头像`"
@@ -785,5 +796,82 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
   padding: 0 10px !important;
   font-size: 11px !important;
   font-weight: 700 !important;
+}
+
+.batch-table-panel--record-pool {
+  border-radius: 12px;
+  border-color: var(--workstation-divider, #e5eaf1);
+  background: #fff;
+  box-shadow: none;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__header {
+  padding: 16px 20px;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__title {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__summary-pill {
+  background: transparent;
+  font-weight: 500;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__clear-selection {
+  padding-inline: 2px;
+  font-size: 12px;
+  color: var(--workstation-brand-500, #0066cc);
+}
+
+.batch-table-panel--record-pool .batch-table-panel__patient-name {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__department {
+  font-size: 14px;
+  color: var(--workstation-text-primary, #1d1d1f);
+}
+
+.batch-table-panel--record-pool .batch-table-panel__detail-button {
+  height: 30px !important;
+  background: transparent !important;
+  color: var(--workstation-brand-500, #0066cc) !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.batch-table-panel--record-pool .batch-table-panel__action--primary {
+  box-shadow: none !important;
+}
+
+.batch-table-panel--record-pool :deep(.ant-table-container) {
+  border-top: 0;
+}
+
+.batch-table-panel--record-pool :deep(.ant-table-thead > tr > th) {
+  background: #fafbfd;
+  color: var(--workstation-text-secondary, #5b6b84);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.batch-table-panel--record-pool :deep(.ant-table-tbody > tr > td) {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom-color: #edf0f4;
+}
+
+.batch-table-panel--record-pool :deep(.ant-table-tbody > tr:hover > td) {
+  background: #f7faff;
+}
+
+.batch-table-panel--record-pool :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: var(--workstation-brand-050, #eaf2ff);
 }
 </style>

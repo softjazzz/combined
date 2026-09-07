@@ -91,6 +91,39 @@ function mountTable() {
 }
 
 describe('BatchTablePanel 病历池列表', () => {
+  it('uses the lightweight patient list only in record-pool mode', async () => {
+    const wrapper = mountTable()
+    expect(wrapper.classes()).toContain('batch-table-panel--record-pool')
+    expect(wrapper.find('.batch-table-panel__avatar').exists()).toBe(false)
+    expect(wrapper.find('.batch-table-panel__patient-name').text()).toBe('患者甲')
+    expect(wrapper.find('.batch-table-panel__visit-id').text()).toBe('V-1')
+
+    await wrapper.setProps({ recordPoolMode: false })
+    expect(wrapper.classes()).not.toContain('batch-table-panel--record-pool')
+    expect(wrapper.find('.batch-table-panel__avatar').exists()).toBe(true)
+  })
+
+  it('clears the record-pool selection through the existing controlled event', async () => {
+    const wrapper = mountTable()
+    expect(wrapper.find('[data-testid="clear-record-selection"]').exists()).toBe(false)
+
+    await wrapper.setProps({ showSelection: true, selectedRowKeys: ['record-1'] })
+    await wrapper.get('[data-testid="clear-record-selection"]').trigger('click')
+    expect(wrapper.emitted('update:selectedRowKeys')).toEqual([[[]]])
+    expect(wrapper.props('selectedRowKeys')).toEqual(['record-1'])
+    expect(wrapper.emitted('batch-extract')).toBeUndefined()
+    expect(wrapper.emitted('filter-qc')).toBeUndefined()
+
+    await wrapper.setProps({ selectedRowKeys: [] })
+    expect(wrapper.find('[data-testid="clear-record-selection"]').exists()).toBe(false)
+
+    await wrapper.setProps({ selectedRowKeys: ['record-1'], showSelection: false })
+    expect(wrapper.find('[data-testid="clear-record-selection"]').exists()).toBe(false)
+
+    await wrapper.setProps({ recordPoolMode: false, showSelection: true })
+    expect(wrapper.find('[data-testid="clear-record-selection"]').exists()).toBe(false)
+  })
+
   it('shows an unverified status without claiming that the patient is inpatient', () => {
     const wrapper = mountTable()
     const row = wrapper.props('rows')[0]

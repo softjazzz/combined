@@ -1,5 +1,8 @@
 <template>
-  <main class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
+  <main
+    class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden"
+    :class="{ 'record-pool-refined': !isStageQueueMode }"
+  >
     <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
       <div class="mx-auto w-full max-w-[1440px]">
         <div class="workstation-surface-enter mb-4">
@@ -26,6 +29,16 @@
                   当前阶段：参考首页生成
                 </div>
               </div>
+              <a-button
+                v-if="!isStageQueueMode"
+                :type="syncScope === 'today_inpatient' ? 'primary' : 'default'"
+                :loading="hospitalizationStatusVerifying"
+                :disabled="hospitalizationStatusVerifying"
+                class="wv4-record-pool-filter__sync-shortcut"
+                @click="emit('toggleTodayInpatient')"
+              >
+                {{ syncScope === 'today_inpatient' ? '当日在院 · 已核验' : '核验当日在院' }}
+              </a-button>
               <div v-if="isFrontpageGenerateStage" class="wv4-analysis-overview__actions">
                 <a-button
                   size="small"
@@ -101,18 +114,6 @@
                   <a-select-option value="recent"> 最近入院优先 </a-select-option>
                 </a-select>
 
-                <a-button
-                  v-if="!isStageQueueMode"
-                  size="small"
-                  :type="syncScope === 'today_inpatient' ? 'primary' : 'default'"
-                  :loading="hospitalizationStatusVerifying"
-                  :disabled="hospitalizationStatusVerifying"
-                  class="wv4-record-pool-filter__sync-shortcut"
-                  @click="emit('toggleTodayInpatient')"
-                >
-                  {{ syncScope === 'today_inpatient' ? '当日在院 · 已核验' : '核验当日在院' }}
-                </a-button>
-
                 <div class="workbench-dept-filter">
                   <a-select
                     :value="activeDept"
@@ -187,10 +188,6 @@
               </div>
               <div class="workbench-filter-summary wv4-record-pool-filter__summary">
                 {{ tableSummaryText }}
-              </div>
-              <div v-if="!isStageQueueMode" class="wv4-record-pool-filter__notice">
-                <InfoCircleOutlined aria-hidden="true" />
-                <span>病历范围由服务端统一筛选，可分别查看在院与已出院病历。</span>
               </div>
             </div>
 
@@ -305,7 +302,6 @@ import {
   CheckCircleOutlined,
   FileTextOutlined,
   InboxOutlined,
-  InfoCircleOutlined,
   SearchOutlined,
   SyncOutlined,
   WarningOutlined,
@@ -453,7 +449,7 @@ const overviewTitle = computed(() =>
 const overviewSubtitle = computed(() =>
   isFrontpageGenerateStage.value
     ? props.stageMeta.pageDesc || '对待生成病历进行批量生成和阻塞清理，不影响正式首页数据。'
-    : '用于筛选病例并发起质控；质控结果请在运行病历质控或终末病历质控中查看。',
+    : '筛选病历，发起质控',
 )
 
 const searchPlaceholder = computed(() =>
@@ -526,3 +522,7 @@ const kpiCards = computed(() => [
   },
 ])
 </script>
+
+<style scoped>
+@import '../styles/record-pool-refined.css';
+</style>
