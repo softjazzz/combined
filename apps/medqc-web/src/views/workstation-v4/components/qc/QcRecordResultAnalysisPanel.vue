@@ -1,66 +1,28 @@
 <template>
-  <section
-    class="qc-result-analysis"
-    aria-label="质控结果分析"
-  >
+  <section class="qc-result-analysis" aria-label="质控结果分析">
     <header class="qc-result-analysis__command-bar">
-      <div class="qc-result-analysis__command-copy">
-        <BarChart3
-          :size="18"
-          aria-hidden="true"
-        />
-        <div>
-          <strong>结果分析</strong>
-          <span>按质控点下钻到科室、医师和病历，不重复统计历史重跑任务。</span>
-        </div>
-      </div>
-      <div
-        class="qc-result-analysis__filters"
-        aria-label="结果分析筛选"
-      >
+      <div class="qc-result-analysis__filters" aria-label="结果分析筛选">
         <label>
-          <span>完成时间</span>
-          <input
-            v-model="completedFrom"
-            type="date"
-            aria-label="质控完成开始日期"
-          >
+          <span>质控完成日期</span>
+          <input v-model="completedFrom" type="date" aria-label="质控完成开始日期" />
         </label>
         <span class="qc-result-analysis__date-separator">至</span>
         <label class="qc-result-analysis__date-end">
           <span class="sr-only">质控完成结束日期</span>
-          <input
-            v-model="completedTo"
-            type="date"
-            aria-label="质控完成结束日期"
-          >
+          <input v-model="completedTo" type="date" aria-label="质控完成结束日期" />
         </label>
         <label>
           <span>科室</span>
-          <select
-            v-model="department"
-            aria-label="分析科室筛选"
-          >
+          <select v-model="department" aria-label="分析科室筛选">
             <option value="">全部科室</option>
-            <option
-              v-for="item in departmentOptions"
-              :key="item"
-              :value="item"
-            >{{ item }}</option>
+            <option v-for="item in departmentOptions" :key="item" :value="item">{{ item }}</option>
           </select>
         </label>
         <label>
           <span>主治医师</span>
-          <select
-            v-model="doctor"
-            aria-label="分析主治医师筛选"
-          >
+          <select v-model="doctor" aria-label="分析主治医师筛选">
             <option value="">全部医师</option>
-            <option
-              v-for="item in physicianOptions"
-              :key="item"
-              :value="item"
-            >{{ item }}</option>
+            <option v-for="item in physicianOptions" :key="item" :value="item">{{ item }}</option>
           </select>
         </label>
         <button
@@ -69,10 +31,7 @@
           :disabled="loading"
           @click="void queryAnalysis()"
         >
-          <Search
-            :size="15"
-            aria-hidden="true"
-          />
+          <Search :size="15" aria-hidden="true" />
           查询
         </button>
         <button
@@ -81,19 +40,13 @@
           :disabled="loading"
           @click="void resetFilters()"
         >
-          <RotateCcw
-            :size="14"
-            aria-hidden="true"
-          />
+          <RotateCcw :size="14" aria-hidden="true" />
           重置
         </button>
       </div>
     </header>
 
-    <nav
-      class="qc-result-analysis__status-nav"
-      aria-label="按质控结论筛选"
-    >
+    <nav class="qc-result-analysis__status-nav" aria-label="按质控结论筛选">
       <button
         v-for="item in statusNavigator"
         :key="item.key"
@@ -107,7 +60,7 @@
         @click="void selectStatus(item.key)"
       >
         <span>{{ item.label }}</span>
-        <strong>{{ item.count }}</strong>
+        <strong>{{ loading || error ? '—' : item.count }}</strong>
       </button>
     </nav>
 
@@ -120,23 +73,10 @@
         <strong>结果分析暂时无法加载</strong>
         <span>{{ error }}</span>
       </div>
-      <button
-        type="button"
-        @click="void queryAnalysis()"
-      >
-        重试
-      </button>
+      <button type="button" @click="void queryAnalysis()">重试</button>
     </section>
-    <section
-      v-else-if="loading"
-      class="qc-result-analysis__state"
-      aria-live="polite"
-    >
-      <LoaderCircle
-        :size="22"
-        class="qc-result-analysis__spin"
-        aria-hidden="true"
-      />
+    <section v-else-if="loading" class="qc-result-analysis__state" aria-live="polite">
+      <LoaderCircle :size="22" class="qc-result-analysis__spin" aria-hidden="true" />
       <div>
         <strong>正在汇总最新质控结果</strong>
         <span>只读取当前范围内已交付的 Canonical 结果。</span>
@@ -144,22 +84,25 @@
     </section>
 
     <template v-else-if="payload">
-      <section
-        class="qc-result-analysis__summary"
-        aria-label="当前分析范围"
-      >
-        <span><strong>{{ payload.kpis.scoped_record_total }}</strong> 份纳入病历</span>
+      <section class="qc-result-analysis__summary" aria-label="当前分析范围">
+        <span
+          ><strong>{{ payload.kpis.scoped_record_total }}</strong> 份纳入病历</span
+        >
         <i aria-hidden="true" />
-        <span><strong>{{ payload.kpis.ready_record_total }}</strong> 份已完成质控</span>
+        <span
+          ><strong>{{ payload.kpis.ready_record_total }}</strong> 份已完成质控</span
+        >
         <i aria-hidden="true" />
         <span>当前范围：{{ carePhaseLabel }}</span>
+        <span v-if="department" class="qc-result-analysis__scope-chip">科室：{{ department }}</span>
+        <span v-if="doctor" class="qc-result-analysis__scope-chip">医师：{{ doctor }}</span>
       </section>
 
       <div class="qc-result-analysis__content-grid">
         <article class="qc-result-analysis__rules-panel">
           <header class="qc-result-analysis__panel-heading">
             <div>
-              <span>问题处置工作台</span>
+              <span>质控点 → 科室 / 医师 → 病历</span>
               <h2>{{ selectedRule ? '已筛选质控点' : '按质控点规则查看' }}</h2>
             </div>
             <button
@@ -172,39 +115,20 @@
             </button>
           </header>
 
-          <div
-            v-if="payload.rule_distribution.length"
-            class="qc-result-analysis__rule-table-wrap"
-          >
+          <div v-if="payload.rule_distribution.length" class="qc-result-analysis__rule-table-wrap">
             <table class="qc-result-analysis__rule-table">
               <thead>
                 <tr>
-                  <th scope="col">
-                    质控点
-                  </th>
-                  <th scope="col">
-                    确定问题
-                  </th>
-                  <th scope="col">
-                    资料待核实
-                  </th>
-                  <th scope="col">
-                    待判断
-                  </th>
-                  <th scope="col">
-                    已核对
-                  </th>
-                  <th
-                    scope="col"
-                    aria-label="展开科室"
-                  />
+                  <th scope="col">质控点</th>
+                  <th scope="col">确定问题</th>
+                  <th scope="col">资料待核实</th>
+                  <th scope="col">待判断</th>
+                  <th scope="col">已核对</th>
+                  <th scope="col" aria-label="展开科室" />
                 </tr>
               </thead>
               <tbody>
-                <template
-                  v-for="rule in payload.rule_distribution"
-                  :key="rule.rule_id"
-                >
+                <template v-for="rule in payload.rule_distribution" :key="rule.rule_id">
                   <tr
                     :class="{ 'is-selected': selectedRuleId === rule.rule_id }"
                     @click="void selectRule(rule.rule_id)"
@@ -242,11 +166,7 @@
                           :size="16"
                           aria-hidden="true"
                         />
-                        <ChevronRight
-                          v-else
-                          :size="16"
-                          aria-hidden="true"
-                        />
+                        <ChevronRight v-else :size="16" aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
@@ -268,40 +188,37 @@
                           <span>{{ departmentItem.department }}</span>
                           <small>{{ departmentItem.record_total }} 份病历</small>
                           <strong>
-                            <em v-if="departmentItem.non_compliant_count">确定 {{ departmentItem.non_compliant_count }}</em>
-                            <em v-if="departmentItem.data_gap_count">待核实 {{ departmentItem.data_gap_count }}</em>
-                            <em v-if="departmentItem.uncertain_count">待判断 {{ departmentItem.uncertain_count }}</em>
+                            <em v-if="departmentItem.non_compliant_count"
+                              >确定 {{ departmentItem.non_compliant_count }}</em
+                            >
+                            <em v-if="departmentItem.data_gap_count"
+                              >待核实 {{ departmentItem.data_gap_count }}</em
+                            >
+                            <em v-if="departmentItem.uncertain_count"
+                              >待判断 {{ departmentItem.uncertain_count }}</em
+                            >
                             <template
                               v-if="
                                 !departmentItem.non_compliant_count &&
-                                  !departmentItem.data_gap_count &&
-                                  !departmentItem.uncertain_count
+                                !departmentItem.data_gap_count &&
+                                !departmentItem.uncertain_count
                               "
-                            >无重点问题</template>
+                              >无重点问题</template
+                            >
                           </strong>
                         </button>
                       </div>
-                      <p v-else>
-                        当前筛选下没有可归属的科室结果。
-                      </p>
+                      <p v-else>当前筛选下没有可归属的科室结果。</p>
                     </td>
                   </tr>
                 </template>
               </tbody>
             </table>
           </div>
-          <div
-            v-else
-            class="qc-result-analysis__empty"
-          >
-            当前筛选下暂无可交付的质控结论。
-          </div>
+          <div v-else class="qc-result-analysis__empty">当前筛选下暂无可交付的质控结论。</div>
         </article>
 
-        <aside
-          class="qc-result-analysis__insights"
-          aria-label="筛选结果概览"
-        >
+        <aside class="qc-result-analysis__insights" aria-label="筛选结果概览">
           <section>
             <header class="qc-result-analysis__panel-heading">
               <div>
@@ -311,10 +228,7 @@
               <strong>{{ totalStatusCount }} 条</strong>
             </header>
             <ul class="qc-result-analysis__status-list">
-              <li
-                v-for="item in visibleStatusItems"
-                :key="item.key"
-              >
+              <li v-for="item in visibleStatusItems" :key="item.key">
                 <span :class="`is-${item.key}`" />
                 <strong>{{ item.label }}</strong>
                 <i><b :style="{ width: `${item.percent}%` }" /></i>
@@ -325,23 +239,14 @@
           <section>
             <header class="qc-result-analysis__panel-heading">
               <div>
-                <span>责任归属</span>
+                <span>按当前筛选统计</span>
                 <h2>主治医师 Top 5</h2>
               </div>
               <span class="qc-result-analysis__panel-note">点击筛选</span>
             </header>
-            <ol
-              v-if="topPhysicians.length"
-              class="qc-result-analysis__physician-list"
-            >
-              <li
-                v-for="(item, index) in topPhysicians"
-                :key="item.physician"
-              >
-                <button
-                  type="button"
-                  @click="void selectPhysician(item.physician)"
-                >
+            <ol v-if="topPhysicians.length" class="qc-result-analysis__physician-list">
+              <li v-for="(item, index) in topPhysicians" :key="item.physician">
+                <button type="button" @click="void selectPhysician(item.physician)">
                   <span>{{ String(index + 1).padStart(2, '0') }}</span>
                   <strong>{{ item.physician }}</strong>
                   <small>
@@ -352,17 +257,13 @@
                       v-if="
                         !item.non_compliant_count && !item.data_gap_count && !item.uncertain_count
                       "
-                    >已核对 {{ item.record_total }}</template>
+                      >已核对 {{ item.record_total }}</template
+                    >
                   </small>
                 </button>
               </li>
             </ol>
-            <p
-              v-else
-              class="qc-result-analysis__empty-inline"
-            >
-              暂无可归属的主治医师结果。
-            </p>
+            <p v-else class="qc-result-analysis__empty-inline">暂无可归属的主治医师结果。</p>
           </section>
         </aside>
       </div>
@@ -379,15 +280,11 @@
               }}
             </h2>
           </div>
-          <span
-            v-if="selectedRule"
-            class="qc-result-analysis__panel-note"
-          >{{ payload.record_page.total }} 份匹配病历</span>
+          <span v-if="selectedRule" class="qc-result-analysis__panel-note"
+            >{{ payload.record_page.total }} 份匹配病历</span
+          >
         </header>
-        <div
-          v-if="!selectedRule"
-          class="qc-result-analysis__drilldown-empty"
-        >
+        <div v-if="!selectedRule" class="qc-result-analysis__drilldown-empty">
           请在上方选择一个质控点，查看对应科室、医师和病历结果。
         </div>
         <div
@@ -397,29 +294,16 @@
           <table class="qc-result-analysis__record-table">
             <thead>
               <tr>
-                <th scope="col">
-                  患者 / 住院号
-                </th>
-                <th scope="col">
-                  科室
-                </th>
-                <th scope="col">
-                  主治医师
-                </th>
-                <th scope="col">
-                  本项结论
-                </th>
-                <th scope="col">
-                  最近质控
-                </th>
+                <th scope="col">患者 / 住院号</th>
+                <th scope="col">科室</th>
+                <th scope="col">主治医师</th>
+                <th scope="col">本项结论</th>
+                <th scope="col">最近质控</th>
                 <th scope="col" />
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="record in payload.record_page.items"
-                :key="record.record_key"
-              >
+              <tr v-for="record in payload.record_page.items" :key="record.record_key">
                 <td>
                   <strong>{{ record.patient_name || '患者信息待核实' }}</strong>
                   <span>住院号 {{ record.visit_id }}</span>
@@ -438,22 +322,14 @@
                     class="qc-result-analysis__open"
                     @click="emit('open-result', record)"
                   >
-                    查看结果 <ExternalLink
-                      :size="14"
-                      aria-hidden="true"
-                    />
+                    查看结果 <ExternalLink :size="14" aria-hidden="true" />
                   </button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div
-          v-else
-          class="qc-result-analysis__drilldown-empty"
-        >
-          当前筛选下没有对应病历。
-        </div>
+        <div v-else class="qc-result-analysis__drilldown-empty">当前筛选下没有对应病历。</div>
       </section>
     </template>
   </section>
@@ -462,7 +338,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import {
-  BarChart3,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -663,7 +538,7 @@ onMounted(() => {
 
 <style scoped>
 .qc-result-analysis {
-  padding: 20px;
+  padding: 12px 0 0;
   background: rgba(255, 255, 255, 0.96);
 }
 .qc-result-analysis__command-bar,
@@ -672,7 +547,7 @@ onMounted(() => {
 .qc-result-analysis__rules-panel,
 .qc-result-analysis__insights {
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
+  border-radius: 10px;
   background: #fff;
 }
 .qc-result-analysis__command-bar {
@@ -680,7 +555,10 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 16px;
+  padding: 12px 0 16px;
+  border: 0;
+  border-bottom: 1px solid #e7edf4;
+  border-radius: 0;
 }
 .qc-result-analysis__command-copy {
   display: flex;
@@ -708,7 +586,7 @@ onMounted(() => {
 .qc-result-analysis__filters {
   display: flex;
   align-items: flex-end;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -773,9 +651,12 @@ onMounted(() => {
 }
 .qc-result-analysis__status-nav {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   overflow-x: auto;
-  padding: 16px 0;
+  margin: 14px 0;
+  padding: 4px;
+  background: #f3f6fa;
+  border-radius: 9px;
   scrollbar-width: thin;
 }
 .qc-result-analysis__status-button {
@@ -784,14 +665,14 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid transparent;
   border-radius: 9px;
   padding: 0 11px;
-  background: #fff;
+  background: transparent;
   color: rgba(29, 29, 31, 0.64);
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 .qc-result-analysis__status-button strong {
@@ -801,26 +682,30 @@ onMounted(() => {
   font-size: 13px;
 }
 .qc-result-analysis__status-button.is-active {
-  border-color: #0066cc;
-  background: #0066cc;
-  color: #fff;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.2);
+  border-color: #d5e3f3;
+  background: #fff;
+  color: #0066cc;
+  box-shadow: 0 1px 3px rgba(25, 49, 80, 0.07);
 }
 .qc-result-analysis__status-button.is-non_compliant:not(.is-active) {
-  border-color: rgba(239, 68, 68, 0.22);
-  color: #dc2626;
+  color: #59677a;
 }
 .qc-result-analysis__status-button.is-data_gap:not(.is-active) {
-  border-color: rgba(245, 158, 11, 0.28);
-  color: #b76a00;
+  color: #59677a;
 }
 .qc-result-analysis__status-button.is-uncertain:not(.is-active) {
-  border-color: rgba(100, 116, 139, 0.24);
   color: #526276;
 }
 .qc-result-analysis__status-button.is-compliant:not(.is-active) {
-  border-color: rgba(16, 185, 129, 0.24);
-  color: #07835b;
+  color: #59677a;
+}
+.qc-result-analysis__status-button:hover {
+  color: #0066cc;
+  background: #eaf1f9;
+}
+.qc-result-analysis__status-button:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: -2px;
 }
 .qc-result-analysis__state {
   display: flex;
@@ -860,12 +745,28 @@ onMounted(() => {
 }
 .qc-result-analysis__summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
-  padding: 10px 14px;
+  padding: 0 2px;
+  border: 0;
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
+}
+.qc-result-analysis__scope-chip {
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: #eff5fc;
+  color: #486c94;
+}
+.qc-result-analysis__rule-table th:not(:first-child),
+.qc-result-analysis__rule-table td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.qc-result-analysis__rule-table tbody > tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 #0066cc;
 }
 .qc-result-analysis__summary strong {
   color: #1d1d1f;
@@ -905,7 +806,8 @@ onMounted(() => {
 }
 .qc-result-analysis h2 {
   margin: 3px 0 0;
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 600;
   line-height: 24px;
 }
 .qc-result-analysis__panel-heading > strong {
@@ -928,9 +830,9 @@ onMounted(() => {
 .qc-result-analysis th {
   padding: 10px 12px;
   background: rgba(245, 245, 247, 0.86);
-  color: rgba(29, 29, 31, 0.45);
-  font-size: 12px;
-  font-weight: 650;
+  color: #637084;
+  font-size: 13px;
+  font-weight: 600;
   text-align: left;
   white-space: nowrap;
 }
@@ -938,7 +840,7 @@ onMounted(() => {
   padding: 13px 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
   color: rgba(29, 29, 31, 0.72);
-  font-size: 14px;
+  font-size: 13px;
 }
 .qc-result-analysis__rule-table tbody > tr:not(.qc-result-analysis__department-row) {
   cursor: pointer;
@@ -955,13 +857,13 @@ onMounted(() => {
   display: block;
   margin-top: 3px;
   color: #1d1d1f;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 21px;
 }
 .qc-result-analysis__rule-code {
-  color: #0066cc;
+  color: #8190a2;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 400;
 }
 .qc-result-analysis__count {
   display: inline-flex;
@@ -970,10 +872,10 @@ onMounted(() => {
   font-weight: 700;
 }
 .qc-result-analysis__count.is-danger {
-  color: #dc2626;
+  color: #b74b50;
 }
 .qc-result-analysis__count.is-warning {
-  color: #b76a00;
+  color: #667487;
 }
 .qc-result-analysis__count.is-neutral {
   color: #526276;
@@ -1032,13 +934,9 @@ onMounted(() => {
 .qc-result-analysis__physician-list em {
   font-style: normal;
 }
-.qc-result-analysis__department-list em:first-child,
-.qc-result-analysis__physician-list em:first-child {
-  color: #dc2626;
-}
-.qc-result-analysis__department-list em:nth-child(2),
-.qc-result-analysis__physician-list em:nth-child(2) {
-  color: #b76a00;
+.qc-result-analysis__department-list em,
+.qc-result-analysis__physician-list em {
+  color: #667487;
 }
 .qc-result-analysis__department-row p {
   margin: 0;
@@ -1072,21 +970,21 @@ onMounted(() => {
   background: #cbd5e1;
 }
 .qc-result-analysis__status-list li > span.is-non_compliant {
-  background: #ef4444;
+  background: #b74b50;
 }
 .qc-result-analysis__status-list li > span.is-data_gap {
-  background: #f59e0b;
+  background: #91a4bb;
 }
 .qc-result-analysis__status-list li > span.is-uncertain {
   background: #64748b;
 }
 .qc-result-analysis__status-list li > span.is-compliant {
-  background: #10b981;
+  background: #a7b8c9;
 }
 .qc-result-analysis__status-list strong {
   color: rgba(29, 29, 31, 0.68);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
 }
 .qc-result-analysis__status-list i {
   height: 5px;
@@ -1101,18 +999,19 @@ onMounted(() => {
   background: #9eb3cc;
 }
 .qc-result-analysis__status-list li:has(.is-non_compliant) b {
-  background: #ef4444;
+  background: #b74b50;
 }
 .qc-result-analysis__status-list li:has(.is-data_gap) b {
-  background: #f59e0b;
+  background: #91a4bb;
 }
 .qc-result-analysis__status-list li:has(.is-uncertain) b {
   background: #64748b;
 }
 .qc-result-analysis__status-list li:has(.is-compliant) b {
-  background: #10b981;
+  background: #a7b8c9;
 }
 .qc-result-analysis__status-list em {
+  font-variant-numeric: tabular-nums;
   color: rgba(29, 29, 31, 0.56);
   font-size: 13px;
   font-style: normal;
@@ -1190,28 +1089,28 @@ onMounted(() => {
 .qc-result-analysis__record-table td:first-child span {
   margin-top: 3px;
   color: rgba(29, 29, 31, 0.45);
-  font-size: 11px;
+  font-size: 12px;
 }
 .qc-result-analysis__result-tag {
   display: inline-flex;
-  border-radius: 999px;
+  border-radius: 5px;
   padding: 3px 8px;
   background: rgba(148, 163, 184, 0.12);
   color: #526276;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
 }
 .qc-result-analysis__result-tag.is-non_compliant {
   background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
+  color: #b74b50;
 }
 .qc-result-analysis__result-tag.is-data_gap {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b76a00;
+  background: #f1f4f8;
+  color: #667487;
 }
 .qc-result-analysis__result-tag.is-compliant {
-  background: rgba(16, 185, 129, 0.1);
-  color: #07835b;
+  background: #f1f4f8;
+  color: #667487;
 }
 .qc-result-analysis__open {
   border: 0;

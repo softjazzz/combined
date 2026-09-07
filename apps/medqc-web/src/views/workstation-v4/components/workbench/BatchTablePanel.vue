@@ -119,7 +119,6 @@
         <template v-if="column.key === 'patient'">
           <div class="batch-table-panel__patient-cell">
             <img
-              v-if="!recordPoolMode"
               class="batch-table-panel__avatar"
               :src="patientAvatarSrc(record)"
               :alt="`${record.patientName || '患者'}头像`"

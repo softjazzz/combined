@@ -2,7 +2,7 @@
   <div
     class="qc-record-result-table"
     :class="{
-      'qc-record-result-table--inpatient': carePhase === 'inpatient',
+      'qc-record-result-table--inpatient': carePhase === 'inpatient' || compactReview,
       'qc-record-result-table--compact-review': compactReview,
     }"
     data-testid="qc-record-result-table"
@@ -64,17 +64,24 @@
             <td>
               <div class="qc-record-result-table__patient-cell">
                 <img
-                  v-if="carePhase !== 'inpatient'"
                   class="qc-record-result-table__avatar"
                   :src="patientAvatarSrc(row)"
                   :alt="`${row.patientName || '患者'}头像`"
                 />
                 <span class="qc-record-result-table__patient-meta">
-                  <span
-                    class="qc-record-result-table__patient-name"
-                    :title="compactReview ? row.patientName : undefined"
-                  >
-                    {{ row.patientName || '患者信息待接入' }}
+                  <span :class="{ 'qc-record-result-table__identity-line': compactReview }">
+                    <span
+                      class="qc-record-result-table__patient-name"
+                      :title="compactReview ? row.patientName : undefined"
+                    >
+                      {{ row.patientName || '患者信息待接入' }}
+                    </span>
+                    <span
+                      v-if="compactReview"
+                      class="qc-record-result-table__inline-visit"
+                      :title="row.visitId"
+                      >{{ row.visitId || '待接入' }}</span
+                    >
                   </span>
                   <span
                     v-if="compactReview"
@@ -84,12 +91,11 @@
                         .filter(Boolean)
                         .join(' · ')
                     "
-                    >{{
-                      [row.visitId || '待接入', row.department || '未分科室', row.bedNumber]
-                        .filter(Boolean)
-                        .join(' · ')
-                    }}</span
                   >
+                    <span>{{
+                      [row.department || '未分科室', row.bedNumber].filter(Boolean).join(' · ')
+                    }}</span>
+                  </span>
                   <span v-else class="qc-record-result-table__visit-line">
                     <span
                       v-if="carePhase !== 'inpatient'"
@@ -120,12 +126,21 @@
               {{ displayTime(row) }}
             </td>
             <td class="qc-record-result-table__summary" :title="row.issueSummary">
-              <span v-if="carePhase === 'inpatient'" class="qc-record-result-table__summary-items">
+              <span
+                v-if="carePhase === 'inpatient' || compactReview"
+                class="qc-record-result-table__summary-items"
+              >
                 <template v-for="(part, index) in row.issueSummary.split(' · ')" :key="index">
                   <span v-if="index > 0" class="qc-record-result-table__summary-separator">{{
                     ' · '
                   }}</span>
-                  <span class="qc-record-result-table__summary-item">{{ part }}</span>
+                  <span
+                    class="qc-record-result-table__summary-item"
+                    :class="{
+                      'qc-record-result-table__summary-item--issue': part.startsWith('确定问题 '),
+                    }"
+                    >{{ part }}</span
+                  >
                 </template>
               </span>
               <template v-else>
@@ -166,12 +181,7 @@
 import { computed } from 'vue'
 import { ChevronRight } from 'lucide-vue-next'
 
-import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
-import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
-import patientIconElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
-import patientIconGirl from '@/assets/avatar-icons/patient-icon-girl.png'
-import patientIconMan from '@/assets/avatar-icons/patient-icon-man.png'
-import patientIconWoman from '@/assets/avatar-icons/patient-icon-woman.png'
+import { patientAvatarSrc } from './patient-avatar'
 
 export type QcRecordCarePhase = 'inpatient' | 'discharged'
 
@@ -261,22 +271,6 @@ function togglePageSelection(event: Event) {
     else next.delete(row.recordKey)
   }
   emit('update:selectedRecordKeys', [...next])
-}
-
-function isFemale(sex?: string): boolean {
-  return /女|female|^f$/i.test(String(sex || '').trim())
-}
-
-function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAge'>): string {
-  const age = Number(row.patientAge || 0)
-  const female = isFemale(row.patientSex)
-  if (Number.isFinite(age) && age > 0 && age < 14) {
-    return female ? patientIconGirl : patientIconBoy
-  }
-  if (Number.isFinite(age) && age >= 55) {
-    return female ? patientIconElderWoman : patientIconElderMan
-  }
-  return female ? patientIconWoman : patientIconMan
 }
 </script>
 
@@ -571,21 +565,18 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__patient-name {
-  font-size: 15px;
-  font-weight: 500;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__visit-id {
   overflow: hidden;
   color: #64748b;
-  font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__department {
-  font-size: 13px;
   font-weight: 400;
 }
 
@@ -650,8 +641,13 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
 .qc-record-result-table--compact-review th:nth-child(1) {
   width: 36px;
 }
+.qc-record-result-table--compact-review .qc-record-result-table__table thead th {
+  font-size: 13px;
+  font-weight: 600;
+  color: #525e6e;
+}
 .qc-record-result-table--compact-review th:nth-child(2) {
-  width: 185px;
+  width: 240px;
 }
 .qc-record-result-table--compact-review th:nth-child(4) {
   width: 148px;
@@ -660,21 +656,49 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
   width: 46px;
 }
 
-.qc-record-result-table--compact-review .qc-record-result-table__patient-name,
-.qc-record-result-table__compact-meta {
+.qc-record-result-table--compact-review .qc-record-result-table__patient-name {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.qc-record-result-table__identity-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.qc-record-result-table__inline-visit {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #7a8390;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.qc-record-result-table--compact-review th:nth-child(3),
+.qc-record-result-table--compact-review .qc-record-result-table__summary {
+  text-align: left;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__summary-items {
+  justify-content: flex-start;
+}
 
 .qc-record-result-table__compact-meta {
-  color: #64748b;
+  display: grid;
+  gap: 2px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 18px;
+  color: #727b87;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__summary-item {
+  font-size: 13px;
+  color: #667487;
   background: transparent;
   padding: 0;
   max-width: 100%;
@@ -682,6 +706,19 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: normal;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__summary-item--issue {
+  color: #b74b50;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(n) {
+  height: 68px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(4) {
+  color: #727b87;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__summary-separator {
   display: inline;
@@ -692,10 +729,23 @@ function patientAvatarSrc(row: Pick<QcRecordResultRow, 'patientSex' | 'patientAg
   width: 28px;
   min-width: 28px;
   padding: 0;
+  color: #8a98aa;
+}
+.qc-record-result-table--compact-review
+  .qc-record-result-table__row:hover
+  .qc-record-result-table__result-button,
+.qc-record-result-table--compact-review
+  .qc-record-result-table__row--active
+  .qc-record-result-table__result-button,
+.qc-record-result-table--compact-review
+  .qc-record-result-table__row--selected
+  .qc-record-result-table__result-button {
+  color: #0066cc;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__row--active,
 .qc-record-result-table--compact-review .qc-record-result-table__row--active:hover {
+  background: #f2f7fd;
   box-shadow: inset 3px 0 0 #0066cc;
 }
 

@@ -40,6 +40,7 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.get('.qc-record-result-table__compact-meta').attributes('title')).toBe(
       'V-1 · 重症医学科 · 12 床',
     )
+    expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
     expect(wrapper.get('.qc-record-result-table__summary').attributes('title')).toBe(issueSummary)
     expect(
       wrapper.findAll('.qc-record-result-table__summary-item').map((item) => item.text()),
@@ -111,7 +112,7 @@ describe('QcRecordResultTable', () => {
     expect(renderedRows[0].attributes('data-record-key')).toBe(rows[0].recordKey)
   })
 
-  it('运行病历使用专属外观且隐藏头像和重复标签，住院号保留完整悬停文本', () => {
+  it('运行病历使用专属外观并保留患者头像，住院号保留完整悬停文本', () => {
     const wrapper = mount(QcRecordResultTable, {
       props: {
         carePhase: 'inpatient',
@@ -120,7 +121,7 @@ describe('QcRecordResultTable', () => {
     })
 
     expect(wrapper.classes()).toContain('qc-record-result-table--inpatient')
-    expect(wrapper.find('.qc-record-result-table__avatar').exists()).toBe(false)
+    expect(wrapper.get('.qc-record-result-table__avatar').attributes('alt')).toBe('患者甲头像')
     expect(wrapper.find('.qc-record-result-table__visit-label').exists()).toBe(false)
     expect(wrapper.get('.qc-record-result-table__patient-name').text()).toBe('患者甲')
     expect(wrapper.get('.qc-record-result-table__visit-id').attributes('title')).toBe(

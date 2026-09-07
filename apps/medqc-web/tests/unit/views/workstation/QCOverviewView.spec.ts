@@ -461,7 +461,7 @@ describe('QCOverviewView', () => {
     const workspace = wrapper.get('[data-testid="home-workspace"]')
     expect(workspace.findAll('button')).toHaveLength(3)
     expect(workspace.find('[data-testid="data-health"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="data-health"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="data-health"]').exists()).toBe(true)
     expect(workspace.find('[data-testid="defect-analysis-chart"]').exists()).toBe(false)
 
     const analysis = wrapper.get('[data-testid="home-analysis"]')

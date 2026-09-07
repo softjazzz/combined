@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import QcRecordReviewPreview from '@/views/workstation-v4/components/qc/QcRecordReviewPreview.vue'
 import type { QcRecordResultRow } from '@/views/workstation-v4/components/qc/QcRecordResultTable.vue'
 import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
@@ -54,9 +54,23 @@ function deferred() {
 
 describe('QcRecordReviewPreview', () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    )
     getLatestResult.mockReset()
     getLatestResult.mockResolvedValue({ success: true, data: payload() })
   })
+  afterEach(() => vi.unstubAllGlobals())
 
   it('未选择和未运行不请求，患者字段缺失保留占位', async () => {
     const wrapper = mount(QcRecordReviewPreview, { props: { row: null } })
@@ -206,6 +220,7 @@ describe('QcRecordReviewPreview', () => {
     expect(wrapper.text()).toContain('技术异常')
     expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(3)
     expect(wrapper.findAll('[data-tab]')).toHaveLength(5)
+    expect(wrapper.find('.ant-pagination').exists()).toBe(false)
     await wrapper.get('select').setValue('compliant')
     expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(1)
     await wrapper.get('select').setValue('all')

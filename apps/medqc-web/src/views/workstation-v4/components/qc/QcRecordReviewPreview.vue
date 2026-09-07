@@ -7,7 +7,11 @@
     <div v-if="!row" class="preview-state">请选择左侧病历，查看最近一次质控结果</div>
     <template v-else>
       <section class="patient-context" aria-label="当前患者">
-        <h3>{{ row.patientName || '患者信息待接入' }}</h3>
+        <h3>
+          <img class="patient-avatar" :src="patientAvatarSrc(row)" alt="" />{{
+            row.patientName || '患者信息待接入'
+          }}
+        </h3>
         <dl>
           <div>
             <dt>住院号</dt>
@@ -18,8 +22,10 @@
             <dd>{{ row.department || '—' }}</dd>
           </div>
           <div>
-            <dt>入院时间</dt>
-            <dd>{{ row.admissionTime || '—' }}</dd>
+            <dt>{{ carePhase === 'discharged' ? '出院时间' : '入院时间' }}</dt>
+            <dd>
+              {{ (carePhase === 'discharged' ? row.dischargeTime : row.admissionTime) || '—' }}
+            </dd>
           </div>
           <div>
             <dt>最近质控</dt>
@@ -38,11 +44,14 @@
       <template v-else>
         <div class="status-tabs">
           <span>问题预览</span>
-          <select v-model="activeTab" aria-label="质控状态筛选">
-            <option v-for="tab in tabs" :key="tab.key" :value="tab.key" :data-tab="tab.key">
-              {{ tab.label }} · {{ tab.count }}
-            </option>
-          </select>
+          <div class="status-select">
+            <select v-model="activeTab" aria-label="质控状态筛选" title="点击切换质控状态">
+              <option v-for="tab in tabs" :key="tab.key" :value="tab.key" :data-tab="tab.key">
+                {{ tab.label }} · {{ tab.count }}
+              </option>
+            </select>
+            <span class="status-select-arrow" aria-hidden="true" />
+          </div>
         </div>
         <div class="preview-results" aria-live="polite">
           <p v-if="!filteredItems.length" class="preview-state">该状态暂无质控项</p>
@@ -129,11 +138,20 @@ import {
   type SingleRecordQcResultItem,
   type SingleRecordQcResultTabKey,
 } from '../../customer-sample-validation/single-record-result-model'
-import type { QcRecordResultRow } from './QcRecordResultTable.vue'
+import type { QcRecordCarePhase, QcRecordResultRow } from './QcRecordResultTable.vue'
+import { patientAvatarSrc } from './patient-avatar'
 
-const props = withDefaults(defineProps<{ row: QcRecordResultRow | null; refreshKey?: number }>(), {
-  refreshKey: 0,
-})
+const props = withDefaults(
+  defineProps<{
+    row: QcRecordResultRow | null
+    refreshKey?: number
+    carePhase?: QcRecordCarePhase
+  }>(),
+  {
+    refreshKey: 0,
+    carePhase: 'inpatient',
+  },
+)
 const emit = defineEmits<{ 'open-full': [recordKey: string] }>()
 const items = ref<SingleRecordQcResultItem[]>([])
 const loading = ref(false)
@@ -259,7 +277,9 @@ onBeforeUnmount(() => {
   min-width: 0;
   border-left: 1px solid #e5ebf3;
   color: var(--ws-text-primary, #1d1d1f);
-  background: #fff;
+  background: #f5f8fc;
+  border-radius: 12px;
+  padding-bottom: 4px;
   font-size: 14px;
   line-height: 1.6;
   font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
@@ -276,13 +296,29 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 .patient-context {
-  padding: 0 20px 18px;
+  margin: 0 16px 16px;
+  padding: 16px;
+  border: 1px solid #e1eaf4;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(36, 65, 100, 0.025);
 }
 .patient-context h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 12px;
   color: #253247;
   font-size: 16px;
   font-weight: 600;
+}
+.patient-avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  background: #eaf2ff;
+  object-fit: cover;
 }
 dl {
   margin: 0;
@@ -310,7 +346,7 @@ dd {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 6px 20px;
+  padding: 0 18px 12px;
   background: transparent;
 }
 button {
@@ -318,13 +354,41 @@ button {
   cursor: pointer;
 }
 .status-tabs select {
-  padding: 5px 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  background: white;
-  color: #52647b;
+  appearance: none;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 34px 6px 12px;
+  border: 1px solid #b9cfe9;
+  border-radius: 7px;
+  background: #f5f9ff;
+  color: #285b8f;
+  cursor: pointer;
   font: inherit;
   font-size: 12px;
+}
+.status-select {
+  position: relative;
+  min-width: 148px;
+  max-width: 100%;
+}
+.status-select-arrow {
+  position: absolute;
+  right: 13px;
+  top: 13px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid #396f9f;
+  border-bottom: 2px solid #396f9f;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+.status-tabs select:hover {
+  border-color: #6a9dd2;
+  background: #edf5ff;
+}
+.status-tabs select:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
 }
 .status-tabs > span {
   font-size: 14px;
@@ -332,16 +396,24 @@ button {
   color: #38465a;
 }
 .preview-results {
-  padding: 0 20px;
+  display: grid;
+  gap: 12px;
+  padding: 0 16px;
 }
 .preview-item {
-  padding: 18px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #dce6f1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(36, 65, 100, 0.045);
 }
 .item-heading {
   display: grid;
   gap: 8px;
   align-items: baseline;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf1f6;
 }
 .item-heading h3 {
   margin: 0;

@@ -94,7 +94,7 @@ describe('BatchTablePanel 病历池列表', () => {
   it('uses the lightweight patient list only in record-pool mode', async () => {
     const wrapper = mountTable()
     expect(wrapper.classes()).toContain('batch-table-panel--record-pool')
-    expect(wrapper.find('.batch-table-panel__avatar').exists()).toBe(false)
+    expect(wrapper.find('.batch-table-panel__avatar').exists()).toBe(true)
     expect(wrapper.find('.batch-table-panel__patient-name').text()).toBe('患者甲')
     expect(wrapper.find('.batch-table-panel__visit-id').text()).toBe('V-1')
 

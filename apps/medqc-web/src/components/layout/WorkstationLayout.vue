@@ -3,8 +3,6 @@
     class="workstation-layout workstation-layout--apple min-h-screen"
     :class="{
       'workstation-layout--overview': isQcOverviewRoute,
-      'workstation-layout--record-pool': route.path === '/workstation-v4/worklist',
-      'workstation-layout--review': route.path === '/workstation-v4/records/running',
     }"
   >
     <!-- 侧边栏 -->
@@ -1264,30 +1262,26 @@ watch(
 .workstation-layout--apple .header :deep(.ant-btn-text:hover) {
   background: rgba(0, 0, 0, 0.05) !important;
 }
-/* 病历池参考稿只调整现有外壳材质，不删改导航或身份信息。 */
-.workstation-layout--record-pool .sidebar-container {
+/* 工作台共用侧栏材质，切换业务路由仅改变选中项。 */
+.workstation-layout--apple .sidebar-container {
   background: #eef5ff !important;
   box-shadow: none !important;
   border-right: 1px solid #dfe8f5 !important;
 }
 
-.workstation-layout--record-pool .brand-card {
+.workstation-layout--apple .brand-card {
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.workstation-layout--record-pool .logo-container {
+.workstation-layout--apple .logo-container {
   padding-top: 24px;
   padding-bottom: 24px;
 }
 
-.workstation-layout--record-pool .sidebar-container :deep(.ant-menu),
-.workstation-layout--record-pool .sidebar-container :deep(.ant-layout-sider-trigger) {
+.workstation-layout--apple .sidebar-container :deep(.ant-menu),
+.workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-trigger) {
   background: transparent !important;
 }
-</style>
-
-<style scoped>
-@import './workstation-review-shell.css';
 </style>

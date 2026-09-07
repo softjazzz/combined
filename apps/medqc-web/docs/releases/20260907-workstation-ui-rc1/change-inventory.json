@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "release_id": "20260907-workstation-ui-rc1",
+  "base_commit": "5723ab72f70fd54c2145adeec43d69b66abb031d",
+  "scope": "当前本地已审核工作台 UI 修改和结果分析接口修复；不包含临时病例/调试数据/原型",
+  "entries": [
+    {
+      "path": "apps/medqc-web/backend/app/services/workstation/luxian_0609_result_analysis_service.py",
+      "category": "A",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "结果分析筛选调用合同修复及回归测试"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_luxian_0609_result_analysis_service.py",
+      "category": "A",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "结果分析筛选调用合同修复及回归测试"
+    },
+    {
+      "path": "apps/medqc-web/src/components/layout/WorkstationLayout.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/components/qc/QCReviewDrawer.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/CustomerSampleValidationView.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/QcRecordResultListView.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/WorkstationV4View.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/DetailHeader.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/WorkstationV4ListView.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/qc/QcRecordResultAnalysisPanel.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/qc/QcRecordResultTable.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/qc/QcRecordReviewPreview.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/workbench/BatchTablePanel.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/workbench/RecordPoolQcTaskStatusBar.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/customer-sample-validation/QCRecordResultComparisonDrawer.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentContent.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/styles/running-qc-refined.css",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation/QCOverviewView.vue",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "本轮工作台 UI 优化与关联格式化"
+    },
+    {
+      "path": "apps/medqc-web/tests/unit/views/workstation-v4/BatchTablePanel.spec.ts",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "工作台 UI 交互及类型回归测试"
+    },
+    {
+      "path": "apps/medqc-web/tests/unit/views/workstation-v4/QcRecordResultListView.spec.ts",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "工作台 UI 交互及类型回归测试"
+    },
+    {
+      "path": "apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRecordResultTable.spec.ts",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "工作台 UI 交互及类型回归测试"
+    },
+    {
+      "path": "apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRecordReviewPreview.spec.ts",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "工作台 UI 交互及类型回归测试"
+    },
+    {
+      "path": "apps/medqc-web/src/views/workstation-v4/components/qc/patient-avatar.ts",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "列表与预览共享头像模块，构建必需"
+    },
+    {
+      "path": "apps/medqc-web/tests/unit/views/workstation/QCOverviewView.spec.ts",
+      "category": "B",
+      "owner": "MedQC 工作台",
+      "release_required": true,
+      "reason": "工作台 UI 交互及类型回归测试"
+    }
+  ]
+}

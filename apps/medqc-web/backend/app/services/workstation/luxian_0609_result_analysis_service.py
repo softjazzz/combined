@@ -87,6 +87,7 @@ def _load_current_workstation_records(
         _apply_workstation_filters,
         _filter_indexed_registration_records,
         _load_indexed_registration_records,
+        _load_hospitalization_projection_map,
         _session_factory,
         _workstation_department_expr,
         _workstation_discharge_join_condition,
@@ -111,6 +112,7 @@ def _load_current_workstation_records(
             end_date=None,
             date_field="visit",
             hospital_status=hospital_status,
+            sync_scope="all",
             include_department=True,
             include_doctor=True,
             discharge_summary=discharge_summary,
@@ -148,6 +150,8 @@ def _load_current_workstation_records(
             end_date=None,
             date_field="visit",
             hospital_status=hospital_status,
+            sync_scope="all",
+            hospitalization_projection_map=_load_hospitalization_projection_map(session),
         )
         records.extend(
             {

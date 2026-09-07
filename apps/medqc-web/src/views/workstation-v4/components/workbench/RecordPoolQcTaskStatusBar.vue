@@ -8,94 +8,98 @@
     data-testid="record-pool-qc-task-status"
   >
     <div class="record-pool-qc-status__main">
-      <div
-        class="record-pool-qc-status__indicator"
-        aria-hidden="true"
-      >
-        <LoaderCircle
-          v-if="isActive"
-          :size="18"
-          class="record-pool-qc-status__spinner"
-        />
-        <CircleCheckBig
-          v-else-if="currentJob.status === 'completed'"
-          :size="18"
-        />
-        <CircleAlert
-          v-else
-          :size="18"
-        />
+      <div v-if="!isActive" class="record-pool-qc-status__indicator" aria-hidden="true">
+        <CircleCheckBig v-if="currentJob.status === 'completed'" :size="18" />
+        <CircleAlert v-else :size="18" />
       </div>
 
       <div class="record-pool-qc-status__content">
         <div class="record-pool-qc-status__heading">
           <strong>{{ statusTitle }}</strong>
-          <span>{{ statusBadge }}</span>
-          <em v-if="progressPercent !== null">{{ progressPercent }}%</em>
-        </div>
-
-        <div class="record-pool-qc-status__metrics">
-          <span>{{ recordProgressText }}</span>
-          <span v-if="ruleProgressText">{{ ruleProgressText }}</span>
-          <span v-if="terminalSummary">{{ terminalSummary }}</span>
+          <em v-if="isActive && progressPercent !== null">{{ progressPercent }}%</em>
         </div>
 
         <div
-          v-if="multiRecordRuntime"
-          class="record-pool-qc-status__concurrency"
-          data-testid="record-pool-qc-concurrency"
-          aria-label="多病历并发执行状态"
+          v-if="isActive && progressPercent !== null"
+          class="record-pool-qc-status__progress"
+          role="progressbar"
+          aria-label="质控执行进度"
+          :aria-valuenow="progressPercent"
+          :aria-valuemin="0"
+          :aria-valuemax="100"
         >
-          <span>并发 <strong>{{ multiRecordRuntime.parallel }}</strong> 份</span>
-          <span class="is-active">执行中 <strong>{{ multiRecordRuntime.active }}</strong> 份</span>
-          <span class="is-complete">已完成 <strong>{{ multiRecordRuntime.completed }}</strong> 份</span>
-          <span>排队 <strong>{{ multiRecordRuntime.queued }}</strong> 份</span>
+          <span :style="{ width: `${progressPercent}%` }" />
         </div>
 
-        <ol
-          class="record-pool-qc-status__stages"
-          data-testid="record-pool-qc-task-stages"
-          aria-label="质控任务执行阶段"
-        >
-          <li
-            v-for="stage in workflowStages"
-            :key="stage.key"
-            :class="`is-${stage.state}`"
-            :data-stage-key="stage.key"
+        <div class="record-pool-qc-status__metrics">
+          <span v-if="ruleProgressText">{{ ruleProgressText }}</span>
+          <span v-if="terminalSummary">{{ terminalSummary }}</span>
+          <span class="record-pool-qc-status__record-count">{{ recordProgressText }}</span>
+        </div>
+
+        <details class="record-pool-qc-status__details">
+          <summary>{{ isActive ? '查看执行详情' : '查看任务详情' }}</summary>
+          <div
+            v-if="multiRecordRuntime"
+            class="record-pool-qc-status__concurrency"
+            data-testid="record-pool-qc-concurrency"
+            aria-label="多病历并发执行状态"
           >
             <span
-              class="record-pool-qc-status__stage-marker"
-              aria-hidden="true"
-            />
-            <span class="record-pool-qc-status__stage-copy">
-              <strong>{{ stage.label }}</strong>
-              <small>{{ stage.detail }}</small>
-            </span>
-            <span
-              v-if="stage.key === 'rules' && stage.state === 'active' && ruleProgressText"
-              class="record-pool-qc-status__stage-progress"
+              >并发 <strong>{{ multiRecordRuntime.parallel }}</strong> 份</span
             >
-              {{ processedRules }} / {{ totalRules }}
-            </span>
-          </li>
-        </ol>
+            <span class="is-active"
+              >执行中 <strong>{{ multiRecordRuntime.active }}</strong> 份</span
+            >
+            <span class="is-complete"
+              >已完成 <strong>{{ multiRecordRuntime.completed }}</strong> 份</span
+            >
+            <span
+              >排队 <strong>{{ multiRecordRuntime.queued }}</strong> 份</span
+            >
+          </div>
 
-        <p class="record-pool-qc-status__stage">
-          {{ stageText }}
-        </p>
+          <ol
+            class="record-pool-qc-status__stages"
+            data-testid="record-pool-qc-task-stages"
+            aria-label="质控任务执行阶段"
+          >
+            <li
+              v-for="stage in workflowStages"
+              :key="stage.key"
+              :class="`is-${stage.state}`"
+              :data-stage-key="stage.key"
+              :title="stage.detail"
+            >
+              <span class="record-pool-qc-status__stage-marker" aria-hidden="true">{{
+                stage.state === 'complete' ? '✓' : ''
+              }}</span>
+              <span class="record-pool-qc-status__stage-copy">
+                <strong>{{ stage.label }}</strong>
+              </span>
+            </li>
+          </ol>
+
+          <p
+            v-if="!isActive || stageText.startsWith('当前：')"
+            class="record-pool-qc-status__stage"
+          >
+            {{ stageText }}
+          </p>
+        </details>
         <p
-          v-if="pollError"
+          v-if="!isActive && currentJob.status !== 'completed'"
           class="record-pool-qc-status__refresh-note"
         >
+          {{ stageText }}
+        </p>
+        <p v-if="pollError" class="record-pool-qc-status__refresh-note">
           进度暂时未更新，系统将自动重试。
         </p>
       </div>
     </div>
 
-    <div
-      v-if="!isActive"
-      class="record-pool-qc-status__actions"
-    >
+    <div v-if="!isActive" class="record-pool-qc-status__actions">
       <button
         v-if="currentJob.status === 'completed'"
         type="button"
@@ -120,7 +124,7 @@
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { CircleAlert, CircleCheckBig, LoaderCircle, X } from 'lucide-vue-next'
+import { CircleAlert, CircleCheckBig, X } from 'lucide-vue-next'
 import {
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
@@ -293,16 +297,6 @@ const statusTitle = computed(() => {
   return '正在准备质控任务'
 })
 
-const statusBadge = computed(() => {
-  const status = currentJob.value?.status
-  if (status === 'queued') return '等待执行'
-  if (status === 'running') return '执行中'
-  if (status === 'completed') return '已完成'
-  if (status === 'failed') return '执行失败'
-  if (status === 'canceled') return '已停止'
-  return '准备中'
-})
-
 const stepLabels: Record<string, string> = {
   queued: '等待执行',
   prepare: '准备病历资料',
@@ -467,13 +461,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 20px;
   overflow: hidden;
-  padding: 18px 22px 16px;
+  padding: 16px 20px;
   border: 1px solid rgba(0, 102, 204, 0.13);
-  border-radius: 18px;
-  background: rgba(251, 253, 255, 0.98);
-  box-shadow:
-    0 2px 8px rgba(29, 29, 31, 0.035),
-    0 12px 28px rgba(0, 70, 140, 0.055);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: none;
   color: #1d1d1f;
 }
 
@@ -482,11 +474,11 @@ onBeforeUnmount(() => {
   inset: 0 auto 0 0;
   width: 3px;
   background: #0066cc;
-  content: '';
+  content: none;
 }
 
 .record-pool-qc-status--success {
-  border-color: rgba(16, 185, 129, 0.2);
+  border-color: #e3eaf2;
 }
 
 .record-pool-qc-status--success::before {
@@ -518,13 +510,18 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__export {
   min-height: 34px;
   padding: 0 13px;
-  border: 1px solid rgba(5, 150, 105, 0.22);
+  border: 1px solid #dde5ef;
   border-radius: 9px;
-  background: rgba(5, 150, 105, 0.08);
-  color: #047857;
+  background: #fff;
+  color: #52677f;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 500;
   cursor: pointer;
+}
+.record-pool-qc-status__export:hover:not(:disabled) {
+  border-color: #bbd2ec;
+  background: #f5f8fc;
+  color: #0066cc;
 }
 
 .record-pool-qc-status__export:disabled {
@@ -534,19 +531,19 @@ onBeforeUnmount(() => {
 
 .record-pool-qc-status__indicator {
   display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
-  border: 1px solid rgba(0, 102, 204, 0.12);
+  border: 0;
   border-radius: 12px;
-  background: #f1f6ff;
+  background: transparent;
   color: #0066cc;
 }
 
 .record-pool-qc-status--success .record-pool-qc-status__indicator {
-  background: rgba(16, 185, 129, 0.1);
-  color: #059669;
+  background: transparent;
+  color: #66819e;
 }
 
 .record-pool-qc-status--danger .record-pool-qc-status__indicator {
@@ -555,8 +552,37 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
   min-width: 0;
   flex: 1;
+}
+.record-pool-qc-status__heading,
+.record-pool-qc-status__progress,
+.record-pool-qc-status__concurrency,
+.record-pool-qc-status__stage,
+.record-pool-qc-status__refresh-note {
+  grid-column: 1 / -1;
+}
+.record-pool-qc-status__progress {
+  height: 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #edf1f6;
+}
+.record-pool-qc-status__progress > span {
+  display: block;
+  height: 100%;
+  background: #0066cc;
+  border-radius: inherit;
+  transition: width 200ms ease;
+}
+.record-pool-qc-status--danger .record-pool-qc-status__progress > span {
+  background: #c45151;
+}
+.record-pool-qc-status--success .record-pool-qc-status__progress > span {
+  background: #398577;
 }
 
 .record-pool-qc-status__heading,
@@ -568,9 +594,9 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__heading strong {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 22px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .record-pool-qc-status__heading span {
@@ -585,11 +611,12 @@ onBeforeUnmount(() => {
 
 .record-pool-qc-status__heading em {
   margin-left: auto;
-  color: #0066cc;
+  color: #253247;
   font-size: 14px;
   line-height: 20px;
   font-style: normal;
-  font-weight: 750;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .record-pool-qc-status--success .record-pool-qc-status__heading em {
@@ -601,11 +628,35 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__metrics {
-  margin-top: 4px;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 13px;
+  margin-top: 0;
+  color: #76808c;
+  font-size: 12px;
   line-height: 20px;
-  font-weight: 550;
+  font-weight: 400;
+}
+.record-pool-qc-status__record-count {
+  margin-left: auto;
+}
+.record-pool-qc-status__details {
+  font-size: 12px;
+  color: #76808c;
+}
+.record-pool-qc-status__details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.record-pool-qc-status__details[open] {
+  padding-top: 8px;
+  border-top: 1px solid #edf1f6;
+}
+.record-pool-qc-status__details .record-pool-qc-status__stages {
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .record-pool-qc-status__progress > span {
+    transition: none;
+  }
 }
 
 .record-pool-qc-status__concurrency {
@@ -656,11 +707,12 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__stages {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   width: 100%;
-  margin: 15px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -669,13 +721,12 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   min-width: 0;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  min-height: 62px;
-  padding: 12px 12px 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.74);
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: rgba(29, 29, 31, 0.48);
 }
 
@@ -684,7 +735,7 @@ onBeforeUnmount(() => {
   height: 8px;
   flex: 0 0 8px;
   z-index: 1;
-  margin-top: 4px;
+  margin-top: 0;
   border: 2px solid rgba(29, 29, 31, 0.18);
   border-radius: 999px;
   background: #fff;
@@ -730,19 +781,21 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__stages li.is-complete {
-  border-color: rgba(16, 185, 129, 0.22);
-  background: rgba(240, 253, 250, 0.74);
-  color: #047857;
+  color: #728599;
 }
 
 .record-pool-qc-status__stages li.is-complete .record-pool-qc-status__stage-marker {
-  border-color: #10b981;
-  background: #10b981;
+  border: 0;
+  background: transparent;
+  width: 12px;
+  height: 16px;
+  flex-basis: 12px;
+  line-height: 16px;
 }
 
 .record-pool-qc-status__stages li.is-active {
   border-color: rgba(0, 102, 204, 0.42);
-  background: rgba(239, 246, 255, 0.86);
+  background: transparent;
   color: #0055aa;
 }
 
@@ -753,7 +806,7 @@ onBeforeUnmount(() => {
 
 .record-pool-qc-status__stages li.is-error {
   border-color: rgba(239, 68, 68, 0.28);
-  background: rgba(254, 242, 242, 0.82);
+  background: transparent;
   color: #b91c1c;
 }
 
@@ -813,8 +866,8 @@ onBeforeUnmount(() => {
   }
 
   .record-pool-qc-status__stages {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px 0;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 }
 </style>

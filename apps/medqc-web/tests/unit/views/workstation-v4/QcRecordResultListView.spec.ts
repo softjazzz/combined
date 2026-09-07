@@ -181,6 +181,19 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
 
 describe('QcRecordResultListView', () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    )
     vi.clearAllMocks()
     window.sessionStorage.clear()
     routeState.query = {}
@@ -192,6 +205,7 @@ describe('QcRecordResultListView', () => {
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     mountedWrappers
       .splice(0)
       .reverse()
@@ -213,7 +227,8 @@ describe('QcRecordResultListView', () => {
         expect(wrapper.get('.review-workbench-scope').text()).toBe('在院')
         expect(wrapper.get('.review-workbench-scope').attributes('title')).toBe(scope)
       } else {
-        expect(wrapper.text()).toContain(scope)
+        expect(wrapper.get('.review-workbench-scope').text()).toBe('已出院')
+        expect(wrapper.get('.review-workbench-scope').attributes('title')).toBe(scope)
       }
       expect(wrapper.find('.qc-record-result-list-view__header').text()).not.toContain(
         removedEyebrow,
@@ -230,7 +245,7 @@ describe('QcRecordResultListView', () => {
     },
   )
 
-  it('运行页分离筛选与列表操作，明确已选范围，不改变终末页外观', async () => {
+  it('运行和终末页共用复核布局，保留各自日期范围', async () => {
     const wrapper = mountView('inpatient')
     await flushPromises()
     expect(wrapper.classes()).toContain('running-qc-refined')
@@ -250,9 +265,13 @@ describe('QcRecordResultListView', () => {
 
     const finalView = mountView('discharged')
     await flushPromises()
-    expect(finalView.classes()).not.toContain('running-qc-refined')
-    expect(finalView.find('.qc-record-result-list-view__list-heading').exists()).toBe(false)
-    expect(finalView.find('.qc-record-result-list-view__field-label').exists()).toBe(false)
+    expect(finalView.classes()).toContain('running-qc-refined')
+    expect(finalView.find('.qc-record-result-list-view__list-heading').exists()).toBe(true)
+    expect(
+      finalView.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
+    ).toEqual(['关键词', '科室', '出院日期'])
+    expect(finalView.getComponent(QcRecordReviewPreview).props('carePhase')).toBe('discharged')
+    expect(finalView.findAllComponents(QcRunSelectedControl)).toHaveLength(1)
   })
 
   it('使用服务端全量汇总，并只展示三坐标和 recordKey 完整的病历行', async () => {
@@ -271,7 +290,7 @@ describe('QcRecordResultListView', () => {
         .map((item) => item.text()),
     ).toEqual(['纳入病历', '已完成质控', '确定问题', '资料待核实'])
     expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
-    expect(wrapper.find('.qc-record-result-table__avatar').exists()).toBe(false)
+    expect(wrapper.find('.qc-record-result-table__avatar').exists()).toBe(true)
     expect(wrapper.text()).toContain('患者乙')
     expect(wrapper.text()).not.toContain('不得展示')
     expect(wrapper.text()).not.toContain('来源未知')
@@ -534,6 +553,11 @@ describe('QcRecordResultListView', () => {
     await wrapper
       .findComponent({ name: 'QcRecordResultTable' })
       .vm.$emit('open-result', '["H","P","V-priority"]')
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+    expect(wrapper.getComponent(QcRecordReviewPreview).props('row')?.visitId).toBe('V-priority')
+    await wrapper
+      .getComponent(QcRecordReviewPreview)
+      .vm.$emit('open-full', '["H","P","V-priority"]')
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
     expect(wrapper.text()).not.toContain('下一闭环接入')
   })

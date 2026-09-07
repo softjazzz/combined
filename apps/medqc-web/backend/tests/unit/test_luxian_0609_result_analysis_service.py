@@ -4,6 +4,33 @@ from datetime import datetime, timezone
 
 import pytest
 
+
+@pytest.mark.parametrize('hospital_status', ['inpatient', 'discharged'])
+def test_default_scope_loader_obeys_shared_filter_contract(monkeypatch, hospital_status):
+    from inspect import signature
+    from unittest.mock import MagicMock
+    from app.services.medical_records import query_service
+    from app.services.workstation.luxian_0609_result_analysis_service import _load_current_workstation_records
+
+    contract = signature(query_service._apply_workstation_filters)
+    captured = {}
+    session = MagicMock()
+    session.query.return_value.with_entities.return_value.all.return_value = []
+
+    def apply_filters(query, **kwargs):
+        contract.bind(query, **kwargs)
+        captured.update(kwargs)
+        return query
+
+    monkeypatch.setattr(query_service, '_session_factory', lambda: session)
+    monkeypatch.setattr(query_service, '_workstation_discharge_summary_subquery', lambda session: None)
+    monkeypatch.setattr(query_service, '_apply_workstation_filters', apply_filters)
+    monkeypatch.setattr(query_service, '_load_indexed_registration_records', lambda session: [])
+    assert _load_current_workstation_records(department=None, doctor=None, hospital_status=hospital_status) == []
+    assert captured['sync_scope'] == 'all'
+    assert captured['hospital_status'] == hospital_status
+    session.close.assert_called_once()
+
 from app.services.workstation.luxian_0609_result_analysis_service import (
     Luxian0609ResultAnalysisService,
 )
