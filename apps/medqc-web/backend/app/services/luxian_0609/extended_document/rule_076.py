@@ -113,7 +113,10 @@ def evaluate_rule_076(
         return Rule076Outcome("not_applicable", "eligibility_not_met", ())
 
     missing_refs = tuple(
-        reference for reference, row in death_rows if _death_time(row) is None
+        reference
+        for reference, row in death_rows
+        if _death_time(row) is None
+        and _clean(row.get("record_content") or row.get("content"))
     )
     if missing_refs:
         return Rule076Outcome(
@@ -129,6 +132,15 @@ def evaluate_rule_076(
                 ),
             ),
         )
+    unreadable_refs = tuple(
+        reference
+        for reference, row in death_rows
+        if _death_time(row) is None
+        and not _clean(row.get("record_content") or row.get("content"))
+    )
+    if unreadable_refs:
+        # 只有元数据的文书不能证明医生漏填；其他文书的死亡时间也不能代填。
+        return Rule076Outcome("data_gap", "source_empty", unreadable_refs)
     return Rule076Outcome(
         "compliant",
         "requirement_satisfied",

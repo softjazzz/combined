@@ -286,7 +286,7 @@ def safe_criterion_results(item: Dict[str, Any]) -> List[Dict[str, Any]]:
         reason_code = _safe_text(raw.get("reason_code"))
         if (
             not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", criterion_id)
-            or kind not in {"text_length", "semantic_relation"}
+            or kind not in {"text_length", "semantic_relation", "completeness"}
             or status not in {"passed", "failed", "unknown"}
             or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", reason_code)
         ):

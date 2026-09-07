@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services.custom_qc_workspace_service import project_customer_safe_result_item
 from app.services.luxian_0609 import execution as execution_module
 from app.services.luxian_0609.customer_rule_package import LUXIAN_0609_RULE_SET_KEY
 from app.services.luxian_0609.decision_binding import (
@@ -28,6 +29,10 @@ from app.services.luxian_0609.native_extended_document_execution import (
 from app.services.luxian_0609.source_evidence_reader import SourceEvidenceUnavailable
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
+from app.services.qc_workspace.canonical_result_store import (
+    safe_criterion_results,
+    validated_customer_explanation,
+)
 
 
 def _session(
@@ -78,7 +83,48 @@ def _canonical(rule_id: str, session, execution):
             "evidence_materials": session.materials,
         },
     )[0]
+    # 正式执行结果必须继续通过保存前解释校验和客户投影，不能只验聚合成功。
+    _facts, criteria = validated_customer_explanation(
+        result, rule_id=rule_id, status=result["status"]
+    )
+    projected = project_customer_safe_result_item(
+        result, hmac_key="production-extension-test-key"
+    )
+    assert projected["status"] == result["status"]
+    assert projected["reason_code"] == result["reason_code"]
+    assert projected.get("criterion_results", []) == criteria
+    if rule_id == "LX0609-076" and result["status"] in {"compliant", "non_compliant"}:
+        assert len(criteria) == 1
+        assert criteria[0]["kind"] == "completeness"
+        assert criteria[0]["source_fact"] == "death_record.death_time"
+        assert criteria[0]["status"] == (
+            "failed" if result["status"] == "non_compliant" else "passed"
+        )
     return reduced[0], result
+
+
+@pytest.mark.parametrize("kind", ["unknown_kind", "temporal", "completeness_unapproved"])
+def test_unapproved_criterion_kind_cannot_bypass_non_compliant_explanation(kind) -> None:
+    item = {
+        "rule_id": "LX0609-076",
+        "status": "non_compliant",
+        "criterion_results": [
+            {
+                "criterion_id": "death_time_complete",
+                "kind": kind,
+                "status": "failed",
+                "reason_code": "defect_proven",
+                "source_fact": "death_record.death_time",
+            }
+        ],
+    }
+    assert safe_criterion_results(item) == []
+    with pytest.raises(ValueError):
+        validated_customer_explanation(
+            item, rule_id="LX0609-076", status="non_compliant"
+        )
+    with pytest.raises(ValueError):
+        project_customer_safe_result_item(item, hmac_key="production-extension-test-key")
 
 
 @pytest.mark.asyncio
@@ -111,6 +157,14 @@ def _canonical(rule_id: str, session, execution):
                 "record_time": "2026-09-01 10:20:00",
             },
             CustomerFinalState.NON_COMPLIANT,
+        ),
+        (
+            {
+                "document_id": "death-076-unreadable",
+                "record_content": None,
+                "record_time": "2026-09-01 10:20:00",
+            },
+            CustomerFinalState.DATA_GAP,
         ),
     ],
 )
