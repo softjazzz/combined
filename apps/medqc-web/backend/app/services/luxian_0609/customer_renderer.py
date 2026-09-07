@@ -2782,7 +2782,7 @@ def customer_finding_from_controlled_facts(
                 f"已确认实施手术 {surgery_count} 台，找到术后首次病程记录 {record_count} 份；"
                 "尚不能逐台关联，暂无法确认每台手术均有对应记录。"
             )
-        return f"已确认实施手术 {surgery_count} 台，找到术后首次病程记录 {record_count} 份，数量及关联关系符合要求。"
+        return f"已确认实施手术 {surgery_count} 台，找到术后首次病程记录 {record_count} 份。"
 
     if rule_id == "LX0609-067" and kind == "predischarge_course_presence_check":
         state = "已找到" if facts.get("course_present") is True else "未找到"
