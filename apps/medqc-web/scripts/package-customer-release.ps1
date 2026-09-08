@@ -211,10 +211,17 @@ if (-not $SkipBuild) {
   Push-Location $projectRoot
   try {
     npx vite build --mode customer --config vite.config.mjs --configLoader native
+    if ($LASTEXITCODE -ne 0) {
+      throw "Customer frontend build failed; refusing to package stale artifacts."
+    }
   }
   finally {
     Pop-Location
   }
+}
+
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "dist\index.html") -PathType Leaf)) {
+  throw "Customer frontend dist/index.html is missing."
 }
 
 Write-Step "Prepare release directory $releaseDir"

@@ -83,7 +83,11 @@
         "
       >
         <div
-          v-if="isGroupedPresentation && documentGroupForItem(item.key)?.isFirst"
+          v-if="
+            isGroupedPresentation &&
+            documentGroupForItem(item.key)?.isFirst &&
+            (documentGroupForItem(item.key)?.count || 0) > 1
+          "
           class="result-document-group-header"
           data-testid="single-record-document-group"
         >
@@ -119,9 +123,17 @@
               : undefined
           "
           :data-testid="isExpandable(item) ? 'single-record-result-toggle' : undefined"
-          @click="isExpandable(item) && toggle(item.key)"
+          @click="handleContentClick($event, item)"
         >
           <span class="result-main">
+            <span class="result-title-row">
+              <strong class="rule-name" :title="item.rule_name">{{
+                displayRuleTitle(item)
+              }}</strong>
+              <span class="status-cell status-pill" :class="`is-${item.tone}`">{{
+                item.status === 'data_gap' ? '资料待核实' : item.displayStatus
+              }}</span>
+            </span>
             <span class="result-row-header" data-testid="single-record-result-row-header">
               <span class="result-row-meta">
                 <span v-if="item.source_document" class="result-source"
@@ -135,11 +147,7 @@
                   {{ displayEvidence(item).length }}处证据
                 </span>
               </span>
-              <span class="status-cell status-pill" :class="`is-${item.tone}`">{{
-                item.displayStatus
-              }}</span>
             </span>
-            <strong class="rule-name" :title="item.rule_name">{{ displayRuleTitle(item) }}</strong>
             <span
               v-if="copyMatchHeadline(item)"
               class="copy-match-headline"
@@ -180,7 +188,6 @@
                 'is-text-expanded': expandedTextKey === item.key || expandedKey === item.key,
               }"
             >
-              <span class="rule-conclusion-label">判定说明</span>
               <span class="rule-conclusion" data-testid="single-record-result-conclusion">{{
                 resultHeadline(item)
               }}</span>
@@ -364,6 +371,7 @@
 
             <div class="detail-column detail-column-evidence">
               <details
+                v-if="displayEvidence(item).length"
                 class="detail-disclosure evidence-disclosure"
                 data-testid="single-record-evidence-disclosure"
               >
@@ -412,6 +420,10 @@
                   {{ emptyEvidenceText(item) }}
                 </p>
               </details>
+              <p v-else class="empty-evidence-note" data-testid="single-record-empty-evidence">
+                暂无可定位证据
+                <span>{{ emptyEvidenceText(item) }}</span>
+              </p>
 
               <details v-if="item.model_analysis" class="medical-analysis model-analysis">
                 <summary>模型分析 / 医学判断</summary>
@@ -433,14 +445,20 @@
             </div>
           </details>
 
-          <QcResultFeedbackControl
+          <details
             v-if="feedbackEnabled"
-            :feedback="feedbackByRule[item.rule_id]"
-            :loading="feedbackLoading"
-            :saving="feedbackSavingRuleId === item.rule_id"
-            :error-message="feedbackError"
-            @submit="emit('submit-feedback', item.rule_id, $event)"
-          />
+            class="detail-disclosure feedback-disclosure"
+            data-testid="single-record-feedback-disclosure"
+          >
+            <summary>反馈此结果</summary>
+            <QcResultFeedbackControl
+              :feedback="feedbackByRule[item.rule_id]"
+              :loading="feedbackLoading"
+              :saving="feedbackSavingRuleId === item.rule_id"
+              :error-message="feedbackError"
+              @submit="emit('submit-feedback', item.rule_id, $event)"
+            />
+          </details>
         </section>
         <footer v-if="isDocumentGroupExpandedForItem(item.key)" class="result-card-actions">
           <button
@@ -976,12 +994,12 @@ function toggleDocumentGroup(key: string) {
 
 function isDocumentGroupExpandedForItem(itemKey: string) {
   const group = documentGroupForItem(itemKey)
-  return !group || isDocumentGroupExpanded(group.key)
+  return !group || group.count <= 1 || isDocumentGroupExpanded(group.key)
 }
 
 function shouldRenderDocumentGroupItem(itemKey: string) {
   const group = documentGroupForItem(itemKey)
-  return !group || group.isFirst || isDocumentGroupExpanded(group.key)
+  return !group || group.count <= 1 || group.isFirst || isDocumentGroupExpanded(group.key)
 }
 
 function resolveDefaultReportTab(): SingleRecordQcResultReportTab {
@@ -1005,6 +1023,21 @@ watch(
 function toggle(key: string) {
   expandedKey.value = expandedKey.value === key ? '' : key
   emit('select', key)
+}
+
+function handleContentClick(event: MouseEvent, item: SingleRecordQcResultViewItem) {
+  const selection = window.getSelection()
+  const target = event.currentTarget
+  // 拖选文字后释放鼠标也会触发 click，不应因此展开或收起卡片。
+  if (
+    event.detail > 0 &&
+    selection &&
+    !selection.isCollapsed &&
+    target instanceof Node &&
+    (target.contains(selection.anchorNode) || target.contains(selection.focusNode))
+  )
+    return
+  if (isExpandable(item)) toggle(item.key)
 }
 
 function toggleText(key: string) {
@@ -1161,7 +1194,7 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 14px 7px;
+  padding: 10px 14px 5px;
 }
 
 .toolbar-summary {
@@ -1187,11 +1220,11 @@ watch(
 }
 
 .result-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
   min-width: 0;
-  padding: 5px 10px 10px;
+  padding: 4px 12px 8px;
 }
 
 .status-pill {
@@ -1246,16 +1279,17 @@ watch(
 .result-tab {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 5px 9px;
+  justify-content: space-between;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 8px;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 9px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.84);
   color: rgba(29, 29, 31, 0.62);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 18px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
   transition:
@@ -1277,7 +1311,7 @@ watch(
   border-color: #0066cc;
   background: #0066cc;
   color: #fff;
-  box-shadow: 0 3px 9px rgba(0, 102, 204, 0.2);
+  box-shadow: none;
 }
 
 .result-tab:not(.is-active) {
@@ -1324,6 +1358,8 @@ watch(
 
 .result-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 9px;
   padding: 10px 12px 16px;
   background: #f5f5f7;
@@ -1377,6 +1413,7 @@ watch(
 
 .result-row {
   position: relative;
+  min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
@@ -1438,8 +1475,9 @@ watch(
   z-index: 1;
   display: block;
   width: 100%;
+  box-sizing: border-box;
   min-height: 0;
-  padding: 13px 14px 12px;
+  padding: 10px 14px 8px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1456,7 +1494,7 @@ watch(
 }
 
 .result-row:not(.is-expanded) .result-trigger {
-  padding: 11px 13px 10px;
+  padding: 9px 14px 7px;
 }
 
 .status-cell {
@@ -1469,6 +1507,9 @@ watch(
   display: block;
   min-width: 0;
   padding: 0;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 .result-row-header {
@@ -1478,6 +1519,7 @@ watch(
   justify-content: space-between;
   gap: 10px;
   padding-right: 0;
+  min-height: 22px;
 }
 
 .result-row-debug-copy {
@@ -1517,6 +1559,7 @@ watch(
   display: inline-flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
@@ -1579,19 +1622,35 @@ watch(
 .rule-name {
   display: block;
   min-width: 0;
-  margin-top: 9px;
-  color: #1d1d1f;
+  margin: 0 0 5px;
+  color: #263547;
   font-size: 16px;
   line-height: 25px;
-  font-weight: 700;
+  font-weight: 500;
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
 }
 
+.result-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+.result-title-row .rule-name {
+  flex: 1;
+  margin: 0;
+}
+.result-title-row .status-pill {
+  flex: none;
+  margin-top: 2px;
+}
+
 .rule-conclusion {
   display: block;
-  color: rgba(29, 29, 31, 0.76);
+  color: #526071;
   font-size: 14px;
   font-weight: 400;
   line-height: 24px;
@@ -1602,21 +1661,43 @@ watch(
 
 .rule-conclusion-block {
   display: block;
-  margin-top: 14px;
-  padding: 12px 14px;
+  margin-top: 7px;
+  padding: 0;
   border-top: 0;
-  border-radius: 6px;
-  background: #f7f9fc;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 保留病历正文的字体与字号，显式使用 Regular，避免 450 匹配到 Medium。 */
+.result-row.is-danger .rule-conclusion {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'Inter', 'PingFang SC', 'Microsoft YaHei UI',
+    'Microsoft YaHei', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 2;
 }
 
 .rule-conclusion-label {
   display: block;
-  margin-bottom: 7px;
+  margin-bottom: 4px;
   color: #627187;
   font-size: 12px;
   line-height: 17px;
   font-weight: 650;
   letter-spacing: 0.04em;
+}
+
+.empty-evidence-note {
+  margin: 0;
+  padding: 12px 0;
+  color: #6b7b8e;
+  font-size: 13px;
+  line-height: 21px;
+}
+.empty-evidence-note span {
+  display: block;
+  font-size: 12px;
 }
 
 .rule-conclusion-block:not(.is-text-expanded) .rule-conclusion {
@@ -1630,9 +1711,9 @@ watch(
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
+  gap: 4px 16px;
   margin: 0 14px;
-  padding: 10px 0 12px;
+  padding: 5px 0 6px;
   border-top: 1px solid #edf0f4;
 }
 
@@ -1645,7 +1726,7 @@ watch(
   color: #0066cc;
   font-size: 12px;
   line-height: 18px;
-  font-weight: 650;
+  font-weight: 400;
   cursor: pointer;
 }
 
@@ -2208,7 +2289,7 @@ watch(
 
 @container (max-width: 560px) {
   .result-trigger {
-    padding: 12px;
+    padding: 10px 14px 8px;
   }
 
   .result-detail {

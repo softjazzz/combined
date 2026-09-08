@@ -1,4 +1,4 @@
-@import './source-han-sans-sc.css';
+/* 使用客户机已安装字体，不加载随包字体资源。 */
 
 @tailwind base;
 @tailwind components;

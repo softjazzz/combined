@@ -11,20 +11,6 @@
             选择病历质控 <ArrowRight :size="16" aria-hidden="true" />
           </button>
         </section>
-        <section class="qc-home-filter-bar" aria-label="首页统计范围筛选">
-          <HomeHeroBar
-            v-model:keyword="keyword"
-            v-model:department-filter="departmentFilter"
-            :selected-date="selectedDate"
-            workflow-filter="all"
-            :department-options="departmentOptions"
-            :loading="loading"
-            :disabled-future-date="disabledFutureDate"
-            :show-date="false"
-            :show-workflow="false"
-            @refresh="void fetchHome()"
-          />
-        </section>
 
         <section
           v-if="loadError"
@@ -51,46 +37,84 @@
         </section>
 
         <template v-else-if="clinicalQc">
-          <section
-            class="qc-home-kpi-strip qc-home-metrics workstation-surface-enter"
-            data-testid="home-kpis"
-            aria-label="质控指标汇总"
-          >
-            <div v-for="card in kpiCards" :key="card.key" :class="`qc-home-metric--${card.key}`">
-              <span>{{ card.label }}</span>
-              <strong>{{ card.value }}<small>份</small></strong>
-              <p>{{ card.helper }}</p>
+          <section class="qc-home-overview" aria-label="质控总览" data-testid="home-overview">
+            <div class="qc-home-scope qc-home-priority-scope" data-testid="home-scope">
+              <span class="qc-home-scope__label">当前范围</span>
+              <span>{{ scopeHospitalText }}</span>
+              <i />
+              <select
+                v-model="departmentFilter"
+                class="qc-home-department"
+                aria-label="统计科室"
+                :title="scopeDepartmentText"
+              >
+                <option value="all">全部科室</option>
+                <option
+                  v-for="department in departmentOptions"
+                  :key="department"
+                  :value="department"
+                >
+                  {{ department }}
+                </option>
+              </select>
+              <i />
+              <span>{{ scopeSceneText }}</span>
+              <i />
+              <span class="qc-home-scope__rule-set">泸县0609质控点</span>
+              <template v-if="keyword.trim()">
+                <span class="qc-home-scope__keyword">关键词：{{ keyword.trim() }}</span>
+                <button
+                  type="button"
+                  class="qc-home-refresh"
+                  aria-label="清除关键词"
+                  @click="clearKeyword"
+                >
+                  清除关键词
+                </button>
+              </template>
+              <span class="qc-home-scope__time"
+                >生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span
+              >
+              <button
+                type="button"
+                class="qc-home-refresh"
+                aria-label="刷新首页数据"
+                @click="void fetchHome()"
+              >
+                刷新
+              </button>
             </div>
-          </section>
 
-          <div class="qc-home-scope qc-home-priority-scope" data-testid="home-scope">
-            <span class="qc-home-scope__label">当前范围</span>
-            <span>{{ scopeHospitalText }}</span>
-            <i />
-            <span>{{ scopeDepartmentText }}</span>
-            <i />
-            <span>{{ scopeSceneText }}</span>
-            <i />
-            <span class="qc-home-scope__rule-set">泸县0609质控点</span>
-            <span class="qc-home-scope__time"
-              >生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span
+            <section
+              class="qc-home-kpi-strip qc-home-metrics workstation-surface-enter"
+              data-testid="home-kpis"
+              aria-label="质控指标汇总"
             >
-          </div>
+              <div v-for="card in kpiCards" :key="card.key" :class="`qc-home-metric--${card.key}`">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}<small>份</small></strong>
+                <p>{{ card.helper }}</p>
+              </div>
+            </section>
 
-          <nav class="qc-home-shortcuts" data-testid="home-workspace" aria-label="质控工作入口">
-            <button type="button" @click="openRecordPool">
-              <span><strong>病历池</strong><small>查找病历 · 选择质控范围</small></span
-              ><ArrowRight :size="18" />
-            </button>
-            <button type="button" @click="router.push('/workstation-v4/records/running')">
-              <span><strong>运行病历质控</strong><small>查看在院病历质控结果</small></span
-              ><ArrowRight :size="18" />
-            </button>
-            <button type="button" @click="router.push('/workstation-v4/records/final')">
-              <span><strong>终末病历质控</strong><small>查看已出院病历质控结果</small></span
-              ><ArrowRight :size="18" />
-            </button>
-          </nav>
+            <nav class="qc-home-shortcuts" data-testid="home-workspace" aria-label="质控工作入口">
+              <button type="button" @click="openRecordPool">
+                <Database :size="18" class="qc-home-shortcut-icon" aria-hidden="true" />
+                <span><strong>病历池</strong><small>查找病历 · 选择质控范围</small></span
+                ><ArrowRight :size="18" />
+              </button>
+              <button type="button" @click="router.push('/workstation-v4/records/running')">
+                <Activity :size="18" class="qc-home-shortcut-icon" aria-hidden="true" />
+                <span><strong>运行病历质控</strong><small>查看在院病历质控结果</small></span
+                ><ArrowRight :size="18" />
+              </button>
+              <button type="button" @click="router.push('/workstation-v4/records/final')">
+                <CircleCheckBig :size="18" class="qc-home-shortcut-icon" aria-hidden="true" />
+                <span><strong>终末病历质控</strong><small>查看已出院病历质控结果</small></span
+                ><ArrowRight :size="18" />
+              </button>
+            </nav>
+          </section>
 
           <section class="qc-home-analysis workstation-surface-enter" data-testid="home-analysis">
             <section
@@ -353,7 +377,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import dayjs, { type Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 import {
   Activity,
   ArrowRight,
@@ -369,7 +393,6 @@ import type {
   ClinicalQcHomePhysicianItem,
   WorkstationHomePayload,
 } from '@/views/workstation-v2/types'
-import HomeHeroBar from './components/HomeHeroBar.vue'
 
 interface KpiCard {
   key: string
@@ -418,7 +441,6 @@ const authStore = useAuthStore()
 // 首次进入即处于加载态，避免请求尚未发起时短暂展示无内容的页面框架。
 const loading = ref(true)
 const loadError = ref(false)
-const selectedDate = ref<Dayjs>(dayjs())
 const departmentFilter = ref('all')
 const keyword = ref('')
 const analysisObject = ref<AnalysisObject>('department')
@@ -592,10 +614,6 @@ function formatDateTime(value?: string | null): string {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : '暂未返回'
 }
 
-function disabledFutureDate(current: Dayjs) {
-  return current.isAfter(dayjs(), 'day')
-}
-
 function applyRouteFilters() {
   const department = typeof route.query.department === 'string' ? route.query.department : 'all'
   const queryKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
@@ -614,6 +632,14 @@ function openRecordPool() {
       keyword: keyword.value.trim() || undefined,
     },
   })
+}
+
+function clearKeyword() {
+  const query = { ...route.query }
+  delete query.keyword
+  if (departmentFilter.value === 'all') delete query.department
+  else query.department = departmentFilter.value
+  void router.replace({ query })
 }
 
 async function fetchHome() {
@@ -646,10 +672,15 @@ watch(
   { immediate: true },
 )
 
-watch([departmentFilter, keyword], () => {
-  if (syncingFromRoute.value) return
-  void fetchHome()
-})
+watch(
+  [departmentFilter, keyword],
+  () => {
+    if (syncingFromRoute.value) return
+    void fetchHome()
+  },
+  // 路由同步期间立即识别保护标记，由路由监听统一请求，避免清除关键词时重复加载。
+  { flush: 'sync' },
+)
 </script>
 
 <style scoped>
@@ -658,6 +689,8 @@ watch([departmentFilter, keyword], () => {
 .qc-home-shell {
   background: #f5f5f7;
   color: #1d1d1f;
+  font-size: 14px;
+  line-height: 1.6;
 }
 .qc-home-canvas {
   --qc-home-dashboard-columns: minmax(0, 1.88fr) minmax(320px, 0.72fr);
@@ -713,16 +746,44 @@ watch([departmentFilter, keyword], () => {
   outline: 2px solid #0066cc;
   outline-offset: 3px;
 }
-.qc-home-filter-bar {
-  padding: 12px 0;
-  border-bottom: 1px solid #e3eaf2;
+.qc-home-department,
+.qc-home-refresh {
+  min-height: 32px;
+  border: 1px solid #e3eaf2;
+  border-radius: 6px;
+  padding: 3px 9px;
+  background: #f8fafd;
+  color: #46576a;
+  font: inherit;
+  cursor: pointer;
+}
+.qc-home-department {
+  max-width: 220px;
+}
+.qc-home-scope__keyword {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.qc-home-refresh {
+  color: #0066cc;
+}
+.qc-home-department:focus-visible,
+.qc-home-refresh:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+.qc-home-overview {
+  overflow: hidden;
+  border: 1px solid #e3eaf2;
+  border-radius: 12px;
+  background: #fff;
 }
 .qc-home-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 18px 0;
-  border: 1px solid #e3eaf2;
-  border-radius: 10px;
+  padding: 22px 0;
+  border: 0;
+  border-radius: 0;
   background: #fff;
 }
 .qc-home-metrics > div {
@@ -733,28 +794,28 @@ watch([departmentFilter, keyword], () => {
   border: 0;
 }
 .qc-home-metrics span {
-  font-size: 13px;
-  color: #627084;
+  font-size: 14px;
+  color: #46576a;
 }
 .qc-home-metrics strong {
   display: block;
   margin: 8px 0 4px;
-  font-size: 26px;
-  line-height: 32px;
+  font-size: 28px;
+  line-height: 36px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: #263547;
 }
 .qc-home-metrics small {
   margin-left: 7px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   color: #7b8592;
 }
 .qc-home-metrics p {
   margin: 0;
-  font-size: 12px;
-  color: #7b8592;
+  font-size: 13px;
+  color: #627084;
 }
 .qc-home-metric--risk strong {
   color: #b74b50;
@@ -876,18 +937,25 @@ watch([departmentFilter, keyword], () => {
   outline-offset: 2px;
 }
 .qc-home-panel h2 {
-  font-size: 17px;
-  line-height: 22px;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
 }
 .qc-home-priority-scope {
-  gap: 7px;
-  padding: 8px 0 10px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  color: rgba(29, 29, 31, 0.62);
-  font-size: 11px;
+  gap: 10px;
+  padding: 15px 22px;
+  border-bottom: 1px solid #edf1f5;
+  color: #46576a;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+}
+.qc-home-priority-scope .qc-home-scope__label,
+.qc-home-priority-scope .qc-home-scope__rule-set {
+  font-weight: 600;
 }
 .qc-home-priority-scope .qc-home-scope__time {
-  font-size: 11px;
+  font-size: 13px;
 }
 .qc-home-health-list {
   display: grid;
@@ -968,8 +1036,8 @@ watch([departmentFilter, keyword], () => {
   gap: 8px;
 }
 .qc-home-defect-analysis__control > span {
-  color: rgba(29, 29, 31, 0.46);
-  font-size: 11px;
+  color: #627084;
+  font-size: 13px;
   white-space: nowrap;
 }
 .qc-home-defect-analysis__control > div {
@@ -987,8 +1055,8 @@ watch([departmentFilter, keyword], () => {
   background: transparent;
   color: rgba(29, 29, 31, 0.62);
   font: inherit;
-  font-size: 11px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: 160ms ease;
 }
@@ -1056,13 +1124,13 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 .qc-home-defect-analysis__meta strong {
   color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 600;
 }
 .qc-home-defect-analysis__meta span {
   margin-top: 3px;
-  color: rgba(29, 29, 31, 0.46);
-  font-size: 11px;
+  color: #627084;
+  font-size: 13px;
 }
 .qc-home-defect-analysis__metric {
   display: grid;
@@ -1094,7 +1162,7 @@ button.qc-home-defect-analysis__row:focus-visible {
   justify-content: flex-end;
   gap: 11px;
   min-width: 132px;
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .qc-home-defect-analysis__counts strong {
@@ -1109,9 +1177,9 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 .qc-home-defect-analysis__note {
   margin: 8px 6px 0;
-  color: rgba(29, 29, 31, 0.46);
-  font-size: 11px;
-  line-height: 17px;
+  color: #627084;
+  font-size: 13px;
+  line-height: 20px;
 }
 .qc-home-conclusion {
   display: grid;
@@ -1312,17 +1380,21 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-shortcuts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 0;
+  border-top: 1px solid #edf1f5;
+  background: #f8fafd;
 }
 .qc-home-shortcuts button {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 20px;
-  border: 1px solid #e3eaf2;
-  border-radius: 10px;
-  background: #fff;
+  min-height: 64px;
+  padding: 10px 22px;
+  border: 0;
+  border-right: 1px solid #e8edf3;
+  border-radius: 0;
+  background: transparent;
   color: #0066cc;
   text-align: left;
   cursor: pointer;
@@ -1330,19 +1402,28 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 .qc-home-shortcuts strong {
   display: block;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #263547;
 }
+.qc-home-shortcuts button > span {
+  flex: 1;
+  min-width: 0;
+}
+.qc-home-shortcuts button > svg {
+  flex-shrink: 0;
+}
 .qc-home-shortcuts small {
   display: block;
-  margin-top: 6px;
-  font-size: 12px;
-  color: #758296;
+  margin-top: 3px;
+  font-size: 13px;
+  color: #627084;
 }
 .qc-home-shortcuts button:hover {
-  background: #f6faff;
-  border-color: #bed4ee;
+  background: #edf4fc;
+}
+.qc-home-shortcuts button:last-child {
+  border-right: 0;
 }
 .qc-home-shortcuts button:focus-visible {
   outline: 2px solid #0066cc;

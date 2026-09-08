@@ -33,6 +33,20 @@ function job(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('RecordPoolQcTaskStatusBar', () => {
+  it('执行态展示状态标签和阶段说明，完成态不保留执行标识', async () => {
+    const wrapper = mount(RecordPoolQcTaskStatusBar, {
+      props: { job: job({ status: 'running' }), autoPoll: false },
+    })
+    expect(wrapper.classes()).toContain('is-active')
+    expect(wrapper.find('.record-pool-qc-status__live-dot').exists()).toBe(true)
+    expect(wrapper.get('.record-pool-qc-status__heading').text()).toContain('执行中')
+    expect(wrapper.get('.record-pool-qc-status__phase').text()).not.toBe('')
+    await wrapper.setProps({ job: job({ status: 'completed' }) })
+    expect(wrapper.find('.record-pool-qc-status__live-dot').exists()).toBe(false)
+    expect(wrapper.find('.record-pool-qc-status__phase').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
   })

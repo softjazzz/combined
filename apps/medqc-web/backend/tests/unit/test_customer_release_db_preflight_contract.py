@@ -4,6 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REPO_ROOT = PROJECT_ROOT.parents[1]
@@ -11,6 +13,36 @@ PACKAGE_SCRIPT = PROJECT_ROOT / "scripts" / "package-customer-release.ps1"
 PREFLIGHT_SCRIPT = PROJECT_ROOT / "scripts" / "customer-db-preflight.ps1"
 BACKEND_LAUNCHER = PROJECT_ROOT / "backend" / "start_dev_backend.ps1"
 DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs" / "deployment" / "客户机交付包编译打包指南.md"
+
+
+@pytest.mark.parametrize("build_exit,has_dist", [(17, True), (0, False), (0, True)])
+def test_customer_build_failure_cannot_package_stale_dist(tmp_path, build_exit, has_dist):
+    """运行实际构建门禁片段；失败即使有旧产物也不得进入复制阶段。"""
+    if has_dist:
+        (tmp_path / "dist").mkdir()
+        (tmp_path / "dist" / "index.html").write_text("old-build", encoding="utf-8")
+    source = PACKAGE_SCRIPT.read_text(encoding="utf-8")
+    build_gate = source.split("if (-not $SkipBuild) {", 1)[1].split(
+        'Write-Step "Prepare release directory', 1
+    )[0]
+    command = (
+        "$ErrorActionPreference='Stop'; $SkipBuild=$false; "
+        "$projectRoot=$env:MEDQC_BUILD_TEST_ROOT; "
+        "function Write-Step {} "
+        f"function npx {{ $global:LASTEXITCODE={build_exit} }} "
+        "if (-not $SkipBuild) {" + build_gate + "Write-Output 'READY_TO_COPY'"
+    )
+    environment = {**os.environ, "MEDQC_BUILD_TEST_ROOT": str(tmp_path)}
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True, text=True, env=environment,
+    )
+    if build_exit or not has_dist:
+        assert result.returncode != 0
+        assert "READY_TO_COPY" not in result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert "READY_TO_COPY" in result.stdout
 
 
 def test_customer_db_preflight_is_read_only_and_does_not_echo_secrets() -> None:

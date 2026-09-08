@@ -254,6 +254,27 @@ describe('SingleRecordQcResultPanel', () => {
     expect(copied).toContain(analysis)
   })
 
+  it('拖选正文后的鼠标点击不展开卡片，键盘激活仍可展开', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [items[0]!] },
+      attachTo: document.body,
+    })
+    const selection = window.getSelection()!
+    const range = document.createRange()
+    range.selectNodeContents(wrapper.get('.rule-conclusion').element)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    const trigger = wrapper.get('[data-testid="single-record-result-toggle"]')
+    trigger.element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+    await wrapper.vm.$nextTick()
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    trigger.element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }))
+    await wrapper.vm.$nextTick()
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    selection.removeAllRanges()
+    wrapper.unmount()
+  })
+
   it('默认以紧凑摘要展示，客户可明确展开和收起完整详情', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [items[0]!] } })
     const trigger = wrapper.get('[data-testid="single-record-result-toggle"]')
@@ -296,6 +317,33 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.find('[data-testid="qc-result-feedback"]').exists()).toBe(false)
     await feedback.trigger('click')
     expect(wrapper.find('.result-detail').exists()).toBe(true)
+    expect(wrapper.emitted('submit-feedback')).toBeUndefined()
+  })
+
+  it('资料缺口卡片不重复分组、不提供空证据折叠栏，反馈默认收起', async () => {
+    const item = {
+      rule_id: 'LX0609-001',
+      rule_name: '入院记录：入院后24小时内是否完成',
+      source_document: '入院记录',
+      status: 'data_gap' as const,
+      conclusion: '当前缺少入院时间或入院记录时间，暂时无法完成核对',
+    }
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [item], presentationMode: 'grouped', feedbackEnabled: true },
+    })
+    expect(wrapper.find('[data-testid="single-record-document-group"]').exists()).toBe(false)
+    expect(wrapper.get('.status-cell').text()).toBe('资料待核实')
+    expect(wrapper.get('.rule-conclusion').text()).toBe(item.conclusion)
+    expect(item.status).toBe('data_gap')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    expect(wrapper.find('[data-testid="single-record-evidence-disclosure"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="single-record-empty-evidence"]').text()).toContain(
+      '暂无可定位证据',
+    )
+    expect(wrapper.find('.suggestion-disclosure').exists()).toBe(false)
+    expect(
+      wrapper.get('[data-testid="single-record-feedback-disclosure"]').attributes('open'),
+    ).toBeUndefined()
     expect(wrapper.emitted('submit-feedback')).toBeUndefined()
   })
 
@@ -612,14 +660,14 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-system-status"]').text()).toContain(
       '1 条结果校验异常',
     )
-    expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(1)
-    expect(wrapper.get('[data-testid="single-record-document-group"]').text()).toContain('手术记录')
+    expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(0)
     expect(wrapper.text()).toContain('1处证据')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(1)
     expect(wrapper.text()).not.toContain('LX0609-002')
 
     await wrapper.get('[data-testid="single-record-report-tab-all"]').trigger('click')
-    expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="single-record-document-group"]').text()).toContain('会诊记录')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(5)
     expect(wrapper.text()).toContain('LX0609-002')
     expect(wrapper.text()).toContain('LX0609-001')
@@ -633,7 +681,7 @@ describe('SingleRecordQcResultPanel', () => {
         .findAll('[data-testid="single-record-document-group-toggle"]')[0]!
         .attributes('aria-expanded'),
     ).toBe('false')
-    expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(3)
     await wrapper
       .findAll('[data-testid="single-record-document-group-toggle"]')[0]!
       .trigger('click')
@@ -1442,7 +1490,7 @@ describe('SingleRecordQcResultPanel', () => {
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
-    expect(wrapper.text()).toContain('数据不足')
+    expect(wrapper.text()).toContain('资料待核实')
     expect(wrapper.text()).toContain('缺口说明')
     expect(wrapper.text()).toContain('后续病程文书的权威记录时间未返回')
     expect(wrapper.text()).toContain('当前已知情况')

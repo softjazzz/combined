@@ -8,16 +8,32 @@ const routeState = vi.hoisted(() => ({
   path: '/workstation-v4',
 }))
 const routerPush = vi.hoisted(() => vi.fn())
+const routerReplace = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ isDemoAccount: false }))
 
 vi.mock('@/services/apiService', () => ({
   ApiService: { get: apiGet },
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => routeState,
-  useRouter: () => ({ push: routerPush, replace: vi.fn() }),
-}))
+vi.mock('vue-router', async () => {
+  const { reactive, nextTick } = await import('vue')
+  return {
+    useRoute: () => {
+      const route = reactive({
+        ...routeState,
+        get fullPath() {
+          return `${this.path}?${new URLSearchParams(this.query).toString()}`
+        },
+      })
+      routerReplace.mockImplementation(async ({ query }: { query: Record<string, string> }) => {
+        route.query = query
+        await nextTick()
+      })
+      return route
+    },
+    useRouter: () => ({ push: routerPush, replace: routerReplace }),
+  }
+})
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
@@ -148,6 +164,7 @@ describe('QCOverviewView', () => {
     apiGet.mockReset()
     apiGet.mockResolvedValue({ success: true, data: clinicalQcPayload })
     routerPush.mockReset()
+    routerReplace.mockClear()
     routeState.query = {}
     authState.isDemoAccount = false
   })
@@ -166,6 +183,75 @@ describe('QCOverviewView', () => {
     expect(wrapper.text()).not.toContain('较昨日')
     expect(wrapper.text()).not.toContain('近7天')
     expect(wrapper.find('[data-testid="home-trend"]').exists()).toBe(false)
+  })
+
+  it('移除搜索栏后在范围行保留科室筛选和刷新', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+    expect(wrapper.find('.qc-home-filter-bar').exists()).toBe(false)
+    const select = wrapper.get('select[aria-label="统计科室"]')
+    const option = select.findAll('option').find((entry) => entry.attributes('value') !== 'all')
+    expect(option).toBeDefined()
+    await select.setValue(option!.attributes('value'))
+    await flushHomeLoad()
+    expect(apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ department: option!.attributes('value') }),
+    )
+    const calls = apiGet.mock.calls.length
+    await wrapper.get('[aria-label="刷新首页数据"]').trigger('click')
+    await flushHomeLoad()
+    expect(apiGet.mock.calls.length).toBe(calls + 1)
+  })
+
+  it('旧链接关键词可见且清除后仅刷新一次，保留其余查询条件', async () => {
+    routeState.query = { keyword: '测试关键词', department: '神经外科', source: 'bookmark' }
+    const wrapper = mountView()
+    await flushHomeLoad()
+    expect(apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ keyword: '测试关键词', department: '神经外科' }),
+    )
+    expect(wrapper.get('[data-testid="home-scope"]').text()).toContain('关键词：测试关键词')
+    apiGet.mockClear()
+    await wrapper.get('[aria-label="清除关键词"]').trigger('click')
+    await flushHomeLoad()
+    expect(routerReplace).toHaveBeenCalledWith({
+      query: { department: '神经外科', source: 'bookmark' },
+    })
+    expect(apiGet).toHaveBeenCalledTimes(1)
+    expect(apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ keyword: undefined, department: '神经外科' }),
+    )
+    expect(wrapper.find('[aria-label="清除关键词"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it.each(['all', '神经外科'])('更换科室为 %s 后清除关键词保持当前范围', async (department) => {
+    routeState.query = { keyword: '测试关键词', department: '旧科室', source: 'bookmark' }
+    const wrapper = mountView()
+    await flushHomeLoad()
+    await wrapper.get('select[aria-label="统计科室"]').setValue(department)
+    await flushHomeLoad()
+    apiGet.mockClear()
+    await wrapper.get('[aria-label="清除关键词"]').trigger('click')
+    await flushHomeLoad()
+    expect(routerReplace).toHaveBeenLastCalledWith({
+      query: department === 'all' ? { source: 'bookmark' } : { department, source: 'bookmark' },
+    })
+    expect(apiGet).toHaveBeenCalledTimes(1)
+    expect(apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({
+        keyword: undefined,
+        department: department === 'all' ? undefined : department,
+      }),
+    )
+    expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
+      department,
+    )
+    wrapper.unmount()
   })
 
   it('三个工作入口进入对应页面，病历池保留筛选条件', async () => {

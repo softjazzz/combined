@@ -2,7 +2,7 @@
   <section
     v-if="currentJob"
     class="record-pool-qc-status"
-    :class="`record-pool-qc-status--${tone}`"
+    :class="[`record-pool-qc-status--${tone}`, { 'is-active': isActive }]"
     role="status"
     aria-live="polite"
     data-testid="record-pool-qc-task-status"
@@ -15,9 +15,13 @@
 
       <div class="record-pool-qc-status__content">
         <div class="record-pool-qc-status__heading">
+          <i v-if="isActive" class="record-pool-qc-status__live-dot" aria-hidden="true" />
           <strong>{{ statusTitle }}</strong>
-          <em v-if="isActive && progressPercent !== null">{{ progressPercent }}%</em>
+          <span v-if="isActive">{{ currentJob.status === 'queued' ? '排队中' : '执行中' }}</span>
         </div>
+        <p v-if="isActive" class="record-pool-qc-status__phase">
+          {{ stageText }}
+        </p>
 
         <div
           v-if="isActive && progressPercent !== null"
@@ -32,6 +36,12 @@
         </div>
 
         <div class="record-pool-qc-status__metrics">
+          <strong
+            v-if="isActive && progressPercent !== null"
+            class="record-pool-qc-status__percent"
+          >
+            当前进度 {{ progressPercent }}%
+          </strong>
           <span v-if="ruleProgressText">{{ ruleProgressText }}</span>
           <span v-if="terminalSummary">{{ terminalSummary }}</span>
           <span class="record-pool-qc-status__record-count">{{ recordProgressText }}</span>
@@ -475,6 +485,45 @@ onBeforeUnmount(() => {
   width: 3px;
   background: #0066cc;
   content: none;
+}
+
+/* 执行态沿用客户样本验证状态条的视觉层级，任务数据仍由原组件负责。 */
+.record-pool-qc-status.is-active {
+  padding: 16px;
+  border-color: rgba(0, 102, 204, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
+}
+.record-pool-qc-status__live-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  margin: 0 5px;
+  border-radius: 50%;
+  background: #0066cc;
+  box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.1);
+}
+.record-pool-qc-status__phase {
+  margin: -4px 0 2px 28px;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+  line-height: 20px;
+}
+.record-pool-qc-status.is-active .record-pool-qc-status__heading strong {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+.record-pool-qc-status.is-active .record-pool-qc-status__progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.1);
+}
+.record-pool-qc-status__percent {
+  color: #175d9c;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .record-pool-qc-status--success {

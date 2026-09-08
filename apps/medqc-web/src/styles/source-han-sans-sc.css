@@ -1,8 +1,8 @@
 /*
  * Source Han Sans SC font wiring.
  *
- * Customer release packages intentionally ship only Regular and Medium to keep
- * the installer size manageable while preserving the Chinese UI typeface.
+ * 静态字体仅声明实际字重，避免 Medium 吞掉标题的粗体层级。
+ * 不含字体的客户包由页面字体栈回退到系统字体。
  */
 @font-face {
   font-family: 'Source Han Sans SC';
@@ -23,5 +23,5 @@
     url('/fonts/source-han-sans-sc/SourceHanSansSC-Medium.otf') format('opentype');
   font-display: swap;
   font-style: normal;
-  font-weight: 500 900;
+  font-weight: 500;
 }
