@@ -1175,8 +1175,8 @@ watch(
   background: rgba(255, 255, 255, 0.88);
   color: #1d1d1f;
   font-family:
-    'Source Han Sans SC', 'SF Pro Text', Inter, 'PingFang SC', 'Microsoft YaHei UI', system-ui,
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI',
+    'Microsoft YaHei', sans-serif;
 }
 
 .result-toolbar {
@@ -1624,8 +1624,8 @@ watch(
   min-width: 0;
   margin: 0 0 5px;
   color: #263547;
-  font-size: 16px;
-  line-height: 25px;
+  font-size: 14px;
+  line-height: 22px;
   font-weight: 500;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1651,9 +1651,9 @@ watch(
 .rule-conclusion {
   display: block;
   color: #526071;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
-  line-height: 24px;
+  line-height: 22px;
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
@@ -1668,11 +1668,9 @@ watch(
   background: transparent;
 }
 
-/* 保留病历正文的字体与字号，显式使用 Regular，避免 450 匹配到 Medium。 */
+/* 问题证据沿用面板系统字体，保留紧凑的正文排版。 */
 .result-row.is-danger .rule-conclusion {
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'Inter', 'PingFang SC', 'Microsoft YaHei UI',
-    'Microsoft YaHei', sans-serif;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 400;
   line-height: 2;
@@ -2301,13 +2299,13 @@ watch(
   }
 
   .rule-name {
-    font-size: 16px;
-    line-height: 25px;
+    font-size: 14px;
+    line-height: 22px;
   }
 
   .rule-conclusion {
-    font-size: 14px;
-    line-height: 24px;
+    font-size: 13px;
+    line-height: 22px;
   }
 
   .copy-match-headline-documents {
