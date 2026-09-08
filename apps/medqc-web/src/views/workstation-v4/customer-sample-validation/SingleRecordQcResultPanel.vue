@@ -1626,7 +1626,7 @@ watch(
   color: #263547;
   font-size: 14px;
   line-height: 22px;
-  font-weight: 500;
+  font-weight: 700;
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;

@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { resolveMedicalDocumentGroup } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+import { formatDiagnosisSection } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+
+it('诊断类别与其他诊断分行，保留椎体编号及原有归属', () => {
+  expect(
+    formatDiagnosisSection(
+      '入院记录诊断',
+      '诊断类型: 初步诊断 其他诊断: 1.L1椎压缩性骨折 2.L3、L4左侧横突骨折',
+    ),
+  ).toBe('诊断类型：初步诊断\n其他诊断：\n1.L1椎压缩性骨折\n2.L3、L4左侧横突骨折')
+  expect(formatDiagnosisSection('现病史', '数值 1.5 其他诊断: 示例')).toBe(
+    '数值 1.5 其他诊断: 示例',
+  )
+})
 
 describe('medicalDocumentDisplay', () => {
   it.each([
