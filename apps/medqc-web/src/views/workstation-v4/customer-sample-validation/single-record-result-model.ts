@@ -146,6 +146,13 @@ export interface SingleRecordQcDataGapDetails {
  * 不承载任务树、前端去重或跨病历选择职责。
  */
 export interface SingleRecordQcResultItem {
+  /** 后端保存的规则和条目结构版本，不是临床日期。 */
+  rule_version?: string
+  schema_version?: string
+  /** 保存结果的资料缺口描述，不代表当次源表读取快照。 */
+  source_status?: string
+  missing_fields?: string[]
+  missing_sources?: string[]
   rule_id: string
   rule_name: string
   /** 规则总表提供的客户展示分组，不参与结果判定。 */

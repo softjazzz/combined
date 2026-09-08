@@ -9,7 +9,13 @@ interface DiagnosticDocument {
   replay_capability: string
   missing_components: string[]
   context: Record<string, unknown>
-  results: SingleRecordQcResultItem[]
+  results: (SingleRecordQcResultItem & {
+    rule_version?: string
+    schema_version?: string
+    source_status?: string
+    missing_fields?: string[]
+    missing_sources?: string[]
+  })[]
   summary: {
     exported_result_count: number
     unique_rule_count: number
@@ -179,6 +185,109 @@ describe('质控诊断包机器附录', () => {
       Date.parse(String(evidence[1].record_time)) - Date.parse(String(evidence[0].record_time)),
     ).toBe(48 * 3600 * 1000)
     expect(doc.results[0]).not.toHaveProperty('extra')
+  })
+
+  it('版本日期在正文和 JSON 中保持原样，临床日期继续整体平移', () => {
+    const item = {
+      ...result(1),
+      rule_version: '2026-07-31',
+      schema_version: 'rule-decision-2026-08-01',
+      conclusion: '核对临床日期 2025-08-12',
+      evidence: [
+        {
+          source_type: 'admission_record',
+          source_ref: 'raw-version-test-reference',
+          record_time: '2025-08-12 17:24:13',
+        },
+      ],
+    }
+    const context = {
+      ...fullContext,
+      ruleSetVersion: '2026-06-09',
+      resultSchemaVersion: 'result-2026-06-10',
+    }
+    const markdown = buildQcResultDebugText([item], context, { diagnosticPackage: true })
+    const doc = appendix(markdown)
+    const prose = markdown.slice(0, markdown.lastIndexOf('```json'))
+    expect(doc.context.ruleSetVersion).toBe('2026-06-09')
+    expect(doc.context.resultSchemaVersion).toBe('result-2026-06-10')
+    expect(doc.results[0].rule_version).toBe('2026-07-31')
+    expect(doc.results[0].schema_version).toBe('rule-decision-2026-08-01')
+    for (const version of [
+      '2026-06-09',
+      'result-2026-06-10',
+      '2026-07-31',
+      'rule-decision-2026-08-01',
+    ]) {
+      expect(prose).toContain(version)
+      expect(buildQcResultDebugText([item], context)).toContain(version)
+    }
+    expect(doc.results[0].evidence?.[0].record_time).toBe('2025-12-27 17:24:13')
+    expect(prose).toContain('2025-12-27 17:24:13')
+    expect(doc.results[0].conclusion).toContain('2025-12-27')
+    expect(markdown).not.toContain('2025-08-12')
+  })
+
+  it('保留版本并不绕过凭证过滤或患者身份脱敏', () => {
+    const item = {
+      ...result(1),
+      rule_version: '2026-07-31 password=secret-123',
+      schema_version: 'schema-2026-08-01 password=secret-123',
+    }
+    const context = {
+      patientId: 'RAW-VERSION-PATIENT',
+      ruleSetVersion: '2026-06-09 password=secret-123',
+      resultSchemaVersion: 'result-2026-06-10 password=secret-123',
+    }
+    for (const diagnosticPackage of [false, true]) {
+      const markdown = buildQcResultDebugText([item], context, { diagnosticPackage })
+      expect(markdown).not.toContain('secret-123')
+      expect(markdown).not.toContain('RAW-VERSION-PATIENT')
+      expect(markdown).toContain('患者-001')
+    }
+  })
+
+  it('保留结果已有资料缺口及证据配对字段，但不宣称已采集源读取状态', () => {
+    const item = {
+      ...result(10),
+      source_status: 'data_gap',
+      missing_fields: ['exam_id'],
+      missing_sources: ['exam_master'],
+      evidence: [
+        {
+          source_type: 'course_record',
+          source_ref: 'raw-opinion-reference',
+          recommendation_index: 2,
+          evidence_role: 'opinion' as const,
+        },
+        {
+          source_type: 'inpat_nondrug_order',
+          source_ref: 'raw-execution-reference',
+          recommendation_index: 2,
+          evidence_role: 'execution' as const,
+        },
+      ],
+    }
+    const markdown = buildQcResultDebugText([item], fullContext, { diagnosticPackage: true })
+    const doc = appendix(markdown)
+    const prose = markdown.slice(0, markdown.lastIndexOf('```json'))
+    expect(doc.results[0]).toMatchObject({
+      source_status: 'data_gap',
+      missing_fields: ['exam_id'],
+      missing_sources: ['exam_master'],
+    })
+    expect(doc.results[0].evidence).toEqual([
+      expect.objectContaining({ recommendation_index: 2, evidence_role: 'opinion' }),
+      expect.objectContaining({ recommendation_index: 2, evidence_role: 'execution' }),
+    ])
+    for (const value of ['data_gap', 'exam_id', 'exam_master', 'opinion', 'execution']) {
+      expect(prose).toContain(value)
+    }
+    expect(prose).toMatch(/(?:建议序号|recommendation_index|建议编号|关联建议序号)[：: ]+2/)
+    expect(doc.missing_components).toContain('source_read_states')
+    expect(doc.capture_completeness).toBe('partial')
+    expect(markdown).not.toContain('raw-opinion-reference')
+    expect(markdown).not.toContain('raw-execution-reference')
   })
 
   it('默认复制仍然输出原有最小调试格式', () => {

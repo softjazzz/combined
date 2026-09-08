@@ -288,7 +288,11 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
 
-function sanitizeText(state: SanitizationState, value: string): string {
+function sanitizeText(
+  state: SanitizationState,
+  value: string,
+  preserveVersionDate = false,
+): string {
   let result = replaceKnownValues(value, state.aliases)
   state.patientNames.forEach((name) => {
     result = result.replace(
@@ -341,10 +345,10 @@ function sanitizeText(state: SanitizationState, value: string): string {
     .replace(/(?<![\da-f:])(?:[\da-f]{1,4}:){3,7}[\da-f]{1,4}(?![\da-f:])/giu, '[网络地址已脱敏]')
     .replace(/(^|[\s"'=:：(])\/(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+/gu, '$1[本地路径已脱敏]')
     .replace(/(\d{4})-(\d{2})-(\d{2})/gu, (_, year, month, day) =>
-      shiftedDate(year, month, day, false),
+      preserveVersionDate ? `${year}-${month}-${day}` : shiftedDate(year, month, day, false),
     )
     .replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/gu, (_, year, month, day) =>
-      shiftedDate(year, month, day, true),
+      preserveVersionDate ? `${year}年${month}月${day}日` : shiftedDate(year, month, day, true),
     )
   return result
 }
@@ -365,7 +369,14 @@ function sanitizeValue(state: SanitizationState, value: unknown, key = ''): unkn
     return aliasFor(state, category, String(value))
   }
   if (typeof value === 'string') {
-    return category ? aliasFor(state, category, value) : sanitizeText(state, value)
+    // 版本日期是发布标识；仍经过姓名、凭证、路径等全部其他脱敏步骤。
+    const versionField = [
+      'rule_set_version',
+      'rule_version',
+      'schema_version',
+      'result_schema_version',
+    ].includes(normalized)
+    return category ? aliasFor(state, category, value) : sanitizeText(state, value, versionField)
   }
   if (Array.isArray(value)) {
     return value.map((item) =>

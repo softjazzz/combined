@@ -56,6 +56,8 @@ function appendEvidenceSections(lines: string[], evidence: SingleRecordQcEvidenc
     appendEvidenceField(lines, '记录时间', item.record_time)
     appendEvidenceField(lines, '字段路径', item.field_path)
     appendEvidenceField(lines, '摘要类型', item.excerpt_kind)
+    appendEvidenceField(lines, '建议序号', item.recommendation_index)
+    appendEvidenceField(lines, '证据角色', item.evidence_role)
     appendEvidenceField(lines, '关键原文摘要', item.evidence_excerpt)
   })
 }
@@ -100,6 +102,8 @@ function appendStatusSummary(lines: string[], items: QcDebugResultItem[]) {
 
 function buildRuleDebugSection(item: QcDebugResultItem, index: number): string {
   const lines = [`## ${index + 1}. ${text(item.rule_id) || '未知规则'} ${text(item.rule_name)}`]
+  appendTextSection(lines, '规则版本', item.rule_version)
+  appendTextSection(lines, '条目结构版本', item.schema_version)
   appendTextSection(lines, '适用文书', item.source_document)
   appendTextSection(lines, '质控点说明', item.qc_point)
   appendTextSection(lines, '客户展示状态', item.displayStatus || item.display_status)
@@ -125,6 +129,9 @@ function buildRuleDebugSection(item: QcDebugResultItem, index: number): string {
   appendJsonSection(lines, '受控判定事实 customer_display_facts', item.customer_display_facts)
   appendJsonSection(lines, '受控子结论 criterion_results', item.criterion_results)
   appendJsonSection(lines, '资料缺口 data_gap_details', item.data_gap_details)
+  appendTextSection(lines, '保存结果资料状态 source_status', item.source_status)
+  appendJsonSection(lines, '保存结果缺失来源 missing_sources', item.missing_sources)
+  appendJsonSection(lines, '保存结果缺失字段 missing_fields', item.missing_fields)
   appendEvidenceSections(lines, item.evidence)
   return lines.join('\n')
 }
@@ -144,7 +151,7 @@ export function buildQcResultDebugText(
     '# MedQC 质控调试信息',
     `格式版本：${DEBUG_SCHEMA}`,
     `结果数量：${normalizedItems.length}`,
-    '说明：以下内容已脱敏，并按最小必要原则仅保留核对规则状态、判定事实和证据链所需信息。受控事实中的完整原始正文字段和访问凭证不会导出；身份标识已使用临时别名，日期已整体平移但时间间隔保持不变。内容仍包含脱敏后的医疗判定语义，仅限授权调试使用，发送前仍请人工复核。',
+    '说明：以下内容已脱敏，并按最小必要原则仅保留核对规则状态、判定事实和证据链所需信息。受控事实中的完整原始正文字段和访问凭证不会导出；身份标识已使用临时别名，临床日期已整体平移但时间间隔保持不变，规则与结构版本保持原值。内容仍包含脱敏后的医疗判定语义，仅限授权调试使用，发送前仍请人工复核。',
   ]
   appendContext(header, sanitizedContext)
   appendStatusSummary(header, normalizedItems)
@@ -156,6 +163,11 @@ export function buildQcResultDebugText(
   const results = normalizedItems.map((item) => ({
     rule_id: item.rule_id,
     rule_name: item.rule_name,
+    rule_version: item.rule_version,
+    schema_version: item.schema_version,
+    source_status: item.source_status,
+    missing_sources: item.missing_sources,
+    missing_fields: item.missing_fields,
     status: item.status,
     display_status: item.displayStatus || item.display_status,
     reason_code: item.reason_code,
@@ -177,6 +189,8 @@ export function buildQcResultDebugText(
       record_time: evidence.record_time,
       field_path: evidence.field_path,
       excerpt_kind: evidence.excerpt_kind,
+      recommendation_index: evidence.recommendation_index,
+      evidence_role: evidence.evidence_role,
       evidence_excerpt: evidence.evidence_excerpt,
     })),
   }))
