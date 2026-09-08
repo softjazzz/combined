@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -403,6 +404,7 @@ def enrich_customer_evidence(
     evidence_rows: Sequence[Mapping[str, Any]],
     *,
     evidence_materials: Any,
+    preferred_source_fields: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """从本次执行的冻结材料中补充精确证据时间和短摘录。
 
@@ -433,6 +435,25 @@ def enrich_customer_evidence(
         matched = matches[0]
         record_time = _record_time(matched)
         field_path, excerpt = _excerpt(matched)
+        preferred = (preferred_source_fields or {}).get(source_type)
+        if preferred:
+            value = matched.get(preferred)
+            path = preferred
+            if preferred not in matched:
+                schema = matched.get("v2_schema")
+                if isinstance(schema, str):
+                    try:
+                        schema = json.loads(schema)
+                    except (TypeError, ValueError):
+                        schema = None
+                if isinstance(schema, Mapping):
+                    value = schema.get(preferred)
+                    path = f"v2_schema.{preferred}"
+            field_path = path
+            excerpt = _text(value)[:300]
+            evidence["field_path"] = field_path
+            evidence["evidence_excerpt"] = excerpt or "参与人员字段为空或未取得"
+            evidence["excerpt_kind"] = "字段级依据"
         if record_time and not _text(evidence.get("record_time")):
             evidence["record_time"] = record_time
         if excerpt and not _text(evidence.get("evidence_excerpt")):

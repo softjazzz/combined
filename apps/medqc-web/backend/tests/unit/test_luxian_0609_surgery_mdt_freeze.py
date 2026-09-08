@@ -45,6 +45,20 @@ _SOURCE_KEYS = (
     "presurg_discussion",
     "consultation_record",
 )
+
+
+class _PresentLlm:
+    async def generate(self, prompt):
+        return {
+            "choices": [{"message": {"content": '{"state":"present"}'}}],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 12,
+                "total_tokens": 132,
+            },
+        }
+
+
 class _NoLlmCall:
     """本冻结集只覆盖结构化、零 LLM 的可达形状。"""
 
@@ -102,7 +116,7 @@ async def _execute_and_project(session):
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=_NoLlmCall(),
+        llm_client=_PresentLlm(),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=(RULE_ID,),
@@ -177,14 +191,18 @@ def _fact_ref_source_keys(session, fact_refs: tuple[str, ...]) -> set[str]:
         source_by_ref.update(
             {document_ref: source_key for document_ref, _ in document_rows}
         )
-    source_by_ref.update({
-        observation.snapshot_ref.removeprefix("sha256:"): observation.source_key
-        for observation in session.snapshot.observations
-    })
+    source_by_ref.update(
+        {
+            observation.snapshot_ref.removeprefix("sha256:"): observation.source_key
+            for observation in session.snapshot.observations
+        }
+    )
     return {source_by_ref[ref] for ref in fact_refs}
 
 
-def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, str, str]]:
+def _evidence_coordinates(
+    result: Mapping[str, object]
+) -> set[tuple[str, str, str, str]]:
     return {
         (
             str(item["source_type"]),
@@ -218,6 +236,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
                     {
                         "document_id": "DISC-C",
                         "record_time": "2026-01-01T09:00:00",
+                        "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
                         "record_content": "经多学科讨论后一致认为可实施手术。",
                     }
                 ],
@@ -232,7 +251,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
                 (
                     "presurg_discussion",
                     "DISC-C",
-                    "record_content",
+                    "discuss_staff",
                     "2026-01-01 09:00:00",
                 ),
             },
@@ -242,6 +261,7 @@ def _evidence_coordinates(result: Mapping[str, object]) -> set[tuple[str, str, s
                 "effective_surgery_level": "四级",
                 "surgery_level_source": "structured_field",
                 "mdt_discussion_state": "completed",
+                "mdt_assessment_basis": "discuss_staff",
             },
         ),
         (
@@ -327,8 +347,8 @@ async def test_surgery_mdt_current_canonical_results_are_frozen(
     envelope, reduced, result = await _execute_and_project(session)
 
     assert envelope.usage_attribution.executor_key == "surgery_mdt", name
-    assert envelope.llm_call_count == 0, name
-    assert envelope.prompt_tokens == envelope.completion_tokens == envelope.total_tokens == 0
+    assert envelope.llm_call_count == (1 if expected_status == "compliant" else 0), name
+    assert envelope.total_tokens == (132 if expected_status == "compliant" else 0)
     assert (reduced.final_state.value, reduced.reason_code) == (
         expected_status,
         expected_reason,
@@ -337,7 +357,9 @@ async def test_surgery_mdt_current_canonical_results_are_frozen(
         expected_status,
         expected_reason,
     ), name
-    assert _fact_ref_source_keys(session, reduced.fact_refs) == expected_fact_sources, name
+    assert (
+        _fact_ref_source_keys(session, reduced.fact_refs) == expected_fact_sources
+    ), name
     assert _evidence_coordinates(result) == expected_evidence, name
     assert result.get("customer_display_facts") == expected_facts, name
 

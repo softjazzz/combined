@@ -66,7 +66,9 @@ def _session(
     def read(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == failed_source:
-            error_type = SourceEvidenceUnavailable if unavailable else SourceEvidenceQueryError
+            error_type = (
+                SourceEvidenceUnavailable if unavailable else SourceEvidenceQueryError
+            )
             raise error_type("private source error")
         return SnapshotSourceRows.create(
             source_key=source_key,
@@ -148,6 +150,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
                 {
                     "document_id": "discussion-40",
                     "record_time": "2026-01-01T09:00:00",
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
                     "record_content": f"经多学科讨论后一致认为可实施手术。{marker}",
                 }
             ],
@@ -190,7 +193,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
         "presurg_discussion",
     )
     assert set(decision.fact_refs) == expected_refs
-    assert execution.llm_call_count == 0
+    assert execution.llm_call_count == 1
     assert marker not in repr(execution)
     assert "2026-01-02" not in repr(execution)
     reduced, result = _aggregate_typed(session, execution)
@@ -201,7 +204,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
             "presurg_discussion",
             "discussion-40",
             "2026-01-01 09:00:00",
-            "record_content",
+            "discuss_staff",
         ),
     }
 
@@ -222,6 +225,7 @@ async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four
             "presurg_discussion": [
                 {
                     "record_time": "2026-01-01T09:00:00",
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
                     "record_content": "经多学科讨论后一致认为可实施手术。",
                 }
             ],
@@ -250,6 +254,7 @@ async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four
         "procedure_code": "01.2408",
         "procedure_name": "颅内血肿清除术",
         "mdt_discussion_state": "completed",
+        "mdt_assessment_basis": "discuss_staff",
     }
 
 
@@ -387,12 +392,11 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
                     "surgery_begin_datetime": "2026-01-02T09:00:00",
                 }
             ],
-            "presurg_discussion": [],
-            "consultation_record": [
+            "presurg_discussion": [
                 {
                     "document_id": "consult-semantic-40",
                     "record_time": "2026-01-01T09:00:00",
-                    "record_content": "请单一专科协助评估手术风险。",
+                    "discuss_staff": "甲主任医师、乙副主任医师",
                 }
             ],
         }
@@ -432,15 +436,15 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
     assert set(typed.decisions[0].fact_refs) == _material_document_refs(
         session,
         "mr_surgery",
-        "consultation_record",
+        "presurg_discussion",
     )
     _, result = _aggregate_typed(session, typed)
     assert _customer_evidence_coordinates(result) == {
         (
-            "consultation_record",
+            "presurg_discussion",
             "consult-semantic-40",
             "2026-01-01 09:00:00",
-            "record_content",
+            "discuss_staff",
         ),
         ("mr_surgery", "surgery-semantic-40", "2026-01-02 09:00:00", ""),
     }
@@ -599,7 +603,7 @@ async def test_mdt_consumes_shared_material_without_live_reader(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_completed_mdt_strong_fact_short_circuits_llm(monkeypatch):
+async def test_mdt_body_cannot_short_circuit_staff_model(monkeypatch):
     marker = "SAFE_BODY_MARKER_MDT"
     monkeypatch.setattr(
         native_mdt_execution,
@@ -616,6 +620,7 @@ async def test_completed_mdt_strong_fact_short_circuits_llm(monkeypatch):
                 "presurg_discussion": [
                     {
                         "record_time": "2026-01-01T09:00:00",
+                        "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
                         "record_content": f"经多学科讨论后一致认为可实施手术。{marker}",
                     }
                 ],
@@ -634,14 +639,14 @@ async def test_completed_mdt_strong_fact_short_circuits_llm(monkeypatch):
     )
 
     assert execution.result["status"] == "compliant"
-    assert execution.result["metadata"]["reason_code"] == "completed_mdt_strong_fact"
-    assert execution.llm_call_count == 0
-    assert llm.calls == 0
+    assert execution.result["metadata"]["reason_code"] == "mdt_llm_present"
+    assert execution.llm_call_count == 1
+    assert llm.calls == 1
     assert marker not in repr(execution)
 
 
 @pytest.mark.asyncio
-async def test_preop_roster_with_anesthesiologist_is_completed_multidepartment_fact(
+async def test_body_anesthesiologist_cannot_override_single_department_staff(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -659,6 +664,7 @@ async def test_preop_roster_with_anesthesiologist_is_completed_multidepartment_f
                 "presurg_discussion": [
                     {
                         "record_time": "2026-01-01T09:00:00",
+                        "discuss_staff": "甲主任医师、乙副主任医师",
                         "record_content": (
                             "术前讨论。主持人签名：甲主任医师。"
                             "乙主治医师、丙住院医师、丁麻醉医师参加。"
@@ -684,13 +690,10 @@ async def test_preop_roster_with_anesthesiologist_is_completed_multidepartment_f
         llm_client=llm,
     )
 
-    assert execution.result["status"] == "compliant"
-    assert (
-        execution.result["metadata"]["reason_code"]
-        == "completed_multidepartment_roster"
-    )
-    assert execution.llm_call_count == 0
-    assert llm.calls == 0
+    assert execution.result["status"] == "non_compliant"
+    assert execution.result["metadata"]["reason_code"] == "mdt_llm_absent"
+    assert execution.llm_call_count == 1
+    assert llm.calls == 1
 
 
 @pytest.mark.asyncio
@@ -711,6 +714,7 @@ async def test_anesthesia_plan_without_anesthesiologist_roster_does_not_shortcut
                 "presurg_discussion": [
                     {
                         "record_time": "2026-01-01T09:00:00",
+                        "discuss_staff": "甲主任医师、乙副主任医师",
                         "record_content": (
                             "术前讨论。主持人签名：甲主任医师。"
                             "乙主治医师、丙住院医师参加。"
@@ -765,9 +769,9 @@ async def test_planned_or_placeholder_anesthesia_roster_does_not_shortcut(
                 "presurg_discussion": [
                     {
                         "record_time": "2026-01-01T09:00:00",
+                        "discuss_staff": "甲主任医师、乙副主任医师",
                         "record_content": (
-                            f"术前讨论。主持人签名：{roster}。病史汇报："
-                            + "模板保留手术指征和手术方案标签。" * 12
+                            f"术前讨论。主持人签名：{roster}。病史汇报：" + "模板保留手术指征和手术方案标签。" * 12
                         ),
                     }
                 ],
@@ -792,7 +796,7 @@ async def test_planned_or_placeholder_anesthesia_roster_does_not_shortcut(
 
 
 @pytest.mark.asyncio
-async def test_ordinary_preop_consult_uses_one_trimmed_llm_call(monkeypatch):
+async def test_ordinary_preop_consult_is_not_a_staff_candidate(monkeypatch):
     monkeypatch.setattr(
         native_mdt_execution,
         "read_luxian_0609_native_source_rows",
@@ -827,10 +831,10 @@ async def test_ordinary_preop_consult_uses_one_trimmed_llm_call(monkeypatch):
 
     assert execution.result["status"] == "non_compliant"
     assert execution.result["metadata"]["execution_source"] == "lx0609_native"
-    assert execution.result["metadata"]["reason_code"] == "mdt_llm_absent"
-    assert execution.llm_call_count == 1
-    assert execution.total_tokens == 132
-    assert llm.calls == 1
+    assert execution.result["metadata"]["reason_code"] == "preoperative_mdt_absent"
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+    assert llm.calls == 0
 
 
 @pytest.mark.asyncio
@@ -907,7 +911,10 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
         "mr_surgery",
         "presurg_summary",
     )
-    assert dict(execution.customer_display_facts)["LX0609-040"]["mdt_exception"] == "emergency_lifesaving_surgery"
+    assert (
+        dict(execution.customer_display_facts)["LX0609-040"]["mdt_exception"]
+        == "emergency_lifesaving_surgery"
+    )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
         expected_rule_ids=("LX0609-040",),
@@ -1069,6 +1076,7 @@ async def test_invalid_llm_output_is_technical_error(monkeypatch):
                 "presurg_discussion": [
                     {
                         "record_time": "2026-01-01T09:00:00",
+                        "discuss_staff": "甲主任医师、乙副主任医师",
                         "record_content": "普通术前讨论。",
                     }
                 ],
@@ -1106,6 +1114,7 @@ async def test_typed_mdt_model_failure_keeps_only_prompt_candidate_evidence():
                 {
                     "document_id": "discussion-llm-error-40",
                     "record_time": "2026-01-01T09:00:00",
+                    "discuss_staff": "甲主任医师、乙副主任医师",
                     "record_content": "普通术前讨论。",
                 }
             ],
@@ -1137,7 +1146,7 @@ async def test_typed_mdt_model_failure_keeps_only_prompt_candidate_evidence():
             "presurg_discussion",
             "discussion-llm-error-40",
             "2026-01-01 09:00:00",
-            "record_content",
+            "discuss_staff",
         ),
     }
 
@@ -1163,3 +1172,123 @@ async def test_source_failure_is_sanitized_data_gap(monkeypatch):
     assert execution.result["metadata"]["reason_code"] == "surgery_source_unavailable"
     assert "Bearer" not in repr(execution)
     assert "13800138000" not in repr(execution)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fields", "state", "expected", "calls"),
+    [
+        ({"discuss_staff": "甲主任医师 乙副主任医师 丙主治医师"}, "absent", "non_compliant", 1),
+        ({"discuss_staff": "骨科甲主任医师、骨科乙副主任医师"}, "absent", "non_compliant", 1),
+        ({"discuss_staff": "骨科甲主任医师、麻醉科乙主任医师"}, "present", "compliant", 1),
+        ({"v2_schema": {"discuss_staff": "骨科甲医师、麻醉科乙医师"}}, "present", "compliant", 1),
+        ({}, "absent", "data_gap", 0),
+        ({"discuss_staff": ""}, "absent", "non_compliant", 0),
+        ({"discuss_staff": "甲" * 3001}, "absent", "data_gap", 0),
+        ({"discuss_staff": "甲医师", "record_time": None}, "absent", "data_gap", 0),
+        (
+            {"discuss_staff": "骨科甲医师、麻醉科乙医师", "record_time": "2026-01-03T09:00:00"},
+            "present",
+            "non_compliant",
+            0,
+        ),
+    ],
+)
+async def test_staff_field_contract_boundaries(
+    monkeypatch, fields, state, expected, calls
+):
+    rows = {
+        "mr_surgery": [
+            {"surgical_level": "四级", "surgery_begin_datetime": "2026-01-02T09:00:00"}
+        ],
+        "presurg_discussion": [
+            {
+                "record_time": "2026-01-01T09:00:00",
+                "record_content": "PRIVATE_BODY_MDT已完成多学科讨论",
+                **fields,
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        native_mdt_execution, "read_luxian_0609_native_source_rows", _reader(rows)
+    )
+
+    class StaffLlm(_LLM):
+        async def generate(self, prompt):
+            assert "PRIVATE_BODY_MDT" not in prompt
+            return await super().generate(prompt)
+
+    llm = StaffLlm(state)
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+    )
+    assert execution.result["status"] == expected
+    assert execution.llm_call_count == llm.calls == calls
+
+
+@pytest.mark.asyncio
+async def test_separate_single_department_rosters_remain_separate_in_one_prompt(
+    monkeypatch,
+):
+    rows = {
+        "mr_surgery": [
+            {"surgical_level": "四级", "surgery_begin_datetime": "2026-01-02T09:00:00"}
+        ],
+        "presurg_discussion": [
+            {"record_time": "2026-01-01T09:00:00", "discuss_staff": "骨科甲医师"},
+            {"record_time": "2026-01-01T10:00:00", "discuss_staff": "麻醉科乙医师"},
+        ],
+    }
+    monkeypatch.setattr(
+        native_mdt_execution, "read_luxian_0609_native_source_rows", _reader(rows)
+    )
+
+    class SeparateLlm(_LLM):
+        async def generate(self, prompt):
+            assert "骨科甲医师" in prompt and "麻醉科乙医师" in prompt
+            assert "不得" in prompt
+            return await super().generate(prompt)
+
+    llm = SeparateLlm("absent")
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+    )
+    assert execution.result["status"] == "non_compliant"
+    assert llm.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_total_staff_context_overflow_does_not_classify_truncated_rosters(
+    monkeypatch,
+):
+    rows = {
+        "mr_surgery": [
+            {"surgical_level": "四级", "surgery_begin_datetime": "2026-01-02T09:00:00"}
+        ],
+        "presurg_discussion": [
+            {"record_time": "2026-01-01T09:00:00", "discuss_staff": "甲" * 2200}
+            for _ in range(3)
+        ],
+    }
+    monkeypatch.setattr(
+        native_mdt_execution, "read_luxian_0609_native_source_rows", _reader(rows)
+    )
+    llm = _LLM("absent")
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+    )
+    assert execution.result["status"] == "data_gap"
+    assert execution.result["metadata"]["reason_code"] == "source_truncated"
+    assert llm.calls == 0

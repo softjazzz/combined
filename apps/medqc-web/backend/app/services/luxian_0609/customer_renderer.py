@@ -2462,6 +2462,13 @@ def customer_finding_from_controlled_facts(
             "national_catalog": "国家临床版手术分级目录",
         }.get(str(facts.get("surgery_level_source") or ""), "受控手术分级目录")
         state = str(facts.get("mdt_discussion_state") or "")
+        if facts.get("mdt_assessment_basis") == "discuss_staff":
+            if state == "missing":
+                if facts.get("mdt_participants_empty") is True:
+                    return f"已确认实施四级手术 {procedure}，术前讨论未记录参与人员，未能体现多学科参与。"
+                return f"已确认实施四级手术 {procedure}，术前讨论参与人员字段未体现多学科实际参与。"
+            if state == "completed":
+                return f"已确认实施四级手术 {procedure}，术前讨论参与人员字段明确体现至少两个不同科室实际参与。"
         if state == "exempt" and facts.get("mdt_exception") == "emergency_lifesaving_surgery":
             return f"已确认实施四级手术 {procedure}，属于紧急抢救生命的急诊手术，按规则免除术前多学科讨论。"
         if state == "missing":
@@ -3275,6 +3282,13 @@ def render_luxian_0609_customer_result(
         )
     ):
         suggestion = structured_suggestion
+    if (
+        decision.rule_id == "LX0609-040"
+        and decision.final_state is CustomerFinalState.NON_COMPLIANT
+        and safe_customer_display_facts
+        and safe_customer_display_facts.get("mdt_assessment_basis") == "discuss_staff"
+    ):
+        suggestion = "请核对实际参会情况，在术前讨论参与人员字段中如实记录人员及所属科室；不得编造参会人员或倒签。"
     if decision.final_state in {
         CustomerFinalState.COMPLIANT,
         CustomerFinalState.NOT_APPLICABLE,

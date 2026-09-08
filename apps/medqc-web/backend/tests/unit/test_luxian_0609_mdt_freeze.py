@@ -75,7 +75,9 @@ def _session(
     def read(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == failed_source:
-            error = SourceEvidenceUnavailable if unavailable else SourceEvidenceQueryError
+            error = (
+                SourceEvidenceUnavailable if unavailable else SourceEvidenceQueryError
+            )
             raise error("controlled source failure")
         return SnapshotSourceRows.create(
             source_key=source_key,
@@ -100,7 +102,9 @@ async def _unexpected_executor(**_kwargs):
     raise AssertionError("only surgery_mdt may run in this freeze")
 
 
-async def _execute_and_project(session, llm: _RecordedLlm | None, *, project: bool = True):
+async def _execute_and_project(
+    session, llm: _RecordedLlm | None, *, project: bool = True
+):
     """走正式 registry -> executor -> Binding -> 客户投影，不伪造 RuleDecision。"""
 
     contract = next(
@@ -190,6 +194,7 @@ def _ordinary_preop_rows() -> dict[str, list[dict]]:
             {
                 "document_id": "DISC-ORDINARY",
                 "record_time": "2026-01-01T09:00:00",
+                "discuss_staff": "甲主任医师、乙副主任医师",
                 "record_content": "请单一专科协助评估手术风险。",
             }
         ],
@@ -218,14 +223,15 @@ def _ordinary_preop_rows() -> dict[str, list[dict]]:
                     {
                         "document_id": "DISC-MDT",
                         "record_time": "2026-01-01T09:00:00",
+                        "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
                         "record_content": "经多学科讨论后一致认为可实施手术。",
                     }
                 ],
             },
-            None,
+            _RecordedLlm(content='{"state":"present","confidence":0.9}'),
             "compliant",
             "requirement_satisfied",
-            0,
+            1,
         ),
         (
             "择期四级手术缺MDT",
@@ -268,7 +274,7 @@ async def test_mdt_typed_registry_binding_and_public_projection_are_frozen(
     assert result["status"] == state, name
     assert result["reason_code"] == reason, name
     assert envelope.llm_call_count == calls, name
-    assert envelope.total_tokens == 0, name
+    assert envelope.total_tokens == 132 * calls, name
 
 
 @pytest.mark.asyncio
@@ -276,9 +282,7 @@ async def test_mdt_emergency_exemption_is_projected_by_current_public_facts_cont
     session = _session(
         {
             "mr_surgery": [_surgery()],
-            "presurg_summary": [
-                {"record_content": "本次急诊抢救，为挽救生命立即手术。"}
-            ],
+            "presurg_summary": [{"record_content": "本次急诊抢救，为挽救生命立即手术。"}],
         }
     )
     envelope, reduced, result = await _execute_and_project(session, None)
@@ -311,12 +315,15 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
                 {
                     "document_id": "DISC-PRIVATE",
                     "record_time": "2026-01-01T09:00:00",
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
                     "record_content": "经多学科讨论后一致认为可实施手术。",
                 }
             ],
         }
     )
-    envelope, reduced, result = await _execute_and_project(session, None)
+    envelope, reduced, result = await _execute_and_project(
+        session, _RecordedLlm(content='{"state":"present"}')
+    )
 
     assert reduced.final_state.value == "compliant"
     assert envelope.customer_display_facts == (
@@ -328,6 +335,7 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
                 "effective_surgery_level": "四级",
                 "surgery_level_source": "structured_field",
                 "mdt_discussion_state": "completed",
+                "mdt_assessment_basis": "discuss_staff",
             },
         ),
     )
@@ -338,6 +346,7 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
         "effective_surgery_level": "四级",
         "surgery_level_source": "structured_field",
         "mdt_discussion_state": "completed",
+        "mdt_assessment_basis": "discuss_staff",
     }
     evidence_by_coordinate = {
         (
@@ -353,7 +362,7 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
         (
             "presurg_discussion",
             "DISC-PRIVATE",
-            "record_content",
+            "discuss_staff",
             "2026-01-01 09:00:00",
         ),
     }
@@ -361,12 +370,12 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
         (
             "presurg_discussion",
             "DISC-PRIVATE",
-            "record_content",
+            "discuss_staff",
             "2026-01-01 09:00:00",
         )
     ]
-    assert discussion_evidence["evidence_excerpt"] == "经多学科讨论后一致认为可实施手术。"
-    assert discussion_evidence["excerpt_kind"] == "文书级依据"
+    assert discussion_evidence["evidence_excerpt"] == "骨科甲主任医师、麻醉科乙主任医师"
+    assert discussion_evidence["excerpt_kind"] == "字段级依据"
 
 
 @pytest.mark.asyncio
@@ -418,8 +427,9 @@ async def test_mdt_model_transport_protocol_and_semantic_unknown_are_distinct(
     envelope, reduced, result = await _execute_and_project(session, llm)
 
     assert len(llm.calls) == expected_calls, name
-    assert "术前证据窗口" in llm.calls[0], name
-    assert "请单一专科协助评估手术风险。" in llm.calls[0], name
+    assert "discuss_staff" in llm.calls[0], name
+    assert "甲主任医师、乙副主任医师" in llm.calls[0], name
+    assert "请单一专科协助评估手术风险。" not in llm.calls[0], name
     assert envelope.llm_call_count == expected_calls, name
     assert envelope.total_tokens == expected_tokens, name
     assert (reduced.final_state.value, reduced.reason_code) == expected_reduced, name
@@ -463,7 +473,7 @@ async def test_mdt_incomplete_discussion_source_is_data_gap_without_model_call()
 
 
 @pytest.mark.asyncio
-async def test_mdt_incomplete_source_preempts_semantic_evaluation_without_model_call():
+async def test_unavailable_consultation_does_not_block_staff_semantic_evaluation():
     session = _session(
         _ordinary_preop_rows(),
         failed_source="consultation_record",
@@ -472,15 +482,15 @@ async def test_mdt_incomplete_source_preempts_semantic_evaluation_without_model_
     unknown = _RecordedLlm()
     envelope, reduced, result = await _execute_and_project(session, unknown)
 
-    assert len(unknown.calls) == envelope.llm_call_count == 0
-    assert envelope.total_tokens == 0
+    assert len(unknown.calls) == envelope.llm_call_count == 1
+    assert envelope.total_tokens == 132
     assert (reduced.final_state.value, reduced.reason_code) == (
-        "data_gap",
-        "source_unavailable",
+        "evaluation_unknown",
+        "semantic_output_unknown",
     )
     assert (result["status"], result["reason_code"]) == (
-        "data_gap",
-        "source_unavailable",
+        "uncertain",
+        "semantic_output_unknown",
     )
 
 
@@ -514,7 +524,9 @@ async def test_mdt_missing_model_client_is_model_transport_error():
         ),
     ),
 )
-async def test_mdt_invalid_response_type_or_usage_is_safe_technical_error(name, response):
+async def test_mdt_invalid_response_type_or_usage_is_safe_technical_error(
+    name, response
+):
     session = _session(_ordinary_preop_rows())
     llm = _RecordedLlm(response=response)
     envelope, reduced, result = await _execute_and_project(session, llm)

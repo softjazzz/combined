@@ -72,6 +72,10 @@ def safe_surgery_mdt_customer_display_facts(
         facts["surgery_level_source"] = level_source
     if discussion_state is not None:
         facts["mdt_discussion_state"] = discussion_state
+    if raw.get("mdt_assessment_basis") == "discuss_staff":
+        facts["mdt_assessment_basis"] = "discuss_staff"
+        if raw.get("mdt_participants_empty") is True:
+            facts["mdt_participants_empty"] = True
     if discussion_state == "exempt":
         facts["emergency_surgery_confirmed"] = True
         facts["mdt_exception"] = "emergency_lifesaving_surgery"

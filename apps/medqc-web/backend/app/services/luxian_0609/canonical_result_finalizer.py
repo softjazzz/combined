@@ -880,6 +880,12 @@ def finalize_luxian_0609_reduced_customer_result(
     customer_evidence = enrich_customer_evidence(
         customer_evidence,
         evidence_materials=evidence_materials,
+        preferred_source_fields=(
+            {"presurg_discussion": "discuss_staff"}
+            if rule_id == "LX0609-040" and safe_facts
+            and safe_facts.get("mdt_assessment_basis") == "discuss_staff"
+            else None
+        ),
     )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
