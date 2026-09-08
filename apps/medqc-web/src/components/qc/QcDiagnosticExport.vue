@@ -1,20 +1,46 @@
 <template>
-  <a-button size="small" :disabled="!items.length" @click="prepare"> 诊断导包 </a-button>
-  <a-modal :open="open" title="诊断导包 · 本地预览" :width="800" :footer="null" @cancel="close">
+  <a-button
+    size="small"
+    :disabled="!items.length"
+    @click="prepare"
+  >
+    诊断导包
+  </a-button>
+  <a-modal
+    :open="open"
+    title="诊断导包 · 本地预览"
+    :width="800"
+    :footer="null"
+    @cancel="close"
+  >
     <p class="diagnostic-export__notice">
-      仅当前已加载结果和证据摘要，不含完整病历或模型原始请求，不支持自动回放，仅供人工核查。
+      包含当前已加载结果、原因码分组、证据来源索引及机器可读数据；仅为结果摘要，不含完整病历或模型原始请求，不支持自动回放，仅供人工核查。
       本操作不请求新数据、不重跑质控、不自动发送。请复核脱敏后再发送。
     </p>
-    <a-alert v-if="error" type="warning" :message="error" show-icon />
+    <a-alert
+      v-if="error"
+      type="warning"
+      :message="error"
+      show-icon
+    />
     <template v-if="preview">
-      <pre class="diagnostic-export__preview" aria-label="诊断包文本预览">{{ preview }}</pre>
+      <pre
+        class="diagnostic-export__preview"
+        aria-label="诊断包文本预览"
+      >{{ preview }}</pre>
       <a-checkbox v-model:checked="confirmed">
         我已复核以上内容的脱敏情况，确认下载此预览对应的文件
       </a-checkbox>
     </template>
     <div class="diagnostic-export__actions">
-      <a-button @click="close"> 取消 </a-button>
-      <a-button type="primary" :disabled="!preview || !confirmed" @click="download">
+      <a-button @click="close">
+        取消
+      </a-button>
+      <a-button
+        type="primary"
+        :disabled="!preview || !confirmed"
+        @click="download"
+      >
         下载诊断包
       </a-button>
     </div>
@@ -54,7 +80,7 @@ function prepare() {
     return
   }
   try {
-    const snapshot = buildQcResultDebugText(props.items, props.context)
+    const snapshot = buildQcResultDebugText(props.items, props.context, { diagnosticPackage: true })
     if (new Blob([snapshot]).size > MAX_BYTES) {
       error.value = '诊断内容超过 2 MiB，请缩小结果范围后再导出。'
       return

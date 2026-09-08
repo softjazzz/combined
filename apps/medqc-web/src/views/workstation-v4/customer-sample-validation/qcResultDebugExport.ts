@@ -1,3 +1,4 @@
+import { buildDiagnosticSummary } from './qcDiagnosticSummary'
 import type { SingleRecordQcEvidence, SingleRecordQcResultItem } from './single-record-result-model'
 import { sanitizeQcDebugPayload } from './qcDebugSanitizer'
 
@@ -131,6 +132,7 @@ function buildRuleDebugSection(item: QcDebugResultItem, index: number): string {
 export function buildQcResultDebugText(
   items: QcDebugResultItem[],
   context?: QcResultDebugContext,
+  options?: { diagnosticPackage?: boolean },
 ): string {
   const sanitized = sanitizeQcDebugPayload(
     { items: Array.isArray(items) ? items : [], context },
@@ -147,7 +149,105 @@ export function buildQcResultDebugText(
   appendContext(header, sanitizedContext)
   appendStatusSummary(header, normalizedItems)
   const sections = normalizedItems.map(buildRuleDebugSection)
-  return [...header, ...sections.map((section) => `\n${section}`)].join('\n').trim()
+  if (!options?.diagnosticPackage) {
+    return [...header, ...sections.map((section) => `\n${section}`)].join('\n').trim()
+  }
+  // 仅选择原调试文本已展示字段，不序列化 API 对象上的其他内部属性。
+  const results = normalizedItems.map((item) => ({
+    rule_id: item.rule_id,
+    rule_name: item.rule_name,
+    status: item.status,
+    display_status: item.displayStatus || item.display_status,
+    reason_code: item.reason_code,
+    source_document: item.source_document,
+    qc_point: item.qc_point,
+    conclusion: item.conclusion,
+    detail: item.detail,
+    actual: item.actual,
+    standard: item.standard,
+    suggestion: item.suggestion,
+    model_analysis: item.model_analysis,
+    customer_display_facts: item.customer_display_facts,
+    criterion_results: item.criterion_results,
+    data_gap_details: item.data_gap_details,
+    evidence: item.evidence?.map((evidence) => ({
+      source_type: evidence.source_type,
+      source_ref: evidence.source_ref,
+      source_label: evidence.source_label,
+      record_time: evidence.record_time,
+      field_path: evidence.field_path,
+      excerpt_kind: evidence.excerpt_kind,
+      evidence_excerpt: evidence.evidence_excerpt,
+    })),
+  }))
+  const summary = buildDiagnosticSummary(results, sanitizedContext)
+  const payload = {
+    schema_version: 'medqc-qc-diagnostic-v1',
+    capture_completeness: 'partial',
+    replay_capability: 'manual_review',
+    missing_components: [
+      'execution_inputs',
+      'source_read_states',
+      'model_requests_and_responses',
+      'execution_build_version',
+    ],
+    context: sanitizedContext
+      ? {
+          instituteId: sanitizedContext.instituteId,
+          patientId: sanitizedContext.patientId,
+          visitId: sanitizedContext.visitId,
+          recordId: sanitizedContext.recordId,
+          recordRef: sanitizedContext.recordRef,
+          jobId: sanitizedContext.jobId,
+          ruleSetKey: sanitizedContext.ruleSetKey,
+          ruleSetVersion: sanitizedContext.ruleSetVersion,
+          resultSchemaVersion: sanitizedContext.resultSchemaVersion,
+          expectedRuleCount: sanitizedContext.expectedRuleCount,
+          resultRuleCount: sanitizedContext.resultRuleCount,
+          isComplete: sanitizedContext.isComplete,
+          missingRuleIds: sanitizedContext.missingRuleIds,
+          conflictingRuleIds: sanitizedContext.conflictingRuleIds,
+        }
+      : undefined,
+    summary,
+    results,
+  }
+  header.push(
+    '',
+    '## 批量排查索引',
+    `本包导出 ${summary.exported_result_count} 条结果，${summary.unique_rule_count} 个不同规则。`,
+    summary.scope === 'full_loaded_result'
+      ? '导出范围：已加载的完整结果。'
+      : '导出范围：部分结果或完整性未知；不能用任务总数代替本包结果数。',
+    '采集完整性：受限。未采集当次执行输入、源表读取状态、模型请求响应及执行构建版本，不支持自动回放。',
+    '以下为状态与原因码分组，仅帮助定位，不重新判定业务结论。',
+  )
+  for (const group of summary.reason_groups) {
+    header.push(`- ${group.status} / ${group.reason_code}：${group.rule_ids.join('、')}`)
+  }
+  header.push(
+    '',
+    '## 已导出证据来源',
+    '以下仅统计结果附带的证据，不能据此认定源表已接入、为空或读取完整。',
+  )
+  for (const source of summary.evidence_sources) {
+    header.push(
+      `- ${source.source_type}：${source.evidence_count} 条证据，${source.unique_reference_count} 个不同引用；规则 ${source.rule_ids.join('、')}`,
+    )
+  }
+  // JSON 与人工文本复用同一次脱敏，引用一致、日期只平移一次。
+  const machine = JSON.stringify(payload, null, 2).replace(/`/g, '\\u0060')
+  return [
+    ...header,
+    ...sections.map((section) => `\n${section}`),
+    '',
+    '## 机器可读诊断数据',
+    '```json',
+    machine,
+    '```',
+  ]
+    .join('\n')
+    .trim()
 }
 
 export async function copyQcResultDebugText(value: string): Promise<boolean> {
