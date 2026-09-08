@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from datetime import datetime, timezone
 import logging
 import re
@@ -28,6 +29,7 @@ from .fast_screen_qc import (
     run_final_fast_screen,
 )
 from .llm_observability import llm_observation_context
+from .qc_diagnostics.job_capture import DiagnosticJobCapture, diagnostic_job_lifecycle
 from .luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
     build_luxian_0609_package_plan_from_settings,
@@ -1167,11 +1169,13 @@ def _result_diagnostic_trace(
     return _sanitize_trace_value(trace, removed_keys)
 
 
+@diagnostic_job_lifecycle
 async def run_sichuan_workspace_batch_job(
     job_id: str,
     *,
     workspace: CustomQCWorkspaceService,
     qc_service_provider: Callable[[], Awaitable[SichuanQCService]],
+    diagnostic_capture: DiagnosticJobCapture | None = None,
 ) -> None:
     job_wall_started = time.perf_counter()
     job = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -2875,7 +2879,8 @@ async def run_sichuan_workspace_batch_job(
                 rule_set_version=rule_set_version,
                 executor_key="legacy_orchestrated",
             ):
-                return await _evaluate_single_record_impl(record)
+                with diagnostic_capture.record_scope((institute_id, patient_id, visit_id)) if diagnostic_capture else nullcontext():
+                    return await _evaluate_single_record_impl(record)
 
         def _merge_record_result(record_result: Dict[str, Any], processed_records_count: int) -> None:
             nonlocal total_tokens
@@ -3337,12 +3342,13 @@ async def run_sichuan_workspace_batch_job(
             summary_patch=summary,
             progress_patch=_record_runtime_progress(total_records),
         )
-        workspace.complete_batch_job(
-            job_id=job_id,
-            summary=summary,
-            items=all_items,
-            failed_records=all_failed_records,
-        )
+        with diagnostic_capture.result_scope() if diagnostic_capture else nullcontext():
+            workspace.complete_batch_job(
+                job_id=job_id,
+                summary=summary,
+                items=all_items,
+                failed_records=all_failed_records,
+            )
     except QCJobCancelled:
         logger.info("四川规则批量任务 %s 已取消，后台执行已停止", job_id)
     except Exception as exc:
