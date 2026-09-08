@@ -192,6 +192,7 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "exam_zone",
         "report_time",
     ),
+    "admission_record": ("admission_datetime",),
     "admission_record_diagnosis": (
         "diagnosis_id",
         "diagnosis_type",
@@ -507,7 +508,7 @@ _SECTION_LABELS: dict[str, str] = {
     "menstrual_history": "月经史",
     "family_history": "家族史",
     "checkup": "体格检查",
-    "checkup_special": "专科情况",
+    "checkup_special": "专科检查",
     "assist_exam": "辅助检查",
     "case_characteristic": "病例特点",
     "diagnose_based_on": "诊断依据",
@@ -1405,6 +1406,20 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
             )
         elif payload:
             flags.append("missing_primary_text")
+
+    if document_type == "admission_record":
+        # 入院时间独立于记录时间；正文回退完成后再附加，避免只有时间时丢失全文。
+        admission_time = _merge_field_text(payload, "admission_datetime")
+        if admission_time:
+            sections.insert(0, AssembledSection(
+                section_key="admission_datetime", section_label="入院时间",
+                text=admission_time, source_field="admission_datetime", order_index=-1,
+            ))
+            source_fields.append(DocumentSourceField(
+                source_table=document_type, source_field="admission_datetime",
+                source_path=None, used=True, raw_value_preview=admission_time,
+            ))
+            assembled_text = "\n".join(filter(None, (admission_time, assembled_text)))
 
     title, title_flags = _resolve_title(document_type, payload, assembled_text)
     flags.extend(title_flags)
