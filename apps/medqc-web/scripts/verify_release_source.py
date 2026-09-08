@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 
 
-PUBLIC_API_DOMAIN = "api.medqc.com"
+PUBLIC_API_HOSTS = ("api.medqc.com", "124.220.6.136")
 VALID_CATEGORIES = {"A", "B", "C", "D", "E"}
 TEXT_SUFFIXES = {
     ".css",
@@ -129,7 +129,7 @@ def _contains_public_api_domain(repo_root: Path, path: str) -> bool:
     if not _should_scan_public_api(path):
         return False
     text = _read_small_text(repo_root / Path(_normalize(path)))
-    return text is not None and PUBLIC_API_DOMAIN in text
+    return text is not None and any(host in text for host in PUBLIC_API_HOSTS)
 
 
 def verify_source_state(

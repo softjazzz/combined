@@ -1,15 +1,9 @@
 <template>
   <div class="qc-llm-config">
-    <a-card
-      title="质控LLM配置"
-      :bordered="false"
-    >
+    <a-card title="质控LLM配置" :bordered="false">
       <template #extra>
         <a-space>
-          <a-button
-            :loading="loading"
-            @click="refreshConfigs"
-          >
+          <a-button :loading="loading" @click="refreshConfigs">
             <template #icon>
               <ReloadOutlined />
             </template>
@@ -27,10 +21,7 @@
             </template>
             导出配置
           </a-button>
-          <a-button
-            type="primary"
-            @click="showAddConfig"
-          >
+          <a-button type="primary" @click="showAddConfig">
             <template #icon>
               <PlusOutlined />
             </template>
@@ -73,28 +64,13 @@
 
           <template v-if="column.key === 'actions'">
             <a-space>
-              <a-button
-                size="small"
-                @click="testConfig(record as LLMConfig)"
-              >
-                测试
-              </a-button>
-              <a-button
-                size="small"
-                @click="editConfig(record as LLMConfig)"
-              >
-                编辑
-              </a-button>
+              <a-button size="small" @click="testConfig(record as LLMConfig)"> 测试 </a-button>
+              <a-button size="small" @click="editConfig(record as LLMConfig)"> 编辑 </a-button>
               <a-popconfirm
                 title="确定要删除这个配置吗？"
                 @confirm="deleteConfig(record as LLMConfig)"
               >
-                <a-button
-                  size="small"
-                  danger
-                >
-                  删除
-                </a-button>
+                <a-button size="small" danger> 删除 </a-button>
               </a-popconfirm>
             </a-space>
           </template>
@@ -110,64 +86,30 @@
       @ok="saveConfig"
       @cancel="cancelEdit"
     >
-      <a-form
-        ref="configForm"
-        :model="configFormData"
-        :rules="configFormRules"
-        layout="vertical"
-      >
-        <a-form-item
-          label="配置名称"
-          name="config_name"
-        >
-          <a-select
-            v-model:value="configFormData.config_name"
-            placeholder="选择配置类型"
-          >
-            <a-select-option value="qc_analysis">
-              质控分析
-            </a-select-option>
-            <a-select-option value="extraction">
-              文档提取
-            </a-select-option>
-            <a-select-option value="default">
-              默认配置
-            </a-select-option>
+      <a-form ref="configForm" :model="configFormData" :rules="configFormRules" layout="vertical">
+        <a-form-item label="配置名称" name="config_name">
+          <a-select v-model:value="configFormData.config_name" placeholder="选择配置类型">
+            <a-select-option value="qc_analysis"> 质控分析 </a-select-option>
+            <a-select-option value="extraction"> 文档提取 </a-select-option>
+            <a-select-option value="default"> 默认配置 </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item
-          label="LLM提供商"
-          name="provider_id"
-        >
+        <a-form-item label="LLM提供商" name="provider_id">
           <a-select
             v-model:value="configFormData.provider_id"
             placeholder="选择LLM提供商"
             @change="onProviderChange"
           >
-            <a-select-option
-              v-for="provider in providers"
-              :key="provider.id"
-              :value="provider.id"
-            >
+            <a-select-option v-for="provider in providers" :key="provider.id" :value="provider.id">
               {{ provider.provider_name }}
             </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item
-          label="模型"
-          name="model_id"
-        >
-          <a-select
-            v-model:value="configFormData.model_id"
-            placeholder="选择模型"
-          >
-            <a-select-option
-              v-for="model in availableModels"
-              :key="model.id"
-              :value="model.id"
-            >
+        <a-form-item label="模型" name="model_id">
+          <a-select v-model:value="configFormData.model_id" placeholder="选择模型">
+            <a-select-option v-for="model in availableModels" :key="model.id" :value="model.id">
               <div>
                 <div>{{ model.model_name }}</div>
                 <div style="font-size: 12px; color: #666">
@@ -178,20 +120,11 @@
           </a-select>
         </a-form-item>
 
-        <a-form-item
-          label="API密钥"
-          name="api_key"
-        >
-          <a-input-password
-            v-model:value="configFormData.api_key"
-            placeholder="输入API密钥"
-          />
+        <a-form-item label="API密钥" name="api_key">
+          <a-input-password v-model:value="configFormData.api_key" placeholder="输入API密钥" />
         </a-form-item>
 
-        <a-form-item
-          label="自定义端点"
-          name="custom_endpoint"
-        >
+        <a-form-item label="自定义端点" name="custom_endpoint">
           <a-input
             v-model:value="configFormData.custom_endpoint"
             placeholder="可选：自定义API端点"
@@ -201,7 +134,7 @@
         <a-form-item label="自定义参数">
           <a-textarea
             v-model:value="customParametersText"
-            placeholder="可选：JSON格式的自定义参数，如 {&quot;temperature&quot;: 0.1}"
+            placeholder='可选：JSON格式的自定义参数，如 {"temperature": 0.1}'
             :rows="3"
           />
         </a-form-item>
@@ -209,36 +142,22 @@
     </a-modal>
 
     <!-- 测试结果弹窗 -->
-    <a-modal
-      v-model:open="testModalVisible"
-      title="配置测试结果"
-      width="500px"
-      :footer="null"
-    >
+    <a-modal v-model:open="testModalVisible" title="配置测试结果" width="500px" :footer="null">
       <div v-if="testResult">
         <a-result
           :status="testResult.success ? 'success' : 'error'"
           :title="testResult.success ? '测试成功' : '测试失败'"
           :sub-title="testResult.message"
         >
-          <template
-            v-if="testResult.details"
-            #extra
-          >
-            <a-descriptions
-              size="small"
-              :column="1"
-            >
+          <template v-if="testResult.details" #extra>
+            <a-descriptions size="small" :column="1">
               <a-descriptions-item label="响应时间">
                 {{ testResult.details.responseTime }}ms
               </a-descriptions-item>
               <a-descriptions-item label="模型">
                 {{ testResult.details.model }}
               </a-descriptions-item>
-              <a-descriptions-item
-                v-if="testResult.details.tokenUsage"
-                label="Token使用"
-              >
+              <a-descriptions-item v-if="testResult.details.tokenUsage" label="Token使用">
                 {{ testResult.details.tokenUsage }}
               </a-descriptions-item>
             </a-descriptions>
@@ -265,12 +184,8 @@
           <p class="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
-          <p class="ant-upload-text">
-            点击或拖拽文件到此区域上传
-          </p>
-          <p class="ant-upload-hint">
-            支持JSON格式的配置文件
-          </p>
+          <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+          <p class="ant-upload-hint">支持JSON格式的配置文件</p>
         </a-upload-dragger>
 
         <div class="import-actions">
@@ -286,17 +201,12 @@
               </template>
               导入配置
             </a-button>
-            <a-button @click="cancelImport">
-              取消
-            </a-button>
+            <a-button @click="cancelImport"> 取消 </a-button>
           </a-space>
         </div>
 
         <!-- 导入预览 -->
-        <div
-          v-if="importData"
-          class="import-preview"
-        >
+        <div v-if="importData" class="import-preview">
           <h4>配置预览</h4>
           <a-table
             :data-source="importData"
@@ -312,6 +222,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
 import { message } from 'ant-design-vue'
 import type { UploadFile } from 'ant-design-vue'
 import {
@@ -697,10 +608,7 @@ const importConfigs = async () => {
 
   importing.value = true
   try {
-    const baseURL =
-      window.location.hostname === 'localhost'
-        ? 'http://localhost:8001'
-        : 'http://124.220.6.136:8001'
+    const baseURL = resolveApiBaseUrl()
 
     for (const config of importData.value) {
       const response = await fetch(`${baseURL}/api/qc/llm-configs`, {
@@ -749,10 +657,7 @@ const runConfigTest = async () => {
 
   testing.value = true
   try {
-    const baseURL =
-      window.location.hostname === 'localhost'
-        ? 'http://localhost:8001'
-        : 'http://124.220.6.136:8001'
+    const baseURL = resolveApiBaseUrl()
 
     const startTime = Date.now()
     const response = await fetch(`${baseURL}/api/qc/llm-configs/test`, {

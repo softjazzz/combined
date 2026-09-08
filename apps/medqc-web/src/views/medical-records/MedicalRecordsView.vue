@@ -2,9 +2,7 @@
   <div class="page-container">
     <!-- 页面标题和操作按钮 -->
     <div class="page-header">
-      <h1 class="page-title">
-        测试病历管理
-      </h1>
+      <h1 class="page-title">测试病历管理</h1>
       <!-- 调试信息 -->
       <div
         class="debug-info"
@@ -24,10 +22,7 @@
       </div>
       <div class="header-actions">
         <a-space>
-          <a-button
-            size="small"
-            @click="toggleViewMode"
-          >
+          <a-button size="small" @click="toggleViewMode">
             {{ viewMode === 'card' ? '切换表格视图' : '切换卡片视图' }}
           </a-button>
           <a-button @click="handleCreateRecord">
@@ -36,10 +31,7 @@
             </template>
             新建病历
           </a-button>
-          <a-button
-            type="primary"
-            @click="handleSmartImport"
-          >
+          <a-button type="primary" @click="handleSmartImport">
             <template #icon>
               <RobotOutlined />
             </template>
@@ -124,24 +116,12 @@
               allow-clear
               @change="handleSearch"
             >
-              <a-select-option value="">
-                全部科室
-              </a-select-option>
-              <a-select-option value="内科">
-                内科
-              </a-select-option>
-              <a-select-option value="外科">
-                外科
-              </a-select-option>
-              <a-select-option value="妇产科">
-                妇产科
-              </a-select-option>
-              <a-select-option value="儿科">
-                儿科
-              </a-select-option>
-              <a-select-option value="急诊科">
-                急诊科
-              </a-select-option>
+              <a-select-option value=""> 全部科室 </a-select-option>
+              <a-select-option value="内科"> 内科 </a-select-option>
+              <a-select-option value="外科"> 外科 </a-select-option>
+              <a-select-option value="妇产科"> 妇产科 </a-select-option>
+              <a-select-option value="儿科"> 儿科 </a-select-option>
+              <a-select-option value="急诊科"> 急诊科 </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="4">
@@ -151,24 +131,12 @@
               allow-clear
               @change="handleSearch"
             >
-              <a-select-option value="">
-                全部诊断
-              </a-select-option>
-              <a-select-option value="高血压">
-                高血压
-              </a-select-option>
-              <a-select-option value="糖尿病">
-                糖尿病
-              </a-select-option>
-              <a-select-option value="冠心病">
-                冠心病
-              </a-select-option>
-              <a-select-option value="肺炎">
-                肺炎
-              </a-select-option>
-              <a-select-option value="阑尾炎">
-                阑尾炎
-              </a-select-option>
+              <a-select-option value=""> 全部诊断 </a-select-option>
+              <a-select-option value="高血压"> 高血压 </a-select-option>
+              <a-select-option value="糖尿病"> 糖尿病 </a-select-option>
+              <a-select-option value="冠心病"> 冠心病 </a-select-option>
+              <a-select-option value="肺炎"> 肺炎 </a-select-option>
+              <a-select-option value="阑尾炎"> 阑尾炎 </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="4">
@@ -178,29 +146,16 @@
               allow-clear
               @change="handleSearch"
             >
-              <a-select-option value="">
-                全部创建人
-              </a-select-option>
-              <a-select-option value="张医生">
-                张医生
-              </a-select-option>
-              <a-select-option value="李医生">
-                李医生
-              </a-select-option>
-              <a-select-option value="王医生">
-                王医生
-              </a-select-option>
+              <a-select-option value=""> 全部创建人 </a-select-option>
+              <a-select-option value="张医生"> 张医生 </a-select-option>
+              <a-select-option value="李医生"> 李医生 </a-select-option>
+              <a-select-option value="王医生"> 王医生 </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="6">
             <a-space>
-              <a-range-picker
-                v-model:value="searchForm.dateRange"
-                @change="handleSearch"
-              />
-              <a-button @click="handleReset">
-                重置
-              </a-button>
+              <a-range-picker v-model:value="searchForm.dateRange" @change="handleSearch" />
+              <a-button @click="handleReset"> 重置 </a-button>
             </a-space>
           </a-col>
         </a-row>
@@ -216,10 +171,7 @@
             <span class="record-count">共 {{ pagination.total }} 条记录</span>
           </div>
           <div class="table-actions">
-            <a-button
-              size="small"
-              @click="handleRefresh"
-            >
+            <a-button size="small" @click="handleRefresh">
               <template #icon>
                 <ReloadOutlined />
               </template>
@@ -234,10 +186,7 @@
           class="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
         >
           <!-- 调试信息 -->
-          <div
-            v-if="records.length === 0"
-            class="col-span-full text-center p-8"
-          >
+          <div v-if="records.length === 0" class="col-span-full text-center p-8">
             <div class="text-gray-500">
               <p class="debug-info-title">
                 <BarChartOutlined class="mr-1" />
@@ -257,9 +206,7 @@
           >
             <div class="flex items-start justify-between">
               <div>
-                <div class="text-xs text-gray-500">
-                  编号
-                </div>
+                <div class="text-xs text-gray-500">编号</div>
                 <div class="text-sm font-semibold text-gray-900 record-number-text">
                   {{ rec.recordNumber }}
                 </div>
@@ -270,9 +217,7 @@
             </div>
 
             <div class="mt-2">
-              <div class="text-xs text-gray-500">
-                患者姓名
-              </div>
+              <div class="text-xs text-gray-500">患者姓名</div>
               <div class="text-gray-800 font-medium patient-name-text">
                 {{ rec.patientName || rec.recordName }}
               </div>
@@ -293,21 +238,11 @@
             <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
               <div>创建：{{ formatDateTime(rec.createdAt) }}</div>
               <div class="flex items-center gap-2">
-                <a-button
-                  type="link"
-                  size="small"
-                  class="p-0"
-                  @click="handleViewDetail(rec.id)"
-                >
+                <a-button type="link" size="small" class="p-0" @click="handleViewDetail(rec.id)">
                   详情
                 </a-button>
                 <a-divider type="vertical" />
-                <a-button
-                  type="link"
-                  size="small"
-                  class="p-0"
-                  @click="handleCopy(rec.id)"
-                >
+                <a-button type="link" size="small" class="p-0" @click="handleCopy(rec.id)">
                   复制
                 </a-button>
                 <a-divider type="vertical" />
@@ -317,14 +252,7 @@
                   cancel-text="取消"
                   @confirm="handleDelete(rec.id)"
                 >
-                  <a-button
-                    type="link"
-                    size="small"
-                    danger
-                    class="p-0"
-                  >
-                    删除
-                  </a-button>
+                  <a-button type="link" size="small" danger class="p-0"> 删除 </a-button>
                 </a-popconfirm>
               </div>
             </div>
@@ -362,18 +290,9 @@
         <a-divider />
         <div class="quality-points-list">
           <h4>应用的质控点：</h4>
-          <div
-            v-if="qualityPointsData.length === 0"
-            class="no-data"
-          >
-            暂无关联的质控点
-          </div>
+          <div v-if="qualityPointsData.length === 0" class="no-data">暂无关联的质控点</div>
           <div v-else>
-            <div
-              v-for="point in qualityPointsData"
-              :key="point.id"
-              class="quality-point-item"
-            >
+            <div v-for="point in qualityPointsData" :key="point.id" class="quality-point-item">
               <div class="point-header">
                 <span class="point-id">{{ point.id }}</span>
                 <span class="point-name">{{ point.name }}</span>
@@ -419,19 +338,8 @@ import {
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
 import { getAccessToken } from '@/utils/auth-token'
-// 添加API配置 - 支持外部IP访问
-const getApiBaseUrl = () => {
-  // 开发环境使用Vite代理，生产环境使用完整URL
-  if (import.meta.env.DEV) {
-    return '' // 开发环境使用Vite代理
-  }
-  // 检测是否从外部IP访问，如果是则使用服务器IP
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return 'http://124.220.6.136:8001'
-  }
-  return 'http://localhost:8001'
-}
-const API_BASE_URL = getApiBaseUrl()
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
+const API_BASE_URL = resolveApiBaseUrl()
 console.log('🌐 病历列表页面使用API地址:', API_BASE_URL)
 
 const router = useRouter()

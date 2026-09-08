@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = PROJECT_ROOT / "scripts" / "verify_release_source.py"
@@ -132,14 +134,15 @@ def test_safe_env_example_is_allowed(tmp_path: Path) -> None:
     assert report["reason_codes"] == []
 
 
+@pytest.mark.parametrize("address", ["https://api.medqc.com", "http://124.220.6.136:8001"])
 def test_public_api_domain_in_frontend_runtime_source_is_blocked(
-    tmp_path: Path,
+    tmp_path: Path, address: str,
 ) -> None:
     verifier = _load_module()
     config = tmp_path / "apps" / "medqc-web" / "src" / "api-base.ts"
     config.parent.mkdir(parents=True)
     config.write_text(
-        'export const apiBase = "https://api.medqc.com/api/v1"\n',
+        f'export const apiBase = "{address}/api/v1"\n',
         encoding="utf-8",
     )
 
@@ -153,4 +156,3 @@ def test_public_api_domain_in_frontend_runtime_source_is_blocked(
 
     assert report["passed"] is False
     assert "forbidden_public_api_domain" in report["reason_codes"]
-

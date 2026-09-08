@@ -154,7 +154,7 @@ function Assert-NoReleaseForbiddenContent([string]$path) {
     $forbiddenApiHits = @(
       Get-ChildItem -LiteralPath $frontendDist -Recurse -File -Force |
         Where-Object { $_.Extension -in @(".js", ".css", ".html", ".json") } |
-        Select-String -SimpleMatch "api.medqc.com" -List
+        Select-String -SimpleMatch -Pattern @("api.medqc.com", "124.220.6.136") -List
     )
     if ($forbiddenApiHits.Count -gt 0) {
       $sample = ($forbiddenApiHits | Select-Object -First 10 | ForEach-Object { $_.Path }) -join "`n"

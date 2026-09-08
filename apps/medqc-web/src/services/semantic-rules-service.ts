@@ -4,6 +4,7 @@
  */
 
 import { getAccessToken } from '@/utils/auth-token'
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
 
 export interface SemanticRuleDefinition {
   rule_id: string
@@ -61,12 +62,7 @@ export class SemanticRulesService {
   private baseURL: string
 
   constructor() {
-    // 使用Vite代理配置，开发环境下直接使用相对路径
-    this.baseURL = import.meta.env.DEV
-      ? '' // 开发环境使用Vite代理
-      : (window.location.hostname === 'localhost'
-        ? 'http://localhost:8001'
-        : 'http://124.220.6.136:8001')
+    this.baseURL = resolveApiBaseUrl()
   }
 
   private buildHeaders(includeJson: boolean = true): Record<string, string> {
@@ -87,7 +83,7 @@ export class SemanticRulesService {
     const res = await fetch(`${this.baseURL}/api/v1/semantic-rules`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rule)
+      body: JSON.stringify(rule),
     })
     if (!res.ok) throw new Error('创建规则失败')
     const data = await res.json()
@@ -98,7 +94,7 @@ export class SemanticRulesService {
     const res = await fetch(`${this.baseURL}/api/v1/semantic-rules/${ruleId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch)
+      body: JSON.stringify(patch),
     })
     if (!res.ok) throw new Error('更新规则失败')
     const data = await res.json()
@@ -107,7 +103,7 @@ export class SemanticRulesService {
 
   async remove(ruleId: string) {
     const res = await fetch(`${this.baseURL}/api/v1/semantic-rules/${ruleId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     })
     if (!res.ok) throw new Error('删除规则失败')
     const data = await res.json()
@@ -118,7 +114,7 @@ export class SemanticRulesService {
     const res = await fetch(`${this.baseURL}/api/v1/semantic-rules/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rules })
+      body: JSON.stringify({ rules }),
     })
     if (!res.ok) throw new Error('导入规则失败')
     const data = await res.json()
@@ -145,7 +141,7 @@ export class SemanticRulesService {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
       })
 
       if (!response.ok) {
@@ -156,13 +152,13 @@ export class SemanticRulesService {
       const data = await response.json()
       return {
         success: true,
-        data: data.rules || []
+        data: data.rules || [],
       }
     } catch (error) {
       console.error('获取语义规则失败:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : '获取语义规则失败'
+        error: error instanceof Error ? error.message : '获取语义规则失败',
       }
     }
   }
@@ -180,7 +176,7 @@ export class SemanticRulesService {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
       })
 
       if (!response.ok) {
@@ -191,13 +187,13 @@ export class SemanticRulesService {
       const data = await response.json()
       return {
         success: true,
-        data: data.rule
+        data: data.rule,
       }
     } catch (error) {
       console.error('获取规则详情失败:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : '获取规则详情失败'
+        error: error instanceof Error ? error.message : '获取规则详情失败',
       }
     }
   }
@@ -208,7 +204,7 @@ export class SemanticRulesService {
   async executeSemanticRule(
     ruleId: string,
     inputData: Record<string, unknown>,
-    useMockLLM: boolean = false
+    useMockLLM: boolean = false,
   ): Promise<{
     success: boolean
     data?: SemanticRuleResult
@@ -222,8 +218,8 @@ export class SemanticRulesService {
         },
         body: JSON.stringify({
           input_data: inputData,
-          use_mock_llm: useMockLLM
-        })
+          use_mock_llm: useMockLLM,
+        }),
       })
 
       if (!response.ok) {
@@ -234,13 +230,13 @@ export class SemanticRulesService {
       const data = await response.json()
       return {
         success: true,
-        data: data.result
+        data: data.result,
       }
     } catch (error) {
       console.error('规则执行失败:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : '规则执行失败'
+        error: error instanceof Error ? error.message : '规则执行失败',
       }
     }
   }
@@ -251,7 +247,7 @@ export class SemanticRulesService {
   async executeBatchSemanticRules(
     ruleIds: string[],
     inputData: Record<string, unknown>,
-    useMockLLM: boolean = false
+    useMockLLM: boolean = false,
   ): Promise<{
     success: boolean
     data?: SemanticRuleResult[]
@@ -266,8 +262,8 @@ export class SemanticRulesService {
         body: JSON.stringify({
           rule_ids: ruleIds,
           input_data: inputData,
-          use_mock_llm: useMockLLM
-        })
+          use_mock_llm: useMockLLM,
+        }),
       })
 
       if (!response.ok) {
@@ -278,13 +274,13 @@ export class SemanticRulesService {
       const data = await response.json()
       return {
         success: true,
-        data: data.results || []
+        data: data.results || [],
       }
     } catch (error) {
       console.error('批量执行失败:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : '批量执行失败'
+        error: error instanceof Error ? error.message : '批量执行失败',
       }
     }
   }
@@ -303,7 +299,7 @@ export class SemanticRulesService {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(request)
+        body: JSON.stringify(request),
       })
 
       if (!response.ok) {
@@ -314,13 +310,13 @@ export class SemanticRulesService {
       const data = await response.json()
       return {
         success: true,
-        data: data.rule
+        data: data.rule,
       }
     } catch (error) {
       console.error('创建自定义规则失败:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : '创建自定义规则失败'
+        error: error instanceof Error ? error.message : '创建自定义规则失败',
       }
     }
   }
@@ -347,13 +343,13 @@ export class SemanticRulesService {
       const data = await response.json()
       return {
         success: true,
-        data: data.stats
+        data: data.stats,
       }
     } catch (error) {
       console.error('获取统计信息失败:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : '获取统计信息失败'
+        error: error instanceof Error ? error.message : '获取统计信息失败',
       }
     }
   }
@@ -385,13 +381,13 @@ export class SemanticRulesService {
       const data = await response.json()
       return {
         success: true,
-        data: data.connection_info
+        data: data.connection_info,
       }
     } catch (error) {
       console.error('LLM连接验证失败:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'LLM连接验证失败'
+        error: error instanceof Error ? error.message : 'LLM连接验证失败',
       }
     }
   }
@@ -399,4 +395,3 @@ export class SemanticRulesService {
 
 // 导出单例实例
 export const semanticRulesService = new SemanticRulesService()
-

@@ -40,3 +40,10 @@
 - 根因：ProductActivationService 已接收完整离线参数仍无条件读取服务器 Settings。
 - 最小修改：仅在 required/state_path 需要默认值时读取 Settings，显式离线参数继续使用原验签和落盘流程。
 - 范围：product_activation.py 及对应测试；验收显式参数不读取 Settings、默认运行时参数继续生效、现有授权测试通过。
+
+## 客户 API 地址发布阻断
+
+- 包检查发现 5 个 JS 分块内含旧公网 IP，6 处源码分支在内网或 127.0.0.1 访问时仍选旧公网后端。
+- 根因：5 个旧页面/服务绕过已有 resolveApiBaseUrl；源码与产物门禁仅检查 api.medqc.com。
+- 最小修改：5 个入口复用现有 helper，保持请求合同；两层门禁同时识别已知旧公网 IP，不新增 API 配置层。
+- 验收：同源及显式 API 配置下真实服务 fetch 地址正确；旧公网源码/产物被门禁拒绝；最终 ZIP 无旧公网 API 地址。

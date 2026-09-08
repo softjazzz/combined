@@ -15,6 +15,33 @@ BACKEND_LAUNCHER = PROJECT_ROOT / "backend" / "start_dev_backend.ps1"
 DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs" / "deployment" / "客户机交付包编译打包指南.md"
 
 
+@pytest.mark.parametrize("address,blocked", [
+    ("http://124.220.6.136:8001/api", True),
+    ("https://api.medqc.com/api", True),
+    ("/api/medical-records", False),
+])
+def test_customer_artifact_gate_rejects_legacy_public_api(tmp_path, address, blocked):
+    """执行真实产物门禁，防止源码校验之后打包了旧公网产物。"""
+    (tmp_path / "backend").mkdir()
+    dist = tmp_path / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "app.js").write_text(f'fetch("{address}")', encoding="utf-8")
+    source = PACKAGE_SCRIPT.read_text(encoding="utf-8")
+    function = "function Assert-NoReleaseForbiddenContent" + source.split(
+        "function Assert-NoReleaseForbiddenContent", 1
+    )[1].split('Write-Step "Verify release source state"', 1)[0]
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+         "$ErrorActionPreference='Stop'; " + function +
+         "Assert-NoReleaseForbiddenContent $env:MEDQC_ARTIFACT_TEST_ROOT"],
+        capture_output=True, text=True,
+        env={**os.environ, "MEDQC_ARTIFACT_TEST_ROOT": str(tmp_path)},
+    )
+    assert (result.returncode != 0) is blocked, result.stderr
+    if blocked:
+        assert "Forbidden public API domain" in result.stderr
+
+
 @pytest.mark.parametrize("build_exit,has_dist", [(17, True), (0, False), (0, True)])
 def test_customer_build_failure_cannot_package_stale_dist(tmp_path, build_exit, has_dist):
     """运行实际构建门禁片段；失败即使有旧产物也不得进入复制阶段。"""

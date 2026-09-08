@@ -494,6 +494,13 @@
       "reason": "业务与发布回归证据"
     },
     {
+      "path": "apps/medqc-web/backend/tests/unit/test_verify_release_source.py",
+      "category": "C",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "清除旧公网 API 硬编码，复用现有地址配置并阻断公网产物"
+    },
+    {
       "path": "apps/medqc-web/docs/acceptance/2026-09-07-qc-event-identity-and-culture-gap.md",
       "category": "D",
       "owner": "MedQC 发布维护",
@@ -690,6 +697,13 @@
       "reason": "构建、部署或验收文档"
     },
     {
+      "path": "apps/medqc-web/src/components/QCLLMConfig.vue",
+      "category": "B",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "清除旧公网 API 硬编码，复用现有地址配置并阻断公网产物"
+    },
+    {
       "path": "apps/medqc-web/src/components/layout/WorkstationLayout.vue",
       "category": "B",
       "owner": "MedQC 发布维护",
@@ -704,11 +718,25 @@
       "reason": "工作台最终页面与本地诊断预览"
     },
     {
+      "path": "apps/medqc-web/src/services/medical-record-persistence-service.ts",
+      "category": "B",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "清除旧公网 API 硬编码，复用现有地址配置并阻断公网产物"
+    },
+    {
       "path": "apps/medqc-web/src/services/qc-diagnostics-service.ts",
       "category": "B",
       "owner": "MedQC 发布维护",
       "release_required": true,
       "reason": "工作台最终页面与本地诊断预览"
+    },
+    {
+      "path": "apps/medqc-web/src/services/semantic-rules-service.ts",
+      "category": "B",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "清除旧公网 API 硬编码，复用现有地址配置并阻断公网产物"
     },
     {
       "path": "apps/medqc-web/src/styles/index.css",
@@ -723,6 +751,20 @@
       "owner": "MedQC 发布维护",
       "release_required": true,
       "reason": "工作台最终页面与本地诊断预览"
+    },
+    {
+      "path": "apps/medqc-web/src/views/medical-records/EditMedicalRecord.vue",
+      "category": "B",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "清除旧公网 API 硬编码，复用现有地址配置并阻断公网产物"
+    },
+    {
+      "path": "apps/medqc-web/src/views/medical-records/MedicalRecordsView.vue",
+      "category": "B",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "清除旧公网 API 硬编码，复用现有地址配置并阻断公网产物"
     },
     {
       "path": "apps/medqc-web/src/views/workstation-v4/QcRecordResultListView.vue",
@@ -814,6 +856,13 @@
       "owner": "MedQC 发布维护",
       "release_required": true,
       "reason": "业务与发布回归证据"
+    },
+    {
+      "path": "apps/medqc-web/tests/unit/services/customer-api-routing.spec.ts",
+      "category": "C",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "清除旧公网 API 硬编码，复用现有地址配置并阻断公网产物"
     },
     {
       "path": "apps/medqc-web/tests/unit/views/workstation-v4/BatchTablePanel.spec.ts",

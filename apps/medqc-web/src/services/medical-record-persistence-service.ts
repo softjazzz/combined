@@ -5,6 +5,7 @@
 
 import type { ExtractedMedicalData } from '@/types/medical'
 import { getAccessToken } from '@/utils/auth-token'
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
 
 export interface MedicalRecord {
   id: string
@@ -90,14 +91,6 @@ export interface MedicalRecordStats {
   avg_confidence: number
 }
 
-function getApiBaseUrl() {
-  if (typeof window === 'undefined') return 'http://localhost:8001'
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return 'http://124.220.6.136:8001'
-  }
-  return 'http://localhost:8001'
-}
-
 async function requestApi<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken()
   const headers: Record<string, string> = {
@@ -106,7 +99,7 @@ async function requestApi<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await fetch(`${resolveApiBaseUrl()}${path}`, {
     ...init,
     headers,
   })
