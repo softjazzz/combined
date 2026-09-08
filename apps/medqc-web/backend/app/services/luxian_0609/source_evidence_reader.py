@@ -70,6 +70,7 @@ _NATIVE_SOURCE_FIELDS = {
         "document_title",
         "record_time",
         "admission_datetime",
+        "admission_time",
         "chief_complaint",
         "history_of_present_illness",
         "record_content",

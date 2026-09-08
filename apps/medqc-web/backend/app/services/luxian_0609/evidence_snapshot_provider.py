@@ -745,6 +745,17 @@ def build_luxian_0609_evidence_read_session(
                 admission_value,
                 field_name="admission_datetime",
             )
+            if "LX0609-007" in selected_rule_ids:
+                from .basic_timeliness_facts import extract_admission_anchor, AdmissionAnchorState
+                fallback_material = material_sources.get("admission_record")
+                anchor = extract_admission_anchor(
+                    registration_rows=admission_material.rows if admission_material else (),
+                    admission_rows=fallback_material.rows if fallback_material and not fallback_material.truncated else (),
+                    discharge_rows=(), allow_date_fallback=False,
+                )
+                if anchor.state is AdmissionAnchorState.EXACT:
+                    admission_datetime = anchor.anchor_time
+                    admission_date = admission_datetime.date()
             discharge_observation = next(
                 (
                     item

@@ -192,7 +192,7 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "exam_zone",
         "report_time",
     ),
-    "admission_record": ("admission_datetime",),
+    "admission_record": ("admission_datetime", "admission_time"),
     "admission_record_diagnosis": (
         "diagnosis_id",
         "diagnosis_type",
@@ -1410,13 +1410,17 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
     if document_type == "admission_record":
         # 入院时间独立于记录时间；正文回退完成后再附加，避免只有时间时丢失全文。
         admission_time = _merge_field_text(payload, "admission_datetime")
+        admission_source_field = "admission_datetime"
+        if not admission_time:
+            admission_time = _merge_field_text(payload, "admission_time")
+            admission_source_field = "admission_time"
         if admission_time:
             sections.insert(0, AssembledSection(
                 section_key="admission_datetime", section_label="入院时间",
-                text=admission_time, source_field="admission_datetime", order_index=-1,
+                text=admission_time, source_field=admission_source_field, order_index=-1,
             ))
             source_fields.append(DocumentSourceField(
-                source_table=document_type, source_field="admission_datetime",
+                source_table=document_type, source_field=admission_source_field,
                 source_path=None, used=True, raw_value_preview=admission_time,
             ))
             assembled_text = "\n".join(filter(None, (admission_time, assembled_text)))

@@ -80,7 +80,7 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     dates = raw.get("recorded_dates")
     if (
         kind not in {"course_record_interval_over_72h", "course_record_interval_within_72h"}
-        or start_source not in _COURSE_SOURCES | {"inpat_registration"}
+        or start_source not in _COURSE_SOURCES | {"inpat_registration", "admission_record"}
         or end_source not in _COURSE_SOURCES | {"evaluation_context.horizon"}
         or start_source == "evaluation_context.horizon" or end_source == "inpat_registration"
         or not _time(raw.get("interval_start_time")) or raw.get("threshold_hours") != 72

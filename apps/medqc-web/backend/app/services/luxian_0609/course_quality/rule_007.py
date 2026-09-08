@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Mapping
 
-from ..basic_timeliness_facts import CourseRoundRole, classify_course_round_role
+from ..basic_timeliness_facts import CourseRoundRole, classify_course_round_role, extract_admission_anchor, AdmissionAnchorState
 from ..decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -29,6 +29,19 @@ from .shared import authoritative_course_time, row_text
 RULE_007_RECORD_SOURCES = ("daily_course_record", "senior_course_record")
 _RULE_007_ADMISSION_SOURCE = "inpat_registration"
 _MAX_INTERVAL = timedelta(hours=72)
+
+
+def _admission_for_007(materials):
+    """复用现有入院锚点优先级，不以文书时间替代入院时间。"""
+    registration = tuple(materials.rows("inpat_registration"))
+    anchor = extract_admission_anchor(registration_rows=registration, admission_rows=(), discharge_rows=(), allow_date_fallback=False)
+    if anchor.state is not AdmissionAnchorState.MISSING:
+        selected = tuple(row for row in registration if authoritative_course_time(row.get("admission_datetime") or row.get("admission_time")) == anchor.anchor_time)
+        return anchor, selected if anchor.state is AdmissionAnchorState.EXACT else registration
+    admission = tuple(materials.rows("admission_record"))
+    anchor = extract_admission_anchor(registration_rows=registration, admission_rows=admission, discharge_rows=(), allow_date_fallback=False)
+    selected = tuple(row for row in admission if authoritative_course_time(row.get("admission_datetime") or row.get("admission_time")) == anchor.anchor_time)
+    return anchor, selected if anchor.state is AdmissionAnchorState.EXACT else admission
 
 
 def _is_round_record(row: Mapping[str, Any], *, source_key: str) -> bool:
@@ -374,6 +387,8 @@ def evaluate_rule_007_typed(
                 confidence=None,
             )
         if observation.query_state.value != "available":
+            if source_key == _RULE_007_ADMISSION_SOURCE and observation.query_state.value == "empty":
+                continue
             return decision(
                 applicability=ApplicabilityState.APPLICABLE,
                 evidence_state=EvidenceState.DATA_GAP,
@@ -392,12 +407,23 @@ def evaluate_rule_007_typed(
                 confidence=None,
             )
     try:
-        admission_rows = tuple(materials.rows(_RULE_007_ADMISSION_SOURCE))
+        admission_anchor, admission_rows = _admission_for_007(materials)
+        admission_source = admission_anchor.source_key or _RULE_007_ADMISSION_SOURCE
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
         admission_document_refs = _material_document_refs_by_row(
             snapshot=snapshot,
             materials=materials,
-            source_key=_RULE_007_ADMISSION_SOURCE,
+            source_key=admission_source,
+        )
+    except EvidenceMaterialUnavailable:
+        fallback_observation = observation_by_source.get("admission_record")
+        query_failed = fallback_observation is not None and fallback_observation.query_state.value == "error"
+        return decision(
+            applicability=ApplicabilityState.ERROR if query_failed else ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.TECHNICAL_ERROR if query_failed else EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_query_error" if query_failed else "source_unavailable",
+            refs=refs, confidence=None,
         )
     except EvidenceMaterialTruncated:
         return decision(
@@ -417,12 +443,12 @@ def evaluate_rule_007_typed(
             refs=refs,
             confidence=None,
         )
-    if len(admission_rows) != 1 or len(horizon_rows) != 1:
+    if admission_anchor.state is not AdmissionAnchorState.EXACT or len(horizon_rows) != 1:
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
             qc_direction=QcDirection.UNKNOWN,
-            reason_code="authoritative_time_missing",
+            reason_code="authoritative_time_conflict" if admission_anchor.state is AdmissionAnchorState.CONFLICT else "authoritative_time_missing",
             refs=refs,
             confidence=None,
         )
@@ -448,7 +474,7 @@ def evaluate_rule_007_typed(
             confidence=None,
         )
     refs.add(horizon_fact.fact_id)
-    admission_time = authoritative_course_time(admission_rows[0].get("admission_datetime"))
+    admission_time = admission_anchor.anchor_time
     horizon_time = authoritative_course_time(horizon_rows[0].get("horizon_datetime"))
     horizon_date = _evaluation_horizon_date(horizon_rows[0].get("horizon_date"))
     if (
@@ -699,7 +725,13 @@ def rule_007_customer_display_facts(
         "source_unavailable", "authoritative_time_missing", "source_truncated"
     }:
         # 与执行器相同的资料顺序，记录阻止本次核对的实际来源；空病程表不是缺源。
+        try:
+            resolved_anchor, _ = _admission_for_007(materials)
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            resolved_anchor = None
         for source in (_RULE_007_ADMISSION_SOURCE, EVALUATION_HORIZON_SOURCE_KEY, *RULE_007_RECORD_SOURCES):
+            if source == _RULE_007_ADMISSION_SOURCE and resolved_anchor is not None and resolved_anchor.state is AdmissionAnchorState.EXACT:
+                continue
             try:
                 rows = tuple(materials.rows(source))
             except EvidenceMaterialTruncated:
@@ -723,13 +755,12 @@ def rule_007_customer_display_facts(
         return None
     record_points: list[tuple[datetime, str, str]] = []
     try:
-        admission_rows = tuple(materials.rows(_RULE_007_ADMISSION_SOURCE))
+        admission_anchor, admission_rows = _admission_for_007(materials)
+        admission_source = admission_anchor.source_key or _RULE_007_ADMISSION_SOURCE
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
-        if len(admission_rows) != 1 or len(horizon_rows) != 1:
+        if admission_anchor.state is not AdmissionAnchorState.EXACT or len(horizon_rows) != 1:
             return None
-        admission_time = authoritative_course_time(
-            admission_rows[0].get("admission_datetime")
-        )
+        admission_time = admission_anchor.anchor_time
         horizon_time = authoritative_course_time(
             horizon_rows[0].get("horizon_datetime")
         )
@@ -775,7 +806,7 @@ def rule_007_customer_display_facts(
         key=lambda item: (item[0], item[1], item[2]),
     )
     ordered_points = [
-        (admission_time, _RULE_007_ADMISSION_SOURCE, ""),
+        (admission_time, admission_source, ""),
         *ordered_records,
     ]
     if horizon_time is None:

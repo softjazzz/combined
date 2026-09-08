@@ -160,7 +160,7 @@ def extract_admission_anchor(
             "inpat_registration",
             _unique_times(registration_rows, "admission_datetime", "admission_time"),
         ),
-        ("admission_record", _unique_times(admission_rows, "admission_datetime")),
+        ("admission_record", _unique_times(admission_rows, "admission_datetime", "admission_time")),
     )
     for source_key, candidates in tiers:
         if len(candidates) > 1:

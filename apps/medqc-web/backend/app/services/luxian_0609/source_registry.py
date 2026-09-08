@@ -304,6 +304,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
         "inpat_registration",
+        "admission_record",
     ),
     "LX0609-008": (
         "evaluation_context.horizon",

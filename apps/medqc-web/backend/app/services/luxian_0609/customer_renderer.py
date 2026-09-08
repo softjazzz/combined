@@ -1716,7 +1716,7 @@ def customer_finding_from_controlled_facts(
             and isinstance(facts.get("interval_end_date"), str)
             and re.fullmatch(r"\d{4}-\d{2}-\d{2}", facts["interval_end_date"])
         ):
-            if start_source == "inpat_registration":
+            if start_source in {"inpat_registration", "admission_record"}:
                 return (
                     f"权威入院时间（{start_time}）至评价截止日期（{facts['interval_end_date']}）"
                     "已确认超过72小时要求；期间未见有效查房。"
@@ -1731,7 +1731,7 @@ def customer_finding_from_controlled_facts(
             kind == "course_record_interval_over_72h"
             and end_source == "evaluation_context.horizon"
             and start_source
-            in {"daily_course_record", "senior_course_record", "inpat_registration"}
+            in {"daily_course_record", "senior_course_record", "inpat_registration", "admission_record"}
             and isinstance(start_time, str)
             and isinstance(facts.get("interval_end_time"), str)
             and threshold_hours == 72
@@ -1740,8 +1740,8 @@ def customer_finding_from_controlled_facts(
             and facts["interval_seconds"] > 72 * 3600
             and facts["overdue_seconds"] == facts["interval_seconds"] - 72 * 3600
         ):
-            start_label = "权威入院时间" if start_source == "inpat_registration" else "最后一次查房"
-            no_rounds = "；期间未见有效查房" if start_source == "inpat_registration" else ""
+            start_label = "权威入院时间" if start_source in {"inpat_registration", "admission_record"} else "最后一次查房"
+            no_rounds = "；期间未见有效查房" if start_source in {"inpat_registration", "admission_record"} else ""
             return (
                 f"{start_label}（{start_time}）至评价截止时间（{facts['interval_end_time']}）间隔"
                 f"{_duration_text(facts['interval_seconds'])}，超过72小时要求"
@@ -1749,7 +1749,7 @@ def customer_finding_from_controlled_facts(
             )
         if (
             kind == "course_record_interval_over_72h"
-            and start_source == "inpat_registration"
+            and start_source in {"inpat_registration", "admission_record"}
             and end_source in {"daily_course_record", "senior_course_record"}
             and isinstance(start_time, str)
             and isinstance(facts.get("interval_end_time"), str)
