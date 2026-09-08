@@ -1672,6 +1672,12 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         }),)
     elif scenario == "missing_time":
         assert result.customer_display_facts == ()
+    elif scenario in {"unavailable", "truncated"}:
+        assert dict(result.customer_display_facts)["LX0609-007"] == {
+            "failure_kind": "course_interval_source_gap",
+            "gap_source": "daily_course_record",
+            "gap_kind": scenario,
+        }
     else:
         assert result.customer_display_facts == ()
 

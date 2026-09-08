@@ -23,6 +23,7 @@ from .rule_contracts import load_luxian_0609_rule_contracts
 from .source_gap_contract import customer_gap_message
 from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 from .surgery_gate_result_mapping import surgery_timeliness_gap_display
+from .course_quality_result_mapping import course_007_gap_display
 
 
 CUSTOMER_RESULT_KEYS = frozenset(
@@ -3193,7 +3194,12 @@ def render_luxian_0609_customer_result(
         )
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
         surgery_gap = surgery_timeliness_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-003" else None
-        if surgery_gap is not None:
+        course_gap = course_007_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-007" else None
+        if course_gap is not None:
+            findings = course_gap[2]
+            evidence = "当前缺口来自本次质控资料读取，不代表没有查房记录。"
+            suggestion = "请核对上述资料及同步情况后重新质控，不要据此补写已有查房记录。"
+        elif surgery_gap is not None:
             findings = surgery_gap[1]
             evidence = "已定位手术记录；时间缺口来自结构化时间字段核对，文书正文摘要仅用于定位。"
             suggestion = "请核对源系统中的对应时间及同步情况，确认资料完整后重新评估。"
@@ -3270,6 +3276,9 @@ def render_luxian_0609_customer_result(
             )
             is not None
             or (decision.rule_id, decision.reason_code) in {
+                ("LX0609-007", "source_unavailable"),
+                ("LX0609-007", "authoritative_time_missing"),
+                ("LX0609-007", "source_truncated"),
                 ("LX0609-003", "authoritative_time_missing"),
                 ("LX0609-003", "authoritative_time_conflict"),
                 ("LX0609-003", "association_failed"),

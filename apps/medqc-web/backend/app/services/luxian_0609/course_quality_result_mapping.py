@@ -41,8 +41,38 @@ def _strict_copy_time(value: Any) -> str:
         return ""
 
 
+def course_007_gap_display(raw: Any) -> tuple[list[str], list[str], str] | None:
+    if not isinstance(raw, Mapping) or raw.get("failure_kind") != "course_interval_source_gap":
+        return None
+    safe = _safe_007(raw)
+    if safe is None:
+        return None
+    source = safe["gap_source"]
+    labels = {"inpat_registration": ("本次住院登记", "入院时间"),
+              "evaluation_context.horizon": ("质控观察截止资料", "观察截止时间"),
+              "daily_course_record": ("日常病程记录", "查房记录时间"),
+              "senior_course_record": ("上级医师病程记录", "查房记录时间")}
+    label, field = labels[source]
+    gap = safe["gap_kind"]
+    message = {
+        "empty": f"未读取到{label}，无法取得{field}，暂时无法完成查房间隔核对。",
+        "unavailable": f"{label}数据源本次不可用，暂时无法完成查房间隔核对。",
+        "truncated": f"{label}读取不完整，暂时无法完成查房间隔核对。",
+        "ambiguous": f"{label}存在多条记录，无法确定唯一的{field}，暂时无法完成查房间隔核对。",
+        "time_missing": f"已读取{label}，但缺少有效的{field}，暂时无法完成查房间隔核对。",
+    }[gap]
+    return ([label] if gap in {"empty", "unavailable", "truncated"} else [],
+            [field] if gap in {"empty", "ambiguous", "time_missing"} else [], message)
+
+
 def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("failure_kind")
+    if kind == "course_interval_source_gap":
+        source, gap = raw.get("gap_source"), raw.get("gap_kind")
+        if (not isinstance(source, str) or source not in {"inpat_registration", "evaluation_context.horizon", "daily_course_record", "senior_course_record"}
+            or not isinstance(gap, str) or gap not in {"empty", "ambiguous", "time_missing", "unavailable", "truncated"}):
+            return None
+        return {"failure_kind": kind, "gap_source": source, "gap_kind": gap}
     if kind == "unstable_patient_order_present":
         return ({"failure_kind": kind, "stable_course_rule_applicable": False}
                 if raw.get("stable_course_rule_applicable") is False else None)
@@ -265,6 +295,8 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
         return True
     if str(status or "").strip().lower() == "technical_error":
         return True
+    if rule_id == "LX0609-007" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_source_gap":
+        return safe_facts is not None and status == "data_gap"
     if rule_id != "LX0609-017":
         return safe_facts is not None or raw_facts is None
     expected = {"non_compliant": "copy_similarity_threshold_exceeded", "compliant": "copy_similarity_within_threshold"}.get(str(status or "").strip().lower())

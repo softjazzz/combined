@@ -695,6 +695,30 @@ def rule_007_customer_display_facts(
         }
     if decision.reason_code == "evaluation_window_not_mature":
         return None
+    if decision.evidence_state is EvidenceState.DATA_GAP and decision.reason_code in {
+        "source_unavailable", "authoritative_time_missing", "source_truncated"
+    }:
+        # 与执行器相同的资料顺序，记录阻止本次核对的实际来源；空病程表不是缺源。
+        for source in (_RULE_007_ADMISSION_SOURCE, EVALUATION_HORIZON_SOURCE_KEY, *RULE_007_RECORD_SOURCES):
+            try:
+                rows = tuple(materials.rows(source))
+            except EvidenceMaterialTruncated:
+                return {"failure_kind": "course_interval_source_gap", "gap_source": source, "gap_kind": "truncated"}
+            except EvidenceMaterialUnavailable:
+                return {"failure_kind": "course_interval_source_gap", "gap_source": source, "gap_kind": "unavailable"}
+            if source in {_RULE_007_ADMISSION_SOURCE, EVALUATION_HORIZON_SOURCE_KEY}:
+                if not rows or (len(rows) != 1 and decision.reason_code == "authoritative_time_missing"):
+                    return {"failure_kind": "course_interval_source_gap", "gap_source": source, "gap_kind": "empty" if not rows else "ambiguous"}
+                if decision.reason_code != "authoritative_time_missing":
+                    continue
+                valid = (
+                    authoritative_course_time(rows[0].get("admission_datetime")) is not None
+                    if source == _RULE_007_ADMISSION_SOURCE else
+                    authoritative_course_time(rows[0].get("horizon_datetime")) is not None
+                    or _evaluation_horizon_date(rows[0].get("horizon_date")) is not None
+                )
+                if not valid:
+                    return {"failure_kind": "course_interval_source_gap", "gap_source": source, "gap_kind": "time_missing"}
     if decision.evidence_state is not EvidenceState.SUFFICIENT:
         return None
     record_points: list[tuple[datetime, str, str]] = []
