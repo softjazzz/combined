@@ -77,6 +77,15 @@ def _missing_implant_fields(value: Any) -> list[str] | None:
 
 def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("failure_kind")
+    if kind == "surgery_timeliness_data_gap":
+        fields = raw.get("missing_fields")
+        reason = raw.get("gap_reason")
+        if (reason not in {"authoritative_time_missing", "authoritative_time_conflict", "association_failed"}
+            or not isinstance(fields, list)
+            or any(item not in {"surgery_end_time", "record_time", "surgery_record_association"} for item in fields)
+            or (not fields and reason != "authoritative_time_conflict")):
+            return None
+        return {"failure_kind": kind, "gap_reason": reason, "missing_fields": list(dict.fromkeys(fields))}
     if kind in {"qualified_surgery_absent", "surgery_not_performed"}:
         return (
             {"failure_kind": kind, "performed_surgery_confirmed": False}
@@ -106,6 +115,22 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "threshold_hours": 24,
         "source_label": "手术记录",
     }
+
+
+def surgery_timeliness_gap_display(facts: Any) -> tuple[list[str], str] | None:
+    """把执行器明确的缺口枚举翻译为展示文字，不重新判定资料。"""
+    if not isinstance(facts, Mapping) or facts.get("failure_kind") != "surgery_timeliness_data_gap":
+        return None
+    safe = _safe_003(facts)
+    if safe is None:
+        return None
+    labels = {"surgery_end_time": "手术结束时间", "record_time": "手术记录权威完成时间",
+              "surgery_record_association": "单台手术与手术记录的关联信息"}
+    missing = [labels[key] for key in safe["missing_fields"]]
+    message = ("手术记录时间早于手术结束时间，暂时无法完成时限核对。"
+               if safe["gap_reason"] == "authoritative_time_conflict"
+               else f"已找到手术记录，但缺少{'、'.join(missing)}，暂时无法判断是否在术后24小时内完成。")
+    return missing, message
 
 
 def _safe_024(raw: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -344,6 +369,8 @@ def safe_surgery_gate_customer_display_facts(*, rule_id: str, raw: Any) -> dict[
 def surgery_gate_customer_fact_status_is_valid(*, rule_id: str, status: str, reason_code: str, raw_facts: Any, safe_facts: Mapping[str, Any] | None) -> bool:
     """状态与 executor facts 的既有一致性合同，供 Finalizer fail-closed 使用。"""
     if rule_id == "LX0609-003" and isinstance(safe_facts, Mapping):
+        if safe_facts.get("failure_kind") == "surgery_timeliness_data_gap":
+            return status == "data_gap" and reason_code == safe_facts.get("gap_reason")
         expected = {
             "qualified_surgery_absent": "not_applicable", "surgery_not_performed": "not_applicable",
             "surgery_record_late": "non_compliant", "surgery_record_within_threshold": "compliant",

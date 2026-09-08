@@ -1017,6 +1017,8 @@ def _typed_003_decision(
 
     intervals: list[tuple[timedelta, datetime, datetime, str | None, str]] = []
     incomplete_performed_row = False
+    missing_time_fields: set[str] = set()
+    time_conflict = False
     fallback_resolved = False
     for row in surgery_rows:
         surgery_end_time = _authoritative_surgery_end_time(
@@ -1024,10 +1026,15 @@ def _typed_003_decision(
         )
         record_time = _authoritative_record_time(row.get("record_time"))
         if surgery_end_time is None or record_time is None:
+            if surgery_end_time is None:
+                missing_time_fields.add("surgery_end_time")
+            if record_time is None:
+                missing_time_fields.add("record_time")
             incomplete_performed_row = True
             continue
         interval = record_time - surgery_end_time
         if interval.total_seconds() < 0:
+            time_conflict = True
             incomplete_performed_row = True
             continue
         document_id = str(row.get("document_id") or "").strip() or None
@@ -1133,7 +1140,23 @@ def _typed_003_decision(
         return decision("data_gap", "source_unavailable")
     if mr_observation.completeness.value == "truncated":
         return decision("data_gap", "source_truncated")
-    return decision("data_gap", "authoritative_time_missing")
+    # 只报告本次实际未能完成核对的字段，不把所有可能原因混成一句话。
+    reason = "authoritative_time_missing"
+    if time_conflict and not missing_time_fields:
+        reason = "authoritative_time_conflict"
+    elif not intervals and mr_end_times and (len(mr_rows) != 1 or len(surgery_rows) != 1):
+        reason = "association_failed"
+        missing_time_fields.discard("surgery_end_time")
+        missing_time_fields.add("surgery_record_association")
+    elif not intervals and len(mr_rows) == len(surgery_rows) == 1 and mr_end_times:
+        missing_time_fields.discard("surgery_end_time")
+        if record_times and record_times[0] < mr_end_times[0]:
+            reason = "authoritative_time_conflict"
+    return decision("data_gap", reason, {
+        "failure_kind": "surgery_timeliness_data_gap",
+        "gap_reason": reason,
+        "missing_fields": sorted(missing_time_fields),
+    })
 
 
 def _typed_conservative_surgery_gate_decision(

@@ -450,6 +450,47 @@ async def test_snapshot_performed_fact_replaces_surgery_gate_live_query(
     assert len(client.prompts) == expected_calls
 
 
+@pytest.mark.parametrize("end,record,reason,missing", [
+    (None, datetime(2026, 1, 1, 10), "authoritative_time_missing", ["手术结束时间"]),
+    (datetime(2026, 1, 1, 9), None, "authoritative_time_missing", ["手术记录权威完成时间"]),
+    (None, None, "authoritative_time_missing", ["手术记录权威完成时间", "手术结束时间"]),
+    (datetime(2026, 1, 1, 11), datetime(2026, 1, 1, 10), "authoritative_time_conflict", []),
+])
+def test_003_exact_gaps_survive_customer_finalization(end, record, reason, missing):
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    session = _typed_003_session(surgery_time=end, record_time=record)
+    facts = []
+    decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials, customer_display_facts=facts)
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,), expected_rule_ids=("LX0609-003",), snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )[0]
+    result = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced, raw_customer_display_facts=dict(facts)["LX0609-003"],
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    assert result["status"] == "data_gap"
+    assert result["reason_code"] == reason
+    assert result["data_gap_details"]["missing_fields"] == missing
+    assert result["data_gap_details"]["customer_message"] == result["findings"]
+    if missing == ["手术结束时间"]:
+        assert "缺少手术结束时间" in result["findings"]
+        assert "关联信息" not in result["findings"]
+    if reason == "authoritative_time_conflict":
+        assert "早于" in result["findings"]
+
+
+def test_003_multiple_candidate_end_times_report_association_gap():
+    from app.services.luxian_0609.surgery_gate_result_mapping import surgery_timeliness_gap_display
+    session = _typed_003_session(record_time=datetime(2026, 1, 1, 10), mr_surgery_times=(
+        datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 9),
+    ))
+    facts = []
+    decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials, customer_display_facts=facts)
+    assert decision.reason_code == "association_failed"
+    assert surgery_timeliness_gap_display(dict(facts)["LX0609-003"])[0] == ["单台手术与手术记录的关联信息"]
+
+
 def _typed_003_session(
     *,
     record_time: object = None,
@@ -1611,6 +1652,8 @@ async def test_typed_003_preserves_time_and_source_boundaries(
                 },
             ),
         )
+    elif source_mode == "available" and expected_reason == "authoritative_time_missing":
+        assert dict(result.customer_display_facts)["LX0609-003"]["missing_fields"] == ["record_time"]
     else:
         assert result.customer_display_facts == ()
 

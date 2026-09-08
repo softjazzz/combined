@@ -909,6 +909,10 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         _DATA_GAP_EXPLANATIONS.get(reason_code, _DEFAULT_DATA_GAP_EXPLANATION),
     )
     existing_details = result.get("data_gap_details")
+    from .surgery_gate_result_mapping import surgery_timeliness_gap_display
+    surgery_gap = surgery_timeliness_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-003" else None
+    if surgery_gap is not None:
+        defaults = {**defaults, "missing_fields": surgery_gap[0]}
     completed_details = (
         dict(existing_details) if isinstance(existing_details, Mapping) else {}
     )
@@ -950,6 +954,8 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         reason_code=reason_code,
         missing_sources=missing_sources,
     )
+    if surgery_gap is not None:
+        default_customer_message = surgery_gap[1]
     customer_message = str(
         consistent_value("customer_message", default_customer_message)
     ).strip()
