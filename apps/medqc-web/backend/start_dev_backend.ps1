@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $backendRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$logDir = Join-Path $env:TEMP "medqc-backend-logs"
+$logDir = Join-Path $backendRoot "logs"
 
 function Install-BundledProductActivation {
     $bootstrapPath = Join-Path $backendRoot "app\data\product_activation_bootstrap.json"
@@ -115,4 +115,17 @@ if ($Reload) {
     )
 }
 
-& python @uvicornArgs
+# 每次启动独立留档；同时保留控制台输出，方便现场与事后排查。
+$logPath = Join-Path $logDir ("backend-{0}-{1}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"), $PID)
+Write-Host "Backend log: $logPath"
+$savedErrorActionPreference = $ErrorActionPreference
+$backendExitCode = 1
+try {
+    # Windows PowerShell 会把原生 stderr 包装成错误记录；不能因此中断日志管道。
+    $ErrorActionPreference = "Continue"
+    & python @uvicornArgs 2>&1 | Tee-Object -FilePath $logPath
+    $backendExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $savedErrorActionPreference
+}
+exit $backendExitCode

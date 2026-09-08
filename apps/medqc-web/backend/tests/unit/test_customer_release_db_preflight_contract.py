@@ -217,6 +217,32 @@ def test_customer_launcher_installs_bootstrap_once_without_overwriting_existing_
     assert "MQ1." not in (second.stdout or "") + (second.stderr or "")
 
 
+def test_customer_launcher_saves_stdout_stderr_and_preserves_exit_code(tmp_path: Path) -> None:
+    import sys
+
+    launcher = tmp_path / "start_dev_backend.ps1"
+    launcher.write_text(BACKEND_LAUNCHER.read_text(encoding="utf-8"), encoding="utf-8")
+    environment = os.environ.copy()
+    environment["MEDQC_TEST_PYTHON"] = sys.executable
+    environment["MEDQC_TEST_LAUNCHER"] = str(launcher)
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+         "function netstat { }; "
+         "function python { & $env:MEDQC_TEST_PYTHON -c "
+         "\"import sys; print('backend-started'); print('backend-failed', file=sys.stderr); sys.exit(7)\" }; "
+         "& $env:MEDQC_TEST_LAUNCHER; exit $LASTEXITCODE"],
+        capture_output=True, env=environment, check=False,
+    )
+    assert result.returncode == 7, result.stderr
+    logs = list((tmp_path / "logs").glob("backend-*.log"))
+    assert len(logs) == 1
+    # Windows PowerShell 的 Tee-Object 使用 UTF-16，中文与异常堆栈均可保留。
+    content = logs[0].read_text(encoding="utf-16")
+    assert "backend-started" in content
+    assert "backend-failed" in content
+    assert b"backend-started" in result.stdout
+
+
 def test_public_key_is_trackable_and_issuer_secret_directory_is_ignored() -> None:
     app_ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
     repo_ignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
