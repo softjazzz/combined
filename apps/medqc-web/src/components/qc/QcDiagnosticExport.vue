@@ -1,137 +1,84 @@
 <template>
-  <a-button size="small" @click="prepare"> 诊断导包 </a-button>
-  <a-modal :open="open" title="诊断包 · 历史受限结果" :width="640" :footer="null" @cancel="close">
-    <a-spin :spinning="busy">
-      <p class="diagnostic-export__notice">
-        仅管理员可导出自己创建的任务。此操作不会重跑质控，也不会修改正式结果。
-      </p>
-      <a-alert v-if="error" type="warning" :message="error" show-icon />
-      <template v-if="prepared">
-        <a-alert type="warning" :message="prepared.notice" show-icon />
-        <div class="diagnostic-export__scope">
-          <section>
-            <h3>包含内容</h3>
-            <p v-for="item in prepared.included" :key="item">
-              {{ item }}
-            </p>
-          </section>
-          <section>
-            <h3>未包含内容</h3>
-            <p v-for="item in prepared.excluded" :key="item">
-              {{ item }}
-            </p>
-          </section>
-        </div>
-        <section class="diagnostic-export__preview">
-          <h3>当前文案投影预览 · {{ supported.length }} 条可用</h3>
-          <p v-if="!supported.length">本次只可检查规则状态清单，没有已支持的文案回放项。</p>
-          <div v-for="item in supported" :key="item.rule_id">
-            <span>{{ item.rule_id }}</span>
-            <p>{{ item.current_findings }}</p>
-          </div>
-        </section>
-        <p class="diagnostic-export__notice">
-          预览保留 5 分钟，服务重启后失效。包内不含患者身份、病历正文或模型原文。
-        </p>
-        <a-checkbox v-model:checked="confirmed">
-          已了解缺失证据及回放限制，确认下载此预览对应的包
-        </a-checkbox>
-      </template>
-      <div class="diagnostic-export__actions">
-        <a-button @click="close"> 取消 </a-button>
-        <a-button v-if="error && !prepared" :disabled="busy" @click="prepare"> 重新准备 </a-button>
-        <a-button type="primary" :disabled="!prepared || !confirmed || busy" @click="download">
-          下载诊断包
-        </a-button>
-      </div>
-    </a-spin>
+  <a-button size="small" :disabled="!items.length" @click="prepare"> 诊断导包 </a-button>
+  <a-modal :open="open" title="诊断导包 · 本地预览" :width="800" :footer="null" @cancel="close">
+    <p class="diagnostic-export__notice">
+      仅当前已加载结果和证据摘要，不含完整病历或模型原始请求，不支持自动回放，仅供人工核查。
+      本操作不请求新数据、不重跑质控、不自动发送。请复核脱敏后再发送。
+    </p>
+    <a-alert v-if="error" type="warning" :message="error" show-icon />
+    <template v-if="preview">
+      <pre class="diagnostic-export__preview" aria-label="诊断包文本预览">{{ preview }}</pre>
+      <a-checkbox v-model:checked="confirmed">
+        我已复核以上内容的脱敏情况，确认下载此预览对应的文件
+      </a-checkbox>
+    </template>
+    <div class="diagnostic-export__actions">
+      <a-button @click="close"> 取消 </a-button>
+      <a-button type="primary" :disabled="!preview || !confirmed" @click="download">
+        下载诊断包
+      </a-button>
+    </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 import {
-  discardDiagnostic,
-  downloadDiagnostic,
-  prepareDiagnostic,
-  type DiagnosticPreparation,
-  type DiagnosticSelection,
-} from '@/services/qc-diagnostics-service'
+  buildQcResultDebugText,
+  type QcResultDebugContext,
+} from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
+import type { SingleRecordQcResultItem } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
-const props = defineProps<{ selection: DiagnosticSelection }>()
+const props = defineProps<{ items: SingleRecordQcResultItem[]; context?: QcResultDebugContext }>()
 const open = ref(false)
-const busy = ref(false)
 const confirmed = ref(false)
 const error = ref('')
-const prepared = ref<DiagnosticPreparation | null>(null)
-const supported = computed(
-  () => prepared.value?.preview.results.filter((item) => item.supported) ?? [],
-)
-let sequence = 0
-
-function discard(token: string) {
-  void discardDiagnostic(token).catch(() => {
-    /* 服务端有效期仍会限制下载。 */
-  })
-}
+const preview = ref('')
+const MAX_ITEMS = 200
+const MAX_BYTES = 2 * 1024 * 1024
 
 function close() {
-  sequence += 1
-  if (prepared.value) discard(prepared.value.token)
-  prepared.value = null
+  preview.value = ''
   confirmed.value = false
-  busy.value = false
   error.value = ''
   open.value = false
 }
 
-async function prepare() {
-  if (busy.value) return
+function prepare() {
   close()
+  if (!props.items.length) return
   open.value = true
-  busy.value = true
-  const request = sequence
+  if (props.items.length > MAX_ITEMS) {
+    error.value = '当前结果超过 200 条，请缩小结果范围后再导出。'
+    return
+  }
   try {
-    const result = await prepareDiagnostic({ ...props.selection })
-    if (request !== sequence) {
-      discard(result.token)
+    const snapshot = buildQcResultDebugText(props.items, props.context)
+    if (new Blob([snapshot]).size > MAX_BYTES) {
+      error.value = '诊断内容超过 2 MiB，请缩小结果范围后再导出。'
       return
     }
-    prepared.value = result
+    preview.value = snapshot
   } catch {
-    if (request === sequence)
-      error.value = '无法准备诊断包。请确认拥有该任务权限，且当前结果未更新。'
-  } finally {
-    if (request === sequence) busy.value = false
+    error.value = '无法生成诊断包，请刷新结果后重试。'
   }
 }
 
-async function download() {
-  if (!prepared.value || !confirmed.value || busy.value) return
-  const request = sequence
-  busy.value = true
-  error.value = ''
+function download() {
+  if (!preview.value || !confirmed.value) return
   try {
-    const blob = await downloadDiagnostic(prepared.value.token)
-    if (request === sequence) downloadBlob(blob, 'qc-diagnostic-history.zip')
+    // 下载已复核的同一份快照，不再次脱敏生成临时别名。
+    downloadBlob(
+      new Blob([preview.value], { type: 'text/markdown;charset=utf-8' }),
+      'qc-diagnostic.md',
+    )
   } catch {
-    if (request === sequence) error.value = '下载失败或预览已过期，请关闭后重新准备。'
-  } finally {
-    if (request === sequence) busy.value = false
+    error.value = '下载失败，请检查浏览器下载权限后重试。'
   }
 }
 
-watch(
-  () => [
-    props.selection.job_id,
-    props.selection.record_ref,
-    props.selection.institute_id,
-    props.selection.patient_id,
-    props.selection.visit_id,
-  ],
-  close,
-)
+watch(() => [props.items, props.context], close, { deep: true, flush: 'sync' })
 onBeforeUnmount(close)
 </script>
 
@@ -142,33 +89,18 @@ onBeforeUnmount(close)
   font-size: 13px;
   line-height: 1.65;
 }
-.diagnostic-export__scope {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin: 16px 0;
-}
-h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
-.diagnostic-export__scope p,
-.diagnostic-export__preview p {
-  margin: 6px 0;
-  font-size: 13px;
-  line-height: 1.65;
-}
 .diagnostic-export__preview {
+  max-height: 50vh;
+  margin: 16px 0;
   padding: 14px;
+  overflow: auto;
   background: #f5f5f7;
   border-radius: 8px;
-  max-height: 220px;
-  overflow: auto;
-}
-.diagnostic-export__preview span {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--workstation-text-primary, #1d1d1f);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .diagnostic-export__actions {
   display: flex;

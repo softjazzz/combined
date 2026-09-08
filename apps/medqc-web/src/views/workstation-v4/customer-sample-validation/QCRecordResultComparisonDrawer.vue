@@ -40,13 +40,8 @@
         </div>
         <QcDiagnosticExport
           v-if="open && latestResult && focus"
-          :selection="{
-            job_id: latestResult.job_id,
-            record_ref: latestResult.record_ref,
-            institute_id: focus.instituteId,
-            patient_id: focus.patientId,
-            visit_id: focus.visitId,
-          }"
+          :items="latestResult.items"
+          :context="debugContext"
         />
         <button
           v-if="latestResult"
