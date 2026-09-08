@@ -6,12 +6,14 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app.routers import custom_qc, qc_sample_pools, qc_sichuan, sync
+from app.services import product_activation
 from app.services.product_activation import (
     ACTIVATION_PRODUCT,
     ProductActivationError,
@@ -72,6 +74,54 @@ def test_valid_code_activates_and_persists_only_safe_state(tmp_path):
     assert saved["payload"]["customer"] == "演示医院"
     assert "private" not in json.dumps(saved)
     assert service.status()["status"] == "active"
+
+
+def test_explicit_offline_activation_does_not_load_application_settings(tmp_path, monkeypatch):
+    def unavailable_settings():
+        raise RuntimeError("离线发行环境没有应用配置")
+
+    monkeypatch.setattr(product_activation, "get_settings", unavailable_settings)
+    private_key, public_path = _keypair(tmp_path)
+    state_path = tmp_path / "offline-state.json"
+    service = ProductActivationService(
+        required=True,
+        state_path=state_path,
+        public_key_path=public_path,
+        now=lambda: datetime(2026, 8, 20, tzinfo=timezone.utc),
+    )
+
+    activation_code = _code(private_key)
+    assert service.activate(activation_code)["status"] == "active"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["activation_code"] == activation_code
+    assert service.status()["status"] == "active"
+    service.enforce()
+
+
+@pytest.mark.parametrize("explicit_field", [None, "required", "state_path"])
+def test_missing_activation_options_use_application_settings(tmp_path, monkeypatch, explicit_field):
+    configured_path = tmp_path / "configured-state.json"
+    settings = SimpleNamespace(
+        PRODUCT_ACTIVATION_REQUIRED=True,
+        PRODUCT_ACTIVATION_STATE_PATH=str(configured_path),
+    )
+    calls = []
+
+    def application_settings():
+        calls.append(True)
+        return settings
+
+    monkeypatch.setattr(product_activation, "get_settings", application_settings)
+    options = {}
+    if explicit_field == "required":
+        options["required"] = False
+    elif explicit_field == "state_path":
+        options["state_path"] = tmp_path / "explicit-state.json"
+
+    service = ProductActivationService(**options)
+
+    assert calls == [True]
+    assert service.required is (explicit_field != "required")
+    assert service.state_path == options.get("state_path", configured_path)
 
 
 @pytest.mark.parametrize(

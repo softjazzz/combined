@@ -95,6 +95,13 @@
       "reason": "已提交后端业务及诊断基础能力"
     },
     {
+      "path": "apps/medqc-web/backend/app/services/product_activation.py",
+      "category": "A",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "离线授权签发显式配置不依赖服务器 JWT 环境；保留运行时默认配置和验签"
+    },
+    {
       "path": "apps/medqc-web/backend/app/services/qc_diagnostics/__init__.py",
       "category": "A",
       "owner": "MedQC 发布维护",
@@ -352,6 +359,13 @@
       "owner": "MedQC 发布维护",
       "release_required": true,
       "reason": "业务与发布回归证据"
+    },
+    {
+      "path": "apps/medqc-web/backend/tests/unit/test_product_activation.py",
+      "category": "C",
+      "owner": "MedQC 发布维护",
+      "release_required": true,
+      "reason": "离线授权签发显式配置不依赖服务器 JWT 环境；保留运行时默认配置和验签"
     },
     {
       "path": "apps/medqc-web/backend/tests/unit/test_qc_diagnostic_api.py",

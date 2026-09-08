@@ -138,10 +138,16 @@ class ProductActivationService:
         public_key_path: str | Path | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
-        self.settings = settings or get_settings()
-        self.required = self.settings.PRODUCT_ACTIVATION_REQUIRED if required is None else bool(required)
-        configured_state_path = state_path if state_path is not None else self.settings.PRODUCT_ACTIVATION_STATE_PATH
-        self.state_path = Path(configured_state_path) if configured_state_path else self._default_state_path()
+        self.settings = settings
+        # 离线发行已显式提供激活配置时，无需加载应用运行环境。
+        if required is None or state_path is None:
+            self.settings = settings or get_settings()
+            if required is None:
+                required = self.settings.PRODUCT_ACTIVATION_REQUIRED
+            if state_path is None:
+                state_path = self.settings.PRODUCT_ACTIVATION_STATE_PATH
+        self.required = bool(required)
+        self.state_path = Path(state_path) if state_path else self._default_state_path()
         self.public_key_path = Path(public_key_path) if public_key_path else self._default_public_key_path()
         self._now = now or (lambda: datetime.now(timezone.utc))
 
