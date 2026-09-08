@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 from .decision_model import (
@@ -31,6 +32,7 @@ from .source_registry import (
 
 _BINDING_EVALUATOR_VERSION = "decision-binding-v1"
 _RULE_ID_PATTERN = re.compile(r"^LX0609-\d{3}$")
+logger = logging.getLogger(__name__)
 
 
 def _technical_decision(
@@ -225,16 +227,39 @@ def bind_and_reduce_luxian_0609_rule_decisions(
     if not isinstance(snapshot, Luxian0609EvidenceSnapshot):
         raise TypeError("snapshot must be Luxian0609EvidenceSnapshot")
 
-    actual_rule_ids = tuple(item.rule_id for item in decisions)
-    if actual_rule_ids != expected_rule_ids:
-        decisions = tuple(
-            _technical_decision(
-                rule_id=rule_id,
-                snapshot_hash=snapshot.snapshot_hash,
-                reason_code="decision_contract_violation",
-            )
-            for rule_id in expected_rule_ids
+    decisions_by_rule_id: dict[str, list[RuleDecision]] = {}
+    for decision in decisions:
+        decisions_by_rule_id.setdefault(decision.rule_id, []).append(decision)
+
+    missing_rule_ids = tuple(
+        rule_id for rule_id in expected_rule_ids if rule_id not in decisions_by_rule_id
+    )
+    duplicate_rule_ids = tuple(
+        rule_id
+        for rule_id in expected_rule_ids
+        if len(decisions_by_rule_id.get(rule_id, ())) > 1
+    )
+    unexpected_rule_ids = tuple(
+        sorted(set(decisions_by_rule_id).difference(expected_rule_ids))
+    )
+    if missing_rule_ids or duplicate_rule_ids or unexpected_rule_ids:
+        logger.warning(
+            "LX0609 decision scope mismatch: missing=%s duplicate=%s unexpected=%s",
+            missing_rule_ids,
+            duplicate_rule_ids,
+            unexpected_rule_ids,
         )
+
+    decisions = tuple(
+        candidates[0]
+        if len(candidates := decisions_by_rule_id.get(rule_id, ())) == 1
+        else _technical_decision(
+            rule_id=rule_id,
+            snapshot_hash=snapshot.snapshot_hash,
+            reason_code="decision_contract_violation",
+        )
+        for rule_id in expected_rule_ids
+    )
 
     reduced: list[ReducedRuleDecision] = []
     document_rows_cache: dict[str, tuple[tuple[str, object], ...] | None] = {}

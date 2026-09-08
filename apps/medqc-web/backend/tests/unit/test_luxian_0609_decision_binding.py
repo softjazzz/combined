@@ -268,20 +268,84 @@ def test_other_not_applicable_reasons_still_require_attested_evidence(reason_cod
     assert reduced[0].reason_code == "snapshot_mismatch"
 
 
-def test_missing_duplicate_extra_or_ordered_wrong_scope_is_contract_error():
+def test_missing_decision_only_marks_missing_rule_as_contract_error():
     snapshot = _snapshot()
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=(_decision(snapshot, rule_id="LX0609-008"),),
-        expected_rule_ids=("LX0609-007", "LX0609-008"),
+        decisions=(
+            _decision(
+                snapshot,
+                rule_id="LX0609-030",
+                fact_refs=("c" * 64,),
+            ),
+        ),
+        expected_rule_ids=("LX0609-007", "LX0609-030"),
         snapshot=snapshot,
     )
 
-    assert [item.rule_id for item in reduced] == ["LX0609-007", "LX0609-008"]
-    assert all(
-        item.final_state is CustomerFinalState.TECHNICAL_ERROR
-        and item.reason_code == "decision_contract_violation"
-        for item in reduced
+    assert [item.rule_id for item in reduced] == ["LX0609-007", "LX0609-030"]
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "decision_contract_violation"
+    assert reduced[1].final_state is CustomerFinalState.COMPLIANT
+
+
+def test_duplicate_decision_only_marks_duplicated_rule_as_contract_error():
+    snapshot = _snapshot()
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(
+            _decision(snapshot),
+            _decision(snapshot),
+            _decision(
+                snapshot,
+                rule_id="LX0609-030",
+                fact_refs=("c" * 64,),
+            ),
+        ),
+        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        snapshot=snapshot,
     )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "decision_contract_violation"
+    assert reduced[1].final_state is CustomerFinalState.COMPLIANT
+
+
+def test_extra_decision_is_excluded_without_poisoning_expected_rules():
+    snapshot = _snapshot()
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(
+            _decision(snapshot),
+            _decision(snapshot, rule_id="LX0609-008"),
+            _decision(
+                snapshot,
+                rule_id="LX0609-030",
+                fact_refs=("c" * 64,),
+            ),
+        ),
+        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        snapshot=snapshot,
+    )
+
+    assert [item.rule_id for item in reduced] == ["LX0609-007", "LX0609-030"]
+    assert all(item.final_state is CustomerFinalState.COMPLIANT for item in reduced)
+
+
+def test_out_of_order_decisions_are_normalized_to_expected_rule_order():
+    snapshot = _snapshot()
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(
+            _decision(
+                snapshot,
+                rule_id="LX0609-030",
+                fact_refs=("c" * 64,),
+            ),
+            _decision(snapshot),
+        ),
+        expected_rule_ids=("LX0609-007", "LX0609-030"),
+        snapshot=snapshot,
+    )
+
+    assert [item.rule_id for item in reduced] == ["LX0609-007", "LX0609-030"]
+    assert all(item.final_state is CustomerFinalState.COMPLIANT for item in reduced)
 
 
 def test_binding_rejects_tuple_subclass_before_iteration():
