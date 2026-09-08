@@ -19,11 +19,12 @@ from .typed_values import encode_value
 class MaterialRedaction:
     """只向调用方暴露新材料；原引用映射只存在内存，不提供序列化接口。"""
 
-    __slots__ = ("_sources", "_reference_map")
+    __slots__ = ("_sources", "_reference_map", "related_values")
 
-    def __init__(self, sources: Mapping[str, SnapshotSourceRows], reference_map: Mapping[str, str]):
+    def __init__(self, sources: Mapping[str, SnapshotSourceRows], reference_map: Mapping[str, str], related_values=()):
         self._sources = MappingProxyType(dict(sources))
         self._reference_map = MappingProxyType(dict(reference_map))
+        self.related_values = related_values
 
     def __repr__(self) -> str:
         return f"MaterialRedaction(source_count={len(self._sources)})"
@@ -44,7 +45,7 @@ class MaterialRedaction:
 
 
 def sanitize_material_sources(
-    sources: Mapping[str, SnapshotSourceRows], *, sanitizer: PayloadSanitizer,
+    sources: Mapping[str, SnapshotSourceRows], *, sanitizer: PayloadSanitizer, related_values=(),
 ) -> MaterialRedaction:
     """先整体脱敏，再按新行 identity 配对；排序改变不改变引用归属。"""
     if type(sources) not in (dict, MappingProxyType) or len(sources) > 128 or not isinstance(sanitizer, PayloadSanitizer):
@@ -70,7 +71,7 @@ def sanitize_material_sources(
                 raise ValueError()
             validated[key] = checked
         # 在任何 canonical 哈希分配前也验证所有来源的总载荷上限。
-        encode_value(tuple(row for material in validated.values() for row in material.rows))
+        encode_value((tuple(row for material in validated.values() for row in material.rows), related_values))
         for key, checked in validated.items():
             pairs = _build_material_document_rows(key, checked.rows)
             ref_by_row_identity = {id(row): ref for ref, row in pairs}
@@ -82,7 +83,9 @@ def sanitize_material_sources(
     except (TypeError, ValueError, SourceEvidenceUnavailable):
         raise DiagnosticPackageError("invalid_material_sources") from None
 
-    cleaned = sanitizer.sanitize(tuple(flattened))
+    # 事实、模型文本等附带材料必须在同一次 collect 中发现身份；不能先脱敏
+    # 正文，再发现只出现在附带材料字段里的姓名而让前面的正文漏脱敏。
+    cleaned, cleaned_related = sanitizer.sanitize((tuple(flattened), related_values))
     rebuilt: dict[str, SnapshotSourceRows] = {}
     reference_map: dict[str, str] = {}
     offset = 0
@@ -100,4 +103,4 @@ def sanitize_material_sources(
             reference_map[old_ref_by_new_identity[id(row)]] = new_ref
         rebuilt[key] = new_source
         offset += size
-    return MaterialRedaction(rebuilt, reference_map)
+    return MaterialRedaction(rebuilt, reference_map, cleaned_related)

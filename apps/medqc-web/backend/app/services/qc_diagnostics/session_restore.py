@@ -86,6 +86,11 @@ def restore_execution_session(inputs: object, *, coordinates: tuple[str, str, st
         )
         from ..luxian_0609.evidence_snapshot import Luxian0609EvidenceSnapshot, SourceObservation
         from ..luxian_0609.source_evidence_reader import SnapshotSourceRows, EVALUATION_HORIZON_SOURCE_KEY
+        from ..luxian_0609.source_registry import resolve_luxian_0609_controlled_fact_source_keys
+
+        if type(data["selected_rule_ids"]) is not tuple:
+            raise ValueError()
+        controlled_sources = resolve_luxian_0609_controlled_fact_source_keys(data["selected_rule_ids"])
 
         sources = {}
         count = 0
@@ -111,7 +116,10 @@ def restore_execution_session(inputs: object, *, coordinates: tuple[str, str, st
                 raise ValueError()
             material = sources.get(observation.source_key)
             available = observation.query_state.value in {"available", "empty"}
-            if available != (material is not None):
+            controlled = observation.source_key in controlled_sources
+            if controlled and material is not None:
+                raise ValueError()
+            if not controlled and available != (material is not None):
                 raise ValueError()
             refs = build_material_document_refs(observation.source_key, material.rows) if material else ()
             if observation.source_key != EVALUATION_HORIZON_SOURCE_KEY:

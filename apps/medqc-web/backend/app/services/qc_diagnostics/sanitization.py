@@ -21,7 +21,7 @@ from .typed_values import encode_value
 _IDENTITY_FIELDS = frozenset({
     "patient_name", "physician_name", "doctor_name", "institute_name", "institute_id",
     "patient_id", "visit_id", "document_id", "surgery_id", "order_id", "diagnosis_id",
-    "phone", "mobile", "id_card", "address", "anesthetist_sign", "apply_doctor",
+    "phone", "mobile", "id_card", "address", "anesthetist_sign", "apply_doctor", "row_ref",
 })
 _FORBIDDEN_FIELDS = frozenset({"headers", "authorization", "api_key", "password", "token",
                                "connection_string", "dsn", "traceback", "secret"})
@@ -94,7 +94,11 @@ class PayloadSanitizer:
         if len(self._aliases) >= 10000 or self._identity_bytes > 65536 or len(raw) > 512:
             _fail("identity_context_limit")
         while True:
-            if raw.isascii() and raw.isdecimal():
+            if re.fullmatch(r"[0-9a-f]{64}", raw):
+                # 保留 opaque 引用的格式，但不保留客户摘要；只用 a-f 避免匿名
+                # token 内偶然出现手机号/日期片段，被后续正文扫描再次改写。
+                replacement = "".join("abcdef"[byte % 6] for byte in secrets.token_bytes(64))
+            elif raw.isascii() and raw.isdecimal():
                 replacement = str(900000000 + secrets.randbelow(100000000))
             elif re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", raw):
                 replacement = str(uuid4())
