@@ -524,7 +524,7 @@ def _critical_value_document_refs(
     item_rows = rows("labtest_item_report")
     disposition_rows = rows("crisis_value_record")
     master_rows = rows("labtest_master")
-    return select_critical_value_fact_refs(
+    selected_refs = select_critical_value_fact_refs(
         outcome=outcome,
         item_refs=tuple(
             (reference, _critical_value_item_from_row(row))
@@ -538,6 +538,20 @@ def _critical_value_document_refs(
         ),
         master_refs=tuple(reference for reference, _row in master_rows),
     )
+    # RuleDecision 的逐条引用上限为 128。大量检验的完整否定证据不能
+    # 截断为前 128 行；改用已有来源快照绑定完整材料，不改变任何判定。
+    if len(selected_refs) > 128:
+        selected = frozenset(selected_refs)
+        return _fact_refs(snapshot, tuple(
+            source_key
+            for source_key, source_rows in (
+                ("labtest_item_report", item_rows),
+                ("crisis_value_record", disposition_rows),
+                ("labtest_master", master_rows),
+            )
+            if any(reference in selected for reference, _row in source_rows)
+        ))
+    return selected_refs
 
 
 def _death_document_refs(

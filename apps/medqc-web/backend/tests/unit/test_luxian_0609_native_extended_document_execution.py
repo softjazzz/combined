@@ -4895,6 +4895,51 @@ async def test_critical_value_rules_keep_catalog_order_for_reversed_input() -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("count", [128, 129, 300])
+async def test_large_lab_evidence_keeps_extended_family_decisions(count) -> None:
+    snapshot, materials = _session({
+        "labtest_item_report": tuple({
+            "id": str(index), "item_name": f"常规检验{index}",
+            "result_flag": "N", "report_time": "2026-06-01 14:00:00",
+        } for index in range(count)),
+    })
+    scope = ("LX0609-051", "LX0609-052", "LX0609-053", "LX0609-060")
+    result = await execute_luxian_0609_native_extended_document_rules(
+        rule_ids=scope, decision_rule_ids=scope,
+        evidence_snapshot=snapshot, evidence_materials=materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=scope,
+        snapshot=snapshot, evidence_materials=materials,
+    )
+    assert tuple(item.rule_id for item in reduced) == scope
+    assert all(item.final_state is not CustomerFinalState.TECHNICAL_ERROR for item in reduced)
+    for item in reduced[1:3]:
+        assert item.final_state is CustomerFinalState.NOT_APPLICABLE
+        assert item.reason_code == "trigger_absent_complete"
+        assert 0 < len(item.fact_refs) <= 128
+    if count > 128:
+        source_ref = next(o.snapshot_ref.removeprefix("sha256:")
+                          for o in snapshot.observations if o.source_key == "labtest_item_report")
+        assert source_ref in reduced[1].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_critical_marker_after_128_normal_items_is_not_discarded() -> None:
+    rows = tuple({"id": str(i), "item_name": f"常规检验{i}",
+                  "result_flag": "N", "report_time": "2026-06-01 14:00:00"}
+                 for i in range(300))
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {"labtest_item_report": rows + ({"id": "critical-last", "item_name": "血钾",
+          "result_flag": "PH", "report_time": "2026-06-01 14:00:00"},)},
+    )
+    assert all(item.final_state is CustomerFinalState.NON_COMPLIANT for item in reduced)
+    assert dict(result.customer_display_facts)["LX0609-052"]["critical_item_names"] == ["血钾"]
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_critical_value_rules_are_repeatable_for_one_evidence_session() -> None:
     snapshot, materials = _session({
         "labtest_item_report": (
