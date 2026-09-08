@@ -21,6 +21,7 @@ from .routers import auth as auth_router
 from .routers import records as records_router
 from .routers import qc as qc_router
 from .routers import qc_sichuan as qc_sichuan_router
+from .routers import qc_diagnostics as qc_diagnostics_router
 from .routers import luxian_0609_preproduction as luxian_0609_preproduction_router
 from .routers import qc_settings as qc_settings_router
 from .routers import tools as tools_router
@@ -252,6 +253,7 @@ def create_app() -> FastAPI:
     app.include_router(records_router.router)
     app.include_router(qc_router.router)
     app.include_router(qc_sichuan_router.router)
+    app.include_router(qc_diagnostics_router.router)
     app.include_router(luxian_0609_preproduction_router.router)
     app.include_router(qc_settings_router.router)
     app.include_router(tools_router.router)

@@ -38,6 +38,16 @@
             </span>
           </span>
         </div>
+        <QcDiagnosticExport
+          v-if="open && latestResult && focus"
+          :selection="{
+            job_id: latestResult.job_id,
+            record_ref: latestResult.record_ref,
+            institute_id: focus.instituteId,
+            patient_id: focus.patientId,
+            visit_id: focus.visitId,
+          }"
+        />
         <button
           v-if="latestResult"
           type="button"
@@ -77,6 +87,7 @@
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
+import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import {
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,

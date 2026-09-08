@@ -20,6 +20,14 @@ def inspect_documents(documents: dict[str, object]) -> dict[str, object]:
     """只输出经过合同约束的摘要，不输出包内自由文本或身份标识。"""
     validate_documents(documents)
     manifest = documents["manifest.json"]
+    if manifest["schema_version"] == "qc-diagnostic-history-v1":
+        return {
+            "schema_version": manifest["schema_version"], "rule_ids": manifest["rule_ids"],
+            "source_git_commit": None, "replay_capability": "render_only", "capture_completeness": "partial",
+            "missing_components": manifest["missing_components"], "privacy_verified": False,
+            "evidence_verified": False,
+            "notice": "历史受限包：只含受控字段，无原始资料或模型响应；不证明临床正确性或同版复现。",
+        }
     return {
         "schema_version": manifest["schema_version"],
         "rule_ids": manifest["rule_ids"],
@@ -41,6 +49,11 @@ def replay_documents(
     summary = inspect_documents(documents)
     if not re.fullmatch(r"[0-9a-f]{40}", local_git_commit):
         raise DiagnosticPackageError("local_version_unavailable")
+    if summary["schema_version"] == "qc-diagnostic-history-v1":
+        if not compare_current:
+            raise DiagnosticPackageError("source_version_unavailable")
+        from .history import replay_history
+        return {**summary, **replay_history(documents), "local_git_commit": local_git_commit}
     same_version = summary["source_git_commit"] == local_git_commit
     if not same_version and not compare_current:
         raise DiagnosticPackageError("version_mismatch")

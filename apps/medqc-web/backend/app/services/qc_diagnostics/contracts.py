@@ -123,6 +123,9 @@ def _validate_input(value: object):
 def validate_documents(documents: dict[str, object]) -> dict[str, object]:
     """严格校验并原样返回；synthetic 标记是声明，不构成自动脱敏证明。"""
     _object(documents, set(REQUIRED_FILES))
+    if type(documents["manifest.json"]) is dict and documents["manifest.json"].get("schema_version") == "qc-diagnostic-history-v1":
+        from .history import validate_history
+        return validate_history(documents)
     manifest = _validate_manifest(documents["manifest.json"])
     issue = _object(documents["issue.json"], {"category", "source"})
     _require(issue == {"category": "customer_wording", "source": "synthetic_regression"})
