@@ -2,7 +2,7 @@
 
 只旁路消费实际调用，不查库、不发请求、不写文件。作用域退出即释放原件；
 read_internal 供范围内的本地脱敏使用，返回值仍含原始内容，调用方不得落盘。
-本模块尚未绑定正式最终结果，不能把内存录制称作完整质控证据。
+客户授权入口、发布版本和完整脱敏尚未接齐，不能把内存录制称作完整质控证据。
 """
 
 from __future__ import annotations
@@ -49,16 +49,20 @@ class _Handle:
 
 
 class _Capture:
-    def __init__(self, max_bytes: int, ttl_seconds: int):
+    def __init__(self, max_bytes: int, ttl_seconds: int, job_id: str | None = None):
         if type(max_bytes) is not int or not 1 <= max_bytes <= 20 * 1024 * 1024:
             raise DiagnosticPackageError("invalid_capture_limit")
         if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= 3600:
             raise DiagnosticPackageError("invalid_capture_limit")
+        if job_id is not None and (type(job_id) is not str or not 1 <= len(job_id) <= 128):
+            raise DiagnosticPackageError("invalid_capture_job")
+        self._job_id = job_id
         self._limit = max_bytes
         self._expires = time.monotonic() + ttl_seconds
         self._lock = threading.Lock()
         self._rows: dict[tuple[str, int], dict] = {}
         self._inputs: bytes | None = None
+        self._saved_result: bytes | None = None
         self._bytes = 0
         self._closed = False
         self._errors: set[str] = set()
@@ -78,6 +82,7 @@ class _Capture:
             self._errors.add("unfinished_attempts")
         self._rows.clear()
         self._inputs = None
+        self._saved_result = None
         self._identity = None
         self._bytes = 0
         self._closed = True
@@ -150,6 +155,41 @@ class _Capture:
             self._bytes += len(frozen)
             return _Handle(self, key)
 
+    def _committed_results(self, receipts):
+        from ..luxian_0609.evidence_snapshot import build_luxian_0609_visit_ref
+        with self._lock:
+            if not self._ready():
+                return
+            if self._saved_result is not None:
+                self._errors.add("duplicate_saved_result")
+                return
+            if self._inputs is None or not self._job_id or not self._identity or not all(self._identity):
+                self._errors.add("saved_result_binding_unavailable")
+                return
+            inputs = decode_value(json.loads(self._inputs))
+            matches = []
+            for identity, envelope_json in receipts:
+                # receipts 来自当次保存的同一 JSON；不查询最新结果，也不重做客户投影。
+                if type(envelope_json) is not str or len(envelope_json) > 4 * 1024 * 1024:
+                    raise DiagnosticPackageError("invalid_saved_result")
+                envelope = json.loads(envelope_json)
+                if envelope.get("job_id") != self._job_id or envelope.get("root_job_id") != self._identity[0]:
+                    continue
+                visit_ref = build_luxian_0609_visit_ref(institute_id=identity[0], patient_id=identity[1], visit_id=identity[2])
+                if visit_ref == inputs["snapshot"]["visit_ref"]:
+                    matches.append(envelope)
+            if len(matches) != 1:
+                self._errors.add("saved_result_not_matched")
+                return
+            frozen = _snapshot(matches[0])
+            if not self._ready():
+                return
+            if self._bytes + len(frozen) > self._limit:
+                self._errors.add("capacity_exceeded")
+                return
+            self._saved_result = frozen
+            self._bytes += len(frozen)
+
     def _finish(self, handle: _Handle, result: object, error_kind: str | None):
         with self._lock:
             if not self._ready():
@@ -175,7 +215,7 @@ class _Capture:
             return {"capture_completeness": "partial", "closed": self._closed,
                     "retained_bytes": self._bytes, "attempt_count": len(self._rows),
                     "pending_attempt_count": sum(not row["finished"] for row in self._rows.values()),
-                    "missing_reasons": sorted(self._errors | {"final_result_not_captured"}
+                    "missing_reasons": sorted(self._errors | ({"final_result_not_captured"} if self._saved_result is None else set())
                                               | ({"execution_inputs_not_captured"} if self._inputs is None else set()))}
 
     def read_internal(self) -> dict:
@@ -184,6 +224,7 @@ class _Capture:
             if not self._ready():
                 raise DiagnosticPackageError("capture_unavailable")
             return {"execution_inputs": decode_value(json.loads(self._inputs)) if self._inputs is not None else None,
+                    "saved_result": decode_value(json.loads(self._saved_result)) if self._saved_result is not None else None,
                     "calls": [{"logical_call_id": key[0], "attempt_no": key[1],
                                "executor_key": row["executor_key"],
                                "request": decode_value(json.loads(row["request"])),
@@ -193,9 +234,9 @@ class _Capture:
 
 
 @contextmanager
-def capture_scope(*, max_bytes: int = 20 * 1024 * 1024, ttl_seconds: int = 1800):
+def capture_scope(*, max_bytes: int = 20 * 1024 * 1024, ttl_seconds: int = 1800, job_id: str | None = None):
     """调用方必须在已授权的单病例执行范围使用；不能包围整个并发病例批次。"""
-    capture = _Capture(max_bytes, ttl_seconds)
+    capture = _Capture(max_bytes, ttl_seconds, job_id)
     token = _CURRENT.set(capture)
     try:
         yield capture
@@ -240,3 +281,19 @@ def capture_execution_inputs(session, *, selected_rule_ids: tuple[str, ...],
         })
     except Exception:
         capture._failed()
+
+
+def capture_committed_results(receipts: object) -> None:
+    """仅在正式事务提交成功后调用；未启用采集时不遍历任何结果。"""
+    capture = _CURRENT.get()
+    if capture is None:
+        return
+    try:
+        capture._committed_results(receipts)
+    except Exception:
+        capture._failed()
+
+
+def diagnostic_capture_enabled() -> bool:
+    """只供既有保存边界决定是否保留内存回执，默认不增加批次留存。"""
+    return _CURRENT.get() is not None

@@ -497,7 +497,8 @@ class CanonicalResultStore:
         items: Sequence[Dict[str, Any]],
         now: datetime,
         projector: Callable[[Dict[str, Any]], Dict[str, Any]],
-    ) -> None:
+        collect_receipts: bool = False,
+    ) -> tuple[tuple[CaseRef, str], ...]:
         table = self._require_table()
         filters = _safe_json_loads(job_row.get("filters_json"), {})
         filters = filters if isinstance(filters, dict) else {}
@@ -596,8 +597,11 @@ class CanonicalResultStore:
             }
             prepared_envelopes.append((record_ref, envelope))
 
+        receipts: list[tuple[CaseRef, str]] = []
+        receipt_bytes = 0
         for record_ref, envelope in prepared_envelopes:
             record_id = record_ref.visit_id
+            envelope_json = _safe_json_dumps(envelope)
             session.execute(
                 table.delete().where(
                     and_(
@@ -620,12 +624,23 @@ class CanonicalResultStore:
                     visit_id=record_ref.visit_id,
                     rule_set_key=rule_set_key,
                     rule_set_version=rule_set_version,
-                    envelope_json=_safe_json_dumps(envelope),
+                    envelope_json=envelope_json,
                     result_count=len(envelope["items"]),
                     created_at=now,
                     updated_at=now,
                 )
             )
+            if collect_receipts:
+                receipt_bytes += len(envelope_json.encode("utf-8"))
+                if receipt_bytes <= 4 * 1024 * 1024:
+                    receipts.append((record_ref, envelope_json))
+                else:
+                    # 提交前的诊断回执也必须有界；超限不影响正式保存，
+                    # 丢弃整组以免残缺回执被误认为完整批次。
+                    receipts.clear()
+                    collect_receipts = False
+        # 尚未 commit；只能由事务所有者在提交成功后交给诊断旁路。
+        return tuple(receipts)
 
     def load_selected(
         self,

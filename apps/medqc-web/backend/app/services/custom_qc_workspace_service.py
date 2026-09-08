@@ -26,6 +26,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.orm import Session
+from .qc_diagnostics.capture import capture_committed_results, diagnostic_capture_enabled
 
 from .document_domain_alignment import (
     align_document_domain_fields,
@@ -4213,7 +4214,7 @@ class CustomQCWorkspaceService:
                 },
                 "updated_at": now.isoformat(),
             }
-            session.execute(
+            completion_update = session.execute(
                 update(self._batch_job_table)
                 .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
                 .values(
@@ -4232,13 +4233,15 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
-            self._write_record_result_envelopes(
+            diagnostic_receipts = self._write_record_result_envelopes(
                 session,
                 job_row=dict(row),
                 items=items,
                 now=now,
             )
             session.commit()
+            if getattr(completion_update, "rowcount", None) == 1:
+                capture_committed_results(diagnostic_receipts)
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
         except Exception:
             session.rollback()
@@ -4257,13 +4260,14 @@ class CustomQCWorkspaceService:
         job_row: Dict[str, Any],
         items: Sequence[Dict[str, Any]],
         now: datetime,
-    ) -> None:
-        CanonicalResultStore(self._record_result_envelope_table).replace_for_job(
+    ) -> tuple[tuple[CaseRef, str], ...]:
+        return CanonicalResultStore(self._record_result_envelope_table).replace_for_job(
             session,
             job_row=job_row,
             items=items,
             now=now,
             projector=self._envelope_item_from_rule_result,
+            collect_receipts=diagnostic_capture_enabled(),
         )
 
     def _load_record_result_envelope_items(
