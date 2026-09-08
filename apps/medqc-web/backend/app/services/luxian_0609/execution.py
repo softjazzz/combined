@@ -22,6 +22,7 @@ from .decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from .decision_model import RuleDecision
 from .decision_reducer import ReducedRuleDecision
 from ..luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
+from ..qc_diagnostics.capture import capture_execution_inputs
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
@@ -308,6 +309,12 @@ async def prepare_luxian_0609_execution(
                 )
                 evidence_snapshot = evidence_session.snapshot
                 evidence_materials = evidence_session.materials
+                capture_execution_inputs(
+                    evidence_session, selected_rule_ids=package_plan.executable_rule_ids,
+                    evaluation_as_of_date=evaluation_as_of_date,
+                    evaluation_horizon_policy=evaluation_horizon_policy,
+                    horizon_unavailable_reason=evaluation_horizon_unavailable_reason,
+                )
             else:
                 evidence_snapshot = build_luxian_0609_evidence_snapshot(
                     selected_rule_ids=package_plan.executable_rule_ids,

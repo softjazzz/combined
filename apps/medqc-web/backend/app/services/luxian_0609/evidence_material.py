@@ -299,6 +299,18 @@ class Luxian0609EvidenceMaterialStore:
             "sources": tuple(sorted(self._sources)),
         }
 
+    def diagnostic_sources(
+        self, *, snapshot: Luxian0609EvidenceSnapshot,
+    ) -> Mapping[str, SnapshotSourceRows]:
+        """内部诊断取材，包含截断标记/原读取上限；不是安全序列化接口。
+
+        不重新读取资料。调用方必须先冻结类型，再用 create 校验行内容与
+        snapshot 的对应关系；本方法只验证所属快照并返回只读来源映射。
+        """
+        if not isinstance(snapshot, Luxian0609EvidenceSnapshot) or self.snapshot_hash != snapshot.snapshot_hash:
+            raise ValueError("diagnostic material snapshot mismatch")
+        return MappingProxyType(dict(self._sources))
+
     def __repr__(self) -> str:
         return (
             "Luxian0609EvidenceMaterialStore("

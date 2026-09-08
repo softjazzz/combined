@@ -2,7 +2,7 @@
 
 只旁路消费实际调用，不查库、不发请求、不写文件。作用域退出即释放原件；
 read_internal 供范围内的本地脱敏使用，返回值仍含原始内容，调用方不得落盘。
-本模块尚未采集材料/最终结果，不能把完整模型录制称作完整质控证据。
+本模块尚未绑定正式最终结果，不能把内存录制称作完整质控证据。
 """
 
 from __future__ import annotations
@@ -58,6 +58,7 @@ class _Capture:
         self._expires = time.monotonic() + ttl_seconds
         self._lock = threading.Lock()
         self._rows: dict[tuple[str, int], dict] = {}
+        self._inputs: bytes | None = None
         self._bytes = 0
         self._closed = False
         self._errors: set[str] = set()
@@ -76,6 +77,7 @@ class _Capture:
         if any(not row["finished"] for row in self._rows.values()):
             self._errors.add("unfinished_attempts")
         self._rows.clear()
+        self._inputs = None
         self._identity = None
         self._bytes = 0
         self._closed = True
@@ -87,6 +89,37 @@ class _Capture:
     def _failed(self):
         with self._lock:
             self._errors.add("capture_failed")
+
+    def _context_matches(self, context) -> bool:
+        identity = (context.root_job_id, context.record_key_hash)
+        if self._identity is not None and self._identity != identity:
+            self._errors.add("case_context_mismatch")
+            return False
+        if not all(identity):
+            self._errors.add("case_context_unavailable")
+        self._identity = identity
+        return True
+
+    def _capture_inputs(self, session, parameters):
+        from ..llm_observability import current_llm_observation_context
+        from .execution_inputs import freeze_execution_inputs
+        with self._lock:
+            if not self._ready() or not self._context_matches(current_llm_observation_context()):
+                return
+            if self._inputs is not None:
+                self._errors.add("duplicate_execution_inputs")
+                return
+            inputs = freeze_execution_inputs(session, **parameters)
+            frozen = _snapshot(inputs)
+            if not self._ready():
+                return
+            if self._bytes + len(frozen) > self._limit:
+                self._errors.add("capacity_exceeded")
+                return
+            self._inputs = frozen
+            self._bytes += len(frozen)
+            if any(item["completeness"] != "complete" for item in inputs["snapshot"]["observations"]):
+                self._errors.add("execution_sources_incomplete")
 
     def _begin(self, logical_call_id: str, attempt_no: int, payload: object) -> _Handle | None:
         with self._lock:
@@ -103,12 +136,8 @@ class _Capture:
                 return None
             from ..llm_observability import current_llm_observation_context
             context = current_llm_observation_context()
-            identity = (context.root_job_id, context.record_key_hash)
-            if self._identity is not None and self._identity != identity:
-                self._errors.add("case_context_mismatch")
+            if not self._context_matches(context):
                 return None
-            if not all(identity):
-                self._errors.add("case_context_unavailable")
             executor = context.executor_key
             if type(executor) is not str or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", executor) is None:
                 executor = None
@@ -117,7 +146,6 @@ class _Capture:
             if self._bytes + len(frozen) > self._limit:
                 self._errors.add("capacity_exceeded")
                 return None
-            self._identity = identity
             self._rows[key] = {"request": frozen, "response": None, "error_kind": None, "finished": False, "executor_key": executor}
             self._bytes += len(frozen)
             return _Handle(self, key)
@@ -147,14 +175,16 @@ class _Capture:
             return {"capture_completeness": "partial", "closed": self._closed,
                     "retained_bytes": self._bytes, "attempt_count": len(self._rows),
                     "pending_attempt_count": sum(not row["finished"] for row in self._rows.values()),
-                    "missing_reasons": sorted(self._errors | {"execution_inputs_not_captured", "final_result_not_captured"})}
+                    "missing_reasons": sorted(self._errors | {"final_result_not_captured"}
+                                              | ({"execution_inputs_not_captured"} if self._inputs is None else set()))}
 
     def read_internal(self) -> dict:
         """返回独立副本，仅供本地脱敏；不向 API 暴露此方法或返回值。"""
         with self._lock:
             if not self._ready():
                 raise DiagnosticPackageError("capture_unavailable")
-            return {"calls": [{"logical_call_id": key[0], "attempt_no": key[1],
+            return {"execution_inputs": decode_value(json.loads(self._inputs)) if self._inputs is not None else None,
+                    "calls": [{"logical_call_id": key[0], "attempt_no": key[1],
                                "executor_key": row["executor_key"],
                                "request": decode_value(json.loads(row["request"])),
                                "response": decode_value(json.loads(row["response"])) if row["response"] is not None else None,
@@ -192,3 +222,21 @@ def finish_attempt(handle: _Handle | None, *, result: object = None, error_kind:
         handle.owner._finish(handle, result, error_kind)
     except Exception:
         handle.owner._failed()
+
+
+def capture_execution_inputs(session, *, selected_rule_ids: tuple[str, ...],
+                             evaluation_as_of_date: str | None,
+                             evaluation_horizon_policy: str | None,
+                             horizon_unavailable_reason: str | None) -> None:
+    """已授权单病例作用域内旁路接收实际 session；默认关闭且错误不影响质控。"""
+    capture = _CURRENT.get()
+    if capture is None:
+        return
+    try:
+        capture._capture_inputs(session, {
+            "selected_rule_ids": selected_rule_ids, "evaluation_as_of_date": evaluation_as_of_date,
+            "evaluation_horizon_policy": evaluation_horizon_policy,
+            "horizon_unavailable_reason": horizon_unavailable_reason,
+        })
+    except Exception:
+        capture._failed()
