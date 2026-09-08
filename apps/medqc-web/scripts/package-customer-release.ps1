@@ -200,6 +200,11 @@ if ($AllowDirty) {
 if ($LASTEXITCODE -ne 0) {
   throw "Release source verification failed."
 }
+$verifiedSourceCommit = & git -c "safe.directory=$($repoRoot.Replace('\', '/'))" -C $repoRoot rev-parse HEAD
+if ($LASTEXITCODE -ne 0) {
+  throw "Cannot freeze release source commit."
+}
+$verifiedSourceCommit = $verifiedSourceCommit.Trim()
 
 if (-not $SkipBuild) {
   Write-Step "Build frontend dist in customer mode"
@@ -263,6 +268,7 @@ $backendExcludeFiles = @(
     ".coverage",
     ".env",
     "coverage.xml",
+    "runtime_build.json",
     "build_icd_vector_index.py",
     "icd_vector_retrieval_demo.py"
   )
@@ -451,6 +457,17 @@ $readme | Set-Content -LiteralPath (Join-Path $releaseDir "README-deployment.txt
 
 Write-Step "Verify forbidden content is absent"
 Assert-NoReleaseForbiddenContent -path $releaseDir
+
+if (-not $AllowDirty) {
+  Write-Step "Freeze verified runtime build identity"
+  & python @sourceVerifyArgs `
+    --runtime-build-output (Join-Path $backendDir "app\data\runtime_build.json") `
+    --build-id $releaseName `
+    --expected-git-commit $verifiedSourceCommit
+  if ($LASTEXITCODE -ne 0) {
+    throw "Runtime build identity verification failed."
+  }
+}
 
 Write-Step "Create zip package"
 $zipPath = "$releaseDir.zip"

@@ -22,7 +22,7 @@ from .decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from .decision_model import RuleDecision
 from .decision_reducer import ReducedRuleDecision
 from ..luxian_0609_result_schema import CANONICAL_RESULT_DELIVERY_MODE
-from ..qc_diagnostics.capture import capture_execution_inputs
+from ..qc_diagnostics.capture import capture_execution_inputs, capture_execution_context
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
@@ -225,6 +225,11 @@ async def prepare_luxian_0609_execution(
             prepared_rule_count=len(prepared_rules),
             executable_rule_count=len(prepared_rules),
         )
+    capture_execution_context(
+        medical_text=medical_text, evidence_payload=evidence_payload, prepared_rules=prepared_rules,
+        settings=settings, source_schema=source_schema,
+        source_gate_decisions_present=source_gate_decisions is not None,
+    )
     llm_client = wrap_luxian_0609_llm_client(llm_client)
 
     prepared_rule_count = len(prepared_rules)

@@ -24,6 +24,8 @@ async def test_selected_capture_crosses_formal_worker_and_canonical_commit(monke
         assert len(delivered) == 3, [capture.summary() for capture in captures]
         for data, summary in delivered:
             assert data["execution_inputs"]["selected_rule_ids"] == (flow.RULE_ID,)
+            assert data["execution_context"]["medical_text"] == "脱敏病历摘要"
+            assert data["execution_context"]["runtime_settings"]["LUXIAN_0609_UNIFIED_ENGINE_ENABLED"] is True
             assert data["saved_result"]["record_id"] == flow._RECORD_A["visit_id"]
             assert len(data["saved_result"]["items"]) == 1
             assert data["saved_result"]["items"][0]["status"] == "compliant"

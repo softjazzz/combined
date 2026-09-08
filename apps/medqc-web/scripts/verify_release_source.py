@@ -278,7 +278,23 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--inventory", type=Path, required=True)
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--runtime-build-output", type=Path)
+    parser.add_argument("--build-id")
+    parser.add_argument("--expected-git-commit")
     return parser.parse_args(argv)
+
+
+def build_runtime_identity(*, report: Mapping[str, Any], git_commit: str,
+                           build_id: str, inventory_schema_version: int) -> dict:
+    """只有正式源码门禁通过才生成运行版本，不使用清单中可能过期的 git_head。"""
+    if report.get("passed") is not True or report.get("non_releasable") is not False:
+        raise ValueError("runtime_build_requires_formal_release")
+    backend_root = str(Path(__file__).resolve().parents[1] / "backend")
+    if backend_root not in sys.path:
+        sys.path.insert(0, backend_root)
+    from app.services.qc_diagnostics.runtime_build import validate_runtime_build
+    return validate_runtime_build({"schema_version": 1, "git_commit": git_commit,
+        "build_id": build_id, "inventory_schema_version": inventory_schema_version})
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -300,6 +316,18 @@ def main(argv: list[str] | None = None) -> int:
         scan_paths=scan_paths,
         allow_dirty=args.allow_dirty,
     )
+    if args.runtime_build_output:
+        if args.allow_dirty:
+            raise ValueError("runtime_build_requires_formal_release")
+        source_commit = _run_git(repo_root, "rev-parse", "HEAD").decode("ascii").strip()
+        if args.expected_git_commit is not None and source_commit != args.expected_git_commit:
+            raise ValueError("release_source_commit_changed")
+        identity = build_runtime_identity(report=report,
+            git_commit=source_commit,
+            build_id=args.build_id, inventory_schema_version=inventory.get("schema_version"))
+        args.runtime_build_output.parent.mkdir(parents=True, exist_ok=True)
+        args.runtime_build_output.write_text(json.dumps(identity, ensure_ascii=False, indent=2) + "\n",
+                                            encoding="utf-8", newline="\n")
     serialized = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

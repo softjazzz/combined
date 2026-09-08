@@ -19,6 +19,7 @@ from uuid import UUID
 
 from .contracts import DiagnosticPackageError
 from .typed_values import decode_value, encode_value
+from .runtime_build import load_runtime_build
 
 _CURRENT: ContextVar[_Capture | None] = ContextVar("qc_diagnostic_capture", default=None)
 _CREDENTIAL_FIELDS = {"authorization", "api_key", "apikey", "access_token", "password", "headers", "api_endpoint", "token", "secret"}
@@ -57,12 +58,14 @@ class _Capture:
         if job_id is not None and (type(job_id) is not str or not 1 <= len(job_id) <= 128):
             raise DiagnosticPackageError("invalid_capture_job")
         self._job_id = job_id
+        self._build_identity = load_runtime_build()
         self._limit = max_bytes
         self._expires = time.monotonic() + ttl_seconds
         self._lock = threading.Lock()
         self._rows: dict[tuple[str, int], dict] = {}
         self._inputs: bytes | None = None
         self._saved_result: bytes | None = None
+        self._execution_context: bytes | None = None
         self._bytes = 0
         self._closed = False
         self._errors: set[str] = set()
@@ -83,6 +86,7 @@ class _Capture:
         self._rows.clear()
         self._inputs = None
         self._saved_result = None
+        self._execution_context = None
         self._identity = None
         self._bytes = 0
         self._closed = True
@@ -155,6 +159,30 @@ class _Capture:
             self._bytes += len(frozen)
             return _Handle(self, key)
 
+    def _capture_execution_context(self, parameters, settings):
+        from ..llm_observability import current_llm_observation_context
+        with self._lock:
+            if not self._ready() or not self._context_matches(current_llm_observation_context()):
+                return
+            if self._execution_context is not None:
+                self._errors.add("duplicate_execution_context")
+                return
+            parameters["runtime_settings"] = {
+                key: value for key, value in vars(settings).items()
+                if key.startswith("LUXIAN_0609_")
+                and not key.endswith(("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_AUTHORIZATION", "_ENDPOINT", "_URL"))
+            }
+            frozen = _snapshot(parameters)
+            if not self._ready():
+                return
+            if self._bytes + len(frozen) > self._limit:
+                self._errors.add("capacity_exceeded")
+                return
+            self._execution_context = frozen
+            self._bytes += len(frozen)
+            if parameters["source_gate_decisions_present"]:
+                self._errors.add("source_gate_decisions_not_captured")
+
     def _committed_results(self, receipts):
         from ..luxian_0609.evidence_snapshot import build_luxian_0609_visit_ref
         with self._lock:
@@ -216,6 +244,8 @@ class _Capture:
                     "retained_bytes": self._bytes, "attempt_count": len(self._rows),
                     "pending_attempt_count": sum(not row["finished"] for row in self._rows.values()),
                     "missing_reasons": sorted(self._errors | ({"final_result_not_captured"} if self._saved_result is None else set())
+                                              | ({"build_version_unavailable"} if not self._build_identity["available"] else set())
+                                              | ({"execution_context_not_captured"} if self._execution_context is None else set())
                                               | ({"execution_inputs_not_captured"} if self._inputs is None else set()))}
 
     def read_internal(self) -> dict:
@@ -224,6 +254,8 @@ class _Capture:
             if not self._ready():
                 raise DiagnosticPackageError("capture_unavailable")
             return {"execution_inputs": decode_value(json.loads(self._inputs)) if self._inputs is not None else None,
+                    "build_identity": dict(self._build_identity),
+                    "execution_context": decode_value(json.loads(self._execution_context)) if self._execution_context is not None else None,
                     "saved_result": decode_value(json.loads(self._saved_result)) if self._saved_result is not None else None,
                     "calls": [{"logical_call_id": key[0], "attempt_no": key[1],
                                "executor_key": row["executor_key"],
@@ -297,3 +329,20 @@ def capture_committed_results(receipts: object) -> None:
 def diagnostic_capture_enabled() -> bool:
     """只供既有保存边界决定是否保留内存回执，默认不增加批次留存。"""
     return _CURRENT.get() is not None
+
+
+def capture_execution_context(*, medical_text: str, evidence_payload: object, prepared_rules: object,
+                              settings: object, source_schema: str | None,
+                              source_gate_decisions_present: bool) -> None:
+    """冻结 prepare 收到的参数，只取 LX0609 配置，不遍历客户端或全局密钥。"""
+    capture = _CURRENT.get()
+    if capture is None:
+        return
+    try:
+        capture._capture_execution_context({
+            "medical_text": medical_text, "evidence_payload": evidence_payload,
+            "prepared_rules": prepared_rules, "source_schema": source_schema,
+            "source_gate_decisions_present": source_gate_decisions_present,
+        }, settings)
+    except Exception:
+        capture._failed()
