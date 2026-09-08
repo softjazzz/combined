@@ -20,6 +20,10 @@ from .llm_observability import (
     safe_status_for_exception,
     safe_status_for_http_result,
 )
+from .qc_diagnostics.capture import (
+    begin_attempt as begin_diagnostic_attempt,
+    finish_attempt as finish_diagnostic_attempt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -294,6 +298,9 @@ class SichuanQCLLMClient:
             model=self.model,
             model_role=self.model_role,
         )
+        diagnostic_attempt = begin_diagnostic_attempt(
+            logical_call_id=logical_call_id, attempt_no=attempt_no, payload=payload,
+        )
         try:
             result = await safe_post_json(
                 url=f"{self.api_endpoint}/chat/completions",
@@ -301,6 +308,7 @@ class SichuanQCLLMClient:
                 payload=payload,
                 timeout_seconds=self.timeout_seconds,
             )
+            finish_diagnostic_attempt(diagnostic_attempt, result=result)
             usage = observed_usage(result)
             status, safe_error_kind = safe_status_for_http_result(result)
             await self._observability_recorder.finish_attempt(
@@ -313,6 +321,7 @@ class SichuanQCLLMClient:
             return result, usage
         except BaseException as error:
             status, safe_error_kind = safe_status_for_exception(error)
+            finish_diagnostic_attempt(diagnostic_attempt, error_kind=safe_error_kind or "unknown_error")
             await self._observability_recorder.finish_attempt(
                 event_id=event_id,
                 started_timestamp=started_timestamp,
