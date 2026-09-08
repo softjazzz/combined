@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -10,6 +11,41 @@ from app.services.luxian_0609.discharge_result_mapping import (
     is_discharge_customer_rule,
     safe_discharge_customer_display_facts,
 )
+from app.services.luxian_0609.extended_document.discharge_documentation import evaluate_discharge_documentation_timeliness
+from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_executor_customer_display_facts
+
+
+@pytest.mark.parametrize("seconds,status", [(-7200, "data_gap"), (-1, "data_gap"), (0, "compliant"), (86400, "compliant"), (90000, "non_compliant")])
+def test_061_executor_facts_survive_final_delivery(seconds, status):
+    discharge = datetime(2026, 9, 8, 12)
+    outcome = evaluate_discharge_documentation_timeliness(
+        death_state="absent", death_error="", registration_error="", discharge_error="",
+        discharge_time=discharge,
+        discharge_rows=({"record_time": (discharge + timedelta(seconds=seconds)).isoformat()},),
+    )
+    result, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={"rule_id": "LX0609-061", "status": outcome.final_state, "reason_code": outcome.reason_code},
+        raw_facts=outcome.display_facts,
+    )
+    assert handled
+    assert result["status"] == status
+    assert result["reason_code"] == outcome.reason_code
+    assert result["customer_display_facts"] == outcome.display_facts
+    if seconds < 0:
+        assert not discharge_customer_fact_status_is_valid(
+            rule_id="LX0609-061", status="compliant", safe_facts=result["customer_display_facts"])
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf"), True, "-2"])
+def test_061_still_rejects_invalid_interval_values(invalid):
+    raw = {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-09-08 12:00:00",
+        "record_time": "2026-09-08 10:00:00",
+        "threshold_hours": 24,
+        "actual_interval_hours": invalid,
+    }
+    assert safe_discharge_customer_display_facts(rule_id="LX0609-061", raw=raw) is None
 
 
 @pytest.mark.parametrize(

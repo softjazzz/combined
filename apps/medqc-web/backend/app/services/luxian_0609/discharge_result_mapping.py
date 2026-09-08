@@ -159,9 +159,13 @@ def _safe_061(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if record_raw is not None and not record_time:
         return None
     interval_raw = raw.get("actual_interval_hours")
-    interval = None if interval_raw is None else _safe_number(interval_raw)
+    interval = None if interval_raw is None else _safe_number(interval_raw, minimum=-math.inf)
     if interval_raw is not None and interval is None:
         return None
+    # 执行器以负时间差表达权威时间冲突；保留符号和精度，避免负一秒
+    # 被四舍五入成 -0.0 后误认为合规。其他规则仍使用非负数值合同。
+    if interval_raw is not None and interval_raw < 0:
+        interval = interval_raw
     source = raw.get("discharge_time_source")
     if source is not None and source not in _TIME_SOURCES:
         return None
@@ -374,6 +378,7 @@ def discharge_customer_fact_status_is_valid(
         return normalized_status == (
             "data_gap"
             if safe_facts.get("actual_interval_hours") is None
+            or safe_facts["actual_interval_hours"] < 0
             else "compliant"
             if safe_facts["actual_interval_hours"] <= 24
             else "non_compliant"
