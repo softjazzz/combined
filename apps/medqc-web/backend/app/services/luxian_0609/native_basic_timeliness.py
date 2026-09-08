@@ -980,6 +980,18 @@ def _typed_basic_decisions(
                         "required_document_missing",
                     )
                 )
+                if missing_decision is None:
+                    add_customer_fact(
+                        rule_id,
+                        timeliness_fact(
+                            rule_id=rule_id,
+                            target_document="first_course_record",
+                            source_label="首次病程记录",
+                            state="missing",
+                            threshold_hours=8,
+                            anchor=anchor,
+                        ),
+                    )
                 continue
             complete_events: list[tuple[datetime, str | None, Mapping[str, Any]]] = []
             incomplete = False

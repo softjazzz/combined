@@ -30,6 +30,7 @@ from app.services.luxian_0609_programmatic_rules import (
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services import sample_programmatic_evidence as programmatic_evidence
+from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
 
 
 _LEGACY_RULE_IDS = ("SC-002", "CL-081", "SC-021", "SC-054", "SC-048", "SC-049", "CL-080")
@@ -1075,6 +1076,73 @@ def test_002_uses_authoritative_first_course_time_without_model(
     assert reduced[0].final_state is expected_state
     assert reduced[0].reason_code == expected_reason
     assert "诊疗计划" not in repr(reduced[0])
+
+
+@pytest.mark.unit
+def test_002_missing_first_course_after_maturity_has_persistable_explanation():
+    session = _typed_basic_session(
+        {"inpat_registration": [{"admission_datetime": "2026-06-01 08:00:00"}]},
+        selected_rule_ids=("LX0609-002",),
+        evaluation_as_of_date="2026-06-02",
+    )
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=_rules("LX0609-002"),
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+        format_evidence=False,
+    )[0]
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert canonical["status"] == "non_compliant"
+    assert canonical["reason_code"] == "required_document_missing"
+    facts, _ = validated_customer_explanation(
+        canonical, rule_id="LX0609-002", status=canonical["status"]
+    )
+    assert facts == dict(execution.customer_display_facts)["LX0609-002"] == {
+        "failure_kind": "timeliness_requirement_not_met",
+        "target_document": "first_course_record",
+        "source_label": "首次病程记录",
+        "timeliness_state": "missing",
+        "threshold_hours": 8,
+        "anchor_time": "2026-06-01 08:00:00",
+    }
+    # 缺失文书不能伪造观察时间、文书引用或超时量。
+    assert tuple(session.materials.rows("first_course_record")) == ()
+    assert canonical.get("customer_evidence", []) == []
+    assert reduced[0].fact_refs
+    assert set(reduced[0].fact_refs).issubset({
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in session.snapshot.observations
+    })
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("admission_datetime", "evaluation_as_of_date", "expected_reason"),
+    [
+        ("2026-06-01 08:00:00", "2026-06-01", "evaluation_window_not_mature"),
+        (None, "2026-06-02", "authoritative_time_missing"),
+    ],
+)
+def test_002_missing_first_course_without_mature_anchor_has_no_defect_facts(
+    admission_datetime, evaluation_as_of_date, expected_reason
+):
+    session = _typed_basic_session(
+        {"inpat_registration": [{"admission_datetime": admission_datetime}]},
+        selected_rule_ids=("LX0609-002",),
+        evaluation_as_of_date=evaluation_as_of_date,
+    )
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == expected_reason
+    assert execution.customer_display_facts == ()
 
 
 def test_002_late_result_exposes_actual_and_overdue_hours():
