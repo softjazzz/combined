@@ -24,9 +24,9 @@ def test_phase_scope_freezes_all_77_customer_rules() -> None:
     assert {entry.definition_version for entry in entries} == {
         "lx0609-defined-scope-2026-09-05-r3"
     }
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 71
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 70
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 6
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 7
     assert sum(entry.catalog_registered for entry in entries) == 77
 
 
@@ -61,6 +61,7 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
     } == {
         "LX0609-025",
         "LX0609-028",
+        "LX0609-036",
         "LX0609-049",
         "LX0609-056",
         "LX0609-059",
@@ -133,13 +134,19 @@ def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
     assert pending == ("LX0609-049", "LX0609-059")
 
 
-def test_customer_delivery_scope_is_72_with_66_executable_and_6_withheld() -> None:
+def test_customer_delivery_scope_is_72_with_65_executable_and_7_withheld() -> None:
     delivery = get_luxian_0609_customer_delivery_rule_ids()
     executable, withheld = get_luxian_0609_customer_execution_scope()
 
     assert len(delivery) == 72
-    assert len(executable) == 66
-    assert len(withheld) == 6
+    assert len(executable) == 65
+    assert len(withheld) == 7
+    assert "LX0609-036" in withheld
+    result = build_luxian_0609_pending_definition_result("LX0609-036")
+    assert result["status"] == "not_executed"
+    assert result["is_compliant"] is None
+    assert "数据源暂不可用" in result["findings"]
+    assert "不要求据此补写" in result["suggestion"]
     assert set(executable).isdisjoint(withheld)
     assert set(executable) | set(withheld) == set(delivery)
     catalog_ids = {

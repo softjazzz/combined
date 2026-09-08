@@ -121,10 +121,18 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
         "result_status": "not_executed",
         "display_status": "not_executed",
         "is_compliant": None,
-        "findings": "本质控点当前不参与正式结论，未生成合规或问题判定。",
+        "findings": (
+            "麻醉术前、术后访视记录数据源暂不可用，本质控点已暂停，未生成合规或问题判定。"
+            if entry.pending_reason_code == "anesthesia_visit_sources_unavailable_customer_scope"
+            else "本质控点当前不参与正式结论，未生成合规或问题判定。"
+        ),
         "facts": {},
         "evidence": [],
-        "suggestion": "待院方确认并发布业务口径后再启用本质控点。",
+        "suggestion": (
+            "待访视记录数据源接入并验收后再启用本质控点；当前不要求据此补写记录。"
+            if entry.pending_reason_code == "anesthesia_visit_sources_unavailable_customer_scope"
+            else "待院方确认并发布业务口径后再启用本质控点。"
+        ),
         "confidence": 0.0,
         "metadata": {
             "execution_source": "lx0609_phase_gate",

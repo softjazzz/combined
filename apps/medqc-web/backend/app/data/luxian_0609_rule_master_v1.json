@@ -297,7 +297,9 @@
       "qc_point": "无麻醉术前或麻醉术后访视记录（局麻除外）",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《麻醉访视》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "客户确认源库暂不提供麻醉术前、术后访视记录，本质控点暂停执行。",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "anesthesia_visit_sources_unavailable_customer_scope"
     },
     {
       "rule_id": "LX0609-037",
