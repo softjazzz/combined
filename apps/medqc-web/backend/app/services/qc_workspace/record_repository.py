@@ -431,7 +431,6 @@ class RecordRepository:
         discharge_dt_expr = func.coalesce(
             MedicalRecordFrontpage.discharge_datetime,
             DischargeRecord.discharge_date,
-            DischargeRecord.update_time,
         )
         admission_dt_expr = func.coalesce(
             MedicalRecordFrontpage.admission_datetime,
