@@ -1317,7 +1317,16 @@
               </div>
             </section>
 
-            <section class="editable-copy-section editable-copy-document-workbench-section">
+            <QCRecordCompareWorkbench
+              v-if="editableCopyReadonly"
+              :visit-id="editableCopySourceRecord?.matched_visit_id || ''"
+              :institute-id="editableCopySourceRecord?.matched_institute_id"
+              :patient-id="editableCopySourceRecord?.matched_patient_id"
+              :issues="[]"
+              :provided-documents="editableCopyDraft.documents"
+              document-only
+            />
+            <section v-else class="editable-copy-section editable-copy-document-workbench-section">
               <div class="editable-copy-section-header">
                 <div>
                   <h3>文书内容</h3>
@@ -1766,6 +1775,7 @@
 </template>
 
 <script setup lang="ts">
+import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
 const {

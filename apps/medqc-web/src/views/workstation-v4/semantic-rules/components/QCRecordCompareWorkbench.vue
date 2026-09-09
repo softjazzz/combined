@@ -1,11 +1,22 @@
 <template>
-  <section class="record-compare-shell" :data-mobile-tab="mobileTab">
+  <section
+    class="record-compare-shell"
+    :class="{ 'is-document-only': documentOnly }"
+    :data-mobile-tab="mobileTab"
+  >
     <header class="record-compare-head">
       <div>
-        <strong>病历原文对照</strong>
-        <span>点击质控结果，核对对应文书与证据片段</span>
+        <strong>{{ documentOnly ? '病历文书' : '病历原文对照' }}</strong>
+        <span>{{
+          documentOnly ? '选择文书查看完整内容' : '点击质控结果，核对对应文书与证据片段'
+        }}</span>
       </div>
-      <div class="record-compare-mobile-tabs" role="tablist" aria-label="病历与结果切换">
+      <div
+        v-if="!documentOnly"
+        class="record-compare-mobile-tabs"
+        role="tablist"
+        aria-label="病历与结果切换"
+      >
         <button
           type="button"
           :class="{ 'is-active': mobileTab === 'record' }"
@@ -57,7 +68,7 @@
               </option>
             </select>
           </label>
-          <span class="record-location-chip" :class="`is-${locationState}`">
+          <span v-if="!documentOnly" class="record-location-chip" :class="`is-${locationState}`">
             {{ locationMessage }}
           </span>
         </div>
@@ -120,12 +131,16 @@
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
         </div>
         <div v-else class="record-content-empty">
-          <strong>暂无可对照的病历原文</strong>
-          <span>质控结果仍可查看，但当前无法定位到来源文书。</span>
+          <strong>{{ documentOnly ? '暂无病历文书' : '暂无可对照的病历原文' }}</strong>
+          <span>{{
+            documentOnly
+              ? '当前没有可展示的文书内容。'
+              : '质控结果仍可查看，但当前无法定位到来源文书。'
+          }}</span>
         </div>
       </main>
 
-      <aside class="record-result-column" aria-label="质控结果">
+      <aside v-if="!documentOnly" class="record-result-column" aria-label="质控结果">
         <SingleRecordQcResultPanel
           v-if="hasSingleRecordResult"
           :items="singleRecordItems || []"
@@ -306,6 +321,9 @@ import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-vali
 const props = withDefaults(
   defineProps<{
     visitId: string
+    documentOnly?: boolean
+    /** 当前病历完整文书；传入后不再请求历史 Bundle 目录或正文。 */
+    providedDocuments?: EditableMedicalRecordDocument[]
     jobId?: string
     recordRef?: string
     instituteId?: string
@@ -724,6 +742,7 @@ async function ensureDocumentLoaded(
 ) {
   const summary = documents.value.find((document) => document.key === documentKey)
   if (!summary) return null
+  if (props.providedDocuments !== undefined) return summary
   if (!renderOverride && isDocumentLoaded(summary)) return summary
   if (!summary.execution_domain) {
     if (selectedDocumentKey.value === documentKey) {
@@ -927,6 +946,7 @@ async function selectSingleRecordResult(key: string) {
 }
 
 async function locateSelectedIssue() {
+  if (props.documentOnly) return
   const issue = selectedIssue.value
   if (!issue) {
     locationState.value = 'idle'
@@ -1067,6 +1087,13 @@ async function loadDocuments() {
   contentLoadError.value = ''
   contentLoadingKey.value = ''
   documentRequests.clear()
+  loading.value = false
+  if (props.providedDocuments !== undefined) {
+    documents.value = props.providedDocuments.filter((document) => document.enabled !== false)
+    selectedDocumentKey.value = resolveDefaultDocumentKey()
+    mobileTab.value = 'record'
+    return
+  }
   if (!visitId && !(jobId && recordRef)) {
     loadError.value = '当前结果缺少可读取病历的就诊标识'
     return
@@ -1119,7 +1146,15 @@ watch(
   { immediate: true },
 )
 watch(
-  () => [props.visitId, props.instituteId, props.patientId, props.jobId, props.recordRef],
+  () => [
+    props.visitId,
+    props.instituteId,
+    props.patientId,
+    props.jobId,
+    props.recordRef,
+    props.providedDocuments,
+    props.documentOnly,
+  ],
   () => void loadDocuments(),
   { immediate: true },
 )
@@ -1170,6 +1205,9 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: grid;
   grid-template-columns: 270px minmax(420px, 1fr) minmax(410px, 460px);
+}
+.is-document-only .record-compare-grid {
+  grid-template-columns: 270px minmax(0, 1fr);
 }
 .record-document-nav,
 .record-content-column,
@@ -1614,6 +1652,9 @@ onBeforeUnmount(() => {
   display: none;
 }
 @media (max-width: 1199px) {
+  .is-document-only .record-compare-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .record-compare-grid {
     grid-template-columns: minmax(380px, 1fr) minmax(360px, 400px);
   }

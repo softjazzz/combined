@@ -155,6 +155,30 @@ function isRound(identity: string): boolean {
 }
 
 export function resolveMedicalDocumentGroup(document: MedicalDocumentLike): MedicalDocumentGroup {
+  // 正文可能提及其他文书或诊疗事件，先用文书身份决定目录归属。
+  const metadata = { ...document, content: undefined, sections: undefined }
+  const group = classifyMedicalDocumentGroup(metadata)
+  if (group.parentKey === 'course') {
+    const identity = medicalDocumentIdentity(document)
+    if (isSeniorRound(identity)) {
+      return {
+        key: 'course.senior',
+        label: MEDICAL_DOCUMENT_GROUP_LABELS['course.senior'],
+        parentKey: 'course',
+      }
+    }
+    if (isOrdinaryRound(identity)) {
+      return {
+        key: 'course.ordinary',
+        label: MEDICAL_DOCUMENT_GROUP_LABELS['course.ordinary'],
+        parentKey: 'course',
+      }
+    }
+  }
+  return group.key === 'other' ? classifyMedicalDocumentGroup(document) : group
+}
+
+function classifyMedicalDocumentGroup(document: MedicalDocumentLike): MedicalDocumentGroup {
   const identity = medicalDocumentIdentity(document)
   const type = normalize(document.doc_type || document.document_type || document.type)
 

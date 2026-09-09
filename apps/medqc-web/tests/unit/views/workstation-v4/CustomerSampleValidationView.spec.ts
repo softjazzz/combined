@@ -2668,21 +2668,21 @@ describe('CustomerSampleValidationView', () => {
         .find((node) => node.text().includes('出院时间'))
         ?.find('input').element.value,
     ).toBe('2026-06-26 08:31:00')
-    expect(modalText).toContain('只读原文')
+    expect(wrapper.find('.record-compare-shell').exists()).toBe(true)
+    expect(wrapper.find('.record-result-column').exists()).toBe(false)
+    expect(wrapper.find('.record-content-toolbar').text()).toContain('入院记录')
     expect(modalText).toContain('入院记录')
     expect(wrapper.find('.editable-copy-document-directory-list.is-tree').exists()).toBe(true)
-    const admissionToggle = wrapper.get('[data-testid="editable-copy-group-toggle-admission"]')
-    const courseToggle = wrapper.get('[data-testid="editable-copy-group-toggle-course"]')
+    const admissionToggle = wrapper.get('[data-testid="record-document-group-toggle-admission"]')
     expect(admissionToggle.attributes('aria-expanded')).toBe('true')
-    expect(courseToggle.attributes('aria-expanded')).toBe('false')
+    await admissionToggle.trigger('click')
+    expect(admissionToggle.attributes('aria-expanded')).toBe('false')
+    await admissionToggle.trigger('click')
+    expect(admissionToggle.attributes('aria-expanded')).toBe('true')
 
-    await courseToggle.trigger('click')
-    expect(courseToggle.attributes('aria-expanded')).toBe('true')
-    expect(wrapper.text()).toContain('日常病程记录')
-
-    await wrapper.get('.editable-copy-document-search').setValue('头孢')
+    await wrapper.get('[data-testid="record-document-search"]').setValue('头孢')
     expect(
-      wrapper.get('[data-testid="editable-copy-group-toggle-order"]').attributes('aria-expanded'),
+      wrapper.get('[data-testid="record-document-group-toggle-order"]').attributes('aria-expanded'),
     ).toBe('true')
     expect(modalText).not.toContain('副本信息')
     expect(modalText).not.toContain('张三编辑副本')

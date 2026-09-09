@@ -82,6 +82,62 @@ describe('QCRecordCompareWorkbench', () => {
     })
   })
 
+  it('只读文书复用目录与正文，优先入院记录并禁止回退历史接口', async () => {
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-current',
+        issues: [],
+        documentOnly: true,
+        providedDocuments: [
+          {
+            key: 'current-order',
+            title: '长期医嘱',
+            document_type: 'inpat_drug_order',
+            source_table: 'inpat_drug_order',
+            content: '观察生命体征',
+            content_loaded: false,
+          },
+          {
+            key: 'current-admission',
+            title: '入院记录',
+            document_type: 'admission_record',
+            source_table: 'admission_record',
+            content: '当前入院主诉',
+            content_loaded: false,
+          },
+        ],
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.record-content-column').text()).toContain('当前入院主诉')
+    expect(wrapper.find('.record-result-column').exists()).toBe(false)
+    expect(wrapper.find('.record-compare-mobile-tabs').exists()).toBe(false)
+    expect(wrapper.find('.record-location-chip').exists()).toBe(false)
+    await wrapper.find('[data-testid="record-document-filter-order"]').trigger('click')
+    await wrapper.find('[data-testid="record-document-group-toggle-order"]').trigger('click')
+    await wrapper.find('.record-document-item').trigger('click')
+    expect(wrapper.find('.record-content-column').text()).toContain('观察生命体征')
+
+    await wrapper.setProps({
+      providedDocuments: [
+        {
+          key: 'next-admission',
+          title: '入院记录',
+          document_type: 'admission_record',
+          content: '更新后的入院内容',
+        },
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.find('.record-content-column').text()).toContain('更新后的入院内容')
+    await wrapper.setProps({ providedDocuments: [] })
+    expect(wrapper.text()).toContain('暂无病历文书')
+    expect(getDocumentsMock).not.toHaveBeenCalled()
+    expect(getDocumentMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('先读取轻量目录并只按需加载证据文书正文', async () => {
     getDocumentsMock.mockResolvedValue({
       success: true,
