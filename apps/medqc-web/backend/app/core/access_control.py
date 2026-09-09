@@ -12,6 +12,7 @@ PUBLIC_EXACT_PATHS = {
     "/openapi.json",
     "/favicon.ico",
     "/api/v1/health",
+    "/api/v1/runtime-build",
     "/api/v1/ready",
     "/api/v1/metrics",
     "/api/v1/metrics/prometheus",

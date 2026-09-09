@@ -22,6 +22,7 @@ from .routers import records as records_router
 from .routers import qc as qc_router
 from .routers import qc_sichuan as qc_sichuan_router
 from .routers import qc_diagnostics as qc_diagnostics_router
+from .routers import runtime_build as runtime_build_router
 from .routers import luxian_0609_preproduction as luxian_0609_preproduction_router
 from .routers import qc_settings as qc_settings_router
 from .routers import tools as tools_router
@@ -254,6 +255,7 @@ def create_app() -> FastAPI:
     app.include_router(qc_router.router)
     app.include_router(qc_sichuan_router.router)
     app.include_router(qc_diagnostics_router.router)
+    app.include_router(runtime_build_router.router)
     app.include_router(luxian_0609_preproduction_router.router)
     app.include_router(qc_settings_router.router)
     app.include_router(tools_router.router)
@@ -345,6 +347,7 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup_event():
         """应用启动时初始化"""
+        runtime_build_router.initialize_runtime_build(app)
         logger.info("🚀 应用启动中...")
         strict_startup_checks = (
             settings.ENV.lower() == "production"

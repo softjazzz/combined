@@ -290,6 +290,7 @@
 
         <!-- 右侧用户信息 -->
         <div class="flex items-center space-x-3 shrink-0">
+          <RuntimeBuildStatus />
           <!-- 通知 -->
           <a-popover placement="bottomRight" trigger="click">
             <template #content>
@@ -406,6 +407,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import RuntimeBuildStatus from '@/components/layout/RuntimeBuildStatus.vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useAuthStore } from '@/stores/auth'

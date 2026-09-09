@@ -11,6 +11,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($SkipBuild) {
+  throw "-SkipBuild is not supported: customer packages must rebuild frontend JavaScript with the current build identity. Run again without -SkipBuild (also required with -AllowDirty)."
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent (Split-Path -Parent $projectRoot)
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -213,20 +217,34 @@ $verifiedSourceCommit = $verifiedSourceCommit.Trim()
 
 if (-not $SkipBuild) {
   Write-Step "Build frontend dist in customer mode"
+  $previousBuildId = $env:VITE_MEDQC_BUILD_ID
+  $previousGitCommit = $env:VITE_MEDQC_GIT_COMMIT
   Push-Location $projectRoot
   try {
-    npx vite build --mode customer --config vite.config.mjs --configLoader native
+    $env:VITE_MEDQC_BUILD_ID = $releaseName
+    $env:VITE_MEDQC_GIT_COMMIT = $verifiedSourceCommit
+    npx vite build --mode customer --config vite.customer.config.mjs --configLoader native
     if ($LASTEXITCODE -ne 0) {
       throw "Customer frontend build failed; refusing to package stale artifacts."
     }
   }
   finally {
+    $env:VITE_MEDQC_BUILD_ID = $previousBuildId
+    $env:VITE_MEDQC_GIT_COMMIT = $previousGitCommit
     Pop-Location
   }
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "dist\index.html") -PathType Leaf)) {
   throw "Customer frontend dist/index.html is missing."
+}
+$frontendBuildInfoPath = Join-Path $projectRoot "dist\build-info.json"
+if (-not (Test-Path -LiteralPath $frontendBuildInfoPath -PathType Leaf)) {
+  throw "Customer frontend build-info.json is missing; refusing to package unmarked artifacts."
+}
+$frontendBuildInfo = Get-Content -LiteralPath $frontendBuildInfoPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($frontendBuildInfo.build_id -cne $releaseName -or $frontendBuildInfo.git_commit -cne $verifiedSourceCommit) {
+  throw "Customer frontend build identity does not match this package; refusing to package stale artifacts."
 }
 
 Write-Step "Prepare release directory $releaseDir"
