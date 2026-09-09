@@ -2618,6 +2618,19 @@ describe('CustomerSampleValidationView', () => {
       ...documentResponse,
       data: {
         ...documentResponse.data,
+        // 模拟接口首先返回医嘱，首次打开仍应选中入院记录。
+        documents: [
+          {
+            key: 'order-first',
+            document_type: 'inpat_nondrug_order',
+            title: '临时医嘱',
+            content: '测试医嘱',
+            record_time: '',
+            submit_time: '',
+            enabled: true,
+          },
+          ...documentResponse.data.documents,
+        ],
         current_record: {
           admission_time: '2026-02-02T10:00:00+08:00',
           admission_time_source: 'inpat_registration',

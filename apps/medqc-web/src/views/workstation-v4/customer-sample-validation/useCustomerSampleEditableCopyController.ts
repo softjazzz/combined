@@ -180,7 +180,12 @@ export function useCustomerSampleEditableCopyController(
     )
       ? 'temporary'
       : 'long'
-    editableCopyActiveDocumentKey.value = editableCopyDraft.value.documents[0]?.key || ''
+    const documents = editableCopyDraft.value.documents
+    const initialDocument =
+      documents.find(
+        (document) => editableDocumentTypeLabel(document.document_type) === '入院记录',
+      ) || documents[0]
+    editableCopyActiveDocumentKey.value = initialDocument?.key || ''
     return true
   }
 
