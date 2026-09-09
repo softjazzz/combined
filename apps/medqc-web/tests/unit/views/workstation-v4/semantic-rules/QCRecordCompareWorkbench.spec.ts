@@ -138,6 +138,47 @@ describe('QCRecordCompareWorkbench', () => {
     wrapper.unmount()
   })
 
+  it('出院记录分别显示出院时间与文书记录时间，缺值不替代', async () => {
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-discharge',
+        issues: [],
+        documentOnly: true,
+        dischargeTime: '2026-07-24 10:00:00',
+        providedDocuments: [
+          {
+            key: 'discharge',
+            document_type: 'discharge_record',
+            title: '出院记录',
+            record_time: '2026-07-24 11:30:00',
+            content: '出院情况',
+          },
+        ],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="record-discharge-time"]').text()).toContain(
+      '2026-07-24 10:00:00',
+    )
+    expect(wrapper.get('.record-content-toolbar').text()).toContain('2026-07-24 11:30:00')
+    await wrapper.setProps({ dischargeTime: '' })
+    expect(wrapper.find('[data-testid="record-discharge-time"]').exists()).toBe(false)
+    await wrapper.setProps({
+      dischargeTime: '2026-07-24 10:00:00',
+      providedDocuments: [
+        {
+          key: 'admission',
+          document_type: 'admission_record',
+          title: '入院记录',
+          content: '入院情况',
+        },
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="record-discharge-time"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('先读取轻量目录并只按需加载证据文书正文', async () => {
     getDocumentsMock.mockResolvedValue({
       success: true,

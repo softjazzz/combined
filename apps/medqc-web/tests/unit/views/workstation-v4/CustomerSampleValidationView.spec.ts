@@ -2659,6 +2659,9 @@ describe('CustomerSampleValidationView', () => {
     expect(modalText).not.toContain('病历信息')
     expect(wrapper.find('.editable-copy-form-grid').exists()).toBe(false)
     expect(wrapper.find('.record-compare-shell').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'QCRecordCompareWorkbench' }).props('dischargeTime')).toBe(
+      '2026-06-26 08:31:00',
+    )
     expect(wrapper.find('.record-result-column').exists()).toBe(false)
     expect(wrapper.find('.record-content-toolbar').text()).toContain('入院记录')
     expect(wrapper.get('[data-testid="record-admission-time"]').text()).toContain(

@@ -1321,6 +1321,7 @@
               :issues="[]"
               :provided-documents="editableCopyDraft.documents"
               :admission-time="editableCopyDraft.admissionTime"
+              :discharge-time="editableCopyDraft.dischargeTime"
               document-only
             />
             <section v-else class="editable-copy-section editable-copy-document-workbench-section">

@@ -69,6 +69,18 @@
               <span>入院时间</span>
               <b>{{ formatDocumentTime(admissionTime) }}</b>
             </time>
+            <time
+              v-if="
+                selectedDocument &&
+                resolveMedicalDocumentTypeLabel(selectedDocument) === '出院记录' &&
+                dischargeTime
+              "
+              class="record-content-time"
+              data-testid="record-discharge-time"
+            >
+              <span>出院时间</span>
+              <b>{{ formatDocumentTime(dischargeTime) }}</b>
+            </time>
           </div>
           <label v-if="documents.length" class="record-document-select">
             <span>选择文书</span>
@@ -336,6 +348,8 @@ const props = withDefaults(
     providedDocuments?: EditableMedicalRecordDocument[]
     /** 后端解析的本次住院入院时间，仅用于展示。 */
     admissionTime?: string
+    /** 已有住院信息中的出院时间，不使用文书记录时间替代。 */
+    dischargeTime?: string
     jobId?: string
     recordRef?: string
     instituteId?: string
