@@ -161,6 +161,8 @@ def evaluate_consultation_timeliness(
         for row in consultation_rows
     )
     if not has_explicit_request_time and not has_request_document:
+        if any(field in row for row in consultation_rows for field in _REQUEST_TIME_FIELDS):
+            return ConsultationTimelinessOutcome("data_gap", "authoritative_time_missing")
         # 当前机构接口可能只返回会诊记录及 record_time，却从未提供
         # consult_apply_time。此时缺失的是规则所需的申请时间数据源，
         # 不是两份已知资料之间的配对失败。

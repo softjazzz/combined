@@ -513,6 +513,11 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-069", "authoritative_time_missing"): (
+        "会诊资料缺少有效申请或完成时间",
+        "已读取会诊资料，但缺少有效的申请或完成时间，无法核对24小时时限。",
+        "请核对本次会诊记录的源系统时间字段及同步映射后重新质控；不应据此补写或倒签记录。",
+    ),
     ("LX0609-069", "source_unavailable"): (
         "当前机构会诊申请时间数据源未接入",
         "会诊记录已读取，但当前机构接口未提供会诊申请时间，无法计算申请发出至会诊记录完成的24小时间隔。",
@@ -3342,6 +3347,7 @@ def render_luxian_0609_customer_result(
             )
             is not None
             or (decision.rule_id, decision.reason_code) in {
+                ("LX0609-069", "authoritative_time_missing"),
                 ("LX0609-007", "source_unavailable"),
                 ("LX0609-007", "authoritative_time_missing"),
                 ("LX0609-007", "source_truncated"),
