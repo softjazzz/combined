@@ -68,6 +68,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { diagnosticCaptureFilename } from './diagnosticCaptureFilename'
 import {
   startDiagnosticCapture,
   getDiagnosticCapture,
@@ -196,7 +197,8 @@ async function downloadCapture() {
   downloading.value = true
   try {
     const blob = await downloadDiagnosticCapture(captureJobId.value)
-    if (current === pollGeneration && open.value) downloadBlob(blob, 'qc-execution-diagnostic.zip')
+    if (current === pollGeneration && open.value)
+      downloadBlob(blob, diagnosticCaptureFilename(props.context, captureJobId.value))
   } catch {
     if (current === pollGeneration) captureError.value = '下载失败，请检查网络及浏览器下载权限。'
   } finally {
