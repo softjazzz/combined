@@ -1,35 +1,16 @@
 <template>
-  <aside
-    class="readonly-medical-document-directory"
-    aria-label="病历文书目录"
-  >
+  <aside class="readonly-medical-document-directory" aria-label="病历文书目录">
     <div class="readonly-medical-document-directory-head">
       <strong>文书目录</strong>
       <span>{{ filteredDocuments.length }} / {{ documents.length }}</span>
     </div>
 
-    <div
-      v-if="loading"
-      class="readonly-medical-document-state"
-    >
-      正在读取病历文书…
-    </div>
-    <div
-      v-else-if="error"
-      class="readonly-medical-document-state is-error"
-    >
+    <div v-if="loading" class="readonly-medical-document-state">正在读取病历文书…</div>
+    <div v-else-if="error" class="readonly-medical-document-state is-error">
       <span>{{ error }}</span>
-      <button
-        type="button"
-        @click="emit('retry')"
-      >
-        重新读取
-      </button>
+      <button type="button" @click="emit('retry')">重新读取</button>
     </div>
-    <div
-      v-else-if="!documents.length"
-      class="readonly-medical-document-state"
-    >
+    <div v-else-if="!documents.length" class="readonly-medical-document-state">
       当前未返回可查看的病历原文
     </div>
     <template v-else>
@@ -39,7 +20,7 @@
         class="readonly-medical-document-search"
         data-testid="record-document-search"
         placeholder="搜索标题、正文或医嘱"
-      >
+      />
       <div class="readonly-medical-document-filter">
         <button
           type="button"
@@ -85,10 +66,7 @@
           >
             <span>
               <i />
-              <b
-                class="readonly-medical-document-group-chevron"
-                aria-hidden="true"
-              >{{
+              <b class="readonly-medical-document-group-chevron" aria-hidden="true">{{
                 isGroupExpanded(group.key) ? '⌄' : '›'
               }}</b>
               {{ group.label }}
@@ -110,10 +88,7 @@
               >
                 <span>
                   <i />
-                  <b
-                    class="readonly-medical-document-group-chevron"
-                    aria-hidden="true"
-                  >{{
+                  <b class="readonly-medical-document-group-chevron" aria-hidden="true">{{
                     isGroupExpanded(subgroup.key) ? '⌄' : '›'
                   }}</b>
                   {{ subgroup.label }}
@@ -137,7 +112,8 @@
                   <small
                     class="readonly-medical-document-meta record-document-time"
                     :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
-                  >{{ formatDocumentMeta(document) }}</small>
+                    >{{ formatDocumentMeta(document) }}</small
+                  >
                 </button>
               </template>
             </section>
@@ -180,12 +156,7 @@
           </template>
         </section>
       </div>
-      <div
-        v-else
-        class="readonly-medical-document-state"
-      >
-        没有匹配的文书
-      </div>
+      <div v-else class="readonly-medical-document-state">没有匹配的文书</div>
     </template>
   </aside>
 </template>
@@ -299,10 +270,10 @@ const documentGroups = computed(() => {
     'surgery',
     'transfusion',
     'exam_lab',
-    'orders',
     'discharge',
     'handoff',
     'other',
+    'orders',
   ]
   return order
     .map((key) => groups.get(key))

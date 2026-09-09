@@ -46,10 +46,10 @@ export const MEDICAL_DOCUMENT_GROUP_ORDER: MedicalDocumentGroupKey[] = [
   'surgery',
   'transfusion',
   'exam_lab',
-  'orders',
   'discharge',
   'handoff',
   'other',
+  'orders',
 ]
 
 export const MEDICAL_DOCUMENT_GROUP_LABELS: Record<MedicalDocumentGroupKey, string> = {
