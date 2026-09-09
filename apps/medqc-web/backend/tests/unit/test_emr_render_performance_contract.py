@@ -98,7 +98,7 @@ def test_documents_summary_view_projects_customer_safe_source_ref(monkeypatch):
     )
 
     assert payload["documents"][0]["source_ref"] == (
-        emr_router_module.build_customer_safe_source_ref("DOC-1")
+        emr_router_module.keyed_ref("src", "DOC-1", hmac_key=emr_router_module.customer_safe_projection_key())
     )
 
 

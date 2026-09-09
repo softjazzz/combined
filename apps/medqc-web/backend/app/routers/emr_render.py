@@ -18,7 +18,7 @@ from ..services.bundles.emr_view import (
     build_render_view,
 )
 from ..services.bundles.current_view import load_current_documents
-from ..services.custom_qc_workspace_service import build_customer_safe_source_ref
+from ..services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
 
 router = APIRouter(
     prefix="/api/v1/emr",
@@ -53,12 +53,21 @@ def _build_empty_documents_payload(reason: str) -> Dict[str, Any]:
 
 
 def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any]:
+    hmac_key = None
+
+    def source_ref(value: str) -> str:
+        nonlocal hmac_key
+        # 同一批引用复用配置；只在本次请求内保留，下一次请求重新读取。
+        if hmac_key is None:
+            hmac_key = customer_safe_projection_key()
+        return keyed_ref("src", value, hmac_key=hmac_key)
+
     for document in list(payload.get("documents") or []):
         if not isinstance(document, dict):
             continue
         source_document_id = str(document.get("document_id") or "").strip()
         if source_document_id:
-            document["source_ref"] = build_customer_safe_source_ref(source_document_id)
+            document["source_ref"] = source_ref(source_document_id)
         source_document_ids = document.get("source_document_ids")
         if isinstance(source_document_ids, list):
             source_document_type = str(
@@ -74,7 +83,7 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
                     continue
                 alias = {
                     "source_document_id": alias_id,
-                    "source_ref": build_customer_safe_source_ref(alias_id),
+                    "source_ref": source_ref(alias_id),
                 }
                 if source_document_type:
                     alias["source_document_type"] = source_document_type
