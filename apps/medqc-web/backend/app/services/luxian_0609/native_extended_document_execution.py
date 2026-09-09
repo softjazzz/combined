@@ -45,6 +45,7 @@ from .extended_document.discharge_course import (
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
+from .extended_document.discharge_medication_extraction import extract_discharge_medications
 from .extended_document.transfer_documentation import (
     evaluate_transfer_documentation,
 )
@@ -1701,8 +1702,10 @@ async def execute_luxian_0609_native_extended_document_rules(
     evidence_snapshot: Luxian0609EvidenceSnapshot,
     evidence_materials: Luxian0609EvidenceMaterialStore,
     decision_rule_ids: Sequence[str] = (),
+    llm_client: Any = None,
     **_: Any,
 ) -> NativeExtendedDocumentExecutionResult:
+    medication_extraction = None
     selected = tuple(
         rule_id
         for rule_id in EXTENDED_DOCUMENT_RULE_IDS
@@ -2805,6 +2808,34 @@ async def execute_luxian_0609_native_extended_document_rules(
             medications, medication_error = _structured_discharge_medications(
                 discharge_rows
             )
+            # 仅在结构化资料缺失且固定标签无法解析时裁剪出院医嘱。
+            # 多份记录不能猜选一份；不覆盖已提供但格式非法的结构化字段。
+            if (medication_error and len(discharge_rows) == 1
+                    and discharge_rows[0].get("discharge_medications") is None
+                    and _clean(discharge_rows[0].get("discharge_order"))):
+                medication_extraction = await extract_discharge_medications(
+                    str(discharge_rows[0]["discharge_order"]), llm_client
+                )
+                if medication_extraction.state in {"ready", "absent"}:
+                    medications = list(medication_extraction.medications)
+                    medication_error = ""
+                else:
+                    final_state = {
+                        "unknown": "uncertain",
+                        "data_gap": "data_gap",
+                        "technical_error": "technical_error",
+                    }[medication_extraction.state]
+                    display.append((rule_id, {
+                        "verification_kind": "discharge_medication_extraction_pending",
+                        "extraction_state": medication_extraction.state,
+                    }))
+                    decisions.append(_decision(
+                        rule_id=rule_id, snapshot=evidence_snapshot,
+                        source_keys=("discharge_record",),
+                        final_state=final_state,
+                        reason_code=medication_extraction.reason_code,
+                    ))
+                    continue
             if medication_error:
                 final_state, reason_code = "data_gap", medication_error
             elif not medications:
@@ -3921,4 +3952,9 @@ async def execute_luxian_0609_native_extended_document_rules(
         planned_rule_ids=selected,
         decisions=tuple(decisions),
         customer_display_facts=tuple(display),
+        llm_call_count=medication_extraction.llm_call_count if medication_extraction else 0,
+        prompt_tokens=medication_extraction.prompt_tokens if medication_extraction else 0,
+        completion_tokens=medication_extraction.completion_tokens if medication_extraction else 0,
+        total_tokens=medication_extraction.total_tokens if medication_extraction else 0,
+        api_time=medication_extraction.api_time if medication_extraction else 0.0,
     )

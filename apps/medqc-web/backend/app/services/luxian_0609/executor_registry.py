@@ -621,6 +621,7 @@ def build_luxian_0609_legacy_executor_registry(
         raw = await _resolve_call(
             functions.extended_document(
                 rule_ids=context.selected_rule_ids,
+                llm_client=resources.llm_client,
                 evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
                 decision_rule_ids=tuple(

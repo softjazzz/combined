@@ -2698,6 +2698,13 @@ def customer_finding_from_controlled_facts(
             f"实际间隔 {exact_duration or f'{interval} 小时'}，规定时限 24 小时。"
         )
 
+    if rule_id == "LX0609-062" and kind == "discharge_medication_extraction_pending":
+        return {
+            "unknown": "已读取出院医嘱，但带药信息的语义仍无法可靠确认，请复核原文中的药名、剂量、途径及用药时间。",
+            "data_gap": "出院医嘱超出当前单次核对范围，尚未完成带药信息提取，请核对该份出院记录。",
+            "technical_error": "出院带药信息提取未成功，本次无法完成核对，请重试；不能据此认定病历缺少带药信息。",
+        }.get(facts.get("extraction_state"), "")
+
     if rule_id == "LX0609-062" and kind == "discharge_medication_completeness_check":
         missing = labels("missing_fields", _DISCHARGE_MEDICATION_FIELD_LABELS)
         return (

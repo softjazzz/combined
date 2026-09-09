@@ -6732,7 +6732,7 @@ async def test_062_generic_discharge_instruction_without_medication_is_not_appli
 
 
 @pytest.mark.asyncio
-async def test_062_unstructured_medication_instruction_remains_data_gap() -> None:
+async def test_062_unstructured_instruction_without_client_is_technical_error() -> None:
     _result, reduced = await _evaluate(
         "LX0609-062",
         {
@@ -6743,8 +6743,8 @@ async def test_062_unstructured_medication_instruction_remains_data_gap() -> Non
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "required_field_missing"
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced.reason_code == "model_transport_error"
 
 
 @pytest.mark.asyncio

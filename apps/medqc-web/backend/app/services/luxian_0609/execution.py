@@ -818,6 +818,7 @@ async def prepare_luxian_0609_execution(
         extended_document_execution = (
             await execute_luxian_0609_native_extended_document_rules(
                 rule_ids=extended_document_rule_ids,
+                llm_client=llm_client,
                 evidence_snapshot=evidence_snapshot,
                 evidence_materials=evidence_materials,
                 decision_rule_ids=tuple(

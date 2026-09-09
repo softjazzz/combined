@@ -180,6 +180,11 @@ def _safe_061(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("verification_kind") == "discharge_medication_extraction_pending":
+        if (set(raw) != {"verification_kind", "extraction_state"}
+                or raw.get("extraction_state") not in ("unknown", "data_gap", "technical_error")):
+            return None
+        return dict(raw)
     required = ["drug_name", "dose", "route", "duration"]
     if (
         not set(raw).issubset(
@@ -430,6 +435,10 @@ def discharge_customer_fact_status_is_valid(
             else "non_compliant"
         )
     if normalized == "LX0609-062":
+        if safe_facts.get("verification_kind") == "discharge_medication_extraction_pending":
+            return normalized_status == {
+                "unknown": "uncertain", "data_gap": "data_gap", "technical_error": "technical_error",
+            }.get(safe_facts.get("extraction_state"))
         return normalized_status == (
             "compliant" if not safe_facts.get("missing_fields") else "non_compliant"
         )
