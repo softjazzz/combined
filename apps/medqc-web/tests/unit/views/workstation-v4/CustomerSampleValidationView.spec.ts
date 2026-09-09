@@ -2654,20 +2654,8 @@ describe('CustomerSampleValidationView', () => {
     })
     const modalText = wrapper.find('.a-modal-stub').text()
     expect(modalText).toContain('查看病历文书')
-    expect(modalText).toContain('病历信息')
-    expect(
-      wrapper
-        .findAll('.editable-copy-form-grid label')
-        .find((node) => node.text().includes('入院时间'))
-        ?.find('input').element.value,
-    ).toBe('2026-02-02 10:00:00')
-    expect(modalText).toContain('出院时间')
-    expect(
-      wrapper
-        .findAll('.editable-copy-form-grid label')
-        .find((node) => node.text().includes('出院时间'))
-        ?.find('input').element.value,
-    ).toBe('2026-06-26 08:31:00')
+    expect(modalText).not.toContain('病历信息')
+    expect(wrapper.find('.editable-copy-form-grid').exists()).toBe(false)
     expect(wrapper.find('.record-compare-shell').exists()).toBe(true)
     expect(wrapper.find('.record-result-column').exists()).toBe(false)
     expect(wrapper.find('.record-content-toolbar').text()).toContain('入院记录')

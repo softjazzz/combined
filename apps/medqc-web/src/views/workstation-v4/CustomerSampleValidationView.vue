@@ -1269,8 +1269,8 @@
 
         <a-spin :spinning="editableCopyLoading">
           <div v-if="editableCopyDraft" class="editable-copy-content">
-            <section class="editable-copy-section">
-              <h3>{{ editableCopyReadonly ? '病历信息' : '副本信息' }}</h3>
+            <section v-if="!editableCopyReadonly" class="editable-copy-section">
+              <h3>副本信息</h3>
               <div class="editable-copy-form-grid">
                 <label>
                   <span>病历名称</span>
