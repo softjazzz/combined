@@ -20,6 +20,7 @@ from .evaluation_horizon import (
     EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE,
     EVALUATION_HORIZON_POLICY_DISABLED,
     EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE,
+    resolve_frozen_discharge_horizon,
 )
 from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
@@ -306,6 +307,7 @@ def build_luxian_0609_evidence_read_session(
     created_at: str,
     evaluation_as_of_date: str | None = None,
     evaluation_horizon_policy: str | None = None,
+    evaluation_horizon_snapshot: Mapping[str, Any] | None = None,
     horizon_unavailable_reason: str | None = None,
     row_reader: SnapshotRowReader = read_luxian_0609_snapshot_source_rows,
     additional_source_keys: tuple[str, ...] = (),
@@ -733,6 +735,17 @@ def build_luxian_0609_evidence_read_session(
         ):
             horizon_date = explicit_as_of_date
             horizon_basis = "evaluation_as_of"
+        elif (
+            evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
+            and evaluation_horizon_snapshot is not None
+        ):
+            horizon_datetime, resolved_horizon_reason = resolve_frozen_discharge_horizon(
+                evaluation_horizon_snapshot, institute_id=institute_id,
+                patient_id=patient_id, visit_id=visit_id,
+            )
+            if horizon_datetime is not None:
+                horizon_date = horizon_datetime.date()
+                horizon_basis = "discharge_date"
         elif evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED:
             admission_material = material_sources.get("inpat_registration")
             admission_value = (
@@ -958,6 +971,7 @@ def build_luxian_0609_evidence_snapshot(
     created_at: str,
     evaluation_as_of_date: str | None = None,
     evaluation_horizon_policy: str | None = None,
+    evaluation_horizon_snapshot: Mapping[str, Any] | None = None,
     horizon_unavailable_reason: str | None = None,
     row_reader: SnapshotRowReader = read_luxian_0609_snapshot_source_rows,
 ) -> Luxian0609EvidenceSnapshot:
@@ -972,6 +986,7 @@ def build_luxian_0609_evidence_snapshot(
         created_at=created_at,
         evaluation_as_of_date=evaluation_as_of_date,
         evaluation_horizon_policy=evaluation_horizon_policy,
+        evaluation_horizon_snapshot=evaluation_horizon_snapshot,
         horizon_unavailable_reason=horizon_unavailable_reason,
         row_reader=row_reader,
     ).snapshot

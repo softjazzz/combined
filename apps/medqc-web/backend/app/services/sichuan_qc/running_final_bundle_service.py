@@ -187,6 +187,7 @@ async def evaluate_running_final_bundle_input(
             source_schema=source_schema or None,
             evaluation_as_of_date=evaluation_as_of_date,
             evaluation_horizon_policy=evaluation_horizon_policy,
+            evaluation_horizon_snapshot=(bundle or {}).get("evaluation_horizon_snapshot"),
             evaluation_horizon_unavailable_reason=(
                 evaluation_horizon_unavailable_reason
             ),

@@ -90,6 +90,54 @@ def resolve_record_evaluation_horizon_unavailable_reason(
     return None
 
 
+def resolve_frozen_discharge_horizon(
+    snapshot: Mapping[str, Any], *, institute_id: str, patient_id: str, visit_id: str,
+) -> tuple[datetime | None, str]:
+    """只校验本病例已冻结的 final 终点；失败时不得用执行时资料补值。"""
+    missing = EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING
+    conflict = EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT
+    if not isinstance(snapshot, Mapping):
+        return None, missing
+    status = _normalized_text(snapshot.get("resolution_status"))
+    scene = _normalized_text(snapshot.get("record_scene"))
+    basis = _normalized_text(snapshot.get("evaluation_basis"))
+    if status == "time_conflict":
+        return None, conflict
+    if not status or status in {"authoritative_time_missing", "scene_uncertain"} or not scene or not basis:
+        return None, missing
+    if status != "resolved" or scene != "final" or basis != "discharge_datetime":
+        return None, conflict
+    context = CaseRef(institute_id.strip(), patient_id.strip(), visit_id.strip())
+    coordinate_fields = ("institute_id", "patient_id", "visit_id")
+    if any(key in snapshot for key in coordinate_fields):
+        coordinates = tuple(_normalized_text(snapshot.get(key)) for key in coordinate_fields)
+        if not all(coordinates) or coordinates != tuple(context):
+            return None, conflict
+    else:
+        record_id = _normalized_text(snapshot.get("record_id"))
+        if not record_id:
+            return None, missing
+        if record_id != context.visit_id:
+            return None, conflict
+    if "record_key" in snapshot and _normalized_text(snapshot.get("record_key")) != context.as_key():
+        return None, conflict
+    try:
+        admission = _parse_datetime(snapshot.get("admission_datetime"), field_name="admission_datetime")
+        discharge = _parse_datetime(snapshot.get("discharge_datetime"), field_name="discharge_datetime")
+        horizon = date.fromisoformat(_normalized_text(snapshot.get("evaluation_horizon")))
+    except (TypeError, ValueError):
+        return None, missing
+    if admission is None or discharge is None:
+        return None, missing
+    try:
+        if discharge < admission or horizon != discharge.date():
+            return None, conflict
+    except TypeError:
+        # 混用无时区/有时区时间无法证明先后，不能隐式假设时区。
+        return None, conflict
+    return discharge, ""
+
+
 def resolve_record_evaluation_horizon(
     *,
     record_id: str,
