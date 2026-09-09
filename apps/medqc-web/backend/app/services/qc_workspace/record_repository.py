@@ -212,6 +212,7 @@ class RecordRepository:
             discharge_datetime = (
                 getattr(source, "discharge_datetime", None)
                 or getattr(discharge_source, "discharge_date", None)
+                or getattr(discharge_source, "discharge_time", None)
             )
             item_scope = "final" if discharge_datetime else "running"
             if scope_value != "all" and item_scope != scope_value:
@@ -339,6 +340,7 @@ class RecordRepository:
             discharge_datetime = (
                 getattr(source, "discharge_datetime", None)
                 or getattr(discharge_source, "discharge_date", None)
+                or getattr(discharge_source, "discharge_time", None)
             )
             item_scope = "final" if discharge_datetime else "running"
             if scope_value != "all" and item_scope != scope_value:
@@ -431,6 +433,7 @@ class RecordRepository:
         discharge_dt_expr = func.coalesce(
             MedicalRecordFrontpage.discharge_datetime,
             DischargeRecord.discharge_date,
+            DischargeRecord.discharge_time,
         )
         admission_dt_expr = func.coalesce(
             MedicalRecordFrontpage.admission_datetime,
