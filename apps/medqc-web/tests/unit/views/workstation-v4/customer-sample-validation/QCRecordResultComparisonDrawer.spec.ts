@@ -4,16 +4,22 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import QCRecordResultComparisonDrawer from '@/views/workstation-v4/customer-sample-validation/QCRecordResultComparisonDrawer.vue'
 
-const { downloadBlob, exportLatestLuxian0609RecordResult, getLatestLuxian0609RecordResult } =
-  vi.hoisted(() => ({
-    downloadBlob: vi.fn(),
-    exportLatestLuxian0609RecordResult: vi.fn(),
-    getLatestLuxian0609RecordResult: vi.fn(),
-  }))
+const {
+  downloadBlob,
+  exportLatestLuxian0609RecordResult,
+  getLatestLuxian0609RecordResult,
+  getSichuanWorkspaceBatchJob,
+} = vi.hoisted(() => ({
+  downloadBlob: vi.fn(),
+  exportLatestLuxian0609RecordResult: vi.fn(),
+  getLatestLuxian0609RecordResult: vi.fn(),
+  getSichuanWorkspaceBatchJob: vi.fn(),
+}))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
+  getSichuanWorkspaceBatchJob,
 }))
 
 vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({
@@ -114,6 +120,11 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
 describe('QCRecordResultComparisonDrawer', () => {
   beforeEach(() => {
     getLatestLuxian0609RecordResult.mockReset()
+    getSichuanWorkspaceBatchJob.mockReset()
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { status: 'completed', finished_at: '2026-09-09T13:20:00+08:00' },
+    })
     exportLatestLuxian0609RecordResult.mockReset()
     downloadBlob.mockReset()
     workbenchProps = null
@@ -123,6 +134,9 @@ describe('QCRecordResultComparisonDrawer', () => {
     getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
     const wrapper = mountDrawer()
     await flushPromises()
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-safe-001')
+    expect(wrapper.get('.customer-record-result-title__qc-time').text()).toContain('质控完成时间：')
+    expect(wrapper.get('.customer-record-result-title__qc-time').text()).toContain('13:20:00')
 
     expect(wrapper.get('.customer-record-result-title__context-label').text()).toBe('当前病历')
     expect(workbenchProps?.admissionTime).toBe('2026-06-18 07:02:00')
@@ -134,6 +148,36 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(wrapper.get('.customer-record-result-title__context').attributes('aria-label')).toBe(
       '当前病历：测试病历，入院时间：2026-06-18 07:02:00，出院时间：2026-06-26 08:31:00',
     )
+  })
+
+  it('缺少完成时间时不使用任务创建时间代替', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { status: 'completed', created_at: '2026-09-08T10:00:00' },
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.get('.customer-record-result-title__qc-time').text()).toBe('质控完成时间未返回')
+  })
+
+  it('当前结果所属任务仍运行时展示进行中', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    getSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: { status: 'running' } })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.get('.customer-record-result-title__qc-time').text()).toBe('质控进行中')
+  })
+
+  it('任务服务无时区UTC时间转换为北京时间', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { status: 'completed', finished_at: '2026-09-09T05:20:00' },
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.get('.customer-record-result-title__qc-time').text()).toContain('13:20:00')
   })
 
   it('ready结果可按当前三坐标导出单病历HTML', async () => {

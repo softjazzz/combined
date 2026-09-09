@@ -37,6 +37,9 @@
               {{ hospitalizationTimeText }}
             </span>
           </span>
+          <span v-if="qcTimeText" class="customer-record-result-title__qc-time">
+            {{ qcTimeText }}
+          </span>
         </div>
         <QcDiagnosticExport
           v-if="open && latestResult && focus"
@@ -88,6 +91,7 @@ import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import {
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
+  getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
 import type { SingleRecordQcResultPayload } from './single-record-result-model'
@@ -123,6 +127,7 @@ const exporting = ref(false)
 const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)
 const authorizedRecordRef = ref('')
+const qcTimeText = ref('')
 let activeRequestSequence = 0
 
 const hospitalizationTimeText = computed(() => {
@@ -202,6 +207,7 @@ async function loadLatestResult() {
   const requestSequence = ++activeRequestSequence
   const focus = props.focus
   latestResult.value = null
+  qcTimeText.value = ''
   authorizedRecordRef.value = ''
   loadError.value = ''
   loading.value = false
@@ -233,6 +239,7 @@ async function loadLatestResult() {
       return
     }
     latestResult.value = result.data
+    void loadQcTime(result.data.job_id, requestSequence)
   } catch {
     if (requestSequence === activeRequestSequence) {
       loadError.value = '质控结果读取失败，请稍后重试'
@@ -241,6 +248,29 @@ async function loadLatestResult() {
     if (requestSequence === activeRequestSequence) {
       loading.value = false
     }
+  }
+}
+
+async function loadQcTime(jobId: string, requestSequence: number) {
+  if (!jobId) return
+  try {
+    const response = await getSichuanWorkspaceBatchJob(jobId)
+    if (requestSequence !== activeRequestSequence) return
+    const job = response.success ? response.data : undefined
+    if (job?.status === 'running' || job?.status === 'queued') {
+      qcTimeText.value = '质控进行中'
+    } else if (job?.status === 'completed' && job.finished_at) {
+      // 任务服务以无时区 UTC 保存时间；已有偏移量的值保持原有时区含义。
+      const rawTime = job.finished_at.trim().replace(' ', 'T')
+      const date = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(rawTime) ? rawTime : `${rawTime}Z`)
+      qcTimeText.value = Number.isNaN(date.getTime())
+        ? '质控完成时间未返回'
+        : `质控完成时间：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`
+    } else {
+      qcTimeText.value = '质控完成时间未返回'
+    }
+  } catch {
+    if (requestSequence === activeRequestSequence) qcTimeText.value = '质控时间暂不可用'
   }
 }
 
@@ -342,6 +372,7 @@ watch(
 .customer-record-result-title__context {
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 7px 12px 7px 10px;
@@ -385,6 +416,13 @@ watch(
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
   font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.customer-record-result-title__qc-time {
+  margin-left: auto;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
   line-height: 20px;
   white-space: nowrap;
 }
