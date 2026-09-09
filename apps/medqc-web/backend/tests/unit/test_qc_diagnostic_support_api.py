@@ -44,7 +44,14 @@ async def test_capture_requires_owned_unchanged_result_and_explicit_download(mon
         path = base + "/" + job_id + "/download"
         assert (await client.post(path, json={"confirmed": False})).status_code == 409
         assert (await client.post(path, json={"confirmed": True})).content == b"PKtest"
+        workspace.get_batch_job.return_value = {"status": "completed", "filters": {}}
+        unavailable = await client.get(base + "/" + job_id)
+        assert unavailable.status_code == 200
+        assert unavailable.json() == {"state": "unavailable", "error_code": "capture_not_recorded"}
+        assert unavailable.headers["cache-control"] == "no-store"
+        assert (await client.post(path, json={"confirmed": True})).status_code == 404
         workspace.get_batch_job.return_value = None
+        assert (await client.get(base + "/" + job_id)).status_code == 404
         assert (await client.post(path, json={"confirmed": True})).status_code == 404
         user["roles"] = ["doctor"]
         assert (await client.get(base + "/" + job_id)).status_code == 403

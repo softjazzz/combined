@@ -111,8 +111,12 @@ async def start_capture(body: PrepareHistory, request: Request, user: dict = Dep
 
 @router.get("/capture/{job_id}")
 def capture_status(job_id: str, response: Response, user: dict = Depends(_admin)):
-    job = _capture_job(job_id, user)
+    job = _workspace().get_batch_job(job_id=job_id, created_by=_owner(user))
+    if not job:
+        raise HTTPException(404, "未找到当前用户的质控任务")
     response.headers["Cache-Control"] = "no-store"
+    if (job.get("filters") or {}).get("diagnostic_capture") is not True:
+        return {"state": "unavailable", "error_code": "capture_not_recorded"}
     try:
         return support_store.status(job_id, job.get("status", ""))
     except DiagnosticPackageError as error:
