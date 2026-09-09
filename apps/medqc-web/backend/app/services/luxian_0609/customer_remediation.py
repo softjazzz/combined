@@ -314,6 +314,25 @@ def build_customer_remediation_suggestion(
         )
 
     if normalized_status == "data_gap":
+        if (
+            normalized_rule_id == "LX0609-071"
+            and reason_code == "required_field_missing"
+            and isinstance(facts, Mapping)
+            and facts.get("failure_kind") == "physician_signature_timeline_incomplete"
+        ):
+            missing = [
+                label for key, label in (
+                    ("missing_title_count", "文书标题"),
+                    ("missing_time_count", "记录时间"),
+                    ("missing_signature_count", "医师签名"),
+                ) if facts.get(key)
+            ]
+            return _structured_action(
+                target="普通病程记录的缺项核对资料",
+                required="、".join(missing),
+                recommendation="请核对源系统普通病程的对应字段及同步映射，确认资料完整后重新评估。",
+                note="当前尚无法确认经治医师变更，不应据此补写交接班记录；提交人不能替代医师签名。",
+            )
         action = _RULE_ACTIONS.get(normalized_rule_id)
         gap_action = _DATA_GAP_ACTIONS.get(normalized_rule_id)
         if gap_action is not None:

@@ -2864,6 +2864,22 @@ def customer_finding_from_controlled_facts(
             return " ".join(event_findings)
         return f"会诊申请时间：{joined('request_times')}；完成时间：{joined('record_times')}；实际间隔 {joined('actual_interval_hours')} 小时，规定时限 24 小时。"
 
+    if rule_id == "LX0609-071" and kind == "physician_signature_timeline_incomplete":
+        missing_parts = [
+            f"{facts.get(key)}份缺少{label}"
+            for key, label in (
+                ("missing_title_count", "文书标题"),
+                ("missing_time_count", "记录时间"),
+                ("missing_signature_count", "医师签名"),
+            )
+            if facts.get(key)
+        ]
+        return (
+            f"已读取{facts.get('daily_course_record_count')}份病程记录，"
+            f"其中已识别普通病程{facts.get('eligible_daily_course_count')}份；"
+            f"{'、'.join(missing_parts)}，暂无法确认经治医师变更及交接班完成时限。"
+        )
+
     if rule_id == "LX0609-071" and kind == "physician_handoff_timeliness_check":
         return f"经治医师变更时间 {facts.get('change_time')}；交班记录时间：{joined('handoff_times') or '未找到'}；接班记录时间：{joined('handover_times') or '未找到'}，接班时限 24 小时。"
 
