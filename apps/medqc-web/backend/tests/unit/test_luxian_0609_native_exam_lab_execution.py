@@ -5646,3 +5646,22 @@ async def test_typed_and_legacy_rules_are_isolated_in_mixed_rollback_mode(monkey
     assert [item["rule_id"] for item in result.results] == ["LX0609-014"]
     assert result.results[0]["status"] == "data_gap"
     assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("performed_dept", ["放射科", "医学影像科", ""])
+@pytest.mark.parametrize("report_time", ["2026-04-07 16:02:56", "2026-04-07 16:02:56+08"])
+async def test_010_unclassified_reported_imaging_with_ct_order_is_data_gap(monkeypatch, performed_dept, report_time):
+    """372916最小复现：有报告时间但缺检查类型，不得断言未实施CT。"""
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        order_rows=({"order_id": "CT-ORDER", "order_name": "胸部螺旋CT平扫+增强扫描",
+                     "order_status": "新开"},),
+        exam_rows=({"exam_id": "UNLINKED-EXAM", "order_id": "UNLINKED-ORDER",
+                    "performed_dept": performed_dept, "report_time": report_time},),
+    )
+    assert decision.final_state.value == "data_gap"
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "required_field_missing"
+    assert result.llm_call_count == 0
+    assert client.prompts == []

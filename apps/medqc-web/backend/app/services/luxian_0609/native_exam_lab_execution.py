@@ -568,6 +568,21 @@ def _order_exam_structure_outcome(
         # 已撤销的目标医嘱不产生检查触发；病程中的既往计划不能据此构成
         # “病程有检查、无医嘱”的缺陷。
         return None
+    if orders and not exam_rows and any(
+        isinstance(row, Mapping)
+        and not any(_clean(row.get(field)) for field in (
+            "exam_type", "modality", "exam_name", "item_name", "exam_item_name",
+        ))
+        and (
+            not _clean(row.get("performed_dept"))
+            or re.search(r"放射|影像", _clean(row.get("performed_dept")))
+        )
+        and _clean(row.get("report_time") or row.get("report_datetime"))
+        for row in rows_by_source.get("exam_master", ())
+    ):
+        # 放射/影像主记录已有报告时间，但类型与关联未明，不能把识别失败
+        # 当成检查未实施。这里不推定它就是CT/MRI，也不让模型猜测事件。
+        return _ExamLabOutcome("LX0609-010", "data_gap", "required_field_missing")
     if orders and not exam_rows and not report_rows:
         # 医嘱只表示计划。检查主表和正式报告均为空时尚未形成实际检查事件，
         # 不应因“医嘱无主表”提前产生资料缺口。
