@@ -4832,6 +4832,33 @@ class CustomQCSamplePoolService:
             total = len(grouped_rows)
             start = max(page - 1, 0) * page_size
             paged_rows = grouped_rows[start : start + page_size]
+            # 顶部入院时间读取当前住院登记，不使用样本导入时的旧快照覆盖登记值。
+            # 只查询当前页，完整三坐标关联，避免同就诊号跨患者或机构串值。
+            case_keys = {
+                tuple(_safe_text(row.get(f"matched_{field}"))
+                      for field in ("institute_id", "patient_id", "visit_id"))
+                for row in paged_rows
+            }
+            case_keys = {key for key in case_keys if all(key)}
+            if case_keys:
+                registrations = session.execute(
+                    select(InpatRegistration.institute_id, InpatRegistration.patient_id,
+                           InpatRegistration.visit_id, InpatRegistration.admission_datetime)
+                    .where(sa.tuple_(InpatRegistration.institute_id,
+                                     InpatRegistration.patient_id,
+                                     InpatRegistration.visit_id).in_(sorted(case_keys)))
+                ).mappings().all()
+                admission_times = {
+                    tuple(_safe_text(reg.get(field))
+                          for field in ("institute_id", "patient_id", "visit_id")):
+                    reg["admission_datetime"]
+                    for reg in registrations if reg.get("admission_datetime") is not None
+                }
+                for row in paged_rows:
+                    key = tuple(_safe_text(row.get(f"matched_{field}"))
+                                for field in ("institute_id", "patient_id", "visit_id"))
+                    if key in admission_times:
+                        row["admission_time"] = str(admission_times[key])
             legacy_items = [
                 item
                 for row in paged_rows

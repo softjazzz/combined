@@ -5149,3 +5149,43 @@ def test_delete_pool_blocks_protected_or_active_pool(
     result = service.delete_pool(pool_id=pool_id)
 
     assert result == {"deleted": False, "reason": reason}
+
+
+@pytest.mark.parametrize("old_time", ["", "2026-01-01 00:00:00"])
+@pytest.mark.parametrize("registration_case,registration_time", [
+    (("H1", "P1", "V1"), datetime(2026, 2, 2, 10)),
+    (("H2", "P1", "V1"), datetime(2026, 2, 2, 10)),
+    (("H1", "P2", "V1"), datetime(2026, 2, 2, 10)),
+    (("H1", "P1", "V1"), None),
+])
+def test_list_pool_records_reads_current_registration_admission_time(
+    monkeypatch, old_time, registration_case, registration_time
+):
+    import json
+    service = CustomQCSamplePoolService()
+    row = {
+        "id": "item-1", "pool_id": "pool-1", "row_no": 1,
+        "mr_no": "test", "patient_name": "测试", "department": "测试科",
+        "matched_institute_id": "H1", "matched_patient_id": "P1",
+        "matched_visit_id": "V1", "match_status": "matched",
+        "sync_status": "synced", "bundle_status": "ready",
+        "raw_payload_json": json.dumps({"admission_time": old_time,
+            "_sample_sync_state": {"hospitalization_status": "active",
+                                   "status_source": "inpat_registration"}}),
+    }
+    class RegistrationSession(_FakeSession):
+        def execute(self, statement):
+            if "inpat_registration" in str(statement):
+                return _FakeExecuteResult([{
+                    "institute_id": registration_case[0], "patient_id": registration_case[1],
+                    "visit_id": registration_case[2], "admission_datetime": registration_time,
+                }])
+            return super().execute(statement)
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: RegistrationSession([row]))
+    monkeypatch.setattr(service, "_load_record_display_map", lambda **kwargs: {})
+    monkeypatch.setattr(service, "_load_patient_display_map", lambda **kwargs: {})
+    monkeypatch.setattr(service, "_load_bundle_source_table_map", lambda **kwargs: {})
+    result = service.list_pool_records(pool_id="pool-1")
+    expected = ("2026-02-02 10:00:00"
+                if registration_case == ("H1", "P1", "V1") and registration_time else old_time)
+    assert result.items[0]["admission_time"] == expected
