@@ -61,6 +61,8 @@
         :visit-id="focus.visitId"
         :institute-id="focus.instituteId"
         :patient-id="focus.patientId"
+        :admission-time="focus.admissionTime"
+        :discharge-time="focus.dischargeTime"
         :record-ref="authorizedRecordRef"
         :job-id="latestResult.job_id"
         :issues="[]"

@@ -27,6 +27,8 @@ const QCRecordCompareWorkbenchStub = defineComponent({
   name: 'QCRecordCompareWorkbenchStub',
   props: {
     visitId: { type: String, default: '' },
+    admissionTime: { type: String, default: '' },
+    dischargeTime: { type: String, default: '' },
     jobId: { type: String, default: '' },
     recordRef: { type: String, default: '' },
     issues: { type: Array, default: () => [] },
@@ -123,6 +125,8 @@ describe('QCRecordResultComparisonDrawer', () => {
     await flushPromises()
 
     expect(wrapper.get('.customer-record-result-title__context-label').text()).toBe('当前病历')
+    expect(workbenchProps?.admissionTime).toBe('2026-06-18 07:02:00')
+    expect(workbenchProps?.dischargeTime).toBe('2026-06-26 08:31:00')
     expect(wrapper.get('.customer-record-result-title__context-value').text()).toBe('测试病历')
     expect(wrapper.get('.customer-record-result-title__context-time').text()).toBe(
       '住院时间 2026-06-18 07:02:00 → 2026-06-26 08:31:00',
