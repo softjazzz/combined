@@ -923,6 +923,14 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     course_gap = course_007_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-007" else None
     if course_gap is not None:
         defaults = {**defaults, "missing_sources": course_gap[0], "missing_fields": course_gap[1], "reason_label": "查房间隔核对资料不足"}
+    from .continuity_result_mapping import physician_signature_gap_fields
+    signature_gap_fields = (
+        physician_signature_gap_fields(result.get("customer_display_facts"))
+        if rule_id == "LX0609-071" and reason_code == "required_field_missing"
+        else None
+    )
+    if signature_gap_fields is not None:
+        defaults = {**defaults, "missing_fields": signature_gap_fields}
     from .discharge_result_mapping import discharge_course_time_gap_display
     discharge_time_gap = discharge_course_time_gap_display(rule_id, result.get("customer_display_facts"))
     if discharge_time_gap is not None:
@@ -972,6 +980,10 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         default_customer_message = surgery_gap[1]
     if course_gap is not None:
         default_customer_message = course_gap[2]
+    if signature_gap_fields is not None:
+        default_customer_message = customer_finding_from_controlled_facts(
+            rule_id=rule_id, facts=result.get("customer_display_facts")
+        )
     if discharge_time_gap is not None:
         default_customer_message = discharge_time_gap[1]
     customer_message = str(

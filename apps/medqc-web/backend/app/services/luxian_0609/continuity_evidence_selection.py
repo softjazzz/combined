@@ -69,9 +69,24 @@ def bind_consultation_evidence(
     materials: Luxian0609EvidenceMaterialStore,
     consultation_rows: Sequence[Mapping[str, Any]],
     display_facts: Mapping[str, Any] | None,
+    consumed_document_rows: Sequence[Mapping[str, Any]] = (),
 ) -> ContinuityEvidenceBinding:
     """按既有会诊判定器交付的申请/记录时间回定位直接配对文书。"""
 
+    if consumed_document_rows:
+        for row in consumed_document_rows:
+            if not isinstance(row, Mapping):
+                return ContinuityEvidenceBinding((), binding_failed=True)
+            document_id = _clean(row.get("document_id") or row.get("id"))
+            if not document_id or sum(
+                _clean(candidate.get("document_id") or candidate.get("id")) == document_id
+                for candidate in consultation_rows
+            ) != 1:
+                return ContinuityEvidenceBinding((), binding_failed=True)
+        return bind_consumed_continuity_document_rows(
+            snapshot=snapshot, materials=materials,
+            consumed_rows=tuple(("consultation_record", row) for row in consumed_document_rows),
+        )
     if not isinstance(display_facts, Mapping):
         return ContinuityEvidenceBinding(())
     request_times = {

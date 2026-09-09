@@ -32,6 +32,7 @@ class ConsultationTimelinessOutcome:
     final_state: str
     reason_code: str
     display_facts: Mapping[str, Any] | None = None
+    consumed_document_rows: tuple[Mapping[str, Any], ...] = ()
 
 
 def _business_id(row: Mapping[str, Any]) -> str:
@@ -162,13 +163,21 @@ def evaluate_consultation_timeliness(
     )
     if not has_explicit_request_time and not has_request_document:
         if any(field in row for row in consultation_rows for field in _REQUEST_TIME_FIELDS):
-            return ConsultationTimelinessOutcome("data_gap", "authoritative_time_missing")
+            return ConsultationTimelinessOutcome(
+                "data_gap", "authoritative_time_missing",
+                consumed_document_rows=tuple(
+                    row for row in consultation_rows
+                    if any(field in row for field in _REQUEST_TIME_FIELDS)
+                    and _clean(row.get("document_id") or row.get("id"))
+                ),
+            )
         # 当前机构接口可能只返回会诊记录及 record_time，却从未提供
         # consult_apply_time。此时缺失的是规则所需的申请时间数据源，
         # 不是两份已知资料之间的配对失败。
         return ConsultationTimelinessOutcome("data_gap", "source_unavailable")
 
     direct_events: list[tuple[datetime | None, datetime | None]] = []
+    consumed_rows: list[Mapping[str, Any]] = []
     remaining_rows: list[Mapping[str, Any]] = []
     for row in consultation_rows:
         if _has_conflicting_business_ids(row):
@@ -184,6 +193,7 @@ def evaluate_consultation_timeliness(
             has_completion_time or not (request_titled or record_titled)
         ):
             direct_events.append((_request_time(row), _completion_time(row)))
+            consumed_rows.append(row)
         else:
             remaining_rows.append(row)
 
@@ -212,6 +222,7 @@ def evaluate_consultation_timeliness(
         pairs = _pair_separate_rows(request_rows, record_rows)
         if pairs is None:
             return ConsultationTimelinessOutcome("data_gap", "association_failed")
+        consumed_rows.extend(row for pair in pairs for row in pair)
         paired_events = tuple(
             (
                 _request_time(request_row),
@@ -224,7 +235,11 @@ def evaluate_consultation_timeliness(
         events = tuple(direct_events)
     if any(request_time is None or completion_time is None for request_time, completion_time in events):
         return ConsultationTimelinessOutcome(
-            "data_gap", "authoritative_time_missing"
+            "data_gap", "authoritative_time_missing",
+            consumed_document_rows=tuple(
+                row for row in consumed_rows
+                if _clean(row.get("document_id") or row.get("id"))
+            ),
         )
 
     typed_events = tuple(

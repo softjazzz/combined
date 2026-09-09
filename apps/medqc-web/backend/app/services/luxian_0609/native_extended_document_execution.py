@@ -3587,6 +3587,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 materials=evidence_materials,
                 consultation_rows=consultation_rows,
                 display_facts=outcome.display_facts,
+                consumed_document_rows=outcome.consumed_document_rows,
             )
             decisions.append(
                 _decision(

@@ -222,6 +222,25 @@ def _valid_signature_timeline(raw: Mapping[str, Any]) -> bool:
     return all(_nonnegative_int(value) for value in values) and values[0] >= values[1] and values[0] >= values[2] and values[1] + values[2] <= values[0] and values[3] <= values[1] and values[4] <= values[1] and any(value > 0 for value in values[2:])
 
 
+def physician_signature_gap_fields(raw: Any) -> list[str] | None:
+    """将已校验的签名序列缺口计数投影为补缺字段，不重新判定业务状态。"""
+    if (
+        not isinstance(raw, Mapping)
+        or raw.get("failure_kind") != "physician_signature_timeline_incomplete"
+        or not _valid_signature_timeline(raw)
+    ):
+        return None
+    return [
+        label
+        for key, label in (
+            ("missing_title_count", "文书标题"),
+            ("missing_time_count", "记录时间"),
+            ("missing_signature_count", "医师签名"),
+        )
+        if raw[key] > 0
+    ]
+
+
 def _valid_missing_record_times(raw: Mapping[str, Any]) -> bool:
     values = tuple(raw.get(key) for key in ("change_event_count", "handoff_record_count", "missing_handoff_time_count", "handover_record_count", "missing_handover_time_count"))
     return all(_nonnegative_int(value) for value in values) and values[0] > 1 and values[2] <= values[1] and values[4] <= values[3] and values[2] + values[4] > 0 and raw.get("handover_threshold_hours") == 24
