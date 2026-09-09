@@ -1300,7 +1300,7 @@ onBeforeUnmount(() => {
 }
 .record-content-text {
   max-width: 820px;
-  margin: 0 auto;
+  margin: 0;
   color: #202124;
   font-family: inherit;
   font-size: 14px;
@@ -1311,7 +1311,7 @@ onBeforeUnmount(() => {
 }
 .record-content-sections {
   max-width: 820px;
-  margin: 0 auto;
+  margin: 0;
   display: grid;
   gap: 0;
 }
