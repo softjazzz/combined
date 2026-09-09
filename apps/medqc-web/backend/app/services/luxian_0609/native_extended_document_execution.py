@@ -3405,11 +3405,35 @@ async def execute_luxian_0609_native_extended_document_rules(
                     None,
                 )
                 present = approval_match is not None
+                # 已识别的同意出院意见若缺时间，只能说明无法确认窗口，不能说未读到意见。
+                undated_approvals = tuple(
+                    (source_key, row)
+                    for source_key, rows in (
+                        ("daily_course_record", daily_rows),
+                        ("senior_course_record", senior_rows),
+                    )
+                    for row in rows
+                    if _row_time(row) is None
+                    and _discharge_approval_path(row, source_key=source_key)
+                ) if not present else ()
                 if approval_match is None and (daily_error or senior_error):
                     final_state, reason_code = (
                         "data_gap",
                         daily_error or senior_error,
                     )
+                elif undated_approvals:
+                    final_state, reason_code = "data_gap", "authoritative_time_missing"
+                    selected_course_document_ids = tuple(
+                        (source_key, document_id)
+                        for source_key, row in undated_approvals
+                        if (document_id := _clean(row.get("document_id") or row.get("id")))
+                    )
+                    display.append((rule_id, {
+                        "failure_kind": "senior_discharge_approval_time_missing",
+                        "discharge_date": discharge_time.date().isoformat(),
+                        "checked_dates": tuple(sorted(item.isoformat() for item in valid_dates)),
+                        "missing_time_count": len(undated_approvals),
+                    }))
                 else:
                     final_state = "compliant" if present else "data_gap"
                     reason_code = (

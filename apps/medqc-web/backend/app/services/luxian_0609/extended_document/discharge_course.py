@@ -55,7 +55,15 @@ def evaluate_predischarge_course_presence(
         discharge_time.date(),
         (discharge_time - timedelta(days=1)).date(),
     }
-    course_rows = (*daily_rows, *senior_rows)
+    missing_time_rows = tuple(
+        (source_key, row)
+        for source_key, rows in (
+            ("daily_course_record", daily_rows),
+            ("senior_course_record", senior_rows),
+        )
+        for row in rows
+        if _row_time(row) is None
+    )
     matched_course_rows = tuple(
         (source_key, row)
         for source_key, rows in (
@@ -66,10 +74,21 @@ def evaluate_predischarge_course_presence(
         if _row_time(row) is not None and _row_time(row).date() in valid_dates
     )
     present = bool(matched_course_rows)
-    if not present and any(_row_time(row) is None for row in course_rows):
+    if not present and missing_time_rows:
         return PredischargeCourseOutcome(
             "data_gap",
             "authoritative_time_missing",
+            {
+                "failure_kind": "predischarge_course_time_missing",
+                "discharge_date": discharge_time.date().isoformat(),
+                "checked_dates": sorted(item.isoformat() for item in valid_dates),
+                "missing_time_count": len(missing_time_rows),
+                "source_document_refs": [
+                    {"source_type": source_key, "source_document_id": document_id}
+                    for source_key, row in missing_time_rows
+                    if (document_id := _clean(row.get("document_id") or row.get("id")))
+                ],
+            },
         )
 
     source_document_refs: list[dict[str, str]] = []

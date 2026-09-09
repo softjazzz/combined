@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 import re
 from typing import Any
@@ -239,7 +239,37 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _safe_course_time_gap(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    discharge = _safe_date(raw.get("discharge_date"))
+    dates = _safe_text_list(raw.get("checked_dates"), minimum=2, maximum=2)
+    count = raw.get("missing_time_count")
+    if (not discharge or dates is None or type(count) is not int or count <= 0
+        or not set(raw).issubset({"failure_kind", "discharge_date", "checked_dates", "missing_time_count"} | _LEGACY_INTERNAL_KEYS)):
+        return None
+    expected = [(datetime.strptime(discharge, "%Y-%m-%d") - timedelta(days=1)).date().isoformat(), discharge]
+    if dates != expected:
+        return None
+    return {"failure_kind": raw["failure_kind"], "discharge_date": discharge,
+            "checked_dates": dates, "missing_time_count": count}
+
+
+def discharge_course_time_gap_display(rule_id: str, raw: Any) -> tuple[list[str], str] | None:
+    kinds = {"LX0609-067": "predischarge_course_time_missing", "LX0609-068": "senior_discharge_approval_time_missing"}
+    if not isinstance(raw, Mapping) or rule_id not in kinds or raw.get("failure_kind") != kinds[rule_id]:
+        return None
+    safe = _safe_course_time_gap(raw)
+    if safe is None:
+        return None
+    count = safe["missing_time_count"]
+    description = (f"已找到{count}份含同意出院意见的病程记录" if rule_id == "LX0609-068" else f"已读取{count}份病程记录")
+    message = (f"出院日期{safe['discharge_date']}，核查窗口为{'、'.join(safe['checked_dates'])}。"
+               f"{description}，但缺少有效记录时间，无法确认是否位于该窗口。请通过证据定位核对这些文书的时间。")
+    return [f"相关病程记录的权威时间（{count}份）"], message
+
+
 def _safe_067(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "predischarge_course_time_missing":
+        return _safe_course_time_gap(raw)
     if (
         not set(raw).issubset(
             {
@@ -274,7 +304,9 @@ def _safe_067(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    """复制活跃 068 合同；仅接受执行器已判定的两条批准路径。"""
+    """复制活跃 068 合同；仅接受执行器已判定的批准路径及时间缺口。"""
+    if raw.get("failure_kind") == "senior_discharge_approval_time_missing":
+        return _safe_course_time_gap(raw)
 
     verification_kind = raw.get("verification_kind")
     failure_kind = raw.get("failure_kind")

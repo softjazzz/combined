@@ -923,6 +923,10 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     course_gap = course_007_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-007" else None
     if course_gap is not None:
         defaults = {**defaults, "missing_sources": course_gap[0], "missing_fields": course_gap[1], "reason_label": "查房间隔核对资料不足"}
+    from .discharge_result_mapping import discharge_course_time_gap_display
+    discharge_time_gap = discharge_course_time_gap_display(rule_id, result.get("customer_display_facts"))
+    if discharge_time_gap is not None:
+        defaults = {**defaults, "missing_sources": [], "missing_fields": discharge_time_gap[0]}
     completed_details = (
         dict(existing_details) if isinstance(existing_details, Mapping) else {}
     )
@@ -968,6 +972,8 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         default_customer_message = surgery_gap[1]
     if course_gap is not None:
         default_customer_message = course_gap[2]
+    if discharge_time_gap is not None:
+        default_customer_message = discharge_time_gap[1]
     customer_message = str(
         consistent_value("customer_message", default_customer_message)
     ).strip()
