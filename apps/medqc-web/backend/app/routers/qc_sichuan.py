@@ -417,6 +417,7 @@ class SichuanRuleVisitEvaluateRequest(BaseModel):
 
 
 class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
+    diagnostic_capture: bool = False
     rule_ids: Optional[List[str]] = None
     rule_set_key: Optional[str] = None
     execution_strategy: Optional[str] = None
@@ -1580,11 +1581,17 @@ def _resolve_shared_sample_pool_latest_job(
 
 
 async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
-    await run_sichuan_workspace_batch_job(
-        job_id,
-        workspace=_sichuan_workspace_service(),
-        qc_service_provider=get_qc_service,
-    )
+    from ..services.qc_diagnostics.support_store import capture_for_job, finalize
+    workspace = _sichuan_workspace_service()
+    capture = capture_for_job(workspace, job_id)
+    try:
+        await run_sichuan_workspace_batch_job(
+            job_id, workspace=workspace, qc_service_provider=get_qc_service,
+            diagnostic_capture=capture,
+        )
+    finally:
+        if capture is not None:
+            finalize(job_id)
 
 
 @router.post("/workspace/batch-jobs")
@@ -1595,6 +1602,11 @@ async def create_workspace_batch_job(
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
+    if payload.diagnostic_capture:
+        if not set(current_user.get("roles", [])).intersection({"admin", "super_admin"}):
+            raise HTTPException(403, "仅管理员可采集完整排障包")
+        if payload.rule_set_key != LUXIAN_0609_RULE_SET_KEY or len(payload.record_refs or []) != 1:
+            raise HTTPException(422, "排障采集仅支持单病历泸县0609质控")
     if payload.rule_set_key and not requested_rule_set:
         raise HTTPException(status_code=422, detail=f"未知规则集: {payload.rule_set_key}")
 
@@ -1777,6 +1789,7 @@ async def create_workspace_batch_job(
         else []
     )
     idempotency_payload = {
+        **({"diagnostic_capture": True} if payload.diagnostic_capture else {}),
         "scope": normalized_scope,
         "query_scope": normalized_scope,
         **(
@@ -1889,6 +1902,7 @@ async def create_workspace_batch_job(
             "refine_confidence_threshold": refine_confidence_threshold,
             "max_refine_candidates": max_refine_candidates,
             "source": "sichuan_rule_workspace",
+            **({"diagnostic_capture": True} if payload.diagnostic_capture else {}),
             "run_mode": run_mode,
             **({"task_frozen_date": task_frozen_date} if task_frozen_date else {}),
             "idempotency_key": idempotency_key,

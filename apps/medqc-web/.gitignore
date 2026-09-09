@@ -151,3 +151,4 @@ supabase/.temp
 
 # Vercel
 .vercel
+backend/app/storage/qc_diagnostics/

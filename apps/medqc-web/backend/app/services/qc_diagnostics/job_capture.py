@@ -21,7 +21,7 @@ from .contracts import DiagnosticPackageError
 class DiagnosticJobCapture:
     def __init__(self, *, job_id: str, record_identity: tuple[str, str, str],
                  consume: Callable[[dict, dict], None], max_bytes: int = 20 * 1024 * 1024,
-                 ttl_seconds: int = 1800):
+                 ttl_seconds: int = 1800, capture_partial: bool = False):
         if (type(record_identity) is not tuple or len(record_identity) != 3
                 or any(type(value) is not str or not value.strip() or len(value) > 128 for value in record_identity)):
             raise DiagnosticPackageError("invalid_capture_identity")
@@ -32,6 +32,7 @@ class DiagnosticJobCapture:
         self._record_identity: tuple[str, str, str] | None = record_identity
         self._capture = _Capture(max_bytes, ttl_seconds, job_id)
         self._consume = consume
+        self._capture_partial = capture_partial
         self._deadline = time.monotonic() + ttl_seconds
         self._lock = threading.Lock()
         self._started = False
@@ -93,9 +94,11 @@ class DiagnosticJobCapture:
                 return
             self._finished = True
         try:
-            if deliver and not self._errors:
+            if self._capture_partial or (deliver and not self._errors):
                 data = self._capture.read_internal()
-                if data["execution_inputs"] is not None and data["saved_result"] is not None:
+                if not deliver:
+                    self._errors.add("execution_interrupted")
+                if self._capture_partial or (data["execution_inputs"] is not None and data["saved_result"] is not None):
                     self._consume(data, self.summary())
                 else:
                     self._errors.add("saved_capture_unavailable")

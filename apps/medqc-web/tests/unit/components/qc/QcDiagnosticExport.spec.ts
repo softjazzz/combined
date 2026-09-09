@@ -1,8 +1,14 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import * as debugExport from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
 import type { SingleRecordQcResultItem } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
+import * as captureApi from '@/services/qc-diagnostics-service'
+vi.mock('@/services/qc-diagnostics-service', () => ({
+  startDiagnosticCapture: vi.fn(),
+  getDiagnosticCapture: vi.fn(),
+  downloadDiagnosticCapture: vi.fn(),
+}))
 
 const { downloadBlob } = vi.hoisted(() => ({ downloadBlob: vi.fn() }))
 vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({ downloadBlob }))
@@ -54,7 +60,10 @@ function readBlob(blob: Blob): Promise<string> {
 }
 
 beforeEach(() => vi.clearAllMocks())
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 
 describe('本地诊断导包', () => {
   it('用真实脱敏器生成全部规则结果，确认后下载同一预览快照', async () => {
@@ -157,6 +166,123 @@ describe('本地诊断导包', () => {
     expect(wrapper.text()).not.toContain(context.patientName)
     expect(wrapper.find('pre').exists()).toBe(false)
     expect(downloadBlob).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+describe('执行排障包采集', () => {
+  it('重新进入已完成采集任务时恢复下载，不重新质控', async () => {
+    vi.mocked(captureApi.getDiagnosticCapture).mockResolvedValue({
+      state: 'ready',
+      capture_completeness: 'complete',
+    })
+    const wrapper = render()
+    await wrapper.setProps({
+      context: { ...context, instituteId: 'hospital', jobId: 'saved-capture', recordRef: 'ref-1' },
+    })
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(captureApi.getDiagnosticCapture).toHaveBeenCalledWith('saved-capture')
+    expect(wrapper.find('.diagnostic-export__capture').text()).toContain('采集完整')
+    expect(
+      wrapper
+        .findAll('button')
+        .find((b) => b.text() === '重新质控并采集排障包')!
+        .attributes('disabled'),
+    ).toBeDefined()
+    expect(captureApi.startDiagnosticCapture).not.toHaveBeenCalled()
+    expect(captureApi.downloadDiagnosticCapture).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  async function setup() {
+    vi.useFakeTimers()
+    vi.mocked(captureApi.startDiagnosticCapture).mockResolvedValue({ job_id: 'capture-1' })
+    vi.mocked(captureApi.getDiagnosticCapture)
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockResolvedValue({ state: 'running' })
+    const wrapper = render()
+    await wrapper.setProps({
+      context: { ...context, instituteId: 'hospital', jobId: 'old-job', recordRef: 'ref-1' },
+    })
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+  it('传递完整选择，防重复启动，仅确认后下载', async () => {
+    const wrapper = await setup()
+    vi.mocked(captureApi.getDiagnosticCapture).mockResolvedValue({
+      state: 'ready',
+      capture_completeness: 'partial',
+      missing_components: ['model_outputs'],
+    })
+    vi.mocked(captureApi.downloadDiagnosticCapture).mockResolvedValue(new Blob(['zip']))
+    const start = wrapper.findAll('button').find((b) => b.text() === '重新质控并采集排障包')!
+    await start.trigger('click')
+    await flushPromises()
+    expect(captureApi.startDiagnosticCapture).toHaveBeenCalledWith({
+      job_id: 'old-job',
+      record_ref: 'ref-1',
+      institute_id: 'hospital',
+      patient_id: context.patientId,
+      visit_id: context.visitId,
+    })
+    await start.trigger('click')
+    expect(captureApi.startDiagnosticCapture).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('采集不完整')
+    const button = wrapper.findAll('button').find((b) => b.text() === '下载执行排障包')!
+    await button.trigger('click')
+    expect(captureApi.downloadDiagnosticCapture).not.toHaveBeenCalled()
+    await wrapper.findAll('input')[1].setValue(true)
+    await button.trigger('click')
+    await flushPromises()
+    expect(captureApi.downloadDiagnosticCapture).toHaveBeenCalledWith('capture-1')
+    expect(downloadBlob).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+  it('关闭停止轮询，重开恢复同一任务，切病例忽略旧响应', async () => {
+    const wrapper = await setup()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '重新质控并采集排障包')!
+      .trigger('click')
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '取消')!
+      .trigger('click')
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(captureApi.getDiagnosticCapture).toHaveBeenCalledTimes(2)
+    let finish!: (value: captureApi.DiagnosticCaptureStatus) => void
+    vi.mocked(captureApi.getDiagnosticCapture).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    await wrapper.get('button').trigger('click')
+    await wrapper.setProps({ context: { visitId: 'other' } })
+    finish({ state: 'ready', capture_completeness: 'complete' })
+    await flushPromises()
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.find('.diagnostic-export__capture').text()).not.toContain('采集完整')
+    expect(captureApi.startDiagnosticCapture).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(captureApi.getDiagnosticCapture).toHaveBeenCalledTimes(3)
+  })
+  it('失败状态可见，不显示下载或完整声明', async () => {
+    const wrapper = await setup()
+    vi.mocked(captureApi.getDiagnosticCapture).mockResolvedValue({
+      state: 'failed',
+      error_code: 'capture_failed',
+    })
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '重新质控并采集排障包')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('capture_failed')
+    expect(wrapper.text()).not.toContain('下载执行排障包')
     wrapper.unmount()
   })
 })

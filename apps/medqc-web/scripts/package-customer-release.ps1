@@ -66,6 +66,10 @@ function Copy-TreeExclude(
   Get-ChildItem -LiteralPath $source -Force | ForEach-Object {
     $name = $_.Name
     if ($_.PSIsContainer) {
+      # 排障制品含临床正文；排除运行数据，保留 services/qc_diagnostics 源码。
+      if ($_.FullName -match '[\\/]storage[\\/]qc_diagnostics$') {
+        return
+      }
       if (($excludeDirs -contains $name) -or (Test-NameMatch -name $name -patterns $excludeDirPatterns)) {
         return
       }
@@ -92,6 +96,7 @@ function Assert-NoReleaseForbiddenContent([string]$path) {
     "backend\.env",
     "backend\data\vector",
     "backend\data\manual_qc_runs",
+    "backend\app\storage\qc_diagnostics",
     "backend\scripts\build_icd_vector_index.py"
   )
   foreach ($relative in $forbiddenPaths) {

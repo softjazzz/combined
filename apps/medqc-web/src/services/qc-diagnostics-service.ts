@@ -47,3 +47,47 @@ export async function downloadDiagnostic(token: string): Promise<Blob> {
 export async function discardDiagnostic(token: string): Promise<void> {
   await ApiService.requestRaw({ method: 'DELETE', url: `${base}/${encodeURIComponent(token)}` })
 }
+
+export interface DiagnosticCaptureStatus {
+  state: 'running' | 'ready' | 'failed' | 'unavailable'
+  capture_completeness?: 'complete' | 'partial'
+  missing_components?: string[]
+  included?: string[]
+  size_bytes?: number
+  notice?: string
+  error_code?: string
+}
+
+const captureBase = '/api/v1/qc/diagnostics/capture'
+
+export async function startDiagnosticCapture(
+  selection: DiagnosticSelection,
+): Promise<{ job_id: string }> {
+  const response = await ApiService.requestRaw<{ job_id: string }>({
+    method: 'POST',
+    url: `${captureBase}/start`,
+    data: selection,
+    timeout: 60000,
+  })
+  return response.data
+}
+
+export async function getDiagnosticCapture(jobId: string): Promise<DiagnosticCaptureStatus> {
+  const response = await ApiService.requestRaw<DiagnosticCaptureStatus>({
+    method: 'GET',
+    url: `${captureBase}/${encodeURIComponent(jobId)}`,
+    timeout: 30000,
+  })
+  return response.data
+}
+
+export async function downloadDiagnosticCapture(jobId: string): Promise<Blob> {
+  const response = await ApiService.requestRaw<Blob>({
+    method: 'POST',
+    url: `${captureBase}/${encodeURIComponent(jobId)}/download`,
+    data: { confirmed: true },
+    responseType: 'blob',
+    timeout: 60000,
+  })
+  return response.data
+}

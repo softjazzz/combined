@@ -7,6 +7,7 @@ from ..core.security import require_roles
 from ..core.audit import audit_event
 from ..services.qc_diagnostics.contracts import DiagnosticPackageError
 from ..services.qc_diagnostics.history_delivery import HistoryDelivery
+from ..services.qc_diagnostics import support_store
 
 router = APIRouter(prefix="/api/v1/qc/diagnostics", tags=["qc-diagnostics"])
 _delivery = HistoryDelivery()
@@ -73,3 +74,63 @@ def download_history(token: str, body: ConfirmHistory, request: Request, user: d
 def discard_history(token: str, user: dict = Depends(_admin)):
     _delivery.discard(owner=_owner(user), token=token)
     return Response(status_code=204)
+
+
+def _capture_job(job_id: str, user: dict) -> dict:
+    job = _workspace().get_batch_job(job_id=job_id, created_by=_owner(user))
+    if not job or (job.get("filters") or {}).get("diagnostic_capture") is not True:
+        raise HTTPException(404, "未找到当前用户的排障采集任务")
+    return job
+
+
+@router.post("/capture/start")
+async def start_capture(body: PrepareHistory, request: Request, user: dict = Depends(_admin)):
+    from .qc_sichuan import (SichuanWorkspaceBatchJobCreateRequest,
+                             create_workspace_batch_job, get_qc_service)
+    workspace = _workspace()
+    job = workspace.get_batch_job(job_id=body.job_id, created_by=_owner(user))
+    if not job:
+        raise HTTPException(404, "未找到当前用户的原质控任务")
+    result = workspace.get_latest_luxian_0609_record_result(
+        institute_id=body.institute_id, patient_id=body.patient_id, visit_id=body.visit_id)
+    if (result.get("state") != "ready" or result.get("job_id") != body.job_id
+            or result.get("record_ref") != body.record_ref):
+        raise HTTPException(409, "质控结果已变化，请重新打开当前病历结果")
+    payload = SichuanWorkspaceBatchJobCreateRequest(
+        diagnostic_capture=True, rule_set_key="luxian_0609_qc_v1",
+        rule_ids=[item["rule_id"] for item in result.get("items", [])],
+        scope=job.get("scope") or "final",
+        record_refs=[{"institute_id": body.institute_id, "patient_id": body.patient_id,
+                      "visit_id": body.visit_id}],
+    )
+    response = await create_workspace_batch_job(request, payload, user, await get_qc_service())
+    audit_event(request, action="qc.diagnostic.capture", resource="qc-diagnostics/capture",
+                outcome="success", details={"mode": "execution_capture"}, current_user=user)
+    return {"job_id": response["data"]["id"]}
+
+
+@router.get("/capture/{job_id}")
+def capture_status(job_id: str, response: Response, user: dict = Depends(_admin)):
+    job = _capture_job(job_id, user)
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return support_store.status(job_id, job.get("status", ""))
+    except DiagnosticPackageError as error:
+        _error(error)
+
+
+@router.post("/capture/{job_id}/download")
+def download_capture(job_id: str, body: ConfirmHistory, request: Request, user: dict = Depends(_admin)):
+    _capture_job(job_id, user)
+    if body.confirmed is not True:
+        raise HTTPException(409, "请先复核排障包包含医疗正文及隐私提示")
+    try:
+        content = support_store.download(job_id)
+    except DiagnosticPackageError as error:
+        _error(error)
+    audit_event(request, action="qc.diagnostic.download", resource="qc-diagnostics/capture",
+                outcome="success", details={"mode": "execution_capture"}, current_user=user)
+    return Response(content, media_type="application/zip", headers={
+        "Content-Disposition": "attachment; filename=qc-troubleshooting.zip",
+        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+    })

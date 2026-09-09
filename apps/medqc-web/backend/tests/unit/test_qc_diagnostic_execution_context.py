@@ -30,6 +30,17 @@ def test_disabled_context_does_not_inspect_settings():
     record(object(), object())
 
 
+def test_capture_preserves_actual_source_gate_decisions():
+    from app.services.luxian_0609_trigger_gate import Luxian0609GateDecision
+    gate = Luxian0609GateDecision(rule_id="LX0609-033", status="data_gap", reason="source_unavailable")
+    with capture_scope() as capture:
+        capture_execution_context(medical_text="", evidence_payload={}, prepared_rules=[],
+            settings=SimpleNamespace(), source_schema="cdm", source_gate_decisions_present=True,
+            source_gate_decisions={"LX0609-033": gate})
+        assert capture.read_internal()["execution_context"]["source_gate_decisions"]["LX0609-033"] == gate.to_metadata()
+        assert "source_gate_decisions_not_captured" not in capture.summary()["missing_reasons"]
+
+
 def test_duplicate_context_and_overflow_are_explicit():
     with capture_scope() as capture:
         record({"x": 1}, SimpleNamespace())

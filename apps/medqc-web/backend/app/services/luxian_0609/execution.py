@@ -229,6 +229,7 @@ async def prepare_luxian_0609_execution(
         medical_text=medical_text, evidence_payload=evidence_payload, prepared_rules=prepared_rules,
         settings=settings, source_schema=source_schema,
         source_gate_decisions_present=source_gate_decisions is not None,
+        source_gate_decisions=source_gate_decisions,
     )
     llm_client = wrap_luxian_0609_llm_client(llm_client)
 

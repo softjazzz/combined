@@ -180,7 +180,7 @@ class _Capture:
                 return
             self._execution_context = frozen
             self._bytes += len(frozen)
-            if parameters["source_gate_decisions_present"]:
+            if parameters["source_gate_decisions_present"] and parameters.get("source_gate_decisions") is None:
                 self._errors.add("source_gate_decisions_not_captured")
 
     def _committed_results(self, receipts):
@@ -333,16 +333,25 @@ def diagnostic_capture_enabled() -> bool:
 
 def capture_execution_context(*, medical_text: str, evidence_payload: object, prepared_rules: object,
                               settings: object, source_schema: str | None,
-                              source_gate_decisions_present: bool) -> None:
+                              source_gate_decisions_present: bool, source_gate_decisions=None) -> None:
     """冻结 prepare 收到的参数，只取 LX0609 配置，不遍历客户端或全局密钥。"""
     capture = _CURRENT.get()
     if capture is None:
         return
     try:
+        from ..luxian_0609_trigger_gate import Luxian0609GateDecision
+        gates = None
+        if source_gate_decisions is not None:
+            gates = {}
+            for rule_id, decision in source_gate_decisions.items():
+                if type(decision) is not Luxian0609GateDecision:
+                    raise DiagnosticPackageError("unsupported_source_gate")
+                gates[rule_id] = decision.to_metadata()
         capture._capture_execution_context({
             "medical_text": medical_text, "evidence_payload": evidence_payload,
             "prepared_rules": prepared_rules, "source_schema": source_schema,
             "source_gate_decisions_present": source_gate_decisions_present,
+            "source_gate_decisions": gates,
         }, settings)
     except Exception:
         capture._failed()
