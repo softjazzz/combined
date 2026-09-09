@@ -13,7 +13,7 @@ from app.services.luxian_0609.evaluation_horizon import build_record_evaluation_
 @pytest.fixture
 def case_db():
     engine = create_engine("sqlite:///:memory:")
-    for model in (module.MedicalRecordFrontpage, module.AdmissionRecord, module.DischargeRecord):
+    for model in (module.MedicalRecordFrontpage, module.AdmissionRecord, module.DischargeRecord, module.InpatRegistration):
         model.__table__.create(bind=engine)
     with Session(engine) as session:
         for key in ("UPDATE-ONLY", "DISCHARGE-DATE", "FRONTPAGE-DATE"):

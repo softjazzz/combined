@@ -296,6 +296,7 @@ def test_collect_records_visit_date_matches_admission_or_discharge_date() -> Non
         record_repository_module.MedicalRecordFrontpage,
         record_repository_module.AdmissionRecord,
         record_repository_module.DischargeRecord,
+        record_repository_module.InpatRegistration,
     ):
         model.__table__.create(bind=engine)
 
@@ -347,6 +348,7 @@ def test_collect_records_today_inpatient_requires_today_verified_projection() ->
         record_repository_module.MedicalRecordFrontpage,
         record_repository_module.AdmissionRecord,
         record_repository_module.DischargeRecord,
+        record_repository_module.InpatRegistration,
         record_repository_module.HospitalizationStatusProjection,
     ):
         model.__table__.create(bind=engine)

@@ -444,7 +444,7 @@ class RecordRepository:
         admission_dt_expr = func.coalesce(
             MedicalRecordFrontpage.admission_datetime,
             AdmissionRecord.admission_datetime,
-            AdmissionRecord.update_time,
+            InpatRegistration.admission_datetime,
         )
         query = (
             session.query(
@@ -466,6 +466,14 @@ class RecordRepository:
                     AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
                     AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
                     AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                ),
+            )
+            .outerjoin(
+                InpatRegistration,
+                and_(
+                    InpatRegistration.institute_id == MedicalRecordFrontpage.institute_id,
+                    InpatRegistration.patient_id == MedicalRecordFrontpage.patient_id,
+                    InpatRegistration.visit_id == MedicalRecordFrontpage.visit_id,
                 ),
             )
         )
