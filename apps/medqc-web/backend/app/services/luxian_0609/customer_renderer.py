@@ -2706,9 +2706,25 @@ def customer_finding_from_controlled_facts(
             else f"出院带药缺少字段：{missing}。"
         )
 
+    if rule_id == "LX0609-063" and kind == "discharge_diagnosis_data_gap":
+        gaps = []
+        for field, label in (("authoritative_gap", "权威出院诊断"), ("written_gap", "出院记录诊断")):
+            gap = facts.get(field)
+            if gap == "diagnoses_missing":
+                gaps.append(f"未取得{label}")
+            elif gap == "name_missing":
+                gaps.append(f"{label}存在缺少名称的记录")
+            elif gap == "order_missing":
+                gaps.append(f"{label}缺少可靠排列序号")
+            elif gap == "order_invalid":
+                gaps.append(f"{label}排列序号无效或重复")
+        return "；".join(gaps) + "，暂时无法完成诊断内容及顺序核对。"
+
     if rule_id == "LX0609-063" and kind == "discharge_diagnosis_consistency_check":
         authority = joined("authoritative_diagnoses")
         written = joined("written_diagnoses")
+        if facts.get("order_comparable") is False:
+            return f"权威出院诊断包含“{authority}”，出院记录诊断包含“{written}”，两者内容不一致；顺序尚无法核对，以上列示不代表诊断排列顺序。"
         state = "一致" if facts.get("diagnoses_consistent") is True else "不一致"
         return f"权威出院诊断为“{authority}”，出院记录诊断为“{written}”，两者顺序及内容{state}。"
 

@@ -1124,16 +1124,38 @@ def _linked_order_id(row: Mapping[str, Any]) -> str:
     )
 
 
-def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
-    ordered = sorted(
-        (
-            int(row.get("diagnosis_no") or 9999),
-            _clean(row.get("diagnosis_name") or row.get("diagnosis")),
-        )
-        for row in rows
-        if _clean(row.get("diagnosis_name") or row.get("diagnosis"))
-    )
-    return tuple(name for _position, name in ordered)
+def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, ...], str | None]:
+    """名称完整后才比较内容；多行仅以唯一合法序号建立顺序。"""
+    if not rows:
+        return (), "diagnoses_missing"
+    names = tuple(_clean(row.get("diagnosis_name") or row.get("diagnosis")) for row in rows)
+    if not all(names):
+        return names, "name_missing"
+    positions: list[int] = []
+    missing = False
+    invalid = False
+    for row in rows:
+        value = row.get("diagnosis_no")
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing = True
+            continue
+        if type(value) is int:
+            position = value
+        elif isinstance(value, str) and re.fullmatch(r"[0-9]{1,9}", value.strip()):
+            position = int(value.strip())
+        else:
+            invalid = True
+            continue
+        if position <= 0:
+            invalid = True
+        positions.append(position)
+    if invalid or len(positions) != len(set(positions)):
+        return names, "order_invalid"
+    if len(rows) == 1:
+        return names, None
+    if missing:
+        return names, "order_missing"
+    return tuple(name for _, name in sorted(zip(positions, names))), None
 
 
 def _structured_discharge_medications(
@@ -2413,19 +2435,27 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif diagnosis_error or discharge_diagnosis_error:
                 final_state, reason_code = "data_gap", diagnosis_error or discharge_diagnosis_error
             else:
-                authority = _diagnosis_sequence(diagnosis_rows)
-                written = _diagnosis_sequence(discharge_diagnosis_rows)
-                if not authority or not written:
+                authority, authority_gap = _diagnosis_sequence(diagnosis_rows)
+                written, written_gap = _diagnosis_sequence(discharge_diagnosis_rows)
+                names_complete = authority_gap not in {"diagnoses_missing", "name_missing"} and written_gap not in {"diagnoses_missing", "name_missing"}
+                order_comparable = authority_gap is None and written_gap is None
+                # 名称多重集保留重复数量；顺序不可靠时不以名称排序建立临床顺序。
+                content_equal = sorted(authority) == sorted(written)
+                if not names_complete or (content_equal and not order_comparable):
                     final_state, reason_code = "data_gap", "required_field_missing"
+                    display.append((rule_id, {
+                        "verification_kind": "discharge_diagnosis_data_gap",
+                        "authoritative_gap": authority_gap, "written_gap": written_gap,
+                    }))
                 else:
-                    complete = authority == written
+                    complete = order_comparable and authority == written
                     final_state = "compliant" if complete else "non_compliant"
                     reason_code = "requirement_satisfied" if complete else "requirement_violated"
                     display.append((rule_id, {
                         "verification_kind": "discharge_diagnosis_consistency_check",
-                        "authoritative_diagnoses": list(authority),
-                        "written_diagnoses": list(written),
-                        "diagnoses_consistent": complete,
+                        "authoritative_diagnoses": list(authority) if order_comparable else sorted(authority),
+                        "written_diagnoses": list(written) if order_comparable else sorted(written),
+                        "diagnoses_consistent": complete, "order_comparable": order_comparable,
                     }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,

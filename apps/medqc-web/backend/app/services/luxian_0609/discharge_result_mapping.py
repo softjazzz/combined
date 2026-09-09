@@ -209,6 +209,15 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("verification_kind") == "discharge_diagnosis_data_gap":
+        allowed = {"verification_kind", "authoritative_gap", "written_gap"}
+        gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
+        if (set(raw) != allowed or not any(gaps)
+                or any(value is not None and (not isinstance(value, str) or value not in {
+                    "diagnoses_missing", "name_missing", "order_missing", "order_invalid"
+                }) for value in gaps)):
+            return None
+        return dict(raw)
     if (
         not set(raw).issubset(
             {
@@ -216,6 +225,7 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "authoritative_diagnoses",
             "written_diagnoses",
             "diagnoses_consistent",
+            "order_comparable",
             }
             | _LEGACY_INTERNAL_KEYS
         )
@@ -225,10 +235,13 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     authoritative = _safe_text_list(raw.get("authoritative_diagnoses"), minimum=1)
     written = _safe_text_list(raw.get("written_diagnoses"), minimum=1)
+    order_comparable = raw.get("order_comparable", True)
     if (
         authoritative is None
         or written is None
         or raw["diagnoses_consistent"] != (authoritative == written)
+        or type(order_comparable) is not bool
+        or (not order_comparable and (raw["diagnoses_consistent"] or sorted(authoritative) == sorted(written)))
     ):
         return None
     return {
@@ -236,6 +249,7 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         "authoritative_diagnoses": authoritative,
         "written_diagnoses": written,
         "diagnoses_consistent": raw["diagnoses_consistent"],
+        **({"order_comparable": order_comparable} if "order_comparable" in raw else {}),
     }
 
 
@@ -420,6 +434,8 @@ def discharge_customer_fact_status_is_valid(
             "compliant" if not safe_facts.get("missing_fields") else "non_compliant"
         )
     if normalized == "LX0609-063":
+        if safe_facts.get("verification_kind") == "discharge_diagnosis_data_gap":
+            return normalized_status == "data_gap"
         return normalized_status == (
             "compliant"
             if safe_facts.get("diagnoses_consistent") is True
