@@ -2661,6 +2661,9 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.find('.record-compare-shell').exists()).toBe(true)
     expect(wrapper.find('.record-result-column').exists()).toBe(false)
     expect(wrapper.find('.record-content-toolbar').text()).toContain('入院记录')
+    expect(wrapper.get('[data-testid="record-admission-time"]').text()).toContain(
+      '2026-02-02 10:00:00',
+    )
     expect(modalText).toContain('入院记录')
     expect(wrapper.find('.editable-copy-document-directory-list.is-tree').exists()).toBe(true)
     const admissionToggle = wrapper.get('[data-testid="record-document-group-toggle-admission"]')

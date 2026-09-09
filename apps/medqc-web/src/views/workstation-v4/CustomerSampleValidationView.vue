@@ -1320,6 +1320,7 @@
               :patient-id="editableCopySourceRecord?.matched_patient_id"
               :issues="[]"
               :provided-documents="editableCopyDraft.documents"
+              :admission-time="editableCopyDraft.admissionTime"
               document-only
             />
             <section v-else class="editable-copy-section editable-copy-document-workbench-section">

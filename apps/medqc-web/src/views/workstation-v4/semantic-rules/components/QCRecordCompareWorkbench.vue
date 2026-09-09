@@ -59,6 +59,16 @@
               <span>记录时间</span>
               <b>{{ formatDocumentTime(resolveDocumentTime(selectedDocument)) }}</b>
             </time>
+            <time
+              v-if="
+                selectedDocument && isAdmissionRecordDocument(selectedDocument) && admissionTime
+              "
+              class="record-content-time"
+              data-testid="record-admission-time"
+            >
+              <span>入院时间</span>
+              <b>{{ formatDocumentTime(admissionTime) }}</b>
+            </time>
           </div>
           <label v-if="documents.length" class="record-document-select">
             <span>选择文书</span>
@@ -324,6 +334,8 @@ const props = withDefaults(
     documentOnly?: boolean
     /** 当前病历完整文书；传入后不再请求历史 Bundle 目录或正文。 */
     providedDocuments?: EditableMedicalRecordDocument[]
+    /** 后端解析的本次住院入院时间，仅用于展示。 */
+    admissionTime?: string
     jobId?: string
     recordRef?: string
     instituteId?: string
