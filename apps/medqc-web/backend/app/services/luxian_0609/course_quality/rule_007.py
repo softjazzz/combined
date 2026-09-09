@@ -17,6 +17,7 @@ from ..evidence_material import (
     EvidenceMaterialTruncated,
     EvidenceMaterialUnavailable,
     Luxian0609EvidenceMaterialStore,
+    build_material_document_refs,
 )
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from ..source_evidence_reader import (
@@ -493,6 +494,7 @@ def evaluate_rule_007_typed(
         )
 
     record_refs_by_time: dict[datetime, set[str]] = {}
+    missing_time_refs: set[str] = set()
     substantive_record_without_time = False
     for source_key in RULE_007_RECORD_SOURCES:
         observation = observations[source_key]
@@ -561,6 +563,9 @@ def evaluate_rule_007_typed(
                     record_refs_by_time.setdefault(parsed, set()).add(document_ref)
             elif row_text(row):
                 substantive_record_without_time = True
+                document_ref = document_refs_by_row.get(id(row))
+                if document_ref:
+                    missing_time_refs.add(document_ref)
 
     bounded_record_refs_by_time = {
         record_time: document_refs
@@ -597,6 +602,7 @@ def evaluate_rule_007_typed(
                 confidence=1.0,
             )
         if substantive_record_without_time:
+            refs.update(missing_time_refs)
             return decision(
                 applicability=ApplicabilityState.APPLICABLE,
                 evidence_state=EvidenceState.DATA_GAP,
@@ -648,6 +654,8 @@ def evaluate_rule_007_typed(
                 confidence=1.0,
             )
         if horizon_date == deadline_date or substantive_record_without_time:
+            if substantive_record_without_time:
+                refs.update(missing_time_refs)
             return decision(
                 applicability=ApplicabilityState.APPLICABLE,
                 evidence_state=EvidenceState.DATA_GAP,
@@ -665,6 +673,7 @@ def evaluate_rule_007_typed(
             confidence=1.0,
         )
     if interval_over_72h and substantive_record_without_time:
+        refs.update(missing_time_refs)
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
@@ -751,6 +760,26 @@ def rule_007_customer_display_facts(
                 )
                 if not valid:
                     return {"failure_kind": "course_interval_source_gap", "gap_source": source, "gap_kind": "time_missing"}
+            elif decision.reason_code == "authoritative_time_missing":
+                # 只展示执行器选中的缺时文书；无关的无时间记录不能解释其他边界缺口。
+                round_rows = [
+                    row for row in rows
+                    if _is_round_record(row, source_key=source)
+                ]
+                missing_refs = build_material_document_refs(
+                    source_key=source, rows=tuple(
+                        row for row in round_rows
+                        if authoritative_course_time(authoritative_document_time_value(row)) is None
+                        and row_text(row)
+                    ),
+                )
+                missing_count = len(set(missing_refs).intersection(decision.fact_refs))
+                if missing_count:
+                    return {
+                        "failure_kind": "course_interval_source_gap", "gap_source": source,
+                        "gap_kind": "time_missing", "record_count": len(round_rows),
+                        "missing_time_count": missing_count,
+                    }
     if decision.evidence_state is not EvidenceState.SUFFICIENT:
         return None
     record_points: list[tuple[datetime, str, str]] = []

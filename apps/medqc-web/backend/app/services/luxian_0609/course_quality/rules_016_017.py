@@ -318,6 +318,7 @@ def _assess_copy(
     )
     comparable: list[tuple[datetime, str, str, bool, str, str]] = []
     seen_document_ids: set[str] = set()
+    missing_time_count = 0
     for source_key, row, content in rows:
         if _clean(row.get("document_title")) == "长期医嘱":
             continue
@@ -328,15 +329,8 @@ def _assess_copy(
             authoritative_document_time_value(row)
         )
         if record_time is None:
-            return _CopyRuleOutcome(
-                status="data_gap",
-                reason_code="copy_authoritative_time_missing",
-                executor_type="program",
-                safe_metadata={
-                    "comparable_document_count": len(comparable),
-                    "similarity_band": "unknown",
-                },
-            )
+            missing_time_count += 1
+            continue
         document_id = _clean(row.get("document_id"))
         if document_id and document_id in seen_document_ids:
             continue
@@ -355,6 +349,7 @@ def _assess_copy(
 
     safe_metadata: dict[str, Any] = {
         "comparable_document_count": len(comparable),
+        "missing_time_document_count": missing_time_count,
         "maximum_similarity": 0.0,
         "similarity_threshold": _COPY_SIMILARITY_THRESHOLD,
         "similarity_band": "unknown",
@@ -367,8 +362,8 @@ def _assess_copy(
     }
     if len(comparable) < 2:
         return _CopyRuleOutcome(
-            status="not_applicable",
-            reason_code="insufficient_independent_course_records",
+            status="data_gap" if missing_time_count else "not_applicable",
+            reason_code="copy_authoritative_time_missing" if missing_time_count else "insufficient_independent_course_records",
             executor_type="program",
             safe_metadata=safe_metadata,
         )
@@ -406,7 +401,7 @@ def _assess_copy(
         if len(comparable) >= 2 and screened_pair_count == 0:
             return _CopyRuleOutcome(
                 status="data_gap",
-                reason_code="copy_authoritative_time_ambiguous",
+                reason_code="copy_authoritative_time_missing" if missing_time_count else "copy_authoritative_time_ambiguous",
                 executor_type="program",
                 safe_metadata=safe_metadata,
             )
@@ -531,6 +526,32 @@ def _assess_copy(
             "template_shell_only": template_shell_only,
         }
     )
+    assert best_pair is not None
+    left_material = _material_for_copy_coverage(best_pair[0][2])
+    right_material = _material_for_copy_coverage(best_pair[1][2])
+    if (
+        maximum == 1.0
+        and not (best_pair[0][3] and best_pair[1][3])
+        and len(left_material) >= _MIN_COMPARABLE_CHARS
+        and left_material == right_material
+    ):
+        return _CopyRuleOutcome(
+            status="non_compliant",
+            reason_code="copy_similarity_threshold_exceeded",
+            executor_type="program",
+            safe_metadata=safe_metadata,
+            copy_match_document_fingerprints=copy_match_document_fingerprints,
+        )
+
+    # 已确定的实质复制不被其他文书缺时掩盖；其余情况不能据部分材料放行。
+    # 本分支不生成语义候选，保持缺时病例原有的零模型调用边界。
+    if missing_time_count:
+        return _CopyRuleOutcome(
+            status="data_gap",
+            reason_code="copy_authoritative_time_missing",
+            executor_type="program",
+            safe_metadata=safe_metadata,
+        )
     if maximum < _COPY_SIMILARITY_THRESHOLD:
         return _CopyRuleOutcome(
             status="compliant",
@@ -550,22 +571,6 @@ def _assess_copy(
             reason_code="copy_similarity_within_threshold",
             executor_type="program",
             safe_metadata=safe_metadata,
-        )
-
-    assert best_pair is not None
-    left_material = _material_for_copy_coverage(best_pair[0][2])
-    right_material = _material_for_copy_coverage(best_pair[1][2])
-    if (
-        maximum == 1.0
-        and len(left_material) >= _MIN_COMPARABLE_CHARS
-        and left_material == right_material
-    ):
-        return _CopyRuleOutcome(
-            status="non_compliant",
-            reason_code="copy_similarity_threshold_exceeded",
-            executor_type="program",
-            safe_metadata=safe_metadata,
-            copy_match_document_fingerprints=copy_match_document_fingerprints,
         )
 
     review_pairs = [

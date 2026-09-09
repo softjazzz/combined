@@ -61,6 +61,11 @@ def course_007_gap_display(raw: Any) -> tuple[list[str], list[str], str] | None:
         "ambiguous": f"{label}存在多条记录，无法确定唯一的{field}，暂时无法完成查房间隔核对。",
         "time_missing": f"已读取{label}，但缺少有效的{field}，暂时无法完成查房间隔核对。",
     }[gap]
+    if "missing_time_count" in safe:
+        label = "上级医师查房记录" if source == "senior_course_record" else "日常查房记录"
+        count = safe["missing_time_count"]
+        message = f"已读取{safe['record_count']}份{label}，其中{count}份缺少有效的查房记录时间，暂时无法完成查房间隔核对。请通过证据定位核对缺时间文书。"
+        field = f"{label}的权威时间（{count}份）"
     return ([label] if gap in {"empty", "unavailable", "truncated"} else [],
             [field] if gap in {"empty", "ambiguous", "time_missing"} else [], message)
 
@@ -72,7 +77,14 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         if (not isinstance(source, str) or source not in {"inpat_registration", "evaluation_context.horizon", "daily_course_record", "senior_course_record"}
             or not isinstance(gap, str) or gap not in {"empty", "ambiguous", "time_missing", "unavailable", "truncated"}):
             return None
-        return {"failure_kind": kind, "gap_source": source, "gap_kind": gap}
+        facts = {"failure_kind": kind, "gap_source": source, "gap_kind": gap}
+        if "record_count" in raw or "missing_time_count" in raw:
+            count, missing = raw.get("record_count"), raw.get("missing_time_count")
+            if (source not in _COURSE_SOURCES or gap != "time_missing"
+                or type(count) is not int or type(missing) is not int or not 0 < missing <= count):
+                return None
+            facts.update(record_count=count, missing_time_count=missing)
+        return facts
     if kind == "unstable_patient_order_present":
         return ({"failure_kind": kind, "stable_course_rule_applicable": False}
                 if raw.get("stable_course_rule_applicable") is False else None)

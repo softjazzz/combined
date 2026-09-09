@@ -339,6 +339,11 @@ def project_selected_document_evidence(
                 "",
             )
             if not document_id:
+                if source_key == "inpat_registration":
+                    # 登记是住院时间锚点，读取合同不提供文书 ID；它参与裁决，
+                    # 但不应让已精确绑定的查房文书一起失去定位。
+                    resolved.add(reference)
+                    continue
                 return []
             selected_by_document_id.setdefault(document_id, set()).add(reference)
         for document_id, selected_source_refs in selected_by_document_id.items():
@@ -363,7 +368,10 @@ def project_selected_document_evidence(
             seen_coordinates: set[tuple[str, str]] = set()
             projected: list[dict[str, str]] = []
             for reference in selected:
-                coordinate = located_by_ref[reference]
+                coordinate = located_by_ref.get(reference)
+                if coordinate is None:
+                    # 仅已验证的无文书 ID 登记锚点没有客户文书坐标。
+                    continue
                 key = (coordinate["source_type"], coordinate["source_document_id"])
                 if key in seen_coordinates:
                     continue
