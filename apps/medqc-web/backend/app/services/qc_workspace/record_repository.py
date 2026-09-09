@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from sqlalchemy import and_, asc, desc, exists, func, or_
+from sqlalchemy import String, and_, asc, cast, desc, exists, func, or_
 from sqlalchemy.orm import Session
 
 from ...database.models.cdm import (
@@ -48,6 +48,11 @@ def _to_iso_date(value: Any) -> str:
 def _to_iso_datetime(value: Any) -> str:
     if value is None:
         return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.strip())
+        except ValueError:
+            return value.strip()
     if isinstance(value, datetime):
         return value.isoformat(sep=" ", timespec="seconds")
     return str(value).strip()
@@ -431,9 +436,10 @@ class RecordRepository:
             AdmissionRecord.dept_name,
         )
         discharge_dt_expr = func.coalesce(
-            MedicalRecordFrontpage.discharge_datetime,
-            DischargeRecord.discharge_date,
-            DischargeRecord.discharge_time,
+            # 源库可同时存在 timestamp、date 和 text，先统一类型再取业务时间。
+            cast(MedicalRecordFrontpage.discharge_datetime, String),
+            cast(DischargeRecord.discharge_date, String),
+            cast(DischargeRecord.discharge_time, String),
         )
         admission_dt_expr = func.coalesce(
             MedicalRecordFrontpage.admission_datetime,

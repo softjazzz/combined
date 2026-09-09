@@ -61,3 +61,24 @@ def test_time_only_matches_discharge_date_filter(entry):
     row = records(entry, date_field="discharge", start="2026-02-09", end="2026-02-09")
     assert row["scope"] == "final"
     assert row["discharge_datetime"] == "2026-02-09 08:31:00"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("2026-02-09 08:31:00.000000", "2026-02-09 08:31:00"),
+    (" 2026-02-09T08:31:00.123456 ", "2026-02-09 08:31:00"),
+    ("2026-02-09T08:31:00+08:00", "2026-02-09 08:31:00+08:00"),
+    ("2026-02-07", "2026-02-07 00:00:00"),
+    (datetime(2026, 2, 9, 8, 31, 0, 123456), "2026-02-09 08:31:00"),
+    (None, ""),
+    ("", ""),
+])
+def test_cast_business_time_serializes_iso_strings_at_second_precision(raw, expected):
+    assert module._to_iso_datetime(raw) == expected
+
+
+def test_query_date_fallback_keeps_midnight_and_frozen_date_contract():
+    row = records("query", discharge_date=date(2026, 2, 7))
+    assert row["discharge_datetime"] == "2026-02-07 00:00:00"
+    frozen = build_record_evaluation_horizon_snapshot([row], task_frozen_date="2026-09-09")[0]
+    assert frozen["discharge_datetime"] == "2026-02-07 00:00:00"
+    assert frozen["evaluation_horizon"] == "2026-02-07"
