@@ -85,6 +85,23 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
                 return None
             facts.update(record_count=count, missing_time_count=missing)
         return facts
+    if kind == "course_interval_capacity_exceeded":
+        start = _strict_copy_time(raw.get("admission_time"))
+        end = _strict_copy_time(raw.get("horizon_lower_bound_time"))
+        precision = raw.get("horizon_precision")
+        known, missing, required = (raw.get(key) for key in (
+            "known_record_count", "missing_time_count", "minimum_required_records"))
+        if (not start or not end or start >= end
+            or precision not in {"datetime", "date"}
+            or (precision == "date" and not end.endswith("00:00:00"))
+            or not all(type(value) is int for value in (known, missing, required))
+            or known < 0 or not 0 < missing < required
+            or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 72):
+            return None
+        return {"failure_kind": kind, "admission_time": start,
+                "horizon_lower_bound_time": end, "horizon_precision": precision,
+                "known_record_count": known, "missing_time_count": missing,
+                "minimum_required_records": required, "threshold_hours": 72}
     if kind == "unstable_patient_order_present":
         return ({"failure_kind": kind, "stable_course_rule_applicable": False}
                 if raw.get("stable_course_rule_applicable") is False else None)
@@ -309,6 +326,8 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
         return True
     if rule_id == "LX0609-007" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_source_gap":
         return safe_facts is not None and status == "data_gap"
+    if rule_id == "LX0609-007" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_capacity_exceeded":
+        return safe_facts is not None and status == "non_compliant"
     if rule_id != "LX0609-017":
         return safe_facts is not None or raw_facts is None
     expected = {"non_compliant": "copy_similarity_threshold_exceeded", "compliant": "copy_similarity_within_threshold"}.get(str(status or "").strip().lower())

@@ -1703,6 +1703,20 @@ def customer_finding_from_controlled_facts(
         return ""
 
     if rule_id == "LX0609-007":
+        if kind == "course_interval_capacity_exceeded":
+            horizon = facts["horizon_lower_bound_time"]
+            horizon_label = (
+                f"评价截止日期{horizon[:10]}当日零点（保守下界）"
+                if facts["horizon_precision"] == "date"
+                else f"评价截止时间{horizon}"
+            )
+            return (
+                f"入院时间{facts['admission_time']}至{horizon_label}，"
+                f"已确认{facts['known_record_count']}个查房时间点，另有{facts['missing_time_count']}份缺少时间。"
+                f"按72小时上限，补足已知时间区间至少还需{facts['minimum_required_records']}份查房记录；"
+                "即使将缺时间记录全部放在最有利的位置，仍至少存在一处超过72小时的查房间隔。"
+                "具体超期间隔位置尚不能确定，请核对缺时间文书。"
+            )
         start_source = facts.get("interval_start_source")
         end_source = facts.get("interval_end_source")
         start_time = facts.get("interval_start_time")

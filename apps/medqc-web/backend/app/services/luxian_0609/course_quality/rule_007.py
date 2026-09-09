@@ -32,6 +32,34 @@ _RULE_007_ADMISSION_SOURCE = "inpat_registration"
 _MAX_INTERVAL = timedelta(hours=72)
 
 
+def _missing_time_capacity_exceeded(
+    *, admission_time: datetime, record_times: list[datetime],
+    horizon_time: datetime | None, horizon_date: date | None,
+    missing_time_count: int,
+) -> dict[str, Any] | None:
+    """按缺时记录最有利放置计算下界，只有仍不足时输出可证明的缺陷事实。"""
+
+    if not missing_time_count or (horizon_time is None and horizon_date is None):
+        return None
+    lower_bound = horizon_time if horizon_time is not None else datetime.combine(horizon_date, datetime.min.time())
+    known_times = sorted(set(record_times))
+    boundaries = (admission_time, *known_times, lower_bound)
+    required = 0
+    for start, end in zip(boundaries, boundaries[1:]):
+        quotient, remainder = divmod(end - start, _MAX_INTERVAL)
+        required += max(0, quotient + bool(remainder) - 1)
+    if required <= missing_time_count:
+        return None
+    return {
+        "failure_kind": "course_interval_capacity_exceeded",
+        "admission_time": admission_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "horizon_lower_bound_time": lower_bound.strftime("%Y-%m-%d %H:%M:%S"),
+        "horizon_precision": "datetime" if horizon_time is not None else "date",
+        "known_record_count": len(known_times), "missing_time_count": missing_time_count,
+        "minimum_required_records": required, "threshold_hours": 72,
+    }
+
+
 def _admission_for_007(materials):
     """复用现有入院锚点优先级，不以文书时间替代入院时间。"""
     registration = tuple(materials.rows("inpat_registration"))
@@ -495,6 +523,7 @@ def evaluate_rule_007_typed(
 
     record_refs_by_time: dict[datetime, set[str]] = {}
     missing_time_refs: set[str] = set()
+    missing_time_count = 0
     substantive_record_without_time = False
     for source_key in RULE_007_RECORD_SOURCES:
         observation = observations[source_key]
@@ -563,6 +592,7 @@ def evaluate_rule_007_typed(
                     record_refs_by_time.setdefault(parsed, set()).add(document_ref)
             elif row_text(row):
                 substantive_record_without_time = True
+                missing_time_count += 1
                 document_ref = document_refs_by_row.get(id(row))
                 if document_ref:
                     missing_time_refs.add(document_ref)
@@ -588,6 +618,18 @@ def evaluate_rule_007_typed(
         for document_refs in bounded_record_refs_by_time.values()
         for document_ref in document_refs
     )
+    capacity_facts = _missing_time_capacity_exceeded(
+        admission_time=admission_time, record_times=ordered_times,
+        horizon_time=horizon_time, horizon_date=horizon_date,
+        missing_time_count=missing_time_count,
+    )
+    if capacity_facts is not None:
+        refs.update(missing_time_refs)
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT, qc_direction=QcDirection.DEFECT,
+            reason_code="threshold_exceeded", refs=refs, confidence=1.0,
+        )
     # 完整来源没有任何可定位病程记录时，先区分规则是否成熟，再区分
     # “记录不存在”和“候选记录存在但时间缺失”。空来源本身不是时间缺口。
     if not ordered_times and horizon_time is not None:
@@ -783,6 +825,7 @@ def rule_007_customer_display_facts(
     if decision.evidence_state is not EvidenceState.SUFFICIENT:
         return None
     record_points: list[tuple[datetime, str, str]] = []
+    missing_time_count = 0
     try:
         admission_anchor, admission_rows = _admission_for_007(materials)
         admission_source = admission_anchor.source_key or _RULE_007_ADMISSION_SOURCE
@@ -813,6 +856,8 @@ def rule_007_customer_display_facts(
                 record_time = authoritative_course_time(
                     authoritative_document_time_value(row)
                 )
+                if record_time is None and row_text(row):
+                    missing_time_count += 1
                 if record_time is None or record_time < admission_time:
                     continue
                 if horizon_time is not None and record_time <= horizon_time:
@@ -830,6 +875,14 @@ def rule_007_customer_display_facts(
                         same_day_horizon_candidate = True
     except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
         return None
+    if decision.qc_direction is QcDirection.DEFECT and decision.reason_code == "threshold_exceeded":
+        capacity_facts = _missing_time_capacity_exceeded(
+            admission_time=admission_time, record_times=[item[0] for item in record_points],
+            horizon_time=horizon_time, horizon_date=horizon_date,
+            missing_time_count=missing_time_count,
+        )
+        if capacity_facts is not None:
+            return capacity_facts
     ordered_records = sorted(
         record_points,
         key=lambda item: (item[0], item[1], item[2]),
