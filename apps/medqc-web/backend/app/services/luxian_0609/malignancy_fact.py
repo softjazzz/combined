@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import math
 import re
@@ -42,6 +42,7 @@ class MalignancySource:
 class MalignancyResolution:
     state: str
     reason_code: str
+    uncertain_rows: tuple[tuple[str, Mapping[str, Any]], ...] = field(default=(), repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,8 @@ class _DiagnosisItem:
     source_kind: str
     name: str
     code: str
+    source_key: str = ""
+    source_row: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
 
 def _clean(value: Any) -> str:
@@ -71,11 +74,12 @@ def build_malignancy_sources(
     diagnosis_rows: Sequence[Mapping[str, Any]],
     pathology_state: str,
     pathology_rows: Sequence[Mapping[str, Any]],
+    diagnosis_source_key: str = "diagnosis",
 ) -> tuple[MalignancySource, ...]:
     """诊断是完整阴性结论的必需来源；病理仅作为可选阳性证据。"""
 
     sources = [
-        MalignancySource("diagnosis", diagnosis_state, tuple(diagnosis_rows), True)
+        MalignancySource(diagnosis_source_key, diagnosis_state, tuple(diagnosis_rows), True)
     ]
     meaningful_pathology_rows = tuple(
         row
@@ -131,6 +135,7 @@ def build_stage_malignancy_sources(
 
     if visit_stage == "inpatient":
         return build_malignancy_sources(
+            diagnosis_source_key="admission_record_diagnosis",
             diagnosis_state=admission_state,
             diagnosis_rows=admission_rows,
             pathology_state=pathology_state,
@@ -140,25 +145,25 @@ def build_stage_malignancy_sources(
         raise ValueError("malignancy diagnosis source requires known visit stage")
 
     diagnosis_candidates = (
-        (diagnosis_state, tuple(diagnosis_rows)),
-        (discharge_diagnosis_state, tuple(discharge_diagnosis_rows)),
+        ("diagnosis", diagnosis_state, tuple(diagnosis_rows)),
+        ("discharge_record_diagnosis", discharge_diagnosis_state, tuple(discharge_diagnosis_rows)),
     )
-    selected_state, selected_rows = next(
+    selected_source, selected_state, selected_rows = next(
         (
-            (state, rows)
-            for state, rows in diagnosis_candidates
+            (source, state, rows)
+            for source, state, rows in diagnosis_candidates
             if state in {"present", "available"} and rows
         ),
         next(
             (
-                (state, rows)
-                for state, rows in diagnosis_candidates
+                (source, state, rows)
+                for source, state, rows in diagnosis_candidates
                 if state == "error"
             ),
             next(
                 (
-                    (state, rows)
-                    for state, rows in diagnosis_candidates
+                    (source, state, rows)
+                    for source, state, rows in diagnosis_candidates
                     if state in {"unavailable", "truncated", "missing"}
                 ),
                 diagnosis_candidates[0],
@@ -166,6 +171,7 @@ def build_stage_malignancy_sources(
         ),
     )
     return build_malignancy_sources(
+        diagnosis_source_key=selected_source,
         diagnosis_state=selected_state,
         diagnosis_rows=selected_rows,
         pathology_state=pathology_state,
@@ -174,7 +180,7 @@ def build_stage_malignancy_sources(
 
 
 def _diagnosis_item(
-    row: Mapping[str, Any], *, source_kind: str, index: int
+    row: Mapping[str, Any], *, source_kind: str, index: int, source_key: str = ""
 ) -> _DiagnosisItem | None:
     name = _clean(
         row.get("diagnosis_name")
@@ -190,6 +196,8 @@ def _diagnosis_item(
         source_kind=source_kind,
         name=name[:240],
         code=code[:32],
+        source_key=source_key,
+        source_row=row,
     )
 
 
@@ -271,7 +279,10 @@ def _parse_resolution(
     if "explicit_malignant" in states:
         return MalignancyResolution("confirmed", "malignancy_confirmed")
     if "uncertain" in states:
-        return MalignancyResolution("unknown", "malignancy_semantics_uncertain")
+        return MalignancyResolution(
+            "unknown", "malignancy_semantics_uncertain",
+            tuple((item.source_key, item.source_row) for item in items if states_by_ref[item.ref] == "uncertain"),
+        )
     return MalignancyResolution("absent", "malignancy_absent_complete")
 
 
@@ -338,7 +349,7 @@ class MalignancyFactResolver:
                 else:
                     diagnosis_index += 1
                     index = diagnosis_index
-                item = _diagnosis_item(row, source_kind=source_kind, index=index)
+                item = _diagnosis_item(row, source_kind=source_kind, index=index, source_key=source.source_key)
                 if item is None:
                     unreadable_row = True
                 else:

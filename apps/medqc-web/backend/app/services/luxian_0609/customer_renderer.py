@@ -2410,6 +2410,9 @@ def customer_finding_from_controlled_facts(
                 return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，{mismatched}记录不一致。"
             return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。"
 
+    if rule_id == "LX0609-027" and kind == "malignant_diagnosis_applicability_uncertain":
+        return f"已读取诊断，其中{facts.get('uncertain_diagnosis_count')}条的恶性性质尚不明确，暂不能确定本条出院治疗计划质控是否适用。请通过证据定位复核相关诊断。"
+
     if rule_id == "LX0609-027" and kind == "malignant_discharge_plan_check":
         items = facts.get("plan_items")
         if isinstance(items, Mapping):

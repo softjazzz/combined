@@ -354,10 +354,26 @@ def project_selected_document_evidence(
                 for reference, row in document_rows
                 if _row_has_identity(row, document_id)
             }
+            coordinate_source = customer_source_type
             if not same_document_refs or selected_source_refs != same_document_refs:
-                return []
+                # 出院诊断多行可共用真实父文书 ID；仅按明确外键定位同快照中
+                # 唯一的出院记录，保留原选中诊断事实，不把其他诊断算作证据。
+                if source_key != "discharge_record_diagnosis" or any(
+                    _text(row.get("document_id")) != document_id
+                    for reference, row in selected_document_rows if reference in selected_source_refs
+                ):
+                    return []
+                try:
+                    parents = [row for _reference, row in evidence_materials.document_rows(
+                        "discharge_record", snapshot=evidence_snapshot
+                    ) if _text(row.get("document_id")) == document_id]
+                except (EvidenceMaterialUnavailable, TypeError, ValueError):
+                    return []
+                if len(parents) != 1:
+                    return []
+                coordinate_source = "discharge_record"
             coordinate = {
-                "source_type": customer_source_type,
+                "source_type": coordinate_source,
                 "source_document_id": document_id,
             }
             resolved.update(selected_source_refs)

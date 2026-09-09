@@ -144,6 +144,12 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_027(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
+        count = raw.get("uncertain_diagnosis_count")
+        if raw.get("malignancy_state") != "unknown" or type(count) is not int or count <= 0:
+            return None
+        return {"verification_kind": "malignant_diagnosis_applicability_uncertain",
+                "malignancy_state": "unknown", "uncertain_diagnosis_count": count}
     plan_items = raw.get("plan_items")
     required = ("future_plan", "tumor_treatment", "follow_up")
     if (
@@ -192,6 +198,8 @@ def tumor_pathology_customer_fact_status_is_valid(
     if not isinstance(safe_facts, Mapping):
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id == "LX0609-027" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
+        return normalized_status == "uncertain"
     if normalized_rule_id in {"LX0609-013", "LX0609-027"}:
         requirement_met = safe_facts.get("requirement_met")
         return (

@@ -241,7 +241,14 @@ def _typed_decision_from_outcome(
             if observation.source_key in _TYPED_RULE_SOURCE_KEYS[outcome.rule_id]
         )
 
-    if outcome.status == "compliant":
+    if outcome.rule_id == "LX0609-027" and outcome.reason_code == "malignancy_semantics_uncertain":
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.CONFLICT,
+            QcDirection.UNKNOWN,
+            "semantic_low_confidence",
+        )
+    elif outcome.status == "compliant":
         dimensions = (
             ApplicabilityState.APPLICABLE,
             EvidenceState.SUFFICIENT,
@@ -1688,6 +1695,15 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         "data_gap",
                         malignancy.reason_code,
                         executor_type="program",
+                        display_facts=(
+                            {"verification_kind": "malignant_diagnosis_applicability_uncertain",
+                             "malignancy_state": "unknown",
+                             "uncertain_diagnosis_count": len(malignancy.uncertain_rows)}
+                            if malignancy.reason_code == "malignancy_semantics_uncertain" else None
+                        ),
+                        fact_refs=typed_document_refs(*(
+                            (source_key, (row,)) for source_key, row in malignancy.uncertain_rows
+                        )),
                     )
                     continue
                 context_sources = _DISCHARGE_TARGET_SOURCES
