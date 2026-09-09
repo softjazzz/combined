@@ -3634,6 +3634,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 handoff_rows=handoff_rows,
                 handover_rows=handover_rows,
                 display_facts=outcome.display_facts,
+                daily_course_rows=daily_rows,
             )
             decisions.append(
                 _decision(

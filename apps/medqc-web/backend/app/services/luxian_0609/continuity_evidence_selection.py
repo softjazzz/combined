@@ -114,11 +114,33 @@ def bind_handoff_evidence(
     handoff_rows: Sequence[Mapping[str, Any]],
     handover_rows: Sequence[Mapping[str, Any]],
     display_facts: Mapping[str, Any] | None,
+    daily_course_rows: Sequence[Mapping[str, Any]] = (),
 ) -> ContinuityEvidenceBinding:
     """按每次医师变更冻结事实回定位实际交班、接班文书。"""
 
     if not isinstance(display_facts, Mapping):
         return ContinuityEvidenceBinding(())
+    if display_facts.get("failure_kind") == "physician_signature_timeline_incomplete":
+        references = display_facts.get("source_document_refs")
+        if not isinstance(references, (list, tuple)):
+            return ContinuityEvidenceBinding((), binding_failed=True)
+        if not references:
+            return ContinuityEvidenceBinding(())
+        consumed_daily = []
+        for reference in references:
+            if not isinstance(reference, Mapping) or reference.get("source_type") != "daily_course_record":
+                return ContinuityEvidenceBinding((), binding_failed=True)
+            document_id = _clean(reference.get("source_document_id"))
+            matches = [
+                row for row in daily_course_rows
+                if document_id and _clean(row.get("document_id") or row.get("id")) == document_id
+            ]
+            if len(matches) != 1:
+                return ContinuityEvidenceBinding((), binding_failed=True)
+            consumed_daily.append(("daily_course_record", matches[0]))
+        return bind_consumed_continuity_document_rows(
+            snapshot=snapshot, materials=materials, consumed_rows=consumed_daily,
+        )
     events = display_facts.get("events", ())
     handoff_times = set(display_facts.get("handoff_times", ()))
     handover_times = set(display_facts.get("handover_times", ()))
