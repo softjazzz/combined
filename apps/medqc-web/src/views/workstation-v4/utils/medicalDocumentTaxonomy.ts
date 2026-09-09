@@ -157,7 +157,16 @@ function isRound(identity: string): boolean {
 export function resolveMedicalDocumentGroup(document: MedicalDocumentLike): MedicalDocumentGroup {
   // 正文可能提及其他文书或诊疗事件，先用文书身份决定目录归属。
   const metadata = { ...document, content: undefined, sections: undefined }
-  const group = classifyMedicalDocumentGroup(metadata)
+  // 已知结构化类型优先于标题，避免“出院前查房”被“出院”关键词误分组。
+  const knownType = [
+    document.doc_type,
+    document.document_type,
+    document.type,
+    document.source_table,
+  ]
+    .map(normalize)
+    .find((value) => Object.prototype.hasOwnProperty.call(TYPE_LABELS, value))
+  const group = classifyMedicalDocumentGroup(knownType ? { document_type: knownType } : metadata)
   if (group.parentKey === 'course') {
     const identity = medicalDocumentIdentity(document)
     if (isSeniorRound(identity)) {

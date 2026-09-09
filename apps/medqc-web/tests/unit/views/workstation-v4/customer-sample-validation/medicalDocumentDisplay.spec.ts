@@ -15,6 +15,23 @@ it('诊断类别与其他诊断分行，保留椎体编号及原有归属', () =
 })
 
 describe('medicalDocumentDisplay', () => {
+  it('出院前上级医师查房按结构化类型归入病程，出院记录仍归入出院类', () => {
+    expect(
+      resolveMedicalDocumentGroup({
+        document_type: 'senior_course_record',
+        group_key: 'course',
+        title: '郑瑞清副主任医师出院前查房记录',
+        content: '',
+      }),
+    ).toEqual({ key: 'course.senior', label: '上级医师查房记录', parentKey: 'course' })
+    expect(
+      resolveMedicalDocumentGroup({
+        document_type: 'discharge_record',
+        title: '出院记录',
+        content: '副主任医师查房后同意出院',
+      }),
+    ).toEqual({ key: 'discharge', label: '出院与死亡' })
+  })
   it.each([
     { document_type: 'presurg_summary', title: '术前小结记录' },
     { document_type: 'custom_document', title: '术前小结' },
