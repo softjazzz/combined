@@ -2613,6 +2613,18 @@ describe('CustomerSampleValidationView', () => {
 
   it('点击查看病历后打开只读文书工作台', async () => {
     const wrapper = await mountView()
+    const documentResponse = await getEditableMedicalRecordDocuments()
+    getEditableMedicalRecordDocuments.mockResolvedValue({
+      ...documentResponse,
+      data: {
+        ...documentResponse.data,
+        current_record: {
+          admission_time: '2026-02-02T10:00:00+08:00',
+          admission_time_source: 'inpat_registration',
+          admission_time_state: 'exact',
+        },
+      },
+    })
 
     const reviewAction = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
       (node) => node.text() === '查看病历',
@@ -2625,6 +2637,7 @@ describe('CustomerSampleValidationView', () => {
       institute_id: 'H1',
       patient_id: 'P001',
       visit_id: 'V001',
+      source_view: 'current',
     })
     const modalText = wrapper.find('.a-modal-stub').text()
     expect(modalText).toContain('查看病历文书')
@@ -2634,7 +2647,7 @@ describe('CustomerSampleValidationView', () => {
         .findAll('.editable-copy-form-grid label')
         .find((node) => node.text().includes('入院时间'))
         ?.find('input').element.value,
-    ).toBe('2026-06-18 07:02:00')
+    ).toBe('2026-02-02 10:00:00')
     expect(modalText).toContain('出院时间')
     expect(
       wrapper

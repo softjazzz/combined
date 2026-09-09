@@ -3,7 +3,7 @@
 import logging
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends, Request, Query
+from fastapi import APIRouter, Depends, Request, Query, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
@@ -17,6 +17,7 @@ from ..services.bundles.emr_view import (
     pick_document,
     build_render_view,
 )
+from ..services.bundles.current_view import load_current_documents
 from ..services.custom_qc_workspace_service import build_customer_safe_source_ref
 
 router = APIRouter(
@@ -171,12 +172,30 @@ async def get_record_documents(
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     view: str = Query("full", pattern="^(full|summary)$", description="目录视图或完整文书"),
+    source_view: str = Query("saved", pattern="^(saved|current)$", description="当前病历或已保存文书"),
     execution_domain: Optional[str] = Query(
         None,
         description="摘要优先加载的文书领域；仅 view=summary 时生效",
     ),
 ):
     """获取病历文书列表（BundleOnly）。"""
+    if source_view == "current":
+        if view != "full":
+            raise HTTPException(status_code=422, detail="当前病历查看需使用完整文书视图")
+        identity = {
+            "institute_id": str(institute_id or "").strip(),
+            "patient_id": str(patient_id or "").strip(),
+            "visit_id": _resolve_bundle_visit_id(record_id, visit_id),
+        }
+        if not all(identity.values()):
+            raise HTTPException(status_code=422, detail="缺少完整住院身份，无法读取当前病历")
+        try:
+            payload = await run_in_threadpool(load_current_documents, **identity)
+        except Exception as exc:
+            logger.warning("当前文书更新失败: error_type=%s", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="文书更新失败，请稍后重试；本次未展示旧文书。") from exc
+        payload = _project_customer_safe_source_refs(payload)
+        return success_response(data=payload, message="已读取当前病历文书", trace_id=get_trace_id(request))
     loader = _load_document_summaries_from_bundle if view == "summary" else _load_documents_from_bundle
     loader_kwargs = {
         "record_id": record_id,

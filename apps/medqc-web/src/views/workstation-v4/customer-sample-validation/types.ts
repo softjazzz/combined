@@ -440,6 +440,11 @@ export type EditableMedicalRecordEmptyReason =
   | 'document_empty'
 
 export type EditableMedicalRecordDocumentsResult = {
+  current_record?: {
+    admission_time: string
+    admission_time_source: string
+    admission_time_state: string
+  }
   visit_id?: string
   empty_reason?: EditableMedicalRecordEmptyReason
   documents: EditableMedicalRecordDocument[]

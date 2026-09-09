@@ -376,6 +376,22 @@ function normalizeEditableDocumentsResponse(
           (options.includeSummaries === true && item.has_content === true)),
     )
   return {
+    current_record:
+      candidate.current_record && typeof candidate.current_record === 'object'
+        ? {
+            admission_time: readStringField(candidate.current_record as Record<string, unknown>, [
+              'admission_time',
+            ]),
+            admission_time_source: readStringField(
+              candidate.current_record as Record<string, unknown>,
+              ['admission_time_source'],
+            ),
+            admission_time_state: readStringField(
+              candidate.current_record as Record<string, unknown>,
+              ['admission_time_state'],
+            ),
+          }
+        : undefined,
     visit_id: readStringField(candidate, ['visit_id']),
     empty_reason: readStringField(candidate, [
       'empty_reason',
@@ -479,6 +495,7 @@ type EditableDocumentRequestParams = {
   job_id?: string
   record_ref?: string
   view?: 'full' | 'summary'
+  source_view?: 'saved' | 'current'
 }
 
 export async function getEditableMedicalRecordDocuments(

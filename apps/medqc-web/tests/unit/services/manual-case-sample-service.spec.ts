@@ -23,6 +23,24 @@ describe('editable medical-record document normalization', () => {
     vi.clearAllMocks()
   })
 
+  it('preserves current admission source and explicitly requests current view', async () => {
+    const currentRecord = {
+      admission_time: '2026-02-02T10:00:00+08:00',
+      admission_time_source: 'inpat_registration',
+      admission_time_state: 'exact',
+    }
+    mocks.requestRaw.mockResolvedValue({
+      data: { data: { documents: [], current_record: currentRecord } },
+    })
+    const result = await getEditableMedicalRecordDocuments('visit-1', { source_view: 'current' })
+    expect(result.data?.current_record).toEqual(currentRecord)
+    expect(mocks.requestRaw).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({ source_view: 'current' }),
+      }),
+    )
+  })
+
   it('keeps summary documents without returning full content', async () => {
     mocks.requestRaw.mockResolvedValue({
       data: {

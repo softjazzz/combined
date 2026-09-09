@@ -1,0 +1,76 @@
+"""当前病历查看：从 CDM 现组装，不读取或覆盖任务使用的持久化 Bundle。"""
+from __future__ import annotations
+
+from concurrent.futures import Future
+from copy import deepcopy
+from threading import Lock
+from typing import Any
+
+from . import assembly, emr_view
+from ..luxian_0609.basic_timeliness_facts import extract_admission_anchor
+
+# 仅合并进行中的同病例请求，结束立即移除；不缓存已完成的临床数据。
+_pending: dict[tuple[str, str, str], Future] = {}
+_pending_lock = Lock()
+
+
+def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
+    identity = dict(institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    source_schema = assembly._default_source_schema()
+    limits = assembly._material_limits_for_variants(scenes=(), domains=emr_view._DOMAIN_LOAD_ORDER)
+    limits["inpat_registration"] = 2
+    snapshot = assembly._build_material_snapshot(source_schema=source_schema, table_limits=limits, **identity)
+    # 读取失败不能冒充没有文书，更不能回退旧 Bundle。
+    if snapshot.errors_by_table:
+        raise RuntimeError("current_document_source_read_failed")
+    bundles = {
+        domain: assembly.assemble_domain_bundle(
+            execution_domain=domain, source_schema=source_schema,
+            material_snapshot=snapshot, **identity,
+        )
+        for domain in emr_view._DOMAIN_LOAD_ORDER
+    }
+    documents = emr_view.build_documents_from_domain_bundles(bundles)
+    anchor = extract_admission_anchor(
+        registration_rows=snapshot.rows_by_table.get("inpat_registration", []),
+        admission_rows=snapshot.rows_by_table.get("admission_record", []),
+        discharge_rows=(), allow_date_fallback=False,
+    )
+    return {
+        "layout_version": "bundle_struct_v1",
+        "visit_id": visit_id,
+        "documents": documents,
+        "documents_tree": emr_view.build_documents_tree(documents),
+        "domain_projection": emr_view._build_domain_projection_summary(bundles),
+        "domain_bundle_hits": {},
+        "empty_reason": "" if documents else "current_documents_empty",
+        "current_record": {
+            "admission_time": anchor.anchor_time.isoformat() if anchor.anchor_time else "",
+            "admission_time_source": anchor.source_key or "",
+            "admission_time_state": anchor.state.value,
+        },
+    }
+
+
+def load_current_documents(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
+    key = (institute_id.strip(), patient_id.strip(), visit_id.strip())
+    if not all(key):
+        raise ValueError("missing_current_record_identity")
+    with _pending_lock:
+        future = _pending.get(key)
+        owner = future is None
+        if owner:
+            future = Future()
+            _pending[key] = future
+    if owner:
+        try:
+            future.set_result(_assemble_current_documents(
+                institute_id=key[0], patient_id=key[1], visit_id=key[2],
+            ))
+        except Exception as exc:
+            future.set_exception(exc)
+        finally:
+            with _pending_lock:
+                _pending.pop(key, None)
+    # 返回独立对象，后续脱敏/前端投影不能污染同一请求结果。
+    return deepcopy(future.result())

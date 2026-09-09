@@ -157,6 +157,7 @@ export function useCustomerSampleEditableCopyController(
       institute_id: record.matched_institute_id,
       patient_id: record.matched_patient_id,
       visit_id: record.matched_visit_id,
+      ...(editableCopyReadonly.value ? { source_view: 'current' as const } : {}),
     })
     editableCopyLoading.value = false
     if (!result.success || !result.data) {
@@ -166,7 +167,10 @@ export function useCustomerSampleEditableCopyController(
     if (!result.data.documents.length) {
       message.warning('当前源病历未读取到可编辑文书')
     }
-    editableCopyDraft.value = buildEditableCopyDraft(record, result.data.documents, {
+    const currentRecord = editableCopyReadonly.value
+      ? { ...record, admission_time: result.data.current_record?.admission_time || '' }
+      : record
+    editableCopyDraft.value = buildEditableCopyDraft(currentRecord, result.data.documents, {
       readonly: editableCopyReadonly.value,
     })
     editableCopyDocumentQuery.value = ''
