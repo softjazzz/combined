@@ -596,21 +596,21 @@ def _order_exam_structure_outcome(
             return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
         return None
 
-    # 已识别到目标医嘱或检查主表，但其正式业务键缺失时，不能回退到仅按
-    # “检查前原因”判定的旧路径。此时无法核实同一次诊疗事件，只能资料待核实。
-    if any(not _clean(row.get("order_id")) for _time, row in orders) or (
-        exam_rows
-        and any(
-            not _clean(row.get("order_id")) or not _clean(row.get("exam_id"))
-            for row in exam_rows
-        )
+    # 检查主表缺键时无法确认实际事件，仍须在核对报告前失败关闭。
+    if any(
+        not _clean(row.get("order_id")) or not _clean(row.get("exam_id"))
+        for row in exam_rows
     ):
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
 
     orders_by_id: dict[str, tuple[datetime | None, Mapping[str, Any]]] = {}
+    missing_order_id = False
     for order_time, order in orders:
         order_id = _clean(order.get("order_id"))
-        if not order_id or order_id in orders_by_id:
+        if not order_id:
+            missing_order_id = True
+            continue
+        if order_id in orders_by_id:
             return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
         if order_time is None:
             return _ExamLabOutcome("LX0609-010", "data_gap", "authoritative_order_time_missing")
@@ -642,6 +642,9 @@ def _order_exam_structure_outcome(
         ) is not None
         if not has_report and not has_master_report_time:
             return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_report_missing")
+    # 未关联医嘱缺键不遮蔽完整实际事件已证明的缺报告；无确定缺陷时仍保留缺口。
+    if missing_order_id:
+        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
     return None
 
 
