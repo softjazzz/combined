@@ -2653,7 +2653,9 @@ describe('CustomerSampleValidationView', () => {
       source_view: 'current',
     })
     const modalText = wrapper.find('.a-modal-stub').text()
-    expect(modalText).toContain('查看病历文书')
+    expect(modalText).toContain('查看病历')
+    expect(wrapper.find('.editable-copy-notice').exists()).toBe(false)
+    expect(wrapper.find('.record-compare-head').exists()).toBe(false)
     expect(modalText).not.toContain('病历信息')
     expect(wrapper.find('.editable-copy-form-grid').exists()).toBe(false)
     expect(wrapper.find('.record-compare-shell').exists()).toBe(true)

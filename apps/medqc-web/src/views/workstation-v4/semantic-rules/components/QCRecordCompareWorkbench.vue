@@ -4,7 +4,7 @@
     :class="{ 'is-document-only': documentOnly }"
     :data-mobile-tab="mobileTab"
   >
-    <header class="record-compare-head">
+    <header v-if="!documentOnly" class="record-compare-head">
       <div>
         <strong>{{ documentOnly ? '病历文书' : '病历原文对照' }}</strong>
         <span>{{

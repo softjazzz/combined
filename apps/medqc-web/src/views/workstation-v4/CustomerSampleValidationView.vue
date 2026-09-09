@@ -1237,26 +1237,22 @@
       <div class="editable-copy-drawer">
         <header class="editable-copy-hero">
           <div>
-            <div class="editable-copy-eyebrow">
+            <div v-if="!editableCopyReadonly" class="editable-copy-eyebrow">
               客户样本验证 / {{ editableCopyReadonly ? '查看病历' : '编辑副本' }}
             </div>
-            <h2>{{ editableCopyReadonly ? '查看病历文书' : '创建可编辑测试病历副本' }}</h2>
-            <p>
-              {{
-                editableCopyReadonly
-                  ? '按文书目录查看已同步病历原文；当前模式只读，不会修改源病历。'
-                  : '从已同步病历读取文书，复制成新的客户自建测试病历；本页所有修改只写入新副本。'
-              }}
+            <h2>{{ editableCopyReadonly ? '查看病历' : '创建可编辑测试病历副本' }}</h2>
+            <p v-if="!editableCopyReadonly">
+              从已同步病历读取文书，复制成新的客户自建测试病历；本页所有修改只写入新副本。
             </p>
           </div>
           <div class="editable-copy-source-card">
-            <span>来源病历</span>
+            <span>{{ editableCopyReadonly ? '只读' : '来源病历' }}</span>
             <strong>{{ editableCopySourceRecord?.patient_name || '-' }}</strong>
             <em>{{ editableCopySourceRecord?.department || '-' }}</em>
           </div>
         </header>
 
-        <div class="editable-copy-notice">
+        <div v-if="!editableCopyReadonly" class="editable-copy-notice">
           <div class="editable-copy-notice-title">原始同步病历保持只读</div>
           <div>
             {{
