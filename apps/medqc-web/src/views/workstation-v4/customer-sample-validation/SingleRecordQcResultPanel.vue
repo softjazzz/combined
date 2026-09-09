@@ -915,7 +915,7 @@ const resultExecutionSummary = computed(() => {
     : `${total} 个质控点 · 已执行 ${executed}`
 })
 const statusTabs = computed(() => buildSingleRecordQcStatusTabs(viewItems.value))
-const activeTab = ref<SingleRecordQcResultTabKey>('all')
+const activeTab = ref<SingleRecordQcResultTabKey>('non_compliant')
 const activeReportTab = ref<SingleRecordQcResultReportTab>('all')
 const reportTabs = computed(() => [
   {
@@ -1160,7 +1160,7 @@ watch(
 watch(
   statusTabs,
   (tabs) => {
-    if (!tabs.some((tab) => tab.key === activeTab.value)) activeTab.value = 'all'
+    if (!tabs.some((tab) => tab.key === activeTab.value)) activeTab.value = 'non_compliant'
   },
   { immediate: true },
 )

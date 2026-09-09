@@ -564,8 +564,9 @@ describe('SingleRecordQcResultPanel', () => {
     expect(detail).toContain('判定阈值70%')
   })
 
-  it('按引擎返回顺序展示每条规则的状态、编号、标题和结论', () => {
+  it('按引擎返回顺序展示每条规则的状态、编号、标题和结论', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     expect(wrapper.find('[data-testid="single-record-result-toolbar"]').exists()).toBe(true)
     expect(wrapper.find('.result-column-header').exists()).toBe(false)
@@ -771,6 +772,7 @@ describe('SingleRecordQcResultPanel', () => {
         ],
       },
     })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
 
@@ -860,13 +862,18 @@ describe('SingleRecordQcResultPanel', () => {
 
     const tabs = wrapper.findAll('[role="tab"]')
     expect(tabs.map((tab) => tab.text())).toEqual([
-      '全部6',
       '确定问题2',
       '待处理2',
       '不适用1',
       '合规1',
+      '全部6',
     ])
-    expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(6)
+    expect(
+      wrapper
+        .get('[data-testid="single-record-result-tab-non_compliant"]')
+        .attributes('aria-selected'),
+    ).toBe('true')
+    expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(2)
 
     await wrapper.get('[data-testid="single-record-result-tab-pending"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(2)
@@ -1391,6 +1398,7 @@ describe('SingleRecordQcResultPanel', () => {
         ],
       },
     })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
@@ -1433,6 +1441,7 @@ describe('SingleRecordQcResultPanel', () => {
         ],
       },
     })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
@@ -1454,6 +1463,7 @@ describe('SingleRecordQcResultPanel', () => {
 
   it('合规结果存在逐项判定时可展开查看合规依据', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [explainedCompliantItem] } })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     expect(wrapper.text()).toContain('合规')
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
@@ -1478,6 +1488,7 @@ describe('SingleRecordQcResultPanel', () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: { items: [historicalCompliantItem] },
     })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     expect(wrapper.text()).toContain('未发现问题。')
     expect(wrapper.text()).not.toContain('历史结果缺少可核查通过依据')
@@ -1487,6 +1498,7 @@ describe('SingleRecordQcResultPanel', () => {
 
   it('数据不足展示具体缺口、当前已知事实和可定位证据，不泛化为资料不足', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [explainedDataGapItem] } })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
@@ -1512,6 +1524,7 @@ describe('SingleRecordQcResultPanel', () => {
         items: [{ rule_id: 'LX0609-014', rule_name: '细菌培养记录', status: 'data_gap' }],
       },
     })
+    await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 

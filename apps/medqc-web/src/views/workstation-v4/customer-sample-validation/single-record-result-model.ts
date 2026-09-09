@@ -438,7 +438,6 @@ export function buildSingleRecordQcStatusTabs(
   items: SingleRecordQcResultViewItem[],
 ): SingleRecordQcStatusTab[] {
   return [
-    { key: 'all', label: '全部', count: items.length },
     {
       key: 'non_compliant',
       label: '确定问题',
@@ -461,5 +460,6 @@ export function buildSingleRecordQcStatusTabs(
       label: '合规',
       count: items.filter((item) => resolveSingleRecordQcResultTab(item) === 'compliant').length,
     },
+    { key: 'all', label: '全部', count: items.length },
   ]
 }
