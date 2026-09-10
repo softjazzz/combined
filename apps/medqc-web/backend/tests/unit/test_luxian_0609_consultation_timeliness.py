@@ -312,7 +312,10 @@ async def test_069_invalid_explicit_request_time_does_not_fall_back_to_record_ti
     decision = result.decisions[0]
     assert decision.evidence_state is EvidenceState.DATA_GAP
     assert decision.reason_code == "authoritative_time_missing"
-    assert result.customer_display_facts == ()
+    assert result.customer_display_facts == (("LX0609-069", {
+        "failure_kind": "consultation_business_time_missing",
+        "missing_time_roles": ["request"],
+    }),)
 
 
 @pytest.mark.asyncio
@@ -329,7 +332,10 @@ async def test_069_direct_row_without_explicit_completion_time_fails_closed() ->
     decision = result.decisions[0]
     assert decision.evidence_state is EvidenceState.DATA_GAP
     assert decision.reason_code == "authoritative_time_missing"
-    assert result.customer_display_facts == ()
+    assert result.customer_display_facts == (("LX0609-069", {
+        "failure_kind": "consultation_business_time_missing",
+        "missing_time_roles": ["completion"],
+    }),)
 
 
 @pytest.mark.asyncio

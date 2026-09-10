@@ -24,7 +24,10 @@ from .source_gap_contract import customer_gap_message
 from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 from .surgery_gate_result_mapping import surgery_timeliness_gap_display
 from .course_quality_result_mapping import course_007_gap_display
-from .continuity_result_mapping import transfer_event_association_gap_display
+from .continuity_result_mapping import (
+    consultation_business_time_gap_display,
+    transfer_event_association_gap_display,
+)
 from .discharge_result_mapping import discharge_course_body_gap_display, discharge_course_time_gap_display
 from .tumor_pathology_result_mapping import pathology_report_gap_missing_fields
 
@@ -1618,6 +1621,10 @@ def customer_finding_from_controlled_facts(
         and kind == "transfer_event_association_gap"
     ):
         display = transfer_event_association_gap_display(facts)
+        return display[1] if display is not None else ""
+
+    if rule_id == "LX0609-069" and kind == "consultation_business_time_missing":
+        display = consultation_business_time_gap_display(facts)
         return display[1] if display is not None else ""
 
     basic_timeliness_labels = {
@@ -3300,11 +3307,28 @@ def render_luxian_0609_customer_result(
             if decision.rule_id in {"LX0609-072", "LX0609-073"}
             else None
         )
+        consultation_time_gap = (
+            consultation_business_time_gap_display(safe_customer_display_facts)
+            if decision.rule_id == "LX0609-069"
+            and decision.reason_code == "authoritative_time_missing"
+            else None
+        )
         surgery_gap = surgery_timeliness_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-003" else None
         course_gap = course_007_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-007" else None
         discharge_time_gap = discharge_course_time_gap_display(decision.rule_id, safe_customer_display_facts)
         discharge_body_gap = discharge_course_body_gap_display(decision.rule_id, safe_customer_display_facts)
-        if transfer_association_gap is not None:
+        if consultation_time_gap is not None:
+            missing_times = "、".join(consultation_time_gap[0])
+            findings = consultation_time_gap[1]
+            evidence = (
+                f"已读取会诊资料；当前缺少{missing_times}，"
+                "暂无法计算申请发出至会诊完成的24小时间隔。"
+            )
+            suggestion = (
+                f"请核对源系统中的{missing_times}及同步映射后重新质控；"
+                "不应据此补写或倒签记录。"
+            )
+        elif transfer_association_gap is not None:
             findings = transfer_association_gap[1]
             evidence = "已定位本次纳入核对的转科资料，当前缺口为逐次事件对应关系。"
             suggestion = "请核对每次转科医嘱与转入、转出记录的事件关联后重新评估。"
@@ -3400,6 +3424,7 @@ def render_luxian_0609_customer_result(
         decision.final_state is CustomerFinalState.DATA_GAP
         and (
             bool(pathology_report_gap)
+            or consultation_time_gap is not None
             or transfer_association_gap is not None
             or exam_lab_data_gap_customer_message(
                 rule_id=decision.rule_id,

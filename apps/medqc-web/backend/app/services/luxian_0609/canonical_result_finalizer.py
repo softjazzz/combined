@@ -937,6 +937,7 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
             "reason_label": "病理报告字段不完整",
         }
     from .continuity_result_mapping import (
+        consultation_business_time_gap_display,
         physician_signature_gap_fields,
         transfer_event_association_gap_display,
     )
@@ -959,6 +960,18 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
             "reason_label": "转科事件与文书关联信息不足",
             "missing_sources": [],
             "missing_fields": transfer_association_gap[0],
+        }
+    consultation_time_gap = (
+        consultation_business_time_gap_display(result.get("customer_display_facts"))
+        if rule_id == "LX0609-069" and reason_code == "authoritative_time_missing"
+        else None
+    )
+    if consultation_time_gap is not None:
+        defaults = {
+            **defaults,
+            "reason_label": "会诊业务时间缺失",
+            "missing_sources": [],
+            "missing_fields": consultation_time_gap[0],
         }
     from .discharge_result_mapping import discharge_course_body_gap_display, discharge_course_time_gap_display
     discharge_body_gap = discharge_course_body_gap_display(rule_id, result.get("customer_display_facts"))
@@ -1022,6 +1035,8 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         )
     if transfer_association_gap is not None:
         default_customer_message = transfer_association_gap[1]
+    if consultation_time_gap is not None:
+        default_customer_message = consultation_time_gap[1]
     if discharge_time_gap is not None:
         default_customer_message = discharge_time_gap[1]
     if discharge_body_gap is not None:

@@ -165,6 +165,10 @@ def evaluate_consultation_timeliness(
         if any(field in row for row in consultation_rows for field in _REQUEST_TIME_FIELDS):
             return ConsultationTimelinessOutcome(
                 "data_gap", "authoritative_time_missing",
+                {
+                    "failure_kind": "consultation_business_time_missing",
+                    "missing_time_roles": ["request"],
+                },
                 consumed_document_rows=tuple(
                     row for row in consultation_rows
                     if any(field in row for field in _REQUEST_TIME_FIELDS)
@@ -234,8 +238,20 @@ def evaluate_consultation_timeliness(
     else:
         events = tuple(direct_events)
     if any(request_time is None or completion_time is None for request_time, completion_time in events):
+        missing_time_roles = [
+            role
+            for role, missing in (
+                ("request", any(request_time is None for request_time, _ in events)),
+                ("completion", any(completion_time is None for _, completion_time in events)),
+            )
+            if missing
+        ]
         return ConsultationTimelinessOutcome(
             "data_gap", "authoritative_time_missing",
+            {
+                "failure_kind": "consultation_business_time_missing",
+                "missing_time_roles": missing_time_roles,
+            },
             consumed_document_rows=tuple(
                 row for row in consumed_rows
                 if _clean(row.get("document_id") or row.get("id"))

@@ -13,7 +13,9 @@ CONTINUITY_CUSTOMER_RULE_IDS = frozenset(
 )
 
 _KINDS_BY_RULE = {
-    "LX0609-069": frozenset({"consultation_timeliness_check"}),
+    "LX0609-069": frozenset({
+        "consultation_timeliness_check", "consultation_business_time_missing",
+    }),
     "LX0609-071": frozenset({
         "physician_handoff_timeliness_check", "physician_handoff_multi_event_check",
         "physician_handoff_association_failed", "physician_handoff_record_time_missing",
@@ -36,6 +38,7 @@ _KINDS_BY_RULE = {
 
 _ALLOWED_KEYS = {
     "consultation_timeliness_check": {"threshold_hours", "actual_interval_hours", "request_times", "record_times", "event_results"},
+    "consultation_business_time_missing": {"missing_time_roles"},
     "physician_handoff_timeliness_check": {"change_time", "handoff_times", "handover_times", "handover_threshold_hours"},
     "physician_handoff_multi_event_check": {"change_event_count", "handover_threshold_hours", "events"},
     "physician_handoff_association_failed": {"change_event_count", "change_times", "handoff_record_count", "handoff_times", "handover_record_count", "handover_times", "handover_threshold_hours"},
@@ -73,6 +76,8 @@ def safe_continuity_customer_display_facts(
         if set(raw) != {kind_key, "source_document_refs", *_ALLOWED_KEYS[kind]}:
             return None
     if kind == "transfer_event_association_gap" and not _valid_transfer_event_association_gap(raw):
+        return None
+    if kind == "consultation_business_time_missing" and not _valid_consultation_business_time_gap(raw):
         return None
 
     safe: dict[str, Any] = {kind_key: kind}
@@ -267,6 +272,41 @@ def transfer_event_association_gap_display(
     )
 
 
+def consultation_business_time_gap_display(
+    raw: Any,
+) -> tuple[list[str], str] | None:
+    """将已校验的会诊业务时间缺口投影为字段和客户文案。"""
+
+    if not _valid_consultation_business_time_gap(raw):
+        return None
+    labels = {
+        "request": "会诊申请业务时间",
+        "completion": "会诊完成业务时间",
+    }
+    missing_fields = [labels[role] for role in raw["missing_time_roles"]]
+    joined = "、".join(missing_fields)
+    return missing_fields, f"会诊资料缺少{joined}，暂无法核对24小时时限。"
+
+
+def _valid_consultation_business_time_gap(raw: Any) -> bool:
+    if (
+        not isinstance(raw, Mapping)
+        or set(raw) != {"failure_kind", "missing_time_roles"}
+        or raw.get("failure_kind") != "consultation_business_time_missing"
+    ):
+        return False
+    roles = raw.get("missing_time_roles")
+    return (
+        isinstance(roles, (list, tuple))
+        and bool(roles)
+        and all(
+            isinstance(role, str) and role in {"request", "completion"}
+            for role in roles
+        )
+        and len(roles) == len(set(roles))
+    )
+
+
 def _valid_transfer_event_association_gap(raw: Any) -> bool:
     return (
         isinstance(raw, Mapping)
@@ -318,6 +358,7 @@ def _nonnegative_int(value: Any) -> bool:
 
 __all__ = [
     "CONTINUITY_CUSTOMER_RULE_IDS",
+    "consultation_business_time_gap_display",
     "is_continuity_customer_rule",
     "safe_continuity_customer_display_facts",
     "transfer_event_association_gap_display",
