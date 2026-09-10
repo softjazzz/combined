@@ -3425,6 +3425,107 @@ def test_020_recommendation_evidence_keeps_each_recommendation_refs():
     ]
 
 
+def test_020_023_display_limits_each_recommendation_refs_without_changing_semantics():
+    recommendation = episode._Recommendation(
+        "consultation_record-1#r1",
+        "test",
+        "复查",
+        "复查",
+        "consultation_record-1",
+    )
+    model_episode = episode._Episode(
+        "consultation_record-1",
+        ("consultation_record-1",),
+        ("consultation_record-1",),
+        ("consultation_record-1",),
+        "clear",
+        "clear",
+        "high",
+        (recommendation,),
+    )
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1", recommendation, None
+        ),
+    )
+    trace_refs = tuple(f"daily_course_record-{index}" for index in range(1, 4))
+    structured_refs = tuple(f"exam_master-{index}" for index in range(1, 11))
+    assessment = episode._ExecutionAssessment(
+        recommendation.recommendation_ref,
+        "linked_vague",
+        structured_refs,
+        "high",
+        (),
+        "generic_trace",
+        trace_refs,
+        trace_refs,
+    )
+    candidates = tuple(
+        episode._CandidateDocument(
+            ref,
+            "daily_course_record",
+            None,
+            "",
+            f"COURSE-{index}",
+        )
+        for index, ref in enumerate(trace_refs, start=1)
+    ) + tuple(
+        episode._CandidateDocument(
+            ref,
+            "exam_master",
+            None,
+            "",
+            f"EXAM-{index}",
+        )
+        for index, ref in enumerate(structured_refs, start=1)
+    )
+
+    raw_facts = {
+        rule_id: episode._consultation_execution_display_facts(
+            rule_id=rule_id,
+            status=status,
+            episodes=(model_episode,),
+            completed_recommendations=completed,
+            assessments=(assessment,),
+            documents=(
+                {
+                    "ref": "consultation_record-1",
+                    "document_id": "CONSULT-1",
+                },
+            ),
+            candidates=candidates,
+        )
+        for rule_id, status in (
+            ("LX0609-020", "evaluation_unknown"),
+            ("LX0609-023", "non_compliant"),
+        )
+    }
+    safe_facts, invalid_rule_ids = episode._safe_customer_display_facts(
+        tuple(raw_facts.items())
+    )
+
+    assert invalid_rule_ids == frozenset()
+    safe_by_rule = dict(safe_facts)
+    assert safe_by_rule["LX0609-020"]["relation_state"] == "association_unresolved"
+    assert safe_by_rule["LX0609-023"]["relation_state"] == (
+        "generic_or_copied_execution"
+    )
+    assert all(
+        [
+            item["source_type"]
+            for item in facts["recommendation_evidence"][0]["execution_evidence"]
+        ]
+        == ["daily_course_record"] * 3 + ["exam_master"] * 5
+        for facts in safe_by_rule.values()
+    )
+    assert all(
+        len(facts["recommendation_evidence"][0]["execution_evidence"]) == 8
+        for facts in safe_by_rule.values()
+    )
+    assert assessment.trace_refs == trace_refs
+    assert assessment.execution_refs == structured_refs
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("action_type", "structured_refs"),
@@ -5033,7 +5134,7 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
 
 
 @pytest.mark.asyncio
-async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure():
+async def test_020_023_does_not_retry_stage_two_4xx_or_identity_contract_failure():
     session = _window_session(rows_by_source={
         "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
         "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
@@ -5044,7 +5145,18 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
             "technical_error",
             "model_transport_error",
         ),
-        ("not-json", "technical_error", "model_invalid_output"),
+        (
+            _execution({
+                "recommendation_ref": "consultation_record-1#unknown",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            }),
+            "technical_error",
+            "model_invalid_output",
+        ),
     ):
         client = _PlannedStageClient(
             _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
@@ -5064,6 +5176,163 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
         ]
         assert result.llm_call_count == 2
         assert len(client.prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_020_023_retries_one_stage_two_shape_error_with_same_prompt():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        {"executions": "invalid-shape"},
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=client, evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 3
+    assert client.prompts[1] == client.prompts[2]
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (
+        36,
+        12,
+        48,
+    )
+
+
+@pytest.mark.asyncio
+async def test_020_023_stops_after_second_stage_two_shape_error():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        {"executions": "invalid-shape"},
+        {"executions": ["still-not-an-object"]},
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=client, evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert {
+        item["metadata"]["reason_code"] for item in result.results
+    } == {"model_invalid_output"}
+    assert result.llm_call_count == 3
+    assert client.prompts[1] == client.prompts[2]
+
+
+@pytest.mark.asyncio
+async def test_stage_two_shape_retry_does_not_add_missing_supplement_or_recheck():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows(
+            "申请与两项明确会诊意见；复查血常规；复查肝功能",
+            day=2,
+            action_suffix=False,
+        )),
+        "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
+    })
+    first_episode = _episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "source_quote": "复查血常规",
+            },
+            {
+                "recommendation_ref": "consultation_record-1#r2",
+                "action_type": "test",
+                "source_quote": "复查肝功能",
+            },
+        ],
+    )
+    client = _PlannedStageClient(
+        _payload(episodes=[first_episode]),
+        {},
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "confidence": "medium",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=client, evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert result.llm_call_count == 3
+    assert len(client.prompts) == 3
+    assert [item.reason_code for item in result.decisions] == [
+        "semantic_low_confidence",
+        "semantic_low_confidence",
+    ]
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert [item["execution_state"] for item in facts["recommendation_results"]] == [
+        "specific",
+        "unknown",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stage_two_shape_retry_skips_low_confidence_recheck():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        {"executions": None},
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "confidence": "medium",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=client, evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.llm_call_count == 3
+    assert len(client.prompts) == 3
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
 
 
 @pytest.mark.asyncio

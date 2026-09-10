@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date, datetime
+from enum import Enum
 import httpx
 import json
 import logging
@@ -445,8 +446,26 @@ class _SourceTechnical(Exception):
     pass
 
 
+class _SemanticInvalidKind(str, Enum):
+    OTHER = "other"
+    RESPONSE_SHAPE = "response_shape"
+    RECOMMENDATION_IDENTITY = "recommendation_identity"
+    REFERENCE_SHAPE = "reference_shape"
+    REFERENCE_NOT_CANDIDATE = "reference_not_candidate"
+    COVERAGE_INCOMPLETE = "coverage_incomplete"
+
+
 class _SemanticInvalid(Exception):
-    pass
+    def __init__(
+        self,
+        kind: _SemanticInvalidKind = _SemanticInvalidKind.OTHER,
+    ) -> None:
+        super().__init__(kind.value)
+        self.kind = kind
+
+    @property
+    def retryable_stage_two_shape(self) -> bool:
+        return self.kind is _SemanticInvalidKind.RESPONSE_SHAPE
 
 
 class _ExecutionCoverageIncomplete(_SemanticInvalid):
@@ -458,7 +477,7 @@ class _ExecutionCoverageIncomplete(_SemanticInvalid):
         parsed: tuple[_ExecutionAssessment, ...],
         missing_refs: frozenset[str],
     ) -> None:
-        super().__init__("execution recommendation coverage incomplete")
+        super().__init__(_SemanticInvalidKind.COVERAGE_INCOMPLETE)
         self.parsed = parsed
         self.missing_refs = missing_refs
 
@@ -2267,7 +2286,11 @@ def _consultation_execution_display_facts(
                     "recommendation_index": recommendation_index,
                     "execution_state": execution_state,
                     "opinion_refs": opinion_evidence,
-                    "execution_refs": execution_evidence,
+                    # 客户事实合同每组最多接收 8 条引用。这里只裁剪展示引用；
+                    # assessments 与 RuleDecision.fact_refs 继续保留完整判定事实。
+                    # 上方按 trace refs、structured refs 的顺序去重，因此切片
+                    # 仍会优先保留病程主证据。
+                    "execution_refs": execution_evidence[:8],
                 }
             )
         if rule_id == "LX0609-020":
@@ -2519,16 +2542,18 @@ def _parse_executions(
         and candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
         for ref in prompt_candidate_refs
     )
-    if not isinstance(raw, list) or len(raw) > len(expected_refs):
-        raise _SemanticInvalid()
+    if not isinstance(raw, list):
+        raise _SemanticInvalid(_SemanticInvalidKind.RESPONSE_SHAPE)
+    if len(raw) > len(expected_refs):
+        raise _SemanticInvalid(_SemanticInvalidKind.RECOMMENDATION_IDENTITY)
     parsed: list[_ExecutionAssessment] = []
     seen: set[str] = set()
     for item in raw:
         if not isinstance(item, Mapping):
-            raise _SemanticInvalid()
+            raise _SemanticInvalid(_SemanticInvalidKind.RESPONSE_SHAPE)
         recommendation_ref = _clean(item.get("recommendation_ref"))
         if recommendation_ref not in expected_refs or recommendation_ref in seen:
-            raise _SemanticInvalid()
+            raise _SemanticInvalid(_SemanticInvalidKind.RECOMMENDATION_IDENTITY)
         seen.add(recommendation_ref)
         state = _clean(item.get("execution_state")).lower()
         original_state = state
@@ -2571,7 +2596,7 @@ def _parse_executions(
                 and not all(isinstance(ref, str) for ref in raw_structured_refs)
             )
         ):
-            raise _SemanticInvalid()
+            raise _SemanticInvalid(_SemanticInvalidKind.REFERENCE_SHAPE)
         if (
             state not in _EXECUTION_STATES
             or confidence not in _CONFIDENCE
@@ -2585,7 +2610,7 @@ def _parse_executions(
         trace_refs = raw_trace_refs if isinstance(raw_trace_refs, list) else []
         structured_refs = raw_structured_refs if isinstance(raw_structured_refs, list) else []
         if any(ref not in candidate_by_ref for ref in refs):
-            raise _SemanticInvalid()
+            raise _SemanticInvalid(_SemanticInvalidKind.REFERENCE_NOT_CANDIDATE)
         if raw_trace_refs is None and raw_structured_refs is None:
             trace_refs = [
                 ref
@@ -2630,7 +2655,7 @@ def _parse_executions(
             for ref in all_refs
         )
         if any(ref not in candidate_by_ref for ref in all_refs):
-            raise _SemanticInvalid()
+            raise _SemanticInvalid(_SemanticInvalidKind.REFERENCE_NOT_CANDIDATE)
         if reference_scope_invalid:
             parsed.append(_unknown_execution_assessment(recommendation_ref))
             continue
@@ -3606,13 +3631,64 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             completion_tokens += next_completion
                             total_tokens += next_total
                             api_time += response_time or (time.perf_counter() - started)
+                            stage_two_payload = _payload(response)
                             try:
-                                execution_assessments = _parse_executions(
-                                    _payload(response),
-                                    completed=completed_recommendations,
-                                    allowed_refs=allowed_refs,
-                                    candidates=projection.candidates,
-                                )
+                                try:
+                                    execution_assessments = _parse_executions(
+                                        stage_two_payload,
+                                        completed=completed_recommendations,
+                                        allowed_refs=allowed_refs,
+                                        candidates=projection.candidates,
+                                    )
+                                except _SemanticInvalid as semantic_error:
+                                    if (
+                                        not semantic_error.retryable_stage_two_shape
+                                        or retry_attempted
+                                    ):
+                                        raise
+                                    # 只对 HTTP 已成功、且 payload 的 executions
+                                    # 或条目对象形状错误做一次同 Prompt 重试。身份、
+                                    # 引用结构和候选集完整性错误始终直接失败。
+                                    calls += 1
+                                    retry_attempted = True
+                                    semantic_retry_started = time.perf_counter()
+                                    try:
+                                        semantic_retry_response = (
+                                            await llm_client.generate(second_prompt)
+                                        )
+                                    except Exception:
+                                        api_time += (
+                                            time.perf_counter()
+                                            - semantic_retry_started
+                                        )
+                                        raise
+                                    if not isinstance(
+                                        semantic_retry_response, Mapping
+                                    ):
+                                        api_time += (
+                                            time.perf_counter()
+                                            - semantic_retry_started
+                                        )
+                                        raise _SemanticInvalid()
+                                    (
+                                        semantic_prompt_tokens,
+                                        semantic_completion_tokens,
+                                        semantic_total_tokens,
+                                        semantic_response_time,
+                                    ) = _usage(semantic_retry_response)
+                                    prompt_tokens += semantic_prompt_tokens
+                                    completion_tokens += semantic_completion_tokens
+                                    total_tokens += semantic_total_tokens
+                                    api_time += semantic_response_time or (
+                                        time.perf_counter()
+                                        - semantic_retry_started
+                                    )
+                                    execution_assessments = _parse_executions(
+                                        _payload(semantic_retry_response),
+                                        completed=completed_recommendations,
+                                        allowed_refs=allowed_refs,
+                                        candidates=projection.candidates,
+                                    )
                             except _ExecutionCoverageIncomplete as incomplete:
                                 # 模型偶发只漏回一部分建议。只把缺失建议连同其
                                 # 受控候选重问一次；首轮合法结果不重复发送，也不
@@ -3625,56 +3701,61 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     if item.recommendation.recommendation_ref
                                     in incomplete.missing_refs
                                 )
-                                missing_prompt, missing_allowed_refs = _execution_prompt(
-                                    completed=missing_completed,
-                                    candidates=projection.candidates,
-                                )
-                                calls += 1
-                                missing_started = time.perf_counter()
                                 completed_missing_assessments: tuple[
                                     _ExecutionAssessment, ...
                                 ] = ()
-                                missing_time_recorded = False
-                                try:
-                                    missing_response = await llm_client.generate(
-                                        missing_prompt
+                                if not retry_attempted:
+                                    missing_prompt, missing_allowed_refs = (
+                                        _execution_prompt(
+                                            completed=missing_completed,
+                                            candidates=projection.candidates,
+                                        )
                                     )
-                                    missing_elapsed = (
-                                        time.perf_counter() - missing_started
-                                    )
-                                    if not isinstance(missing_response, Mapping):
-                                        api_time += missing_elapsed
-                                        missing_time_recorded = True
-                                        raise _SemanticInvalid()
-                                    (
-                                        missing_prompt_tokens,
-                                        missing_completion_tokens,
-                                        missing_total_tokens,
-                                        missing_response_time,
-                                    ) = _usage(missing_response)
-                                    prompt_tokens += missing_prompt_tokens
-                                    completion_tokens += missing_completion_tokens
-                                    total_tokens += missing_total_tokens
-                                    api_time += (
-                                        missing_response_time or missing_elapsed
-                                    )
-                                    missing_time_recorded = True
+                                    calls += 1
+                                    missing_started = time.perf_counter()
+                                    missing_time_recorded = False
                                     try:
-                                        completed_missing_assessments = (
-                                            _parse_executions(
-                                                _payload(missing_response),
-                                                completed=missing_completed,
-                                                allowed_refs=missing_allowed_refs,
-                                                candidates=projection.candidates,
+                                        missing_response = await llm_client.generate(
+                                            missing_prompt
+                                        )
+                                        missing_elapsed = (
+                                            time.perf_counter() - missing_started
+                                        )
+                                        if not isinstance(missing_response, Mapping):
+                                            api_time += missing_elapsed
+                                            missing_time_recorded = True
+                                            raise _SemanticInvalid()
+                                        (
+                                            missing_prompt_tokens,
+                                            missing_completion_tokens,
+                                            missing_total_tokens,
+                                            missing_response_time,
+                                        ) = _usage(missing_response)
+                                        prompt_tokens += missing_prompt_tokens
+                                        completion_tokens += missing_completion_tokens
+                                        total_tokens += missing_total_tokens
+                                        api_time += (
+                                            missing_response_time or missing_elapsed
+                                        )
+                                        missing_time_recorded = True
+                                        try:
+                                            completed_missing_assessments = (
+                                                _parse_executions(
+                                                    _payload(missing_response),
+                                                    completed=missing_completed,
+                                                    allowed_refs=missing_allowed_refs,
+                                                    candidates=projection.candidates,
+                                                )
                                             )
-                                        )
-                                    except _ExecutionCoverageIncomplete as retry_incomplete:
-                                        completed_missing_assessments = (
-                                            retry_incomplete.parsed
-                                        )
-                                except Exception:
-                                    if not missing_time_recorded:
-                                        api_time += time.perf_counter() - missing_started
+                                        except _ExecutionCoverageIncomplete as retry_incomplete:
+                                            completed_missing_assessments = (
+                                                retry_incomplete.parsed
+                                            )
+                                    except Exception:
+                                        if not missing_time_recorded:
+                                            api_time += (
+                                                time.perf_counter() - missing_started
+                                            )
                                 assessment_by_ref = {
                                     item.recommendation_ref: item
                                     for item in (
@@ -3721,7 +3802,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 and item.recommendation_ref
                                 not in exhausted_missing_refs
                             }
-                            if low_confidence_refs:
+                            if low_confidence_refs and not retry_attempted:
                                 # 只对首轮明确标为中/低信心的建议做一次
                                 # 最小上下文重问；已高信心的其他建议不重复投递。
                                 recheck_completed = tuple(
@@ -3774,7 +3855,13 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     # 语义复核只用于提升个别低信心事实；其失败
                                     # 不得覆盖首轮可交付的其他建议。
                                     pass
-                        except _SemanticInvalid:
+                        except _SemanticInvalid as semantic_error:
+                            logger.warning(
+                                "consultation_stage_two_invalid "
+                                "stage_two_invalid_kind=%s retry_attempted=%s",
+                                semantic_error.kind.value,
+                                retry_attempted,
+                            )
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = (
                                     "technical_error",
