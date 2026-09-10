@@ -2101,6 +2101,85 @@ async def test_specific_application_purpose_stabilizes_llm_vague_to_clear(monkey
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
 
 
+@pytest.mark.parametrize("contract", ("compact", "full"))
+def test_explicit_no_special_treatment_with_dynamic_ecg_follow_up_stabilizes_022_to_clear(
+    contract,
+):
+    ref = "consultation_record-1"
+    documents = ({
+        "ref": ref,
+        "time": "2025-08-08 15:46:48",
+        "text": (
+            "目前我科暂无特殊处理。建议患者有心悸等症状，可再次完善动态心电图。"
+            "遵嘱观察心律变化。"
+        ),
+        "event_identity_mode": "document" if contract == "compact" else "semantic",
+        "event_group_ref": "consultation-event-1" if contract == "compact" else "",
+    },)
+    if contract == "compact":
+        payload = _document_payload(_document_fact(
+            ref,
+            application="absent",
+            opinion="vague",
+            recommendations=[],
+        ))
+    else:
+        payload = _payload(episodes=[_episode(
+            ref,
+            [ref],
+            application="absent",
+            opinion="vague",
+            application_refs=[],
+            opinion_refs=[ref],
+            recommendations=[],
+        )])
+
+    parsed = episode._parse(payload, documents)
+
+    assert parsed[0].opinion_state == "clear"
+    assert episode._outcome("LX0609-022", parsed) == (
+        "compliant",
+        "requirement_satisfied",
+    )
+
+
+@pytest.mark.parametrize("contract", ("compact", "full"))
+def test_generic_possible_check_or_medication_does_not_stabilize_022_to_clear(contract):
+    ref = "consultation_record-1"
+    documents = ({
+        "ref": ref,
+        "time": "2025-08-08 15:46:48",
+        "text": "目前我科暂无特殊处理，必要时行相关检查或药物治疗。",
+        "event_identity_mode": "document" if contract == "compact" else "semantic",
+        "event_group_ref": "consultation-event-1" if contract == "compact" else "",
+    },)
+    if contract == "compact":
+        payload = _document_payload(_document_fact(
+            ref,
+            application="absent",
+            opinion="vague",
+            recommendations=[],
+        ))
+    else:
+        payload = _payload(episodes=[_episode(
+            ref,
+            [ref],
+            application="absent",
+            opinion="vague",
+            application_refs=[],
+            opinion_refs=[ref],
+            recommendations=[],
+        )])
+
+    parsed = episode._parse(payload, documents)
+
+    assert parsed[0].opinion_state == "vague"
+    assert episode._outcome("LX0609-022", parsed) == (
+        "non_compliant",
+        "requirement_violated",
+    )
+
+
 @pytest.mark.asyncio
 async def test_generic_application_vague_remains_non_compliant(monkeypatch):
     monkeypatch.setattr(

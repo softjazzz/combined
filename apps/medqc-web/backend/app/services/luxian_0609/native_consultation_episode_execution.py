@@ -230,6 +230,15 @@ _GENERIC_OPINION_PATTERN = re.compile(
     r"[，,；;]?(?:结合|根据)(?:相关)?检查结果(?:酌情|视情况)?"
     r"(?:调整|继续)(?:诊疗|治疗)方案[。.]?$"
 )
+_NO_SPECIAL_TREATMENT_DECISION_PATTERN = re.compile(
+    r"(?:目前|当前|现阶段)?(?:我科)?(?:暂无|无需|无须)"
+    r"(?:特殊|特别|进一步)?(?:处理|治疗|处置)"
+)
+_DYNAMIC_ECG_FOLLOW_UP_PATTERN = re.compile(
+    r"(?:建议|可|必要时)[^。；]{0,48}"
+    r"(?:复查|再次完善|重新完善|进一步完善|完善)"
+    r"(?:24小时|二十四小时)?动态心电图"
+)
 _SAFE_EXCEPTION_ORIGIN_PART = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -541,6 +550,26 @@ def _opinion_is_only_generic(
     ]
     text = _evidence_text("；".join(item for item in texts if item))
     return bool(text and _GENERIC_OPINION_PATTERN.fullmatch(text))
+
+
+def _stabilize_explicit_opinion_state(
+    *,
+    opinion_state: str,
+    opinion_refs: Sequence[str],
+    documents_by_ref: Mapping[str, Mapping[str, str]],
+) -> str:
+    """同一意见原文已有明确处理决定和具体复查时，稳定 022 模型抖动。"""
+
+    if opinion_state not in {"vague", "missing", "unknown"}:
+        return opinion_state
+    for ref in opinion_refs:
+        text = _evidence_text(_clean((documents_by_ref.get(ref) or {}).get("text")))
+        if (
+            _NO_SPECIAL_TREATMENT_DECISION_PATTERN.search(text)
+            and _DYNAMIC_ECG_FOLLOW_UP_PATTERN.search(text)
+        ):
+            return "clear"
+    return opinion_state
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -1488,6 +1517,12 @@ def _parse_compact_document_facts(
             )
         ):
             opinion = "vague"
+        if scope == "ordinary":
+            opinion = _stabilize_explicit_opinion_state(
+                opinion_state=opinion,
+                opinion_refs=(ref,),
+                documents_by_ref=documents_by_ref,
+            )
         episodes.append(
             _Episode(
                 ref,
@@ -1715,6 +1750,11 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             )
         ):
             opinion = "vague"
+        opinion = _stabilize_explicit_opinion_state(
+            opinion_state=opinion,
+            opinion_refs=opinion_refs,
+            documents_by_ref=documents_by_ref,
+        )
         assigned.extend(member_refs)
         assignment_bucket_by_ref.update(
             (ref, f"episode:{episode_ref}") for ref in member_refs
