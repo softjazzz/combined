@@ -6693,6 +6693,64 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_070_uses_actual_bloodtrans_record_when_frontpage_detail_is_empty() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    result, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-01 08:00:00"},
+            ),
+            "mr_bloodtrans": (),
+            "bloodtrans_record": ({
+                "document_id": "BLOOD-RECORD-1",
+                "record_time": "2026-06-02 14:00:00",
+                "record_content": "悬浮红细胞2U输注完毕。",
+            },),
+            "labtest_item_report": tuple(
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": "2026-06-02 10:00:00",
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+    bloodtrans_ref = build_material_document_refs(
+        "bloodtrans_record",
+        ({
+            "document_id": "BLOOD-RECORD-1",
+            "record_time": "2026-06-02 14:00:00",
+            "record_content": "悬浮红细胞2U输注完毕。",
+        },),
+    )[0]
+    assert bloodtrans_ref in result.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_070_cannot_claim_no_transfusion_when_record_source_is_unavailable() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-070",
+        {"mr_bloodtrans": ()},
+        unavailable_sources=frozenset({"bloodtrans_record"}),
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_unavailable"
+
+
+@pytest.mark.asyncio
 async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
     names = (
         ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
@@ -6852,6 +6910,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
         for source_key in (
             "inpat_registration",
             "mr_bloodtrans",
+            "bloodtrans_record",
             "labtest_item_report",
         )
         for reference, row in materials.document_rows(source_key, snapshot=snapshot)
@@ -6861,7 +6920,12 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
         if observation.source_key
-        in {"inpat_registration", "mr_bloodtrans", "labtest_item_report"}
+        in {
+            "inpat_registration",
+            "mr_bloodtrans",
+            "bloodtrans_record",
+            "labtest_item_report",
+        }
     }
     assert set(execution.decisions[0].fact_refs) == (
         source_snapshot_refs | selected_document_refs
@@ -6969,7 +7033,12 @@ async def test_070_trigger_absent_does_not_project_registration_or_lab_documents
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
         if observation.source_key
-        in {"inpat_registration", "mr_bloodtrans", "labtest_item_report"}
+        in {
+            "inpat_registration",
+            "mr_bloodtrans",
+            "bloodtrans_record",
+            "labtest_item_report",
+        }
     }
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
     assert set(execution.decisions[0].fact_refs) == source_snapshot_refs

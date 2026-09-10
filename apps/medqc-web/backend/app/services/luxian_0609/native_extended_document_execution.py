@@ -488,6 +488,9 @@ def _070_document_refs(
         transfusion_rows = materials.document_rows(
             "mr_bloodtrans", snapshot=snapshot
         )
+        bloodtrans_record_rows = materials.document_rows(
+            "bloodtrans_record", snapshot=snapshot
+        )
         lab_rows = materials.document_rows("labtest_item_report", snapshot=snapshot)
     except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
         # 既有规则已将受控来源不可用/截断映射为 data_gap；此时不能据部分材料
@@ -507,6 +510,7 @@ def _070_document_refs(
     refs = (
         *registration_refs,
         *(reference for reference, _row in transfusion_rows),
+        *(reference for reference, _row in bloodtrans_record_rows),
         *lab_refs,
     )
     return tuple(dict.fromkeys(refs))
@@ -1892,6 +1896,9 @@ async def execute_luxian_0609_native_extended_document_rules(
     mr_bloodtrans_rows, mr_bloodtrans_error = _source_rows(
         evidence_materials, "mr_bloodtrans"
     )
+    bloodtrans_record_rows, bloodtrans_record_error = _source_rows(
+        evidence_materials, "bloodtrans_record"
+    )
     death_state, death_time = _death_context(
         registration_rows=registration_rows,
         death_rows=death_rows,
@@ -2544,11 +2551,19 @@ async def execute_luxian_0609_native_extended_document_rules(
             source_keys = (
                 "inpat_registration",
                 "mr_bloodtrans",
+                "bloodtrans_record",
                 "labtest_item_report",
             )
-            if mr_bloodtrans_error:
-                final_state, reason_code = "data_gap", mr_bloodtrans_error
-            elif not mr_bloodtrans_rows:
+            transfusion_source_error = (
+                mr_bloodtrans_error or bloodtrans_record_error
+            )
+            actual_transfusion_rows = (
+                *mr_bloodtrans_rows,
+                *bloodtrans_record_rows,
+            )
+            if transfusion_source_error:
+                final_state, reason_code = "data_gap", transfusion_source_error
+            elif not actual_transfusion_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif registration_error:
                 final_state, reason_code = "data_gap", registration_error
@@ -2558,7 +2573,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
                     {
                         "inpat_registration": list(registration_rows),
-                        "mr_bloodtrans": list(mr_bloodtrans_rows),
+                        "mr_bloodtrans": list(actual_transfusion_rows),
                         "labtest_item_report": list(lab_item_rows),
                         "blood_application": [],
                         "__logical_source_states__": {
@@ -2590,7 +2605,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         snapshot=evidence_snapshot,
                         materials=evidence_materials,
                     )
-                    if mr_bloodtrans_rows and not mr_bloodtrans_error
+                    if actual_transfusion_rows and not transfusion_source_error
                     else ()
                 ),
             ))
