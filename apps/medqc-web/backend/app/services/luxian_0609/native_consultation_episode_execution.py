@@ -464,8 +464,11 @@ class _SemanticInvalid(Exception):
         self.kind = kind
 
     @property
-    def retryable_stage_two_shape(self) -> bool:
-        return self.kind is _SemanticInvalidKind.RESPONSE_SHAPE
+    def retryable_stage_two_once(self) -> bool:
+        return self.kind in {
+            _SemanticInvalidKind.RESPONSE_SHAPE,
+            _SemanticInvalidKind.REFERENCE_NOT_CANDIDATE,
+        }
 
 
 class _ExecutionCoverageIncomplete(_SemanticInvalid):
@@ -3642,13 +3645,14 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     )
                                 except _SemanticInvalid as semantic_error:
                                     if (
-                                        not semantic_error.retryable_stage_two_shape
+                                        not semantic_error.retryable_stage_two_once
                                         or retry_attempted
                                     ):
                                         raise
-                                    # 只对 HTTP 已成功、且 payload 的 executions
-                                    # 或条目对象形状错误做一次同 Prompt 重试。身份、
-                                    # 引用结构和候选集完整性错误始终直接失败。
+                                    # 只对 HTTP 已成功后的纯响应形状错误或候选外
+                                    # ref 做一次同 Prompt 重试。后者只容忍模型偶发
+                                    # 抄错；第二响应仍须完整通过相同安全合同。
+                                    # 身份和引用结构错误始终直接失败。
                                     calls += 1
                                     retry_attempted = True
                                     semantic_retry_started = time.perf_counter()
