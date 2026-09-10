@@ -20,8 +20,14 @@ _KINDS_BY_RULE = {
         "physician_handoff_identity_missing", "physician_signature_timeline_incomplete",
         "physician_change_time_missing",
     }),
-    "LX0609-072": frozenset({"transfer_record_timeliness_check", "transfer_records_missing"}),
-    "LX0609-073": frozenset({"transfer_record_presence_check", "transfer_records_missing"}),
+    "LX0609-072": frozenset({
+        "transfer_record_timeliness_check", "transfer_records_missing",
+        "transfer_event_association_gap",
+    }),
+    "LX0609-073": frozenset({
+        "transfer_record_presence_check", "transfer_records_missing",
+        "transfer_event_association_gap",
+    }),
     "LX0609-074": frozenset({
         "diagnosis_change_documentation_check", "diagnosis_change_association_failed",
         "diagnosis_change_documentation_time_missing",
@@ -40,6 +46,7 @@ _ALLOWED_KEYS = {
     "transfer_record_timeliness_check": {"transfer_order_time", "transfer_in_time", "transfer_out_time", "threshold_hours", "transfer_in_interval_hours", "transfer_out_interval_hours"},
     "transfer_record_presence_check": {"transfer_order_time", "transfer_in_time", "transfer_out_time", "transfer_in_associated", "transfer_out_associated"},
     "transfer_records_missing": {"transfer_order_count", "transfer_in_count", "transfer_out_count"},
+    "transfer_event_association_gap": {"transfer_order_count", "transfer_in_count", "transfer_out_count"},
     "diagnosis_change_documentation_check": {"diagnosis_change_count", "reason_recorded", "basis_recorded"},
     "diagnosis_change_association_failed": {"diagnosis_record_count", "diagnosis_change_count", "association_issue"},
     "diagnosis_change_documentation_time_missing": {"diagnosis_change_count", "untimed_document_count", "issue"},
@@ -65,6 +72,8 @@ def safe_continuity_customer_display_facts(
     if kind in {"physician_handoff_identity_missing", "physician_signature_timeline_incomplete"}:
         if set(raw) != {kind_key, "source_document_refs", *_ALLOWED_KEYS[kind]}:
             return None
+    if kind == "transfer_event_association_gap" and not _valid_transfer_event_association_gap(raw):
+        return None
 
     safe: dict[str, Any] = {kind_key: kind}
     for key in _ALLOWED_KEYS[kind]:
@@ -241,6 +250,41 @@ def physician_signature_gap_fields(raw: Any) -> list[str] | None:
     ]
 
 
+def transfer_event_association_gap_display(
+    raw: Any,
+) -> tuple[list[str], str] | None:
+    """将已校验的多次转科关联缺口投影为字段和客户文案。"""
+
+    if not _valid_transfer_event_association_gap(raw):
+        return None
+    return (
+        ["转科医嘱与转入/转出记录的事件关联"],
+        (
+            f"已识别{raw['transfer_order_count']}条转科相关医嘱、"
+            f"{raw['transfer_in_count']}份转入/{raw['transfer_out_count']}份转出记录，"
+            "缺少可将各文书与具体转科事件对应的关联信息，暂无法逐次核对。"
+        ),
+    )
+
+
+def _valid_transfer_event_association_gap(raw: Any) -> bool:
+    return (
+        isinstance(raw, Mapping)
+        and set(raw)
+        == {
+            "failure_kind",
+            "transfer_order_count",
+            "transfer_in_count",
+            "transfer_out_count",
+        }
+        and raw.get("failure_kind") == "transfer_event_association_gap"
+        and _nonnegative_int(raw.get("transfer_order_count"))
+        and raw["transfer_order_count"] >= 2
+        and _nonnegative_int(raw.get("transfer_in_count"))
+        and _nonnegative_int(raw.get("transfer_out_count"))
+    )
+
+
 def _valid_missing_record_times(raw: Mapping[str, Any]) -> bool:
     values = tuple(raw.get(key) for key in ("change_event_count", "handoff_record_count", "missing_handoff_time_count", "handover_record_count", "missing_handover_time_count"))
     return all(_nonnegative_int(value) for value in values) and values[0] > 1 and values[2] <= values[1] and values[4] <= values[3] and values[2] + values[4] > 0 and raw.get("handover_threshold_hours") == 24
@@ -272,4 +316,9 @@ def _nonnegative_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-__all__ = ["CONTINUITY_CUSTOMER_RULE_IDS", "is_continuity_customer_rule", "safe_continuity_customer_display_facts"]
+__all__ = [
+    "CONTINUITY_CUSTOMER_RULE_IDS",
+    "is_continuity_customer_rule",
+    "safe_continuity_customer_display_facts",
+    "transfer_event_association_gap_display",
+]

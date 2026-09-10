@@ -923,7 +923,23 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     course_gap = course_007_gap_display(result.get("customer_display_facts")) if rule_id == "LX0609-007" else None
     if course_gap is not None:
         defaults = {**defaults, "missing_sources": course_gap[0], "missing_fields": course_gap[1], "reason_label": "查房间隔核对资料不足"}
-    from .continuity_result_mapping import physician_signature_gap_fields
+    from .tumor_pathology_result_mapping import pathology_report_gap_missing_fields
+    pathology_report_gap_fields = (
+        pathology_report_gap_missing_fields(result.get("customer_display_facts"))
+        if rule_id == "LX0609-013" and reason_code == "required_field_missing"
+        else None
+    )
+    if pathology_report_gap_fields is not None:
+        defaults = {
+            **defaults,
+            "missing_sources": [],
+            "missing_fields": pathology_report_gap_fields,
+            "reason_label": "病理报告字段不完整",
+        }
+    from .continuity_result_mapping import (
+        physician_signature_gap_fields,
+        transfer_event_association_gap_display,
+    )
     signature_gap_fields = (
         physician_signature_gap_fields(result.get("customer_display_facts"))
         if rule_id == "LX0609-071" and reason_code == "required_field_missing"
@@ -931,6 +947,19 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     )
     if signature_gap_fields is not None:
         defaults = {**defaults, "missing_fields": signature_gap_fields}
+    transfer_association_gap = (
+        transfer_event_association_gap_display(result.get("customer_display_facts"))
+        if rule_id in {"LX0609-072", "LX0609-073"}
+        and reason_code == "association_failed"
+        else None
+    )
+    if transfer_association_gap is not None:
+        defaults = {
+            **defaults,
+            "reason_label": "转科事件与文书关联信息不足",
+            "missing_sources": [],
+            "missing_fields": transfer_association_gap[0],
+        }
     from .discharge_result_mapping import discharge_course_body_gap_display, discharge_course_time_gap_display
     discharge_body_gap = discharge_course_body_gap_display(rule_id, result.get("customer_display_facts"))
     if discharge_body_gap is not None:
@@ -983,10 +1012,16 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         default_customer_message = surgery_gap[1]
     if course_gap is not None:
         default_customer_message = course_gap[2]
+    if pathology_report_gap_fields is not None:
+        default_customer_message = customer_finding_from_controlled_facts(
+            rule_id=rule_id, facts=result.get("customer_display_facts")
+        )
     if signature_gap_fields is not None:
         default_customer_message = customer_finding_from_controlled_facts(
             rule_id=rule_id, facts=result.get("customer_display_facts")
         )
+    if transfer_association_gap is not None:
+        default_customer_message = transfer_association_gap[1]
     if discharge_time_gap is not None:
         default_customer_message = discharge_time_gap[1]
     if discharge_body_gap is not None:

@@ -2744,3 +2744,73 @@ def test_transfer_timeliness_uses_a_readable_gap_when_interval_is_unavailable() 
     assert "转入记录时间未能关联到本次转科，间隔无法计算" in finding
     assert "转出记录时间2026-07-01 10:00:00，间隔 2.0 小时" in finding
     assert "None 小时" not in finding
+
+
+def test_transfer_multi_event_gap_renders_counts_without_claiming_documents_missing() -> None:
+    facts = {
+        "failure_kind": "transfer_event_association_gap",
+        "transfer_order_count": 3,
+        "transfer_in_count": 2,
+        "transfer_out_count": 1,
+    }
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-072",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="association_failed",
+            fact_refs=(FACT_REF,),
+            evaluator_version="transfer-documentation-v1",
+            confidence=1.0,
+        )
+    )
+
+    rendered = render_luxian_0609_customer_result(
+        decision=decision,
+        safe_customer_display_facts=facts,
+    )
+
+    expected = (
+        "已识别3条转科相关医嘱、2份转入/1份转出记录，"
+        "缺少可将各文书与具体转科事件对应的关联信息，暂无法逐次核对。"
+    )
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-072", facts=facts
+    ) == expected
+    assert rendered["findings"] == expected
+    assert "文书缺失" not in rendered["findings"]
+    assert "缺少时间" not in rendered["findings"]
+
+
+def test_transfer_multi_event_gap_does_not_invent_zero_count_record_evidence() -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-073",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="association_failed",
+            fact_refs=(FACT_REF,),
+            evaluator_version="transfer-documentation-v1",
+            confidence=1.0,
+        )
+    )
+
+    rendered = render_luxian_0609_customer_result(
+        decision=decision,
+        safe_customer_display_facts={
+            "failure_kind": "transfer_event_association_gap",
+            "transfer_order_count": 2,
+            "transfer_in_count": 1,
+            "transfer_out_count": 0,
+        },
+    )
+
+    assert "1份转入/0份转出记录" in rendered["findings"]
+    assert rendered["evidence"] == (
+        "已定位本次纳入核对的转科资料，当前缺口为逐次事件对应关系。"
+    )
+    assert "候选转出记录" not in rendered["evidence"]

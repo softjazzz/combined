@@ -716,6 +716,47 @@ def test_rule_031_signature_association_gap_names_the_unavailable_signature_fiel
     assert "提交人" not in result["customer_message"]
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "order_count", "transfer_in_count", "transfer_out_count"),
+    (
+        ("LX0609-072", 3, 2, 1),
+        ("LX0609-073", 2, 1, 0),
+    ),
+)
+def test_transfer_event_association_gap_names_event_linkage_only(
+    rule_id: str,
+    order_count: int,
+    transfer_in_count: int,
+    transfer_out_count: int,
+) -> None:
+    result = _finalize(
+        {
+            "rule_id": rule_id,
+            "status": "data_gap",
+            "reason_code": "association_failed",
+            "customer_display_facts": {
+                "failure_kind": "transfer_event_association_gap",
+                "transfer_order_count": order_count,
+                "transfer_in_count": transfer_in_count,
+                "transfer_out_count": transfer_out_count,
+            },
+        }
+    )
+
+    assert result["missing_sources"] == []
+    assert result["missing_fields"] == [
+        "转科医嘱与转入/转出记录的事件关联"
+    ]
+    assert result["data_gap_details"]["reason_label"] == "转科事件与文书关联信息不足"
+    assert result["customer_message"] == (
+        f"已识别{order_count}条转科相关医嘱、"
+        f"{transfer_in_count}份转入/{transfer_out_count}份转出记录，"
+        "缺少可将各文书与具体转科事件对应的关联信息，暂无法逐次核对。"
+    )
+    assert "文书缺失" not in result["customer_message"]
+    assert "缺少时间" not in result["customer_message"]
+
+
 def test_rule_028_required_field_gap_names_the_actual_prophylaxis_inputs() -> None:
     result = _finalize(
         {

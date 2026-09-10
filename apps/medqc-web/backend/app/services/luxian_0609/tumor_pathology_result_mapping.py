@@ -50,6 +50,38 @@ def _safe_checked_sources(value: Any) -> list[dict[str, str]] | None:
 
 
 def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("verification_kind") == "pathology_report_field_gap":
+        report_gaps = raw.get("report_gaps")
+        if not isinstance(report_gaps, list) or not report_gaps:
+            return None
+        safe_gaps: list[dict[str, str]] = []
+        for item in report_gaps:
+            if not isinstance(item, Mapping) or set(item) != {
+                "final_diagnosis_state",
+                "report_time_state",
+            }:
+                return None
+            diagnosis_state = item.get("final_diagnosis_state")
+            time_state = item.get("report_time_state")
+            if (
+                not isinstance(diagnosis_state, str)
+                or not isinstance(time_state, str)
+                or diagnosis_state not in {"confirmed", "missing", "pending"}
+                or time_state not in {"valid", "missing"}
+                or (diagnosis_state == "confirmed" and time_state == "valid")
+            ):
+                return None
+            safe_gaps.append(
+                {
+                    "final_diagnosis_state": str(diagnosis_state),
+                    "report_time_state": str(time_state),
+                }
+            )
+        return {
+            "verification_kind": "pathology_report_field_gap",
+            "report_gaps": safe_gaps,
+        }
+
     triggers = _safe_sources(
         raw.get("pathology_trigger_sources"), allowed=_PATHOLOGY_SOURCES, required=True
     )
@@ -201,6 +233,11 @@ def tumor_pathology_customer_fact_status_is_valid(
     if normalized_rule_id == "LX0609-027" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
         return normalized_status == "uncertain"
     if normalized_rule_id in {"LX0609-013", "LX0609-027"}:
+        if (
+            normalized_rule_id == "LX0609-013"
+            and safe_facts.get("verification_kind") == "pathology_report_field_gap"
+        ):
+            return normalized_status == "data_gap"
         requirement_met = safe_facts.get("requirement_met")
         return (
             normalized_status in {"compliant", "non_compliant"}
@@ -243,9 +280,45 @@ def tumor_pathology_customer_fact_status_is_valid(
     return False
 
 
+def pathology_report_gap_missing_fields(
+    safe_facts: Mapping[str, Any] | None,
+) -> list[str] | None:
+    """把已校验的逐报告缺口汇总为稳定客户字段名。"""
+
+    if not isinstance(safe_facts, Mapping):
+        return None
+    normalized = _safe_013(safe_facts)
+    if (
+        normalized is None
+        or normalized.get("verification_kind") != "pathology_report_field_gap"
+    ):
+        return None
+    report_gaps = normalized["report_gaps"]
+    missing_diagnosis_count = sum(
+        item.get("final_diagnosis_state") == "missing" for item in report_gaps
+    )
+    pending_diagnosis_count = sum(
+        item.get("final_diagnosis_state") == "pending" for item in report_gaps
+    )
+    missing_time_count = sum(
+        item.get("report_time_state") == "missing" for item in report_gaps
+    )
+    fields: list[str] = []
+    if missing_diagnosis_count:
+        fields.append(f"病理最终诊断（{missing_diagnosis_count}份报告）")
+    if pending_diagnosis_count:
+        fields.append(
+            f"已确认的病理最终诊断（{pending_diagnosis_count}份报告尚未确认）"
+        )
+    if missing_time_count:
+        fields.append(f"有效病理报告时间（{missing_time_count}份报告）")
+    return fields or None
+
+
 __all__ = [
     "TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS",
     "is_tumor_pathology_customer_rule",
+    "pathology_report_gap_missing_fields",
     "safe_tumor_pathology_customer_display_facts",
     "tumor_pathology_customer_fact_status_is_valid",
 ]

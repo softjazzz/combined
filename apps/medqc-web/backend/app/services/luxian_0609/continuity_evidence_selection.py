@@ -12,6 +12,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .extended_document.transfer_documentation import select_transfer_order_rows
 from .extended_document.shared import _parse_datetime
 from .source_evidence_reader import authoritative_document_time_value
 
@@ -216,13 +217,28 @@ def bind_transfer_evidence(
 ) -> ContinuityEvidenceBinding:
     """绑定唯一转科医嘱及既有判定器实际匹配的转入、转出文书。"""
 
-    orders = tuple(
-        row for row in nondrug_order_rows
-        if "转科" in _clean(row.get("order_name") or row.get("record_content"))
-        and not any(marker in _clean(row.get("order_status")) for marker in ("取消", "作废", "撤销"))
-    )
+    orders = select_transfer_order_rows(nondrug_order_rows)
     if len(orders) != 1:
-        return ContinuityEvidenceBinding(())
+        is_multi_event_gap = (
+            len(orders) > 1
+            and isinstance(display_facts, Mapping)
+            and display_facts.get("failure_kind")
+            == "transfer_event_association_gap"
+            and display_facts.get("transfer_order_count") == len(orders)
+            and display_facts.get("transfer_in_count") == len(transfer_in_rows)
+            and display_facts.get("transfer_out_count") == len(transfer_out_rows)
+        )
+        if not is_multi_event_gap:
+            return ContinuityEvidenceBinding(())
+        return bind_consumed_continuity_document_rows(
+            snapshot=snapshot,
+            materials=materials,
+            consumed_rows=[
+                *(("inpat_nondrug_order", row) for row in orders),
+                *(("transfer_in_record", row) for row in transfer_in_rows),
+                *(("transfer_out_record", row) for row in transfer_out_rows),
+            ],
+        )
     consumed: list[tuple[str, Mapping[str, Any]]] = [("inpat_nondrug_order", orders[0])]
     if isinstance(display_facts, Mapping):
         for source_key, rows, fact_key in (

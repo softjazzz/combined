@@ -270,7 +270,13 @@ def _typed_decision_from_outcome(
             "trigger_absent_complete",
         )
     elif outcome.status == "data_gap":
-        source_gap = "unavailable" in outcome.reason_code
+        # 字段名中带 unavailable 不等于来源未接入。013 已读取到具体病理报告，
+        # 只是同一报告缺最终诊断或有效报告时间，必须保留为字段缺口。
+        source_gap = (
+            outcome.reason_code
+            != "pathology_final_result_or_report_time_unavailable"
+            and "unavailable" in outcome.reason_code
+        )
         dimensions = (
             ApplicabilityState.UNKNOWN if source_gap else ApplicabilityState.APPLICABLE,
             EvidenceState.DATA_GAP,
@@ -570,29 +576,40 @@ def _complete_pathology_result_row(
     """返回实际构成病理最终结果触发的报告行。"""
 
     for row in material.rows:
-        report_time = _clean(
-            row.get("report_datetime")
-            or row.get("report_time")
-            or row.get("record_time")
-            or row.get("display_time")
-            or row.get("authored_at")
-        )
-        if not report_time:
-            continue
-        if not _PATHOLOGY_REPORT_DATETIME_PATTERN.fullmatch(report_time):
-            continue
-        try:
-            datetime.fromisoformat(report_time.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        diagnosis = _clean(row.get("diagnosis"))
-        body = _clean(row.get("record_content") or row.get("content"))
-        result_text = diagnosis or body
-        if not result_text or _PATHOLOGY_PENDING_RESULT_PATTERN.search(result_text):
-            continue
-        if diagnosis or _PATHOLOGY_FINAL_RESULT_PATTERN.search(body):
+        if (
+            _pathology_report_time_state(row) == "valid"
+            and _pathology_final_diagnosis_state(row) == "confirmed"
+        ):
             return row
     return None
+
+
+def _pathology_report_time_state(row: Mapping[str, Any]) -> str:
+    report_time = _clean(
+        row.get("report_datetime")
+        or row.get("report_time")
+        or row.get("record_time")
+        or row.get("display_time")
+        or row.get("authored_at")
+    )
+    if not report_time or not _PATHOLOGY_REPORT_DATETIME_PATTERN.fullmatch(report_time):
+        return "missing"
+    try:
+        datetime.fromisoformat(report_time.replace("Z", "+00:00"))
+    except ValueError:
+        return "missing"
+    return "valid"
+
+
+def _pathology_final_diagnosis_state(row: Mapping[str, Any]) -> str:
+    diagnosis = _clean(row.get("diagnosis"))
+    body = _clean(row.get("record_content") or row.get("content"))
+    result_text = diagnosis or body
+    if result_text and _PATHOLOGY_PENDING_RESULT_PATTERN.search(result_text):
+        return "pending"
+    if diagnosis or (body and _PATHOLOGY_FINAL_RESULT_PATTERN.search(body)):
+        return "confirmed"
+    return "missing"
 
 
 def _has_documented_pathology_sampling(*materials: SourceMaterial) -> bool:
@@ -885,6 +902,30 @@ def _pathology_result_display_facts(
     if len(report_times) == 1:
         facts["report_time"] = next(iter(report_times))
     return facts
+
+
+def _pathology_report_gap_display_facts(
+    pathology_report: SourceMaterial,
+) -> Mapping[str, Any] | None:
+    """投影逐报告字段完整性；不携带报告正文，也不跨报告合并字段。"""
+
+    report_gaps = [
+        {
+            "final_diagnosis_state": _pathology_final_diagnosis_state(row),
+            "report_time_state": _pathology_report_time_state(row),
+        }
+        for row in pathology_report.rows
+        if not (
+            _pathology_final_diagnosis_state(row) == "confirmed"
+            and _pathology_report_time_state(row) == "valid"
+        )
+    ]
+    if not report_gaps:
+        return None
+    return {
+        "verification_kind": "pathology_report_field_gap",
+        "report_gaps": report_gaps,
+    }
 
 
 def _pathology_sampling_display_facts(
@@ -1503,6 +1544,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     "data_gap",
                     "pathology_final_result_or_report_time_unavailable",
                     executor_type="program",
+                    display_facts=_pathology_report_gap_display_facts(report),
                     fact_refs=(
                         typed_document_refs(("pathology_exam_report", report.rows))
                         if typed_rule

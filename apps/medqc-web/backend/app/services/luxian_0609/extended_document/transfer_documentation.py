@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
@@ -23,16 +24,37 @@ class _TransferRecordCandidate:
     record_time: datetime | None = None
 
 
-def _transfer_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
-    return tuple(
-        row
-        for row in rows
-        if "转科" in _clean(row.get("order_name") or row.get("record_content"))
-        and not any(
-            marker in _clean(row.get("order_status"))
-            for marker in ("取消", "作废", "撤销")
+_TRANSFER_IN_DESTINATION_PATTERN = re.compile(
+    r"转入(?:ICU|[\u4e00-\u9fffA-Za-z0-9]+科)",
+    re.IGNORECASE,
+)
+_NON_CLINICAL_TRANSFER_MARKERS = ("药品", "病案")
+_PLANNED_TRANSFER_MARKERS = ("拟转",)
+
+
+def select_transfer_order_rows(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    """选择已正式下达且指向临床科室的转科医嘱。"""
+
+    selected = []
+    for row in rows:
+        text = _clean(row.get("order_name") or row.get("record_content"))
+        normalized_name = re.sub(r"\s+", "", text).strip("：:，,。；;")
+        is_transfer = "转科" in text or (
+            _TRANSFER_IN_DESTINATION_PATTERN.fullmatch(normalized_name) is not None
         )
-    )
+        if not is_transfer:
+            continue
+        if any(marker in text for marker in _PLANNED_TRANSFER_MARKERS):
+            continue
+        if any(marker in text for marker in _NON_CLINICAL_TRANSFER_MARKERS):
+            continue
+        status = _clean(row.get("order_status"))
+        if any(marker in status for marker in ("取消", "作废", "撤销", "未执行")):
+            continue
+        selected.append(row)
+    return tuple(selected)
 
 
 def _precise_datetime(value: Any) -> datetime | None:
@@ -214,11 +236,20 @@ def evaluate_transfer_documentation(
     source_error = nondrug_order_error or transfer_in_error or transfer_out_error
     if source_error:
         return TransferDocumentationOutcome("data_gap", source_error)
-    orders = _transfer_orders(nondrug_order_rows)
+    orders = select_transfer_order_rows(nondrug_order_rows)
     if not orders:
         return TransferDocumentationOutcome("not_applicable", "trigger_absent_complete")
     if len(orders) != 1:
-        return TransferDocumentationOutcome("data_gap", "association_failed")
+        return TransferDocumentationOutcome(
+            "data_gap",
+            "association_failed",
+            {
+                "failure_kind": "transfer_event_association_gap",
+                "transfer_order_count": len(orders),
+                "transfer_in_count": len(transfer_in_rows),
+                "transfer_out_count": len(transfer_out_rows),
+            },
+        )
 
     order_time, order_time_conflict = _unique_order_time(orders[0])
     if order_time_conflict:

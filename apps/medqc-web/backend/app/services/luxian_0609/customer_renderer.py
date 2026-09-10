@@ -24,7 +24,9 @@ from .source_gap_contract import customer_gap_message
 from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 from .surgery_gate_result_mapping import surgery_timeliness_gap_display
 from .course_quality_result_mapping import course_007_gap_display
+from .continuity_result_mapping import transfer_event_association_gap_display
 from .discharge_result_mapping import discharge_course_body_gap_display, discharge_course_time_gap_display
+from .tumor_pathology_result_mapping import pathology_report_gap_missing_fields
 
 
 CUSTOMER_RESULT_KEYS = frozenset(
@@ -1599,6 +1601,24 @@ def customer_finding_from_controlled_facts(
         return ""
 
     kind = str(facts.get("verification_kind") or facts.get("failure_kind") or "")
+
+    if rule_id == "LX0609-013" and kind == "pathology_report_field_gap":
+        missing_fields = pathology_report_gap_missing_fields(facts)
+        report_gaps = facts.get("report_gaps")
+        if missing_fields and isinstance(report_gaps, list):
+            return (
+                f"已读取{len(report_gaps)}份病理报告，报告字段不完整："
+                + "、".join(missing_fields)
+                + "。"
+            )
+        return ""
+
+    if (
+        rule_id in {"LX0609-072", "LX0609-073"}
+        and kind == "transfer_event_association_gap"
+    ):
+        display = transfer_event_association_gap_display(facts)
+        return display[1] if display is not None else ""
 
     basic_timeliness_labels = {
         "LX0609-001": ("入院记录", "入院后", "入院时间"),
@@ -3262,11 +3282,41 @@ def render_luxian_0609_customer_result(
             missing_items=_missing_item_labels(decision),
         )
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
+        pathology_report_gap = (
+            customer_finding_from_controlled_facts(
+                rule_id=decision.rule_id,
+                facts=safe_customer_display_facts,
+            )
+            if decision.rule_id == "LX0609-013"
+            else ""
+        )
+        pathology_report_gap_fields = (
+            pathology_report_gap_missing_fields(safe_customer_display_facts)
+            if pathology_report_gap
+            else None
+        )
+        transfer_association_gap = (
+            transfer_event_association_gap_display(safe_customer_display_facts)
+            if decision.rule_id in {"LX0609-072", "LX0609-073"}
+            else None
+        )
         surgery_gap = surgery_timeliness_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-003" else None
         course_gap = course_007_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-007" else None
         discharge_time_gap = discharge_course_time_gap_display(decision.rule_id, safe_customer_display_facts)
         discharge_body_gap = discharge_course_body_gap_display(decision.rule_id, safe_customer_display_facts)
-        if discharge_body_gap is not None:
+        if transfer_association_gap is not None:
+            findings = transfer_association_gap[1]
+            evidence = "已定位本次纳入核对的转科资料，当前缺口为逐次事件对应关系。"
+            suggestion = "请核对每次转科医嘱与转入、转出记录的事件关联后重新评估。"
+        elif pathology_report_gap:
+            findings = pathology_report_gap
+            evidence = (
+                "已定位具体病理报告；本次缺口为"
+                + "、".join(pathology_report_gap_fields or [])
+                + "。"
+            )
+            suggestion = "请核对证据定位中的病理报告及上述字段，确认后重新评估。"
+        elif discharge_body_gap is not None:
             findings = discharge_body_gap[1]
             evidence = "已定位窗口内病程记录，缺口是可核对的正文，不代表文书不存在。"
             suggestion = "请核对证据定位中的病程正文及同步情况后重新质控。"
@@ -3349,7 +3399,9 @@ def render_luxian_0609_customer_result(
     if structured_suggestion and not (
         decision.final_state is CustomerFinalState.DATA_GAP
         and (
-            exam_lab_data_gap_customer_message(
+            bool(pathology_report_gap)
+            or transfer_association_gap is not None
+            or exam_lab_data_gap_customer_message(
                 rule_id=decision.rule_id,
                 reason_code=decision.reason_code,
             )
