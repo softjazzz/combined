@@ -5431,8 +5431,16 @@ async def test_017_long_template_with_material_change_uses_one_review(monkeypatc
         course,
         "read_luxian_0609_native_source_rows",
         lambda **kwargs: [
-            {**_row(left), "document_id": "safe-left"},
-            {**_row(right, "2026-06-02 09:00:00"), "document_id": "safe-right"},
+            {
+                **_row(left),
+                "document_id": "safe-left",
+                "document_title": "主治医师查房记录",
+            },
+            {
+                **_row(right, "2026-06-02 09:00:00"),
+                "document_id": "safe-right",
+                "document_title": "副主任医师查房记录",
+            },
         ] if kwargs["source_key"] == "senior_course_record" else [],
     )
     client = _CopyReviewClient("substantial_copy")
@@ -5459,8 +5467,26 @@ async def test_017_long_template_with_material_change_uses_one_review(monkeypatc
         '"document_refs":["D01","D02"]}]'
     ) in client.calls[0]["prompt"]
     assert "禁止使用pair_ref作为JSON对象的键" in client.calls[0]["prompt"]
+    assert "不能只凭相似度或共同模板判为实质复制" in client.calls[0]["prompt"]
+    assert "症状、客观体征、检查、判断或处置呈可核对的纵向变化" in client.calls[0]["prompt"]
+    assert "不同文书角色为完成各自职责而复述稳定事实" in client.calls[0]["prompt"]
+    assert '"document_title":"主治医师查房记录"' in client.calls[0]["prompt"]
+    assert '"document_title":"副主任医师查房记录"' in client.calls[0]["prompt"]
+    assert '"was_truncated":false' in client.calls[0]["prompt"]
     assert left not in repr(result)
     assert right not in repr(result)
+
+
+def test_017_copy_review_excerpt_keeps_head_and_tail_within_budget():
+    content = "开头病情" + ("中段" * 800) + "尾部诊疗计划与签名"
+
+    excerpt, was_truncated = rules_016_017._copy_review_excerpt(content)
+
+    assert was_truncated is True
+    assert len(excerpt) <= 1200
+    assert excerpt.startswith("开头病情")
+    assert excerpt.endswith("尾部诊疗计划与签名")
+    assert "中段已裁剪" in excerpt
 
 
 @pytest.mark.asyncio

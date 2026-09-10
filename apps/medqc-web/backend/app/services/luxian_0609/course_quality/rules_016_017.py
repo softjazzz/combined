@@ -258,6 +258,8 @@ class _CopyReviewCandidate:
     right_source: str
     left_time: str
     right_time: str
+    left_title: str
+    right_title: str
     left_content: str = field(repr=False)
     right_content: str = field(repr=False)
     document_fingerprints: tuple[str, str] = ("", "")
@@ -316,7 +318,9 @@ def _assess_copy(
         RULE_017_COPY_SOURCES,
         limit_per_source=None if source_complete else _MAX_ROWS_PER_SOURCE,
     )
-    comparable: list[tuple[datetime, str, str, bool, str, str]] = []
+    comparable: list[
+        tuple[datetime, str, str, bool, str, str, Mapping[str, Any]]
+    ] = []
     seen_document_ids: set[str] = set()
     missing_time_count = 0
     for source_key, row, content in rows:
@@ -344,6 +348,7 @@ def _assess_copy(
                 _is_copy_template_shell(normalized),
                 content,
                 document_id,
+                row,
             )
         )
 
@@ -415,8 +420,8 @@ def _assess_copy(
     precise_pairs: list[
         tuple[
             float,
-            tuple[datetime, str, str, bool, str, str],
-            tuple[datetime, str, str, bool, str, str],
+            tuple[datetime, str, str, bool, str, str, Mapping[str, Any]],
+            tuple[datetime, str, str, bool, str, str, Mapping[str, Any]],
         ]
     ] = []
     for _, _, _, left_index, right_index in candidate_heap:
@@ -436,8 +441,8 @@ def _assess_copy(
 
     maximum = -1.0
     best_pair: tuple[
-        tuple[datetime, str, str, bool, str, str],
-        tuple[datetime, str, str, bool, str, str],
+        tuple[datetime, str, str, bool, str, str, Mapping[str, Any]],
+        tuple[datetime, str, str, bool, str, str, Mapping[str, Any]],
     ] | None = None
     longest_block = 0
     substantial_coverage = 0.0
@@ -604,8 +609,10 @@ def _assess_copy(
                 right_source=right[1],
                 left_time=left[0].strftime("%Y-%m-%d %H:%M:%S"),
                 right_time=right[0].strftime("%Y-%m-%d %H:%M:%S"),
-                left_content=left[4][:_COPY_REVIEW_DOCUMENT_CHARS],
-                right_content=right[4][:_COPY_REVIEW_DOCUMENT_CHARS],
+                left_title=_clean(left[6].get("document_title")),
+                right_title=_clean(right[6].get("document_title")),
+                left_content=left[4],
+                right_content=right[4],
                 document_fingerprints=(fingerprints[0], fingerprints[1]),
                 redaction_terms=tuple(
                     value for value in (left[5], right[5]) if value
@@ -632,6 +639,17 @@ def _redact_copy_review_text(text: str, terms: Sequence[str]) -> str:
     return redacted
 
 
+def _copy_review_excerpt(text: str) -> tuple[str, bool]:
+    """在固定预算内同时保留文首事实和文尾诊疗结论。"""
+
+    if len(text) <= _COPY_REVIEW_DOCUMENT_CHARS:
+        return text, False
+    marker = "[中段已裁剪]"
+    head_chars = 700
+    tail_chars = _COPY_REVIEW_DOCUMENT_CHARS - head_chars - len(marker)
+    return text[:head_chars] + marker + text[-tail_chars:], True
+
+
 def _copy_review_prompt(
     candidates: Sequence[_CopyReviewCandidate],
     redaction_terms: Sequence[str] = (),
@@ -639,14 +657,25 @@ def _copy_review_prompt(
     documents: dict[str, dict[str, Any]] = {}
     pairs: list[dict[str, Any]] = []
     for candidate in candidates:
+        left_excerpt, left_was_truncated = _copy_review_excerpt(
+            candidate.left_content
+        )
+        right_excerpt, right_was_truncated = _copy_review_excerpt(
+            candidate.right_content
+        )
         documents.setdefault(
             candidate.left_ref,
             {
                 "document_ref": candidate.left_ref,
                 "source_type": candidate.left_source,
+                "document_title": _redact_copy_review_text(
+                    candidate.left_title,
+                    (*candidate.redaction_terms, *redaction_terms),
+                ),
                 "record_time": candidate.left_time,
+                "was_truncated": left_was_truncated,
                 "content": _redact_copy_review_text(
-                    candidate.left_content,
+                    left_excerpt,
                     (*candidate.redaction_terms, *redaction_terms),
                 ),
             },
@@ -656,9 +685,14 @@ def _copy_review_prompt(
             {
                 "document_ref": candidate.right_ref,
                 "source_type": candidate.right_source,
+                "document_title": _redact_copy_review_text(
+                    candidate.right_title,
+                    (*candidate.redaction_terms, *redaction_terms),
+                ),
                 "record_time": candidate.right_time,
+                "was_truncated": right_was_truncated,
                 "content": _redact_copy_review_text(
-                    candidate.right_content,
+                    right_excerpt,
                     (*candidate.redaction_terms, *redaction_terms),
                 ),
             },
@@ -690,6 +724,12 @@ def _copy_review_prompt(
     return (
         "你只核对候选病程对是否属于实质内容复制，不输出质控状态。"
         "逐个pair_ref返回substantial_copy、template_only或uncertain；"
+        "不能只凭相似度或共同模板判为实质复制。"
+        "substantial_copy仅用于患者特异性的病史、查体、检查、诊断分析和计划被大段复用，"
+        "且后文缺少与本次记录相称的当日变化或独立判断；只改医师、签名、日期或局部诊断名仍属实质复制。"
+        "template_only用于症状、客观体征、检查、判断或处置呈可核对的纵向变化，"
+        "或者不同文书角色为完成各自职责而复述稳定事实，同时各自保留独立结论和处置。"
+        "无法从裁剪文本确认上述边界时返回uncertain；"
         "document_refs必须原样返回该候选的两个临时文书引用。"
         "只输出严格JSON，不要输出Markdown或解释；顶层只能包含schema_version和pair_results；"
         "pair_results必须是数组且恰好覆盖每个候选一次；"
