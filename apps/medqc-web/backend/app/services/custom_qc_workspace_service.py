@@ -358,9 +358,8 @@ def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str
             record_time,
         ):
             row["record_time"] = record_time
+        # 保留执行器选定的全部安全定位，不能按顺序截掉判定所需的时间锚点。
         rows.append(row)
-        if len(rows) >= 8:
-            break
     return rows
 
 
