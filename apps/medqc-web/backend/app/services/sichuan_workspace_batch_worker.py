@@ -729,6 +729,23 @@ def _build_batch_input_profile_summary(result_profiles: List[Dict[str, Any]]) ->
     }
 
 
+def _distribute_non_negative_int(total: int, count: int) -> List[int]:
+    safe_total = max(0, int(total or 0))
+    safe_count = max(1, int(count or 0))
+    quotient, remainder = divmod(safe_total, safe_count)
+    return [
+        quotient + (1 if index < remainder else 0)
+        for index in range(safe_count)
+    ]
+
+
+def _attributed_llm_call_count(result: Dict[str, Any]) -> Optional[int]:
+    breakdown = result.get("executor_breakdown")
+    if not isinstance(breakdown, dict) or "llm" not in breakdown:
+        return None
+    return _performance_int(breakdown.get("llm"))
+
+
 def _build_result_performance_profile(item: Dict[str, Any]) -> Dict[str, Any]:
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
     executor_type = str(item.get("executor_type") or metadata.get("executor_type") or "llm").strip().lower()
@@ -861,6 +878,10 @@ def _build_batch_performance_profile(
     wall_clock_time: float,
     first_result_latency: float,
     actual_llm_pack_call_count: int = 0,
+    actual_llm_call_count: Optional[int] = None,
+    actual_total_tokens: Optional[int] = None,
+    actual_prompt_tokens: Optional[int] = None,
+    actual_completion_tokens: Optional[int] = None,
 ) -> Dict[str, Any]:
     result_profiles = [
         dict(item.get("performance_profile") or _build_result_performance_profile(item))
@@ -879,7 +900,6 @@ def _build_batch_performance_profile(
     total_tokens = 0
     total_prompt_tokens = 0
     total_completion_tokens = 0
-    total_unattributed_tokens = 0
     total_context_tokens = 0
 
     for profile in result_profiles:
@@ -910,7 +930,6 @@ def _build_batch_performance_profile(
         total_tokens += tokens
         total_prompt_tokens += prompt_tokens
         total_completion_tokens += completion_tokens
-        total_unattributed_tokens += unattributed_tokens
         total_context_tokens += context_tokens
 
         rule_profile = rule_map.setdefault(
@@ -978,6 +997,32 @@ def _build_batch_performance_profile(
         reverse=True,
     )[:20]
     input_profile_summary = _build_batch_input_profile_summary(result_profiles)
+    authoritative_llm_calls = (
+        total_llm_calls
+        if actual_llm_call_count is None
+        else _performance_int(actual_llm_call_count)
+    )
+    authoritative_tokens = (
+        total_tokens
+        if actual_total_tokens is None
+        else _performance_int(actual_total_tokens)
+    )
+    authoritative_prompt_tokens = (
+        total_prompt_tokens
+        if actual_prompt_tokens is None
+        else _performance_int(actual_prompt_tokens)
+    )
+    authoritative_completion_tokens = (
+        total_completion_tokens
+        if actual_completion_tokens is None
+        else _performance_int(actual_completion_tokens)
+    )
+    authoritative_unattributed_tokens = max(
+        0,
+        authoritative_tokens
+        - authoritative_prompt_tokens
+        - authoritative_completion_tokens,
+    )
 
     batch_profile = {
         "schema_version": "luxian_0609_job_perf_v1",
@@ -990,8 +1035,12 @@ def _build_batch_performance_profile(
         "wall_clock_time_seconds": round(max(0.0, float(wall_clock_time or 0.0)), 4),
         "sum_rule_duration_seconds": round(total_duration, 4),
         "first_result_latency_seconds": round(max(0.0, float(first_result_latency or 0.0)), 4),
-        "llm_call_count": total_llm_calls,
-        "llm_call_count_basis": "result_participation_count",
+        "llm_call_count": authoritative_llm_calls,
+        "llm_call_count_basis": (
+            "record_execution_attribution"
+            if actual_llm_call_count is not None
+            else "result_participation_count"
+        ),
         "actual_llm_pack_call_count": int(actual_llm_pack_call_count or 0),
         "program_call_count": total_program_calls,
         "retry_count": total_retry_count,
@@ -999,11 +1048,11 @@ def _build_batch_performance_profile(
         "timeout_count": total_timeouts,
         "rate_limit_count": total_rate_limits,
         "pack_retry_attempts": total_pack_retries,
-        "tokens_total": total_tokens,
-        "prompt_tokens": total_prompt_tokens,
-        "completion_tokens": total_completion_tokens,
-        "unattributed_tokens": total_unattributed_tokens,
-        "token_breakdown_complete": total_unattributed_tokens == 0,
+        "tokens_total": authoritative_tokens,
+        "prompt_tokens": authoritative_prompt_tokens,
+        "completion_tokens": authoritative_completion_tokens,
+        "unattributed_tokens": authoritative_unattributed_tokens,
+        "token_breakdown_complete": authoritative_unattributed_tokens == 0,
         "context_tokens_estimate": total_context_tokens,
         "rules": rules,
         "slow_rules": rules[:12],
@@ -1351,6 +1400,7 @@ async def run_sichuan_workspace_batch_job(
         executor_program = 0
         executor_llm = 0
         executor_native = 0
+        actual_llm_call_count = 0
         cache_hit = 0
         cache_miss = 0
         cot_summary_total = {
@@ -1948,6 +1998,7 @@ async def run_sichuan_workspace_batch_job(
                 record_total_prompt_tokens = 0
                 record_total_completion_tokens = 0
                 record_total_api_time = 0.0
+                record_llm_call_count: Optional[int] = None
                 record_first_result_latency = 0.0
                 record_first_result_source = ""
                 record_pack_metrics: Dict[str, Any] = {}
@@ -1966,6 +2017,7 @@ async def run_sichuan_workspace_batch_job(
                     nonlocal record_total_prompt_tokens
                     nonlocal record_total_completion_tokens
                     nonlocal record_total_api_time
+                    nonlocal record_llm_call_count
                     nonlocal record_first_result_latency
                     nonlocal record_first_result_source
                     nonlocal record_pack_metrics
@@ -1976,6 +2028,8 @@ async def run_sichuan_workspace_batch_job(
                     aggregated_items: List[Dict[str, Any]] = []
                     aggregated_tokens = 0
                     aggregated_api_time = 0.0
+                    aggregated_llm_calls = 0
+                    has_llm_call_attribution = True
                     first_latency = 0.0
                     first_source = ""
                     for single_rule_id in active_rule_ids:
@@ -2000,6 +2054,11 @@ async def run_sichuan_workspace_batch_job(
                         token_usage = dict(single_result.get("token_usage") or {})
                         aggregated_tokens += int(token_usage.get("total_tokens") or 0)
                         aggregated_api_time += float(single_result.get("api_time") or 0.0)
+                        single_llm_calls = _attributed_llm_call_count(single_result)
+                        if single_llm_calls is None:
+                            has_llm_call_attribution = False
+                        else:
+                            aggregated_llm_calls += single_llm_calls
                         if first_latency <= 0:
                             first_latency = float(single_result.get("api_time") or 0.0)
                             first_source = "rule_for_visit"
@@ -2009,6 +2068,9 @@ async def run_sichuan_workspace_batch_job(
                     record_total_prompt_tokens = 0
                     record_total_completion_tokens = 0
                     record_total_api_time = aggregated_api_time
+                    record_llm_call_count = (
+                        aggregated_llm_calls if has_llm_call_attribution else None
+                    )
                     record_first_result_latency = first_latency
                     record_first_result_source = first_source
                     record_pack_metrics = {
@@ -2180,6 +2242,7 @@ async def run_sichuan_workspace_batch_job(
                     record_total_tokens = int(token_usage.get("total_tokens") or 0)
                     record_total_prompt_tokens = int(token_usage.get("prompt_tokens") or 0)
                     record_total_completion_tokens = int(token_usage.get("completion_tokens") or 0)
+                    record_llm_call_count = _attributed_llm_call_count(result)
                     record_total_api_time = float(result.get("api_time") or 0.0)
                     record_first_result_latency = float(result.get("first_result_latency") or 0.0)
                     record_first_result_source = str(result.get("first_result_source") or "")
@@ -2273,6 +2336,7 @@ async def run_sichuan_workspace_batch_job(
                         record_total_tokens = int(token_usage.get("total_tokens") or 0)
                         record_total_prompt_tokens = int(token_usage.get("prompt_tokens") or 0)
                         record_total_completion_tokens = int(token_usage.get("completion_tokens") or 0)
+                        record_llm_call_count = _attributed_llm_call_count(single_result)
                         record_total_api_time = float(single_result.get("api_time") or 0.0)
                         record_first_result_latency = float(single_result.get("first_result_latency") or 0.0)
                         record_first_result_source = str(single_result.get("first_result_source") or "")
@@ -2341,6 +2405,7 @@ async def run_sichuan_workspace_batch_job(
                     record_total_tokens = int(token_usage.get("total_tokens") or 0)
                     record_total_prompt_tokens = int(token_usage.get("prompt_tokens") or 0)
                     record_total_completion_tokens = int(token_usage.get("completion_tokens") or 0)
+                    record_llm_call_count = _attributed_llm_call_count(result)
                     record_total_api_time = float(result.get("api_time") or 0.0)
                     record_first_result_latency = float(result.get("first_result_latency") or 0.0)
                     record_first_result_source = str(result.get("first_result_source") or "")
@@ -2359,7 +2424,6 @@ async def run_sichuan_workspace_batch_job(
                     if key and key not in eval_map:
                         eval_map[key] = dict(eval_item)
 
-                local_total_tokens = 0
                 local_total_processing_time = 0.0
                 local_executor_program = 0
                 local_executor_llm = 0
@@ -2371,14 +2435,33 @@ async def run_sichuan_workspace_batch_job(
                 record_issue_items: List[Dict[str, Any]] = []
                 record_status_items: List[Dict[str, Any]] = []
 
-                fallback_tokens_per_rule = int(record_total_tokens / max(1, len(result_rule_ids)))
-                fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(result_rule_ids)))
-                fallback_completion_tokens_per_rule = int(
-                    record_total_completion_tokens / max(1, len(result_rule_ids))
+                result_rule_count = max(1, len(result_rule_ids))
+                fallback_prompt_tokens = _distribute_non_negative_int(
+                    record_total_prompt_tokens,
+                    result_rule_count,
                 )
+                fallback_completion_tokens = _distribute_non_negative_int(
+                    record_total_completion_tokens,
+                    result_rule_count,
+                )
+                if record_total_tokens == (
+                    record_total_prompt_tokens + record_total_completion_tokens
+                ):
+                    fallback_total_tokens = [
+                        prompt + completion
+                        for prompt, completion in zip(
+                            fallback_prompt_tokens,
+                            fallback_completion_tokens,
+                        )
+                    ]
+                else:
+                    fallback_total_tokens = _distribute_non_negative_int(
+                        record_total_tokens,
+                        result_rule_count,
+                    )
                 fallback_api_per_rule = float(record_total_api_time / max(1, len(result_rule_ids)))
 
-                for rule_id in result_rule_ids:
+                for rule_index, rule_id in enumerate(result_rule_ids):
                     normalized_rule_id = str(rule_id).strip().upper()
                     state = result_rule_states[rule_id]
                     rule = state["rule"]
@@ -2481,11 +2564,11 @@ async def run_sichuan_workspace_batch_job(
                         else []
                     )
                     metadata = dict(eval_item.get("metadata") or {})
-                    metadata.setdefault("tokens_used", fallback_tokens_per_rule)
-                    metadata.setdefault("prompt_tokens", fallback_prompt_tokens_per_rule)
-                    metadata.setdefault("completion_tokens", fallback_completion_tokens_per_rule)
-                    metadata.setdefault("input_tokens", fallback_prompt_tokens_per_rule)
-                    metadata.setdefault("output_tokens", fallback_completion_tokens_per_rule)
+                    metadata.setdefault("tokens_used", fallback_total_tokens[rule_index])
+                    metadata.setdefault("prompt_tokens", fallback_prompt_tokens[rule_index])
+                    metadata.setdefault("completion_tokens", fallback_completion_tokens[rule_index])
+                    metadata.setdefault("input_tokens", fallback_prompt_tokens[rule_index])
+                    metadata.setdefault("output_tokens", fallback_completion_tokens[rule_index])
                     metadata.setdefault("api_time", fallback_api_per_rule)
                     metadata.setdefault("first_result_latency", record_first_result_latency)
                     metadata.setdefault("first_result_source", record_first_result_source)
@@ -2509,7 +2592,6 @@ async def run_sichuan_workspace_batch_job(
 
                     tokens_used = int(metadata.get("tokens_used") or 0)
                     api_time = float(metadata.get("api_time") or 0.0)
-                    local_total_tokens += tokens_used
                     local_total_processing_time += api_time
                     rule_stats[rule_id]["total_tokens"] = int(rule_stats[rule_id]["total_tokens"] or 0) + tokens_used
                     rule_stats[rule_id]["total_processing_time"] = (
@@ -2784,6 +2866,8 @@ async def run_sichuan_workspace_batch_job(
                             has_issue = True
                     items_by_rule[final_rule_id].append(final_item)
 
+                if record_llm_call_count is None:
+                    record_llm_call_count = local_executor_llm
                 return {
                     "record_id": record_id,
                     "record_key": record_key,
@@ -2794,9 +2878,10 @@ async def run_sichuan_workspace_batch_job(
                     "issue_record": has_issue,
                     "uncertain_record": has_uncertain,
                     "failed_record": any(bool(value) for value in failed_by_rule.values()),
-                    "total_tokens": local_total_tokens,
+                    "total_tokens": record_total_tokens,
                     "total_prompt_tokens": record_total_prompt_tokens,
                     "total_completion_tokens": record_total_completion_tokens,
+                    "llm_call_count": record_llm_call_count,
                     "total_processing_time": local_total_processing_time,
                     "first_result_latency": record_first_result_latency,
                     "first_result_source": record_first_result_source,
@@ -2846,6 +2931,7 @@ async def run_sichuan_workspace_batch_job(
                     "total_tokens": 0,
                     "total_prompt_tokens": 0,
                     "total_completion_tokens": 0,
+                    "llm_call_count": 0,
                     "total_processing_time": 0.0,
                     "first_result_latency": 0.0,
                     "first_result_source": "",
@@ -2892,6 +2978,7 @@ async def run_sichuan_workspace_batch_job(
             nonlocal executor_program
             nonlocal executor_llm
             nonlocal executor_native
+            nonlocal actual_llm_call_count
             nonlocal cache_hit
             nonlocal cache_miss
             nonlocal total_pack_count
@@ -2919,6 +3006,7 @@ async def run_sichuan_workspace_batch_job(
             total_tokens += int(record_result.get("total_tokens") or 0)
             total_prompt_tokens += int(record_result.get("total_prompt_tokens") or 0)
             total_completion_tokens += int(record_result.get("total_completion_tokens") or 0)
+            actual_llm_call_count += int(record_result.get("llm_call_count") or 0)
             total_processing_time += float(record_result.get("total_processing_time") or 0.0)
             executor_program += int(record_result.get("executor_program") or 0)
             executor_llm += int(record_result.get("executor_llm") or 0)
@@ -3244,6 +3332,10 @@ async def run_sichuan_workspace_batch_job(
             wall_clock_time=final_wall_clock_time,
             first_result_latency=float(first_result_latency or 0.0),
             actual_llm_pack_call_count=total_pack_count,
+            actual_llm_call_count=actual_llm_call_count,
+            actual_total_tokens=total_tokens,
+            actual_prompt_tokens=total_prompt_tokens,
+            actual_completion_tokens=total_completion_tokens,
         )
 
         summary = {

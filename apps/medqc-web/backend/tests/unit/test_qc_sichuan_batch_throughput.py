@@ -1210,7 +1210,7 @@ async def test_workspace_batch_should_keep_uncertain_items_in_detail(monkeypatch
     assert int(performance_profile.get("result_count") or 0) == 4
     assert int(performance_profile.get("program_call_count") or 0) == 4
     assert int(performance_profile.get("llm_call_count") or 0) == 0
-    assert performance_profile.get("llm_call_count_basis") == "result_participation_count"
+    assert performance_profile.get("llm_call_count_basis") == "record_execution_attribution"
     assert int(performance_profile.get("actual_llm_pack_call_count") or 0) >= 1
     assert float(performance_profile.get("sum_rule_duration_seconds") or 0) > 0
     profiled_rules = {str(item.get("rule_id") or "") for item in list(performance_profile.get("rules") or [])}
@@ -3517,6 +3517,126 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
     persisted_summary = (workspace.items[0].get("metadata") or {}).get("luxian_0609_runtime_shadow")
     assert persisted_summary and persisted_summary["disposition"] == "completed"
     assert persisted_summary["expected_llm_call_count"] == persisted_summary["llm_total_tokens"] == 0
+
+
+async def _run_native_usage_batch(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    prompt_tokens: int,
+    completion_tokens: int,
+    llm_call_count: int,
+) -> _WorkspaceStub:
+    workspace = _WorkspaceStub()
+    native_rule_ids = ["LX0609-029", "LX0609-030"]
+    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["filters"] = {
+        "rule_ids": native_rule_ids,
+        "selected_rule_ids": native_rule_ids,
+        "scoped_customer_rule_ids": native_rule_ids,
+        "record_rule_map": {"visit-001": native_rule_ids},
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": rule_id,
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "metadata": {
+                        "executor_type": "program",
+                        "executor_key": "extended_document",
+                    },
+                }
+                for rule_id in native_rule_ids
+            ],
+            "token_usage": {
+                "total_tokens": prompt_tokens + completion_tokens,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+            },
+            "executor_breakdown": {"llm": llm_call_count},
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    return workspace
+
+
+@pytest.mark.asyncio
+async def test_native_usage_call_count_reaches_public_job_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = await _run_native_usage_batch(
+        monkeypatch,
+        prompt_tokens=80,
+        completion_tokens=21,
+        llm_call_count=2,
+    )
+
+    projected = workspace_module.project_customer_safe_batch_job(
+        {
+            **workspace.job,
+            "summary": workspace.summary,
+            "items": workspace.items,
+        },
+        hmac_key="unit-test-key",
+        _validate_luxian=False,
+    )
+
+    assert workspace.summary is not None
+    assert workspace.summary["performance_profile"]["llm_call_count"] == 2
+    assert projected["summary"]["llm_call_count"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prompt_tokens", "completion_tokens", "expected_input", "expected_output", "expected_total"),
+    [
+        (80, 21, [40, 40], [11, 10], [51, 50]),
+        (81, 21, [41, 40], [11, 10], [52, 50]),
+    ],
+)
+async def test_native_usage_distribution_preserves_odd_token_totals(
+    monkeypatch: pytest.MonkeyPatch,
+    prompt_tokens: int,
+    completion_tokens: int,
+    expected_input: List[int],
+    expected_output: List[int],
+    expected_total: List[int],
+) -> None:
+    workspace = await _run_native_usage_batch(
+        monkeypatch,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        llm_call_count=2,
+    )
+
+    metadata = [dict(item.get("metadata") or {}) for item in workspace.items]
+    assert [item["input_tokens"] for item in metadata] == expected_input
+    assert [item["output_tokens"] for item in metadata] == expected_output
+    assert [item["tokens_used"] for item in metadata] == expected_total
+    assert all(
+        item["tokens_used"] == item["input_tokens"] + item["output_tokens"] >= 0
+        for item in metadata
+    )
+    assert sum(item["input_tokens"] for item in metadata) == prompt_tokens
+    assert sum(item["output_tokens"] for item in metadata) == completion_tokens
+    assert sum(item["tokens_used"] for item in metadata) == prompt_tokens + completion_tokens
+    assert workspace.summary is not None
+    assert workspace.summary["total_tokens"] == prompt_tokens + completion_tokens
+    assert workspace.summary["performance_profile"]["tokens_total"] == prompt_tokens + completion_tokens
 
 
 @pytest.mark.asyncio
