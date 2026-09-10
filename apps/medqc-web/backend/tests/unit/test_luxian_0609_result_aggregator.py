@@ -560,6 +560,17 @@ def test_058_canonical_projection_renders_expert_support_after_special_use() -> 
                 "evaluation_intervals": [48.0],
                 "unmatched_antimicrobials": ["万古霉素"],
                 "association_ambiguous": False,
+                "event_windows": [
+                    {
+                        "antimicrobial": "万古霉素",
+                        "event_state": "mature",
+                        "start_time": "2026-06-01 10:00:00",
+                        "window_start_time": "2026-06-03 10:00:00",
+                        "window_end_time": "2026-06-04 10:00:00",
+                        "evaluation_time": "2026-06-04 10:00:00",
+                        "elapsed_hours": 72.0,
+                    }
+                ],
             },
         ),
     ),

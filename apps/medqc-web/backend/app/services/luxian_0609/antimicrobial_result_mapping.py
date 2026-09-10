@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from math import isfinite
 from typing import Any
 
@@ -66,8 +66,114 @@ def _controlled_datetime(value: Any) -> datetime | None:
         return None
 
 
-def _safe_054_or_055(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    verification_kind = _KIND_BY_RULE[rule_id]
+_055_REQUIRED_KEYS = frozenset({
+    "verification_kind",
+    "antimicrobials",
+    "window_hours",
+    "evaluation_intervals",
+    "unmatched_antimicrobials",
+    "association_ambiguous",
+    "event_windows",
+})
+_055_EVENT_BASE_KEYS = frozenset({
+    "antimicrobial",
+    "event_state",
+    "start_time",
+    "window_start_time",
+    "window_end_time",
+})
+_055_EVENT_STATES = frozenset({
+    "mature", "not_started", "not_mature", "conflict", "missing",
+})
+_055_WINDOW_STATES = frozenset({
+    "evaluation_window_not_started", "evaluation_window_not_mature",
+})
+
+
+def _controlled_event_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or len(value) > 160 or not any(
+        separator in value for separator in ("T", " ")
+    ):
+        return None
+    return _controlled_datetime(value)
+
+
+def _controlled_date(value: Any) -> date | None:
+    if not isinstance(value, str) or len(value) != 10:
+        return None
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.isoformat() == value else None
+
+
+def _safe_055_event(raw: Any, antimicrobials: list[str]) -> dict[str, Any] | None:
+    if not isinstance(raw, Mapping) or raw.get("antimicrobial") not in antimicrobials:
+        return None
+    keys = frozenset(raw)
+    datetime_keys = _055_EVENT_BASE_KEYS | {"evaluation_time", "elapsed_hours"}
+    date_keys = _055_EVENT_BASE_KEYS | {"evaluation_date"}
+    if keys not in {_055_EVENT_BASE_KEYS, datetime_keys, date_keys}:
+        return None
+    state = raw.get("event_state")
+    if state not in _055_EVENT_STATES:
+        return None
+    start = _controlled_event_datetime(raw.get("start_time"))
+    window_start = _controlled_event_datetime(raw.get("window_start_time"))
+    window_end = _controlled_event_datetime(raw.get("window_end_time"))
+    if start is None or window_start is None or window_end is None:
+        return None
+    try:
+        if window_start != start + timedelta(hours=48) or window_end != start + timedelta(hours=72):
+            return None
+    except TypeError:
+        return None
+
+    if keys == _055_EVENT_BASE_KEYS:
+        if state != "missing":
+            return None
+    elif keys == datetime_keys:
+        evaluation = _controlled_event_datetime(raw.get("evaluation_time"))
+        elapsed = raw.get("elapsed_hours")
+        if (
+            evaluation is None
+            or not isinstance(elapsed, (int, float))
+            or isinstance(elapsed, bool)
+            or not isfinite(float(elapsed))
+        ):
+            return None
+        try:
+            calculated = (evaluation - start).total_seconds() / 3600
+        except TypeError:
+            return None
+        if abs(float(elapsed) - calculated) > 0.01:
+            return None
+        expected_state = (
+            "conflict" if calculated < 0
+            else "not_started" if calculated < 48
+            else "not_mature" if calculated < 72
+            else "mature"
+        )
+        if state != expected_state:
+            return None
+    else:
+        evaluation_date = _controlled_date(raw.get("evaluation_date"))
+        if evaluation_date is None:
+            return None
+        expected_state = (
+            "conflict" if evaluation_date < start.date()
+            else "not_started" if evaluation_date < window_start.date()
+            else "mature" if evaluation_date > window_end.date()
+            else "not_mature"
+        )
+        if state != expected_state:
+            return None
+    return dict(raw)
+
+
+def _safe_054(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    verification_kind = _KIND_BY_RULE["LX0609-054"]
     if raw.get("verification_kind") != verification_kind:
         return None
     antimicrobials = _controlled_names(raw.get("antimicrobials"))
@@ -86,20 +192,60 @@ def _safe_054_or_055(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         "verification_kind": verification_kind,
         "antimicrobials": antimicrobials,
     }
-    if rule_id == "LX0609-054":
-        reason_documented = raw.get("reason_documented")
-        if type(reason_documented) is not bool:
-            return None
-        facts["reason_documented"] = reason_documented
-    else:
-        window_hours = _controlled_number_list(raw.get("window_hours"))
-        intervals = _controlled_number_list(raw.get("evaluation_intervals"))
-        if window_hours != [48, 72] or intervals is None:
-            return None
-        facts["window_hours"] = window_hours
-        facts["evaluation_intervals"] = intervals
+    reason_documented = raw.get("reason_documented")
+    if type(reason_documented) is not bool:
+        return None
+    facts["reason_documented"] = reason_documented
     facts["unmatched_antimicrobials"] = unmatched
     facts["association_ambiguous"] = association_ambiguous
+    return facts
+
+
+def _safe_055(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    allowed_keys = _055_REQUIRED_KEYS | {"window_state"}
+    if frozenset(raw) not in {_055_REQUIRED_KEYS, allowed_keys}:
+        return None
+    antimicrobials = _controlled_names(raw.get("antimicrobials"))
+    unmatched = _controlled_names(
+        raw.get("unmatched_antimicrobials"), require_nonempty=False
+    )
+    window_hours = _controlled_number_list(raw.get("window_hours"))
+    intervals = _controlled_number_list(raw.get("evaluation_intervals"))
+    association_ambiguous = raw.get("association_ambiguous")
+    raw_events = raw.get("event_windows")
+    window_state = raw.get("window_state")
+    if (
+        raw.get("verification_kind") != _KIND_BY_RULE["LX0609-055"]
+        or antimicrobials is None
+        or len(set(antimicrobials)) != len(antimicrobials)
+        or unmatched is None
+        or len(set(unmatched)) != len(unmatched)
+        or any(name not in antimicrobials for name in unmatched)
+        or window_hours != [48, 72]
+        or intervals is None
+        or type(association_ambiguous) is not bool
+        or not isinstance(raw_events, (list, tuple))
+        or len(raw_events) > 100
+        or ("window_state" in raw and window_state not in _055_WINDOW_STATES)
+    ):
+        return None
+    events: list[dict[str, Any]] = []
+    for raw_event in raw_events:
+        event = _safe_055_event(raw_event, antimicrobials)
+        if event is None:
+            return None
+        events.append(event)
+    facts: dict[str, Any] = {
+        "verification_kind": _KIND_BY_RULE["LX0609-055"],
+        "antimicrobials": antimicrobials,
+        "window_hours": window_hours,
+        "evaluation_intervals": intervals,
+        "unmatched_antimicrobials": unmatched,
+        "association_ambiguous": association_ambiguous,
+        "event_windows": events,
+    }
+    if "window_state" in raw:
+        facts["window_state"] = window_state
     return facts
 
 
@@ -201,8 +347,10 @@ def safe_antimicrobial_customer_display_facts(
     normalized_rule_id = str(rule_id or "").strip().upper()
     if not isinstance(raw, Mapping) or normalized_rule_id not in _KIND_BY_RULE:
         return None
-    if normalized_rule_id in {"LX0609-054", "LX0609-055"}:
-        return _safe_054_or_055(rule_id=normalized_rule_id, raw=raw)
+    if normalized_rule_id == "LX0609-054":
+        return _safe_054(raw)
+    if normalized_rule_id == "LX0609-055":
+        return _safe_055(raw)
     if normalized_rule_id == "LX0609-057":
         return _safe_057(raw)
     return _safe_058(raw)
@@ -237,16 +385,64 @@ def antimicrobial_customer_fact_status_is_valid(
         )
     if normalized_rule_id == "LX0609-055":
         unmatched = safe_facts.get("unmatched_antimicrobials")
+        events = safe_facts.get("event_windows")
+        intervals = safe_facts.get("evaluation_intervals")
+        window_state = safe_facts.get("window_state")
+        if (
+            not isinstance(events, list)
+            or not isinstance(intervals, list)
+            or any(float(value) < 0 for value in intervals)
+        ):
+            return False
+        event_states = [event.get("event_state") for event in events]
+        mature_names = {
+            event.get("antimicrobial")
+            for event in events
+            if event.get("event_state") == "mature"
+        }
         if association_ambiguous is True:
-            return normalized_status == "data_gap"
+            return normalized_status == "data_gap" and window_state is None
         if normalized_status == "compliant":
-            return unmatched == []
+            in_window_interval_count = sum(
+                48 <= float(value) <= 72 for value in intervals
+            )
+            return (
+                unmatched == []
+                and bool(events)
+                and all(state == "mature" for state in event_states)
+                and in_window_interval_count >= len(events)
+                and window_state is None
+            )
         if normalized_status == "non_compliant":
-            return isinstance(unmatched, list) and bool(unmatched)
+            return (
+                isinstance(unmatched, list)
+                and bool(unmatched)
+                and all(name in mature_names for name in unmatched)
+                and window_state is None
+            )
         if normalized_status == "not_applicable":
-            return unmatched == []
-        # 评价截止时间缺失/冲突等 data_gap 不进入展示 facts，因此仅确认事实形状。
-        return normalized_status == "data_gap"
+            immature_states = {"not_started", "not_mature"}
+            expected_window_state = (
+                "evaluation_window_not_mature"
+                if "not_mature" in event_states
+                else "evaluation_window_not_started"
+                if "not_started" in event_states
+                else None
+            )
+            mature_count = event_states.count("mature")
+            in_window_interval_count = sum(
+                48 <= float(value) <= 72 for value in intervals
+            )
+            return (
+                unmatched == []
+                and bool(immature_states.intersection(event_states))
+                and set(event_states) <= {"mature", *immature_states}
+                and in_window_interval_count >= mature_count
+                and window_state == expected_window_state
+            )
+        # 时间缺失/冲突等 data_gap 可合法携带空或部分窗口；只接受已验证形状，
+        # 不在安全投影层重算执行器的失败原因。
+        return normalized_status == "data_gap" and window_state is None
     if normalized_rule_id == "LX0609-057":
         documented = safe_facts.get("reason_or_no_specimen_documented")
         return (normalized_status == "compliant" and documented is True) or (
