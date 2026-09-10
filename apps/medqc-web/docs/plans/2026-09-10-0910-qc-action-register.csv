@@ -428,7 +428,7 @@ C25/LX0609-054,C25,LX0609-054,data_gap,待复核,R11,未启动,,,,主协调代�
 C25/LX0609-055,C25,LX0609-055,non_compliant,待复核,R11,未启动,,,,主协调代理,未关闭
 C27/LX0609-054,C27,LX0609-054,not_applicable,待复核,R11,未启动,,,,主协调代理,未关闭
 C27/LX0609-055,C27,LX0609-055,non_compliant,待复核,R11,未启动,,,,主协调代理,未关闭
-C08/LX0609-052,C08,LX0609-052,non_compliant,待复核,R12,未启动,,,,主协调代理,未关闭
-C08/LX0609-053,C08,LX0609-053,non_compliant,待复核,R12,未启动,,,,主协调代理,未关闭
+C08/LX0609-052,C08,LX0609-052,non_compliant,待复核,R12,真实API逐事件复核通过，待总回归,non_compliant/threshold_exceeded（未证实6小时内已执行处置）,.tmp/0910-full-audit/r12-c08-current-api/summary.json；.tmp/0910-full-audit/r12-c08-business-review.json,真实API任务5e5f3851-59f1-4246-b5a1-2035ac8e0a85；同一test_id和报告时间的两项PL归并为1次危急事件；新开医嘱仅证明已下达，会诊建议和“遵会诊意见执行”未给出实际执行时间，后续改善不反推处置开始；0模型调用,主协调代理,聚焦验收通过
+C08/LX0609-053,C08,LX0609-053,non_compliant,待复核,R12,真实API逐事件复核通过，待总回归,non_compliant/required_document_missing（已执行处置事实未证实）,.tmp/0910-full-audit/r12-c08-current-api/summary.json；.tmp/0910-full-audit/r12-c08-business-review.json,真实API任务5e5f3851-59f1-4246-b5a1-2035ac8e0a85；危急值处置专表为空；治疗医嘱、会诊建议和复查改善分别属于下达、建议和间接疗效证据，均不能代替已执行处置的时间与动作事实；0模型调用,主协调代理,聚焦验收通过
 C13/LX0609-062,C13,LX0609-062,uncertain,待复核,R13,真实API聚焦验收通过，待总回归,应仅缺给药途径,.tmp/0910-full-audit/typed-062-time-v2/independent-verification.json,原始COPY与正式EvidenceMaterial一致；真实回归6药药名剂量用药时间完整且仅报告给药途径缺失,主协调代理,聚焦验收通过
 C04/LX0609-070,C04,LX0609-070,not_applicable,待复核,R14,未启动,,,,主协调代理,未关闭
