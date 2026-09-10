@@ -931,7 +931,10 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     )
     if signature_gap_fields is not None:
         defaults = {**defaults, "missing_fields": signature_gap_fields}
-    from .discharge_result_mapping import discharge_course_time_gap_display
+    from .discharge_result_mapping import discharge_course_body_gap_display, discharge_course_time_gap_display
+    discharge_body_gap = discharge_course_body_gap_display(rule_id, result.get("customer_display_facts"))
+    if discharge_body_gap is not None:
+        defaults = {**defaults, "missing_sources": [], "missing_fields": discharge_body_gap[0]}
     discharge_time_gap = discharge_course_time_gap_display(rule_id, result.get("customer_display_facts"))
     if discharge_time_gap is not None:
         defaults = {**defaults, "missing_sources": [], "missing_fields": discharge_time_gap[0]}
@@ -986,6 +989,8 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         )
     if discharge_time_gap is not None:
         default_customer_message = discharge_time_gap[1]
+    if discharge_body_gap is not None:
+        default_customer_message = discharge_body_gap[1]
     customer_message = str(
         consistent_value("customer_message", default_customer_message)
     ).strip()

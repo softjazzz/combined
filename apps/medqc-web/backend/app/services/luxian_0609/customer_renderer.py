@@ -24,7 +24,7 @@ from .source_gap_contract import customer_gap_message
 from .surgery_text_fact_contract import LX0609_025_REQUIRED_FIELDS
 from .surgery_gate_result_mapping import surgery_timeliness_gap_display
 from .course_quality_result_mapping import course_007_gap_display
-from .discharge_result_mapping import discharge_course_time_gap_display
+from .discharge_result_mapping import discharge_course_body_gap_display, discharge_course_time_gap_display
 
 
 CUSTOMER_RESULT_KEYS = frozenset(
@@ -2839,6 +2839,9 @@ def customer_finding_from_controlled_facts(
             )
         return f"已确认实施手术 {surgery_count} 台，找到术后首次病程记录 {record_count} 份。"
 
+    discharge_body_gap = discharge_course_body_gap_display(rule_id, facts)
+    if discharge_body_gap is not None:
+        return discharge_body_gap[1]
     discharge_time_gap = discharge_course_time_gap_display(rule_id, facts)
     if discharge_time_gap is not None:
         return discharge_time_gap[1]
@@ -3262,7 +3265,12 @@ def render_luxian_0609_customer_result(
         surgery_gap = surgery_timeliness_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-003" else None
         course_gap = course_007_gap_display(safe_customer_display_facts) if decision.rule_id == "LX0609-007" else None
         discharge_time_gap = discharge_course_time_gap_display(decision.rule_id, safe_customer_display_facts)
-        if discharge_time_gap is not None:
+        discharge_body_gap = discharge_course_body_gap_display(decision.rule_id, safe_customer_display_facts)
+        if discharge_body_gap is not None:
+            findings = discharge_body_gap[1]
+            evidence = "已定位窗口内病程记录，缺口是可核对的正文，不代表文书不存在。"
+            suggestion = "请核对证据定位中的病程正文及同步情况后重新质控。"
+        elif discharge_time_gap is not None:
             findings = discharge_time_gap[1]
             evidence = "相关文书已读取，记录时间不足以确认是否位于出院前一天或当天。"
             suggestion = "请核对证据定位中的记录时间及同步情况后重新质控。"

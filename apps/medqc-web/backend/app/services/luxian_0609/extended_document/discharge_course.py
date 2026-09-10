@@ -9,6 +9,12 @@ from typing import Any, Mapping, Sequence
 from .shared import _clean, _row_time
 
 
+def _has_course_body(row: Mapping[str, Any]) -> bool:
+    """只排除空正文与纯签名标签，不评价正文长度或临床质量。"""
+    body = "".join(_clean(row.get("record_content")).split())
+    return bool(body) and body not in {"医生签名:", "医生签名：", "医师签名:", "医师签名："}
+
+
 @dataclass(frozen=True)
 class PredischargeCourseOutcome:
     final_state: str
@@ -73,7 +79,8 @@ def evaluate_predischarge_course_presence(
         for row in rows
         if _row_time(row) is not None and _row_time(row).date() in valid_dates
     )
-    present = bool(matched_course_rows)
+    body_rows = tuple((source_key, row) for source_key, row in matched_course_rows if _has_course_body(row))
+    present = bool(body_rows)
     if not present and missing_time_rows:
         return PredischargeCourseOutcome(
             "data_gap",
@@ -91,9 +98,26 @@ def evaluate_predischarge_course_presence(
             },
         )
 
+    if not present and matched_course_rows:
+        return PredischargeCourseOutcome(
+            "data_gap",
+            "required_field_missing",
+            {
+                "failure_kind": "predischarge_course_body_missing",
+                "discharge_date": discharge_time.date().isoformat(),
+                "checked_dates": sorted(item.isoformat() for item in valid_dates),
+                "missing_body_count": len(matched_course_rows),
+                "source_document_refs": [
+                    {"source_type": source_key, "source_document_id": document_id}
+                    for source_key, row in matched_course_rows
+                    if (document_id := _clean(row.get("document_id") or row.get("id")))
+                ],
+            },
+        )
+
     source_document_refs: list[dict[str, str]] = []
     seen_document_refs: set[tuple[str, str]] = set()
-    for source_key, row in matched_course_rows:
+    for source_key, row in body_rows:
         document_id = _clean(row.get("document_id") or row.get("id"))
         reference_key = (source_key, document_id)
         if not document_id or reference_key in seen_document_refs:

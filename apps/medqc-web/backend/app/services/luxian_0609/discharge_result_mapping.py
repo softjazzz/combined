@@ -286,7 +286,37 @@ def discharge_course_time_gap_display(rule_id: str, raw: Any) -> tuple[list[str]
     return [f"相关病程记录的权威时间（{count}份）"], message
 
 
+def discharge_course_body_gap_display(rule_id: str, raw: Any) -> tuple[list[str], str] | None:
+    if rule_id != "LX0609-067" or not isinstance(raw, Mapping) or raw.get("failure_kind") != "predischarge_course_body_missing":
+        return None
+    safe = _safe_067(raw)
+    if safe is None:
+        return None
+    count = safe["missing_body_count"]
+    return (
+        [f"出院前一天或当天病程记录正文（{count}份）"],
+        f"出院日期{safe['discharge_date']}，核查窗口为{'、'.join(safe['checked_dates'])}。"
+        f"已读取该窗口内{count}份病程记录，但正文为空或仅有签名标签，暂无法完成核对。"
+        "请通过证据定位核对这些文书的正文及同步情况。",
+    )
+
+
 def _safe_067(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("failure_kind") == "predischarge_course_body_missing":
+        count = raw.get("missing_body_count")
+        if type(count) is not int or count <= 0 or not set(raw).issubset(
+            {"failure_kind", "discharge_date", "checked_dates", "missing_body_count"} | _LEGACY_INTERNAL_KEYS
+        ):
+            return None
+        # 与既有时间缺口共用严格的出院日/前一日窗口校验，仅转换计数字段。
+        checked = _safe_course_time_gap({
+            "failure_kind": raw["failure_kind"], "discharge_date": raw.get("discharge_date"),
+            "checked_dates": raw.get("checked_dates"), "missing_time_count": count,
+        })
+        if checked is None:
+            return None
+        checked.pop("missing_time_count")
+        return {**checked, "missing_body_count": count}
     if raw.get("failure_kind") == "predischarge_course_time_missing":
         return _safe_course_time_gap(raw)
     if (
