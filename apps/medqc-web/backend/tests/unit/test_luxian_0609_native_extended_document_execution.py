@@ -1911,8 +1911,9 @@ async def test_068_semantic_equivalent_approval_uses_existing_senior_path(
     facts = dict(result.customer_display_facts)["LX0609-068"]
     assert facts["approval_path"] == "senior_approval"
     assert facts["checked_source"] == "senior_course_record"
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 100
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.calls == []
 
 
 @pytest.mark.asyncio
@@ -2028,7 +2029,7 @@ async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
         assert reduced[0].final_state is CustomerFinalState.DATA_GAP
         assert reduced[0].reason_code == "authoritative_time_missing"
         assert dict(result.customer_display_facts)["LX0609-068"]["missing_time_count"] == 1
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == (0 if dated_opinion == "approved" else 1)
 
 
 @pytest.mark.asyncio

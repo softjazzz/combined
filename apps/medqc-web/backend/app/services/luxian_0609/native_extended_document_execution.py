@@ -199,14 +199,24 @@ _INVASIVE_PROCEDURES = (
     "气管插管", "支气管镜", "动脉置管",
 )
 _DISCHARGE_APPROVAL_PATTERN = re.compile(
-    r"(?:同意|准予|可以|予以)(?:患者)?(?:于|拟于)?"
-    r"(?:今日|明日|次日)?(?:办理)?出院"
+    r"(?:同意|批准|准许|准予)(?:患者|其)?(?:于|拟于)?"
+    r"(?:今日|明日|次日)?(?:安排|办理)?出院"
+    r"|(?:可以|可)(?:患者|其)?(?:于|拟于)?"
+    r"(?:今日|明日|次日)?(?:安排|办理|予以)?出院"
+    r"|(?:建议|予以)(?:患者|其)?(?:于|拟于)?"
+    r"(?:今日|明日|次日)?(?:安排|办理)?出院"
+    r"|(?<!拟)(?<!计划)(?<!准备)于今日(?:办理)?出院"
 )
 _DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
     r"(?:不|未|未获|未取得|未得到|尚未|尚不|暂不).{0,12}"
-    r"(?:同意|准予|可以|予以).{0,8}出院"
-    r"|(?:待|若|如).{0,24}(?:同意|准予|可以|予以).{0,8}出院"
-    r"|后再.{0,8}(?:同意|准予|可以|予以).{0,8}出院"
+    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
+    r"|(?:待|若|如|如果).{0,24}"
+    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
+    r"|(?:复查|检查|治疗).{0,16}后(?:再)?.{0,8}"
+    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
+    r"|(?:病情|情况).{0,16}后再.{0,8}"
+    r"(?:同意|批准|准许|准予|可以|可|建议|予以).{0,8}出院"
+    r"|(?:拟|计划|准备|考虑).{0,12}于今日(?:办理)?出院"
 )
 _SENIOR_PHYSICIAN_REFERENCE_PATTERN = re.compile(
     r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
@@ -262,12 +272,10 @@ def _discharge_approval_path(
     ):
         return "automatic_discharge"
 
-    approval = _DISCHARGE_APPROVAL_PATTERN.search(text)
+    approval = _confirmed_discharge_approval_match(text)
     if approval is None:
         return None
     local_context = text[max(0, approval.start() - 80): approval.end() + 40]
-    if _DISCHARGE_APPROVAL_NEGATED_PATTERN.search(local_context):
-        return None
     author_title = _clean(row.get("author_title"))
     if (
         source_key == "senior_course_record"
@@ -276,6 +284,29 @@ def _discharge_approval_path(
     ):
         return "senior_approval"
     return None
+
+
+def _confirmed_discharge_approval_match(text: str) -> re.Match[str] | None:
+    """返回未被否定或条件短语约束的明确出院处置。"""
+
+    value = str(text or "")
+    for approval in _DISCHARGE_APPROVAL_PATTERN.finditer(value):
+        local_start = max(0, approval.start() - 80)
+        local_context = value[local_start: approval.end() + 40]
+        is_bound_to_negation = any(
+            local_start + negated.start() < approval.end()
+            and local_start + negated.end() > approval.start()
+            for negated in _DISCHARGE_APPROVAL_NEGATED_PATTERN.finditer(local_context)
+        )
+        if not is_bound_to_negation:
+            return approval
+    return None
+
+
+def _has_confirmed_discharge_approval(text: str) -> bool:
+    """模型的 approved 枚举也必须通过同一明确处置合同。"""
+
+    return _confirmed_discharge_approval_match(text) is not None
 
 
 def _source_rows(
@@ -3636,6 +3667,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     if row_time is not None
                                     and assertion.role == "senior"
                                     and assertion.opinion == "approved"
+                                    and _has_confirmed_discharge_approval(
+                                        assertion.quote
+                                    )
                                 ),
                                 None,
                             )
@@ -3646,6 +3680,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 if row_time is None
                                 and assertion.role == "senior"
                                 and assertion.opinion == "approved"
+                                and _has_confirmed_discharge_approval(
+                                    assertion.quote
+                                )
                             )
                             if semantic_match is not None:
                                 approval_match = semantic_match

@@ -10,7 +10,11 @@ from app.services.luxian_0609.decision_reducer import CustomerFinalState
 from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
     SCHEMA_VERSION,
 )
-from tests.unit.test_luxian_0609_native_extended_document_execution import _evaluate
+from tests.unit.test_luxian_0609_native_extended_document_execution import (
+    _canonical_extended_result,
+    _evaluate,
+    _evaluate_selected,
+)
 
 
 class _Client:
@@ -98,6 +102,7 @@ async def test_daily_approval_without_role_evidence_does_not_block_senior_condit
     assert reduced.reason_code == "source_empty"
     assert dict(result.customer_display_facts)["LX0609-068"]["approval_present"] is False
     assert result.llm_call_count == 1
+    assert result.total_tokens == 100
     assert len(client.calls) == 1
 
 
@@ -127,5 +132,99 @@ async def test_daily_approval_with_senior_role_inside_opinion_quote_is_compliant
     facts = dict(result.customer_display_facts)["LX0609-068"]
     assert facts["approval_path"] == "senior_approval"
     assert facts["checked_source"] == "daily_course_record"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("document_id", "text"),
+    (
+        ("c02", "可安排出院"),
+        ("c06", "可出院"),
+        ("c08", "准予其出院"),
+        ("c10", "可出院"),
+        ("c30", "于今日出院"),
+        ("completed-condition", "病情好转后，予以出院"),
+        ("c08-mixed-plan-and-approval", "拟于今日出院，请示主任后准予其出院"),
+    ),
+)
+async def test_confirmed_senior_approval_phrases_use_fixed_path_and_exact_evidence(
+    document_id: str,
+    text: str,
+) -> None:
+    client = _Client()
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-068",),
+        {
+            **_base_rows(),
+            "senior_course_record": ({
+                "document_id": document_id,
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.calls == []
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-068",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert [item["source_document_id"] for item in canonical["customer_evidence"]] == [
+        document_id
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    (
+        "拟办理出院",
+        "经仔细看后出院",
+        "不建议出院",
+        "不可以出院",
+        "不准许出院",
+        "复查后可出院",
+        "若稳定再建议出院",
+    ),
+)
+async def test_model_approved_without_confirmed_quote_does_not_create_evidence(
+    text: str,
+) -> None:
+    client = _Client(_item("doc_01", opinion="approved", quote=text))
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-068",),
+        {
+            **_base_rows(),
+            "senior_course_record": ({
+                "document_id": "unconfirmed-approval",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_empty"
     assert result.llm_call_count == 1
+    assert result.total_tokens == 100
     assert len(client.calls) == 1
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-068",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert "customer_evidence" not in canonical
