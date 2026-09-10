@@ -2944,6 +2944,10 @@ def _execution_outcome(
         and item.confidence == "high"
         for item in assessments or ()
     )
+    possible_vague_trace = any(
+        item.execution_record_state in {"generic_trace", "copied_opinion"}
+        for item in assessments or ()
+    )
     confirmed_incomplete_coverage = any(
         item.recommendation_coverage_state in {"partial", "no_trace"}
         and item.coverage_confidence == "high"
@@ -2983,7 +2987,11 @@ def _execution_outcome(
         if course_source_incomplete:
             return "data_gap", "candidate_scope_incomplete"
         return "not_applicable", "trigger_absent_complete"
-    if rule_id == "LX0609-023" and confirmed_specific_trace:
+    if (
+        rule_id == "LX0609-023"
+        and confirmed_specific_trace
+        and not possible_vague_trace
+    ):
         return "compliant", "requirement_satisfied"
     if assessments is None or any(
         item.confidence != "high"

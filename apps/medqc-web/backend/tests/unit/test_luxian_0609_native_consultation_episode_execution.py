@@ -749,6 +749,30 @@ def test_023_high_generic_or_copy_remains_non_compliant(trace_state):
     ) == ("non_compliant", "requirement_violated")
 
 
+@pytest.mark.parametrize("trace_state", ("generic_trace", "copied_opinion"))
+@pytest.mark.parametrize("confidence", ("medium", "low"))
+def test_023_possible_generic_or_copy_blocks_early_compliance(
+    trace_state,
+    confidence,
+):
+    model_episode, completed = _coverage_outcome_inputs(2)
+    assessments = (
+        _coverage_outcome_assessment(
+            "consultation_record-1#r1", "specific_trace", "high"
+        ),
+        _coverage_outcome_assessment(
+            "consultation_record-1#r2", trace_state, confidence
+        ),
+    )
+
+    assert episode._execution_outcome(
+        "LX0609-023",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=assessments,
+    ) == ("evaluation_unknown", "semantic_low_confidence")
+
+
 def test_023_low_confidence_no_trace_remains_unknown():
     model_episode, completed = _coverage_outcome_inputs(2)
     assessments = (
