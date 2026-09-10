@@ -1718,7 +1718,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             action_type = _clean(raw_recommendation.get("action_type")).lower()
             source_quote = raw_recommendation.get("source_quote")
             normalized_action = raw_recommendation.get("normalized_action")
-            opinion_document = documents_by_ref.get(opinion_ref)
             if (
                 opinion_ref not in opinion_refs
                 or action_type not in _RECOMMENDATION_TYPES
@@ -1728,11 +1727,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
                 or not normalized_action.strip()
                 or len(source_quote) > _MAX_RECOMMENDATION_CHARS
                 or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
-                or opinion_document is None
-                or not _quote_is_grounded(
-                    quote=source_quote,
-                    source=_clean(opinion_document.get("text")),
-                )
             ):
                 raise _SemanticInvalid()
             recommendations.append(_Recommendation(

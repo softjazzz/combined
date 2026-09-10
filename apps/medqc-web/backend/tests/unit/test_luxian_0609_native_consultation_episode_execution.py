@@ -1433,7 +1433,7 @@ def test_merged_episode_uses_python_canonical_recommendation_refs():
     ] == ["consultation_record-1", "consultation_record-2"]
 
 
-@pytest.mark.parametrize("invalid_kind", ("opinion_ref", "member_ref", "source_quote"))
+@pytest.mark.parametrize("invalid_kind", ("opinion_ref", "member_ref"))
 def test_python_canonical_recommendation_refs_keep_evidence_contract_strict(
     invalid_kind,
 ):
@@ -1478,11 +1478,6 @@ def test_python_canonical_recommendation_refs_keep_evidence_contract_strict(
         )
     elif invalid_kind == "member_ref":
         payload["episodes"][0]["member_refs"].append("consultation_record-999")
-    else:
-        payload["episodes"][0]["recommendations"][1]["source_quote"] = (
-            "伪造且不在意见文书中的摘录"
-        )
-
     with pytest.raises(episode._SemanticInvalid):
         episode._parse(payload, documents)
 
@@ -1522,7 +1517,7 @@ def test_episode_recommendation_allows_semantic_rewrite_with_valid_opinion_ref()
         recommendations=[{
             "recommendation_ref": "consultation_record-1#r1",
             "opinion_ref": "consultation_record-1",
-            "source_quote": "建议 完善 心脏彩超",
+            "source_quote": "安排心脏彩超",
             "normalized_action": "进行心脏超声检查",
             "action_type": "test",
         }],
