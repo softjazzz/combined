@@ -1,0 +1,5 @@
+record_key,work_package,already_in_original_register,original_work_package,finding,before_hours,after_hours,verification,commit
+C21/LX0609-007,F03,False,,明确今日查房记录因日常病程标题漏计，间隔事实错误,141.68,91.01,原值及精确秒数已核；真实API聚焦验证；仍不符合,3a53f6f84
+C17/LX0609-007,F03,False,,明确今日查房记录因日常病程标题漏计，间隔事实错误,87.98,87.93,原值及精确秒数已核；真实API聚焦验证；仍不符合,3a53f6f84
+C11/LX0609-007,F03,False,,明确今日查房记录因日常病程标题漏计，间隔事实错误,117.07,95.28,原值及精确秒数已核；真实API聚焦验证；仍不符合,3a53f6f84
+C10/LX0609-007,F03,True,F02,明确今日查房记录因日常病程标题漏计，间隔事实错误,307.9,307.9,原值及精确秒数已核；真实API聚焦验证；仍不符合,3a53f6f84
