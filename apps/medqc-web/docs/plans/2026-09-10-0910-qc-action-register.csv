@@ -93,7 +93,7 @@ C23/LX0609-071,C23,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通
 C25/LX0609-071,C25,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
 C26/LX0609-071,C26,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
 C28/LX0609-071,C28,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
-C04/LX0609-022,C04,LX0609-022,non_compliant,发现缺陷,F13,未启动,,,,主协调代理,未关闭
+C04/LX0609-022,C04,LX0609-022,non_compliant,发现缺陷,F13,真实API聚焦验收通过，待总回归,compliant/requirement_satisfied；明确当前处理决定、具体症状触发条件、动态心电图复查项目和心律观察目标构成明确会诊意见,.tmp/0910-full-audit/f13-022-c04-independent-evidence.json；.tmp/0910-full-audit/typed-022-all-after/independent-verification.json,0ef2653c0；当前HEAD正式API先复现模型vague/high误分类；新增窄范围确定性稳定器，泛化反例保持vague；172项episode测试通过；30例022前后仅C04状态与原因按预期纠正，其余29例不变；保存、Envelope、公开API一致，调用账本19次/43143 Token,主协调代理,聚焦验收通过
 C18/LX0609-062,C18,LX0609-062,non_compliant,发现缺陷,F14,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-062-time-v2/independent-verification.json,修正计数剂量和组级用药时间合同；真实回归5药仅报告给药途径缺失并定位出院记录,主协调代理,聚焦验收通过
 C01/LX0609-020,C01,LX0609-020,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C01/LX0609-023,C01,LX0609-023,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
