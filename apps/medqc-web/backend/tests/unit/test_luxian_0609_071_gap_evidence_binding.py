@@ -37,7 +37,7 @@ def test_empty_refs_do_not_invent_binding_failure(refs):
 
 
 @pytest.mark.asyncio
-async def test_missing_title_without_selected_refs_stays_data_gap():
+async def test_missing_title_document_is_located_without_changing_data_gap():
     from app.services.luxian_0609.native_extended_document_execution import execute_luxian_0609_native_extended_document_rules
     from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
     from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
@@ -55,14 +55,14 @@ async def test_missing_title_without_selected_refs_stays_data_gap():
     )[0]
     assert result.final_state.value == "data_gap"
     assert result.reason_code == "required_field_missing"
-    assert dict(native.customer_display_facts)["LX0609-071"]["source_document_refs"] == []
+    assert dict(native.customer_display_facts)["LX0609-071"]["source_document_refs"] == [{"source_type": "daily_course_record", "source_document_id": "NO-TITLE"}]
     final = finalize_luxian_0609_reduced_customer_result(
         decision=result, raw_customer_display_facts=dict(native.customer_display_facts)["LX0609-071"],
         evidence_snapshot=snapshot, evidence_materials=materials,
     )
     assert final["status"] == "data_gap"
     assert final["reason_code"] == "required_field_missing"
-    assert not final.get("customer_evidence")
+    assert [row["source_document_id"] for row in final["customer_evidence"]] == ["NO-TITLE"]
 
 
 def test_duplicate_daily_id_cannot_choose_one_row():

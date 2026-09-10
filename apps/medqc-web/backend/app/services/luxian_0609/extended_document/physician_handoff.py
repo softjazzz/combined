@@ -142,7 +142,7 @@ def _derive_change_rows_from_daily_courses(
     """从普通病程的结构化医师签名序列推导稳定的经治医师变更。"""
 
     eligible_count = 0
-    eligible_rows: list[Mapping[str, Any]] = []
+    missing_field_rows: list[Mapping[str, Any]] = []
     timed_signed_rows: list[tuple[datetime, str, Mapping[str, Any]]] = []
     missing_title_count = 0
     missing_time_count = 0
@@ -151,11 +151,11 @@ def _derive_change_rows_from_daily_courses(
         title = _clean(row.get("document_title"))
         if not title:
             missing_title_count += 1
+            missing_field_rows.append(row)
             continue
         if _NON_ROUTINE_COURSE_TITLE_PATTERN.search(title):
             continue
         eligible_count += 1
-        eligible_rows.append(row)
         record_time = _row_time(row)
         # author_name/submitter 是文书元数据，真实病历中可能与医师签名不同；
         # 071 只消费结构化 physician_sign，禁止用正文姓名或记录者代替签名。
@@ -164,6 +164,8 @@ def _derive_change_rows_from_daily_courses(
             missing_time_count += 1
         if not physician_name:
             missing_signature_count += 1
+        if record_time is None or not physician_name:
+            missing_field_rows.append(row)
         if record_time is not None and physician_name:
             timed_signed_rows.append((record_time, physician_name, row))
 
@@ -179,7 +181,7 @@ def _derive_change_rows_from_daily_courses(
                 "missing_time_count": missing_time_count,
                 "missing_signature_count": missing_signature_count,
                 "source_document_refs": _document_refs(
-                    (("daily_course_record", eligible_rows),)
+                    (("daily_course_record", missing_field_rows),)
                 ),
             },
         )
