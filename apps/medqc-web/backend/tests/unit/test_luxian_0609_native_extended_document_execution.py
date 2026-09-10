@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 
 import pytest
 
@@ -27,6 +28,9 @@ from app.services.luxian_0609.evidence_snapshot import (
     Luxian0609EvidenceSnapshot,
     SourceCompleteness,
     SourceObservation,
+)
+from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
+    SCHEMA_VERSION as DISCHARGE_APPROVAL_SCHEMA_VERSION,
 )
 from app.services.luxian_0609.native_extended_document_execution import (
     execute_luxian_0609_native_extended_document_rules,
@@ -135,7 +139,13 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
     )
 
 
-async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset()):
+async def _evaluate(
+    rule_id,
+    rows_by_source,
+    *,
+    unavailable_sources=frozenset(),
+    llm_client=None,
+):
     rows_by_source = dict(rows_by_source)
     if (
         rule_id in {"LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}
@@ -165,6 +175,7 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         decision_rule_ids=(rule_id,),
+        llm_client=llm_client,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
@@ -175,7 +186,13 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
     return result, reduced[0]
 
 
-async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=frozenset()):
+async def _evaluate_selected(
+    rule_ids,
+    rows_by_source,
+    *,
+    unavailable_sources=frozenset(),
+    llm_client=None,
+):
     rows_by_source = dict(rows_by_source)
     if (
         {"LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}.intersection(rule_ids)
@@ -201,6 +218,7 @@ async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=fr
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         decision_rule_ids=rule_ids,
+        llm_client=llm_client,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
@@ -209,6 +227,46 @@ async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=fr
         evidence_materials=materials,
     )
     return snapshot, materials, result, reduced
+
+
+class _DischargeApprovalClient:
+    def __init__(self, *items, error=None):
+        self.items = list(items)
+        self.error = error
+        self.calls = []
+
+    async def generate(self, prompt, **kwargs):
+        self.calls.append((prompt, kwargs))
+        if self.error is not None:
+            raise self.error
+        return {
+            "choices": [{
+                "message": {"content": json.dumps({
+                    "schema_version": DISCHARGE_APPROVAL_SCHEMA_VERSION,
+                    "items": self.items,
+                })},
+                "finish_reason": "stop",
+            }],
+            "usage": {
+                "prompt_tokens": 80,
+                "completion_tokens": 20,
+                "total_tokens": 100,
+            },
+            "_api_time": 0.1,
+        }
+
+
+def _approval_item(
+    local_doc_id,
+    *,
+    opinion="approved",
+    quote="予以办理出院",
+):
+    return {
+        "local_doc_id": local_doc_id,
+        "opinion": opinion,
+        "quote": quote,
+    }
 
 
 def _canonical_extended_result(*, rule_id, snapshot, materials, result, reduced):
@@ -1070,6 +1128,35 @@ async def test_061_does_not_use_business_discharge_time_as_document_completion_t
 
 
 @pytest.mark.asyncio
+async def test_061_does_not_use_sync_update_time_as_document_completion_time() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": (
+                {
+                    "patient_status": "出院",
+                    "discharge_datetime": "2026-07-01 12:00:00",
+                },
+            ),
+            "discharge_record": (
+                {
+                    "record_time": None,
+                    "submit_datetime": None,
+                    "update_time": "2026-07-03 12:00:00",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+    facts = dict(result.customer_display_facts)["LX0609-061"]
+    assert facts["discharge_time"] == "2026-07-01 12:00:00"
+    assert facts["record_time"] is None
+    assert facts["actual_interval_hours"] is None
+
+
+@pytest.mark.asyncio
 async def test_061_prefers_record_or_submit_time_over_business_discharge_time() -> None:
     """业务出院字段不能掩盖真实文书完成时间。"""
 
@@ -1463,7 +1550,83 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
 
 
 @pytest.mark.asyncio
+async def test_068_accepts_senior_yuyi_discharge_without_model_call() -> None:
+    client = _DischargeApprovalClient()
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-068",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "senior_course_record": ({
+                "document_id": "senior-yuyi-approval",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": "病情好转平稳，予以出院。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 0
+    assert client.calls == []
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-068",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+    assert [item["source_document_id"] for item in canonical["customer_evidence"]] == [
+        "senior-yuyi-approval"
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text,opinion",
+    (
+        ("病情未好转，不予以出院。", "denied"),
+        ("主任医师意见：复查正常后再予以办理出院。", "conditional"),
+    ),
+)
+async def test_068_does_not_match_nonapproval_yuyi_discharge(
+    text, opinion
+) -> None:
+    client = _DischargeApprovalClient(_approval_item(
+        "doc_01", opinion=opinion, quote=text
+    ))
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "senior_course_record": ({
+                "document_id": "senior-negated-yuyi",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_empty"
+    assert result.llm_call_count == 1
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> None:
+    client = _DischargeApprovalClient(_approval_item(
+        "doc_01", opinion="unknown", quote="病情稳定。"
+    ))
     result, reduced = await _evaluate(
         "LX0609-068",
         {
@@ -1477,6 +1640,7 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
                 {"record_time": "2026-07-03 08:00:00", "record_content": "病情稳定。"},
             ),
         },
+        llm_client=client,
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
@@ -1488,6 +1652,8 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
         "checked_source": "daily_course_record,senior_course_record",
         "approval_present": False,
     }
+    assert result.llm_call_count == 1
+    assert len(client.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -1647,6 +1813,11 @@ async def test_068_accepts_senior_approval_recorded_in_daily_course() -> None:
 
 @pytest.mark.asyncio
 async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
+    client = _DischargeApprovalClient(_approval_item(
+        "doc_01",
+        opinion="patient_request",
+        quote="家属坚持自动出院",
+    ))
     _, reduced = await _evaluate(
         "LX0609-068",
         {
@@ -1665,6 +1836,7 @@ async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
                 },
             ),
         },
+        llm_client=client,
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
@@ -1673,6 +1845,9 @@ async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
 
 @pytest.mark.asyncio
 async def test_068_does_not_treat_senior_rejection_as_discharge_approval() -> None:
+    client = _DischargeApprovalClient(_approval_item(
+        "doc_01", opinion="denied", quote="上级医师不同意出院"
+    ))
     _, reduced = await _evaluate(
         "LX0609-068",
         {
@@ -1689,10 +1864,230 @@ async def test_068_does_not_treat_senior_rejection_as_discharge_approval() -> No
                 },
             ),
         },
+        llm_client=client,
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "source_empty"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text,quote",
+    (
+        (
+            "上级医师查房后认为目前病情平稳，批准办理出院。",
+            "上级医师查房后认为目前病情平稳，批准办理出院。",
+        ),
+        (
+            "主任医师查房意见：患者一般情况可，可安排出院。",
+            "主任医师查房意见：患者一般情况可，可安排出院。",
+        ),
+    ),
+)
+async def test_068_semantic_equivalent_approval_uses_existing_senior_path(
+    text, quote
+) -> None:
+    client = _DischargeApprovalClient(_approval_item("doc_01", quote=quote))
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "senior_course_record": ({
+                "document_id": "semantic-approval",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-068"]
+    assert facts["approval_path"] == "senior_approval"
+    assert facts["checked_source"] == "senior_course_record"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 100
+
+
+@pytest.mark.asyncio
+async def test_068_real_conditional_clause_is_not_promoted_to_approval() -> None:
+    text = "今日请示主任医师，待复查结果正常并停用静脉药物后可考虑出院。"
+    client = _DischargeApprovalClient(_approval_item(
+        "doc_01",
+        opinion="conditional",
+        quote=text,
+    ))
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "daily_course_record": ({
+                "document_id": "conditional-course",
+                "record_time": "2026-07-02 08:00:00",
+                "record_content": text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_empty"
+    assert dict(result.customer_display_facts)["LX0609-068"]["approval_present"] is False
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_068_semantic_undated_approval_keeps_time_missing_semantics() -> None:
+    text = "主任医师查房后认为恢复良好，予以出院。"
+    client = _DischargeApprovalClient(_approval_item("doc_01", quote=text))
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "senior_course_record": ({
+                "document_id": "undated-semantic-approval",
+                "record_content": text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+    facts = dict(result.customer_display_facts)["LX0609-068"]
+    assert facts["missing_time_count"] == 1
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dated_opinion", ("approved", "conditional"))
+async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
+    dated_opinion,
+) -> None:
+    undated_text = "主任医师查房后同意出院。"
+    dated_text = (
+        "主任医师查房后认为病情平稳，批准办理出院。"
+        if dated_opinion == "approved"
+        else "主任医师查房意见：复查正常后再批准办理出院。"
+    )
+    client = _DischargeApprovalClient(
+        _approval_item("doc_01", quote=undated_text),
+        _approval_item("doc_02", opinion=dated_opinion, quote=dated_text),
+    )
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-068",),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "senior_course_record": (
+                {
+                    "document_id": "undated-fixed-approval",
+                    "record_content": undated_text,
+                },
+                {
+                    "document_id": "dated-semantic-opinion",
+                    "record_time": "2026-07-03 08:00:00",
+                    "record_content": dated_text,
+                },
+            ),
+        },
+        llm_client=client,
+    )
+
+    if dated_opinion == "approved":
+        assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+        assert reduced[0].reason_code == "requirement_satisfied"
+        canonical = _canonical_extended_result(
+            rule_id="LX0609-068",
+            snapshot=snapshot,
+            materials=materials,
+            result=result,
+            reduced=reduced,
+        )
+        assert [item["source_document_id"] for item in canonical["customer_evidence"]] == [
+            "dated-semantic-opinion"
+        ]
+    else:
+        assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+        assert reduced[0].reason_code == "authoritative_time_missing"
+        assert dict(result.customer_display_facts)["LX0609-068"]["missing_time_count"] == 1
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_068_semantic_context_overflow_is_explicit_gap_without_call() -> None:
+    client = _DischargeApprovalClient()
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "senior_course_record": tuple({
+                "document_id": f"course-{index}",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": f"第{index}份普通病程。",
+            } for index in range(13)),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_truncated"
+    assert result.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ("invalid", "timeout"))
+async def test_068_semantic_model_failure_is_technical_error(failure) -> None:
+    client = (
+        _DischargeApprovalClient(_approval_item("wrong", quote="病情稳定。"))
+        if failure == "invalid"
+        else _DischargeApprovalClient(error=TimeoutError())
+    )
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "senior_course_record": ({
+                "document_id": "ordinary-course",
+                "record_time": "2026-07-03 08:00:00",
+                "record_content": "病情稳定。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced.reason_code == (
+        "model_invalid_output" if failure == "invalid" else "model_timeout"
+    )
+    assert result.llm_call_count == 1
+    assert len(client.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -4975,14 +5370,16 @@ async def test_critical_value_rules_are_repeatable_for_one_evidence_session() ->
 
 
 def test_discharge_medication_labels_form_a_structured_contract() -> None:
-    medications, error = module._structured_discharge_medications(({
+    row = {
         "discharge_order": (
             "药品名称：阿莫西林胶囊；用药剂量：0.5g；"
             "给药途径：口服；用药时间：每日3次，共5天"
         ),
-    },))
+    }
+    medications, error, selected_indexes = module._structured_discharge_medications((row,))
 
     assert error == ""
+    assert selected_indexes == (0,)
     assert medications == [{
         "drug_name": "阿莫西林胶囊",
         "dose": "0.5g",
@@ -6693,6 +7090,104 @@ async def test_050_uncertain_diagnosis_with_discussion_is_compliant() -> None:
         "uncertain_record_times": ["2026-06-08 09:00:00"],
         "discussion_count": 1,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing_route", [True, False])
+@pytest.mark.parametrize("known_drug_name", [True, False])
+async def test_062_partial_uncertainty_only_reports_confirmed_missing_fields(missing_route, known_drug_name):
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import SCHEMA_VERSION
+
+    text = "出院带药：合成药甲，每次一片，口服，疗程待明确。"
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {
+                "choices": [{"message": {"content": json.dumps({
+                    "schema_version": SCHEMA_VERSION,
+                    "state": "medications_present",
+                    "items": [{
+                        "drug_name": {"state": "present", "quote": "合成药甲"} if known_drug_name else {"state": "uncertain", "quote": None},
+                        "dose": {"state": "present", "quote": "每次一片"},
+                        "route": {"state": "missing", "quote": None} if missing_route else {"state": "present", "quote": "口服"},
+                        "medication_time": {"state": "uncertain", "quote": None},
+                    }],
+                })}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+            }
+    if missing_route:
+        text = text.replace("口服，", "")
+    result, reduced = await _evaluate(
+        "LX0609-062", {"discharge_record": ({"discharge_order": text},)}, llm_client=Client(),
+    )
+    assert result.llm_call_count == 1
+    if missing_route and known_drug_name:
+        assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+        facts = dict(result.customer_display_facts)["LX0609-062"]
+        assert facts["missing_fields"] == ["route"]
+        assert facts["medication_count"] == 1
+    else:
+        assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
+        assert reduced.reason_code == "semantic_low_confidence"
+
+
+@pytest.mark.asyncio
+async def test_062_multiple_medications_keep_confirmed_gap_despite_other_uncertainty():
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import SCHEMA_VERSION
+
+    text = (
+        "出院带药：合成药甲，每次一片，口服；"
+        "合成药乙，每次两片，连续七天。"
+    )
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        async def generate(self, prompt, **kwargs):
+            self.calls.append((prompt, kwargs))
+            return {
+                "choices": [{"message": {"content": json.dumps({
+                    "schema_version": SCHEMA_VERSION,
+                    "state": "medications_present",
+                    "items": [
+                        {
+                            "drug_name": {"state": "present", "quote": "合成药甲"},
+                            "dose": {"state": "present", "quote": "每次一片"},
+                            "route": {"state": "present", "quote": "口服"},
+                            "medication_time": {"state": "uncertain", "quote": None},
+                        },
+                        {
+                            "drug_name": {"state": "present", "quote": "合成药乙"},
+                            "dose": {"state": "present", "quote": "每次两片"},
+                            "route": {"state": "missing", "quote": None},
+                            "medication_time": {"state": "present", "quote": "连续七天"},
+                        },
+                    ],
+                })}}],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "total_tokens": 150,
+                },
+            }
+
+    client = Client()
+    result, reduced = await _evaluate(
+        "LX0609-062",
+        {"discharge_record": ({"discharge_order": text},)},
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
+    assert dict(result.customer_display_facts)["LX0609-062"] == {
+        "verification_kind": "discharge_medication_completeness_check",
+        "medication_count": 2,
+        "required_fields": ["drug_name", "dose", "route", "duration"],
+        "missing_fields": ["route"],
+    }
+    assert result.llm_call_count == 1
+    assert len(client.calls) == 1
 
 
 @pytest.mark.asyncio

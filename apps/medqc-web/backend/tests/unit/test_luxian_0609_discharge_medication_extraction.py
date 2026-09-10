@@ -17,7 +17,7 @@ def _field(quote):
 def _payload():
     return {"schema_version": SCHEMA_VERSION, "state": "medications_present", "items": [{
         "drug_name": _field("合成药甲"), "dose": _field("每次一片"),
-        "route": _field("口服"), "duration": _field("连续七天"),
+        "route": _field("口服"), "medication_time": _field("连续七天"),
     }]}
 
 
@@ -36,6 +36,177 @@ class Client:
 
 
 @pytest.mark.asyncio
+async def test_prompt_defines_count_units_and_bedtime_count_as_explicit_dose():
+    text = "出院带药：合成药甲每次1片；合成药乙每次2粒；合成药丙每次1袋；合成药丁睡前1支。"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "state": "medications_present",
+        "items": [
+            {
+                "drug_name": _field(name),
+                "dose": _field(dose),
+                "route": _field(None),
+                "medication_time": _field(None),
+            }
+            for name, dose in (
+                ("合成药甲", "每次1片"),
+                ("合成药乙", "每次2粒"),
+                ("合成药丙", "每次1袋"),
+                ("合成药丁", "睡前1支"),
+            )
+        ],
+    }
+    client = Client(payload)
+
+    result = await extract_discharge_medications(text, client)
+
+    assert result.state == "ready"
+    assert [item["dose"] for item in result.medications] == [
+        "每次1片", "每次2粒", "每次1袋", "睡前1支",
+    ]
+    prompt, kwargs = client.calls[0]
+    assert "片、粒、袋、支等计数单位也属于dose" in prompt
+    assert "睡前1片" in prompt and "明确一次用量" in prompt
+    assert "不要求必须有mg/g" in prompt
+    assert kwargs == {"max_completion_tokens": 4096, "allow_length_retry": False}
+
+
+@pytest.mark.asyncio
+async def test_prompt_forbids_inferring_dose_from_frequency_alone():
+    text = "出院带药：合成药甲，每日三次，口服。"
+    payload = _payload()
+    payload["items"][0] = {
+        "drug_name": _field("合成药甲"),
+        "dose": _field(None),
+        "route": _field("口服"),
+        "medication_time": _field("每日三次"),
+    }
+    client = Client(payload)
+
+    result = await extract_discharge_medications(text, client)
+
+    assert result.state == "ready"
+    assert result.medications[0]["dose"] is None
+    assert result.medications[0]["duration"] == "每日三次"
+    assert result.field_assertions[0]["dose"] == "missing"
+    assert result.field_assertions[0]["duration"] == "present"
+    prompt, _kwargs = client.calls[0]
+    assert "只有频次或用药时机、没有数值用量时" in prompt
+    assert "不得从频次或药名推算" in prompt
+
+
+@pytest.mark.asyncio
+async def test_group_route_applies_to_each_medication_without_cross_section_spread():
+    text = (
+        "院外继续口服合成药甲每次1片、合成药乙每次2粒、"
+        "合成药丙每次1袋。另段记录其他治疗。"
+    )
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "state": "medications_present",
+        "items": [
+            {
+                "drug_name": _field(name),
+                "dose": _field(dose),
+                "route": _field("口服"),
+                "medication_time": _field(None),
+            }
+            for name, dose in (
+                ("合成药甲", "每次1片"),
+                ("合成药乙", "每次2粒"),
+                ("合成药丙", "每次1袋"),
+            )
+        ],
+    }
+    client = Client(payload)
+
+    result = await extract_discharge_medications(text, client)
+
+    assert result.state == "ready"
+    assert [item["route"] for item in result.medications] == ["口服"] * 3
+    assert [item["route"] for item in result.field_assertions] == ["present"] * 3
+    prompt, _kwargs = client.calls[0]
+    assert "组级给药途径" in prompt
+    assert "为组内每项保留相同的原文连续引用" in prompt
+    assert "不得跨药物组或跨段传播" in prompt
+    assert "无法明确适用范围时，route必须为uncertain" in prompt
+
+
+@pytest.mark.asyncio
+async def test_known_medications_without_route_are_missing_not_uncertain():
+    text = (
+        "出院带药一周：合成糖浆甲每天3次每次10ml；"
+        "合成胶囊乙每天2次每次1粒。"
+    )
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "state": "medications_present",
+        "items": [
+            {
+                "drug_name": _field(name),
+                "dose": _field(dose),
+                "route": _field(None),
+                "medication_time": _field(frequency),
+            }
+            for name, dose, frequency in (
+                ("合成糖浆甲", "每次10ml", "每天3次"),
+                ("合成胶囊乙", "每次1粒", "每天2次"),
+            )
+        ],
+    }
+    client = Client(payload)
+
+    result = await extract_discharge_medications(text, client)
+
+    assert result.state == "ready"
+    assert [item["route"] for item in result.medications] == [None, None]
+    assert [item["route"] for item in result.field_assertions] == ["missing"] * 2
+    prompt, _kwargs = client.calls[0]
+    assert "药物身份及其条目边界明确" in prompt
+    assert "原文没有明确给药途径时，route必须为missing" in prompt
+    assert "糖浆、胶囊等剂型不得用于推断口服" in prompt
+    assert "不能仅因给药途径缺失使用uncertain" in prompt
+    assert "只有药物边界或归属本身无法可靠确认时，route才可为uncertain" in prompt
+
+
+@pytest.mark.asyncio
+async def test_partial_uncertainty_preserves_verified_medications_and_field_states():
+    payload = _payload()
+    payload["items"][0]["medication_time"] = {"state": "uncertain", "quote": None}
+    payload["items"].append({
+        "drug_name": _field("合成药乙"), "dose": _field("每次两片"),
+        "route": _field(None), "medication_time": _field("连续七天"),
+    })
+    client = Client(payload)
+    result = await extract_discharge_medications(TEXT + "合成药乙，每次两片，连续七天。", client)
+    assert result.state == "unknown"
+    assert len(result.medications) == 2
+    assert result.medications[0]["drug_name"] == "合成药甲"
+    assert result.medications[1]["drug_name"] == "合成药乙"
+    assert result.field_assertions[0]["duration"] == "uncertain"
+    assert result.field_assertions[1]["route"] == "missing"
+    assert result.field_assertions[0]["route"] == "present"
+    assert result.llm_call_count == len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy_kind", ["v1", "duration", "mixed"])
+async def test_v2_wire_rejects_legacy_or_mixed_duration_contract(legacy_kind):
+    payload = _payload()
+    if legacy_kind == "v1":
+        payload["schema_version"] = "lx0609_discharge_medications_v1"
+    elif legacy_kind == "duration":
+        payload["items"][0]["duration"] = payload["items"][0].pop("medication_time")
+    else:
+        payload["items"][0]["duration"] = _field("连续七天")
+
+    result = await extract_discharge_medications(TEXT, Client(payload))
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
 async def test_extract_exact_quotes_with_one_bounded_call_and_no_patient_id():
     client = Client()
     result = await extract_discharge_medications("患者姓名：张测试；住院号：ZY123456；" + TEXT, client)
@@ -46,6 +217,11 @@ async def test_extract_exact_quotes_with_one_bounded_call_and_no_patient_id():
     prompt, kwargs = client.calls[0]
     assert "张测试" not in prompt and "ZY123456" not in prompt
     assert kwargs == {"max_completion_tokens": 4096, "allow_length_retry": False}
+    assert SCHEMA_VERSION == "lx0609_discharge_medications_v2"
+    assert "medication_time" in prompt
+    assert "报medication_time缺失" in prompt
+    assert "报duration缺失" not in prompt
+    assert "频次、用药时机或疗程任一项" in prompt
 
 
 @pytest.mark.asyncio
@@ -57,17 +233,38 @@ async def test_missing_fields_remain_none_for_python_judgement():
 
 
 @pytest.mark.asyncio
+async def test_missing_medication_time_maps_to_internal_duration_missing():
+    payload = _payload()
+    payload["items"][0]["medication_time"] = _field(None)
+
+    result = await extract_discharge_medications(TEXT, Client(payload))
+
+    assert result.state == "ready"
+    assert result.medications[0]["duration"] is None
+    assert result.field_assertions[0]["duration"] == "missing"
+    assert "medication_time" not in result.medications[0]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("case", ["json", "extra", "fake_quote", "missing_key", "missing_name", "bad_quote_state", "overflow", "wrong_schema"])
 async def test_invalid_model_contract_fails_closed(case):
     payload = _payload()
-    if case == "json": payload = "not json"
-    elif case == "extra": payload["advice"] = "未经授权内容"
-    elif case == "fake_quote": payload["items"][0]["dose"] = _field("每次两片")
-    elif case == "missing_key": del payload["items"][0]["route"]
-    elif case == "missing_name": payload["items"][0]["drug_name"] = _field(None)
-    elif case == "bad_quote_state": payload["items"][0]["dose"] = {"state": "missing", "quote": "每次一片"}
-    elif case == "overflow": payload["items"] *= 21
-    else: payload["schema_version"] = "wrong"
+    if case == "json":
+        payload = "not json"
+    elif case == "extra":
+        payload["advice"] = "未经授权内容"
+    elif case == "fake_quote":
+        payload["items"][0]["dose"] = _field("每次两片")
+    elif case == "missing_key":
+        del payload["items"][0]["route"]
+    elif case == "missing_name":
+        payload["items"][0]["drug_name"] = _field(None)
+    elif case == "bad_quote_state":
+        payload["items"][0]["dose"] = {"state": "missing", "quote": "每次一片"}
+    elif case == "overflow":
+        payload["items"] *= 21
+    else:
+        payload["schema_version"] = "wrong"
     result = await extract_discharge_medications(TEXT, Client(payload))
     assert result.state == "technical_error" and result.reason_code == "model_invalid_output"
     assert result.medications == () and result.llm_call_count == 1
@@ -78,16 +275,21 @@ async def test_invalid_model_contract_fails_closed(case):
 async def test_absent_and_unknown_have_no_medications(state, expected):
     result = await extract_discharge_medications(TEXT, Client({"schema_version": SCHEMA_VERSION, "state": state, "items": []}))
     assert result.state == expected and result.medications == ()
-    invalid = _payload(); invalid["state"] = state
+    invalid = _payload()
+    invalid["state"] = state
     assert (await extract_discharge_medications(TEXT, Client(invalid))).state == "technical_error"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["drug_name", "dose"])
 async def test_uncertain_field_makes_whole_extraction_unknown(field):
-    payload = _payload(); payload["items"][0][field] = {"state": "uncertain", "quote": None}
+    payload = _payload()
+    payload["items"][0][field] = {"state": "uncertain", "quote": None}
     result = await extract_discharge_medications(TEXT, Client(payload))
-    assert result.state == "unknown" and result.medications == ()
+    assert result.state == "unknown"
+    assert len(result.medications) == 1
+    assert result.medications[0][field] is None
+    assert result.field_assertions[0][field] == "uncertain"
 
 
 @pytest.mark.asyncio

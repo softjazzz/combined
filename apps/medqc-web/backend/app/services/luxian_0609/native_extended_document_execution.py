@@ -46,6 +46,10 @@ from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
 from .extended_document.discharge_medication_extraction import extract_discharge_medications
+from .extended_document.discharge_approval_extraction import (
+    DischargeApprovalInput,
+    extract_discharge_approval,
+)
 from .extended_document.transfer_documentation import (
     evaluate_transfer_documentation,
 )
@@ -195,12 +199,14 @@ _INVASIVE_PROCEDURES = (
     "气管插管", "支气管镜", "动脉置管",
 )
 _DISCHARGE_APPROVAL_PATTERN = re.compile(
-    r"(?:同意|准予|可以)(?:患者)?(?:于|拟于)?"
+    r"(?:同意|准予|可以|予以)(?:患者)?(?:于|拟于)?"
     r"(?:今日|明日|次日)?(?:办理)?出院"
 )
 _DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
     r"(?:不|未|未获|未取得|未得到|尚未|尚不|暂不).{0,12}"
-    r"(?:同意|准予|可以).{0,8}出院"
+    r"(?:同意|准予|可以|予以).{0,8}出院"
+    r"|(?:待|若|如).{0,24}(?:同意|准予|可以|予以).{0,8}出院"
+    r"|后再.{0,8}(?:同意|准予|可以|予以).{0,8}出院"
 )
 _SENIOR_PHYSICIAN_REFERENCE_PATTERN = re.compile(
     r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
@@ -1161,25 +1167,28 @@ def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, .
 
 def _structured_discharge_medications(
     rows: Sequence[Mapping[str, Any]],
-) -> tuple[list[Mapping[str, Any]] | None, str]:
-    for row in rows:
+) -> tuple[list[Mapping[str, Any]] | None, str, tuple[int, ...]]:
+    for index, row in enumerate(rows):
         value = row.get("discharge_medications")
         if value is None:
             continue
         if isinstance(value, list) and all(isinstance(item, Mapping) for item in value):
-            return list(value), ""
-        return None, "required_field_missing"
+            return list(value), "", (index,)
+        return None, "required_field_missing", (index,)
     has_discharge_instruction = False
     has_medication_signal = False
-    for row in rows:
+    medication_signal_indexes: list[int] = []
+    for index, row in enumerate(rows):
         value = _clean(row.get("discharge_order"))
         if not value:
             continue
         has_discharge_instruction = True
-        has_medication_signal = (
-            has_medication_signal
-            or _DISCHARGE_MEDICATION_SIGNAL_PATTERN.search(value) is not None
+        row_has_medication_signal = (
+            _DISCHARGE_MEDICATION_SIGNAL_PATTERN.search(value) is not None
         )
+        has_medication_signal = has_medication_signal or row_has_medication_signal
+        if row_has_medication_signal:
+            medication_signal_indexes.append(index)
         labels = {
             "drug_name": "药品名称",
             "dose": "用药剂量",
@@ -1192,10 +1201,15 @@ def _structured_discharge_medications(
             if match:
                 parsed[key] = match.group(1).strip()
         if parsed:
-            return [parsed], ""
+            return [parsed], "", (index,)
     if has_discharge_instruction and not has_medication_signal:
-        return [], ""
-    return None, "required_field_missing"
+        return [], "", ()
+    selected_indexes = (
+        tuple(medication_signal_indexes)
+        if medication_signal_indexes
+        else tuple(range(len(rows)))
+    )
+    return None, "required_field_missing", selected_indexes
 
 
 def _course_dates(
@@ -1706,6 +1720,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     **_: Any,
 ) -> NativeExtendedDocumentExecutionResult:
     medication_extraction = None
+    discharge_approval_extraction = None
     selected = tuple(
         rule_id
         for rule_id in EXTENDED_DOCUMENT_RULE_IDS
@@ -2825,17 +2840,84 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                 )
                 continue
-            medications, medication_error = _structured_discharge_medications(
+            (
+                medications,
+                medication_error,
+                selected_discharge_row_indexes,
+            ) = _structured_discharge_medications(
                 discharge_rows
             )
+            use_unstructured_extraction = (
+                medication_error
+                and len(discharge_rows) == 1
+                and discharge_rows[0].get("discharge_medications") is None
+                and bool(_clean(discharge_rows[0].get("discharge_order")))
+            )
+            if use_unstructured_extraction:
+                # 模型输入明确只有这一行；来源选择不依赖模型输出。
+                selected_discharge_row_indexes = (0,)
+            selected_discharge_document_refs: tuple[str, ...] = ()
+            original_discharge_rows = evidence_materials.rows("discharge_record")
+            try:
+                discharge_document_rows = evidence_materials.document_rows(
+                    "discharge_record", snapshot=evidence_snapshot
+                )
+            except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+                discharge_document_rows = ()
+            selected_refs: list[str] = []
+            if (
+                len(original_discharge_rows)
+                == len(discharge_rows)
+                == len(discharge_document_rows)
+            ):
+                for selected_index in selected_discharge_row_indexes:
+                    if not 0 <= selected_index < len(original_discharge_rows):
+                        selected_refs = []
+                        break
+                    selected_material_row = original_discharge_rows[selected_index]
+                    matching_refs = tuple(
+                        reference
+                        for reference, material_row in discharge_document_rows
+                        if material_row is selected_material_row
+                    )
+                    if len(matching_refs) != 1:
+                        selected_refs = []
+                        break
+                    selected_refs.append(matching_refs[0])
+            selected_discharge_document_refs = tuple(selected_refs)
             # 仅在结构化资料缺失且固定标签无法解析时裁剪出院医嘱。
             # 多份记录不能猜选一份；不覆盖已提供但格式非法的结构化字段。
-            if (medication_error and len(discharge_rows) == 1
-                    and discharge_rows[0].get("discharge_medications") is None
-                    and _clean(discharge_rows[0].get("discharge_order"))):
+            if use_unstructured_extraction:
                 medication_extraction = await extract_discharge_medications(
                     str(discharge_rows[0]["discharge_order"]), llm_client
                 )
+                # 已确认药物的明确缺项足以证明不完整；未知字段不可冒充缺项。
+                if medication_extraction.state == "unknown":
+                    confirmed_missing_fields = sorted({
+                        name
+                        for assertions in medication_extraction.field_assertions
+                        if assertions.get("drug_name") == "present"
+                        for name, assertion in assertions.items()
+                        if assertion == "missing"
+                    })
+                    if confirmed_missing_fields:
+                        display.append((rule_id, {
+                            "verification_kind": "discharge_medication_completeness_check",
+                            "medication_count": sum(
+                                assertions.get("drug_name") == "present"
+                                for assertions in medication_extraction.field_assertions
+                            ),
+                            "required_fields": ["drug_name", "dose", "route", "duration"],
+                            "missing_fields": confirmed_missing_fields,
+                        }))
+                        decisions.append(_decision(
+                            rule_id=rule_id, snapshot=evidence_snapshot,
+                            source_keys=("discharge_record",),
+                            final_state="non_compliant",
+                            reason_code="requirement_violated",
+                            document_refs=selected_discharge_document_refs,
+                        ))
+                        continue
                 if medication_extraction.state in {"ready", "absent"}:
                     medications = list(medication_extraction.medications)
                     medication_error = ""
@@ -2854,6 +2936,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         source_keys=("discharge_record",),
                         final_state=final_state,
                         reason_code=medication_extraction.reason_code,
+                        document_refs=selected_discharge_document_refs,
                     ))
                     continue
             if medication_error:
@@ -2907,6 +2990,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     source_keys=("discharge_record",),
                     final_state=final_state,
                     reason_code=reason_code,
+                    document_refs=(
+                        ()
+                        if reason_code == "trigger_absent_complete"
+                        else selected_discharge_document_refs
+                    ),
                 )
             )
             continue
@@ -3497,12 +3585,94 @@ async def execute_luxian_0609_native_extended_document_rules(
                     if _row_time(row) is None
                     and _discharge_approval_path(row, source_key=source_key)
                 ) if not present else ()
+                approval_resolution_blocked = False
                 if approval_match is None and (daily_error or senior_error):
                     final_state, reason_code = (
                         "data_gap",
                         daily_error or senior_error,
                     )
-                elif undated_approvals:
+                    approval_resolution_blocked = True
+                elif not present:
+                    semantic_candidates = tuple(
+                        (source_key, row, _row_time(row), text)
+                        for source_key, rows in (
+                            ("daily_course_record", daily_rows),
+                            ("senior_course_record", senior_rows),
+                        )
+                        for row in rows
+                        if (
+                            _row_time(row) is None
+                            or _row_time(row).date() in valid_dates
+                        )
+                        if (text := _clean(row.get("record_content")))
+                    )
+                    if semantic_candidates:
+                        discharge_approval_extraction = (
+                            await extract_discharge_approval(
+                                tuple(
+                                    DischargeApprovalInput(
+                                        f"doc_{index:02d}", source_key, text
+                                    )
+                                    for index, (source_key, _row, _time, text)
+                                    in enumerate(semantic_candidates, start=1)
+                                ),
+                                llm_client,
+                            )
+                        )
+                        if discharge_approval_extraction.state == "ready":
+                            extracted_candidates = tuple(
+                                (source_key, row, row_time, assertion)
+                                for (source_key, row, row_time, _text), assertion
+                                in zip(
+                                    semantic_candidates,
+                                    discharge_approval_extraction.assertions,
+                                )
+                            )
+                            semantic_match = next(
+                                (
+                                    (source_key, "senior_approval", row)
+                                    for source_key, row, row_time, assertion
+                                    in extracted_candidates
+                                    if row_time is not None
+                                    and assertion.role == "senior"
+                                    and assertion.opinion == "approved"
+                                ),
+                                None,
+                            )
+                            semantic_undated = tuple(
+                                (source_key, row)
+                                for source_key, row, row_time, assertion
+                                in extracted_candidates
+                                if row_time is None
+                                and assertion.role == "senior"
+                                and assertion.opinion == "approved"
+                            )
+                            if semantic_match is not None:
+                                approval_match = semantic_match
+                                present = True
+                            elif semantic_undated:
+                                undated_approvals = (
+                                    *undated_approvals,
+                                    *(
+                                        candidate
+                                        for candidate in semantic_undated
+                                        if all(
+                                            candidate[1] is not existing[1]
+                                            for existing in undated_approvals
+                                        )
+                                    ),
+                                )
+                        elif discharge_approval_extraction.state == "technical_error":
+                            final_state = "technical_error"
+                            reason_code = discharge_approval_extraction.reason_code
+                            approval_resolution_blocked = True
+                        else:
+                            final_state = "data_gap"
+                            reason_code = discharge_approval_extraction.reason_code
+                            approval_resolution_blocked = True
+                if approval_resolution_blocked:
+                    pass
+                elif approval_match is None and undated_approvals:
                     final_state, reason_code = "data_gap", "authoritative_time_missing"
                     selected_course_document_ids = tuple(
                         (source_key, document_id)
@@ -3986,9 +4156,29 @@ async def execute_luxian_0609_native_extended_document_rules(
         planned_rule_ids=selected,
         decisions=tuple(decisions),
         customer_display_facts=tuple(display),
-        llm_call_count=medication_extraction.llm_call_count if medication_extraction else 0,
-        prompt_tokens=medication_extraction.prompt_tokens if medication_extraction else 0,
-        completion_tokens=medication_extraction.completion_tokens if medication_extraction else 0,
-        total_tokens=medication_extraction.total_tokens if medication_extraction else 0,
-        api_time=medication_extraction.api_time if medication_extraction else 0.0,
+        llm_call_count=sum(
+            item.llm_call_count
+            for item in (medication_extraction, discharge_approval_extraction)
+            if item is not None
+        ),
+        prompt_tokens=sum(
+            item.prompt_tokens
+            for item in (medication_extraction, discharge_approval_extraction)
+            if item is not None
+        ),
+        completion_tokens=sum(
+            item.completion_tokens
+            for item in (medication_extraction, discharge_approval_extraction)
+            if item is not None
+        ),
+        total_tokens=sum(
+            item.total_tokens
+            for item in (medication_extraction, discharge_approval_extraction)
+            if item is not None
+        ),
+        api_time=sum(
+            item.api_time
+            for item in (medication_extraction, discharge_approval_extraction)
+            if item is not None
+        ),
     )

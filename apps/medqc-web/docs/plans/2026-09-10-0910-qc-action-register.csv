@@ -39,14 +39,14 @@ C25/LX0609-072,C25,LX0609-072,not_applicable,发现缺陷,F05,真实API聚焦验
 C25/LX0609-073,C25,LX0609-073,not_applicable,发现缺陷,F05,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C07/LX0609-074,C07,LX0609-074,not_applicable,发现缺陷,F06,未启动,,,,主协调代理,未关闭
 C20/LX0609-074,C20,LX0609-074,not_applicable,发现缺陷,F06,未启动,,,,主协调代理,未关闭
-C12/LX0609-055,C12,LX0609-055,not_applicable,发现缺陷,F07,未启动,,,,主协调代理,未关闭
+C12/LX0609-055,C12,LX0609-055,not_applicable,发现缺陷,F07,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；C12/055药名覆盖及冻结终点修复，符合预期超时判定,主协调代理,聚焦验收通过
 C01/LX0609-013,C01,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C02/LX0609-013,C02,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C04/LX0609-013,C04,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C07/LX0609-013,C07,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C29/LX0609-013,C29,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C30/LX0609-013,C30,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
-C30/LX0609-019,C30,LX0609-019,non_compliant,发现缺陷,F09,未启动,,,,主协调代理,未关闭
+C30/LX0609-019,C30,LX0609-019,non_compliant,发现缺陷,F09,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-019-prompt/independent-verification.json,093ac77fb：019三来源与prompt范围同步；541相关测试通过。真实30例对照仅C30恢复符合，5条精确证据保留；3次调用9487Token无重试。不宣称模型总体能力或C04传输问题修复。,主协调代理,聚焦验收通过
 C01/LX0609-068,C01,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
 C04/LX0609-068,C04,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
 C05/LX0609-068,C05,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
@@ -55,109 +55,109 @@ C08/LX0609-068,C08,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调�
 C10/LX0609-068,C10,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
 C12/LX0609-068,C12,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
 C19/LX0609-068,C19,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
-C20/LX0609-068,C20,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
+C20/LX0609-068,C20,LX0609-068,data_gap,发现缺陷,F10,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/f10-068-c20-v2-diagnostic.json；.tmp/0910-full-audit/typed-062-route-v2-068-yuyi-v3/status.json,移除模型角色字段并由同一意见分句派生角色；真实回归恢复符合且上级病程定位完整,主协调代理,聚焦验收通过
 C23/LX0609-068,C23,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
-C25/LX0609-068,C25,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
+C25/LX0609-068,C25,LX0609-068,data_gap,发现缺陷,F10,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/f10-068-c25-v2-diagnostic.json；.tmp/0910-full-audit/typed-062-route-v2-068-yuyi-v3/status.json,将明确“予以出院”纳入确定性批准并保护否定和条件表达；真实回归符合且无需额外语义调用,主协调代理,聚焦验收通过
 C26/LX0609-068,C26,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
 C27/LX0609-068,C27,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
 C30/LX0609-068,C30,LX0609-068,data_gap,发现缺陷,F10,未启动,,,,主协调代理,未关闭
-C01/LX0609-069,C01,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C02/LX0609-069,C02,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C04/LX0609-069,C04,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C06/LX0609-069,C06,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C07/LX0609-069,C07,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C08/LX0609-069,C08,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C09/LX0609-069,C09,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C10/LX0609-069,C10,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C11/LX0609-069,C11,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C13/LX0609-069,C13,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C17/LX0609-069,C17,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C18/LX0609-069,C18,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C19/LX0609-069,C19,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C20/LX0609-069,C20,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C21/LX0609-069,C21,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C23/LX0609-069,C23,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C24/LX0609-069,C24,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C25/LX0609-069,C25,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C26/LX0609-069,C26,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C27/LX0609-069,C27,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C29/LX0609-069,C29,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C30/LX0609-069,C30,LX0609-069,data_gap,发现缺陷,F11,未启动,,,,主协调代理,未关闭
-C01/LX0609-071,C01,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C02/LX0609-071,C02,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C06/LX0609-071,C06,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C08/LX0609-071,C08,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C11/LX0609-071,C11,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C12/LX0609-071,C12,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C23/LX0609-071,C23,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C25/LX0609-071,C25,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C26/LX0609-071,C26,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
-C28/LX0609-071,C28,LX0609-071,data_gap,发现缺陷,F12,未启动,,,,主协调代理,未关闭
+C01/LX0609-069,C01,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C02/LX0609-069,C02,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C04/LX0609-069,C04,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C06/LX0609-069,C06,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C07/LX0609-069,C07,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C08/LX0609-069,C08,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C09/LX0609-069,C09,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C10/LX0609-069,C10,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C11/LX0609-069,C11,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C13/LX0609-069,C13,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C17/LX0609-069,C17,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C18/LX0609-069,C18,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C19/LX0609-069,C19,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C20/LX0609-069,C20,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C21/LX0609-069,C21,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C23/LX0609-069,C23,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C24/LX0609-069,C24,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C25/LX0609-069,C25,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C26/LX0609-069,C26,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C27/LX0609-069,C27,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C29/LX0609-069,C29,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C30/LX0609-069,C30,LX0609-069,data_gap,发现缺陷,F11,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；申请业务时间缺失提示明确，原状态和定位保留,主协调代理,聚焦验收通过
+C01/LX0609-071,C01,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C02/LX0609-071,C02,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C06/LX0609-071,C06,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C08/LX0609-071,C08,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C11/LX0609-071,C11,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C12/LX0609-071,C12,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C23/LX0609-071,C23,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C25/LX0609-071,C25,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C26/LX0609-071,C26,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
+C28/LX0609-071,C28,LX0609-071,data_gap,发现缺陷,F12,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；缺标题文书定位恢复，状态原因不变,主协调代理,聚焦验收通过
 C04/LX0609-022,C04,LX0609-022,non_compliant,发现缺陷,F13,未启动,,,,主协调代理,未关闭
-C18/LX0609-062,C18,LX0609-062,non_compliant,发现缺陷,F14,未启动,,,,主协调代理,未关闭
+C18/LX0609-062,C18,LX0609-062,non_compliant,发现缺陷,F14,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-062-time-v2/independent-verification.json,修正计数剂量和组级用药时间合同；真实回归5药仅报告给药途径缺失并定位出院记录,主协调代理,聚焦验收通过
 C01/LX0609-020,C01,LX0609-020,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C01/LX0609-023,C01,LX0609-023,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C04/LX0609-019,C04,LX0609-019,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C04/LX0609-020,C04,LX0609-020,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C04/LX0609-023,C04,LX0609-023,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
-C12/LX0609-062,C12,LX0609-062,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
+C12/LX0609-062,C12,LX0609-062,technical_error,发现缺陷,F15,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-062-time-v2/independent-verification.json,补齐组级给药途径合同；真实回归3药完整且无技术错误并定位出院记录,主协调代理,聚焦验收通过
 C29/LX0609-020,C29,LX0609-020,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C29/LX0609-021,C29,LX0609-021,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C29/LX0609-022,C29,LX0609-022,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
 C29/LX0609-023,C29,LX0609-023,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
-C30/LX0609-062,C30,LX0609-062,technical_error,发现缺陷,F15,未启动,,,,主协调代理,未关闭
-C01/LX0609-061,C01,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C02/LX0609-061,C02,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C30/LX0609-062,C30,LX0609-062,technical_error,发现缺陷,F15,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-062-time-v2/independent-verification.json,修正计数剂量和用药时间提取合同；真实回归2药仅报告给药途径缺失并定位出院记录,主协调代理,聚焦验收通过
+C01/LX0609-061,C01,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C02/LX0609-061,C02,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C02/LX0609-068,C02,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C03/LX0609-061,C03,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C03/LX0609-061,C03,LX0609-061,non_compliant,待复核,R01,真实API定位验收通过，业务合同待复核,首页与出院记录的出院终点冲突；虽已移除非权威update_time回退并恢复定位，但唯一出院终点与冲突失败语义尚未定。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；保留：authoritative_discharge_endpoint_conflict,主协调代理（独立复核已核对）,未关闭
 C03/LX0609-067,C03,LX0609-067,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
 C03/LX0609-068,C03,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C04/LX0609-061,C04,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C05/LX0609-061,C05,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C06/LX0609-061,C06,LX0609-061,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C07/LX0609-061,C07,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C04/LX0609-061,C04,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C05/LX0609-061,C05,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C06/LX0609-061,C06,LX0609-061,compliant,待复核,R01,真实API聚焦验收通过，待总回归,submit_datetime为正式时间，晚于出院0.0575小时；当前compliant/requirement_within_threshold，冻结回放与真实API一致，且返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：正式record_time/submit_datetime优先合同保持；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C07/LX0609-061,C07,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C07/LX0609-068,C07,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C08/LX0609-061,C08,LX0609-061,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C08/LX0609-061,C08,LX0609-061,compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C09/LX0609-005,C09,LX0609-005,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C09/LX0609-061,C09,LX0609-061,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C09/LX0609-061,C09,LX0609-061,compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C09/LX0609-068,C09,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C10/LX0609-061,C10,LX0609-061,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C11/LX0609-061,C11,LX0609-061,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
+C10/LX0609-061,C10,LX0609-061,data_gap,待复核,R01,真实API定位验收通过，业务合同待复核,正式submit_datetime早于当前出院终点21.685小时；当前安全降级为authoritative_time_conflict，但“预先完成”是否允许及正式时间语义仍需业务合同。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：正式record_time/submit_datetime优先合同保持；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；保留：formal_completion_before_discharge_contract,主协调代理（独立复核已核对）,未关闭
+C11/LX0609-061,C11,LX0609-061,data_gap,待复核,R01,真实API定位验收通过，业务合同待复核,正式submit_datetime早于当前出院终点16.861389小时；当前安全降级为authoritative_time_conflict，但“预先完成”是否允许及正式时间语义仍需业务合同。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：正式record_time/submit_datetime优先合同保持；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；保留：formal_completion_before_discharge_contract,主协调代理（独立复核已核对）,未关闭
 C11/LX0609-068,C11,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C12/LX0609-061,C12,LX0609-061,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
+C12/LX0609-061,C12,LX0609-061,data_gap,待复核,R01,真实API定位验收通过，业务合同待复核,正式submit_datetime早于当前出院终点0.035小时；当前安全降级为authoritative_time_conflict，但“预先完成”是否允许及正式时间语义仍需业务合同。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：正式record_time/submit_datetime优先合同保持；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；保留：formal_completion_before_discharge_contract,主协调代理（独立复核已核对）,未关闭
 C13/LX0609-008,C13,LX0609-008,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C13/LX0609-061,C13,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C13/LX0609-061,C13,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C13/LX0609-068,C13,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C14/LX0609-061,C14,LX0609-061,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C14/LX0609-061,C14,LX0609-061,compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C14/LX0609-068,C14,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C15/LX0609-061,C15,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C15/LX0609-061,C15,LX0609-061,non_compliant,待复核,R01,真实API定位验收通过，业务合同待复核,首页与出院记录的出院终点冲突；正式submit_datetime相对当前所选终点为152.855833小时，换终点可能影响窗口，不能据本次定位PASS关闭。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：正式record_time/submit_datetime优先合同保持；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；保留：authoritative_discharge_endpoint_conflict,主协调代理（独立复核已核对）,未关闭
 C15/LX0609-067,C15,LX0609-067,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
 C15/LX0609-068,C15,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C16/LX0609-061,C16,LX0609-061,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C16/LX0609-061,C16,LX0609-061,compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C16/LX0609-068,C16,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C17/LX0609-061,C17,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C17/LX0609-061,C17,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C17/LX0609-068,C17,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
 C18/LX0609-004,C18,LX0609-004,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
 C18/LX0609-008,C18,LX0609-008,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C18/LX0609-061,C18,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C18/LX0609-061,C18,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C18/LX0609-068,C18,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C19/LX0609-061,C19,LX0609-061,compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C20/LX0609-061,C20,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C21/LX0609-061,C21,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C19/LX0609-061,C19,LX0609-061,compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C20/LX0609-061,C20,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C21/LX0609-061,C21,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C21/LX0609-068,C21,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C22/LX0609-061,C22,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C22/LX0609-061,C22,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C22/LX0609-068,C22,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C23/LX0609-061,C23,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C24/LX0609-061,C24,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C23/LX0609-061,C23,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C24/LX0609-061,C24,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C24/LX0609-068,C24,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C25/LX0609-061,C25,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C26/LX0609-061,C26,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C27/LX0609-061,C27,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
-C28/LX0609-061,C28,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C25/LX0609-061,C25,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C26/LX0609-061,C26,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C27/LX0609-061,C27,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
+C28/LX0609-061,C28,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C28/LX0609-068,C28,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C29/LX0609-061,C29,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C29/LX0609-061,C29,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C29/LX0609-068,C29,LX0609-068,data_gap,待复核,R01,未启动,,,,主协调代理,未关闭
-C30/LX0609-061,C30,LX0609-061,non_compliant,待复核,R01,未启动,,,,主协调代理,未关闭
+C30/LX0609-061,C30,LX0609-061,non_compliant,待复核,R01,真实API聚焦验收通过，待总回归,该例无record_time/submit_datetime；旧结果依赖与last_modified_datetime相同的update_time。修复后改为data_gap/authoritative_time_missing，真实API返回1条安全出院记录定位。,.tmp/0910-full-audit/typed-061-location/root-api-verification.json; .tmp/0910-full-audit/typed-061-location/root-persistence-verification.json; .tmp/0910-full-audit/proposed-ledger-061.json,46859ee6e：不再把update_time作为061完成时间；客户公开结果恢复所消费出院记录的安全定位；保存envelope与公开投影一致；待最终2160项回归,主协调代理（独立复核已核对）,聚焦验收通过
 C01/LX0609-029,C01,LX0609-029,compliant,待复核,R02,未启动,,,,主协调代理,未关闭
 C01/LX0609-032,C01,LX0609-032,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C03/LX0609-029,C03,LX0609-029,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
@@ -430,5 +430,5 @@ C27/LX0609-054,C27,LX0609-054,not_applicable,待复核,R11,未启动,,,,主协�
 C27/LX0609-055,C27,LX0609-055,non_compliant,待复核,R11,未启动,,,,主协调代理,未关闭
 C08/LX0609-052,C08,LX0609-052,non_compliant,待复核,R12,未启动,,,,主协调代理,未关闭
 C08/LX0609-053,C08,LX0609-053,non_compliant,待复核,R12,未启动,,,,主协调代理,未关闭
-C13/LX0609-062,C13,LX0609-062,uncertain,待复核,R13,未启动,,,,主协调代理,未关闭
+C13/LX0609-062,C13,LX0609-062,uncertain,待复核,R13,真实API聚焦验收通过，待总回归,应仅缺给药途径,.tmp/0910-full-audit/typed-062-time-v2/independent-verification.json,原始COPY与正式EvidenceMaterial一致；真实回归6药药名剂量用药时间完整且仅报告给药途径缺失,主协调代理,聚焦验收通过
 C04/LX0609-070,C04,LX0609-070,not_applicable,待复核,R14,未启动,,,,主协调代理,未关闭
