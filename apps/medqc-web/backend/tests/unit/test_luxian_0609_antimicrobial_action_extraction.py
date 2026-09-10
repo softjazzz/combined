@@ -307,3 +307,127 @@ async def test_duplicate_json_key_is_invalid_output():
         (candidate,), _Client(response)
     )
     assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_confirmed_resolution_preserves_prompt_order_and_returns_action() -> None:
+    rows = (
+        {"record_content": "建议左氧氟沙星抗感染，但患者输注后出现瘙痒。"},
+        {"record_content": "计划停用万古霉素，待培养结果后调整。"},
+    )
+    response_items = [
+        {
+            "item_id": "r0-a0",
+            "antimicrobial": "左氧氟沙星",
+            "state": "affirmed",
+            "action_quote": "左氧氟沙星抗感染，但患者输注后出现瘙痒",
+        },
+        {
+            "item_id": "r1-a0",
+            "antimicrobial": "万古霉素",
+            "state": "negated_or_planned",
+            "action_quote": "计划停用万古霉素",
+        },
+    ]
+    client = _Client(_response(response_items))
+
+    result = await extraction.extract_confirmed_antimicrobial_actions(rows, client)
+
+    assert (result.state, result.reason_code) == ("ready", "action_states_extracted")
+    assert result.confirmed_actions == (
+        extraction.ConfirmedAntimicrobialAction(0, "左氧氟沙星", "输注"),
+    )
+    assert result.semantic_antimicrobials == ("左氧氟沙星", "万古霉素")
+    assert result.llm_call_count == 1
+    assert len(client.calls) == 1
+    prompt, options = client.calls[0]
+    assert options == {
+        "max_completion_tokens": 2048,
+        "allow_length_retry": False,
+    }
+    assert "动作词：" + "、".join(extraction.ACTION_TERMS) + "之一" in prompt
+    assert prompt.endswith(json.dumps([
+        {
+            "item_id": "r0-a0",
+            "antimicrobial": "左氧氟沙星",
+            "text": rows[0]["record_content"].rstrip("。"),
+        },
+        {
+            "item_id": "r1-a0",
+            "antimicrobial": "万古霉素",
+            "text": "计划停用万古霉素",
+        },
+    ], ensure_ascii=False, separators=(",", ":")))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "action",
+    tuple(
+        action
+        for action in extraction.AntimicrobialAction
+        if action is not extraction.AntimicrobialAction.RECOMMEND
+    ),
+)
+async def test_every_accepted_affirmed_term_has_a_consumable_action(action) -> None:
+    candidate = _candidate(text=f"今日{action.value}美罗培南抗感染治疗。")
+
+    result = await extraction.extract_antimicrobial_actions(
+        (candidate,),
+        _Client(_response([_item(candidate, quote=f"{action.value}美罗培南")])),
+    )
+
+    assert result.state == "ready"
+    assert result.items[0].action is action
+
+
+@pytest.mark.asyncio
+async def test_affirmed_recommendation_without_performed_action_fails_closed() -> None:
+    candidate = _candidate(text="建议美罗培南抗感染治疗。")
+
+    result = await extraction.extract_antimicrobial_actions(
+        (candidate,), _Client(_response([_item(candidate, quote="建议美罗培南")]))
+    )
+
+    assert (result.state, result.reason_code) == (
+        "technical_error", "model_invalid_output",
+    )
+
+
+def _strict_order(planned_start_datetime: str) -> dict[str, str]:
+    return {
+        "drug_code": "LEV",
+        "drug_type": "抗菌药物",
+        "brand_name": "左氧氟沙星",
+        "generic_name": "左氧氟沙星",
+        "drug_frequency": "qd",
+        "drug_apply_method": "ivgtt",
+        "single_dose": "0.5",
+        "single_dose_unit": "g",
+        "repeat_indicator": "临时",
+        "dose_form": "注射剂",
+        "order_status": "新开",
+        "last_modified_datetime": "2026-06-01 09:58:00",
+        "drug_specification": "100ml:0.5g",
+        "medication_duration": "1",
+        "start_time": "",
+        "order_time": "",
+        "update_time": "",
+        "record_content": "",
+        "prescribed_datetime": "2026-06-01 09:00:00",
+        "planned_start_datetime": planned_start_datetime,
+    }
+
+
+def test_strict_duplicate_order_events_keep_sixty_second_and_signature_boundary() -> None:
+    first = _strict_order("2026-06-01 10:00:00")
+    at_boundary = _strict_order("2026-06-01 10:01:00")
+    outside_boundary = _strict_order("2026-06-01 10:01:01")
+    changed_signature = {
+        **_strict_order("2026-06-01 10:01:00"),
+        "repeat_indicator": "长期",
+    }
+
+    assert len(extraction.build_antimicrobial_order_events((first, at_boundary))) == 1
+    assert len(extraction.build_antimicrobial_order_events((first, outside_boundary))) == 2
+    assert len(extraction.build_antimicrobial_order_events((first, changed_signature))) == 2

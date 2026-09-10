@@ -48,8 +48,14 @@ from .extended_document.diagnosis_change_extraction import (
     extract_diagnosis_change_documentation,
 )
 from .extended_document.antimicrobial_action_extraction import (
-    AntimicrobialActionCandidate,
-    extract_antimicrobial_actions,
+    ANTIMICROBIAL_CONTEXT_MARKERS as _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS,
+    SPECIAL_ANTIMICROBIALS as _SPECIAL_ANTIMICROBIALS,
+    AntimicrobialOrderEvent as _AntimicrobialOrderEvent,
+    antimicrobial_names_in as _antimicrobial_names_in,
+    antimicrobial_names_in_rows as _antimicrobial_names_in_rows,
+    build_antimicrobial_order_events as _antimicrobial_order_events,
+    extract_confirmed_antimicrobial_actions,
+    linked_order_id as _linked_order_id,
 )
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import evaluate_rule_076
@@ -162,50 +168,10 @@ _DIAGNOSIS_CHANGE_NON_EVENT_PREFIX_PATTERN = re.compile(
 _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?:药品|药物|用药|服药|服用|口服|停药|带药)"
 )
-_SPECIAL_ANTIMICROBIALS = (
-    "头孢他啶/阿维巴坦", "头孢吡肟", "氨曲南", "美罗培南",
-    "亚胺培南", "万古霉素", "伏立康唑",
-)
-_ANTIMICROBIALS = _SPECIAL_ANTIMICROBIALS + (
-    "阿莫西林", "舒他西林", "青霉素", "苯唑西林", "哌拉西林",
-    "头孢唑林", "头孢呋辛", "头孢曲松", "头孢他啶", "头孢西丁", "厄他培南",
-    "阿米卡星", "阿奇霉素", "莫西沙星", "左氧氟沙星", "环丙沙星",
-    "甲硝唑", "替硝唑", "奥硝唑", "克林霉素", "氟康唑",
-)
 _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
     "有效", "好转", "改善", "感染控制", "疗效不佳", "效果不佳",
     "无改善", "未改善", "无效", "治疗失败", "感染未控制", "病情加重",
     "恶化", "调整方案", "更换抗菌药", "升级抗菌药", "降阶梯", "停用",
-)
-_ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
-_ANTIMICROBIAL_REASON_ACTIONS = (
-    "超说明书", "停用", "更换", "更改", "改为", "联合", "启用", "输注", "使用",
-    "给予", "予以", "继续",
-)
-_ANTIMICROBIAL_ACTION_STRONG_BOUNDARY_PATTERN = re.compile(r"[。；;！!？?\r\n]+")
-_ANTIMICROBIAL_ACTION_WEAK_BOUNDARY_PATTERN = re.compile(r"[，,]+")
-_ANTIMICROBIAL_ACTION_PLAN_MARKERS = (
-    "建议", "拟", "计划", "决定", "待", "是否", "尚待", "尚未", "暂未",
-    "暂不", "未曾",
-)
-_ANTIMICROBIAL_ACTION_NEGATION_MARKERS = (
-    "不予", "不给予", "不使用", "不启用", "不更换", "未予", "未给予", "未使用",
-    "未启用", "尚未", "暂未", "暂不",
-)
-_ANTIMICROBIAL_ACTION_HISTORICAL_MARKERS = (
-    "既往", "曾经", "曾用", "曾使用", "院外", "外院", "入院前", "治疗史",
-    "用药史", "抗感染史",
-)
-_ANTIMICROBIAL_ACTION_FOLLOWUP_MARKERS = (
-    "输注后", "使用后", "用药后", "给药后", "该药", "此药",
-)
-_ANTIMICROBIAL_ACTION_PROSPECTIVE_MARKERS = (
-    "应", "需", "须", "术前", "出院后", "前需", "前须", "后再", "后决定",
-    "需待", "需要等待",
-)
-_ANTIMICROBIAL_SHARED_ACTION_BLOCKERS = (
-    "过敏", "不良反应", "输注反应", "瘙痒", "皮疹", "疗效", "效果", "无效",
-    "欠佳", "好转", "改善", "出现",
 )
 _ANTIMICROBIAL_REASON_MARKERS = (
     "因为", "由于", "考虑", "依据", "理由", "重症感染", "覆盖",
@@ -868,16 +834,7 @@ def _material_text(row: Mapping[str, Any]) -> str:
 
 
 def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
-    return tuple(
-        row for row in rows if any(name in _material_text(row) for name in _ANTIMICROBIALS)
-    )
-
-
-def _antimicrobial_names_in(
-    row: Mapping[str, Any], names: Sequence[str] = _ANTIMICROBIALS
-) -> tuple[str, ...]:
-    text = _material_text(row)
-    return tuple(name for name in names if name in text)
+    return tuple(row for row in rows if _antimicrobial_names_in(row))
 
 
 def _parse_lx0609_058_datetime(value: Any) -> datetime | None:
@@ -932,7 +889,7 @@ def _is_antimicrobial_effect_evaluation(row: Mapping[str, Any]) -> bool:
         return False
     has_antimicrobial_context = any(
         marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS
-    ) or any(name in text for name in _ANTIMICROBIALS)
+    ) or bool(_antimicrobial_names_in(row))
     # “治疗效果/疗效评价”本身可能描述镇痛、补液等非抗菌治疗；必须同时
     # 出现抗菌/抗感染语境或具体抗菌药名，才能作为本规则的疗效评价。
     return has_antimicrobial_context
@@ -953,112 +910,6 @@ def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> 
 
 
 @dataclass(frozen=True)
-class _AntimicrobialOrderEvent:
-    """054/057 使用的临床用药事件；保留构成事件的全部原始医嘱行。"""
-
-    orders: tuple[Mapping[str, Any], ...]
-    antimicrobials: tuple[str, ...]
-
-    @property
-    def order_ids(self) -> tuple[str, ...]:
-        return tuple(dict.fromkeys(
-            order_id
-            for row in self.orders
-            if (order_id := _linked_order_id(row))
-        ))
-
-
-_ANTIMICROBIAL_DUPLICATE_REQUIRED_FIELDS = (
-    "drug_code",
-    "drug_type",
-    "brand_name",
-    "generic_name",
-    "drug_frequency",
-    "drug_apply_method",
-    "single_dose",
-    "single_dose_unit",
-    "repeat_indicator",
-    "dose_form",
-    "order_status",
-    "last_modified_datetime",
-)
-_ANTIMICROBIAL_DUPLICATE_OPTIONAL_MATCH_FIELDS = (
-    "drug_specification",
-    "medication_duration",
-    "start_time",
-    "order_time",
-    "update_time",
-    "record_content",
-)
-_ANTIMICROBIAL_DUPLICATE_START_TOLERANCE_SECONDS = 60
-
-
-def _is_strict_duplicate_antimicrobial_order(
-    left: Mapping[str, Any],
-    right: Mapping[str, Any],
-) -> bool:
-    """只归并能由完整处方签名证明为同一事件的相邻技术重复行。"""
-
-    left_names = _antimicrobial_names_in(left)
-    right_names = _antimicrobial_names_in(right)
-    if not left_names or left_names != right_names:
-        return False
-    for field in _ANTIMICROBIAL_DUPLICATE_REQUIRED_FIELDS:
-        left_value = _clean(left.get(field))
-        right_value = _clean(right.get(field))
-        if not left_value or left_value != right_value:
-            return False
-    if any(
-        _clean(left.get(field)) != _clean(right.get(field))
-        for field in _ANTIMICROBIAL_DUPLICATE_OPTIONAL_MATCH_FIELDS
-    ):
-        return False
-    left_prescribed = _parse_lx0609_058_datetime(left.get("prescribed_datetime"))
-    right_prescribed = _parse_lx0609_058_datetime(right.get("prescribed_datetime"))
-    if left_prescribed is None or left_prescribed != right_prescribed:
-        return False
-    left_start = _parse_lx0609_058_datetime(left.get("planned_start_datetime"))
-    right_start = _parse_lx0609_058_datetime(right.get("planned_start_datetime"))
-    return (
-        left_start is not None
-        and right_start is not None
-        and abs((left_start - right_start).total_seconds())
-        <= _ANTIMICROBIAL_DUPLICATE_START_TOLERANCE_SECONDS
-    )
-
-
-def _antimicrobial_order_events(
-    orders: Sequence[Mapping[str, Any]],
-) -> tuple[_AntimicrobialOrderEvent, ...]:
-    """归并同一处方批次的严格重复行；字段不足或差异均保留独立事件。"""
-
-    groups: list[list[Mapping[str, Any]]] = []
-    for order in orders:
-        matching_group = next(
-            (
-                group
-                for group in groups
-                if all(
-                    _is_strict_duplicate_antimicrobial_order(member, order)
-                    for member in group
-                )
-            ),
-            None,
-        )
-        if matching_group is None:
-            groups.append([order])
-        else:
-            matching_group.append(order)
-    return tuple(
-        _AntimicrobialOrderEvent(
-            orders=tuple(group),
-            antimicrobials=_antimicrobial_names_in(group[0]),
-        )
-        for group in groups
-    )
-
-
-@dataclass(frozen=True)
 class _AntimicrobialReasonAction:
     """054 的一个可证明、已命名的抗菌药处置动作。"""
 
@@ -1067,201 +918,6 @@ class _AntimicrobialReasonAction:
     action: str
     order_ids: tuple[str, ...]
     orders: tuple[Mapping[str, Any], ...]
-
-
-def _054_text_spans(text: str, boundary: re.Pattern[str]) -> tuple[tuple[int, int], ...]:
-    """按原文边界返回非空片段坐标，保证裁剪结果仍是连续原文。"""
-
-    spans: list[tuple[int, int]] = []
-    start = 0
-    for match in boundary.finditer(text):
-        if text[start:match.start()].strip():
-            spans.append((start, match.start()))
-        start = match.end()
-    if text[start:].strip():
-        spans.append((start, len(text)))
-    return tuple(spans)
-
-
-def _054_has_action_marker(text: str) -> bool:
-    return any(action in text for action in _ANTIMICROBIAL_REASON_ACTIONS)
-
-
-def _054_has_plan_marker(text: str) -> bool:
-    return any(marker in text for marker in _ANTIMICROBIAL_ACTION_PLAN_MARKERS)
-
-
-def _054_can_inherit_shared_action(previous: str, current: str) -> bool:
-    """只允许紧邻的肯定治疗列表把共同谓语传给目标药分句。"""
-
-    if not _054_has_action_marker(previous):
-        return False
-    if "未" in previous or "不" in previous:
-        return False
-    if _054_has_plan_marker(previous) or _054_has_plan_marker(current):
-        return False
-    if any(
-        marker in current for marker in _ANTIMICROBIAL_ACTION_HISTORICAL_MARKERS
-    ):
-        return False
-    if not any(
-        marker in current
-        for marker in (*_ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS, "预防感染")
-    ):
-        return False
-    if any(marker in current for marker in _ANTIMICROBIAL_SHARED_ACTION_BLOCKERS):
-        return False
-    blocked_prefixes = (
-        "患者", "患儿", "家属", "医师", "医生", "护士", "但", "然而", "不过",
-    )
-    return not current.lstrip().startswith(blocked_prefixes)
-
-
-def _054_candidate_text(text: str, antimicrobial: str) -> str | None:
-    """裁剪为围绕目标药的最小连续动作上下文。
-
-    目标药必须在本分句内拥有动作/计划词，或严格继承紧邻治疗列表的共同
-    谓语。仅当紧邻后分句唯一回指该药时，才附加后分句的实施事实。
-    """
-
-    candidates: list[tuple[int, int]] = []
-    for strong_start, strong_end in _054_text_spans(
-        text, _ANTIMICROBIAL_ACTION_STRONG_BOUNDARY_PATTERN
-    ):
-        sentence = text[strong_start:strong_end]
-        if antimicrobial not in sentence:
-            continue
-        weak_spans = _054_text_spans(
-            sentence, _ANTIMICROBIAL_ACTION_WEAK_BOUNDARY_PATTERN
-        )
-        for index, (weak_start, weak_end) in enumerate(weak_spans):
-            clause = sentence[weak_start:weak_end]
-            if antimicrobial not in clause:
-                continue
-            has_direct_marker = (
-                _054_has_action_marker(clause) or _054_has_plan_marker(clause)
-            )
-            snippet_start = weak_start
-            snippet_end = weak_end
-            if not has_direct_marker:
-                if index == 0:
-                    continue
-                previous_start, previous_end = weak_spans[index - 1]
-                previous = sentence[previous_start:previous_end]
-                if not _054_can_inherit_shared_action(previous, clause):
-                    continue
-                snippet_start = previous_start
-            elif index > 0:
-                previous_start, previous_end = weak_spans[index - 1]
-                previous = sentence[previous_start:previous_end]
-                if _054_has_plan_marker(previous) or any(
-                    marker in previous
-                    for marker in _ANTIMICROBIAL_ACTION_NEGATION_MARKERS
-                ):
-                    snippet_start = previous_start
-
-            if index + 1 < len(weak_spans):
-                next_start, next_end = weak_spans[index + 1]
-                following = sentence[next_start:next_end]
-                if (
-                    any(
-                        marker in following
-                        for marker in _ANTIMICROBIAL_ACTION_FOLLOWUP_MARKERS
-                    )
-                    and sum(
-                        name in clause + following for name in _ANTIMICROBIALS
-                    ) == 1
-                ):
-                    snippet_end = next_end
-
-            candidates.append((
-                strong_start + snippet_start,
-                strong_start + snippet_end,
-            ))
-    if not candidates:
-        return None
-    return text[candidates[0][0]:candidates[-1][1]].strip()
-
-
-def _054_high_confidence_action_in_candidate(
-    candidate_text: str,
-    antimicrobial: str,
-) -> str | None:
-    """识别动作直接落药及严格并列治疗列表，其他语义交给模型。"""
-
-    target_index = candidate_text.find(antimicrobial)
-    if target_index < 0:
-        return None
-    prefix = candidate_text[:target_index]
-    if (
-        _054_has_plan_marker(candidate_text)
-        or "未" in candidate_text
-        or "不" in candidate_text
-        or any(
-            marker in candidate_text
-            for marker in _ANTIMICROBIAL_ACTION_PROSPECTIVE_MARKERS
-        )
-        or f"{antimicrobial}前" in candidate_text
-        or any(
-            marker in candidate_text
-            for marker in _ANTIMICROBIAL_ACTION_NEGATION_MARKERS
-        )
-        or any(
-            marker in candidate_text
-            for marker in _ANTIMICROBIAL_ACTION_HISTORICAL_MARKERS
-        )
-    ):
-        return None
-    matches = tuple(
-        (prefix.rfind(action), action)
-        for action in _ANTIMICROBIAL_REASON_ACTIONS
-        if action not in {"超说明书", "联合"} and action in prefix
-    )
-    if not matches:
-        return None
-    action_index, action = max(matches)
-    if target_index - action_index > 80:
-        return None
-    return action
-
-
-def _054_action_inputs(
-    rows: Sequence[Mapping[str, Any]],
-) -> tuple[
-    dict[tuple[int, str], str],
-    tuple[AntimicrobialActionCandidate, ...],
-    dict[str, tuple[int, str]],
-]:
-    """拆出确定性肯定动作与必须交给单次语义抽取的候选。"""
-
-    confirmed: dict[tuple[int, str], str] = {}
-    candidates: list[AntimicrobialActionCandidate] = []
-    identity: dict[str, tuple[int, str]] = {}
-    for row_index, row in enumerate(rows):
-        text = _material_text(row)
-        for antimicrobial_index, antimicrobial in enumerate(
-            _antimicrobial_names_in(row)
-        ):
-            if antimicrobial not in text:
-                continue
-            key = (row_index, antimicrobial)
-            candidate_text = _054_candidate_text(text, antimicrobial)
-            if candidate_text is None:
-                continue
-            action = _054_high_confidence_action_in_candidate(
-                candidate_text, antimicrobial
-            )
-            if action is not None:
-                confirmed[key] = action
-                continue
-            item_id = f"r{row_index}-a{antimicrobial_index}"
-            identity[item_id] = key
-            candidates.append(AntimicrobialActionCandidate(
-                item_id=item_id,
-                antimicrobial=antimicrobial,
-                text=candidate_text,
-            ))
-    return confirmed, tuple(candidates), identity
 
 
 def _054_action_events(
@@ -1392,7 +1048,7 @@ def _is_explicit_empiric_antimicrobial_use(row: Mapping[str, Any]) -> bool:
         return (
             any(action in text for action in ("启用", "使用", "给予", "用药", "治疗"))
             and (
-                any(name in text for name in _ANTIMICROBIALS)
+                bool(_antimicrobial_names_in(row))
                 or any(marker in text for marker in _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS)
             )
         )
@@ -1502,14 +1158,6 @@ def _antimicrobial_document_refs(
             return ()
         refs.append(matches[0])
     return tuple(dict.fromkeys(refs))
-
-
-def _linked_order_id(row: Mapping[str, Any]) -> str:
-    return _clean(
-        row.get("related_order_id")
-        or row.get("source_order_id")
-        or row.get("order_id")
-    )
 
 
 def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, ...], str | None]:
@@ -2388,49 +2036,35 @@ async def execute_luxian_0609_native_extended_document_rules(
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif rule_id == "LX0609-054":
-                confirmed_actions, semantic_candidates, semantic_identity = (
-                    _054_action_inputs(course_rows)
-                )
-                if semantic_candidates:
-                    antimicrobial_action_extraction = (
-                        await extract_antimicrobial_actions(
-                            semantic_candidates, llm_client
-                        )
+                antimicrobial_action_extraction = (
+                    await extract_confirmed_antimicrobial_actions(
+                        course_rows, llm_client
                     )
-                    if antimicrobial_action_extraction.state == "ready":
-                        for item in antimicrobial_action_extraction.items:
-                            if item.state != "affirmed" or item.action_quote is None:
-                                continue
-                            action = next(
-                                (
-                                    action_name
-                                    for action_name in _ANTIMICROBIAL_REASON_ACTIONS
-                                    if action_name in item.action_quote
-                                ),
-                                None,
-                            )
-                            if action is not None:
-                                confirmed_actions[semantic_identity[item.item_id]] = action
-                    else:
-                        final_state = (
-                            "technical_error"
-                            if antimicrobial_action_extraction.state == "technical_error"
-                            else "uncertain"
-                        )
-                        reason_code = antimicrobial_action_extraction.reason_code
-                        display.append((rule_id, {
-                            "verification_kind": "antimicrobial_reason_documentation_check",
-                            "antimicrobials": list(dict.fromkeys(
-                                item.antimicrobial for item in semantic_candidates
-                            )),
-                            "action_count": len(confirmed_actions),
-                            "reason_documented": False,
-                            "unmatched_antimicrobials": list(dict.fromkeys(
-                                item.antimicrobial for item in semantic_candidates
-                            )),
-                            "association_ambiguous": True,
-                        }))
-                if not semantic_candidates or antimicrobial_action_extraction.state == "ready":
+                )
+                confirmed_actions = {
+                    (item.row_index, item.antimicrobial): item.action
+                    for item in antimicrobial_action_extraction.confirmed_actions
+                }
+                if antimicrobial_action_extraction.state not in {"ready", "absent"}:
+                    final_state = (
+                        "technical_error"
+                        if antimicrobial_action_extraction.state == "technical_error"
+                        else "uncertain"
+                    )
+                    reason_code = antimicrobial_action_extraction.reason_code
+                    display.append((rule_id, {
+                        "verification_kind": "antimicrobial_reason_documentation_check",
+                        "antimicrobials": list(
+                            antimicrobial_action_extraction.semantic_antimicrobials
+                        ),
+                        "action_count": len(confirmed_actions),
+                        "reason_documented": False,
+                        "unmatched_antimicrobials": list(
+                            antimicrobial_action_extraction.semantic_antimicrobials
+                        ),
+                        "association_ambiguous": True,
+                    }))
+                else:
                     (
                         action_events,
                         action_association_failed,
@@ -2646,7 +2280,7 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif rule_id == "LX0609-056":
                 special_orders = tuple(
                     row for row in antimicrobial_orders
-                    if any(name in _material_text(row) for name in _SPECIAL_ANTIMICROBIALS)
+                    if _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS)
                 )
                 if len(special_orders) < 2:
                     final_state, reason_code = "not_applicable", "trigger_absent_complete"
@@ -2831,10 +2465,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "association_ambiguous": ambiguous_support,
                     }))
             else:
-                used_names = tuple(
-                    name for name in _ANTIMICROBIALS
-                    if any(name in _material_text(row) for row in antimicrobial_orders)
-                )
+                used_names = _antimicrobial_names_in_rows(antimicrobial_orders)
                 complete = bool(used_names) and all(
                     _has_any_text(course_rows, (name,)) for name in used_names
                 )

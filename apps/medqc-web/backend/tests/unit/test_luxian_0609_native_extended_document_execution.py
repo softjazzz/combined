@@ -35,6 +35,9 @@ from app.services.luxian_0609.extended_document.discharge_approval_extraction im
 from app.services.luxian_0609.extended_document.diagnosis_change_extraction import (
     SCHEMA_VERSION as DIAGNOSIS_CHANGE_SCHEMA_VERSION,
 )
+from app.services.luxian_0609.extended_document import (
+    antimicrobial_action_extraction as antimicrobial_events,
+)
 from app.services.luxian_0609.native_extended_document_execution import (
     execute_luxian_0609_native_extended_document_rules,
 )
@@ -5757,7 +5760,7 @@ def test_054_candidate_text_keeps_only_target_action_context(
     antimicrobial: str,
     expected: str | None,
 ) -> None:
-    assert module._054_candidate_text(text, antimicrobial) == expected
+    assert antimicrobial_events._candidate_text(text, antimicrobial) == expected
 
 
 @pytest.mark.parametrize(
@@ -5783,7 +5786,7 @@ def test_054_high_confidence_candidate_action_is_conservative(
     antimicrobial: str,
     expected_action: str | None,
 ) -> None:
-    assert module._054_high_confidence_action_in_candidate(
+    assert antimicrobial_events._high_confidence_action_in_candidate(
         candidate_text, antimicrobial
     ) == expected_action
 
