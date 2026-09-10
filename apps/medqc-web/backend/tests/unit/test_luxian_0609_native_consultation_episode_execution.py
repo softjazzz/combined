@@ -4470,7 +4470,7 @@ async def test_confirmed_generic_execution_is_not_hidden_by_another_unknown_reco
 
 
 @pytest.mark.asyncio
-async def test_second_stage_retries_forged_execution_ref_once_then_accepts_valid(monkeypatch):
+async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见"),
         "daily_course_record": _rows("可比候选", hour_start=2),
@@ -4481,48 +4481,15 @@ async def test_second_stage_retries_forged_execution_ref_once_then_accepts_valid
     client = _SequentialClient(
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
         _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-999"], "confidence": "high"}),
-        _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"compliant"}
-    assert result.llm_call_count == 3
-    assert client.prompts[1] == client.prompts[2]
-
-
-@pytest.mark.asyncio
-async def test_second_stage_rejects_forged_execution_ref_after_one_retry(monkeypatch):
-    source_rows = {
-        "consultation_record": _rows("申请与明确会诊意见"),
-        "daily_course_record": _rows("可比候选", hour_start=2),
-        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
-        "labtest_item_report": [], "surgery_record": [],
-    }
-    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
-    forged = _execution({
-        "episode_ref": "consultation_record-1",
-        "execution_state": "linked_specific",
-        "execution_refs": ["daily_course_record-999"],
-        "confidence": "high",
-    })
-    client = _SequentialClient(
-        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
-        forged,
-        forged,
-    )
-
-    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p",
-        visit_id="v", source_schema=None, llm_client=client,
-    )
-
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert {item["metadata"]["reason_code"] for item in result.results} == {
         "model_invalid_output"
     }
-    assert result.llm_call_count == 3
-    assert client.prompts[1] == client.prompts[2]
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
@@ -5306,73 +5273,6 @@ async def test_stage_two_shape_retry_does_not_add_missing_supplement_or_recheck(
     client = _PlannedStageClient(
         _payload(episodes=[first_episode]),
         {},
-        _execution({
-            "recommendation_ref": "consultation_record-1#r1",
-            "execution_record_state": "specific_trace",
-            "trace_refs": ["daily_course_record-1"],
-            "execution_state": "absent",
-            "structured_action_refs": [],
-            "confidence": "medium",
-        }),
-    )
-
-    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"),
-        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
-        llm_client=client, evidence_snapshot=session.snapshot,
-        evidence_materials=session.materials,
-        decision_rule_ids=("LX0609-020", "LX0609-023"),
-    )
-
-    assert result.llm_call_count == 3
-    assert len(client.prompts) == 3
-    assert [item.reason_code for item in result.decisions] == [
-        "semantic_low_confidence",
-        "semantic_low_confidence",
-    ]
-    facts = dict(result.customer_display_facts)["LX0609-020"]
-    assert [item["execution_state"] for item in facts["recommendation_results"]] == [
-        "specific",
-        "unknown",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_stage_two_forged_ref_retry_does_not_add_missing_supplement_or_recheck():
-    session = _window_session(rows_by_source={
-        "consultation_record": tuple(_rows(
-            "申请与两项明确会诊意见；复查血常规；复查肝功能",
-            day=2,
-            action_suffix=False,
-        )),
-        "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
-    })
-    first_episode = _episode(
-        "consultation_record-1",
-        ["consultation_record-1"],
-        recommendations=[
-            {
-                "recommendation_ref": "consultation_record-1#r1",
-                "action_type": "test",
-                "source_quote": "复查血常规",
-            },
-            {
-                "recommendation_ref": "consultation_record-1#r2",
-                "action_type": "test",
-                "source_quote": "复查肝功能",
-            },
-        ],
-    )
-    client = _PlannedStageClient(
-        _payload(episodes=[first_episode]),
-        _execution({
-            "recommendation_ref": "consultation_record-1#r1",
-            "execution_record_state": "specific_trace",
-            "trace_refs": ["daily_course_record-999"],
-            "execution_state": "absent",
-            "structured_action_refs": [],
-            "confidence": "high",
-        }),
         _execution({
             "recommendation_ref": "consultation_record-1#r1",
             "execution_record_state": "specific_trace",
