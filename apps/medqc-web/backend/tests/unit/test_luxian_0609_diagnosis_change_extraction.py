@@ -270,6 +270,136 @@ async def test_accepts_c01_shape_as_missing_reason_with_cross_marker_positive_ba
 
 
 @pytest.mark.asyncio
+async def test_expands_isolated_c01_ct_basis_to_uniquely_related_marker():
+    text = (
+        "胸部CT报告进一步支持感染，胸部CT提示双肺支扩伴感染。"
+        "继续其他治疗，暂不考虑手术。补充诊断：支气管扩张伴感染。"
+    )
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote="胸部CT提示双肺支扩伴感染",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "ready"
+    assert result.assertions[0].reason_state == "missing"
+    assert result.assertions[0].basis_state == "present"
+    assert result.assertions[0].basis_quote == (
+        "胸部CT提示双肺支扩伴感染。继续其他治疗，暂不考虑手术。"
+        "补充诊断：支气管扩张伴感染"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rejects_isolated_basis_without_diagnosis_term_overlap():
+    text = "胸部CT提示肺炎。补充诊断：高血压。"
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote="胸部CT提示肺炎",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_rejects_generic_infection_overlap_with_longer_compound_diagnosis():
+    text = "胸部CT提示肺部感染。补充诊断：支气管扩张伴感染。"
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote="胸部CT提示肺部感染",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_accepts_identical_standalone_two_character_diagnosis():
+    text = "影像提示肺炎。补充诊断：肺炎。"
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote="影像提示肺炎",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "ready"
+    assert result.assertions[0].basis_quote == "影像提示肺炎。补充诊断：肺炎"
+
+
+@pytest.mark.asyncio
+async def test_rejects_isolated_basis_with_multiple_related_following_markers():
+    text = (
+        "胸部CT提示肺部感染。补充诊断：肺部感染。"
+        "稍后补充诊断：重症肺部感染。"
+    )
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote="胸部CT提示肺部感染",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_rejects_isolated_negated_basis_before_marker():
+    text = "胸部CT未提示肺部感染。补充诊断：肺部感染。"
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote="胸部CT未提示肺部感染",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_rejects_nonverbatim_isolated_basis_before_marker():
+    text = "胸部CT提示肺部感染。补充诊断：肺部感染。"
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote="CT明确证实肺部感染",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "conclusion",
     (

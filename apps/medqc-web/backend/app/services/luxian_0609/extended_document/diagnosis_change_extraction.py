@@ -20,7 +20,7 @@ _SOURCE_TYPES = {"daily_course_record", "senior_course_record"}
 _STATES = {"present", "missing", "unknown"}
 _CHANGE_MARKER_PATTERN = re.compile(
     r"(?:修正诊断|补充诊断)\s*(?:为|[:：])\s*"
-    r"[^\s，,。；;：:！？!?][^，,。；;\r\n]*"
+    r"(?P<diagnosis>[^\s，,。；;：:！？!?][^，,。；;\r\n]*)"
 )
 _REASON_CONNECTION_PATTERN = re.compile(
     r"(?:综上(?:所述)?|结合|基于|由于|鉴于|"
@@ -33,6 +33,11 @@ _CLINICAL_BASIS_PATTERN = re.compile(
 _POSITIVE_DIAGNOSTIC_CONCLUSION_PATTERN = re.compile(r"(?:提示|考虑|支持|符合|诊断)")
 _LOCAL_DIAGNOSTIC_NEGATION_PATTERN = re.compile(r"(?:未|不)(?:能|予|作)?\s*$")
 _SENTENCE_BOUNDARY_PATTERN = re.compile(r"[。！？!?；;\r\n]")
+_GENERIC_DIAGNOSTIC_NGRAMS = {
+    "提示", "考虑", "支持", "符合", "诊断", "检查", "报告", "结果",
+    "异常", "进一步", "胸部", "双肺", "治疗", "手术", "补充", "修正",
+    "患者", "疾病", "临床",
+}
 
 
 class DiagnosisChangeLLMClient(Protocol):
@@ -234,6 +239,72 @@ def _basis_quote_is_grounded(text: str, quote: str) -> bool:
     return False
 
 
+def _normalize_diagnosis_fragment(value: str) -> str:
+    normalized = value.replace("支扩", "支气管扩张")
+    return "".join(re.findall(r"[A-Za-z0-9\u4e00-\u9fff]+", normalized)).casefold()
+
+
+def _positive_conclusion_fragments(quote: str) -> tuple[str, ...]:
+    fragments: list[str] = []
+    for signal in _POSITIVE_DIAGNOSTIC_CONCLUSION_PATTERN.finditer(quote):
+        if _LOCAL_DIAGNOSTIC_NEGATION_PATTERN.search(quote[:signal.start()]):
+            continue
+        suffix = quote[signal.end():]
+        boundary = _SENTENCE_BOUNDARY_PATTERN.search(suffix)
+        conclusion = suffix[:boundary.start()] if boundary else suffix
+        normalized = _normalize_diagnosis_fragment(conclusion)
+        if normalized:
+            fragments.append(normalized)
+    return tuple(fragments)
+
+
+def _diagnosis_fragments_related(left: str, right: str) -> bool:
+    if not left or not right:
+        return False
+    if left in right or right in left:
+        return True
+    if len(left) == len(right) == 2:
+        return left == right
+    left_ngrams = {
+        left[index:index + 3]
+        for index in range(len(left) - 2)
+    }
+    right_ngrams = {
+        right[index:index + 3]
+        for index in range(len(right) - 2)
+    }
+    return bool(
+        (left_ngrams & right_ngrams) - _GENERIC_DIAGNOSTIC_NGRAMS
+    )
+
+
+def _expand_isolated_basis_to_related_marker(text: str, quote: str) -> str | None:
+    """将模型给出的阳性语义锚点唯一扩展到对应诊断变更 marker。"""
+
+    if _CLINICAL_BASIS_PATTERN.search(quote) is None:
+        return None
+    conclusion_fragments = _positive_conclusion_fragments(quote)
+    if not conclusion_fragments:
+        return None
+    candidates: list[tuple[int, int]] = []
+    for quote_start in _quote_positions(text, quote):
+        quote_end = quote_start + len(quote)
+        for marker in _CHANGE_MARKER_PATTERN.finditer(text, quote_end):
+            diagnosis_fragment = _normalize_diagnosis_fragment(
+                marker.group("diagnosis")
+            )
+            if any(
+                _diagnosis_fragments_related(fragment, diagnosis_fragment)
+                for fragment in conclusion_fragments
+            ):
+                candidates.append((quote_start, marker.end()))
+    if len(candidates) != 1:
+        return None
+    start, end = candidates[0]
+    expanded = text[start:end]
+    return expanded if _basis_quote_is_grounded(text, expanded) else None
+
+
 def _parse(
     content: str,
     documents: Sequence[DiagnosisChangeDocumentInput],
@@ -292,6 +363,12 @@ def _parse(
                         # 原文中的无关内容过度声明为理由，规范为确定缺失；若存在
                         # 合格候选而模型选错，仍按模型输出无效关闭。
                         state, quote = "missing", ""
+                    elif field_name == "basis" and (
+                        expanded_quote := _expand_isolated_basis_to_related_marker(
+                            document.text, quote
+                        )
+                    ) is not None:
+                        quote = expanded_quote
                     else:
                         raise ValueError("ungrounded assertion relationship")
             elif quote != "":
