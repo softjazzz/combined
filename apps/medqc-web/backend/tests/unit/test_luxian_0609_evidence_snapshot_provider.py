@@ -648,6 +648,48 @@ def test_055_058_session_reads_each_executor_input_source() -> None:
     }
 
 
+def test_055_focused_scopes_freeze_the_same_evaluation_horizon() -> None:
+    """055 单选或聚焦组合都必须获得与既有终点规则相同的冻结终点。"""
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [{"admission_datetime": "2026-07-30 08:00:00"}]
+            if source_key == "inpat_registration"
+            else []
+        )
+        return _rows(source_key, rows)
+
+    def horizon_rows(selected_rule_ids: tuple[str, ...]):
+        session = build_luxian_0609_evidence_read_session(
+            selected_rule_ids=selected_rule_ids,
+            institute_id="I-055",
+            patient_id="P-055",
+            visit_id="V-055",
+            source_schema=None,
+            created_at="2026-08-05T19:00:00",
+            evaluation_as_of_date="2026-08-05",
+            evaluation_horizon_policy="frozen_task_date",
+            row_reader=reader,
+        )
+        return session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
+
+    reference = horizon_rows(("LX0609-052",))
+    focused_six = (
+        "LX0609-054",
+        "LX0609-055",
+        "LX0609-057",
+        "LX0609-058",
+        "LX0609-069",
+        "LX0609-071",
+    )
+
+    assert horizon_rows(("LX0609-055",)) == reference
+    assert horizon_rows(focused_six) == reference
+    assert reference[0]["horizon_date"] == "2026-08-05"
+    assert reference[0]["basis"] == "evaluation_as_of"
+
+
 def test_033_reads_only_surgery_record_and_surgery_consent_sources() -> None:
     """033 只读取手术记录及手术知情同意书，不能被无关术前文书阻断。"""
 
