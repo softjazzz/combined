@@ -114,14 +114,16 @@ async def test_prompt_contains_abstract_missing_and_grounded_present_examples():
     assert '"reason_state":"present"' in prompt
     assert "无法提供通过上述关系校验的连续quote时" in prompt
     assert "不能仍将对应state报告为present" in prompt
+    assert "CT提示X，建议治疗；继续其他治疗。补充诊断：X。" in prompt
+    assert "basis_quote必须连续覆盖该阳性结论到补充诊断marker" in prompt
 
 
 @pytest.mark.asyncio
 async def test_accepts_basis_quote_that_contains_marker_and_clinical_basis_signal():
-    text = "结合影像表现，补充诊断：脑梗死，MRI提示新发梗死灶。"
+    text = "结合影像表现，影像提示脑梗死，补充诊断：脑梗死。"
     client = _Client(_payload(_item(
-        reason_quote="结合影像表现，补充诊断：脑梗死",
-        basis_quote="补充诊断：脑梗死，MRI提示新发梗死灶",
+        reason_quote="结合影像表现，影像提示脑梗死，补充诊断：脑梗死",
+        basis_quote="影像提示脑梗死，补充诊断：脑梗死",
     )))
 
     result = await extract_diagnosis_change_documentation(
@@ -164,7 +166,7 @@ async def test_rejects_c07_marker_preceding_unrelated_condition_and_test_quotes(
 
 
 @pytest.mark.asyncio
-async def test_rejects_reason_quote_with_marker_but_without_attribution_signal():
+async def test_normalizes_ungrounded_reason_to_missing_when_document_has_no_candidate():
     text = "患者病情稳定，修正诊断为继发性癫痫。诊断依据：动态脑电异常。"
     client = _Client(_payload(_item(
         reason_quote="患者病情稳定，修正诊断为继发性癫痫",
@@ -175,8 +177,9 @@ async def test_rejects_reason_quote_with_marker_but_without_attribution_signal()
         (_document(text=text),), client
     )
 
-    assert result.state == "technical_error"
-    assert result.reason_code == "model_invalid_output"
+    assert result.state == "ready"
+    assert result.assertions[0].reason_state == "missing"
+    assert result.assertions[0].reason_quote == ""
 
 
 @pytest.mark.asyncio
@@ -188,6 +191,99 @@ async def test_rejects_isolated_premarker_basis_even_when_reason_is_grounded():
     client = _Client(_payload(_item(
         reason_quote="综上所述，结合神经内科会诊意见，修正诊断为症状性癫痫",
         basis_quote="MRI提示异常",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_normalizes_reason_borrowed_from_previous_treatment_sentence():
+    text = (
+        "胸部CT提示支气管扩张伴感染。"
+        "因腹痛减轻，故今嘱继续对症治疗。"
+        "补充诊断：支气管扩张伴感染。"
+    )
+    client = _Client(_payload(_item(
+        reason_quote=text.removesuffix("。"),
+        basis_quote=text.removesuffix("。"),
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "ready"
+    assert result.assertions[0].reason_state == "missing"
+    assert result.assertions[0].reason_quote == ""
+    assert result.assertions[0].basis_state == "present"
+
+
+@pytest.mark.asyncio
+async def test_wrong_reason_quote_remains_technical_when_document_has_valid_candidate():
+    text = (
+        "患者病情稳定，补充诊断：A。"
+        "结合影像提示的新发现，故补充诊断：B。"
+    )
+    client = _Client(_payload(_item(
+        reason_quote="患者病情稳定，补充诊断：A",
+        basis_state="missing",
+        basis_quote="",
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "technical_error"
+    assert result.reason_code == "model_invalid_output"
+
+
+@pytest.mark.asyncio
+async def test_accepts_c01_shape_as_missing_reason_with_cross_marker_positive_basis():
+    text = (
+        "胸部CT报告进一步支持感染，但胸部CT提示双肺支气管扩张伴感染，"
+        "暂不考虑手术，建议对症治疗；继续其他治疗。"
+        "补充诊断：支气管扩张伴感染。"
+    )
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote=(
+            "胸部CT报告进一步支持感染，但胸部CT提示双肺支气管扩张伴感染，"
+            "暂不考虑手术，建议对症治疗；继续其他治疗。"
+            "补充诊断：支气管扩张伴感染"
+        ),
+    )))
+
+    result = await extract_diagnosis_change_documentation(
+        (_document(text=text),), client
+    )
+
+    assert result.state == "ready"
+    assert result.assertions[0].reason_state == "missing"
+    assert result.assertions[0].basis_state == "present"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "conclusion",
+    (
+        "胸部CT未提示支气管扩张",
+        "胸部CT未见明显异常",
+        "结合胸部CT不考虑支气管扩张",
+    ),
+)
+async def test_rejects_cross_marker_basis_with_negated_diagnostic_conclusion(conclusion):
+    text = f"{conclusion}。补充诊断：支气管扩张伴感染。"
+    client = _Client(_payload(_item(
+        reason_state="missing",
+        reason_quote="",
+        basis_quote=text.removesuffix("。"),
     )))
 
     result = await extract_diagnosis_change_documentation(
