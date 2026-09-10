@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from datetime import datetime, timedelta
+import pytest
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -7,6 +8,122 @@ import app.services.qc_workspace.record_repository as record_repository_module
 from app.services.qc_workspace.record_repository import RecordRepository
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
+
+@pytest.fixture
+def explicit_anchor_database():
+    engine = create_engine("sqlite:///:memory:")
+    for model in (
+        record_repository_module.MedicalRecordFrontpage,
+        record_repository_module.InpatRegistration,
+        record_repository_module.AdmissionRecord,
+        record_repository_module.DischargeRecord,
+    ):
+        model.__table__.create(bind=engine)
+    yield engine
+    engine.dispose()
+
+
+def _collect_explicit_anchor(engine, identity, **date_filters):
+    return RecordRepository(session_factory=lambda: Session(engine)).collect_records(
+        scope="all", department=None, doctor=None, date_field="admission",
+        start_date=date_filters.get("start_date"), end_date=date_filters.get("end_date"),
+        keyword=None, record_refs=[identity],
+    )
+
+
+@pytest.mark.parametrize(
+    "registration_time,admission_time,expected",
+    [
+        (None, datetime(2026, 7, 1, 9), "2026-07-01 09:00:00"),
+        (datetime(2026, 7, 2, 10), datetime(2026, 7, 1, 9), "2026-07-01 09:00:00"),
+        (datetime(2026, 7, 2, 10), None, "2026-07-02 10:00:00"),
+        (None, None, ""),
+    ],
+)
+def test_explicit_anchor_uses_admission_business_time_without_changing_display_source(
+    explicit_anchor_database, registration_time, admission_time, expected,
+):
+    identity = dict(institute_id="I", patient_id="P", visit_id="V")
+    with Session(explicit_anchor_database) as session:
+        session.add(record_repository_module.InpatRegistration(
+            **identity, name="登记展示姓名", admission_datetime=registration_time,
+            update_time=datetime(2026, 9, 10, 12),
+        ))
+        session.add(record_repository_module.AdmissionRecord(
+            **identity, document_id="A", name="入院文书姓名",
+            admission_datetime=admission_time, update_time=datetime(2026, 9, 10, 13),
+        ))
+        session.commit()
+    rows = _collect_explicit_anchor(explicit_anchor_database, identity)
+    assert len(rows) == 1
+    assert rows[0]["admission_datetime"] == expected
+    assert rows[0]["patient_name"] == "登记展示姓名"
+
+
+@pytest.mark.parametrize("source_kind", ["registration", "admission"])
+def test_explicit_anchor_supports_single_business_time_source(explicit_anchor_database, source_kind):
+    identity = dict(institute_id="I", patient_id="P", visit_id="V")
+    values = dict(**identity, admission_datetime=datetime(2026, 7, 1, 9))
+    if source_kind == "registration":
+        source = record_repository_module.InpatRegistration(**values)
+    else:
+        source = record_repository_module.AdmissionRecord(**values, document_id="A")
+    with Session(explicit_anchor_database) as session:
+        session.add(source)
+        session.commit()
+    rows = _collect_explicit_anchor(explicit_anchor_database, identity)
+    assert len(rows) == 1
+    assert rows[0]["admission_datetime"] == "2026-07-01 09:00:00"
+
+
+def test_explicit_anchor_fallback_does_not_cross_institute_or_patient(explicit_anchor_database):
+    identity = dict(institute_id="I", patient_id="P", visit_id="V")
+    with Session(explicit_anchor_database) as session:
+        session.add(record_repository_module.InpatRegistration(**identity))
+        for institute, patient in (("OTHER", "P"), ("I", "OTHER")):
+            session.add(record_repository_module.AdmissionRecord(
+                institute_id=institute, patient_id=patient, visit_id="V", document_id="A",
+                admission_datetime=datetime(2026, 7, 1, 9),
+            ))
+        session.commit()
+    rows = _collect_explicit_anchor(explicit_anchor_database, identity)
+    assert len(rows) == 1
+    assert rows[0]["admission_datetime"] == ""
+
+
+@pytest.mark.parametrize("filter_date,expected_count", [("2026-07-01", 1), ("2026-07-02", 0)])
+def test_explicit_anchor_date_filter_uses_preferred_admission_time(
+    explicit_anchor_database, filter_date, expected_count,
+):
+    identity = dict(institute_id="I", patient_id="P", visit_id="V")
+    with Session(explicit_anchor_database) as session:
+        session.add(record_repository_module.InpatRegistration(
+            **identity, admission_datetime=datetime(2026, 7, 2, 10),
+        ))
+        session.add(record_repository_module.AdmissionRecord(
+            **identity, document_id="A", admission_datetime=datetime(2026, 7, 1, 9),
+        ))
+        session.commit()
+    rows = _collect_explicit_anchor(
+        explicit_anchor_database, identity, start_date=filter_date, end_date=filter_date,
+    )
+    assert len(rows) == expected_count
+
+
+def test_explicit_anchor_keeps_frontpage_admission_time_priority(explicit_anchor_database):
+    identity = dict(institute_id="I", patient_id="P", visit_id="V")
+    with Session(explicit_anchor_database) as session:
+        session.add(record_repository_module.MedicalRecordFrontpage(
+            **identity, admission_datetime=datetime(2026, 7, 3, 11),
+        ))
+        session.add(record_repository_module.AdmissionRecord(
+            **identity, document_id="A", admission_datetime=datetime(2026, 7, 1, 9),
+        ))
+        session.commit()
+    rows = _collect_explicit_anchor(explicit_anchor_database, identity)
+    assert len(rows) == 1
+    assert rows[0]["admission_datetime"] == "2026-07-03 11:00:00"
 
 
 def test_serialize_record_row_should_include_programmatic_execution_keys():

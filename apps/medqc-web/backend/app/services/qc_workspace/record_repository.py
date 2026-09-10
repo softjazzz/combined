@@ -328,6 +328,12 @@ class RecordRepository:
             CaseRef.from_mapping(row.__dict__): row for row in discharge_rows
         }
         anchor_by_ref: Dict[CaseRef, Any] = {}
+        registration_by_ref: Dict[CaseRef, Any] = {}
+        admission_by_ref: Dict[CaseRef, Any] = {}
+        for row in registration_rows:
+            registration_by_ref.setdefault(CaseRef.from_mapping(row.__dict__), row)
+        for row in admission_rows:
+            admission_by_ref.setdefault(CaseRef.from_mapping(row.__dict__), row)
         for row in [*registration_rows, *admission_rows]:
             ref = CaseRef.from_mapping(row.__dict__)
             anchor_by_ref.setdefault(ref, row)
@@ -378,7 +384,10 @@ class RecordRepository:
                     if value
                 ):
                     continue
-            admission_datetime = getattr(source, "admission_datetime", None)
+            # 展示来源与入院业务时间分别取值，登记空值不能遮蔽入院文书。
+            admission_datetime = getattr(
+                admission_by_ref.get(ref), "admission_datetime", None
+            ) or getattr(registration_by_ref.get(ref), "admission_datetime", None)
             if not _record_dates_match_range(
                 date_field=date_field_value,
                 admission_datetime=admission_datetime,
