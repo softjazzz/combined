@@ -18,11 +18,9 @@ class DischargeDocumentationOutcome:
 
 
 def _discharge_record_completion_time(row: Mapping[str, Any]) -> datetime | None:
-    """读取出院记录完成时间；泸县源表以 update_time 保存提交完成时间。"""
+    """读取出院记录正式记录/提交时间。"""
 
     value = authoritative_document_time_value(row)
-    if value is None:
-        value = row.get("update_time")
     return _parse_datetime(value)
 
 

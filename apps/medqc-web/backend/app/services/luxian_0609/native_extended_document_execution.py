@@ -2771,6 +2771,25 @@ async def execute_luxian_0609_native_extended_document_rules(
                 if death_state == "present" or (death_state == "unknown" and death_error)
                 else ("inpat_registration", "discharge_record")
             )
+            discharge_document_refs: tuple[str, ...] = ()
+            discharge_rows_were_consumed = (
+                death_state != "present"
+                and not (death_state == "unknown" and death_error)
+                and not registration_error
+                and not discharge_error
+                and not registration_time_conflicts
+                and discharge_time is not None
+            )
+            if discharge_rows_were_consumed:
+                try:
+                    discharge_document_refs = tuple(
+                        reference
+                        for reference, _row in evidence_materials.document_rows(
+                            "discharge_record", snapshot=evidence_snapshot
+                        )
+                    )
+                except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+                    discharge_document_refs = ()
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -2778,6 +2797,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     source_keys=source_keys,
                     final_state=outcome.final_state,
                     reason_code=outcome.reason_code,
+                    document_refs=discharge_document_refs,
                 )
             )
             continue
