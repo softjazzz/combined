@@ -338,11 +338,11 @@ C27/LX0609-020,C27,LX0609-020,uncertain,待复核,R07,未启动,,,,主协调代�
 C27/LX0609-023,C27,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
 C30/LX0609-020,C30,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
 C30/LX0609-023,C30,LX0609-023,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C05/LX0609-017,C05,LX0609-017,non_compliant,待复核,R08,未启动,,,,主协调代理,未关闭
-C08/LX0609-017,C08,LX0609-017,non_compliant,待复核,R08,未启动,,,,主协调代理,未关闭
-C11/LX0609-017,C11,LX0609-017,non_compliant,待复核,R08,未启动,,,,主协调代理,未关闭
-C19/LX0609-017,C19,LX0609-017,non_compliant,待复核,R08,未启动,,,,主协调代理,未关闭
-C28/LX0609-017,C28,LX0609-017,non_compliant,待复核,R08,未启动,,,,主协调代理,未关闭
+C05/LX0609-017,C05,LX0609-017,non_compliant,待复核,R08,技术修复和模型对照完成，业务口径待确认,独立人工复核倾向compliant/requirement_within_threshold；第二对上级查房相似度0.7569，同时存在诊断补充及手术计划从明日推进到今日。Flash和35B均判实质复制，需明确不同层级查房必要复述边界。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：补齐复制判定合同并在同一1200字预算保留文书头尾；30例回归仍判non_compliant/threshold_exceeded，但命中对由0.8203改为0.7569；结论存在业务口径分歧，暂不关闭。,主协调代理（待业务口径确认）,未关闭
+C08/LX0609-017,C08,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,non_compliant/threshold_exceeded；两份独立上级查房相隔6分13秒、相似度0.9981，患者特异性病史、检查、诊断分析和计划几乎全部复制，仅标点和签名不同。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：Flash与35B修复后均保持不符合；30例Flash回归保存结果与预期一致，0重试，无目标外状态或原因变化。,主协调代理（独立复核已核对）,聚焦验收通过
+C11/LX0609-017,C11,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,compliant/requirement_within_threshold；疼痛、肿胀、体征和检查由阳性到弱阳性再到阴性，并形成复查及出院的连续处置变化，属于合理纵向重复。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：Flash与35B均由误报纠正为符合；30例Flash回归从non_compliant/threshold_exceeded改为compliant/requirement_within_threshold。,主协调代理（独立复核已核对）,聚焦验收通过
+C19/LX0609-017,C19,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,non_compliant/threshold_exceeded；不同层级医师次日记录相似度0.9869，病史、查体、检查、诊断依据和计划整体复用，只有局部诊断名称变化。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：Flash与35B修复后均保持不符合；30例Flash回归保存结果与预期一致，0重试，无目标外状态或原因变化。,主协调代理（独立复核已核对）,聚焦验收通过
+C28/LX0609-017,C28,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,compliant/requirement_within_threshold；一份实际为术前讨论、一份为主治查房，共同复述稳定术前事实但各自保留参会意见、风险处理和独立计划，属于跨角色必要复述。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：传入文书标题并明确跨角色判据后，Flash与35B均纠正为符合；30例Flash回归从non_compliant/threshold_exceeded改为compliant/requirement_within_threshold。,主协调代理（独立复核已核对）,聚焦验收通过
 C01/LX0609-018,C01,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
 C02/LX0609-018,C02,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
 C03/LX0609-018,C03,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
