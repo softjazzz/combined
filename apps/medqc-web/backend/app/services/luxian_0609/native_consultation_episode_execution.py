@@ -3653,8 +3653,21 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             )
                         second_prompt = ""
                         allowed_refs = {}
-                    if not any(allowed_refs.values()):
+                    candidate_by_ref = {
+                        item.ref: item for item in projection.candidates
+                    }
+                    allowed_context_candidate_present = any(
+                        ref in candidate_by_ref
+                        and candidate_by_ref[ref].source_key
+                        in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                        for refs in allowed_refs.values()
+                        for ref in refs
+                    )
+                    if not allowed_context_candidate_present:
                         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
+                            # projection 里的会诊前病程会在逐建议时序过滤后失去
+                            # 资格。此时即使仍有结构化动作，也没有 4.20.4 所需
+                            # 的会诊后病程记录，确定性收敛为 no_trace。
                             execution_assessments = tuple(
                                 _ExecutionAssessment(
                                     item.recommendation.recommendation_ref,

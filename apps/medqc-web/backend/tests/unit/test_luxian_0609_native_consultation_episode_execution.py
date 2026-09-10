@@ -6811,10 +6811,14 @@ async def test_structured_order_is_auxiliary_and_cannot_replace_course_execution
 
 
 @pytest.mark.asyncio
-async def test_high_confidence_structured_exam_with_unrelated_course_is_no_trace(
-    monkeypatch,
+@pytest.mark.parametrize(
+    ("course_hour_start", "expected_calls"),
+    ((0, 1), (2, 2)),
+)
+async def test_structured_exam_with_course_respects_recommendation_time_scope(
+    monkeypatch, course_hour_start, expected_calls,
 ):
-    """C29形态：结构化检查已关联，但无关查房不能充当会诊执行记录。"""
+    """C29形态：只有会诊后的查房才允许进入执行记录语义判断。"""
 
     source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
     source_rows["consultation_record"] = _rows(
@@ -6823,7 +6827,7 @@ async def test_high_confidence_structured_exam_with_unrelated_course_is_no_trace
     )
     source_rows["senior_course_record"] = _rows(
         "患者一般情况平稳，无会诊执行内容。",
-        hour_start=2,
+        hour_start=course_hour_start,
         action_suffix=False,
     )
     source_rows["exam_item_report"] = [{
@@ -6891,14 +6895,16 @@ async def test_high_confidence_structured_exam_with_unrelated_course_is_no_trace
         "non_compliant",
         "not_applicable",
     ]
-    assert result.llm_call_count == 2
-    evidence = dict(result.customer_display_facts)["LX0609-020"][
-        "recommendation_evidence"
-    ][1]
-    assert evidence["execution_state"] == "unknown"
-    assert [
-        item["source_type"] for item in evidence["execution_evidence"]
-    ] == ["exam_item_report"]
+    assert result.llm_call_count == expected_calls
+    assert len(client.prompts) == expected_calls
+    if expected_calls == 2:
+        evidence = dict(result.customer_display_facts)["LX0609-020"][
+            "recommendation_evidence"
+        ][1]
+        assert evidence["execution_state"] == "unknown"
+        assert [
+            item["source_type"] for item in evidence["execution_evidence"]
+        ] == ["exam_item_report"]
 
 
 @pytest.mark.asyncio
