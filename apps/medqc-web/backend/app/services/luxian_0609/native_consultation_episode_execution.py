@@ -2381,6 +2381,14 @@ def _execution_prompt(
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
     documents_by_ref: dict[str, dict[str, object]] = {}
+    # 候选的内部 ref 同时承载来源类型和序号，大批检验明细下会在
+    # candidate_documents 与每条建议的 allowed 列表中重复占用大量预算。
+    # Prompt 仅使用同一候选顺序派生的短别名；返回给 parser/证据链的白名单
+    # 仍保持原始内部 ref，候选集合和时序过滤均不改变。
+    alias_by_ref = {
+        candidate.ref: f"c{index}"
+        for index, candidate in enumerate(candidates, start=1)
+    }
     trace_candidates = tuple(
         candidate
         for candidate in candidates
@@ -2419,7 +2427,7 @@ def _execution_prompt(
             if include:
                 related_refs.append(candidate.ref)
                 documents_by_ref.setdefault(candidate.ref, {
-                    "ref": candidate.ref,
+                    "ref": alias_by_ref[candidate.ref],
                     "source": candidate.source_key,
                     "date": candidate.observed_time.value.isoformat(),
                     "text": candidate.text,
@@ -2433,12 +2441,14 @@ def _execution_prompt(
             "normalized_action": item.recommendation.normalized_action,
             "source_quote": item.recommendation.source_quote,
             "opinion_date": item.opinion_time.value.isoformat(),
-            "allowed_candidate_refs": related_refs,
+            "allowed_candidate_refs": [
+                alias_by_ref[reference] for reference in related_refs
+            ],
         })
     payload = json.dumps({
         "recommendations": entries,
         "candidate_documents": list(documents_by_ref.values()),
-    }, ensure_ascii=False)
+    }, ensure_ascii=False, separators=(",", ":"))
     if len(payload) > _MAX_EXECUTION_PROMPT_CHARS:
         raise _SourceGap()
     if trace_candidates and not any(
@@ -2572,6 +2582,10 @@ def _parse_executions(
     raw = payload.get("executions")
     expected_refs = {item.recommendation.recommendation_ref for item in completed}
     candidate_by_ref = {item.ref: item for item in candidates}
+    ref_by_alias = {
+        f"c{index}": candidate.ref
+        for index, candidate in enumerate(candidates, start=1)
+    }
     prompt_candidate_refs = {
         ref for refs in allowed_refs.values() for ref in refs
     }
@@ -2647,6 +2661,14 @@ def _parse_executions(
         refs = refs if isinstance(refs, list) else []
         trace_refs = raw_trace_refs if isinstance(raw_trace_refs, list) else []
         structured_refs = raw_structured_refs if isinstance(raw_structured_refs, list) else []
+        # Prompt 中返回的是稳定短别名；在进入原有候选身份、逐建议范围、
+        # 来源类别和状态交叉校验前还原。原始内部 ref 仍兼容，未知别名保持
+        # 原值并由既有 REFERENCE_NOT_CANDIDATE 合同拒绝。
+        refs = [ref_by_alias.get(ref, ref) for ref in refs]
+        trace_refs = [ref_by_alias.get(ref, ref) for ref in trace_refs]
+        structured_refs = [
+            ref_by_alias.get(ref, ref) for ref in structured_refs
+        ]
         if any(ref not in candidate_by_ref for ref in refs):
             raise _SemanticInvalid(_SemanticInvalidKind.REFERENCE_NOT_CANDIDATE)
         if raw_trace_refs is None and raw_structured_refs is None:

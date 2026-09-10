@@ -1912,8 +1912,13 @@ def test_course_only_execution_prompt_and_parser_use_compact_trace_contract():
     assert "execution_record_state,trace_refs,confidence" in prompt
     prompt_payload = json.loads(prompt.rsplit("输入：", 1)[1])
     assert prompt_payload["recommendations"][0]["allowed_candidate_refs"] == [
-        "daily_course_record-1"
+        "c1"
     ]
+    assert prompt_payload["candidate_documents"][0]["ref"] == "c1"
+    assert prompt_payload["candidate_documents"][0]["source"] == "daily_course_record"
+    assert allowed_refs["consultation_record-1#r1"] == frozenset(
+        {"daily_course_record-1"}
+    )
 
     parsed = episode._parse_executions(
         {
@@ -2117,10 +2122,15 @@ def test_many_document_events_share_bounded_stage_two_candidates_without_repeate
         item["allowed_candidate_refs"]
         for item in prompt_payload["recommendations"]
     )
-    assert (
-        48000
-        < len(prompt.rsplit("输入：", 1)[1])
-        <= episode._MAX_EXECUTION_PROMPT_CHARS
+    assert len(prompt.rsplit("输入：", 1)[1]) < 48000
+    assert [
+        item["ref"] for item in prompt_payload["candidate_documents"]
+    ] == [f"c{index}" for index in range(1, 25)]
+    assert all(
+        refs == frozenset(
+            f"senior_course_record-{index}" for index in range(1, 25)
+        )
+        for refs in allowed_refs.values()
     )
 
 
@@ -2192,17 +2202,23 @@ def test_execution_prompt_exposes_exact_allowed_refs_per_recommendation():
     }
 
     assert entries["consultation_record-1#r1"]["allowed_candidate_refs"] == [
-        "daily_course_record-1",
-        "exam_master-1",
+        "c1",
+        "c2",
     ]
     assert entries["consultation_record-1#r2"]["allowed_candidate_refs"] == [
-        "inpat_drug_order-1"
+        "c3"
     ]
     assert entries["consultation_record-1#r3"]["allowed_candidate_refs"] == []
-    assert {
-        recommendation_ref: frozenset(entry["allowed_candidate_refs"])
-        for recommendation_ref, entry in entries.items()
-    } == allowed_refs
+    assert allowed_refs == {
+        "consultation_record-1#r1": frozenset(
+            {"daily_course_record-1", "exam_master-1"}
+        ),
+        "consultation_record-1#r2": frozenset({"inpat_drug_order-1"}),
+        "consultation_record-1#r3": frozenset(),
+    }
+    assert [item["ref"] for item in payload["candidate_documents"]] == [
+        "c1", "c2", "c3"
+    ]
     assert "只能逐字复制本条recommendation的allowed_candidate_refs" in prompt
     assert "不得按source与序号合成ref" in prompt
     assert (
@@ -2248,10 +2264,153 @@ def test_course_only_prompt_keeps_empty_allowed_refs_explicit():
     assert [
         item["allowed_candidate_refs"]
         for item in payload["recommendations"]
-    ] == [["daily_course_record-1"], []]
+    ] == [["c1"], []]
     assert allowed_refs["consultation_record-1#r2"] == frozenset()
     assert "allowed_candidate_refs为空时必须返回execution_record_state=unknown、trace_refs=[]" in prompt
     assert "structured_action_refs" not in prompt
+
+
+def test_execution_prompt_short_aliases_keep_c04_sized_candidate_scope():
+    action_types = (
+        "test", "other", "other", "other", "monitoring", "medication", "test"
+    )
+    completed = tuple(
+        episode._CompletedRecommendation(
+            f"consultation_record-{index}",
+            episode._Recommendation(
+                f"consultation_record-{index}#r1",
+                action_type,
+                "安全建议",
+                "安全建议",
+                f"consultation_record-{index}",
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, index), True),
+        )
+        for index, action_type in enumerate(action_types, start=1)
+    )
+    source_counts = (
+        ("daily_course_record", 3),
+        ("senior_course_record", 9),
+        ("inpat_drug_order", 24),
+        ("inpat_nondrug_order", 24),
+        ("exam_item_report", 9),
+        ("labtest_master", 33),
+        ("labtest_item_report", 353),
+        ("surgery_record", 1),
+    )
+    candidates = tuple(
+        episode._CandidateDocument(
+            f"{source_key}-{index}",
+            source_key,
+            episode._ObservedTime(datetime(2026, 7, 21, 8), True),
+            f"安全候选{index}",
+        )
+        for source_key, count in source_counts
+        for index in range(1, count + 1)
+    )
+
+    prompt, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+    payload = json.loads(prompt.rsplit("输入：", 1)[1])
+
+    assert len(candidates) == 456
+    assert len(prompt) <= episode._MAX_EXECUTION_PROMPT_CHARS
+    assert len(payload["candidate_documents"]) == 456
+    assert {item["ref"] for item in payload["candidate_documents"]} == {
+        f"c{index}" for index in range(1, 457)
+    }
+    candidate_by_alias = {
+        f"c{index}": candidate
+        for index, candidate in enumerate(candidates, start=1)
+    }
+    assert all(
+        item["source"] == candidate_by_alias[item["ref"]].source_key
+        and item["text"] == candidate_by_alias[item["ref"]].text
+        for item in payload["candidate_documents"]
+    )
+    other_allowed = allowed_refs["consultation_record-2#r1"]
+    assert len(other_allowed) == 456
+    assert {
+        ref for ref in other_allowed
+        if ref.startswith(("daily_course_record-", "senior_course_record-"))
+    } == {
+        candidate.ref
+        for candidate in candidates
+        if candidate.source_key in episode._COURSE_EXECUTION_SOURCE_KEYS
+    }
+
+
+def test_parse_executions_translates_short_aliases_before_safety_checks():
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r1",
+                "test",
+                "复查胸部CT",
+                "复查胸部CT",
+                "consultation_record-1",
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 8), True),
+        ),
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "daily_course_record-1",
+            "daily_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+            "已按会诊意见完成胸部CT",
+        ),
+        episode._CandidateDocument(
+            "exam_master-1",
+            "exam_master",
+            episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+            "胸部CT",
+        ),
+    )
+    _, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+
+    parsed = episode._parse_executions(
+        {
+            "executions": [{
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["c1"],
+                "execution_state": "linked_specific",
+                "structured_action_refs": ["c2"],
+                "confidence": "high",
+            }]
+        },
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=candidates,
+    )
+
+    assert parsed[0].trace_refs == ("daily_course_record-1",)
+    assert parsed[0].execution_refs == ("exam_master-1",)
+
+    with pytest.raises(episode._SemanticInvalid) as error:
+        episode._parse_executions(
+            {
+                "executions": [{
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "execution_record_state": "specific_trace",
+                    "trace_refs": ["c999"],
+                    "execution_state": "absent",
+                    "structured_action_refs": [],
+                    "confidence": "high",
+                }]
+            },
+            completed=completed,
+            allowed_refs=allowed_refs,
+            candidates=candidates,
+        )
+    assert error.value.kind is episode._SemanticInvalidKind.REFERENCE_NOT_CANDIDATE
 
 
 @pytest.mark.asyncio
@@ -2943,7 +3102,14 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
     assert [item["status"] for item in result.results] == ["compliant", "compliant", "compliant", "compliant"]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
-    assert "daily_course_record-1" in client.prompts[1]
+    execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
+    assert len(execution_payload["candidate_documents"]) == 1
+    assert execution_payload["candidate_documents"][0]["ref"] == "c1"
+    assert (
+        execution_payload["candidate_documents"][0]["source"]
+        == "daily_course_record"
+    )
+    assert "已按意见处理" in execution_payload["candidate_documents"][0]["text"]
     assert "申请与意见一" not in repr(result)
 
 
@@ -3704,9 +3870,10 @@ async def test_020_023_include_each_authorized_execution_evidence_category_once(
             "execution_refs" not in item
             for item in facts["recommendation_evidence"]
         )
-    assert "exam_master-1" in client.prompts[1]
-    assert "labtest_master-1" in client.prompts[1]
-    assert "surgery_record-1" in client.prompts[1]
+    execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
+    assert {
+        item["source"] for item in execution_payload["candidate_documents"]
+    } >= {"exam_master", "labtest_master", "surgery_record"}
 
 
 def test_020_recommendation_evidence_keeps_each_recommendation_refs():
@@ -3966,7 +4133,13 @@ async def test_020_023_keep_action_matched_exam_lab_and_surgery_evidence(
 
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
-    assert all(ref in client.prompts[1] for ref in structured_refs)
+    execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
+    expected_sources = {
+        ref.rsplit("-", 1)[0] for ref in structured_refs
+    }
+    assert {
+        item["source"] for item in execution_payload["candidate_documents"]
+    } >= expected_sources
 
 
 @pytest.mark.asyncio
@@ -4030,7 +4203,11 @@ async def test_020_uses_actual_exam_time_not_preconsultation_request_time(monkey
 
     assert [item["status"] for item in result.results] == ["compliant"]
     assert result.llm_call_count == 2
-    assert "exam_master-1" in client.prompts[1]
+    execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
+    assert any(
+        item["source"] == "exam_master"
+        for item in execution_payload["candidate_documents"]
+    )
 
 
 @pytest.mark.asyncio
@@ -6300,7 +6477,12 @@ async def test_many_or_long_course_candidates_remain_available_to_stage_two(
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
-    assert linked_ref in client.prompts[1]
+    execution_payload = json.loads(client.prompts[1].rsplit("输入：", 1)[1])
+    assert any(
+        item["source"] == "daily_course_record"
+        and linked_quote in item["text"]
+        for item in execution_payload["candidate_documents"]
+    )
 
 
 @pytest.mark.asyncio
