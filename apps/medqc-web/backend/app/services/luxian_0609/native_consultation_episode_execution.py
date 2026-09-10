@@ -157,6 +157,13 @@ _EXPLICIT_REQUEST_CLEAR_PATTERN = re.compile(
 _EXPLICIT_REQUEST_VAGUE_PATTERN = re.compile(
     r"^(?:会诊申请单；)?(?:请|申请)?相关科室会诊(?:协助)?(?:诊治|处理)[。；]?$"
 )
+# 少数 consultation_record 只保存专科意见正文，且用科室意见标题开篇。
+# 这类标题是确定性的文书角色证据；其后的临床内容不能反向充当申请内容。
+_OPINION_ONLY_HEADING_PATTERN = re.compile(
+    r"^[\s\ufeff]*(?:会诊记录(?:单)?\s*[；;])?\s*"
+    r"[A-Za-z0-9\u4e00-\u9fff·（）()]{1,32}科"
+    r"会诊(?:医师)?意见\s*[:：]"
+)
 _EXPLICIT_OPINION_VAGUE_PATTERN = re.compile(
     r"(?:必要时|酌情|视情况).{0,24}(?:完善|行|给予).{0,20}(?:检查|药物治疗|对症治疗)"
 )
@@ -245,6 +252,12 @@ _SAFE_EXCEPTION_ORIGIN_PART = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 class ConsultationEpisodeLLMClient(Protocol):
     async def generate(self, prompt: str) -> dict[str, Any]: ...
+
+
+def _is_explicit_opinion_only_document(document: Mapping[str, str]) -> bool:
+    """识别以明确科室会诊意见标题开篇、没有前置申请内容的文书。"""
+
+    return bool(_OPINION_ONLY_HEADING_PATTERN.match(_clean(document.get("text"))))
 
 
 def _is_retryable_execution_transport_failure(error: Exception) -> bool:
@@ -1522,6 +1535,8 @@ def _parse_compact_document_facts(
             )
         if recommendations and (opinion != "clear" or confidence != "high"):
             raise _SemanticInvalid()
+        if _is_explicit_opinion_only_document(documents_by_ref[ref]):
+            application = "absent"
         if application in {"vague", "missing", "unknown"} and _has_specific_application_purpose(
             application_refs=(ref,),
             documents_by_ref=documents_by_ref,
@@ -1757,6 +1772,25 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             ))
         if raw_recommendations and (opinion != "clear" or confidence != "high"):
             raise _SemanticInvalid()
+        original_application_refs = tuple(application_refs)
+        application_refs = [
+            ref
+            for ref in application_refs
+            if not _is_explicit_opinion_only_document(documents_by_ref[ref])
+        ]
+        filtered_all_application_refs = bool(
+            original_application_refs and not application_refs
+        )
+        all_members_are_opinion_only = bool(
+            not original_application_refs
+            and member_refs
+            and all(
+                _is_explicit_opinion_only_document(documents_by_ref[ref])
+                for ref in member_refs
+            )
+        )
+        if filtered_all_application_refs or all_members_are_opinion_only:
+            application = "absent"
         if application in {"vague", "missing", "unknown"} and _has_specific_application_purpose(
             application_refs=application_refs,
             documents_by_ref=documents_by_ref,

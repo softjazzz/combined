@@ -2212,6 +2212,170 @@ async def test_opinion_only_document_is_application_absent_and_021_not_applicabl
 
 
 @pytest.mark.asyncio
+async def test_c29_opinion_headings_override_model_application_role(monkeypatch):
+    """明确的科室意见标题不能因正文含临床内容而被模型借作申请。"""
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows(
+            "疼痛科会诊意见：建议调整镇痛方案",
+            "呼吸与危重症医学科会诊医师意见：建议复查胸部CT",
+        ),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1", "consultation_record-2"],
+        application_refs=["consultation_record-2"],
+        opinion_refs=["consultation_record-1", "consultation_record-2"],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "not_applicable",
+        "compliant",
+    ]
+
+
+@pytest.mark.parametrize("contract", ("compact", "full"))
+def test_opinion_heading_filters_application_refs_but_preserves_opinion_refs(contract):
+    refs = ("consultation_record-1", "consultation_record-2")
+    documents = tuple(
+        {
+            "ref": ref,
+            "time": f"2026-07-20 0{index}:00:00",
+            "text": text,
+            "event_identity_mode": "document" if contract == "compact" else "semantic",
+            "event_group_ref": f"consultation-event-{index}",
+        }
+        for index, (ref, text) in enumerate(zip(
+            refs,
+            (
+                "疼痛科会诊意见：建议调整镇痛方案。",
+                "呼吸与危重症医学科会诊医师意见：建议复查胸部CT。",
+            ),
+            strict=True,
+        ), 1)
+    )
+    if contract == "compact":
+        payload = _document_payload(*(
+            _document_fact(ref)
+            for ref in refs
+        ))
+    else:
+        payload = _payload(episodes=[
+            _episode(ref, [ref], recommendations=[{
+                "action_type": "other",
+                "source_quote": "建议",
+                "normalized_action": "专科建议",
+                "opinion_ref": ref,
+            }])
+            for ref in refs
+        ])
+
+    parsed = episode._parse(payload, documents)
+
+    assert [item.application_state for item in parsed] == ["absent", "absent"]
+    assert [item.application_refs for item in parsed] == [(), ()]
+    assert [item.opinion_refs for item in parsed] == [(refs[0],), (refs[1],)]
+    assert all(item.recommendations for item in parsed)
+
+
+@pytest.mark.parametrize("contract", ("compact", "full"))
+def test_application_before_opinion_heading_preserves_clear_application(contract):
+    ref = "consultation_record-1"
+    documents = ({
+        "ref": ref,
+        "time": "2026-07-20 01:00:00",
+        "text": (
+            "会诊目的：因顽固性疼痛，请疼痛科评估镇痛方案。"
+            "疼痛科会诊意见：建议调整镇痛方案。"
+        ),
+        "event_identity_mode": "document" if contract == "compact" else "semantic",
+        "event_group_ref": "consultation-event-1",
+    },)
+    payload = (
+        _document_payload(_document_fact(ref))
+        if contract == "compact"
+        else _payload(episodes=[_episode(ref, [ref], recommendations=[{
+            "action_type": "other",
+            "source_quote": "建议调整镇痛方案",
+            "normalized_action": "调整镇痛方案",
+            "opinion_ref": ref,
+        }])])
+    )
+
+    parsed = episode._parse(payload, documents)
+
+    assert parsed[0].application_state == "clear"
+    assert parsed[0].application_refs == (ref,)
+    assert parsed[0].opinion_refs == (ref,)
+
+
+@pytest.mark.parametrize("contract", ("compact", "full"))
+def test_unlabelled_document_keeps_model_application_role(contract):
+    ref = "consultation_record-1"
+    documents = ({
+        "ref": ref,
+        "time": "2026-07-20 01:00:00",
+        "text": "患者疼痛明显，建议调整镇痛方案。",
+        "event_identity_mode": "document" if contract == "compact" else "semantic",
+        "event_group_ref": "consultation-event-1",
+    },)
+    payload = (
+        _document_payload(_document_fact(ref))
+        if contract == "compact"
+        else _payload(episodes=[_episode(ref, [ref], recommendations=[{
+            "action_type": "other",
+            "source_quote": "建议调整镇痛方案",
+            "normalized_action": "调整镇痛方案",
+            "opinion_ref": ref,
+        }])])
+    )
+
+    parsed = episode._parse(payload, documents)
+
+    assert parsed[0].application_state == "clear"
+    assert parsed[0].application_refs == (ref,)
+
+
+def test_unlabelled_unknown_application_without_refs_stays_unknown():
+    ref = "consultation_record-1"
+    documents = ({
+        "ref": ref,
+        "time": "2026-07-20 01:00:00",
+        "text": "患者情况复杂，建议专科进一步评估。",
+        "event_identity_mode": "semantic",
+        "event_group_ref": "consultation-event-1",
+    },)
+    payload = _payload(episodes=[_episode(
+        ref,
+        [ref],
+        application="unknown",
+        application_refs=[],
+        recommendations=[{
+            "action_type": "other",
+            "source_quote": "建议专科进一步评估",
+            "normalized_action": "专科进一步评估",
+            "opinion_ref": ref,
+        }],
+    )])
+
+    parsed = episode._parse(payload, documents)
+
+    assert parsed[0].application_state == "unknown"
+    assert parsed[0].application_refs == ()
+
+
+@pytest.mark.asyncio
 async def test_opinion_only_episode_with_absent_application_cannot_carry_an_application_ref(monkeypatch):
     """意见-only 合同要求 absent 申请状态不得携带意见文书引用。"""
 
