@@ -472,6 +472,302 @@ def _execution(*items):
     return {"executions": normalized}
 
 
+def _coverage_completed_recommendation(
+    recommendation_ref: str = "consultation_record-1#r1",
+    *,
+    source_quote: str = "建议复查血常规并复查肝功能",
+):
+    return episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(
+            recommendation_ref,
+            "test",
+            source_quote,
+            source_quote,
+            "consultation_record-1",
+        ),
+        episode._ObservedTime(datetime(2026, 7, 20, 8), True),
+    )
+
+
+def _coverage_candidate(ref: str = "daily_course_record-1"):
+    return episode._CandidateDocument(
+        ref,
+        "daily_course_record",
+        episode._ObservedTime(datetime(2026, 7, 21, 8), True),
+        "病程记录已复查血常规",
+        "course-document-1",
+    )
+
+
+def _parse_coverage_execution(item):
+    completed = (_coverage_completed_recommendation(),)
+    candidate = _coverage_candidate()
+    return episode._parse_executions(
+        _execution(item),
+        completed=completed,
+        allowed_refs={
+            completed[0].recommendation.recommendation_ref: frozenset(
+                {candidate.ref}
+            )
+        },
+        candidates=(candidate,),
+    )[0]
+
+
+def test_stage_two_prompt_requests_recommendation_coverage_fields():
+    completed = (_coverage_completed_recommendation(),)
+    candidate = _coverage_candidate()
+
+    prompt, _ = episode._execution_prompt(
+        completed=completed,
+        candidates=(candidate,),
+    )
+
+    assert "recommendation_coverage_state" in prompt
+    assert "coverage_confidence" in prompt
+    assert "uncovered_source_quotes" in prompt
+
+
+def test_partial_coverage_with_grounded_quote_triggers_020_non_compliant():
+    assessment = _parse_coverage_execution({
+        "recommendation_ref": "consultation_record-1#r1",
+        "execution_record_state": "specific_trace",
+        "trace_refs": ["daily_course_record-1"],
+        "execution_state": "absent",
+        "structured_action_refs": [],
+        "execution_quotes": ["复查血常规"],
+        "confidence": "high",
+        "recommendation_coverage_state": "partial",
+        "coverage_confidence": "high",
+        "uncovered_source_quotes": ["复查肝功能"],
+    })
+    completed = (_coverage_completed_recommendation(),)
+    model_episode = episode._Episode(
+        "consultation_record-1",
+        ("consultation_record-1",),
+        (),
+        ("consultation_record-1",),
+        "absent",
+        "clear",
+        "high",
+        (completed[0].recommendation,),
+    )
+
+    assert assessment.recommendation_coverage_state == "partial"
+    assert assessment.uncovered_source_quotes == ("复查肝功能",)
+    assert episode._execution_outcome(
+        "LX0609-020",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=(assessment,),
+    ) == ("non_compliant", "requirement_violated")
+    assert episode._execution_outcome(
+        "LX0609-020",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=(assessment,),
+        source_incomplete_keys=frozenset({"daily_course_record"}),
+    ) == ("data_gap", "candidate_scope_incomplete")
+
+
+def test_recheck_omitted_coverage_fields_preserve_valid_first_pass_coverage():
+    original = episode._ExecutionAssessment(
+        "consultation_record-1#r1",
+        "absent",
+        (),
+        "low",
+        (),
+        "specific_trace",
+        ("daily_course_record-1",),
+        ("daily_course_record-1",),
+        "partial",
+        "high",
+        ("复查肝功能",),
+    )
+    rechecked = episode._ExecutionAssessment(
+        "consultation_record-1#r1",
+        "absent",
+        (),
+        "high",
+        (),
+        "specific_trace",
+        ("daily_course_record-1",),
+        ("daily_course_record-1",),
+    )
+
+    merged = episode._merge_rechecked_execution_assessment(original, rechecked)
+
+    assert merged.recommendation_coverage_state == "partial"
+    assert merged.coverage_confidence == "high"
+    assert merged.uncovered_source_quotes == ("复查肝功能",)
+
+
+@pytest.mark.parametrize(
+    "uncovered_source_quotes",
+    (["调整抗菌药物"], [["复查肝功能"]], []),
+)
+def test_invalid_partial_coverage_only_downgrades_coverage(
+    uncovered_source_quotes,
+):
+    assessment = _parse_coverage_execution({
+        "recommendation_ref": "consultation_record-1#r1",
+        "execution_record_state": "specific_trace",
+        "trace_refs": ["daily_course_record-1"],
+        "execution_state": "absent",
+        "structured_action_refs": [],
+        "execution_quotes": ["复查血常规"],
+        "confidence": "high",
+        "recommendation_coverage_state": "partial",
+        "coverage_confidence": "high",
+        "uncovered_source_quotes": uncovered_source_quotes,
+    })
+
+    assert assessment.execution_record_state == "specific_trace"
+    assert assessment.confidence == "high"
+    assert assessment.recommendation_coverage_state == "unknown"
+    assert assessment.coverage_confidence == "low"
+    assert assessment.uncovered_source_quotes == ()
+
+
+@pytest.mark.parametrize(
+    ("execution_record_state", "trace_refs", "coverage_state"),
+    (
+        ("no_trace", [], "complete"),
+        ("no_trace", [], "partial"),
+        ("specific_trace", ["daily_course_record-1"], "no_trace"),
+    ),
+)
+def test_coverage_and_trace_state_conflict_only_downgrades_coverage(
+    execution_record_state,
+    trace_refs,
+    coverage_state,
+):
+    assessment = _parse_coverage_execution({
+        "recommendation_ref": "consultation_record-1#r1",
+        "execution_record_state": execution_record_state,
+        "trace_refs": trace_refs,
+        "execution_state": "absent",
+        "structured_action_refs": [],
+        "execution_quotes": ["复查血常规"] if trace_refs else [],
+        "confidence": "high",
+        "recommendation_coverage_state": coverage_state,
+        "coverage_confidence": "high",
+        "uncovered_source_quotes": (
+            ["复查肝功能"] if coverage_state == "partial" else []
+        ),
+    })
+
+    assert assessment.recommendation_coverage_state == "unknown"
+    assert assessment.coverage_confidence == "low"
+    assert assessment.uncovered_source_quotes == ()
+
+
+def _coverage_outcome_assessment(
+    recommendation_ref: str,
+    execution_record_state: str,
+    confidence: str,
+):
+    trace_refs = (
+        ("daily_course_record-1",)
+        if execution_record_state in {
+            "specific_trace",
+            "generic_trace",
+            "copied_opinion",
+        }
+        else ()
+    )
+    return episode._ExecutionAssessment(
+        recommendation_ref,
+        "absent",
+        (),
+        confidence,
+        (),
+        execution_record_state,
+        trace_refs,
+        trace_refs,
+    )
+
+
+def _coverage_outcome_inputs(count: int):
+    recommendations = tuple(
+        _coverage_completed_recommendation(
+            f"consultation_record-1#r{index}",
+            source_quote=f"建议执行动作{index}",
+        )
+        for index in range(1, count + 1)
+    )
+    model_episode = episode._Episode(
+        "consultation_record-1",
+        ("consultation_record-1",),
+        (),
+        ("consultation_record-1",),
+        "absent",
+        "clear",
+        "high",
+        tuple(item.recommendation for item in recommendations),
+    )
+    return model_episode, recommendations
+
+
+def test_023_high_specific_is_not_dragged_unknown_by_low_ambiguous_trace():
+    model_episode, completed = _coverage_outcome_inputs(2)
+    assessments = (
+        _coverage_outcome_assessment(
+            "consultation_record-1#r1", "specific_trace", "high"
+        ),
+        _coverage_outcome_assessment(
+            "consultation_record-1#r2", "unknown", "low"
+        ),
+    )
+
+    assert episode._execution_outcome(
+        "LX0609-023",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=assessments,
+    ) == ("compliant", "requirement_satisfied")
+
+
+@pytest.mark.parametrize("trace_state", ("generic_trace", "copied_opinion"))
+def test_023_high_generic_or_copy_remains_non_compliant(trace_state):
+    model_episode, completed = _coverage_outcome_inputs(2)
+    assessments = (
+        _coverage_outcome_assessment(
+            "consultation_record-1#r1", "specific_trace", "high"
+        ),
+        _coverage_outcome_assessment(
+            "consultation_record-1#r2", trace_state, "high"
+        ),
+    )
+
+    assert episode._execution_outcome(
+        "LX0609-023",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=assessments,
+    ) == ("non_compliant", "requirement_violated")
+
+
+def test_023_low_confidence_no_trace_remains_unknown():
+    model_episode, completed = _coverage_outcome_inputs(2)
+    assessments = (
+        _coverage_outcome_assessment(
+            "consultation_record-1#r1", "no_trace", "high"
+        ),
+        _coverage_outcome_assessment(
+            "consultation_record-1#r2", "no_trace", "low"
+        ),
+    )
+
+    assert episode._execution_outcome(
+        "LX0609-023",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=assessments,
+    ) == ("evaluation_unknown", "semantic_low_confidence")
+
+
 def _window_session(
     *,
     rows_by_source,
@@ -6028,7 +6324,7 @@ async def test_020_023_omission_retry_preserves_parsed_and_marks_remaining_unkno
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "semantic_low_confidence",
+        "requirement_satisfied",
     ]
     assert result.llm_call_count == 3
     facts = dict(result.customer_display_facts)["LX0609-020"]
@@ -6100,7 +6396,7 @@ async def test_020_023_invalid_or_failed_omission_retry_does_not_overwrite_first
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "semantic_low_confidence",
+        "requirement_satisfied",
     ]
     assert result.llm_call_count == 3
     facts = dict(result.customer_display_facts)["LX0609-020"]
@@ -6287,7 +6583,7 @@ async def test_020_023_misplaced_course_ref_only_marks_its_recommendation_unknow
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "semantic_low_confidence",
+        "requirement_satisfied",
     ]
     facts = dict(result.customer_display_facts)["LX0609-020"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [

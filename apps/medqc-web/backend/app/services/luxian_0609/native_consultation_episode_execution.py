@@ -148,6 +148,9 @@ _EXECUTION_RECORD_STATES = frozenset({
     "no_trace",
     "unknown",
 })
+_RECOMMENDATION_COVERAGE_STATES = frozenset({
+    "complete", "partial", "no_trace", "unknown",
+})
 _RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer", "monitoring", "other"})
 _EXPLICIT_REQUEST_CLEAR_PATTERN = re.compile(
     r"(?:会诊目的|申请.{0,12}会诊).{0,80}"
@@ -369,6 +372,9 @@ class _ExecutionAssessment:
     execution_record_state: str = "no_trace"
     trace_refs: tuple[str, ...] = ()
     context_only_refs: tuple[str, ...] = ()
+    recommendation_coverage_state: str = "unknown"
+    coverage_confidence: str = "low"
+    uncovered_source_quotes: tuple[str, ...] = ()
 
 
 def _merge_rechecked_execution_assessment(
@@ -377,9 +383,8 @@ def _merge_rechecked_execution_assessment(
 ) -> _ExecutionAssessment:
     """复核结果优先；两次独立均确认无执行痕迹时可收敛信心。"""
 
-    if rechecked.confidence == "high":
-        return rechecked
-    if (
+    merged = rechecked
+    if rechecked.confidence != "high" and (
         original.execution_record_state == "no_trace"
         and rechecked.execution_record_state == "no_trace"
         and original.execution_state == "absent"
@@ -391,8 +396,20 @@ def _merge_rechecked_execution_assessment(
     ):
         # 不从关键词推断“未执行”；只在两次受控语义核对对
         # 同一建议给出完全一致的 no_trace/absent 事实时收敛。
-        return replace(rechecked, confidence="high")
-    return rechecked
+        merged = replace(rechecked, confidence="high")
+    # 旧版复核响应省略覆盖字段时，保留首轮已经严格校验并落地的覆盖事实。
+    if (
+        merged.recommendation_coverage_state == "unknown"
+        and merged.coverage_confidence == "low"
+        and original.recommendation_coverage_state != "unknown"
+    ):
+        merged = replace(
+            merged,
+            recommendation_coverage_state=original.recommendation_coverage_state,
+            coverage_confidence=original.coverage_confidence,
+            uncovered_source_quotes=original.uncovered_source_quotes,
+        )
+    return merged
 
 
 @dataclass(frozen=True)
@@ -2471,8 +2488,13 @@ def _execution_prompt(
             "allowed_candidate_refs为空时必须返回execution_record_state=unknown、trace_refs=[]。"
             "不得引用会诊申请或会诊意见的ref。specific_trace/generic_trace/copied_opinion必须返回至少一个trace_refs；"
             "no_trace/unknown必须返回空trace_refs。confidence只能是high/medium/low。"
+            "另须判断每条原始会诊建议是否被所选病程trace完整覆盖：recommendation_coverage_state只能是"
+            "complete/partial/no_trace/unknown；complete和partial必须有trace_refs，no_trace必须无trace_refs。"
+            "partial必须在uncovered_source_quotes返回1至8段本条source_quote中尚未落实的连续原文摘录；"
+            "complete/no_trace/unknown的uncovered_source_quotes必须为空。coverage_confidence只能是high/medium/low。"
             "每个输入recommendation_ref恰好输出一次，禁止重复、遗漏或创造。"
-            "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,confidence}]}。输入："
+            "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,confidence,"
+            "recommendation_coverage_state,coverage_confidence,uncovered_source_quotes}]}。输入："
             + payload,
             allowed_refs,
         )
@@ -2511,8 +2533,14 @@ def _execution_prompt(
         "execution_quotes是可选的辅助摘录；已选择精确trace_refs或structured_action_refs时可以返回空数组。"
         "若返回摘录，每项必须是所引执行候选中的连续原文，不得改写、拼接或引用未选候选。"
         "no_trace/absent组合必须返回空数组trace_refs、structured_action_refs和execution_quotes。"
+        "另须判断每条原始会诊建议是否被所选病程trace完整覆盖：recommendation_coverage_state只能是"
+        "complete/partial/no_trace/unknown；complete和partial必须有trace_refs，no_trace必须无trace_refs。"
+        "partial必须在uncovered_source_quotes返回1至8段本条source_quote中尚未落实的连续原文摘录；"
+        "complete/no_trace/unknown的uncovered_source_quotes必须为空。coverage_confidence只能是high/medium/low。"
         "每个输入recommendation_ref恰好输出一项，禁止重复。"
-        "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,execution_state,structured_action_refs,execution_quotes,confidence}]}。输入："
+        "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,execution_state,"
+        "structured_action_refs,execution_quotes,confidence,recommendation_coverage_state,"
+        "coverage_confidence,uncovered_source_quotes}]}。输入："
         + payload
     )
     return prompt, allowed_refs
@@ -2550,6 +2578,21 @@ def _apply_embedded_decision_traces(
             execution_record_state="specific_trace",
             trace_refs=(opinion_ref,),
             context_only_refs=(opinion_ref,),
+            recommendation_coverage_state=(
+                "unknown"
+                if item.recommendation_coverage_state == "no_trace"
+                else item.recommendation_coverage_state
+            ),
+            coverage_confidence=(
+                "low"
+                if item.recommendation_coverage_state == "no_trace"
+                else item.coverage_confidence
+            ),
+            uncovered_source_quotes=(
+                ()
+                if item.recommendation_coverage_state == "no_trace"
+                else item.uncovered_source_quotes
+            ),
         )
         if (
             opinion_ref := opinion_ref_by_recommendation.get(item.recommendation_ref)
@@ -2581,6 +2624,10 @@ def _parse_executions(
 ) -> tuple[_ExecutionAssessment, ...]:
     raw = payload.get("executions")
     expected_refs = {item.recommendation.recommendation_ref for item in completed}
+    recommendation_by_ref = {
+        item.recommendation.recommendation_ref: item.recommendation
+        for item in completed
+    }
     candidate_by_ref = {item.ref: item for item in candidates}
     ref_by_alias = {
         f"c{index}": candidate.ref
@@ -2779,6 +2826,53 @@ def _parse_executions(
         elif quotes:
             parsed.append(_unknown_execution_assessment(recommendation_ref))
             continue
+        coverage_state = _clean(
+            item.get("recommendation_coverage_state")
+        ).lower() or "unknown"
+        coverage_confidence = _clean(
+            item.get("coverage_confidence")
+        ).lower() or "low"
+        raw_uncovered_quotes = item.get("uncovered_source_quotes")
+        if raw_uncovered_quotes is None:
+            raw_uncovered_quotes = []
+        coverage_valid = (
+            coverage_state in _RECOMMENDATION_COVERAGE_STATES
+            and coverage_confidence in _CONFIDENCE
+            and isinstance(raw_uncovered_quotes, list)
+            and len(raw_uncovered_quotes) <= 8
+            and all(isinstance(quote, str) for quote in raw_uncovered_quotes)
+        )
+        uncovered_quotes: tuple[str, ...] = ()
+        if coverage_valid:
+            uncovered_quotes = tuple(
+                _clean(quote) for quote in raw_uncovered_quotes
+            )
+            coverage_valid = (
+                all(
+                    quote and len(quote) <= _MAX_RECOMMENDATION_CHARS
+                    for quote in uncovered_quotes
+                )
+                and len(uncovered_quotes) == len(set(uncovered_quotes))
+                and (
+                    (coverage_state == "partial" and bool(uncovered_quotes))
+                    or (coverage_state != "partial" and not uncovered_quotes)
+                )
+                and (
+                    coverage_state not in {"complete", "partial"}
+                    or bool(trace_refs)
+                )
+                and (coverage_state != "no_trace" or not trace_refs)
+            )
+        if coverage_valid and coverage_state == "partial":
+            source_quote = recommendation_by_ref[recommendation_ref].source_quote
+            coverage_valid = all(
+                _quote_is_grounded(quote=quote, source=source_quote)
+                for quote in uncovered_quotes
+            )
+        if not coverage_valid:
+            coverage_state = "unknown"
+            coverage_confidence = "low"
+            uncovered_quotes = ()
         parsed.append(_ExecutionAssessment(
             recommendation_ref,
             state,
@@ -2788,6 +2882,9 @@ def _parse_executions(
             execution_record_state,
             tuple(trace_refs),
             tuple(trace_refs),
+            coverage_state,
+            coverage_confidence,
+            uncovered_quotes,
         ))
     if seen != expected_refs:
         raise _ExecutionCoverageIncomplete(
@@ -2847,12 +2944,32 @@ def _execution_outcome(
         and item.confidence == "high"
         for item in assessments or ()
     )
+    confirmed_incomplete_coverage = any(
+        item.recommendation_coverage_state in {"partial", "no_trace"}
+        and item.coverage_confidence == "high"
+        for item in assessments or ()
+    )
+    confirmed_specific_trace = any(
+        item.execution_record_state == "specific_trace"
+        and item.confidence == "high"
+        and bool(item.trace_refs)
+        for item in assessments or ()
+    )
+    all_no_course_trace = bool(assessments) and all(
+        item.execution_record_state == "no_trace"
+        and item.confidence == "high"
+        and item.execution_state != "unknown"
+        and not item.trace_refs
+        for item in assessments or ()
+    )
     course_source_incomplete = bool(
         _COURSE_EXECUTION_SOURCE_KEYS.intersection(source_incomplete_keys)
     )
     # 一条已经严格落地的缺陷足以形成不合规结论；其他建议仍待判断只会
     # 阻止“全部合规”，不能反向抹掉已确认的缺失或笼统记录。
-    if rule_id == "LX0609-020" and confirmed_no_course_trace_refs:
+    if rule_id == "LX0609-020" and (
+        confirmed_no_course_trace_refs or confirmed_incomplete_coverage
+    ):
         if course_source_incomplete:
             return "data_gap", "candidate_scope_incomplete"
         return "non_compliant", "requirement_violated"
@@ -2862,6 +2979,12 @@ def _execution_outcome(
         return "evaluation_unknown", "semantic_low_confidence"
     if not completed or not completed_recommendations:
         return "not_applicable", "trigger_absent_complete"
+    if rule_id == "LX0609-023" and all_no_course_trace:
+        if course_source_incomplete:
+            return "data_gap", "candidate_scope_incomplete"
+        return "not_applicable", "trigger_absent_complete"
+    if rule_id == "LX0609-023" and confirmed_specific_trace:
+        return "compliant", "requirement_satisfied"
     if assessments is None or any(
         item.confidence != "high"
         or item.execution_state == "unknown"
