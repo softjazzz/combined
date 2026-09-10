@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v29"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v30"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -201,7 +201,11 @@ _REGISTRY_ENTRIES = (
     _entry("labtest_item_report", access_mode=_BOUNDED),
     _entry("labtest_master", access_mode=_BOUNDED),
     _entry("crisis_value_record", access_mode=_BOUNDED),
-    _entry("inpat_drug_order", access_mode=_BOUNDED),
+    _entry(
+        "inpat_drug_order",
+        access_mode=_BOUNDED,
+        query_version="snapshot-provider-inpat_drug_order-v2",
+    ),
     _entry("inpat_nondrug_order", access_mode=_BOUNDED),
     _entry(
         "medical_order",

@@ -78,7 +78,7 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
         "crisis_value_record": "snapshot-provider-crisis_value_record-v1",
         "labtest_item_report": "snapshot-provider-labtest_item_report-v1",
         "labtest_master": "snapshot-provider-labtest_master-v1",
-        "inpat_drug_order": "snapshot-provider-inpat_drug_order-v1",
+        "inpat_drug_order": "snapshot-provider-inpat_drug_order-v2",
         "discharge_record_diagnosis": "snapshot-provider-discharge_record_diagnosis-v1",
         "mr_bloodtrans": bloodtrans_query_version,
         "bloodtrans_record": bloodtrans_query_version,
@@ -140,6 +140,42 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
         snapshot=snapshot,
         sources=sources,
     )
+
+
+class _AntimicrobialActionClient:
+    def __init__(self, state="affirmed"):
+        self.state = state
+        self.calls = []
+
+    async def generate(self, prompt, **kwargs):
+        self.calls.append((prompt, kwargs))
+        candidates = json.loads(prompt.rsplit("\n", 1)[-1])
+        items = [
+            {
+                "item_id": item["item_id"],
+                "antimicrobial": item["antimicrobial"],
+                "state": self.state,
+                "action_quote": (
+                    None if self.state == "no_action" else item["text"]
+                ),
+            }
+            for item in candidates
+        ]
+        content = json.dumps({
+            "schema_version": "lx0609_antimicrobial_actions_v1",
+            "items": items,
+        }, ensure_ascii=False)
+        return {
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {"content": content},
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+            },
+        }
 
 
 async def _evaluate(
@@ -5442,6 +5478,7 @@ def test_discharge_medication_labels_form_a_structured_contract() -> None:
     ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-058"],
 )
 async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> None:
+    client = _AntimicrobialActionClient() if rule_id == "LX0609-054" else None
     result, reduced = await _evaluate(
         rule_id,
         {
@@ -5472,12 +5509,14 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
                 "record_content": "感染专家会诊同意使用美罗培南和万古霉素。",
             },),
         },
+        llm_client=client,
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert result.llm_call_count == 0
-    assert result.prompt_tokens == 0
-    assert result.completion_tokens == 0
-    assert result.total_tokens == 0
+    expected_calls = 1 if rule_id == "LX0609-054" else 0
+    assert result.llm_call_count == expected_calls
+    assert result.prompt_tokens == expected_calls * 10
+    assert result.completion_tokens == expected_calls * 5
+    assert result.total_tokens == expected_calls * 15
 
 
 @pytest.mark.asyncio
@@ -5627,6 +5666,322 @@ async def test_054_explicit_action_with_same_record_reason_is_compliant() -> Non
     assert facts["reason_documented"] is True
     assert facts["unmatched_antimicrobials"] == []
     assert facts["association_ambiguous"] is False
+
+
+@pytest.mark.asyncio
+async def test_054_change_after_infusion_pruritus_has_documented_reason() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": (
+                {"order_id": "L-1", "generic_name": "左氧氟沙星"},
+                {"order_id": "C-1", "generic_name": "头孢呋辛"},
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": (
+                    "呼吸科建议左氧氟沙星抗肺部感染，但患者输注后出现瘙痒不适，"
+                    "今日更改为头孢呋辛继续预防感染。"
+                ),
+            },),
+        },
+        llm_client=_AntimicrobialActionClient("affirmed"),
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-054"]
+    assert facts["antimicrobials"] == ["头孢呋辛", "左氧氟沙星"]
+    assert facts["action_count"] == 2
+    assert facts["reason_documented"] is True
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("text", "antimicrobial", "expected"),
+    (
+        (
+            "考虑肺部感染，给予甲泼尼龙抗炎，左氧氟沙星抗感染。",
+            "左氧氟沙星",
+            "给予甲泼尼龙抗炎，左氧氟沙星抗感染",
+        ),
+        (
+            "呼吸科建议左氧氟沙星抗感染，但患者输注后出现瘙痒，今日更改为头孢呋辛。",
+            "左氧氟沙星",
+            "呼吸科建议左氧氟沙星抗感染，但患者输注后出现瘙痒",
+        ),
+        (
+            "经讨论决定于2026-06-03术前使用头孢呋辛。",
+            "头孢呋辛",
+            "经讨论决定于2026-06-03术前使用头孢呋辛",
+        ),
+        (
+            "未给予甲泼尼龙抗炎，左氧氟沙星抗感染。",
+            "左氧氟沙星",
+            None,
+        ),
+        (
+            "给予甲泼尼龙抗炎，患者诉不适。左氧氟沙星抗感染。",
+            "左氧氟沙星",
+            None,
+        ),
+        (
+            "治疗上给予补液，左氧氟沙星过敏。",
+            "左氧氟沙星",
+            None,
+        ),
+        (
+            "治疗上给予补液，左氧氟沙星抗感染后出现皮疹。",
+            "左氧氟沙星",
+            None,
+        ),
+        (
+            "治疗上给予补液，院外左氧氟沙星抗感染治疗。",
+            "左氧氟沙星",
+            None,
+        ),
+        (
+            "治疗上给予补液，有左氧氟沙星抗感染史。",
+            "左氧氟沙星",
+            None,
+        ),
+        (
+            "暂不使用左氧氟沙星。复查感染加重，给予左氧氟沙星抗感染。",
+            "左氧氟沙星",
+            "暂不使用左氧氟沙星。复查感染加重，给予左氧氟沙星抗感染",
+        ),
+    ),
+)
+def test_054_candidate_text_keeps_only_target_action_context(
+    text: str,
+    antimicrobial: str,
+    expected: str | None,
+) -> None:
+    assert module._054_candidate_text(text, antimicrobial) == expected
+
+
+@pytest.mark.parametrize(
+    ("candidate_text", "antimicrobial", "expected_action"),
+    (
+        ("给予甲泼尼龙抗炎，左氧氟沙星抗感染", "左氧氟沙星", "给予"),
+        ("治疗上予以奥美拉唑抑酸、盐酸莫西沙星抗感染", "莫西沙星", "予以"),
+        ("决定于2026-06-03术前使用头孢呋辛", "头孢呋辛", None),
+        ("使用左氧氟沙星前需完善皮试", "左氧氟沙星", None),
+        ("使用左氧氟沙星需待药敏结果", "左氧氟沙星", None),
+        ("应停用左氧氟沙星", "左氧氟沙星", None),
+        ("术前使用头孢呋辛", "头孢呋辛", None),
+        ("出院后使用左氧氟沙星", "左氧氟沙星", None),
+        ("既往曾使用莫西沙星", "莫西沙星", None),
+        ("院外给予左氧氟沙星抗感染治疗", "左氧氟沙星", None),
+        ("入院前使用左氧氟沙星抗感染", "左氧氟沙星", None),
+        ("不建议停用而继续使用左氧氟沙星", "左氧氟沙星", None),
+        ("建议左氧氟沙星抗感染，但患者输注后出现瘙痒", "左氧氟沙星", None),
+    ),
+)
+def test_054_high_confidence_candidate_action_is_conservative(
+    candidate_text: str,
+    antimicrobial: str,
+    expected_action: str | None,
+) -> None:
+    assert module._054_high_confidence_action_in_candidate(
+        candidate_text, antimicrobial
+    ) == expected_action
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("course_text", "expected_state", "expected_reason"),
+    (
+        (
+            "考虑右肾感染可能，予以左氧氟沙星经验性抗感染处理。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        (
+            "考虑右肾感染可能予以左氧氟沙星经验性抗感染处理。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        (
+            "考虑肺部感染，给予甲泼尼龙抗炎，左氧氟沙星抗感染。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        (
+            "目前感染证据不足，暂不予以左氧氟沙星抗感染处理。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "当前未考虑予以左氧氟沙星抗感染治疗。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "目前不建议予以左氧氟沙星抗感染治疗。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "尚未决定是否予以左氧氟沙星抗感染治疗。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "未予以左氧氟沙星使用。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，尚未明确是否予以左氧氟沙星抗感染处理。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，暂不推荐予以左氧氟沙星抗感染处理。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，暂不建议在病原学检查结果回报并完成会诊讨论前予以左氧氟沙星抗感染。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，不予继续使用左氧氟沙星。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，不建议停用而继续使用左氧氟沙星抗感染。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        (
+            "考虑感染，未见不良反应继续使用左氧氟沙星抗感染。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        (
+            "考虑感染，并非不予以左氧氟沙星抗感染。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        (
+            "感染证据不足，不予以左氧氟沙星抗感染处理。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "感染持续加重，不使用左氧氟沙星，改用其他方案。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染持续加重，不得不予以左氧氟沙星抗感染处理。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        (
+            "未给予甲泼尼龙抗炎，左氧氟沙星抗感染。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，尚未开始使用左氧氟沙星抗感染。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，未曾予以左氧氟沙星抗感染。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，暂未实际给予左氧氟沙星抗感染。",
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        (
+            "考虑感染，暂不更换并继续使用左氧氟沙星抗感染。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+    ),
+)
+async def test_054_recognizes_only_affirmed_yuyi_antimicrobial_action(
+    course_text: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+) -> None:
+    semantic_state = (
+        "affirmed"
+        if expected_state is CustomerFinalState.COMPLIANT
+        else "no_action"
+    )
+    _, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": ({
+                "order_id": "L-1",
+                "generic_name": "左氧氟沙星",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": course_text,
+            },),
+        },
+        llm_client=_AntimicrobialActionClient(semantic_state),
+    )
+
+    assert reduced.final_state is expected_state
+    assert reduced.reason_code == expected_reason
+
+
+@pytest.mark.asyncio
+async def test_054_semantic_uncertainty_is_explicit_evaluation_unknown_with_usage() -> None:
+    client = _AntimicrobialActionClient("uncertain")
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": ({
+                "order_id": "L-1",
+                "generic_name": "左氧氟沙星",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "考虑感染，是否继续使用左氧氟沙星尚待确认。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced.reason_code == "semantic_low_confidence"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_054_semantic_candidate_without_model_is_technical_error() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": ({
+                "order_id": "L-1",
+                "generic_name": "左氧氟沙星",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "考虑感染，尚未开始使用左氧氟沙星抗感染。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced.reason_code == "model_transport_error"
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -5783,6 +6138,127 @@ async def test_057_explicit_empiric_use_without_unique_drug_event_is_data_gap() 
             ),
             "daily_course_record": ({
                 "record_content": "经验性抗感染治疗，覆盖耐药菌。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+def _duplicate_levofloxacin_order_rows(
+    *,
+    second_start: str,
+    second_overrides: dict | None = None,
+) -> tuple[dict, dict]:
+    shared = {
+        "generic_name": "左氧氟沙星氯化钠注射液",
+        "drug_code": "YXJ01MA4304",
+        "drug_type": "氟喹诺酮类",
+        "brand_name": "左氧氟沙星氯化钠注射液",
+        "drug_specification": "100ml:0.5g",
+        "repeat_indicator": "临时",
+        "drug_frequency": "St",
+        "drug_apply_method": "静脉滴注",
+        "single_dose": "1",
+        "single_dose_unit": "袋",
+        "dose_form": "注射剂",
+        "medication_duration": "1",
+        "order_status": "新开",
+        "prescribed_datetime": "2026-06-01 10:00:00",
+        "last_modified_datetime": "2026-06-01 09:58:00",
+    }
+    second = {
+        **shared,
+        "document_id": "LEVO-ORDER-2",
+        "order_id": "LEVO-ORDER-2",
+        "planned_start_datetime": second_start,
+    }
+    second.update(second_overrides or {})
+    return (
+        {
+            **shared,
+            "document_id": "LEVO-ORDER-1",
+            "order_id": "LEVO-ORDER-1",
+            "planned_start_datetime": "2026-06-01 09:59:45+08:00",
+        },
+        second,
+    )
+
+
+@pytest.mark.asyncio
+async def test_054_and_057_group_strict_duplicate_order_rows_and_keep_all_refs() -> None:
+    course_row = {
+        "document_id": "LEVO-COURSE",
+        "record_time": "2026-06-01 12:00:00",
+        "record_content": "考虑右肾感染可能，予以左氧氟沙星经验性抗感染处理。",
+    }
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-054", "LX0609-057"),
+        {
+            "inpat_drug_order": _duplicate_levofloxacin_order_rows(
+                second_start="2026-06-01 10:00:00+08:00"
+            ),
+            "daily_course_record": (course_row,),
+        },
+    )
+
+    refs = {
+        row["document_id"]: reference
+        for source_key in ("inpat_drug_order", "daily_course_record")
+        for reference, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+    expected_refs = tuple(sorted((
+        refs["LEVO-ORDER-1"],
+        refs["LEVO-ORDER-2"],
+        refs["LEVO-COURSE"],
+    )))
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "requirement_satisfied",
+        "requirement_satisfied",
+    ]
+    assert [item.fact_refs for item in execution.decisions] == [
+        expected_refs,
+        expected_refs,
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ("LX0609-054", "LX0609-057"))
+@pytest.mark.parametrize(
+    ("second_start", "second_overrides"),
+    (
+        ("2026-06-01 10:00:46+08:00", {}),
+        ("2026-06-01 10:00:00+08:00", {"repeat_indicator": "长期"}),
+        ("2026-06-01 10:00:00+08:00", {"dose_form": "片剂"}),
+        ("2026-06-01 10:00:00+08:00", {"drug_specification": "50ml:0.25g"}),
+        ("2026-06-01 10:00:00+08:00", {"medication_duration": "2"}),
+        (
+            "2026-06-01 10:00:00+08:00",
+            {"last_modified_datetime": "2026-06-01 09:58:01"},
+        ),
+    ),
+)
+async def test_antimicrobial_nearby_distinct_orders_remain_ambiguous(
+    rule_id: str,
+    second_start: str,
+    second_overrides: dict,
+) -> None:
+    _, reduced = await _evaluate(
+        rule_id,
+        {
+            "inpat_drug_order": _duplicate_levofloxacin_order_rows(
+                second_start=second_start,
+                second_overrides=second_overrides,
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "考虑右肾感染可能，予以左氧氟沙星经验性抗感染处理。",
             },),
         },
     )

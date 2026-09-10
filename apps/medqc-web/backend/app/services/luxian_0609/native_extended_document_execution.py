@@ -47,6 +47,10 @@ from .extended_document.diagnosis_change_extraction import (
     DiagnosisChangeDocumentInput,
     extract_diagnosis_change_documentation,
 )
+from .extended_document.antimicrobial_action_extraction import (
+    AntimicrobialActionCandidate,
+    extract_antimicrobial_actions,
+)
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time
@@ -175,12 +179,39 @@ _ANTIMICROBIAL_EFFECT_EVALUATION_OUTCOMES = (
 )
 _ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS = ("抗菌", "抗感染", "抗生素")
 _ANTIMICROBIAL_REASON_ACTIONS = (
-    "超说明书", "停用", "更换", "联合", "启用", "使用", "给予", "继续",
+    "超说明书", "停用", "更换", "更改", "改为", "联合", "启用", "输注", "使用",
+    "给予", "予以", "继续",
+)
+_ANTIMICROBIAL_ACTION_STRONG_BOUNDARY_PATTERN = re.compile(r"[。；;！!？?\r\n]+")
+_ANTIMICROBIAL_ACTION_WEAK_BOUNDARY_PATTERN = re.compile(r"[，,]+")
+_ANTIMICROBIAL_ACTION_PLAN_MARKERS = (
+    "建议", "拟", "计划", "决定", "待", "是否", "尚待", "尚未", "暂未",
+    "暂不", "未曾",
+)
+_ANTIMICROBIAL_ACTION_NEGATION_MARKERS = (
+    "不予", "不给予", "不使用", "不启用", "不更换", "未予", "未给予", "未使用",
+    "未启用", "尚未", "暂未", "暂不",
+)
+_ANTIMICROBIAL_ACTION_HISTORICAL_MARKERS = (
+    "既往", "曾经", "曾用", "曾使用", "院外", "外院", "入院前", "治疗史",
+    "用药史", "抗感染史",
+)
+_ANTIMICROBIAL_ACTION_FOLLOWUP_MARKERS = (
+    "输注后", "使用后", "用药后", "给药后", "该药", "此药",
+)
+_ANTIMICROBIAL_ACTION_PROSPECTIVE_MARKERS = (
+    "应", "需", "须", "术前", "出院后", "前需", "前须", "后再", "后决定",
+    "需待", "需要等待",
+)
+_ANTIMICROBIAL_SHARED_ACTION_BLOCKERS = (
+    "过敏", "不良反应", "输注反应", "瘙痒", "皮疹", "疗效", "效果", "无效",
+    "欠佳", "好转", "改善", "出现",
 )
 _ANTIMICROBIAL_REASON_MARKERS = (
     "因为", "由于", "考虑", "依据", "理由", "重症感染", "覆盖",
     "培养", "药敏", "感染证据", "感染可能", "疑似感染", "因感染",
-    "感染指标升高", "无样可采", "耐药", "过敏", "肝功能", "肾功能",
+    "感染指标升高", "无样可采", "耐药", "过敏", "不良反应", "输注反应",
+    "瘙痒", "皮疹", "肝功能", "肾功能",
 )
 _EMPIRIC_ANTIMICROBIAL_TRIGGER_PATTERN = re.compile(
     r"(?:经验性用药|经验用药|经验性抗感染(?:治疗)?|经验性抗菌治疗|经验性)"
@@ -922,33 +953,321 @@ def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> 
 
 
 @dataclass(frozen=True)
+class _AntimicrobialOrderEvent:
+    """054/057 使用的临床用药事件；保留构成事件的全部原始医嘱行。"""
+
+    orders: tuple[Mapping[str, Any], ...]
+    antimicrobials: tuple[str, ...]
+
+    @property
+    def order_ids(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(
+            order_id
+            for row in self.orders
+            if (order_id := _linked_order_id(row))
+        ))
+
+
+_ANTIMICROBIAL_DUPLICATE_REQUIRED_FIELDS = (
+    "drug_code",
+    "drug_type",
+    "brand_name",
+    "generic_name",
+    "drug_frequency",
+    "drug_apply_method",
+    "single_dose",
+    "single_dose_unit",
+    "repeat_indicator",
+    "dose_form",
+    "order_status",
+    "last_modified_datetime",
+)
+_ANTIMICROBIAL_DUPLICATE_OPTIONAL_MATCH_FIELDS = (
+    "drug_specification",
+    "medication_duration",
+    "start_time",
+    "order_time",
+    "update_time",
+    "record_content",
+)
+_ANTIMICROBIAL_DUPLICATE_START_TOLERANCE_SECONDS = 60
+
+
+def _is_strict_duplicate_antimicrobial_order(
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+) -> bool:
+    """只归并能由完整处方签名证明为同一事件的相邻技术重复行。"""
+
+    left_names = _antimicrobial_names_in(left)
+    right_names = _antimicrobial_names_in(right)
+    if not left_names or left_names != right_names:
+        return False
+    for field in _ANTIMICROBIAL_DUPLICATE_REQUIRED_FIELDS:
+        left_value = _clean(left.get(field))
+        right_value = _clean(right.get(field))
+        if not left_value or left_value != right_value:
+            return False
+    if any(
+        _clean(left.get(field)) != _clean(right.get(field))
+        for field in _ANTIMICROBIAL_DUPLICATE_OPTIONAL_MATCH_FIELDS
+    ):
+        return False
+    left_prescribed = _parse_lx0609_058_datetime(left.get("prescribed_datetime"))
+    right_prescribed = _parse_lx0609_058_datetime(right.get("prescribed_datetime"))
+    if left_prescribed is None or left_prescribed != right_prescribed:
+        return False
+    left_start = _parse_lx0609_058_datetime(left.get("planned_start_datetime"))
+    right_start = _parse_lx0609_058_datetime(right.get("planned_start_datetime"))
+    return (
+        left_start is not None
+        and right_start is not None
+        and abs((left_start - right_start).total_seconds())
+        <= _ANTIMICROBIAL_DUPLICATE_START_TOLERANCE_SECONDS
+    )
+
+
+def _antimicrobial_order_events(
+    orders: Sequence[Mapping[str, Any]],
+) -> tuple[_AntimicrobialOrderEvent, ...]:
+    """归并同一处方批次的严格重复行；字段不足或差异均保留独立事件。"""
+
+    groups: list[list[Mapping[str, Any]]] = []
+    for order in orders:
+        matching_group = next(
+            (
+                group
+                for group in groups
+                if all(
+                    _is_strict_duplicate_antimicrobial_order(member, order)
+                    for member in group
+                )
+            ),
+            None,
+        )
+        if matching_group is None:
+            groups.append([order])
+        else:
+            matching_group.append(order)
+    return tuple(
+        _AntimicrobialOrderEvent(
+            orders=tuple(group),
+            antimicrobials=_antimicrobial_names_in(group[0]),
+        )
+        for group in groups
+    )
+
+
+@dataclass(frozen=True)
 class _AntimicrobialReasonAction:
     """054 的一个可证明、已命名的抗菌药处置动作。"""
 
     row: Mapping[str, Any]
     antimicrobial: str
     action: str
-    order_id: str
-    order: Mapping[str, Any]
+    order_ids: tuple[str, ...]
+    orders: tuple[Mapping[str, Any], ...]
 
 
-def _054_action_for_antimicrobial(text: str, antimicrobial: str) -> str | None:
-    """确认动作与药名属于同一局部文本，不能把同段别的药物动作借来触发。"""
+def _054_text_spans(text: str, boundary: re.Pattern[str]) -> tuple[tuple[int, int], ...]:
+    """按原文边界返回非空片段坐标，保证裁剪结果仍是连续原文。"""
 
-    positions = [
-        match.start() for match in re.finditer(re.escape(antimicrobial), text)
-    ]
-    for position in positions:
-        local_text = text[max(0, position - 16): position + len(antimicrobial) + 16]
-        for action in _ANTIMICROBIAL_REASON_ACTIONS:
-            if action in local_text:
-                return action
-    return None
+    spans: list[tuple[int, int]] = []
+    start = 0
+    for match in boundary.finditer(text):
+        if text[start:match.start()].strip():
+            spans.append((start, match.start()))
+        start = match.end()
+    if text[start:].strip():
+        spans.append((start, len(text)))
+    return tuple(spans)
+
+
+def _054_has_action_marker(text: str) -> bool:
+    return any(action in text for action in _ANTIMICROBIAL_REASON_ACTIONS)
+
+
+def _054_has_plan_marker(text: str) -> bool:
+    return any(marker in text for marker in _ANTIMICROBIAL_ACTION_PLAN_MARKERS)
+
+
+def _054_can_inherit_shared_action(previous: str, current: str) -> bool:
+    """只允许紧邻的肯定治疗列表把共同谓语传给目标药分句。"""
+
+    if not _054_has_action_marker(previous):
+        return False
+    if "未" in previous or "不" in previous:
+        return False
+    if _054_has_plan_marker(previous) or _054_has_plan_marker(current):
+        return False
+    if any(
+        marker in current for marker in _ANTIMICROBIAL_ACTION_HISTORICAL_MARKERS
+    ):
+        return False
+    if not any(
+        marker in current
+        for marker in (*_ANTIMICROBIAL_EFFECT_CONTEXT_MARKERS, "预防感染")
+    ):
+        return False
+    if any(marker in current for marker in _ANTIMICROBIAL_SHARED_ACTION_BLOCKERS):
+        return False
+    blocked_prefixes = (
+        "患者", "患儿", "家属", "医师", "医生", "护士", "但", "然而", "不过",
+    )
+    return not current.lstrip().startswith(blocked_prefixes)
+
+
+def _054_candidate_text(text: str, antimicrobial: str) -> str | None:
+    """裁剪为围绕目标药的最小连续动作上下文。
+
+    目标药必须在本分句内拥有动作/计划词，或严格继承紧邻治疗列表的共同
+    谓语。仅当紧邻后分句唯一回指该药时，才附加后分句的实施事实。
+    """
+
+    candidates: list[tuple[int, int]] = []
+    for strong_start, strong_end in _054_text_spans(
+        text, _ANTIMICROBIAL_ACTION_STRONG_BOUNDARY_PATTERN
+    ):
+        sentence = text[strong_start:strong_end]
+        if antimicrobial not in sentence:
+            continue
+        weak_spans = _054_text_spans(
+            sentence, _ANTIMICROBIAL_ACTION_WEAK_BOUNDARY_PATTERN
+        )
+        for index, (weak_start, weak_end) in enumerate(weak_spans):
+            clause = sentence[weak_start:weak_end]
+            if antimicrobial not in clause:
+                continue
+            has_direct_marker = (
+                _054_has_action_marker(clause) or _054_has_plan_marker(clause)
+            )
+            snippet_start = weak_start
+            snippet_end = weak_end
+            if not has_direct_marker:
+                if index == 0:
+                    continue
+                previous_start, previous_end = weak_spans[index - 1]
+                previous = sentence[previous_start:previous_end]
+                if not _054_can_inherit_shared_action(previous, clause):
+                    continue
+                snippet_start = previous_start
+            elif index > 0:
+                previous_start, previous_end = weak_spans[index - 1]
+                previous = sentence[previous_start:previous_end]
+                if _054_has_plan_marker(previous) or any(
+                    marker in previous
+                    for marker in _ANTIMICROBIAL_ACTION_NEGATION_MARKERS
+                ):
+                    snippet_start = previous_start
+
+            if index + 1 < len(weak_spans):
+                next_start, next_end = weak_spans[index + 1]
+                following = sentence[next_start:next_end]
+                if (
+                    any(
+                        marker in following
+                        for marker in _ANTIMICROBIAL_ACTION_FOLLOWUP_MARKERS
+                    )
+                    and sum(
+                        name in clause + following for name in _ANTIMICROBIALS
+                    ) == 1
+                ):
+                    snippet_end = next_end
+
+            candidates.append((
+                strong_start + snippet_start,
+                strong_start + snippet_end,
+            ))
+    if not candidates:
+        return None
+    return text[candidates[0][0]:candidates[-1][1]].strip()
+
+
+def _054_high_confidence_action_in_candidate(
+    candidate_text: str,
+    antimicrobial: str,
+) -> str | None:
+    """识别动作直接落药及严格并列治疗列表，其他语义交给模型。"""
+
+    target_index = candidate_text.find(antimicrobial)
+    if target_index < 0:
+        return None
+    prefix = candidate_text[:target_index]
+    if (
+        _054_has_plan_marker(candidate_text)
+        or "未" in candidate_text
+        or "不" in candidate_text
+        or any(
+            marker in candidate_text
+            for marker in _ANTIMICROBIAL_ACTION_PROSPECTIVE_MARKERS
+        )
+        or f"{antimicrobial}前" in candidate_text
+        or any(
+            marker in candidate_text
+            for marker in _ANTIMICROBIAL_ACTION_NEGATION_MARKERS
+        )
+        or any(
+            marker in candidate_text
+            for marker in _ANTIMICROBIAL_ACTION_HISTORICAL_MARKERS
+        )
+    ):
+        return None
+    matches = tuple(
+        (prefix.rfind(action), action)
+        for action in _ANTIMICROBIAL_REASON_ACTIONS
+        if action not in {"超说明书", "联合"} and action in prefix
+    )
+    if not matches:
+        return None
+    action_index, action = max(matches)
+    if target_index - action_index > 80:
+        return None
+    return action
+
+
+def _054_action_inputs(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[
+    dict[tuple[int, str], str],
+    tuple[AntimicrobialActionCandidate, ...],
+    dict[str, tuple[int, str]],
+]:
+    """拆出确定性肯定动作与必须交给单次语义抽取的候选。"""
+
+    confirmed: dict[tuple[int, str], str] = {}
+    candidates: list[AntimicrobialActionCandidate] = []
+    identity: dict[str, tuple[int, str]] = {}
+    for row_index, row in enumerate(rows):
+        text = _material_text(row)
+        for antimicrobial_index, antimicrobial in enumerate(
+            _antimicrobial_names_in(row)
+        ):
+            if antimicrobial not in text:
+                continue
+            key = (row_index, antimicrobial)
+            candidate_text = _054_candidate_text(text, antimicrobial)
+            if candidate_text is None:
+                continue
+            action = _054_high_confidence_action_in_candidate(
+                candidate_text, antimicrobial
+            )
+            if action is not None:
+                confirmed[key] = action
+                continue
+            item_id = f"r{row_index}-a{antimicrobial_index}"
+            identity[item_id] = key
+            candidates.append(AntimicrobialActionCandidate(
+                item_id=item_id,
+                antimicrobial=antimicrobial,
+                text=candidate_text,
+            ))
+    return confirmed, tuple(candidates), identity
 
 
 def _054_action_events(
     rows: Sequence[Mapping[str, Any]],
     antimicrobial_orders: Sequence[Mapping[str, Any]],
+    confirmed_actions: Mapping[tuple[int, str], str],
 ) -> tuple[tuple[_AntimicrobialReasonAction, ...], bool, tuple[str, ...]]:
     """仅从病程里的“具体药物 + 明确动作”建立054触发事件。
 
@@ -957,29 +1276,29 @@ def _054_action_events(
     """
 
     events: list[_AntimicrobialReasonAction] = []
+    order_events = _antimicrobial_order_events(antimicrobial_orders)
     mentioned_antimicrobials: list[str] = []
     association_failed = False
-    for row in rows:
-        text = _material_text(row)
+    for row_index, row in enumerate(rows):
         for antimicrobial in _antimicrobial_names_in(row):
-            if (action := _054_action_for_antimicrobial(text, antimicrobial)) is None:
+            if (
+                action := confirmed_actions.get((row_index, antimicrobial))
+            ) is None:
                 continue
             mentioned_antimicrobials.append(antimicrobial)
             row_order_id = _linked_order_id(row)
             if row_order_id:
                 candidates = tuple(
-                    order
-                    for order in antimicrobial_orders
-                    if (
-                        _linked_order_id(order) == row_order_id
-                        and antimicrobial in _antimicrobial_names_in(order)
-                    )
+                    order_event
+                    for order_event in order_events
+                    if row_order_id in order_event.order_ids
+                    and antimicrobial in order_event.antimicrobials
                 )
             else:
                 candidates = tuple(
-                    order
-                    for order in antimicrobial_orders
-                    if antimicrobial in _antimicrobial_names_in(order)
+                    order_event
+                    for order_event in order_events
+                    if antimicrobial in order_event.antimicrobials
                 )
             if len(candidates) != 1:
                 # 病程动作本身不能证明属于本次哪条受控医嘱；不能凭 status 或
@@ -990,8 +1309,8 @@ def _054_action_events(
                 row=row,
                 antimicrobial=antimicrobial,
                 action=action,
-                order_id=_linked_order_id(candidates[0]),
-                order=candidates[0],
+                order_ids=candidates[0].order_ids,
+                orders=candidates[0].orders,
             ))
     return (
         tuple(events),
@@ -1031,11 +1350,11 @@ def _054_event_reason_state(
             continue
         row_order_id = _linked_order_id(row)
         row_names = _antimicrobial_names_in(row)
-        if event.order_id and row_order_id:
-            if event.order_id == row_order_id:
+        if event.order_ids and row_order_id:
+            if row_order_id in event.order_ids:
                 return "documented", row
             continue
-        if row_order_id or event.order_id:
+        if row_order_id or event.order_ids:
             # 只有一端带医嘱标识时，不能用同名猜测它们属于同一动作。
             if event.antimicrobial in row_names:
                 has_unresolvable_candidate = True
@@ -1084,10 +1403,11 @@ def _empiric_antimicrobial_event_contexts(
     *,
     antimicrobial_orders: Sequence[Mapping[str, Any]],
     candidate_rows: Sequence[Mapping[str, Any]],
-) -> tuple[tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...], bool]:
+) -> tuple[tuple[tuple[Mapping[str, Any], _AntimicrobialOrderEvent], ...], bool]:
     """返回可唯一关联的经验用药事件；无法归属具体医嘱时由调用方交付资料缺口。"""
 
-    contexts: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    order_events = _antimicrobial_order_events(antimicrobial_orders)
+    contexts: list[tuple[Mapping[str, Any], _AntimicrobialOrderEvent]] = []
     association_ambiguous = False
     for row in candidate_rows:
         if not _is_explicit_empiric_antimicrobial_use(row):
@@ -1096,18 +1416,18 @@ def _empiric_antimicrobial_event_contexts(
         mentioned_names = _antimicrobial_names_in(row)
         if linked_order_id:
             candidates = tuple(
-                order
-                for order in antimicrobial_orders
-                if _linked_order_id(order) == linked_order_id
+                event
+                for event in order_events
+                if linked_order_id in event.order_ids
             )
         elif mentioned_names:
             candidates = tuple(
-                order
-                for order in antimicrobial_orders
-                if any(name in _antimicrobial_names_in(order) for name in mentioned_names)
+                event
+                for event in order_events
+                if any(name in event.antimicrobials for name in mentioned_names)
             )
-        elif len(antimicrobial_orders) == 1:
-            candidates = tuple(antimicrobial_orders)
+        elif len(order_events) == 1:
+            candidates = order_events
         else:
             candidates = ()
         if len(candidates) != 1:
@@ -1120,20 +1440,20 @@ def _empiric_antimicrobial_event_contexts(
 def _empiric_reason_documented(
     *,
     event_row: Mapping[str, Any],
-    order_row: Mapping[str, Any],
+    order_event: _AntimicrobialOrderEvent,
     course_rows: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any] | None:
     """理由只能来自可归属该经验用药事件的病程，不以培养/药敏调整代替。"""
 
-    order_id = _linked_order_id(order_row)
-    order_names = _antimicrobial_names_in(order_row)
+    order_ids = order_event.order_ids
+    order_names = order_event.antimicrobials
     for row in course_rows:
         text = _material_text(row)
         if not any(marker in text for marker in _EMPIRIC_REASON_MARKERS):
             continue
         row_order_id = _linked_order_id(row)
-        if row_order_id and order_id:
-            if row_order_id == order_id:
+        if row_order_id and order_ids:
+            if row_order_id in order_ids:
                 return row
             continue
         row_names = _antimicrobial_names_in(row)
@@ -1783,6 +2103,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     medication_extraction = None
     discharge_approval_extraction = None
     diagnosis_change_extraction = None
+    antimicrobial_action_extraction = None
     selected = tuple(
         rule_id
         for rule_id in EXTENDED_DOCUMENT_RULE_IDS
@@ -2067,73 +2388,120 @@ async def execute_luxian_0609_native_extended_document_rules(
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif rule_id == "LX0609-054":
-                (
-                    action_events,
-                    action_association_failed,
-                    mentioned_action_names,
-                ) = _054_action_events(
-                    course_rows, antimicrobial_orders
+                confirmed_actions, semantic_candidates, semantic_identity = (
+                    _054_action_inputs(course_rows)
                 )
-                if action_association_failed:
-                    final_state, reason_code = "data_gap", "association_failed"
-                elif not action_events:
-                    final_state, reason_code = (
-                        "not_applicable", "trigger_absent_complete"
-                    )
-                else:
-                    reason_outcomes = tuple(
-                        _054_event_reason_state(
-                            event=event,
-                            all_events=action_events,
-                            course_rows=course_rows,
+                if semantic_candidates:
+                    antimicrobial_action_extraction = (
+                        await extract_antimicrobial_actions(
+                            semantic_candidates, llm_client
                         )
-                        for event in action_events
                     )
-                    event_states = tuple(state for state, _row in reason_outcomes)
-                    selected_antimicrobial_evidence_rows.extend(
-                        row
-                        for event, (_state, reason_row) in zip(
-                            action_events, reason_outcomes
+                    if antimicrobial_action_extraction.state == "ready":
+                        for item in antimicrobial_action_extraction.items:
+                            if item.state != "affirmed" or item.action_quote is None:
+                                continue
+                            action = next(
+                                (
+                                    action_name
+                                    for action_name in _ANTIMICROBIAL_REASON_ACTIONS
+                                    if action_name in item.action_quote
+                                ),
+                                None,
+                            )
+                            if action is not None:
+                                confirmed_actions[semantic_identity[item.item_id]] = action
+                    else:
+                        final_state = (
+                            "technical_error"
+                            if antimicrobial_action_extraction.state == "technical_error"
+                            else "uncertain"
                         )
-                        for row in (event.row, event.order, reason_row)
-                        if row is not None
+                        reason_code = antimicrobial_action_extraction.reason_code
+                        display.append((rule_id, {
+                            "verification_kind": "antimicrobial_reason_documentation_check",
+                            "antimicrobials": list(dict.fromkeys(
+                                item.antimicrobial for item in semantic_candidates
+                            )),
+                            "action_count": len(confirmed_actions),
+                            "reason_documented": False,
+                            "unmatched_antimicrobials": list(dict.fromkeys(
+                                item.antimicrobial for item in semantic_candidates
+                            )),
+                            "association_ambiguous": True,
+                        }))
+                if not semantic_candidates or antimicrobial_action_extraction.state == "ready":
+                    (
+                        action_events,
+                        action_association_failed,
+                        mentioned_action_names,
+                    ) = _054_action_events(
+                        course_rows,
+                        antimicrobial_orders,
+                        confirmed_actions,
                     )
-                    unmatched_names = tuple(dict.fromkeys(
-                        event.antimicrobial
-                        for event, state in zip(action_events, event_states)
-                        if state != "documented"
-                    ))
-                    association_ambiguous = "ambiguous" in event_states
-                    complete = not unmatched_names
-                    if association_ambiguous:
+                    if action_association_failed:
                         final_state, reason_code = "data_gap", "association_failed"
-                    elif complete:
+                    elif not action_events:
                         final_state, reason_code = (
-                            "compliant", "requirement_satisfied"
+                            "not_applicable", "trigger_absent_complete"
                         )
                     else:
-                        final_state, reason_code = (
-                            "non_compliant", "requirement_violated"
+                        reason_outcomes = tuple(
+                            _054_event_reason_state(
+                                event=event,
+                                all_events=action_events,
+                                course_rows=course_rows,
+                            )
+                            for event in action_events
                         )
-                    display.append((rule_id, {
-                        "verification_kind": "antimicrobial_reason_documentation_check",
-                        "antimicrobials": list(dict.fromkeys(
-                            event.antimicrobial for event in action_events
-                        )),
-                        "action_count": len(action_events),
-                        "reason_documented": complete,
-                        "unmatched_antimicrobials": list(unmatched_names),
-                        "association_ambiguous": association_ambiguous,
-                    }))
-                if action_association_failed:
-                    display.append((rule_id, {
-                        "verification_kind": "antimicrobial_reason_documentation_check",
-                        "antimicrobials": list(mentioned_action_names),
-                        "action_count": len(action_events),
-                        "reason_documented": False,
-                        "unmatched_antimicrobials": list(mentioned_action_names),
-                        "association_ambiguous": True,
-                    }))
+                        event_states = tuple(
+                            state for state, _row in reason_outcomes
+                        )
+                        selected_antimicrobial_evidence_rows.extend(
+                            row
+                            for event, (_state, reason_row) in zip(
+                                action_events, reason_outcomes
+                            )
+                            for row in (event.row, *event.orders, reason_row)
+                            if row is not None
+                        )
+                        unmatched_names = tuple(dict.fromkeys(
+                            event.antimicrobial
+                            for event, state in zip(action_events, event_states)
+                            if state != "documented"
+                        ))
+                        association_ambiguous = "ambiguous" in event_states
+                        complete = not unmatched_names
+                        if association_ambiguous:
+                            final_state, reason_code = "data_gap", "association_failed"
+                        elif complete:
+                            final_state, reason_code = (
+                                "compliant", "requirement_satisfied"
+                            )
+                        else:
+                            final_state, reason_code = (
+                                "non_compliant", "requirement_violated"
+                            )
+                        display.append((rule_id, {
+                            "verification_kind": "antimicrobial_reason_documentation_check",
+                            "antimicrobials": list(dict.fromkeys(
+                                event.antimicrobial for event in action_events
+                            )),
+                            "action_count": len(action_events),
+                            "reason_documented": complete,
+                            "unmatched_antimicrobials": list(unmatched_names),
+                            "association_ambiguous": association_ambiguous,
+                        }))
+                    if action_association_failed:
+                        display.append((rule_id, {
+                            "verification_kind": "antimicrobial_reason_documentation_check",
+                            "antimicrobials": list(mentioned_action_names),
+                            "action_count": len(action_events),
+                            "reason_documented": False,
+                            "unmatched_antimicrobials": list(mentioned_action_names),
+                            "association_ambiguous": True,
+                        }))
             elif not antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif rule_id == "LX0609-055":
@@ -2322,17 +2690,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                     reason_rows = tuple(
                         _empiric_reason_documented(
                             event_row=event_row,
-                            order_row=order_row,
+                            order_event=order_event,
                             course_rows=course_rows,
                         )
-                        for event_row, order_row in empiric_contexts
+                        for event_row, order_event in empiric_contexts
                     )
                     selected_antimicrobial_evidence_rows.extend(
                         row
-                        for (event_row, order_row), reason_row in zip(
+                        for (event_row, order_event), reason_row in zip(
                             empiric_contexts, reason_rows
                         )
-                        for row in (event_row, order_row, reason_row)
+                        for row in (event_row, *order_event.orders, reason_row)
                         if row is not None
                     )
                     complete = all(reason_row is not None for reason_row in reason_rows)
@@ -2342,8 +2710,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "verification_kind": "empiric_antimicrobial_reason_check",
                         "antimicrobials": list(dict.fromkeys(
                             name
-                            for _event_row, order_row in empiric_contexts
-                            for name in _antimicrobial_names_in(order_row)
+                            for _event_row, order_event in empiric_contexts
+                            for name in order_event.antimicrobials
                         )),
                         "empiric_use_confirmed": True,
                         "reason_or_no_specimen_documented": complete,
@@ -4364,6 +4732,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         llm_call_count=sum(
             item.llm_call_count
             for item in (
+                antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -4373,6 +4742,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         prompt_tokens=sum(
             item.prompt_tokens
             for item in (
+                antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -4382,6 +4752,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         completion_tokens=sum(
             item.completion_tokens
             for item in (
+                antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -4391,6 +4762,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         total_tokens=sum(
             item.total_tokens
             for item in (
+                antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,
@@ -4400,6 +4772,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         api_time=sum(
             item.api_time
             for item in (
+                antimicrobial_action_extraction,
                 medication_extraction,
                 discharge_approval_extraction,
                 diagnosis_change_extraction,

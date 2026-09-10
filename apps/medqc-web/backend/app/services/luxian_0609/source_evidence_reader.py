@@ -348,6 +348,10 @@ _NATIVE_SOURCE_FIELDS = {
         "drug_type",
         "single_dose",
         "single_dose_unit",
+        "drug_specification",
+        "repeat_indicator",
+        "dose_form",
+        "medication_duration",
         "drug_apply_method",
         "drug_frequency",
         "start_time",
@@ -356,6 +360,7 @@ _NATIVE_SOURCE_FIELDS = {
         "planned_start_datetime",
         "update_time",
         "order_status",
+        "last_modified_datetime",
         "record_content",
     ),
     "inpat_nondrug_order": (

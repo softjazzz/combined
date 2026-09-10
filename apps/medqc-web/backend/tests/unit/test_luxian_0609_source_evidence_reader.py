@@ -121,11 +121,19 @@ def test_snapshot_reader_projects_real_mr_surgery_primary_identity(monkeypatch) 
 
 
 def test_snapshot_reader_projects_drug_order_planned_start_time(monkeypatch) -> None:
+    signature_fields = {
+        "repeat_indicator": "临时",
+        "drug_specification": "100ml:0.5g",
+        "dose_form": "注射剂",
+        "medication_duration": "1",
+        "last_modified_datetime": "2026-08-19 08:01:00+08",
+    }
     connection = _SourceRowsConnection([{
         "order_id": "O-1",
         "generic_name": "美罗培南",
         "prescribed_datetime": "2026-08-19 08:00:00+08",
         "planned_start_datetime": "2026-08-19 10:00:00+08",
+        **signature_fields,
     }])
     monkeypatch.setattr(
         source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
@@ -146,6 +154,7 @@ def test_snapshot_reader_projects_drug_order_planned_start_time(monkeypatch) -> 
             "generic_name",
             "prescribed_datetime",
             "planned_start_datetime",
+            *signature_fields,
         ],
     )
 
@@ -158,8 +167,10 @@ def test_snapshot_reader_projects_drug_order_planned_start_time(monkeypatch) -> 
     )
 
     assert result.rows[0]["planned_start_datetime"] == "2026-08-19 10:00:00+08"
+    assert {field: result.rows[0][field] for field in signature_fields} == signature_fields
     sql, _params = connection.calls[0]
     assert '"planned_start_datetime"' in sql
+    assert all(f'"{field}"' in sql for field in signature_fields)
 
 
 @pytest.mark.parametrize(
