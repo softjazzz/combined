@@ -37,8 +37,8 @@ C04/LX0609-072,C04,LX0609-072,not_applicable,发现缺陷,F05,真实API聚焦验
 C04/LX0609-073,C04,LX0609-073,not_applicable,发现缺陷,F05,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C25/LX0609-072,C25,LX0609-072,not_applicable,发现缺陷,F05,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C25/LX0609-073,C25,LX0609-073,not_applicable,发现缺陷,F05,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
-C07/LX0609-074,C07,LX0609-074,not_applicable,发现缺陷,F06,未启动,,,,主协调代理,未关闭
-C20/LX0609-074,C20,LX0609-074,not_applicable,发现缺陷,F06,未启动,,,,主协调代理,未关闭
+C07/LX0609-074,C07,LX0609-074,not_applicable,发现缺陷,F06,真实API聚焦验收通过，待总回归,non_compliant/requirement_violated；1次修正诊断，修改理由和诊断依据均未记录,.tmp/0910-full-audit/f06-074-final-model-comparison.json；Flash job e75e6a1a-80b2-42ea-978c-86c4c21d8d16；35B job 3a02fa41-a10f-4a6a-a45d-71bd3c6f552f；src_f3f26bee1b0207e57d4eca0d,提交528f04977、5e8387941、7352f4d5c、472ed0798；355项聚焦测试通过；两模型30例074结果一致：27 data_gap、2 non_compliant、1 compliant，3次调用、0重试、0技术错误,主协调代理,聚焦验收通过
+C20/LX0609-074,C20,LX0609-074,not_applicable,发现缺陷,F06,真实API聚焦验收通过，待总回归,compliant/requirement_satisfied；1次修正诊断，修改理由和诊断依据均已记录,.tmp/0910-full-audit/f06-074-final-model-comparison.json；Flash job e75e6a1a-80b2-42ea-978c-86c4c21d8d16；35B job 3a02fa41-a10f-4a6a-a45d-71bd3c6f552f；src_e7080a944638910cc76b8611,提交528f04977、5e8387941、7352f4d5c、472ed0798；355项聚焦测试通过；两模型30例074结果一致：27 data_gap、2 non_compliant、1 compliant，3次调用、0重试、0技术错误,主协调代理,聚焦验收通过
 C12/LX0609-055,C12,LX0609-055,not_applicable,发现缺陷,F07,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-antimicrobial-gaps-horizon/independent-verification.json,；真实API job1685bf48-571e-45aa-9711-cb9c1760ac71，180项保存与公开DTO一致；C12/055药名覆盖及冻结终点修复，符合预期超时判定,主协调代理,聚焦验收通过
 C01/LX0609-013,C01,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
 C02/LX0609-013,C02,LX0609-013,data_gap,发现缺陷,F08,真实API聚焦验收通过，待总回归,,.tmp/0910-full-audit/typed-pathology-transfer/independent-verification.json,提交782af9d12；真实API30例90项job9ac26bb9-1da4-4f0f-b938-ba9a9ad275f6，13.56秒0Token；独立保存/公开投影逐字段一致，原COPY来源与提示定位吻合；10项状态或原因预期变化。,主协调代理,聚焦验收通过
@@ -380,7 +380,7 @@ C29/LX0609-018,C29,LX0609-018,non_compliant,待复核,R09,未启动,,,,主协调
 C29/LX0609-077,C29,LX0609-077,non_compliant,待复核,R09,未启动,,,,主协调代理,未关闭
 C30/LX0609-018,C30,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
 C30/LX0609-077,C30,LX0609-077,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C01/LX0609-074,C01,LX0609-074,not_applicable,待复核,R10,未启动,,,,主协调代理,未关闭
+C01/LX0609-074,C01,LX0609-074,not_applicable,待复核,R10,真实API聚焦验收通过，待总回归,non_compliant/requirement_violated；1次补充诊断，修改理由未记录、诊断依据已记录,.tmp/0910-full-audit/f06-074-final-model-comparison.json；Flash job e75e6a1a-80b2-42ea-978c-86c4c21d8d16；35B job 3a02fa41-a10f-4a6a-a45d-71bd3c6f552f；src_f7af9ef346c887461b020cfa,提交528f04977、5e8387941、7352f4d5c、472ed0798；355项聚焦测试通过；两模型30例074结果一致：27 data_gap、2 non_compliant、1 compliant，3次调用、0重试、0技术错误,主协调代理,聚焦验收通过
 C02/LX0609-074,C02,LX0609-074,not_applicable,待复核,R10,未启动,,,,主协调代理,未关闭
 C03/LX0609-074,C03,LX0609-074,not_applicable,待复核,R10,未启动,,,,主协调代理,未关闭
 C04/LX0609-074,C04,LX0609-074,not_applicable,待复核,R10,未启动,,,,主协调代理,未关闭
