@@ -269,9 +269,27 @@ def test_native_core_emits_direct_rule_decisions_on_shared_snapshot(monkeypatch)
 def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monkeypatch):
     snapshot, materials = _typed_session(
         surgery_record_rows=(
-            {"document_id": "surgery-1", "surgery_begin_time": "2026-07-07 16:30:00+08"},
-            {"document_id": "surgery-1", "surgery_begin_time": "2026-07-07 16:30:00+08"},
-            {"document_id": "surgery-2", "surgery_begin_time": "2026-07-08 15:55:00+08"},
+            {
+                "document_id": "surgery-1",
+                "surgery_begin_time": "2026-07-07 16:30:00+08",
+                "surgery_name": "同名手术",
+                "surgery_code": "same-code",
+                "surgery_process": "第一台手术实质记录",
+            },
+            {
+                "document_id": "surgery-1",
+                "surgery_begin_time": "2026-07-07 16:30:00+08",
+                "surgery_name": "同名手术",
+                "surgery_code": "same-code",
+                "surgery_process": "第一台手术实质记录",
+            },
+            {
+                "document_id": "surgery-2",
+                "surgery_begin_time": "2026-07-08 15:55:00+08",
+                "surgery_name": "同名手术",
+                "surgery_code": "same-code",
+                "surgery_process": "第二台手术实质记录",
+            },
         ),
         surgery_safecheck_record_rows=(
             {
@@ -280,7 +298,9 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
             },
             {
                 "document_id": "safecheck-2",
-                "record_content": "手术时间：2026-07-08 15:55:00",
+                "record_content": (
+                    "手术时间：2026-07-08 07:55:00+00:00 手术方式：同名手术"
+                ),
             },
         ),
         mr_surgery_rows=tuple(
@@ -362,6 +382,122 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
     )
 
 
+def test_native_032_unmatched_time_shell_keeps_association_gap_and_document_refs(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        surgery_record_rows=(
+            {
+                "document_id": "surgery-shell",
+                "surgery_begin_time": "2025-07-10 09:00:00+08:00",
+                "surgery_process": "",
+            },
+            {
+                "document_id": "surgery-confirmed",
+                "surgery_begin_time": "2025-07-13 08:55:00+08:00",
+                "surgery_process": "具有实质过程的手术记录",
+            },
+        ),
+        surgery_safecheck_record_rows=(
+            {
+                "document_id": "safecheck-confirmed",
+                "record_content": (
+                    "手术时间：2025-07-13 00:55:00+00:00 手术方式：已实施手术"
+                ),
+            },
+        ),
+    )
+    plan = SimpleNamespace(
+        planned_rules=[
+            SimpleNamespace(rule_id=rule_id)
+            for rule_id in native_execution.NATIVE_RULE_IDS
+        ]
+    )
+    provided = SimpleNamespace(
+        evidence_payload={"programmatic_timeline": {"documents": {}}},
+        source_query_observations=(),
+        extraction_inputs=(),
+        target_qualifications=(),
+    )
+    assembly = SimpleNamespace(
+        source_query_observations=(), fact_pairs=(), deterministic_coverage_outcomes=()
+    )
+    execution = SimpleNamespace(
+        results=tuple(
+            SimpleNamespace(
+                rule_id=rule_id,
+                final_state=SimpleNamespace(value="compliant"),
+                finding_kind=SimpleNamespace(value="requirement_satisfied"),
+            )
+            for rule_id in native_execution.NATIVE_RULE_IDS
+        ),
+        fingerprint=lambda: "e" * 64,
+    )
+    monkeypatch.setattr(
+        native_execution.planner, "build_luxian_0609_shadow_plan", lambda **_: plan
+    )
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "provide_luxian_0609_runtime_shadow_inputs",
+        lambda **_: provided,
+    )
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_assembler,
+        "assemble_luxian_0609_runtime_shadow_inputs",
+        lambda **_: assembly,
+    )
+    monkeypatch.setattr(
+        native_execution.shadow_execution,
+        "build_luxian_0609_shadow_execution",
+        lambda **_: execution,
+    )
+
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=native_execution.NATIVE_RULE_IDS,
+        visit_id="visit-native-shell",
+        institute_id="inst-native-shell",
+        patient_id="patient-native-shell",
+        source_schema=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=native_execution.NATIVE_RULE_IDS,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=native_execution.NATIVE_RULE_IDS,
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
+    surgery_refs = {
+        reference
+        for reference, _ in materials.document_rows(
+            "surgery_record", snapshot=snapshot
+        )
+    }
+    assert set(result.decisions[0].fact_refs) == surgery_refs
+    assert reduced[1].final_state.value == "data_gap"
+    assert reduced[1].reason_code == "association_failed"
+    expected_refs = {
+        reference
+        for source_key in ("surgery_record", "surgery_safecheck_record")
+        for reference, _ in materials.document_rows(source_key, snapshot=snapshot)
+    }
+    assert set(result.decisions[1].fact_refs) == expected_refs
+    assert result.customer_display_facts == (
+        (
+            "LX0609-030",
+            {
+                "verification_kind": "surgery_document_present",
+                "target_document": "surgery_record",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     (
         "surgery_record_rows",
@@ -372,10 +508,114 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         "expected_reason",
     ),
     (
+        *(
+            pytest.param(
+                (
+                    {
+                        "document_id": "surgery-placeholder",
+                        "surgery_begin_time": "2026-07-29 08:00:00",
+                        "record_content": placeholder,
+                    },
+                    {
+                        "document_id": "surgery-confirmed",
+                        "surgery_begin_time": "2026-07-30 10:00:00",
+                        "surgery_process": "完整手术过程记录",
+                    },
+                ),
+                (
+                    {
+                        "document_id": "safecheck-confirmed",
+                        "record_content": "手术时间：2026-07-30 10:00:00",
+                    },
+                ),
+                frozenset(),
+                False,
+                "data_gap",
+                "association_failed",
+                id=f"placeholder-{index}-is-an-uncertain-shell",
+            )
+            for index, placeholder in enumerate(("无。", "无", "-", "/"), start=1)
+        ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {
+                    "document_id": "single-confirmed",
+                    "surgery_begin_time": "2026-07-30 08:00:00+08:00",
+                    "surgery_process": "-",
+                    "record_content": "完整手术过程记录",
+                },
+            ),
+            (),
+            frozenset(),
+            False,
+            "compliant",
+            "requirement_satisfied",
+            id="single-substantive-record-keeps-existing-result",
+        ),
+        pytest.param(
+            (
+                {
+                    "document_id": "single-shell",
+                    "surgery_begin_time": "2026-07-30 08:00:00+08:00",
+                },
+            ),
+            (
+                {
+                    "document_id": "single-safecheck",
+                    "record_content": "手术时间：2026-07-30 00:00:00Z",
+                },
+            ),
+            frozenset(),
+            False,
+            "compliant",
+            "requirement_satisfied",
+            id="single-time-shell-with-unique-safecheck-is-confirmed",
+        ),
+        pytest.param(
+            (
+                {
+                    "document_id": "single-shell",
+                    "surgery_begin_time": "2026-07-30 08:00:00+08:00",
+                },
+            ),
+            (),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="single-time-shell-without-safecheck-is-a-gap",
+        ),
+        pytest.param(
+            (
+                {
+                    "document_id": "surgery-shell-1",
+                    "surgery_begin_time": "2026-07-30 08:00:00+08:00",
+                },
+                {
+                    "document_id": "surgery-shell-2",
+                    "surgery_begin_time": "2026-07-30 10:00:00+08:00",
+                },
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 00:00:00Z",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 02:00:00+00",
+                },
+            ),
+            frozenset(),
+            False,
+            "compliant",
+            "requirement_satisfied",
+            id="unique-safechecks-confirm-time-shell-events",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -395,8 +635,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -416,8 +656,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -433,8 +673,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -454,8 +694,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -475,8 +715,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -496,8 +736,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -517,8 +757,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -538,8 +778,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -559,8 +799,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -580,8 +820,33 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {
+                    "document_id": "surgery-1",
+                    "surgery_begin_time": "2026-07-30 08:00:00+08:00@bad",
+                    "surgery_process": "第一台手术实质记录",
+                },
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="formal-surgery-time-rejects-illegal-offset-suffix",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -601,8 +866,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -622,8 +887,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -647,8 +912,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
-                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第一台手术实质记录"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 08:00:00", "surgery_process": "第二台手术实质记录"},
             ),
             (
                 {
@@ -741,7 +1006,18 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
     )
     assert reduced[0].final_state.value == expected_state
     assert reduced[0].reason_code == expected_reason
-    if expected_state == "non_compliant":
+    if expected_state == "compliant":
+        assert result.customer_display_facts == (
+            (
+                "LX0609-032",
+                {
+                    "verification_kind": "surgery_document_present",
+                    "target_document": "surgery_safecheck_record",
+                    "performed_surgery_confirmed": True,
+                },
+            ),
+        )
+    elif expected_state == "non_compliant":
         assert result.customer_display_facts == (
             (
                 "LX0609-032",

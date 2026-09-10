@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import re
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
 from .decision_model import (
@@ -67,12 +68,19 @@ _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
 )
 _SAFE_CHECK_SURGERY_TIME_PATTERN = re.compile(
     r"(?<![\u4e00-\u9fffA-Za-z0-9_])手术时间\s*[:：]\s*"
-    r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?=$|[\r\n])"
+    r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}"
+    r"(?:Z|[+-]\d{2}(?::\d{2})?)?)"
+    r"(?=$|[\r\n]|[ \t]+[\u4e00-\u9fff][\u4e00-\u9fffA-Za-z0-9（）()_-]*\s*[:：])"
+)
+_SAFE_CHECK_SURGERY_TIME_LABEL_PATTERN = re.compile(
+    r"(?<![\u4e00-\u9fffA-Za-z0-9_])手术时间\s*[:：]"
 )
 _COMPLETE_SURGERY_DATETIME_PATTERN = re.compile(
     r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})"
     r"(Z|[+-]\d{2}(?::\d{2})?)?$"
 )
+_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_SURGERY_CONTENT_PLACEHOLDERS = frozenset({"无", "无。", "-", "/"})
 
 
 @dataclass(frozen=True)
@@ -193,11 +201,17 @@ def _minute_key(value: object) -> tuple[int, int, int, int, int] | None:
             )
         except ValueError:
             return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_HOSPITAL_TIMEZONE)
+    else:
+        parsed = parsed.astimezone(_HOSPITAL_TIMEZONE)
     return (parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute)
 
 
 def _safecheck_surgery_minute(row: Mapping[str, Any]) -> tuple[int, int, int, int, int] | None:
     content = str(row.get("record_content") or "")
+    if len(_SAFE_CHECK_SURGERY_TIME_LABEL_PATTERN.findall(content)) != 1:
+        return None
     matches = _SAFE_CHECK_SURGERY_TIME_PATTERN.findall(content)
     if len(matches) != 1:
         return None
@@ -231,19 +245,59 @@ def _unique_document_minutes(
     return document_id_by_minute
 
 
+def _surgery_document_minutes(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[
+    dict[tuple[int, int, int, int, int], str],
+    set[tuple[int, int, int, int, int]],
+] | None:
+    """返回唯一手术分钟索引及其中有实质记录的确认事件。"""
+    minute_by_document_id: dict[str, tuple[int, int, int, int, int]] = {}
+    material_by_document_id: dict[str, bool] = {}
+    for row in rows:
+        document_id = str(row.get("document_id") or "").strip()
+        minute = _minute_key(row.get("surgery_begin_time"))
+        if not document_id or minute is None:
+            return None
+        previous = minute_by_document_id.get(document_id)
+        if previous is not None and previous != minute:
+            return None
+        minute_by_document_id[document_id] = minute
+        contents = (
+            str(row.get(field) or "").strip()
+            for field in ("surgery_process", "record_content")
+        )
+        material_by_document_id[document_id] = material_by_document_id.get(
+            document_id, False
+        ) or any(
+            content and content not in _SURGERY_CONTENT_PLACEHOLDERS
+            for content in contents
+        )
+
+    document_id_by_minute: dict[tuple[int, int, int, int, int], str] = {}
+    confirmed_minutes: set[tuple[int, int, int, int, int]] = set()
+    for document_id, minute in minute_by_document_id.items():
+        if minute in document_id_by_minute:
+            return None
+        document_id_by_minute[minute] = document_id
+        if material_by_document_id[document_id]:
+            confirmed_minutes.add(minute)
+    return document_id_by_minute, confirmed_minutes
+
+
 def _resolve_multi_surgery_safecheck_linkage(
     *,
     surgery_rows: Sequence[Mapping[str, Any]],
     safecheck_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[str, str] | None:
     """仅为032按客户确认的“手术时间”字段做精确分钟双向唯一关联。"""
-    surgery_by_minute = _unique_document_minutes(
-        surgery_rows,
-        minute_resolver=lambda row: _minute_key(row.get("surgery_begin_time")),
-    )
-    if surgery_by_minute is None:
+    surgery_minutes = _surgery_document_minutes(surgery_rows)
+    if surgery_minutes is None:
         return "data_gap", "association_failed"
-    if len(surgery_by_minute) <= 1:
+    surgery_by_minute, confirmed_minutes = surgery_minutes
+    if not surgery_by_minute or (
+        len(surgery_by_minute) == 1 and confirmed_minutes
+    ):
         return None
 
     safecheck_by_minute = _unique_document_minutes(
@@ -254,7 +308,13 @@ def _resolve_multi_surgery_safecheck_linkage(
         return "data_gap", "association_failed"
     if set(safecheck_by_minute).difference(surgery_by_minute):
         return "data_gap", "association_failed"
-    if set(surgery_by_minute).difference(safecheck_by_minute):
+    uncertain_minutes = set(surgery_by_minute).difference(confirmed_minutes)
+    if uncertain_minutes.difference(safecheck_by_minute):
+        return "data_gap", "association_failed"
+    effective_confirmed_minutes = confirmed_minutes.union(
+        uncertain_minutes.intersection(safecheck_by_minute)
+    )
+    if effective_confirmed_minutes.difference(safecheck_by_minute):
         return "non_compliant", "required_document_missing"
     return "compliant", "requirement_satisfied"
 
@@ -357,26 +417,30 @@ def _selected_surgery_presence_fact_refs(
 ) -> tuple[str, ...] | None:
     """为已判定的存在性结果选择同一会话内的真实文书坐标。
 
-    030 合规时覆盖全部手术记录；032 合规时再覆盖已由既有分钟关联
-    逻辑确认的核查表。缺核查表的 032 只保留手术事件坐标，不能由后层
-    反查或猜测。没有实际手术文书的既有状态继续使用来源观察坐标。
+    030 合规时覆盖全部手术记录；032 合规及关联缺口时覆盖本次参与关联
+    的手术记录与核查表。缺核查表的 032 缺陷只保留手术事件坐标，不能
+    由后层反查或猜测。没有实际手术文书的既有状态继续使用来源观察坐标。
     """
 
-    if final_state not in {"compliant", "non_compliant"}:
+    if final_state not in {"compliant", "non_compliant", "data_gap"}:
         return None
     source_keys = ["surgery_record"]
-    if rule_id == "LX0609-032" and final_state == "compliant":
+    if rule_id == "LX0609-032" and final_state in {"compliant", "data_gap"}:
         source_keys.append("surgery_safecheck_record")
     refs: list[str] = []
     for source_key in source_keys:
-        refs.extend(
-            reference
-            for reference, _ in materials.document_rows(
-                source_key, snapshot=snapshot
+        try:
+            refs.extend(
+                reference
+                for reference, _ in materials.document_rows(
+                    source_key, snapshot=snapshot
+                )
             )
-        )
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+            if final_state != "data_gap":
+                raise
     selected = tuple(dict.fromkeys(refs))
-    if not selected:
+    if not selected and final_state != "data_gap":
         raise ValueError("surgery presence selected evidence is empty")
     return selected
 
@@ -540,14 +604,20 @@ def execute_luxian_0609_native_rules(
     if evidence_snapshot is not None and evidence_materials is not None:
         for rule_id in typed_set:
             try:
-                selected_fact_refs_by_rule[rule_id] = (
-                    _selected_surgery_presence_fact_refs(
-                        rule_id=rule_id,
-                        final_state=final_state_by_rule_id[rule_id],
-                        snapshot=evidence_snapshot,
-                        materials=evidence_materials,
+                if (
+                    final_state_by_rule_id[rule_id] == "data_gap"
+                    and reason_by_rule_id[rule_id] != "association_failed"
+                ):
+                    selected_fact_refs_by_rule[rule_id] = None
+                else:
+                    selected_fact_refs_by_rule[rule_id] = (
+                        _selected_surgery_presence_fact_refs(
+                            rule_id=rule_id,
+                            final_state=final_state_by_rule_id[rule_id],
+                            snapshot=evidence_snapshot,
+                            materials=evidence_materials,
+                        )
                     )
-                )
             except (
                 EvidenceMaterialTruncated,
                 EvidenceMaterialUnavailable,
