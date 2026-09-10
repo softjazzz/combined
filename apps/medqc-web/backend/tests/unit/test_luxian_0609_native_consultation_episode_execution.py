@@ -2001,6 +2001,61 @@ def test_one_out_of_window_trace_only_downgrades_that_recommendation():
     assert parsed[1].confidence == "low"
 
 
+def test_low_confidence_structured_link_keeps_unknown_execution_record_state():
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r1",
+                "test",
+                "复查胸部CT",
+                "复查胸部CT",
+                "consultation_record-1",
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+        ),
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "senior_course_record-1",
+            "senior_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 2), True),
+            "患者一般情况平稳，无会诊执行内容。",
+        ),
+        episode._CandidateDocument(
+            "exam_item_report-1",
+            "exam_item_report",
+            episode._ObservedTime(datetime(2026, 7, 20, 3), True),
+            "胸部CT检查完成。",
+        ),
+    )
+    _, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+
+    parsed = episode._parse_executions(
+        {
+            "executions": [{
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "unknown",
+                "trace_refs": [],
+                "execution_state": "linked_specific",
+                "structured_action_refs": ["exam_item_report-1"],
+                "execution_quotes": [],
+                "confidence": "medium",
+            }]
+        },
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=candidates,
+    )
+
+    assert parsed[0].execution_record_state == "unknown"
+    assert parsed[0].execution_refs == ("exam_item_report-1",)
+    assert parsed[0].confidence == "medium"
+
+
 def test_many_document_events_share_bounded_stage_two_candidates_without_repeated_refs():
     episodes = tuple(
         episode._Episode(
@@ -6753,6 +6808,97 @@ async def test_structured_order_is_auxiliary_and_cannot_replace_course_execution
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_high_confidence_structured_exam_with_unrelated_course_is_no_trace(
+    monkeypatch,
+):
+    """C29形态：结构化检查已关联，但无关查房不能充当会诊执行记录。"""
+
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows(
+        "会诊意见：建议调整镇痛方案并复查胸部CT。",
+        action_suffix=False,
+    )
+    source_rows["senior_course_record"] = _rows(
+        "患者一般情况平稳，无会诊执行内容。",
+        hour_start=2,
+        action_suffix=False,
+    )
+    source_rows["exam_item_report"] = [{
+        "document_id": "EXAM-C29",
+        "exam_name": "胸部CT",
+        "exam_result": "胸部CT检查完成",
+        "exam_time": "2026-07-20 03:00:00",
+    }]
+    session = _window_session(rows_by_source=source_rows)
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[
+                {
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "action_type": "medication",
+                    "source_quote": "调整镇痛方案",
+                    "normalized_action": "调整镇痛方案",
+                    "opinion_ref": "__AUTO__",
+                },
+                {
+                    "recommendation_ref": "consultation_record-1#r2",
+                    "action_type": "test",
+                    "source_quote": "复查胸部CT",
+                    "normalized_action": "复查胸部CT",
+                    "opinion_ref": "__AUTO__",
+                },
+            ],
+        )]),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "execution_quotes": [],
+                "confidence": "high",
+            },
+            {
+                "recommendation_ref": "consultation_record-1#r2",
+                "execution_record_state": "unknown",
+                "trace_refs": [],
+                "execution_state": "linked_specific",
+                "structured_action_refs": ["exam_item_report-1"],
+                "execution_quotes": ["胸部CT检查完成"],
+                "confidence": "high",
+            },
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "not_applicable",
+    ]
+    assert result.llm_call_count == 2
+    evidence = dict(result.customer_display_facts)["LX0609-020"][
+        "recommendation_evidence"
+    ][1]
+    assert evidence["execution_state"] == "unknown"
+    assert [
+        item["source_type"] for item in evidence["execution_evidence"]
+    ] == ["exam_item_report"]
 
 
 @pytest.mark.asyncio

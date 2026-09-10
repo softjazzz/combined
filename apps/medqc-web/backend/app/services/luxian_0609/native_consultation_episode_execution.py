@@ -2724,6 +2724,16 @@ def _parse_executions(
         ):
             parsed.append(_unknown_execution_assessment(recommendation_ref))
             continue
+        if (
+            confidence == "high"
+            and structured_refs
+            and not trace_refs
+            and execution_record_state == "unknown"
+        ):
+            # 引用范围、来源角色及 linked_* 结构化状态均已在上方闭合。
+            # 结构化动作存在但未选择任何病程 trace，按 Prompt 合同归并为
+            # no_trace；保留动作关联、引用和摘录，不替模型补造病程证据。
+            execution_record_state = "no_trace"
         quotes = tuple(_clean(quote) for quote in raw_quotes)
         if any(not quote or len(quote) > _MAX_RECOMMENDATION_CHARS for quote in quotes) or len(quotes) != len(set(quotes)):
             parsed.append(_unknown_execution_assessment(recommendation_ref))
