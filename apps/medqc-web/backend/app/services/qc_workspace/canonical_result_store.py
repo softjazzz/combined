@@ -357,7 +357,9 @@ def validated_customer_explanation(
     return customer_display_facts, criterion_results
 
 
-def envelope_item_from_rule_result(item: Dict[str, Any]) -> Dict[str, Any]:
+def envelope_item_from_rule_result(
+    item: Dict[str, Any], *, hmac_key: str | None = None,
+) -> Dict[str, Any]:
     """截取 RuleDecision 交付所需字段，避免 Envelope 变成任务调试日志。"""
 
     allowed_keys = {
@@ -434,7 +436,8 @@ def envelope_item_from_rule_result(item: Dict[str, Any]) -> Dict[str, Any]:
         if gap_details:
             result["data_gap_details"] = gap_details
 
-    hmac_key = customer_safe_projection_key()
+    if hmac_key is None:
+        hmac_key = customer_safe_projection_key()
     record_id = _safe_text(item.get("record_id") or item.get("visit_id"))
     if record_id:
         result["record_ref"] = keyed_ref("rec", record_id, hmac_key=hmac_key)
@@ -498,6 +501,7 @@ class CanonicalResultStore:
         now: datetime,
         projector: Callable[[Dict[str, Any]], Dict[str, Any]],
         collect_receipts: bool = False,
+        projection_key: str | None = None,
     ) -> tuple[tuple[CaseRef, str], ...]:
         table = self._require_table()
         filters = _safe_json_loads(job_row.get("filters_json"), {})
@@ -587,7 +591,11 @@ class CanonicalResultStore:
                 "record_ref": keyed_ref(
                     "rec",
                     record_ref.as_key(),
-                    hmac_key=customer_safe_projection_key(),
+                    hmac_key=(
+                        projection_key
+                        if projection_key is not None
+                        else customer_safe_projection_key()
+                    ),
                 ),
                 "job_id": job_id,
                 "root_job_id": root_job_id,

@@ -1779,7 +1779,7 @@ def test_writer_uses_facade_envelope_item_projector(monkeypatch):
     monkeypatch.setattr(
         service,
         "_envelope_item_from_rule_result",
-        lambda item: dict(projected_item),
+        lambda item, *, hmac_key=None: dict(projected_item),
     )
 
     service._write_record_result_envelopes(

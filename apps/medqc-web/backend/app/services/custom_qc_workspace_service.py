@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO, StringIO
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 import sqlalchemy as sa
@@ -4250,8 +4250,10 @@ class CustomQCWorkspaceService:
             session.close()
 
     @staticmethod
-    def _envelope_item_from_rule_result(item: Dict[str, Any]) -> Dict[str, Any]:
-        return envelope_item_from_rule_result(item)
+    def _envelope_item_from_rule_result(
+        item: Dict[str, Any], *, hmac_key: str | None = None,
+    ) -> Dict[str, Any]:
+        return envelope_item_from_rule_result(item, hmac_key=hmac_key)
 
     def _write_record_result_envelopes(
         self,
@@ -4261,13 +4263,16 @@ class CustomQCWorkspaceService:
         items: Sequence[Dict[str, Any]],
         now: datetime,
     ) -> tuple[tuple[CaseRef, str], ...]:
+        # 一次保存使用同一份配置，下一次操作仍读取最新密钥。
+        projection_key = customer_safe_projection_key()
         return CanonicalResultStore(self._record_result_envelope_table).replace_for_job(
             session,
             job_row=job_row,
             items=items,
             now=now,
-            projector=self._envelope_item_from_rule_result,
+            projector=partial(self._envelope_item_from_rule_result, hmac_key=projection_key),
             collect_receipts=diagnostic_capture_enabled(),
+            projection_key=projection_key,
         )
 
     def _load_record_result_envelope_items(
