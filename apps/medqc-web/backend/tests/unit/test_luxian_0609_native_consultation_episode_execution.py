@@ -6356,6 +6356,7 @@ async def test_stage_two_prompt_scope_gap_returns_unknown_without_crash(monkeypa
         "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-21 00:00:00"},),
         "consultation_record": tuple(_rows("申请与明确会诊意见")),
+        "daily_course_record": tuple(_rows("会诊后病程候选", hour_start=3)),
         "inpat_nondrug_order": (
             {"order_name": "会诊后具体处置医嘱", "prescribed_datetime": "2026-07-20 02:00:00"},
         ),
@@ -6750,8 +6751,8 @@ async def test_structured_order_is_auxiliary_and_cannot_replace_course_execution
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
-    assert result.llm_call_count == 2
-    assert f"{source_key}-1" in client.prompts[1]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -6793,9 +6794,8 @@ async def test_direct_reader_keeps_nondrug_order_as_auxiliary_evidence_without_s
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
-    assert result.llm_call_count == 2
-    assert "inpat_nondrug_order-1" in client.prompts[1]
-    assert "不应作为正文候选" not in client.prompts[1]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio

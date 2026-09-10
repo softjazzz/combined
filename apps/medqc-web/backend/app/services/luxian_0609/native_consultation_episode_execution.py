@@ -3595,6 +3595,23 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             "data_gap",
                             "candidate_scope_incomplete",
                         )
+                elif projection.candidates and not context_only_candidate_present:
+                    # 4.20.4 要求会诊后病程记录执行情况。只有医嘱、检查、
+                    # 检验或手术等结构化动作时，无法替代这份病程记录；该
+                    # 来源组合的 no_trace 是确定事实，无需交给模型关联。
+                    execution_assessments = tuple(
+                        _ExecutionAssessment(
+                            item.recommendation.recommendation_ref,
+                            "absent",
+                            (),
+                            "high",
+                            (),
+                            "no_trace",
+                            (),
+                            (),
+                        )
+                        for item in completed_recommendations
+                    )
                 elif not projection.candidates:
                     # 候选因截断、超限、无权威时间或正文预算而无法投给模型时，
                     # 不是模型的 absent 结论，必须单列为资料不足。反之，已成功
