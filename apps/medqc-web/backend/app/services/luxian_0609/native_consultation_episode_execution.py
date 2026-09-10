@@ -1351,6 +1351,47 @@ def _compact_document_prompt(
     )
     if len(payload) > _MAX_PROMPT_CHARS:
         raise _SourceGap()
+    first_ref = _clean(prompt_documents[0].get("ref"))
+    recommendation_example = json.dumps(
+        {
+            "consultation_event_facts": [{
+                "ref": first_ref,
+                "scope": "ordinary",
+                "application_state": "clear",
+                "opinion_state": "clear",
+                "confidence": "high",
+                "recommendations": [
+                    {
+                        "source_quote": "完善检查A",
+                        "normalized_action": "完善检查A",
+                        "action_type": "test",
+                    },
+                    {
+                        "source_quote": "完善检查B",
+                        "normalized_action": "完善检查B",
+                        "action_type": "test",
+                    },
+                    {
+                        "source_quote": "采集标本C并测定指标D",
+                        "normalized_action": "采集标本C并测定指标D",
+                        "action_type": "test",
+                    },
+                    {
+                        "source_quote": "7日后复查检查A",
+                        "normalized_action": "7日后复查检查A",
+                        "action_type": "test",
+                    },
+                    {
+                        "source_quote": "操作前禁食并禁饮",
+                        "normalized_action": "操作前禁食并禁饮",
+                        "action_type": "procedure",
+                    },
+                ],
+            }]
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     return (
         "你逐份识别本次住院的普通专科会诊文书，并从明确会诊意见中抽取建议清单；不做质控结论。"
         "每个ref已经由CDM稳定文书身份隔离为独立事件，禁止跨ref合并，也禁止拆分同一ref。"
@@ -1367,9 +1408,20 @@ def _compact_document_prompt(
         "既往史或泛化继续治疗当建议。建议身份由Python按数组顺序生成，禁止输出recommendation_ref；action_type只能是"
         "medication/test/procedure/transfer/monitoring/other；source_quote优先返回该文书的连续支持原句，最长240字；"
         "normalized_action只做医学归一化，不得虚构。non_target/unknown的recommendations必须为空。"
+        "对每份ordinary且opinion_state=clear、confidence=high的意见，必须穷尽全部直接可执行行动。"
+        "以能否独立判断执行或未执行为原子边界：不同检查、标本采集与检测、治疗、用药、转科复诊、监测目标分别列；"
+        "同一动作的剂量、频次、时间或条件只是该动作的限定，不得拆开；必须共同完成才构成一次临床动作的"
+        "不可分割的顺序路径合并为一条；同一episode内重复表述必须去重。"
+        "禁止把整份意见概括成一条，也禁止为凑数拆分修饰语、诊断或风险说明。"
         "每个输入ref必须恰好输出一次，禁止创造、改写、遗漏或重复ref。"
         "严格输出JSON对象：{consultation_event_facts:[{ref,scope,application_state,opinion_state,confidence,"
-        "recommendations:[{source_quote,normalized_action,action_type}]}]}。输入："
+        "recommendations:[{source_quote,normalized_action,action_type}]}]}。"
+        "抽象多行动判例：意见为“完善检查A、完善检查B；采集标本C并测定指标D；7日后复查检查A；"
+        "操作前禁食并禁饮”，应输出5条建议；两项检查分别列，标本采集与其测定属于不可分割路径合一，"
+        "定时复查另列，禁食与禁饮属于同一准备动作合一。以下JSON只说明该抽象判例的字段结构，"
+        "不得把A/B/C/D复制到实际结果："
+        + recommendation_example
+        + "。输入："
         + payload
     )
 
@@ -1397,11 +1449,47 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
                     "episode_ref": first_ref,
                     "member_refs": [first_ref],
                     "application_refs": [first_ref],
-                    "opinion_refs": [],
+                    "opinion_refs": [first_ref],
                     "application_state": "clear",
-                    "opinion_state": "absent",
+                    "opinion_state": "clear",
                     "confidence": "high",
-                    "recommendations": [],
+                    "recommendations": [
+                        {
+                            "recommendation_ref": f"{first_ref}#r1",
+                            "opinion_ref": first_ref,
+                            "source_quote": "完善检查A",
+                            "normalized_action": "完善检查A",
+                            "action_type": "test",
+                        },
+                        {
+                            "recommendation_ref": f"{first_ref}#r2",
+                            "opinion_ref": first_ref,
+                            "source_quote": "完善检查B",
+                            "normalized_action": "完善检查B",
+                            "action_type": "test",
+                        },
+                        {
+                            "recommendation_ref": f"{first_ref}#r3",
+                            "opinion_ref": first_ref,
+                            "source_quote": "采集标本C并测定指标D",
+                            "normalized_action": "采集标本C并测定指标D",
+                            "action_type": "test",
+                        },
+                        {
+                            "recommendation_ref": f"{first_ref}#r4",
+                            "opinion_ref": first_ref,
+                            "source_quote": "7日后复查检查A",
+                            "normalized_action": "7日后复查检查A",
+                            "action_type": "test",
+                        },
+                        {
+                            "recommendation_ref": f"{first_ref}#r5",
+                            "opinion_ref": first_ref,
+                            "source_quote": "操作前禁食并禁饮",
+                            "normalized_action": "操作前禁食并禁饮",
+                            "action_type": "procedure",
+                        },
+                    ],
                 }
             ],
             "non_target_refs": [],
@@ -1445,6 +1533,11 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "申请或意见为clear时对应refs不得为空。"
         "recommendations仅用于普通会诊中意见明确且高置信的可执行建议；每项必须是意见原文中的具体行动，"
         "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
+        "对每份ordinary且opinion_state=clear、confidence=high的意见，必须穷尽全部直接可执行行动。"
+        "以能否独立判断执行或未执行为原子边界：不同检查、标本采集与检测、治疗、用药、转科复诊、监测目标分别列；"
+        "同一动作的剂量、频次、时间或条件只是该动作的限定，不得拆开；必须共同完成才构成一次临床动作的"
+        "不可分割的顺序路径合并为一条；同一episode内重复表述必须去重。"
+        "禁止把整份意见概括成一条，也禁止为凑数拆分修饰语、诊断或风险说明。"
         "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
         "medication/test/procedure/transfer/monitoring/other。每项必须返回opinion_ref、source_quote和normalized_action："
         "opinion_ref只能是本episode的opinion_refs之一；source_quote用于人工溯源，优先摘录该单一意见文书的支持性原句，"
@@ -1452,7 +1545,10 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "允许source_quote和normalized_action作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
         "意见不明确、无可执行建议或非普通会诊时recommendations必须为空数组。"
         "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,source_quote,normalized_action,action_type}]}],"
-        "non_target_refs:[],unresolved_refs:[]}。格式示例（只说明引用和字段结构，不代表实际语义）："
+        "non_target_refs:[],unresolved_refs:[]}。抽象多行动判例：意见为“完善检查A、完善检查B；"
+        "采集标本C并测定指标D；7日后复查检查A；操作前禁食并禁饮”，应输出5条建议；两项检查分别列，"
+        "标本采集与其测定属于不可分割路径合一，定时复查另列，禁食与禁饮属于同一准备动作合一。"
+        "格式示例（只说明该抽象判例的引用和字段结构，不代表实际语义，不得复制A/B/C/D）："
         + output_example
         + "。输入："
         + payload
