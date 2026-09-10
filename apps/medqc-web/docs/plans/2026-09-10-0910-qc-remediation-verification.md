@@ -6,7 +6,7 @@
 
 **技术栈：** PostgreSQL、Python/FastAPI、pytest、Vue/TypeScript。主协调负责合同和真实病例验收；子代理在限定文件内执行或独立审查。
 
-**状态：** 持续执行中。已完成并聚焦验收 96/107 条确认缺陷和 46/326 条待复核记录；最终 30 例 × 72 条总回归尚未开始。7 条暂停规则保持不执行。
+**状态：** 持续执行中。已完成并聚焦验收 99/107 条确认缺陷和 46/326 条待复核记录；最终 30 例 × 72 条总回归尚未开始。7 条暂停规则保持不执行。
 
 ## 1. 基线与完成定义
 
@@ -308,3 +308,9 @@ F13在当前HEAD正式任务 `8050c9ed-514b-4f84-9df3-9bce843f96b7` 中复现：
 正式episode执行器新增窄范围确定性稳定：只有同一意见同时出现明确暂无／无需特殊处理决定和动态心电图复查安排时，才把模型的 `vague/missing/unknown` 稳定为 `clear`；泛化“必要时行相关检查或药物治疗”继续为含糊。compact和full两条解析路径均有正反单测，整份会诊episode测试172项通过，Ruff与差分检查通过。修复提交 `0ef2653c0`。
 
 30例规则022前后正式任务分别为 `aa35b6cf-caa4-4ccd-9251-b8f8f765870f` 和 `aeee7062-8099-48f8-8b12-d24510a92a66`。修复后30/30完成，C04从 `non_compliant/requirement_violated` 修正为 `compliant/requirement_satisfied`，其余29例状态和原因不变；另1例两次模型调用的clear episode数量从5变4，但状态仍符合，记录为模型分组抖动。保存结果、Envelope和公开API完全一致；API与事件账本均为19次调用、43143 Token（输入30438、输出12705）。证据：`.tmp/0910-full-audit/f13-022-c04-independent-evidence.json`、`.tmp/0910-full-audit/typed-022-all-after/independent-verification.json`。累计确认缺陷96/107（89.7%）、待复核46/326（14.1%）、全部142/433（32.8%）。
+
+### F15三条已恢复结果独立验收
+
+当前HEAD正式任务 `3ec94896-39ca-4160-8fef-1035aee110dd` 完成30例规则019至023共150项。独立核查确认三条原技术错误已恢复为可交付结果：C01/020为 `non_compliant/requirement_violated`，3项会诊建议中2项有具体执行、1项缺执行；C01/023为 `compliant/requirement_satisfied`，只评价已经存在且均具体的2项执行记录，缺执行项由020评价；C04/019为 `non_compliant/requirement_violated`，存在病理触发，但规则指定的手术记录、日常病程和上级医师查房记录均无取材、标本或送检事实，范围外会诊记录中的病理结果转录不能补足。
+
+三条保存原始项经正式Canonical投影与Envelope精确一致，Envelope经正式客户投影与公开API精确一致；公开API与debug接口均返回150项，任务30/30成功。API统计与 `sys.llm_call_events` 完全守恒：62次调用、0重试、输入254252 Token、输出27704 Token、合计281956 Token，全部模型事件成功且usage已知。核查过程未调用模型。证据：`.tmp/0910-full-audit/f15-recovered3-independent-verification.json`。台账新增关闭3条确认缺陷，累计确认缺陷99/107（92.5%）、待复核46/326（14.1%）、全部145/433（33.5%）。其余F15技术错误继续按第一阶段身份编号冲突、第二阶段覆盖缺项和单建议字段错放分别处理，不能按本次恢复结果批量关闭。
