@@ -53,6 +53,7 @@ _TYPED_RULE_SOURCE_KEYS = {
         "pathology_exam_report",
         "surgery_record",
         "daily_course_record",
+        "senior_course_record",
     ),
     "LX0609-026": (
         "admission_record_diagnosis",
@@ -76,6 +77,7 @@ _TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
 
 _PATHOLOGY_SOURCES = ("pathology_exam_master", "pathology_exam_report")
 _PATHOLOGY_TARGET_SOURCES = ("surgery_record", "daily_course_record")
+_LX019_PATHOLOGY_TARGET_SOURCES = (*_PATHOLOGY_TARGET_SOURCES, "senior_course_record")
 _CHEMO_TARGET_SOURCES = ("inpat_drug_order", "daily_course_record")
 _DISCHARGE_TARGET_SOURCES = ("diagnosis", "discharge_record")
 _MAX_ROWS_PER_SOURCE = 8
@@ -811,6 +813,7 @@ def _lx019_missing_sampling_display_facts(
     pathology_report: SourceMaterial,
     surgery_record: SourceMaterial,
     daily_course_record: SourceMaterial,
+    senior_course_record: SourceMaterial,
 ) -> Mapping[str, Any] | None:
     """019 只投影已核对的来源状态，不携带病理或病程原文。"""
 
@@ -827,10 +830,11 @@ def _lx019_missing_sampling_display_facts(
         for source_key, material in (
             ("surgery_record", surgery_record),
             ("daily_course_record", daily_course_record),
+            ("senior_course_record", senior_course_record),
         )
         if material.state in {"present", "empty"}
     ]
-    if not pathology_sources or len(target_sources) != 2:
+    if not pathology_sources or len(target_sources) != 3:
         return None
     return {
         "failure_kind": "pathology_sampling_not_documented",
@@ -845,6 +849,7 @@ def _pathology_checked_sources(
     pathology_report: SourceMaterial,
     surgery_record: SourceMaterial,
     daily_course_record: SourceMaterial,
+    senior_course_record: SourceMaterial | None = None,
 ) -> tuple[list[str], list[dict[str, str]]]:
     trigger_sources = [
         source_key
@@ -854,12 +859,15 @@ def _pathology_checked_sources(
         )
         if material.state == "present"
     ]
+    target_materials = [
+        ("surgery_record", surgery_record),
+        ("daily_course_record", daily_course_record),
+    ]
+    if senior_course_record is not None:
+        target_materials.append(("senior_course_record", senior_course_record))
     target_sources = [
         {"source": source_key, "state": material.state}
-        for source_key, material in (
-            ("surgery_record", surgery_record),
-            ("daily_course_record", daily_course_record),
-        )
+        for source_key, material in target_materials
         if material.state in {"present", "empty"}
     ]
     return trigger_sources, target_sources
@@ -934,20 +942,23 @@ def _pathology_sampling_display_facts(
     pathology_report: SourceMaterial,
     surgery_record: SourceMaterial,
     daily_course_record: SourceMaterial,
+    senior_course_record: SourceMaterial,
 ) -> Mapping[str, Any] | None:
     trigger_sources, target_sources = _pathology_checked_sources(
         pathology_master=pathology_master,
         pathology_report=pathology_report,
         surgery_record=surgery_record,
         daily_course_record=daily_course_record,
+        senior_course_record=senior_course_record,
     )
-    if not trigger_sources or len(target_sources) != 2:
+    if not trigger_sources or len(target_sources) != 3:
         return None
     documented_sources = [
         source
         for source, material in (
             ("surgery_record", surgery_record),
             ("daily_course_record", daily_course_record),
+            ("senior_course_record", senior_course_record),
         )
         if _has_documented_pathology_sampling(material)
     ]
@@ -1552,7 +1563,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     ),
                 )
                 continue
-            context_sources = (*_PATHOLOGY_SOURCES, *_PATHOLOGY_TARGET_SOURCES)
+            target_context_sources = (
+                _LX019_PATHOLOGY_TARGET_SOURCES
+                if rule_id == "LX0609-019"
+                else _PATHOLOGY_TARGET_SOURCES
+            )
+            context_sources = (*_PATHOLOGY_SOURCES, *target_context_sources)
         else:
             diagnosis = source_for_rule("diagnosis")
             if typed_rule and rule_id == "LX0609-026":
@@ -1800,7 +1816,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             for source_key in context_sources
         }
         required_sources = (
-            ("surgery_record", "daily_course_record")
+            _LX019_PATHOLOGY_TARGET_SOURCES
+            if rule_id == "LX0609-019" and typed_rule
+            else _PATHOLOGY_TARGET_SOURCES
             if rule_id in {"LX0609-013", "LX0609-019"}
             else ("inpat_drug_order", "daily_course_record")
             if rule_id == "LX0609-026"
@@ -1866,6 +1884,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 pathology_report=report,
                 surgery_record=materials["surgery_record"],
                 daily_course_record=materials["daily_course_record"],
+                senior_course_record=materials["senior_course_record"],
             )
             emit_outcome(
                 rule_id,
@@ -1944,6 +1963,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             (
                 sampling_surgery or materials["surgery_record"],
                 materials["daily_course_record"],
+                materials["senior_course_record"],
             )
             if rule_id == "LX0609-019"
             else ()
@@ -1954,10 +1974,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             else None
         )
         if rule_id == "LX0609-019" and sampling_row is not None:
-            sampling_source = (
-                "surgery_record"
-                if any(sampling_row is row for row in sampling_materials[0].rows)
-                else "daily_course_record"
+            sampling_source = next(
+                source_key
+                for source_key, material in zip(
+                    _LX019_PATHOLOGY_TARGET_SOURCES, sampling_materials
+                )
+                if any(sampling_row is row for row in material.rows)
             )
             emit_outcome(
                 rule_id,
@@ -1969,6 +1991,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     pathology_report=report,
                     surgery_record=sampling_surgery or materials["surgery_record"],
                     daily_course_record=materials["daily_course_record"],
+                    senior_course_record=materials["senior_course_record"],
                 ),
                 fact_refs=(
                     typed_document_refs(
@@ -2057,6 +2080,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 _PATHOLOGY_SAMPLING_MISSING_PATTERN,
                 materials["surgery_record"],
                 materials["daily_course_record"],
+                materials["senior_course_record"],
             )
             if rule_id == "LX0609-019"
             else ()
@@ -2080,8 +2104,13 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     typed_document_refs(
                         ("pathology_exam_master", master.rows),
                         ("pathology_exam_report", report.rows),
-                        ("surgery_record", (missing_sampling_rows[0],)),
-                        ("daily_course_record", (missing_sampling_rows[1],)),
+                        *(
+                            (source_key, (row,))
+                            for source_key, row in zip(
+                                _LX019_PATHOLOGY_TARGET_SOURCES,
+                                missing_sampling_rows,
+                            )
+                        ),
                     )
                     if typed_rule
                     else ()
@@ -2181,6 +2210,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 pathology_report=report,
                 surgery_record=materials["surgery_record"],
                 daily_course_record=materials["daily_course_record"],
+                senior_course_record=materials["senior_course_record"],
             )
         emit_outcome(
             rule_id,

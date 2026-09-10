@@ -16,7 +16,8 @@ TUMOR_PATHOLOGY_CUSTOMER_RULE_IDS = frozenset(
     {"LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"}
 )
 _PATHOLOGY_SOURCES = frozenset({"pathology_exam_master", "pathology_exam_report"})
-_TARGET_SOURCES = frozenset({"surgery_record", "daily_course_record"})
+_TARGET_SOURCES = ("surgery_record", "daily_course_record")
+_LX019_TARGET_SOURCES = (*_TARGET_SOURCES, "senior_course_record")
 _DATETIME = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
 
 
@@ -32,10 +33,11 @@ def _safe_sources(value: Any, *, allowed: frozenset[str], required: bool) -> lis
     return list(dict.fromkeys(value))
 
 
-def _safe_checked_sources(value: Any) -> list[dict[str, str]] | None:
-    if not isinstance(value, list) or len(value) != 2:
+def _safe_checked_sources(
+    value: Any, *, expected: tuple[str, ...] = _TARGET_SOURCES
+) -> list[dict[str, str]] | None:
+    if not isinstance(value, list) or len(value) != len(expected):
         return None
-    expected = ("surgery_record", "daily_course_record")
     result: list[dict[str, str]] = []
     for source, item in zip(expected, value):
         if (
@@ -108,7 +110,15 @@ def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    checked = _safe_checked_sources(raw.get("checked_target_sources"))
+    raw_checked = raw.get("checked_target_sources")
+    checked = _safe_checked_sources(
+        raw_checked,
+        expected=(
+            _LX019_TARGET_SOURCES
+            if isinstance(raw_checked, list) and len(raw_checked) == 3
+            else _TARGET_SOURCES
+        ),
+    )
     if raw.get("verification_kind") == "pathology_sampling_documentation_check":
         triggers = _safe_sources(
             raw.get("pathology_trigger_sources"),
@@ -116,7 +126,11 @@ def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             required=True,
         )
         documented = _safe_sources(
-            raw.get("documented_sources"), allowed=_TARGET_SOURCES, required=True
+            raw.get("documented_sources"),
+            allowed=frozenset(
+                item["source"] for item in checked
+            ) if checked is not None else frozenset(),
+            required=True,
         )
         if (
             triggers is None

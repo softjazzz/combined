@@ -390,7 +390,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 病理/肿瘤规则的适用触发来源也必须参与 RuleDecision 引用绑定。
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
-    "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-019": (
+        "pathology_exam_master",
+        "pathology_exam_report",
+        "senior_course_record",
+    ),
     # 026 绑定同一请求内的恶性事实、化疗医嘱和对应病程，禁止跨快照补证。
     "LX0609-026": (
         "admission_record_diagnosis", "diagnosis", "discharge_record_diagnosis",

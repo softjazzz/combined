@@ -292,8 +292,8 @@ _RULE_DATA_GAP_MESSAGES = {
     ),
     "LX0609-019": (
         "暂无法核对病理取材记录",
-        "当前缺少完整的病理申请或报告来源，或缺少可核对的手术记录和病程记录。",
-        "请确认病理、手术及病程资料已完整同步后重新评估。",
+        "当前缺少完整的病理申请或报告来源，或缺少可核对的手术记录、日常病程记录和上级医师查房记录。",
+        "请确认病理、手术、日常病程及上级医师查房资料已完整同步后重新评估。",
     ),
     "LX0609-020": (
         "暂无法核对会诊意见是否具有对应执行记录",
@@ -910,7 +910,7 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
     ),
     ("LX0609-019", "trigger_absent_complete"): (
         "本次未发现病理取材事件",
-        "病理检查及手术资料已完成核对，未发现需要记录取材情况的病理事件。",
+        "现有病理检查资料未发现需要记录取材情况的病理事件。",
         "无需按本质控点处理。",
     ),
     ("LX0609-020", "trigger_absent_complete"): (
@@ -1275,7 +1275,7 @@ _RULE_COMPLIANT_FINDINGS = {
     "LX0609-016": "已核对入院记录现病史与首次病程记录病例特点，两段内容并非完全相同。",
     "LX0609-017": "已核对病程记录，未发现相似度达到或超过 70% 的重复记录。",
     "LX0609-018": "已确认主诉长度及诊断指向符合书写要求。",
-    "LX0609-019": "已确认病理取材情况已在手术记录或病程中记录。",
+    "LX0609-019": "已确认病理取材情况已在手术记录、日常病程记录或上级医师查房记录中记录。",
     "LX0609-020": "已确认会诊记录具备对应的会诊执行记录。",
     "LX0609-021": "已核对会诊申请单，会诊目的表述明确。",
     "LX0609-022": "已核对会诊记录单，会诊意见表述明确。",
@@ -2224,7 +2224,24 @@ def customer_finding_from_controlled_facts(
         return f"病理报告于 {facts.get('report_time')} 出具；已核对手术记录和病程记录，未找到病理结果记录。"
 
     if rule_id == "LX0609-019" and kind == "pathology_sampling_not_documented":
-        return "已确认存在病理取材事件；已核对手术记录和病程记录，均未找到取材情况记录。"
+        checked_sources = facts.get("checked_target_sources")
+        checked_names = (
+            [item.get("source") for item in checked_sources]
+            if isinstance(checked_sources, list)
+            and all(isinstance(item, Mapping) for item in checked_sources)
+            else []
+        )
+        if checked_names == ["surgery_record", "daily_course_record"]:
+            checked_scope = "手术记录和病程记录"
+        elif checked_names == [
+            "surgery_record",
+            "daily_course_record",
+            "senior_course_record",
+        ]:
+            checked_scope = "手术记录、日常病程记录和上级医师查房记录"
+        else:
+            return ""
+        return f"已确认存在病理取材事件；已核对{checked_scope}，均未找到取材情况记录。"
 
     if rule_id == "LX0609-020":
         if kind == "consultation_execution_relation_check":
