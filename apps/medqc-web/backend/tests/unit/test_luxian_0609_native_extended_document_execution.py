@@ -8145,3 +8145,45 @@ async def test_069_consumed_document_binding_failure_closes_as_technical_error(
 
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == "snapshot_mismatch"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("matching_time", "expected_state"),
+    [
+        ("2026-07-01 09:00:00", CustomerFinalState.NON_COMPLIANT),
+        (None, CustomerFinalState.DATA_GAP),
+        ("2026-07-02 10:00:00", CustomerFinalState.COMPLIANT),
+    ],
+)
+async def test_074_diagnosis_reference_and_time_must_belong_to_same_course(
+    matching_time, expected_state
+):
+    _, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": tuple(
+                {
+                    "diagnosis_datetime": time,
+                    "diagnosis_name": name,
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": "1",
+                }
+                for time, name in (
+                    ("2026-07-01 08:00:00", "肺部感染"),
+                    ("2026-07-02 08:00:00", "细菌性肺炎"),
+                )
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": matching_time,
+                    "record_content": "修正诊断：细菌性肺炎。诊断依据为培养结果。",
+                },
+                {
+                    "record_time": "2026-07-02 09:00:00",
+                    "record_content": "修正诊断：高血压。诊断依据为血压监测。",
+                },
+            ),
+        },
+    )
+    assert reduced.final_state is expected_state

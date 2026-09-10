@@ -271,13 +271,12 @@ def bind_diagnosis_change_evidence(
     """绑定实际发生变化的诊断行及已匹配的理由/依据病程。"""
 
     if len(change_events) == 1:
-        change_time, diagnosis_name, diagnosis_row = change_events[0]
+        _change_time, _diagnosis_name, diagnosis_row = change_events[0]
         consumed = [("diagnosis", diagnosis_row)]
+        # 执行器已选定支撑当前结论的候选；绑定层不再重判名称或时序。
         consumed.extend(
             (source_key, row)
-            for record_time, text, source_key, row in candidate_rows
-            if diagnosis_name in text
-            and (record_time is None or record_time >= change_time)
+            for _record_time, _text, source_key, row in candidate_rows
         )
     elif len(change_events) > 1 and uniquely_matched:
         consumed = [

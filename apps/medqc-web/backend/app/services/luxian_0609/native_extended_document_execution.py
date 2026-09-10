@@ -3815,10 +3815,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     if len(change_events) == 1:
                         changed_diagnosis_name = change_events[0][1]
-                        has_changed_diagnosis_reference = any(
-                            changed_diagnosis_name in text
-                            for _, text, _source_key, _row in candidate_rows
+                        # 名称、依据与时间必须属于同一条病程，不能借用其他诊断的时间。
+                        candidate_rows = tuple(
+                            candidate for candidate in candidate_rows
+                            if changed_diagnosis_name in candidate[1]
                         )
+                        has_changed_diagnosis_reference = bool(candidate_rows)
                         if not has_changed_diagnosis_reference:
                             # 有带时间的理由/依据候选，但未提及本次变更后的
                             # 诊断名称时，不能把其他诊断的记录当作本次变更
@@ -3829,19 +3831,29 @@ async def execute_luxian_0609_native_extended_document_rules(
                             )
                             has_reason_and_basis = False
                         else:
-                            has_reason_and_basis = any(
-                                record_time is not None and record_time >= change_events[0][0]
-                                for record_time, _text, _source_key, _row in candidate_rows
+                            matching_timed_candidates = tuple(
+                                candidate
+                                for candidate in candidate_rows
+                                if candidate[0] is not None
+                                and candidate[0] >= change_events[0][0]
                             )
-                        if (
-                            has_changed_diagnosis_reference
-                            and not has_reason_and_basis
-                            and candidate_rows
-                            and all(
-                                record_time is None
-                                for record_time, _text, _source_key, _row
-                                in candidate_rows
+                            untimed_candidates = tuple(
+                                candidate
+                                for candidate in candidate_rows
+                                if candidate[0] is None
                             )
+                            if matching_timed_candidates:
+                                candidate_rows = matching_timed_candidates
+                                has_reason_and_basis = True
+                            elif untimed_candidates:
+                                candidate_rows = untimed_candidates
+                                has_reason_and_basis = False
+                            else:
+                                # 剩余候选均有时间且早于诊断变更，只能形成确定缺陷。
+                                has_reason_and_basis = False
+                        if has_changed_diagnosis_reference and not has_reason_and_basis and any(
+                            record_time is None
+                            for record_time, _text, _source_key, _row in candidate_rows
                         ):
                             final_state, reason_code = (
                                 "data_gap",
