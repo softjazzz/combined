@@ -19,6 +19,7 @@ from .decision_model import (
     RuleDecision,
 )
 from .continuity_evidence_selection import (
+    bind_consumed_continuity_document_rows,
     bind_consultation_evidence,
     bind_diagnosis_change_evidence,
     bind_handoff_evidence,
@@ -41,6 +42,10 @@ from .extended_document.discharge_documentation import (
 )
 from .extended_document.discharge_course import (
     evaluate_predischarge_course_presence,
+)
+from .extended_document.diagnosis_change_extraction import (
+    DiagnosisChangeDocumentInput,
+    extract_diagnosis_change_documentation,
 )
 from .extended_document.physician_handoff import evaluate_physician_handoff
 from .extended_document.rule_076 import evaluate_rule_076
@@ -143,6 +148,13 @@ _DEATH_MARKERS = ("死亡", "病故")
 _ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院")
 _UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确")
 _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS = ("原因待查", "性质待定")
+_DIAGNOSIS_CHANGE_EVENT_PATTERN = re.compile(
+    r"(?:修正诊断|补充诊断)\s*(?:为|[:：])\s*"
+    r"[^\s，,。；;：:！？!?][^，,。；;\r\n]*"
+)
+_DIAGNOSIS_CHANGE_NON_EVENT_PREFIX_PATTERN = re.compile(
+    r"(?:暂不|无需|不需|不必|不予|未予|未作|若需|如需|是否|应记录|应当记录).{0,8}$"
+)
 _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?:药品|药物|用药|服药|服用|口服|停药|带药)"
 )
@@ -791,6 +803,20 @@ def _row_text(row: Mapping[str, Any]) -> str:
         for key in ("record_content", "discharge_order", "document_title")
         if _clean(row.get(key))
     )
+
+
+def _has_explicit_diagnosis_change_event(text: str) -> bool:
+    """只接受已落地的诊断修正/补充表达，排除否定、条件和泛指。"""
+
+    for match in _DIAGNOSIS_CHANGE_EVENT_PATTERN.finditer(text):
+        clause_start = max(
+            text.rfind(separator, 0, match.start())
+            for separator in ("。", "！", "!", "？", "?", "；", ";", "\n", "\r")
+        )
+        prefix = text[clause_start + 1:match.start()].strip()
+        if _DIAGNOSIS_CHANGE_NON_EVENT_PREFIX_PATTERN.search(prefix) is None:
+            return True
+    return False
 
 
 def _material_text(row: Mapping[str, Any]) -> str:
@@ -1752,6 +1778,7 @@ async def execute_luxian_0609_native_extended_document_rules(
 ) -> NativeExtendedDocumentExecutionResult:
     medication_extraction = None
     discharge_approval_extraction = None
+    diagnosis_change_extraction = None
     selected = tuple(
         rule_id
         for rule_id in EXTENDED_DOCUMENT_RULE_IDS
@@ -3938,6 +3965,132 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-074":
+            if not diagnosis_rows:
+                course_event_rows = tuple(
+                    (source_key, row, _row_text(row))
+                    for source_key, source_rows in (
+                        ("daily_course_record", daily_rows),
+                        ("senior_course_record", senior_rows),
+                    )
+                    for row in source_rows
+                    if _has_explicit_diagnosis_change_event(_row_text(row))
+                )
+                if diagnosis_error:
+                    final_state, reason_code = "data_gap", diagnosis_error
+                elif daily_error or senior_error:
+                    final_state, reason_code = (
+                        "data_gap",
+                        daily_error or senior_error,
+                    )
+                elif not course_event_rows:
+                    # 静态入院/出院诊断差异不能证明住院期间发生过诊断变更；
+                    # diagnosis 空表也不能反向证明没有发生变更。
+                    final_state, reason_code = (
+                        "data_gap",
+                        "applicability_source_gap",
+                    )
+                else:
+                    event_times = tuple(
+                        _parse_datetime(authoritative_document_time_value(row))
+                        for _source_key, row, _text in course_event_rows
+                    )
+                    if any(value is None for value in event_times):
+                        final_state, reason_code = (
+                            "data_gap",
+                            "authoritative_time_missing",
+                        )
+                        display.append((rule_id, {
+                            "failure_kind": "diagnosis_change_documentation_time_missing",
+                            "diagnosis_change_count": len(course_event_rows),
+                            "untimed_document_count": sum(
+                                value is None for value in event_times
+                            ),
+                            "issue": "candidate_document_time_missing",
+                        }))
+                    else:
+                        diagnosis_change_extraction = (
+                            await extract_diagnosis_change_documentation(
+                                tuple(
+                                    DiagnosisChangeDocumentInput(
+                                        local_doc_id=f"doc_{index:02d}",
+                                        source_type=source_key,
+                                        text=text,
+                                    )
+                                    for index, (source_key, _row, text) in enumerate(
+                                        course_event_rows, 1
+                                    )
+                                ),
+                                llm_client,
+                            )
+                        )
+                        if diagnosis_change_extraction.state != "ready":
+                            final_state = diagnosis_change_extraction.state
+                            reason_code = diagnosis_change_extraction.reason_code
+                        else:
+                            assertion_states = tuple(
+                                state
+                                for assertion in diagnosis_change_extraction.assertions
+                                for state in (
+                                    assertion.reason_state,
+                                    assertion.basis_state,
+                                )
+                            )
+                            if "missing" in assertion_states:
+                                final_state, reason_code = (
+                                    "non_compliant",
+                                    "requirement_violated",
+                                )
+                            elif "unknown" in assertion_states:
+                                final_state, reason_code = (
+                                    "uncertain",
+                                    "semantic_low_confidence",
+                                )
+                            else:
+                                final_state, reason_code = (
+                                    "compliant",
+                                    "requirement_satisfied",
+                                )
+                            if final_state in {"compliant", "non_compliant"}:
+                                display.append((rule_id, {
+                                    "verification_kind": "diagnosis_change_documentation_check",
+                                    "diagnosis_change_count": len(course_event_rows),
+                                    "reason_recorded": all(
+                                        item.reason_state == "present"
+                                        for item in diagnosis_change_extraction.assertions
+                                    ),
+                                    "basis_recorded": all(
+                                        item.basis_state == "present"
+                                        for item in diagnosis_change_extraction.assertions
+                                    ),
+                                }))
+                course_binding = bind_consumed_continuity_document_rows(
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                    consumed_rows=tuple(
+                        (source_key, row)
+                        for source_key, row, _text in course_event_rows
+                    ),
+                )
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=(),
+                        document_refs=course_binding.document_refs,
+                        exact_document_refs=bool(course_event_rows),
+                        final_state=(
+                            "technical_error"
+                            if course_binding.binding_failed
+                            else final_state
+                        ),
+                        reason_code=(
+                            "snapshot_mismatch"
+                            if course_binding.binding_failed
+                            else reason_code
+                        ),
+                    )
+                )
+                continue
             change_events: list[tuple[datetime, str, Mapping[str, Any]]] = []
             candidate_rows: tuple[
                 tuple[datetime | None, str, str, Mapping[str, Any]], ...
@@ -4195,27 +4348,47 @@ async def execute_luxian_0609_native_extended_document_rules(
         customer_display_facts=tuple(display),
         llm_call_count=sum(
             item.llm_call_count
-            for item in (medication_extraction, discharge_approval_extraction)
+            for item in (
+                medication_extraction,
+                discharge_approval_extraction,
+                diagnosis_change_extraction,
+            )
             if item is not None
         ),
         prompt_tokens=sum(
             item.prompt_tokens
-            for item in (medication_extraction, discharge_approval_extraction)
+            for item in (
+                medication_extraction,
+                discharge_approval_extraction,
+                diagnosis_change_extraction,
+            )
             if item is not None
         ),
         completion_tokens=sum(
             item.completion_tokens
-            for item in (medication_extraction, discharge_approval_extraction)
+            for item in (
+                medication_extraction,
+                discharge_approval_extraction,
+                diagnosis_change_extraction,
+            )
             if item is not None
         ),
         total_tokens=sum(
             item.total_tokens
-            for item in (medication_extraction, discharge_approval_extraction)
+            for item in (
+                medication_extraction,
+                discharge_approval_extraction,
+                diagnosis_change_extraction,
+            )
             if item is not None
         ),
         api_time=sum(
             item.api_time
-            for item in (medication_extraction, discharge_approval_extraction)
+            for item in (
+                medication_extraction,
+                discharge_approval_extraction,
+                diagnosis_change_extraction,
+            )
             if item is not None
         ),
     )

@@ -32,6 +32,9 @@ from app.services.luxian_0609.evidence_snapshot import (
 from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
     SCHEMA_VERSION as DISCHARGE_APPROVAL_SCHEMA_VERSION,
 )
+from app.services.luxian_0609.extended_document.diagnosis_change_extraction import (
+    SCHEMA_VERSION as DIAGNOSIS_CHANGE_SCHEMA_VERSION,
+)
 from app.services.luxian_0609.native_extended_document_execution import (
     execute_luxian_0609_native_extended_document_rules,
 )
@@ -266,6 +269,50 @@ def _approval_item(
         "local_doc_id": local_doc_id,
         "opinion": opinion,
         "quote": quote,
+    }
+
+
+class _DiagnosisChangeClient:
+    def __init__(self, *items, error=None):
+        self.items = list(items)
+        self.error = error
+        self.calls = []
+
+    async def generate(self, prompt, **kwargs):
+        self.calls.append((prompt, kwargs))
+        if self.error is not None:
+            raise self.error
+        return {
+            "choices": [{
+                "message": {"content": json.dumps({
+                    "schema_version": DIAGNOSIS_CHANGE_SCHEMA_VERSION,
+                    "items": self.items,
+                }, ensure_ascii=False)},
+                "finish_reason": "stop",
+            }],
+            "usage": {
+                "prompt_tokens": 80,
+                "completion_tokens": 20,
+                "total_tokens": 100,
+            },
+            "_api_time": 0.1,
+        }
+
+
+def _diagnosis_change_item(
+    local_doc_id,
+    *,
+    reason_state="present",
+    reason_quote="故考虑",
+    basis_state="present",
+    basis_quote="MRI提示异常",
+):
+    return {
+        "local_doc_id": local_doc_id,
+        "reason_state": reason_state,
+        "reason_quote": reason_quote,
+        "basis_state": basis_state,
+        "basis_quote": basis_quote,
     }
 
 
@@ -8683,3 +8730,301 @@ async def test_074_diagnosis_reference_and_time_must_belong_to_same_course(
         },
     )
     assert reduced.final_state is expected_state
+
+
+@pytest.mark.asyncio
+async def test_074_course_marker_without_reason_or_basis_is_non_compliant_c07_pattern():
+    client = _DiagnosisChangeClient(_diagnosis_change_item(
+        "doc_01",
+        reason_state="missing",
+        reason_quote="",
+        basis_state="missing",
+        basis_quote="",
+    ))
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {"daily_course_record": ({
+            "document_id": "COURSE-C07-CHANGE",
+            "record_time": "2025-06-17 09:00:00",
+            "record_content": "今日查房后修正诊断为继发性癫痫。",
+        },)},
+        llm_client=client,
+    )
+    refs = {
+        row["document_id"]: ref
+        for ref, row in materials.document_rows("daily_course_record", snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert execution.decisions[0].fact_refs == (refs["COURSE-C07-CHANGE"],)
+    assert execution.llm_call_count == 1
+    assert execution.total_tokens == 100
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_074_course_marker_with_reason_and_basis_is_compliant_c20_pattern():
+    text = (
+        "结合反复发作症状及体征，MRI提示异常，动态脑电异常，"
+        "神经内科会诊并鉴别排除其他疾病，故考虑症状性癫痫，修正诊断为症状性癫痫。"
+    )
+    client = _DiagnosisChangeClient(_diagnosis_change_item(
+        "doc_01",
+        reason_quote="故考虑症状性癫痫",
+        basis_quote="MRI提示异常，动态脑电异常",
+    ))
+    _, _, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {"senior_course_record": ({
+            "document_id": "COURSE-C20-CHANGE",
+            "record_time": "2025-07-05 10:00:00",
+            "record_content": text,
+        },)},
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert execution.llm_call_count == 1
+    assert execution.total_tokens == 100
+
+
+@pytest.mark.asyncio
+async def test_074_empty_diagnosis_and_no_course_marker_is_applicability_gap_not_na():
+    client = _DiagnosisChangeClient()
+    execution, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "admission_record": ({"admission_diagnosis": "肺部感染"},),
+            "discharge_record": ({"discharge_diagnosis": "细菌性肺炎"},),
+            "daily_course_record": ({
+                "record_time": "2025-07-05 10:00:00",
+                "record_content": "病情平稳，继续当前治疗。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "applicability_source_gap"
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_074_diagnosis_source_error_takes_priority_and_skips_model():
+    client = _DiagnosisChangeClient(_diagnosis_change_item("doc_01"))
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {"daily_course_record": ({
+            "document_id": "COURSE-CHANGE-DIAGNOSIS-GAP",
+            "record_time": "2025-07-05 10:00:00",
+            "record_content": "修正诊断：症状性癫痫。",
+        },)},
+        unavailable_sources=frozenset({"diagnosis"}),
+        llm_client=client,
+    )
+    ref = next(
+        ref
+        for ref, row in materials.document_rows("daily_course_record", snapshot=snapshot)
+        if row["document_id"] == "COURSE-CHANGE-DIAGNOSIS-GAP"
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_unavailable"
+    assert execution.decisions[0].fact_refs == (ref,)
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    (
+        "暂不修正诊断为症状性癫痫。",
+        "目前无需补充诊断：高血压。",
+        "如需修正诊断：应先完善相关依据。",
+        "病程应记录补充诊断：具体名称及依据。",
+        "修正诊断：",
+    ),
+)
+async def test_074_negated_conditional_or_generic_marker_is_not_an_event(text):
+    client = _DiagnosisChangeClient()
+    execution, reduced = await _evaluate(
+        "LX0609-074",
+        {"daily_course_record": ({
+            "document_id": "COURSE-NON-EVENT",
+            "record_time": "2025-07-05 10:00:00",
+            "record_content": text,
+        },)},
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "applicability_source_gap"
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    (
+        "今日查房后修正诊断为继发性癫痫。",
+        "结合检查结果，修正诊断：症状性癫痫。",
+        "补充诊断:高血压。",
+    ),
+)
+async def test_074_explicit_event_formats_reach_single_extraction_call(text):
+    client = _DiagnosisChangeClient(_diagnosis_change_item(
+        "doc_01",
+        reason_state="missing",
+        reason_quote="",
+        basis_state="missing",
+        basis_quote="",
+    ))
+    execution, reduced = await _evaluate(
+        "LX0609-074",
+        {"daily_course_record": ({
+            "document_id": "COURSE-EXPLICIT-EVENT",
+            "record_time": "2025-07-05 10:00:00",
+            "record_content": text,
+        },)},
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert execution.llm_call_count == 1
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_074_multiple_course_events_cannot_cross_fill_reason_and_basis():
+    client = _DiagnosisChangeClient(
+        _diagnosis_change_item(
+            "doc_01",
+            reason_quote="故考虑甲诊断",
+            basis_state="missing",
+            basis_quote="",
+        ),
+        _diagnosis_change_item(
+            "doc_02",
+            reason_state="missing",
+            reason_quote="",
+            basis_quote="检查支持乙诊断",
+        ),
+    )
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {
+            "daily_course_record": ({
+                "document_id": "COURSE-CHANGE-1",
+                "record_time": "2025-07-05 10:00:00",
+                "record_content": "故考虑甲诊断，修正诊断为甲诊断。",
+            },),
+            "senior_course_record": ({
+                "document_id": "COURSE-CHANGE-2",
+                "record_time": "2025-07-06 10:00:00",
+                "record_content": "检查支持乙诊断，补充诊断为乙诊断。",
+            },),
+        },
+        llm_client=client,
+    )
+    refs = {
+        row["document_id"]: ref
+        for source_key in ("daily_course_record", "senior_course_record")
+        for ref, row in materials.document_rows(source_key, snapshot=snapshot)
+    }
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert set(execution.decisions[0].fact_refs) == {
+        refs["COURSE-CHANGE-1"],
+        refs["COURSE-CHANGE-2"],
+    }
+    assert execution.llm_call_count == 1
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_074_course_event_without_authoritative_time_is_gap_and_skips_model():
+    client = _DiagnosisChangeClient()
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {"daily_course_record": ({
+            "document_id": "COURSE-CHANGE-UNTIMED",
+            "record_content": "修正诊断为细菌性肺炎。",
+        },)},
+        llm_client=client,
+    )
+    ref = next(
+        ref
+        for ref, row in materials.document_rows("daily_course_record", snapshot=snapshot)
+        if row["document_id"] == "COURSE-CHANGE-UNTIMED"
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert execution.decisions[0].fact_refs == (ref,)
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_074_unknown_without_missing_is_uncertain():
+    client = _DiagnosisChangeClient(_diagnosis_change_item(
+        "doc_01",
+        reason_state="unknown",
+        reason_quote="",
+        basis_state="present",
+        basis_quote="MRI提示异常",
+    ))
+    execution, reduced = await _evaluate(
+        "LX0609-074",
+        {"senior_course_record": ({
+            "document_id": "COURSE-CHANGE-UNKNOWN",
+            "record_time": "2025-07-05 10:00:00",
+            "record_content": "MRI提示异常，修正诊断为症状性癫痫。",
+        },)},
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced.reason_code == "semantic_low_confidence"
+    assert execution.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("client", "expected_reason", "expected_tokens"),
+    (
+        (
+            _DiagnosisChangeClient(_diagnosis_change_item(
+                "doc_01",
+                reason_quote="文书中不存在的理由",
+                basis_quote="MRI提示异常",
+            )),
+            "model_invalid_output",
+            100,
+        ),
+        (_DiagnosisChangeClient(error=RuntimeError("network")), "model_transport_error", 0),
+    ),
+)
+async def test_074_model_failure_is_technical_and_never_retries(
+    client, expected_reason, expected_tokens
+):
+    execution, reduced = await _evaluate(
+        "LX0609-074",
+        {"senior_course_record": ({
+            "document_id": "COURSE-CHANGE-MODEL-FAIL",
+            "record_time": "2025-07-05 10:00:00",
+            "record_content": "MRI提示异常，修正诊断为症状性癫痫。",
+        },)},
+        llm_client=client,
+    )
+
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced.reason_code == expected_reason
+    assert execution.llm_call_count == 1
+    assert execution.total_tokens == expected_tokens
+    assert len(client.calls) == 1
