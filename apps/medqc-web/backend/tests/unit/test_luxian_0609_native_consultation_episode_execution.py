@@ -237,6 +237,7 @@ async def test_batch_preserves_explicit_clear_022_when_model_marks_one_episode_v
             "consultation_record-1",
             ["consultation_record-1"],
             opinion="clear",
+            recommendations=[],
         ),
         _episode(
             "consultation_record-2",
@@ -846,13 +847,21 @@ async def test_022_mixed_opinions_preserve_each_episode_for_customer_explanation
     client = _Client(
         _payload(
             episodes=[
-                _episode("consultation_record-1", ["consultation_record-1"]),
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1"],
+                    recommendations=[],
+                ),
                 _episode(
                     "consultation_record-2",
                     ["consultation_record-2"],
                     opinion="vague",
                 ),
-                _episode("consultation_record-3", ["consultation_record-3"]),
+                _episode(
+                    "consultation_record-3",
+                    ["consultation_record-3"],
+                    recommendations=[],
+                ),
                 _episode(
                     "consultation_record-4",
                     ["consultation_record-4"],
@@ -1055,7 +1064,7 @@ async def test_many_real_documents_without_application_id_keep_semantic_event_co
             recommendations=[{
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
-                "source_quote": "并非文书中的连续原句",
+                "source_quote": "复查血常规",
                 "normalized_action": "复查血常规检查",
             }],
         )],
@@ -1377,6 +1386,107 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
     ]
 
 
+def test_merged_episode_uses_python_canonical_recommendation_refs():
+    documents = (
+        {
+            "ref": "consultation_record-1",
+            "time": "2026-07-20 08:00:00",
+            "text": "会诊意见：建议调整降压药。",
+        },
+        {
+            "ref": "consultation_record-2",
+            "time": "2026-07-20 09:00:00",
+            "text": "会诊意见：建议完善心脏彩超。",
+        },
+    )
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1", "consultation_record-2"],
+        application="absent",
+        application_refs=[],
+        opinion_refs=["consultation_record-1", "consultation_record-2"],
+        recommendations=[
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "medication",
+                "source_quote": "建议调整降压药",
+                "normalized_action": "调整降压治疗",
+                "opinion_ref": "consultation_record-1",
+            },
+            {
+                "recommendation_ref": "consultation_record-2#r1",
+                "action_type": "test",
+                "source_quote": "建议完善心脏彩超",
+                "normalized_action": "完善心脏超声检查",
+                "opinion_ref": "consultation_record-2",
+            },
+        ],
+    )])
+
+    parsed = episode._parse(payload, documents)
+
+    assert [
+        item.recommendation_ref for item in parsed[0].recommendations
+    ] == ["consultation_record-1#r1", "consultation_record-1#r2"]
+    assert [
+        item.opinion_ref for item in parsed[0].recommendations
+    ] == ["consultation_record-1", "consultation_record-2"]
+
+
+@pytest.mark.parametrize("invalid_kind", ("opinion_ref", "member_ref", "source_quote"))
+def test_python_canonical_recommendation_refs_keep_evidence_contract_strict(
+    invalid_kind,
+):
+    documents = (
+        {
+            "ref": "consultation_record-1",
+            "time": "2026-07-20 08:00:00",
+            "text": "会诊意见：建议调整降压药。",
+        },
+        {
+            "ref": "consultation_record-2",
+            "time": "2026-07-20 09:00:00",
+            "text": "会诊意见：建议完善心脏彩超。",
+        },
+    )
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1", "consultation_record-2"],
+        application="absent",
+        application_refs=[],
+        opinion_refs=["consultation_record-1", "consultation_record-2"],
+        recommendations=[
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "medication",
+                "source_quote": "建议调整降压药",
+                "normalized_action": "调整降压治疗",
+                "opinion_ref": "consultation_record-1",
+            },
+            {
+                "recommendation_ref": "consultation_record-2#r1",
+                "action_type": "test",
+                "source_quote": "建议完善心脏彩超",
+                "normalized_action": "完善心脏超声检查",
+                "opinion_ref": "consultation_record-2",
+            },
+        ],
+    )])
+    if invalid_kind == "opinion_ref":
+        payload["episodes"][0]["recommendations"][1]["opinion_ref"] = (
+            "consultation_record-999"
+        )
+    elif invalid_kind == "member_ref":
+        payload["episodes"][0]["member_refs"].append("consultation_record-999")
+    else:
+        payload["episodes"][0]["recommendations"][1]["source_quote"] = (
+            "伪造且不在意见文书中的摘录"
+        )
+
+    with pytest.raises(episode._SemanticInvalid):
+        episode._parse(payload, documents)
+
+
 def test_episode_recommendation_requires_its_own_opinion_ref():
     documents = (
         {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
@@ -1412,7 +1522,7 @@ def test_episode_recommendation_allows_semantic_rewrite_with_valid_opinion_ref()
         recommendations=[{
             "recommendation_ref": "consultation_record-1#r1",
             "opinion_ref": "consultation_record-1",
-            "source_quote": "安排心脏彩超",
+            "source_quote": "建议 完善 心脏彩超",
             "normalized_action": "进行心脏超声检查",
             "action_type": "test",
         }],
@@ -1737,7 +1847,7 @@ async def test_same_category_generic_execution_is_vague_for_each_rehabilitation_
             "consultation_record-1", ["consultation_record-1"],
             recommendations=[
                 {"recommendation_ref": "consultation_record-1#r1", "action_type": "other", "action_text": "开展关节活动训练"},
-                {"recommendation_ref": "consultation_record-1#r2", "action_type": "other", "action_text": "开展肌力训练"},
+                {"recommendation_ref": "consultation_record-1#r2", "action_type": "other", "action_text": "肌力训练"},
             ],
         )]),
         _execution(
@@ -2507,7 +2617,15 @@ async def test_020_023_execution_state_mapping(monkeypatch, execution_state, exp
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
     refs = ["daily_course_record-1"] if execution_state.startswith("linked_") else []
     client = _SequentialClient(
-        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "source_quote": "复查血常规",
+            }],
+        )]),
         _execution({"episode_ref": "consultation_record-1", "execution_state": execution_state, "execution_refs": refs, "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -2867,7 +2985,15 @@ async def test_complete_daily_trace_closes_020_023_when_senior_source_is_incompl
         lambda *, source_key, **_: source_rows[source_key],
     )
     client = _SequentialClient(
-        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "medication",
+                "source_quote": "建议加强抗感染治疗",
+            }],
+        )]),
         _execution({
             "recommendation_ref": "consultation_record-1#r1",
             "execution_record_state": "specific_trace",
@@ -4328,6 +4454,12 @@ async def test_020_explicit_fast_path_cannot_use_course_before_current_opinion(
                     ["consultation_record-1", "consultation_record-2"],
                     application_refs=["consultation_record-1"],
                     opinion_refs=["consultation_record-2"],
+                    recommendations=[{
+                        "recommendation_ref": "consultation_record-2#r1",
+                        "action_type": "medication",
+                        "source_quote": "建议今日调整抗菌药物",
+                        "opinion_ref": "consultation_record-2",
+                    }],
                 )
             ]
         )
@@ -4604,7 +4736,15 @@ async def test_020_023_window_filters_post_discharge_candidate_as_complete_absen
         "daily_course_record": tuple(_rows("出院后同步的候选文书", day=4)),
     })
     client = _SequentialClient(
-        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "source_quote": "复查血常规",
+            }],
+        )]),
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -4981,7 +5121,11 @@ async def test_020_023_reasks_only_omitted_recommendation_once():
     """合法的部分输出只补问遗漏建议，最终仍要求完整合同。"""
 
     session = _window_session(rows_by_source={
-        "consultation_record": tuple(_rows("申请与两项明确会诊意见", day=2)),
+        "consultation_record": tuple(_rows(
+            "申请与两项明确会诊意见；复查血常规；复查肝功能",
+            day=2,
+            action_suffix=False,
+        )),
         "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
     })
     first_episode = _episode(
@@ -5044,9 +5188,13 @@ async def test_020_023_reasks_only_omitted_recommendation_once():
 
 
 @pytest.mark.asyncio
-async def test_020_023_omission_retry_still_incomplete_is_technical_error():
+async def test_020_023_omission_retry_preserves_parsed_and_marks_remaining_unknown():
     session = _window_session(rows_by_source={
-        "consultation_record": tuple(_rows("申请与两项明确会诊意见", day=2)),
+        "consultation_record": tuple(_rows(
+            "申请与两项明确会诊意见；复查血常规；复查肝功能",
+            day=2,
+            action_suffix=False,
+        )),
         "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
     })
     first_episode = _episode(
@@ -5061,8 +5209,8 @@ async def test_020_023_omission_retry_still_incomplete_is_technical_error():
         _payload(episodes=[first_episode]),
         _execution({
             "recommendation_ref": "consultation_record-1#r1",
-            "execution_record_state": "no_trace",
-            "trace_refs": [],
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
             "execution_state": "absent",
             "structured_action_refs": [],
             "confidence": "high",
@@ -5083,10 +5231,88 @@ async def test_020_023_omission_retry_still_incomplete_is_technical_error():
     )
 
     assert [item.reason_code for item in result.decisions] == [
-        "model_invalid_output",
-        "model_invalid_output",
+        "semantic_low_confidence",
+        "semantic_low_confidence",
     ]
     assert result.llm_call_count == 3
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert [item["execution_state"] for item in facts["recommendation_results"]] == [
+        "specific",
+        "unknown",
+    ]
+    assert facts["recommendation_evidence"][1].get("execution_refs", []) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "retry_response",
+    (
+        _execution({
+            "recommendation_ref": "consultation_record-1#unknown",
+            "execution_record_state": "no_trace",
+            "trace_refs": [],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "confidence": "high",
+        }),
+        RuntimeError("retry failed"),
+    ),
+)
+async def test_020_023_invalid_or_failed_omission_retry_does_not_overwrite_first_response(
+    retry_response,
+):
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows(
+            "申请与两项明确会诊意见；复查血常规；复查肝功能",
+            day=2,
+            action_suffix=False,
+        )),
+        "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
+    })
+    first_episode = _episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[
+            {"recommendation_ref": "consultation_record-1#r1", "action_type": "test", "source_quote": "复查血常规"},
+            {"recommendation_ref": "consultation_record-1#r2", "action_type": "test", "source_quote": "复查肝功能"},
+        ],
+    )
+    client = _PlannedStageClient(
+        _payload(episodes=[first_episode]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "confidence": "high",
+        }),
+        retry_response,
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "semantic_low_confidence",
+        "semantic_low_confidence",
+    ]
+    assert result.llm_call_count == 3
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert [item["execution_state"] for item in facts["recommendation_results"]] == [
+        "specific",
+        "unknown",
+    ]
+    assert facts["recommendation_evidence"][1].get("execution_refs", []) == []
 
 
 @pytest.mark.asyncio
@@ -5143,6 +5369,136 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_
         ("technical_error", "model_invalid_output"),
         ("technical_error", "model_invalid_output"),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("identity_error", ("unknown", "duplicate"))
+async def test_020_023_unresolvable_execution_identity_remains_technical_error(identity_error):
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows(
+            "申请与两项明确会诊意见；复查血常规；复查肝功能",
+            day=2,
+            action_suffix=False,
+        )),
+        "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
+    })
+    first_episode = _episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[
+            {"recommendation_ref": "consultation_record-1#r1", "action_type": "test", "source_quote": "复查血常规"},
+            {"recommendation_ref": "consultation_record-1#r2", "action_type": "test", "source_quote": "复查肝功能"},
+        ],
+    )
+    invalid_ref = (
+        "consultation_record-1#unknown"
+        if identity_error == "unknown"
+        else "consultation_record-1#r1"
+    )
+    client = _PlannedStageClient(
+        _payload(episodes=[first_episode]),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            },
+            {
+                "recommendation_ref": invalid_ref,
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            },
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "model_invalid_output",
+        "model_invalid_output",
+    ]
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_020_023_misplaced_course_ref_only_marks_its_recommendation_unknown():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows(
+            "申请与两项明确会诊意见；复查血常规；复查肝功能",
+            day=2,
+            action_suffix=False,
+        )),
+        "daily_course_record": tuple(_rows("已落实两项会诊意见", day=3)),
+    })
+    first_episode = _episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[
+            {"recommendation_ref": "consultation_record-1#r1", "action_type": "test", "source_quote": "复查血常规"},
+            {"recommendation_ref": "consultation_record-1#r2", "action_type": "test", "source_quote": "复查肝功能"},
+        ],
+    )
+    client = _PlannedStageClient(
+        _payload(episodes=[first_episode]),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+            },
+            {
+                "recommendation_ref": "consultation_record-1#r2",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": ["daily_course_record-1"],
+                "confidence": "high",
+            },
+        ),
+        RuntimeError("low-confidence recheck failed"),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "semantic_low_confidence",
+        "semantic_low_confidence",
+    ]
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert [item["execution_state"] for item in facts["recommendation_results"]] == [
+        "specific",
+        "unknown",
+    ]
+    assert facts["recommendation_evidence"][1].get("execution_refs", []) == []
 
 
 @pytest.mark.asyncio
@@ -5365,13 +5721,24 @@ async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
     session = _window_session(rows_by_source={
         "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-21 00:00:00"},),
-        "consultation_record": tuple(_rows("申请与明确会诊意见")),
+        "consultation_record": tuple(_rows(
+            "申请与明确会诊意见；调整药物治疗",
+            action_suffix=False,
+        )),
         "daily_course_record": tuple(_rows(*[
             f"{secret}_{index}" for index in range(13)
         ], hour_start=2)),
     })
     client = _SequentialClient(
-        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "medication",
+                "source_quote": "调整药物治疗",
+            }],
+        )]),
         _execution({
             "recommendation_ref": "consultation_record-1#r1",
             "execution_record_state": "specific_trace",
@@ -5463,7 +5830,10 @@ async def test_link_diagnostics_does_not_treat_order_only_candidate_as_course_ex
     session = _window_session(rows_by_source={
         "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-22 00:00:00"},),
-        "consultation_record": tuple(_rows("申请与明确会诊意见")),
+        "consultation_record": tuple(_rows(
+            "申请与明确会诊意见；调整药物治疗",
+            action_suffix=False,
+        )),
         "inpat_drug_order": (
             {
                 "generic_name": "受控药物候选",

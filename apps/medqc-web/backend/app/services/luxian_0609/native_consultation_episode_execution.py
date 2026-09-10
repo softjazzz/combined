@@ -1710,14 +1710,17 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
         for number, raw_recommendation in enumerate(raw_recommendations, 1):
             if not isinstance(raw_recommendation, Mapping):
                 raise _SemanticInvalid()
-            recommendation_ref = _clean(raw_recommendation.get("recommendation_ref"))
+            # recommendation_ref 是 Python 内部身份，不是模型判定事实。合并
+            # episode 中模型可能按各意见文书分别从 r1 编号；与 compact 路径
+            # 一致，统一按 episode 内数组顺序生成，避免格式差异抹掉合法事实。
+            recommendation_ref = f"{episode_ref}#r{number}"
             opinion_ref = _clean(raw_recommendation.get("opinion_ref"))
             action_type = _clean(raw_recommendation.get("action_type")).lower()
             source_quote = raw_recommendation.get("source_quote")
             normalized_action = raw_recommendation.get("normalized_action")
+            opinion_document = documents_by_ref.get(opinion_ref)
             if (
-                recommendation_ref != f"{episode_ref}#r{number}"
-                or opinion_ref not in opinion_refs
+                opinion_ref not in opinion_refs
                 or action_type not in _RECOMMENDATION_TYPES
                 or not isinstance(source_quote, str)
                 or not isinstance(normalized_action, str)
@@ -1725,6 +1728,11 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
                 or not normalized_action.strip()
                 or len(source_quote) > _MAX_RECOMMENDATION_CHARS
                 or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
+                or opinion_document is None
+                or not _quote_is_grounded(
+                    quote=source_quote,
+                    source=_clean(opinion_document.get("text")),
+                )
             ):
                 raise _SemanticInvalid()
             recommendations.append(_Recommendation(
@@ -2486,6 +2494,19 @@ def _apply_embedded_decision_traces(
     )
 
 
+def _unknown_execution_assessment(recommendation_ref: str) -> _ExecutionAssessment:
+    return _ExecutionAssessment(
+        recommendation_ref,
+        "unknown",
+        (),
+        "low",
+        (),
+        "unknown",
+        (),
+        (),
+    )
+
+
 def _parse_executions(
     payload: Mapping[str, Any],
     *,
@@ -2512,6 +2533,9 @@ def _parse_executions(
         if not isinstance(item, Mapping):
             raise _SemanticInvalid()
         recommendation_ref = _clean(item.get("recommendation_ref"))
+        if recommendation_ref not in expected_refs or recommendation_ref in seen:
+            raise _SemanticInvalid()
+        seen.add(recommendation_ref)
         state = _clean(item.get("execution_state")).lower()
         original_state = state
         confidence = _clean(item.get("confidence")).lower()
@@ -2537,15 +2561,13 @@ def _parse_executions(
         if raw_quotes is None:
             raw_quotes = []
         if (
-            recommendation_ref not in expected_refs
-            or recommendation_ref in seen
-            or state not in _EXECUTION_STATES
-            or confidence not in _CONFIDENCE
-            or (compact_item and not execution_record_state)
-            or (execution_record_state and execution_record_state not in _EXECUTION_RECORD_STATES)
-            or (refs is not None and not isinstance(refs, list))
+            (refs is not None and not isinstance(refs, list))
             or (raw_trace_refs is not None and not isinstance(raw_trace_refs, list))
             or (raw_structured_refs is not None and not isinstance(raw_structured_refs, list))
+            or (
+                isinstance(refs, list)
+                and not all(isinstance(ref, str) for ref in refs)
+            )
             or (
                 isinstance(raw_trace_refs, list)
                 and not all(isinstance(ref, str) for ref in raw_trace_refs)
@@ -2554,12 +2576,22 @@ def _parse_executions(
                 isinstance(raw_structured_refs, list)
                 and not all(isinstance(ref, str) for ref in raw_structured_refs)
             )
-            or not isinstance(raw_quotes, list)
         ):
             raise _SemanticInvalid()
+        if (
+            state not in _EXECUTION_STATES
+            or confidence not in _CONFIDENCE
+            or (compact_item and not execution_record_state)
+            or (execution_record_state and execution_record_state not in _EXECUTION_RECORD_STATES)
+            or not isinstance(raw_quotes, list)
+        ):
+            parsed.append(_unknown_execution_assessment(recommendation_ref))
+            continue
         refs = refs if isinstance(refs, list) else []
         trace_refs = raw_trace_refs if isinstance(raw_trace_refs, list) else []
         structured_refs = raw_structured_refs if isinstance(raw_structured_refs, list) else []
+        if any(ref not in candidate_by_ref for ref in refs):
+            raise _SemanticInvalid()
         if raw_trace_refs is None and raw_structured_refs is None:
             trace_refs = [
                 ref
@@ -2600,25 +2632,13 @@ def _parse_executions(
             state = "absent"
         all_refs = [*trace_refs, *structured_refs]
         reference_scope_invalid = any(
-            not isinstance(ref, str)
-            or ref not in allowed_refs[recommendation_ref]
+            ref not in allowed_refs[recommendation_ref]
             for ref in all_refs
         )
+        if any(ref not in candidate_by_ref for ref in all_refs):
+            raise _SemanticInvalid()
         if reference_scope_invalid:
-            # 推荐项身份已经严格命中，但模型把存在的病程错配到意见时间之前，
-            # 或返回了不属于该建议白名单的ref。只关闭这一条建议并清空引用；
-            # 不能让一个局部错配作废同批其他几十条已经验证的执行事实。
-            seen.add(recommendation_ref)
-            parsed.append(_ExecutionAssessment(
-                recommendation_ref,
-                "unknown",
-                (),
-                "low",
-                (),
-                "unknown",
-                (),
-                (),
-            ))
+            parsed.append(_unknown_execution_assessment(recommendation_ref))
             continue
         if (
             len(trace_refs) != len(set(trace_refs))
@@ -2629,7 +2649,8 @@ def _parse_executions(
             or (state in {"linked_specific", "linked_vague"} and not structured_refs)
             or (state in {"absent", "unknown"} and structured_refs)
         ):
-            raise _SemanticInvalid()
+            parsed.append(_unknown_execution_assessment(recommendation_ref))
+            continue
         if not execution_record_state:
             if trace_refs and original_state == "linked_vague":
                 execution_record_state = "generic_trace"
@@ -2644,10 +2665,12 @@ def _parse_executions(
         ) or (
             execution_record_state in {"no_trace", "unknown"} and trace_refs
         ):
-            raise _SemanticInvalid()
+            parsed.append(_unknown_execution_assessment(recommendation_ref))
+            continue
         quotes = tuple(_clean(quote) for quote in raw_quotes)
         if any(not quote or len(quote) > _MAX_RECOMMENDATION_CHARS for quote in quotes) or len(quotes) != len(set(quotes)):
-            raise _SemanticInvalid()
+            parsed.append(_unknown_execution_assessment(recommendation_ref))
+            continue
         selected_documents = tuple(
             candidate_by_ref[ref] for ref in all_refs if ref in candidate_by_ref
         )
@@ -2665,8 +2688,8 @@ def _parse_executions(
             # 来源、时序与白名单校验后，冗余改写不得作废主事实。
             quotes = grounded_quotes
         elif quotes:
-            raise _SemanticInvalid()
-        seen.add(recommendation_ref)
+            parsed.append(_unknown_execution_assessment(recommendation_ref))
+            continue
         parsed.append(_ExecutionAssessment(
             recommendation_ref,
             state,
@@ -3562,6 +3585,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 for item in completed_recommendations
                             )
                     else:
+                        exhausted_missing_refs: set[str] = set()
                         calls += 1
                         retry_attempted = False
                         try:
@@ -3598,8 +3622,9 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             except _ExecutionCoverageIncomplete as incomplete:
                                 # 模型偶发只漏回一部分建议。只把缺失建议连同其
                                 # 受控候选重问一次；首轮合法结果不重复发送，也不
-                                # 把缺项默认解释为未执行。补问仍不完整则由外层按
-                                # model_invalid_output 失败关闭。
+                                # 把缺项默认解释为未执行。补问失败或仍不完整时，
+                                # 保留两轮已经通过合同的建议，只有未闭合项降为
+                                # unknown，避免一个缺项抹掉同批合法事实。
                                 missing_completed = tuple(
                                     item
                                     for item in completed_recommendations
@@ -3612,27 +3637,50 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 )
                                 calls += 1
                                 missing_started = time.perf_counter()
-                                missing_response = await llm_client.generate(missing_prompt)
-                                if not isinstance(missing_response, Mapping):
-                                    raise _SemanticInvalid()
-                                (
-                                    missing_prompt_tokens,
-                                    missing_completion_tokens,
-                                    missing_total_tokens,
-                                    missing_response_time,
-                                ) = _usage(missing_response)
-                                prompt_tokens += missing_prompt_tokens
-                                completion_tokens += missing_completion_tokens
-                                total_tokens += missing_total_tokens
-                                api_time += missing_response_time or (
-                                    time.perf_counter() - missing_started
-                                )
-                                completed_missing_assessments = _parse_executions(
-                                    _payload(missing_response),
-                                    completed=missing_completed,
-                                    allowed_refs=missing_allowed_refs,
-                                    candidates=projection.candidates,
-                                )
+                                completed_missing_assessments: tuple[
+                                    _ExecutionAssessment, ...
+                                ] = ()
+                                missing_time_recorded = False
+                                try:
+                                    missing_response = await llm_client.generate(
+                                        missing_prompt
+                                    )
+                                    missing_elapsed = (
+                                        time.perf_counter() - missing_started
+                                    )
+                                    if not isinstance(missing_response, Mapping):
+                                        api_time += missing_elapsed
+                                        missing_time_recorded = True
+                                        raise _SemanticInvalid()
+                                    (
+                                        missing_prompt_tokens,
+                                        missing_completion_tokens,
+                                        missing_total_tokens,
+                                        missing_response_time,
+                                    ) = _usage(missing_response)
+                                    prompt_tokens += missing_prompt_tokens
+                                    completion_tokens += missing_completion_tokens
+                                    total_tokens += missing_total_tokens
+                                    api_time += (
+                                        missing_response_time or missing_elapsed
+                                    )
+                                    missing_time_recorded = True
+                                    try:
+                                        completed_missing_assessments = (
+                                            _parse_executions(
+                                                _payload(missing_response),
+                                                completed=missing_completed,
+                                                allowed_refs=missing_allowed_refs,
+                                                candidates=projection.candidates,
+                                            )
+                                        )
+                                    except _ExecutionCoverageIncomplete as retry_incomplete:
+                                        completed_missing_assessments = (
+                                            retry_incomplete.parsed
+                                        )
+                                except Exception:
+                                    if not missing_time_recorded:
+                                        api_time += time.perf_counter() - missing_started
                                 assessment_by_ref = {
                                     item.recommendation_ref: item
                                     for item in (
@@ -3640,6 +3688,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                         *completed_missing_assessments,
                                     )
                                 }
+                                for missing_item in missing_completed:
+                                    missing_ref = (
+                                        missing_item.recommendation.recommendation_ref
+                                    )
+                                    if missing_ref not in assessment_by_ref:
+                                        assessment_by_ref[missing_ref] = (
+                                            _unknown_execution_assessment(missing_ref)
+                                        )
+                                        exhausted_missing_refs.add(missing_ref)
                                 execution_assessments = tuple(
                                     assessment_by_ref[
                                         item.recommendation.recommendation_ref
@@ -3667,6 +3724,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 item.recommendation_ref
                                 for item in execution_assessments
                                 if item.confidence != "high"
+                                and item.recommendation_ref
+                                not in exhausted_missing_refs
                             }
                             if low_confidence_refs:
                                 # 只对首轮明确标为中/低信心的建议做一次
