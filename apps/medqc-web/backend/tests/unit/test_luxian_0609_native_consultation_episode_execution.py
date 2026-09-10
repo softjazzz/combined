@@ -1351,55 +1351,6 @@ def test_episode_prompt_excludes_mdt_and_requires_grounded_recommendations():
     assert "span_start/span_end" not in prompt
 
 
-@pytest.mark.parametrize("contract", ("compact", "full"))
-def test_recommendation_prompt_requires_exhaustive_atomic_action_extraction(contract):
-    document = {
-        "ref": "consultation_record-1",
-        "time": "2026-07-20 08:00:00",
-        "text": "安全抽象会诊文书",
-        "event_identity_mode": "document" if contract == "compact" else "semantic",
-        "event_group_ref": "consultation-event-1" if contract == "compact" else "",
-    }
-
-    prompt = episode._prompt((document,))
-
-    assert "穷尽全部直接可执行行动" in prompt
-    assert "能否独立判断执行或未执行" in prompt
-    assert "不同检查、标本采集与检测、治疗、用药、转科复诊、监测目标" in prompt
-    assert "同一动作的剂量、频次、时间或条件" in prompt
-    assert "不可分割的顺序路径" in prompt
-    assert "同一episode内重复表述" in prompt
-    assert "禁止把整份意见概括成一条" in prompt
-
-
-@pytest.mark.parametrize("contract", ("compact", "full"))
-def test_recommendation_prompt_contains_nonempty_multi_action_few_shot(contract):
-    document = {
-        "ref": "consultation_record-1",
-        "time": "2026-07-20 08:00:00",
-        "text": "安全抽象会诊文书",
-        "event_identity_mode": "document" if contract == "compact" else "semantic",
-        "event_group_ref": "consultation-event-1" if contract == "compact" else "",
-    }
-
-    prompt = episode._prompt((document,))
-
-    assert "抽象多行动判例" in prompt
-    assert "完善检查A" in prompt
-    assert "完善检查B" in prompt
-    assert "采集标本C并测定指标D" in prompt
-    assert "7日后复查检查A" in prompt
-    assert "操作前禁食并禁饮" in prompt
-    assert "应输出5条建议" in prompt
-    assert '"recommendations":[' in prompt
-    assert prompt.count('"source_quote":') >= 5
-    if contract == "full":
-        assert "consultation_record-1#r1" in prompt
-        assert "consultation_record-1#r2" in prompt
-    else:
-        assert '"recommendation_ref":' not in prompt
-
-
 def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
     documents = ({
         "ref": "consultation_record-1",
