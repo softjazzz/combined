@@ -102,6 +102,60 @@ def test_055_final_scopes_never_fall_back_from_invalid_frozen_horizon(
     assert observation.reason_code == reason
 
 
+@pytest.mark.parametrize(
+    "selected_rule_ids,live",
+    [
+        (("LX0609-065",), "2026-07-20 12:00:00"),
+        (("LX0609-064", "LX0609-065"), "2026-07-30 13:00:00"),
+    ],
+)
+def test_065_scopes_use_the_same_frozen_discharge_horizon_as_064(
+    selected_rule_ids, live
+):
+    reference = build_luxian_0609_evidence_read_session(
+        **{**_kwargs(live="2026-07-10 10:00:00"), "selected_rule_ids": ("LX0609-064",)}
+    )
+    session = build_luxian_0609_evidence_read_session(
+        **{**_kwargs(live=live), "selected_rule_ids": selected_rule_ids}
+    )
+
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == (
+        reference.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
+    )
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0][
+        "horizon_datetime"
+    ] == "2026-06-10T12:00:00"
+
+
+@pytest.mark.parametrize(
+    "selected_rule_ids", [("LX0609-065",), ("LX0609-064", "LX0609-065")]
+)
+@pytest.mark.parametrize(
+    "patch,reason",
+    [
+        ({"discharge_datetime": ""}, "authoritative_time_missing"),
+        ({"evaluation_horizon": "2026-06-11"}, "authoritative_time_conflict"),
+    ],
+)
+def test_065_scopes_never_fall_back_from_invalid_frozen_horizon(
+    selected_rule_ids, patch, reason
+):
+    session = build_luxian_0609_evidence_read_session(
+        **{
+            **_kwargs({**FROZEN, **patch}, live="2026-07-20 12:00:00"),
+            "selected_rule_ids": selected_rule_ids,
+        }
+    )
+
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == ()
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == EVALUATION_HORIZON_SOURCE_KEY
+    )
+    assert observation.reason_code == reason
+
+
 @pytest.mark.parametrize("patch,reason", [
     ({"discharge_datetime": ""}, "authoritative_time_missing"),
     ({"admission_datetime": "invalid"}, "authoritative_time_missing"),
