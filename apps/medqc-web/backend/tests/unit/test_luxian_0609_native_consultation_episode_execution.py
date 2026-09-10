@@ -1903,11 +1903,17 @@ def test_course_only_execution_prompt_and_parser_use_compact_trace_contract():
     )
 
     assert "trace_refs" in prompt
-    assert "没有不早于其opinion_date的可验证candidate_documents ref时必须返回unknown" in prompt
+    assert "只能逐字复制本条recommendation的allowed_candidate_refs" in prompt
+    assert "不得按source与序号合成ref" in prompt
+    assert "allowed_candidate_refs为空时必须返回execution_record_state=unknown、trace_refs=[]" in prompt
     assert "不得引用会诊申请或会诊意见的ref" in prompt
     assert "structured_action_refs" not in prompt
     assert "execution_quotes" not in prompt
     assert "execution_record_state,trace_refs,confidence" in prompt
+    prompt_payload = json.loads(prompt.rsplit("输入：", 1)[1])
+    assert prompt_payload["recommendations"][0]["allowed_candidate_refs"] == [
+        "daily_course_record-1"
+    ]
 
     parsed = episode._parse_executions(
         {
@@ -2040,7 +2046,7 @@ def test_many_document_events_share_bounded_stage_two_candidates_without_repeate
             ),
             "安全后续病程" * 90,
         )
-        for index in range(1, 68)
+        for index in range(1, 25)
     )
 
     prompt, allowed_refs = episode._execution_prompt(
@@ -2051,9 +2057,9 @@ def test_many_document_events_share_bounded_stage_two_candidates_without_repeate
 
     assert len(completed) == 56
     assert len(allowed_refs) == 56
-    assert len(prompt_payload["candidate_documents"]) == 67
+    assert len(prompt_payload["candidate_documents"]) == 24
     assert all(
-        "candidate_refs" not in item
+        item["allowed_candidate_refs"]
         for item in prompt_payload["recommendations"]
     )
     assert (
@@ -2061,6 +2067,136 @@ def test_many_document_events_share_bounded_stage_two_candidates_without_repeate
         < len(prompt.rsplit("输入：", 1)[1])
         <= episode._MAX_EXECUTION_PROMPT_CHARS
     )
+
+
+def test_execution_prompt_exposes_exact_allowed_refs_per_recommendation():
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r1",
+                "test",
+                "复查血常规",
+                "复查血常规",
+                "consultation_record-1",
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 8), True),
+        ),
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r2",
+                "medication",
+                "调整降压药",
+                "调整降压药",
+                "consultation_record-1",
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 10, 30), True),
+        ),
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r3",
+                "procedure",
+                "行清创术",
+                "行清创术",
+                "consultation_record-1",
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 12), True),
+        ),
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "daily_course_record-1",
+            "daily_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+            "安全后续病程",
+        ),
+        episode._CandidateDocument(
+            "exam_master-1",
+            "exam_master",
+            episode._ObservedTime(datetime(2026, 7, 20, 10), True),
+            "安全检查记录",
+        ),
+        episode._CandidateDocument(
+            "inpat_drug_order-1",
+            "inpat_drug_order",
+            episode._ObservedTime(datetime(2026, 7, 20, 11), True),
+            "安全药品医嘱",
+        ),
+    )
+
+    prompt, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+    payload = json.loads(prompt.rsplit("输入：", 1)[1])
+    entries = {
+        item["recommendation_ref"]: item
+        for item in payload["recommendations"]
+    }
+
+    assert entries["consultation_record-1#r1"]["allowed_candidate_refs"] == [
+        "daily_course_record-1",
+        "exam_master-1",
+    ]
+    assert entries["consultation_record-1#r2"]["allowed_candidate_refs"] == [
+        "inpat_drug_order-1"
+    ]
+    assert entries["consultation_record-1#r3"]["allowed_candidate_refs"] == []
+    assert {
+        recommendation_ref: frozenset(entry["allowed_candidate_refs"])
+        for recommendation_ref, entry in entries.items()
+    } == allowed_refs
+    assert "只能逐字复制本条recommendation的allowed_candidate_refs" in prompt
+    assert "不得按source与序号合成ref" in prompt
+    assert (
+        "allowed_candidate_refs为空时必须返回execution_record_state=unknown、"
+        "execution_state=unknown、trace_refs=[]、structured_action_refs=[]、"
+        "execution_quotes=[]"
+    ) in prompt
+
+
+def test_course_only_prompt_keeps_empty_allowed_refs_explicit():
+    completed = tuple(
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                f"consultation_record-1#r{index}",
+                "test",
+                "复查血常规",
+                "复查血常规",
+                "consultation_record-1",
+            ),
+            episode._ObservedTime(opinion_time, True),
+        )
+        for index, opinion_time in enumerate(
+            (datetime(2026, 7, 20, 8), datetime(2026, 7, 20, 10)),
+            start=1,
+        )
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "daily_course_record-1",
+            "daily_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+            "安全后续病程",
+        ),
+    )
+
+    prompt, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+    payload = json.loads(prompt.rsplit("输入：", 1)[1])
+
+    assert [
+        item["allowed_candidate_refs"]
+        for item in payload["recommendations"]
+    ] == [["daily_course_record-1"], []]
+    assert allowed_refs["consultation_record-1#r2"] == frozenset()
+    assert "allowed_candidate_refs为空时必须返回execution_record_state=unknown、trace_refs=[]" in prompt
+    assert "structured_action_refs" not in prompt
 
 
 @pytest.mark.asyncio

@@ -2399,6 +2399,7 @@ def _execution_prompt(
             "normalized_action": item.recommendation.normalized_action,
             "source_quote": item.recommendation.source_quote,
             "opinion_date": item.opinion_time.value.isoformat(),
+            "allowed_candidate_refs": related_refs,
         })
     payload = json.dumps({
         "recommendations": entries,
@@ -2421,10 +2422,11 @@ def _execution_prompt(
             "同一治疗类别的多个细项建议，若病程明确记载该治疗类别已经实施、但未逐项重复细项，"
             "可以分别判定已有执行痕迹；不得把跨类别措施合并推断。"
             "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
-            "trace_refs只能引用candidate_documents中的病程ref，且候选时间不得早于该建议的opinion_date；"
-            "不得引用会诊申请或会诊意见的ref，也不得引用其他建议的ref。specific_trace/generic_trace/copied_opinion必须返回至少一个trace_refs；"
+            "trace_refs只能逐字复制本条recommendation的allowed_candidate_refs中的病程ref；"
+            "不得从全局candidate_documents或其他建议复制，也不得按source与序号合成ref。"
+            "allowed_candidate_refs为空时必须返回execution_record_state=unknown、trace_refs=[]。"
+            "不得引用会诊申请或会诊意见的ref。specific_trace/generic_trace/copied_opinion必须返回至少一个trace_refs；"
             "no_trace/unknown必须返回空trace_refs。confidence只能是high/medium/low。"
-            "某条建议没有不早于其opinion_date的可验证candidate_documents ref时必须返回unknown。"
             "每个输入recommendation_ref恰好输出一次，禁止重复、遗漏或创造。"
             "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,confidence}]}。输入："
             + payload,
@@ -2457,9 +2459,11 @@ def _execution_prompt(
         "这只适用于同一临床治疗类别，绝不得用一句泛化记录覆盖药物、检查、转运等跨类别建议。"
         "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
         "confidence只能为high/medium/low。"
-        "trace_refs和structured_action_refs只能引用candidate_documents中的ref，且候选时间必须不早于该建议的opinion_date；绝不得引用会诊申请或会诊意见的ref。"
+        "trace_refs和structured_action_refs只能逐字复制本条recommendation的allowed_candidate_refs中的ref；"
+        "不得从全局candidate_documents或其他建议复制，也不得按source与序号合成ref；绝不得引用会诊申请或会诊意见的ref。"
         "specific_trace/generic_trace/copied_opinion必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
-        "某条建议没有不早于其opinion_date的可验证candidate_documents ref时必须返回unknown。"
+        "allowed_candidate_refs为空时必须返回execution_record_state=unknown、execution_state=unknown、"
+        "trace_refs=[]、structured_action_refs=[]、execution_quotes=[]。"
         "execution_quotes是可选的辅助摘录；已选择精确trace_refs或structured_action_refs时可以返回空数组。"
         "若返回摘录，每项必须是所引执行候选中的连续原文，不得改写、拼接或引用未选候选。"
         "no_trace/absent组合必须返回空数组trace_refs、structured_action_refs和execution_quotes。"
