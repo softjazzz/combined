@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Mapping
@@ -82,6 +83,15 @@ def _is_round_record(row: Mapping[str, Any], *, source_key: str) -> bool:
     )
     if not title:
         return True
+    if source_key == "daily_course_record" and title == "日常病程记录":
+        # 只识别当前查房模板，不从计划、历史引用或其他用途文书推断查房。
+        body = str(row.get("record_content") or row.get("content") or "").strip()
+        current = re.match(r"^(?:查房内容\s*[：:]+\s*)?今日查房\s*[：:,，]\s*(.+)", body)
+        if current:
+            content = current.group(1).strip()
+            return bool(re.search(r"[\u4e00-\u9fff]", content)) and not content.startswith(
+                ("未进行", "未完成", "取消")
+            )
     role = classify_course_round_role(row, source_key=source_key)
     return "查房" in title and role is not CourseRoundRole.NONE
 
