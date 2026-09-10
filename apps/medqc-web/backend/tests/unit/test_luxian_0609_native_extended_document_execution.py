@@ -303,7 +303,7 @@ def _diagnosis_change_item(
     local_doc_id,
     *,
     reason_state="present",
-    reason_quote="故考虑",
+    reason_quote="故考虑症状性癫痫，修正诊断为症状性癫痫",
     basis_state="present",
     basis_quote="MRI提示异常",
 ):
@@ -8771,15 +8771,19 @@ async def test_074_course_marker_with_reason_and_basis_is_compliant_c20_pattern(
     )
     client = _DiagnosisChangeClient(_diagnosis_change_item(
         "doc_01",
-        reason_quote="故考虑症状性癫痫",
-        basis_quote="MRI提示异常，动态脑电异常",
+        reason_quote=(
+            "结合反复发作症状及体征，MRI提示异常，动态脑电异常，"
+            "神经内科会诊并鉴别排除其他疾病，故考虑症状性癫痫，"
+            "修正诊断为症状性癫痫"
+        ),
+        basis_quote="诊断依据：MRI提示异常，动态脑电异常",
     ))
     _, _, execution, reduced = await _evaluate_selected(
         ("LX0609-074",),
         {"senior_course_record": ({
             "document_id": "COURSE-C20-CHANGE",
             "record_time": "2025-07-05 10:00:00",
-            "record_content": text,
+            "record_content": text + "诊断依据：MRI提示异常，动态脑电异常。",
         },)},
         llm_client=client,
     )
@@ -8904,7 +8908,7 @@ async def test_074_multiple_course_events_cannot_cross_fill_reason_and_basis():
     client = _DiagnosisChangeClient(
         _diagnosis_change_item(
             "doc_01",
-            reason_quote="故考虑甲诊断",
+            reason_quote="故考虑甲诊断，修正诊断为甲诊断",
             basis_state="missing",
             basis_quote="",
         ),
@@ -8912,7 +8916,7 @@ async def test_074_multiple_course_events_cannot_cross_fill_reason_and_basis():
             "doc_02",
             reason_state="missing",
             reason_quote="",
-            basis_quote="检查支持乙诊断",
+            basis_quote="检查支持乙诊断，补充诊断为乙诊断",
         ),
     )
     snapshot, materials, execution, reduced = await _evaluate_selected(
@@ -8977,14 +8981,14 @@ async def test_074_unknown_without_missing_is_uncertain():
         reason_state="unknown",
         reason_quote="",
         basis_state="present",
-        basis_quote="MRI提示异常",
+        basis_quote="诊断依据：MRI提示异常",
     ))
     execution, reduced = await _evaluate(
         "LX0609-074",
         {"senior_course_record": ({
             "document_id": "COURSE-CHANGE-UNKNOWN",
             "record_time": "2025-07-05 10:00:00",
-            "record_content": "MRI提示异常，修正诊断为症状性癫痫。",
+            "record_content": "修正诊断为症状性癫痫。诊断依据：MRI提示异常。",
         },)},
         llm_client=client,
     )
