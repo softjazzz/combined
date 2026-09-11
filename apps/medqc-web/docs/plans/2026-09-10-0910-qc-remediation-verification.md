@@ -6,7 +6,7 @@
 
 **技术栈：** PostgreSQL、Python/FastAPI、pytest、Vue/TypeScript。主协调负责合同和真实病例验收；子代理在限定文件内执行或独立审查。
 
-**状态：** 持续执行中。已完成并聚焦验收 101/107 条确认缺陷和 54/326 条待复核记录；最终 30 例 × 72 条总回归尚未开始。7 条暂停规则保持不执行。
+**状态：** 持续执行中。已完成并聚焦验收 101/107 条确认缺陷和 78/326 条待复核记录，合计 179/433；最终 30 例 × 72 条总回归尚未开始。7 条暂停规则保持不执行。
 
 ## 1. 基线与完成定义
 
@@ -414,3 +414,39 @@ C04原始数据包含1条悬浮红细胞2U申请，但 `mr_bloodtrans` 和 `bloo
 Flash 30例正式聚焦任务 `40f80392-19bc-4669-a899-c3319c24dc15` 完成30/30，5次调用、0重试、9678 Token、墙钟8.11秒，结果为26符合、3不符合、1不适用。与原基线逐就诊对齐后，只有C11和C28的状态／原因按预期改变；C05状态与原因不变，但命中相似度由0.8203换为0.7569；其余27例状态、原因和相似度事实完全不变。持久化Envelope、事件账本和模型恢复状态已在 `.tmp/0910-full-audit/r08-017-final-verification.json` 核对。
 
 本轮关闭C08、C11、C19、C28四条待复核记录。C05仍不关闭：独立人工复核认为不同层级查房包含腰椎结核鉴别诊断及手术计划从“明日”推进到“今日”，属于必要复述；两种模型均认为患者特异性内容整体复用已经构成实质复制。该分歧需要明确客户对上级查房必要复述和70%阈值的口径，不能用模型一致代替业务裁决。累计确认缺陷101/107（94.4%），待复核54/326（16.6%），全部155/433（35.8%）；最终30例2160项总回归尚未开始。
+
+### R11 抗菌药执行与评价复核
+
+R11共20条（054与055各覆盖10例，另含C03的057）。本轮先冻结同名同方案医嘱的归并边界和疗效评价窗口，再做动作事实的结构收敛，最终关闭C03/054、C03/057、C23/054、C03/055四条。
+
+提交`09866b6c1`修复抗菌药重复医嘱与动作语义关联：同名同方案、处方时间近秒的医嘱严格归并并保留全部原始引用，补齐“予以”等动作语义，避免同一给药事实被拆成多份候选。C03真实回放中054由`not_applicable`改为`compliant`并保留3条来源定位，057由`data_gap`改为`compliant`；055保持`non_compliant/threshold_exceeded`并保留3个成熟事件。C23/054的局部候选保留输注后回指和换药事实，并把不良反应纳入受控理由，30例回放由`non_compliant`改为`compliant`。独立业务复核见`.tmp/0910-full-audit/r11-c03-independent-business-review.json`、`r11-c03-source-freeze.json`、`r11-054-057-full30-current-vs-saved.json`。
+
+055的首轮验收未通过并重新打开：旧投影在“成熟与未成熟事件混合”时会给出自相矛盾的`not_applicable`。提交`20527567a`新增055专用严格安全投影，逐事件启用时间、48至72小时窗口、冻结评价时点、`elapsed_hours`与`event_state`经Finalizer至Envelope原样保留；关闭条件收为“至少存在一个未成熟事件、排除conflict/missing，且窗口内评价数量覆盖全部mature事件”。独立复审`r11-055-mapping-diff-review.json`用3个拒绝反例和1个合法混合例验证合同矩阵，同时记录一项非阻断限制：`evaluation_intervals`仍是全局列表，不能单独证明每个成熟事件各自匹配评价，本次以native生成的`unmatched_antimicrobials`为权威事实，不扩展事件ID或评价配对。映射与聚合436项、相关原生聚焦用例通过后，提交`2c7a856dc`将C03/055重新记为聚焦验收通过。
+
+结构收敛由`0c675fa8a`完成：动作词表、提示动作清单、quote校验和受控action归一化唯一收拢到新深模块`antimicrobial_action_extraction.py`，native不再从quote二次解释动作，相对`09866b6c1`净减少449行。独立复核`r11-postcommit-review.json`确认B1（动作事实多所有者）与B2（巨型执行器职责堆积）关闭，native仅保留054的医嘱关联与`association_failed`、055的事件窗口判定、057的用药理由识别；提示字节、候选顺序、单次调用、2048补全上限和失败语义均与修复前一致。`r11-final-diff-review.json`进一步关闭“首个命中片段遮蔽后续肯定动作”的阻断项，历史四个反例不再产生confirmed action。
+
+模型对照：14条合成正反例上Flash与35B逐项精确一致（`r11-054-model-ab.json`）；C23、C25真实语义重复5次全部一致（`r11-054-real-semantic-stability.json`）；30例×054/057的真实回放中两模型结论一致，Flash为2次调用1295 Token、35B为2次调用1317 Token，C23输注事实与C25术前计划边界均未回退（`r11-054-057-full30-qwen3.7-flash-head-vs-working.json`、`r11-054-057-full30-qwen3.6-35b-a3b-head-vs-working.json`）。本轮复核时重跑`test_luxian_0609_antimicrobial_action_extraction.py`、`test_luxian_0609_antimicrobial_result_mapping.py`、`test_luxian_0609_result_aggregator.py`、`test_luxian_0609_native_extended_document_execution.py`共860项通过。
+
+本轮关闭4条待复核记录：确认缺陷仍为101/107（94.4%），待复核累计58/326（17.8%），全部159/433（36.7%）。R11仍剩16条（C01、C02、C04、C12、C14、C17、C25、C27的054/055及C23/055）；本次仍是聚焦验收，最终30例2160项总回归尚未开始。
+
+### R07 会诊建议执行关联复核
+
+R07共34条（020与023各17例）。复核前先冻结“会诊后病程主证据”合同，再由两批独立复核逐例给出人工预期，最后提交`39a0896a1`关闭20条、留下14条确认缺陷。
+
+冻结合同（`r07-audit-a.json`、`r07-audit-b.json`）：020与023的主证据只取会诊后的`daily_course_record`或`senior_course_record`；会诊单自身的“遵会诊意见执行”“已执行”等普通表述只作背景，不计执行痕迹；会诊前病程、计划与申请、没有授权时间序的病程记录排除；同次会诊只有在明确记录“已与患者或家属沟通、对方拒绝或暂缓”并写出具体原因时，才可作为specific闭环。020为任一原子建议high`no_trace`或partial即不符合；023为全部`no_trace`判不适用，任一generic/copied判不符合，已找到的痕迹全部specific才判符合。证据锚点为`f15-boundary-fix-full30-flash/comparison-v5.json`、`f15-coverage-flips-business-review.json`、`f15-allowed-refs-v5-independent-review.json`。
+
+两批独立复核覆盖全部34项：A批8例（C02、C07、C08、C09、C11、C13、C17、C18）16项，10项可关闭、6项确认缺陷；B批9例（C19、C20、C21、C23、C24、C25、C26、C27、C30）18项，10项可关闭、8项确认缺陷。两批都没有“口径不清、无法裁决”的条目。
+
+关闭的20条是状态、原因与人工逐项预期一致且客户展示事实可复核的记录，其中C20是唯一020与023同时判符合的病例（唯一原子建议有具体病程闭环，实际course trace具体）。另有一项非阻断残留：C18/020在补齐`senior_course_record-3`权威时间后可重审随访项，但其余`no_trace`已足以支撑020。
+
+确认缺陷14条集中在C02/023、C08/023、C11/023、C17/020、C17/023、C18/023、C19/020、C19/023、C21/023、C23/023、C25/023、C26/023、C27/020、C27/023，失败形态已分成两类：11条当前为`uncertain/semantic_low_confidence`，属于“判不出”而不是判错方向，逐项对应的实际trace均为specific或high`no_trace`；另外3条（C08/023、C25/023、C27/020）当前为`non_compliant`而人工预期`compliant`，属于把已有具体执行痕迹、或同一康复治疗类别多个细项的整体闭环误判为未落实。两类必须分别修复，不能合并处理。
+
+提交后继续做了三项边界实验，均未改动台账：
+
+- C19计划痕迹诊断（`r07-c19-planned-trace-diagnostic-v2.json`）：候选投影给出160个候选，其中`senior_course_record`候选命中“建议式未来动作”模式，模型仍返回`generic_trace`/medium置信，020与023最终都落为`semantic_low_confidence`；说明缺口不在候选缺失，而在时态判定。
+- C19未来计划护栏补丁（`r07-c19-exact-future-guard-postfix.json`、`r07-c19-guard-before-input-postfix.json`）：三轮真实执行中只有两轮得到预期结果，累计9次调用、13965 Token后仍有一次把未来计划识别为`generic_trace`；补丁未达到验收标准，已撤回且没有进入代码提交。
+- 同模型重复判断提升置信度（`r07-consensus-confidence-postfix.json`）：C02、C17、C27各跑3轮，可归并的一致结论全部被提升，但状态分布仍不稳定——C17有1/3、C27有2/3出现020变为符合，C02仍有1/3的023停留在`uncertain`。这证明“同一模型重复判断一致”不能作为置信度依据，更不能替代业务验收。
+
+本轮复核时重跑`test_luxian_0609_native_consultation_episode_execution.py`共217项通过。
+
+本轮关闭20条待复核记录：确认缺陷仍为101/107（94.4%），待复核累计78/326（23.9%），全部179/433（41.3%）。R07剩余14条、F15剩余6条是当前未收口的高影响项，下一步按“建议抽取与逐建议执行关系”单独立闭环，最终30例2160项总回归尚未开始。
