@@ -7752,3 +7752,144 @@ async def test_no_usable_candidate_with_technical_source_is_technical_without_se
     )
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert result.llm_call_count == 1
+
+
+# --- S2／S3／S4：模型只抽取“建议类型 + 处置事实 + 原文摘录”，状态由 Python 判据表映射 ---
+
+
+def _execution_fact_source_rows(*, opinion: str, course: str):
+    return {
+        "consultation_record": _rows(opinion, action_suffix=False),
+        "daily_course_record": _rows(course, hour_start=2, action_suffix=False),
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "exam_item_report": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+
+
+def _execution_fact_client(*, recommendation, execution_payload):
+    return _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                **recommendation,
+                "recommendation_ref": "consultation_record-1#r1",
+            }],
+        )]),
+        execution_payload,
+    )
+
+
+def _execution_fact_item(
+    *,
+    record_state: str,
+    fact: str,
+    quote: str,
+    action_family: str = "test",
+    trace_refs=("daily_course_record-1",),
+    confidence: str = "high",
+):
+    coverage_state = "complete" if trace_refs else "no_trace"
+    return {
+        "executions": [{
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": record_state,
+            "trace_refs": list(trace_refs),
+            "execution_fact": fact,
+            "fact_quote": quote,
+            "action_family": action_family,
+            "confidence": confidence,
+            "recommendation_coverage_state": coverage_state,
+            "coverage_confidence": "high",
+            "uncovered_source_quotes": [],
+        }]
+    }
+
+
+@pytest.mark.asyncio
+async def test_s2_copied_course_opinion_is_non_compliant_without_adding_trace(monkeypatch):
+    """S2：病程逐字照搬会诊意见即判 023-A；不因此给 020 补出一条执行痕迹。"""
+
+    opinion = "建议2周后复查尿常规，肾内科门诊随访"
+    source_rows = _execution_fact_source_rows(
+        opinion=f"会诊意见：{opinion}",
+        course=opinion,
+    )
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _execution_fact_client(
+        recommendation={
+            "action_type": "test",
+            "source_quote": opinion,
+            "normalized_action": "复查尿常规并肾内科门诊随访",
+        },
+        execution_payload={"executions": [{
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "no_trace",
+            "trace_refs": [],
+            "confidence": "high",
+            "recommendation_coverage_state": "no_trace",
+            "coverage_confidence": "high",
+            "uncovered_source_quotes": [],
+        }]},
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-020"]["generic_execution_count"] == 0
+    assert facts["LX0609-020"]["missing_execution_count"] == 1
+    assert facts["LX0609-023"]["generic_execution_count"] == 1
+    assert (
+        facts["LX0609-023"]["recommendation_evidence"][0]["execution_state"]
+        == "generic"
+    )
+
+
+@pytest.mark.asyncio
+async def test_s2_result_bearing_course_sentence_is_not_copied(monkeypatch):
+    """S2 反例：重合片段之外写明本次结果与时间时，不判照抄。"""
+
+    opinion = "复查免疫固定电泳、抗磷脂酶A2受体抗体检测"
+    course = f"2025-07-31 {opinion}，结果未见异常"
+    source_rows = _execution_fact_source_rows(
+        opinion=f"会诊意见：{opinion}",
+        course=course,
+    )
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _execution_fact_client(
+        recommendation={
+            "action_type": "test",
+            "source_quote": opinion,
+            "normalized_action": "复查免疫固定电泳与抗磷脂酶A2受体抗体",
+        },
+        execution_payload=_execution_fact_item(
+            record_state="specific_trace",
+            fact="performed",
+            quote=course,
+        ),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-023"]["generic_execution_count"] == 0
