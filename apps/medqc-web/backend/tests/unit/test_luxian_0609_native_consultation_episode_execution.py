@@ -7280,6 +7280,118 @@ async def test_stage_two_source_error_is_technical_without_second_call(monkeypat
     assert len(client.prompts) == 1
 
 
+@pytest.mark.asyncio
+async def test_invalid_stage_one_output_is_not_frozen(monkeypatch, tmp_path):
+    """合同校验不通过的第一阶段输出不得落盘冻结。"""
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("申请会诊", "专科会诊意见"),
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    recommendations=[
+                        {
+                            "recommendation_ref": "consultation_record-1#r1",
+                            "action_type": "bogus",
+                            "source_quote": "复查血常规",
+                            "normalized_action": "复查血常规检查",
+                            "opinion_ref": "consultation_record-1",
+                        }
+                    ],
+                )
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v-freeze-invalid",
+        source_schema=None,
+        llm_client=client,
+        opinion_freeze_dir=tmp_path,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert result.llm_call_count == 1
+    assert list(tmp_path.glob("*.json")) == []
+
+
+@pytest.mark.asyncio
+async def test_valid_stage_one_output_is_frozen_then_reused_without_model_call(
+    monkeypatch, tmp_path
+):
+    """校验通过后落盘；再次执行复用冻结事实，不再调用模型。"""
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("申请会诊", "专科会诊意见"),
+    )
+    first_client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    opinion="clear",
+                )
+            ]
+        )
+    )
+    first = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v-freeze-valid",
+        source_schema=None,
+        llm_client=first_client,
+        opinion_freeze_dir=tmp_path,
+    )
+    frozen_files = sorted(tmp_path.glob("*.json"))
+    assert len(frozen_files) == 1
+    assert first.llm_call_count == 1
+
+    # 第二次刻意给出会导向不同结论的模型输出；冻结命中即不得调用模型。
+    second_client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    opinion="vague",
+                )
+            ]
+        )
+    )
+    second = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v-freeze-valid",
+        source_schema=None,
+        llm_client=second_client,
+        opinion_freeze_dir=tmp_path,
+    )
+
+    assert second_client.prompts == []
+    assert second.llm_call_count == 0
+    assert [item["status"] for item in second.results] == [
+        item["status"] for item in first.results
+    ]
+    assert len(sorted(tmp_path.glob("*.json"))) == 1
+
+
 # --- S2：照抄阈值由 Python 文本比对判定，不占用模型调用 ---
 
 
