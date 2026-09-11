@@ -987,10 +987,12 @@ def test_023_high_generic_or_copy_remains_non_compliant(trace_state):
 
 @pytest.mark.parametrize("trace_state", ("generic_trace", "copied_opinion"))
 @pytest.mark.parametrize("confidence", ("medium", "low"))
-def test_023_possible_generic_or_copy_blocks_early_compliance(
+def test_023_vague_or_copied_trace_fails_regardless_of_confidence(
     trace_state,
     confidence,
 ):
+    """023 只评价已找到的痕迹是否规范，不再按模型自报置信度退回不确定。"""
+
     model_episode, completed = _coverage_outcome_inputs(2)
     assessments = (
         _coverage_outcome_assessment(
@@ -1006,10 +1008,12 @@ def test_023_possible_generic_or_copy_blocks_early_compliance(
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
-    ) == ("evaluation_unknown", "semantic_low_confidence")
+    ) == ("non_compliant", "requirement_violated")
 
 
-def test_023_low_confidence_no_trace_remains_unknown():
+def test_023_all_no_trace_is_not_applicable_regardless_of_confidence():
+    """没有任何已找到的执行痕迹时 023 不适用，不再产出不确定。"""
+
     model_episode, completed = _coverage_outcome_inputs(2)
     assessments = (
         _coverage_outcome_assessment(
@@ -1025,7 +1029,7 @@ def test_023_low_confidence_no_trace_remains_unknown():
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
-    ) == ("evaluation_unknown", "semantic_low_confidence")
+    ) == ("not_applicable", "trigger_absent_complete")
 
 
 def _window_session(
@@ -3676,7 +3680,8 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
         ("linked_specific", ("compliant", "compliant")),
         ("linked_vague", ("compliant", "non_compliant")),
         ("absent", ("non_compliant", "not_applicable")),
-        ("unknown", ("uncertain", "uncertain")),
+        # 023 不再产出不确定：该建议没有可评价的已找到痕迹时判不适用。
+        ("unknown", ("uncertain", "not_applicable")),
     ],
 )
 async def test_020_023_execution_state_mapping(monkeypatch, execution_state, expected):
@@ -5501,7 +5506,8 @@ async def test_confirmed_missing_execution_is_not_hidden_by_another_unknown_reco
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "uncertain",
+        # 023 只评价已找到的痕迹；另一条建议无可评价痕迹时不适用。
+        "not_applicable",
     ]
 
 
@@ -6383,7 +6389,8 @@ async def test_stage_two_shape_retry_does_not_add_missing_supplement_or_recheck(
     assert len(client.prompts) == 3
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "semantic_low_confidence",
+        # 023 判据只看已找到的痕迹：已找到的痕迹为具体即符合。
+        "requirement_satisfied",
     ]
     facts = dict(result.customer_display_facts)["LX0609-020"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
@@ -6420,7 +6427,8 @@ async def test_stage_two_shape_retry_skips_low_confidence_recheck():
 
     assert result.llm_call_count == 3
     assert len(client.prompts) == 3
-    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    # 020 看到痕迹即成立；023 的已找到痕迹为具体即符合，均不再退回不确定。
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
 
 
 @pytest.mark.asyncio

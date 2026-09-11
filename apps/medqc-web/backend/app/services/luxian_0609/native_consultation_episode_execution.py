@@ -389,6 +389,9 @@ class _ExecutionAssessment:
     recommendation_coverage_state: str = "unknown"
     coverage_confidence: str = "low"
     uncovered_source_quotes: tuple[str, ...] = ()
+    # 023 命中原因（023-A 照抄 / 023-B 笼统遵嘱 / 023-C 未写明具体执行）
+    hit_rules: tuple[str, ...] = ()
+    needs_manual_review: bool = False
 
 
 def _merge_rechecked_execution_assessment(
@@ -3063,6 +3066,61 @@ def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
     return "evaluation_unknown", "semantic_output_unknown"
 
 
+def _every_recommendation_has_trace(
+    assessments: Sequence[_ExecutionAssessment] | None,
+) -> bool:
+    """每条建议都已选中受控来源中的执行痕迹。
+
+    020 只核对“会诊后病程是否记录了与该建议对应的执行痕迹”；是否笼统或
+    照抄由 023 单独评价，模型对痕迹具体程度的置信度不改变痕迹是否存在。
+    """
+
+    return bool(assessments) and all(item.trace_refs for item in assessments)
+
+
+_RECORDED_TRACE_LEVELS = frozenset(
+    {"specific_trace", "generic_trace", "copied_opinion"}
+)
+_VAGUE_TRACE_LEVELS = frozenset({"generic_trace", "copied_opinion"})
+
+
+def _execution_quality_outcome(
+    *,
+    assessments: Sequence[_ExecutionAssessment] | None,
+    completed_recommendations: Sequence[_CompletedRecommendation],
+    course_source_incomplete: bool,
+) -> tuple[str, str]:
+    """S1／S5／S6：023 只评价已找到的执行痕迹是否规范。
+
+    023 的评价对象是**已经找到的**执行痕迹：没有任何痕迹时不适用；已找到的
+    痕迹中存在笼统或照抄即不符合；已找到的痕迹全部具体即符合。未找到痕迹的
+    建议与无法判定的条目都不参与 023 判罚，因此 023 不再产出“不确定”。
+    """
+
+    if not completed_recommendations:
+        return "not_applicable", "trigger_absent_complete"
+    rows = tuple(assessments or ())
+    if not rows:
+        return "evaluation_unknown", "semantic_low_confidence"
+    if all(item.execution_record_state == "no_trace" for item in rows):
+        if course_source_incomplete:
+            return "data_gap", "candidate_scope_incomplete"
+        return "not_applicable", "trigger_absent_complete"
+    recorded = tuple(
+        item
+        for item in rows
+        if item.execution_record_state in _RECORDED_TRACE_LEVELS
+    )
+    if not recorded:
+        # 既没有找到痕迹、也不是来源缺失：023 没有可评价对象。
+        return "not_applicable", "trigger_absent_complete"
+    if any(
+        item.execution_record_state in _VAGUE_TRACE_LEVELS for item in recorded
+    ):
+        return "non_compliant", "requirement_violated"
+    return "compliant", "requirement_satisfied"
+
+
 def _execution_outcome(
     rule_id: str,
     *,
@@ -3083,9 +3141,6 @@ def _execution_outcome(
     )
     if source_technical:
         return "technical_error", "source_query_error"
-    trace_states = tuple(
-        item.execution_record_state for item in assessments or ()
-    )
     confirmed_no_course_trace_refs = {
         item.recommendation_ref
         for item in assessments or ()
@@ -3093,31 +3148,9 @@ def _execution_outcome(
         and item.confidence == "high"
         and item.execution_state != "unknown"
     }
-    confirmed_vague_trace = any(
-        item.execution_record_state in {"generic_trace", "copied_opinion"}
-        and item.confidence == "high"
-        for item in assessments or ()
-    )
-    possible_vague_trace = any(
-        item.execution_record_state in {"generic_trace", "copied_opinion"}
-        for item in assessments or ()
-    )
     confirmed_incomplete_coverage = any(
         item.recommendation_coverage_state in {"partial", "no_trace"}
         and item.coverage_confidence == "high"
-        for item in assessments or ()
-    )
-    confirmed_specific_trace = any(
-        item.execution_record_state == "specific_trace"
-        and item.confidence == "high"
-        and bool(item.trace_refs)
-        for item in assessments or ()
-    )
-    all_no_course_trace = bool(assessments) and all(
-        item.execution_record_state == "no_trace"
-        and item.confidence == "high"
-        and item.execution_state != "unknown"
-        and not item.trace_refs
         for item in assessments or ()
     )
     course_source_incomplete = bool(
@@ -3131,22 +3164,18 @@ def _execution_outcome(
         if course_source_incomplete:
             return "data_gap", "candidate_scope_incomplete"
         return "non_compliant", "requirement_violated"
-    if rule_id == "LX0609-023" and confirmed_vague_trace:
-        return "non_compliant", "requirement_violated"
+    if rule_id == "LX0609-020" and _every_recommendation_has_trace(assessments):
+        return "compliant", "requirement_satisfied"
+    if rule_id == "LX0609-023":
+        return _execution_quality_outcome(
+            assessments=assessments,
+            completed_recommendations=completed_recommendations,
+            course_source_incomplete=course_source_incomplete,
+        )
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
     if not completed or not completed_recommendations:
         return "not_applicable", "trigger_absent_complete"
-    if rule_id == "LX0609-023" and all_no_course_trace:
-        if course_source_incomplete:
-            return "data_gap", "candidate_scope_incomplete"
-        return "not_applicable", "trigger_absent_complete"
-    if (
-        rule_id == "LX0609-023"
-        and confirmed_specific_trace
-        and not possible_vague_trace
-    ):
-        return "compliant", "requirement_satisfied"
     if assessments is None or any(
         item.confidence != "high"
         or item.execution_state == "unknown"
@@ -3176,26 +3205,6 @@ def _execution_outcome(
         if complete_course_traces:
             return "compliant", "requirement_satisfied"
         return "evaluation_unknown", "semantic_output_unknown"
-    # 020 没有找到执行记录时，023 不重复判“无记录”；023 只评价已找到的
-    # 执行病程是否笼统、照抄或已明确说明具体落实情况。
-    if len(no_course_trace_refs) == len(assessments):
-        if course_source_incomplete:
-            return "data_gap", "candidate_scope_incomplete"
-        return "not_applicable", "trigger_absent_complete"
-    recorded_trace_states = tuple(
-        state for state in trace_states if state != "no_trace"
-    )
-    if any(
-        state in {"generic_trace", "copied_opinion"}
-        for state in recorded_trace_states
-    ):
-        return "non_compliant", "requirement_violated"
-    if recorded_trace_states and all(
-        state == "specific_trace" for state in recorded_trace_states
-    ):
-        return "compliant", "requirement_satisfied"
-    if source_technical:
-        return "technical_error", "source_query_error"
     return "evaluation_unknown", "semantic_output_unknown"
 
 
