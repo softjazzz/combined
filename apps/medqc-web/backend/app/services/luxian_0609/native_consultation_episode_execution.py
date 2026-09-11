@@ -25,6 +25,10 @@ from .consultation_decision_evidence import (
     material_refs_for_internal_refs,
     select_consultation_rule_material_refs,
 )
+from .consultation_opinion_freeze import (
+    load_opinion_payload,
+    save_opinion_payload,
+)
 from .consultation_customer_projection import (
     is_consultation_customer_rule,
     safe_consultation_customer_display_facts,
@@ -3764,6 +3768,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     decision_rule_ids: Sequence[str] = (),
+    opinion_freeze_dir: str | Path | None = None,
+    opinion_freeze_rebuild: bool = False,
 ) -> NativeConsultationEpisodeExecutionResult:
     requested = {str(item or "").strip().upper() for item in rule_ids}
     selected = tuple(rule_id for rule_id in CONSULTATION_EPISODE_RULE_IDS if rule_id in requested)
@@ -3899,14 +3905,41 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     calls = 1
     prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
+    # 第一阶段事实按病例版本冻结：同一份会诊文书集合只由模型抽取一次，
+    # 后续运行直接复用，保证 020/023 的判定对象（建议条数/原文/编号）稳定。
+    frozen = None
+    if not opinion_freeze_rebuild:
+        frozen = load_opinion_payload(
+            visit_id=visit_id, documents=documents, store_dir=opinion_freeze_dir
+        )
+    freeze_state = frozen.state if frozen is not None else ""
+    if frozen is not None:
+        calls = 0
     try:
-        started = time.perf_counter()
-        response = await llm_client.generate(_prompt(documents))
-        if not isinstance(response, Mapping):
-            raise _SemanticInvalid()
-        prompt_tokens, completion_tokens, total_tokens, response_time = _usage(response)
-        api_time = response_time or (time.perf_counter() - started)
-        episodes = _parse(_payload(response), documents)
+        if frozen is not None:
+            payload = dict(frozen.payload)
+        else:
+            started = time.perf_counter()
+            response = await llm_client.generate(_prompt(documents))
+            if not isinstance(response, Mapping):
+                raise _SemanticInvalid()
+            prompt_tokens, completion_tokens, total_tokens, response_time = _usage(response)
+            api_time = response_time or (time.perf_counter() - started)
+            payload = dict(_payload(response))
+        episodes = _parse(payload, documents)
+        if frozen is None:
+            freeze_state = save_opinion_payload(
+                visit_id=visit_id,
+                documents=documents,
+                payload=payload,
+                store_dir=opinion_freeze_dir,
+            ).state
+        logger.info(
+            "consultation_opinion_freeze visit=%s state=%s calls=%s",
+            visit_id,
+            freeze_state,
+            calls,
+        )
     except _SourceGap:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticUnresolved:

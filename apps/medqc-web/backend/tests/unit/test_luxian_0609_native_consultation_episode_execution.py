@@ -47,6 +47,15 @@ class _Client:
         return {"content": _materialize_recommendation_quotes(self.payload, prompt), "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}}
 
 
+@pytest.fixture(autouse=True)
+def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
+    """第一阶段事实冻结按用例隔离，避免用例之间互相复用冻结结果。"""
+
+    monkeypatch.setenv(
+        "LUXIAN_0609_OPINION_FREEZE_DIR", str(tmp_path / "opinion-freeze")
+    )
+
+
 class _SequentialClient:
     def __init__(self, *payloads):
         self.payloads = list(payloads)
@@ -1317,6 +1326,8 @@ async def test_material_reference_binding_keeps_anonymous_prompt_sequence_unchan
         rule_ids=("LX0609-021", "LX0609-022"),
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=raw_client,
+        # 本用例比较两次调用各自构建的提示词，必须绕过第一阶段事实冻结。
+        opinion_freeze_rebuild=True,
     )
     material_result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021", "LX0609-022"),
@@ -1324,6 +1335,7 @@ async def test_material_reference_binding_keeps_anonymous_prompt_sequence_unchan
         llm_client=material_client,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
+        opinion_freeze_rebuild=True,
     )
 
     assert [item["status"] for item in material_result.results] == [
