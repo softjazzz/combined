@@ -781,6 +781,67 @@ def test_shared_source_quote_atomic_items_cannot_fail_020_on_coverage():
     ) != ("non_compliant", "requirement_violated")
 
 
+def _planned_trace_parse(
+    candidate_text,
+    *,
+    source_quote="建议复查血常规并复查肝功能",
+    record_state="generic_trace",
+):
+    completed = (_coverage_completed_recommendation(source_quote=source_quote),)
+    candidate = episode._CandidateDocument(
+        "daily_course_record-1",
+        "daily_course_record",
+        episode._ObservedTime(datetime(2026, 7, 21, 8), True),
+        candidate_text,
+        "course-document-1",
+    )
+    return episode._parse_executions(
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": record_state,
+            "trace_refs": ["c1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [],
+            "confidence": "medium",
+        }),
+        completed=completed,
+        allowed_refs={"consultation_record-1#r1": frozenset({candidate.ref})},
+        candidates=(candidate,),
+    )[0]
+
+
+def test_advice_to_start_new_treatment_is_not_an_execution_trace():
+    """“建议行某项治疗”只表明后续安排，不是已经执行的痕迹。"""
+
+    assessment = _planned_trace_parse(
+        "治疗上告知患者，建议行神经阻滞治疗，配合针灸理疗，余治疗同前，续观。"
+    )
+
+    assert assessment.execution_record_state == "no_trace"
+    assert assessment.trace_refs == ()
+    assert assessment.confidence == "high"
+
+
+def test_discharge_course_repeating_opinion_stays_a_trace():
+    """病程直接复述会诊意见原文属于照抄意见，不能判成没有执行。"""
+
+    assessment = _planned_trace_parse(
+        "查房后指出：建议复查血常规并复查肝功能。医生签名：测试。"
+    )
+
+    assert assessment.execution_record_state == "generic_trace"
+    assert assessment.trace_refs == ("daily_course_record-1",)
+
+
+def test_fulfilled_advice_wording_stays_a_trace():
+    """“已遵嘱执行”属于已履行事实，不能因出现“嘱”字判成没有执行。"""
+
+    assessment = _planned_trace_parse("以上已遵嘱执行。")
+
+    assert assessment.execution_record_state == "generic_trace"
+
+
 def test_prompt_aliases_are_dense_over_rendered_candidates():
     """别名必须在本次真正渲染的候选上连续编号，不能按全量候选稀疏编号。"""
 

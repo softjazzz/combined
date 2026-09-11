@@ -190,6 +190,20 @@ _EXPLICIT_EXECUTION_TRACE_PATTERN = re.compile(
 _EXPLICIT_COMPLETED_ACTION_PATTERN = re.compile(
     r"(?:已(?:安排|完成|给予|实施|行)|予以|给予|实施|完成|冰敷|石膏固定|观察末梢循环)"
 )
+# 明确的动作变更同样证明已经执行，不能因为同一段里出现“建议/拟”就否定执行痕迹。
+_EXPLICIT_ACTION_CHANGE_PATTERN = re.compile(
+    r"(?:改为|改用|更换|换用|停用|已停)"
+)
+# 只有后续安排或“建议行某项治疗”这类尚未发生的表述，且同段没有任何已执行
+# 动作；只用于核对模型自选的执行痕迹候选。
+# 注意：“遵嘱执行／遵会诊意见用药”属于已履行事实，因此不把“嘱／告知／交代”
+# 纳入本模式，避免把已执行记录判成没有执行。
+_PLANNED_ONLY_TRACE_PATTERN = re.compile(
+    r"(?:拟|计划|准备|待|择期|后续|下一步|明日|次日|出院后)"
+    r"[^。；\n]{0,20}(?:执行|行|予以|给予|完善|复查|实施|治疗|检查|检验|手术|操作|随访|处理)"
+    r"|建议[^。；\n]{0,20}"
+    r"(?:行|予以|给予|完善|复查|实施|治疗|检查|检验|手术|操作|随访|处理)"
+)
 _EMBEDDED_DECISION_COMMUNICATION_PATTERN = re.compile(
     r"(?:(?:已|经).{0,8})?(?:与)?(?:患者(?:家属)?|家属).{0,8}(?:沟通|告知|说明)"
 )
@@ -2627,6 +2641,42 @@ def _generic_trace_conflicts_with_completed_action(
     )
 
 
+def _trace_document_is_planned_only(
+    assessment: _ExecutionAssessment,
+    candidates: Sequence[_CandidateDocument],
+    *,
+    source_quote: str = "",
+) -> bool:
+    """模型选中的执行痕迹只有后续安排或建议用语，没有任何已执行动作。
+
+    4.20.4 要求病程记录会诊意见及执行情况：“建议行…治疗”“拟…复查”只表明后续
+    安排，不能当作已经执行。判定只看模型自己选中的候选原文；任一选中候选
+    出现明确完成或动作变更即不成立，不做跨文书推断。
+
+    病程直接复述会诊意见原文时属于“照抄意见”，不是尚未发生的安排，仍按
+    笼统执行痕迹处理，因此这里用本条建议原文做排除。
+    """
+
+    if assessment.execution_record_state not in {"generic_trace", "copied_opinion"}:
+        return False
+    by_ref = {item.ref: item for item in candidates}
+    documents = [by_ref[ref] for ref in assessment.trace_refs if ref in by_ref]
+    if not documents:
+        return False
+    for document in documents:
+        if _EXPLICIT_COMPLETED_ACTION_PATTERN.search(document.text):
+            return False
+        if _EXPLICIT_ACTION_CHANGE_PATTERN.search(document.text):
+            return False
+        if source_quote and _quote_is_grounded(
+            quote=source_quote, source=document.text
+        ):
+            return False
+        if not _PLANNED_ONLY_TRACE_PATTERN.search(document.text):
+            return False
+    return True
+
+
 def _apply_embedded_decision_traces(
     assessments: Sequence[_ExecutionAssessment],
     *,
@@ -2957,7 +3007,7 @@ def _parse_executions(
             coverage_state = "unknown"
             coverage_confidence = "low"
             uncovered_quotes = ()
-        parsed.append(_ExecutionAssessment(
+        assessment = _ExecutionAssessment(
             recommendation_ref,
             state,
             tuple(structured_refs),
@@ -2969,7 +3019,27 @@ def _parse_executions(
             coverage_state,
             coverage_confidence,
             uncovered_quotes,
-        ))
+        )
+        # 自选的执行痕迹只有后续安排或建议用语时，确定性地按“没有执行痕迹”
+        # 处理：这是对选中原文的核对，不是对新文书或新事实的推断。
+        if _trace_document_is_planned_only(
+            assessment,
+            candidates,
+            source_quote=recommendation_by_ref[recommendation_ref].source_quote,
+        ):
+            assessment = replace(
+                assessment,
+                execution_state="absent",
+                confidence="high",
+                execution_quotes=(),
+                execution_record_state="no_trace",
+                trace_refs=(),
+                context_only_refs=(),
+                recommendation_coverage_state="unknown",
+                coverage_confidence="low",
+                uncovered_source_quotes=(),
+            )
+        parsed.append(assessment)
     if seen != expected_refs:
         raise _ExecutionCoverageIncomplete(
             parsed=tuple(parsed),
