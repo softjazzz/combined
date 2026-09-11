@@ -304,40 +304,40 @@ C20/LX0609-022,C20,LX0609-022,compliant,待复核,R06,未启动,,,,主协调代�
 C23/LX0609-021,C23,LX0609-021,compliant,待复核,R06,未启动,,,,主协调代理,未关闭
 C23/LX0609-022,C23,LX0609-022,non_compliant,待复核,R06,未启动,,,,主协调代理,未关闭
 C26/LX0609-021,C26,LX0609-021,compliant,待复核,R06,未启动,,,,主协调代理,未关闭
-C02/LX0609-020,C02,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C02/LX0609-023,C02,LX0609-023,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C07/LX0609-020,C07,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C07/LX0609-023,C07,LX0609-023,not_applicable,待复核,R07,未启动,,,,主协调代理,未关闭
-C08/LX0609-020,C08,LX0609-020,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C08/LX0609-023,C08,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C09/LX0609-020,C09,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C09/LX0609-023,C09,LX0609-023,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C11/LX0609-020,C11,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C11/LX0609-023,C11,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C13/LX0609-020,C13,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C13/LX0609-023,C13,LX0609-023,not_applicable,待复核,R07,未启动,,,,主协调代理,未关闭
-C17/LX0609-020,C17,LX0609-020,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C17/LX0609-023,C17,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C18/LX0609-020,C18,LX0609-020,non_compliant,待复核,R07,引用越界已修复，业务关联待核对,,.tmp/0910-full-audit/f15-allowed-refs-v5-independent-review.json,C18单例、C04/C18组合和30例回归均无技术错误；020均为待确认，建议和执行关联仍未完成业务验收,主协调代理,未关闭
-C18/LX0609-023,C18,LX0609-023,uncertain,待复核,R07,引用越界已修复，业务关联待核对,,.tmp/0910-full-audit/f15-allowed-refs-v5-independent-review.json,C18单例、C04/C18组合和30例回归均无技术错误；023均为待确认，执行记录规范性仍未完成业务验收,主协调代理,未关闭
-C19/LX0609-020,C19,LX0609-020,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C19/LX0609-023,C19,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C20/LX0609-020,C20,LX0609-020,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C20/LX0609-023,C20,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C21/LX0609-020,C21,LX0609-020,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C21/LX0609-023,C21,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C23/LX0609-020,C23,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C23/LX0609-023,C23,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C24/LX0609-020,C24,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C24/LX0609-023,C24,LX0609-023,not_applicable,待复核,R07,未启动,,,,主协调代理,未关闭
-C25/LX0609-020,C25,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C25/LX0609-023,C25,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C26/LX0609-020,C26,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C26/LX0609-023,C26,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C27/LX0609-020,C27,LX0609-020,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C27/LX0609-023,C27,LX0609-023,uncertain,待复核,R07,未启动,,,,主协调代理,未关闭
-C30/LX0609-020,C30,LX0609-020,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
-C30/LX0609-023,C30,LX0609-023,non_compliant,待复核,R07,未启动,,,,主协调代理,未关闭
+C02/LX0609-020,C02,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated,主协调代理,聚焦验收通过
+C02/LX0609-023,C02,LX0609-023,non_compliant,确认缺陷,R07,确认缺陷，待按根因修复,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期non_compliant/requirement_violated,主协调代理,未关闭
+C07/LX0609-020,C07,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated,主协调代理,聚焦验收通过
+C07/LX0609-023,C07,LX0609-023,not_applicable,人工复核通过,R07,正式Bundle只读核查通过,not_applicable/trigger_absent_complete,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前not_applicable/trigger_absent_complete，人工预期not_applicable/trigger_absent_complete,主协调代理,聚焦验收通过
+C08/LX0609-020,C08,LX0609-020,uncertain,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated,主协调代理,聚焦验收通过
+C08/LX0609-023,C08,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期compliant/requirement_satisfied,主协调代理,未关闭
+C09/LX0609-020,C09,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated,主协调代理,聚焦验收通过
+C09/LX0609-023,C09,LX0609-023,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,not_applicable/trigger_absent_complete,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前not_applicable/trigger_absent_complete，人工预期not_applicable/trigger_absent_complete,主协调代理,聚焦验收通过
+C11/LX0609-020,C11,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated,主协调代理,聚焦验收通过
+C11/LX0609-023,C11,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期compliant/requirement_satisfied,主协调代理,未关闭
+C13/LX0609-020,C13,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated,主协调代理,聚焦验收通过
+C13/LX0609-023,C13,LX0609-023,not_applicable,人工复核通过,R07,正式Bundle只读核查通过,not_applicable/trigger_absent_complete,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前not_applicable/trigger_absent_complete，人工预期not_applicable/trigger_absent_complete,主协调代理,聚焦验收通过
+C17/LX0609-020,C17,LX0609-020,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期compliant/requirement_satisfied,主协调代理,未关闭
+C17/LX0609-023,C17,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期non_compliant/requirement_violated,主协调代理,未关闭
+C18/LX0609-020,C18,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated,主协调代理,聚焦验收通过
+C18/LX0609-023,C18,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,not_applicable/trigger_absent_complete,.tmp/0910-full-audit/r07-audit-a.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期not_applicable/trigger_absent_complete,主协调代理,未关闭
+C19/LX0609-020,C19,LX0609-020,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期non_compliant/requirement_violated；六项康复动作均无会诊后病程闭环,主协调代理,未关闭
+C19/LX0609-023,C19,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,not_applicable/trigger_absent_complete,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期not_applicable/trigger_absent_complete；没有实际 course trace,主协调代理,未关闭
+C20/LX0609-020,C20,LX0609-020,uncertain,人工复核通过,R07,正式Bundle只读核查通过,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前compliant/requirement_satisfied，人工预期compliant/requirement_satisfied；唯一原子建议有具体病程闭环,主协调代理,聚焦验收通过
+C20/LX0609-023,C20,LX0609-023,uncertain,人工复核通过,R07,正式Bundle只读核查通过,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前compliant/requirement_satisfied，人工预期compliant/requirement_satisfied；实际 course trace 具体,主协调代理,聚焦验收通过
+C21/LX0609-020,C21,LX0609-020,uncertain,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated；第二次会诊建议无有效时间窗内病程 trace,主协调代理,聚焦验收通过
+C21/LX0609-023,C21,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期compliant/requirement_satisfied；唯一实际 course trace 为 specific,主协调代理,未关闭
+C23/LX0609-020,C23,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated；病原学检查及止咳祛痰子项无病程闭环,主协调代理,聚焦验收通过
+C23/LX0609-023,C23,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期compliant/requirement_satisfied；已找到的实际 course trace 均 specific,主协调代理,未关闭
+C24/LX0609-020,C24,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated；四项康复动作均无会诊执行 trace,主协调代理,聚焦验收通过
+C24/LX0609-023,C24,LX0609-023,not_applicable,人工复核通过,R07,正式Bundle只读核查通过,not_applicable/trigger_absent_complete,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前not_applicable/trigger_absent_complete，人工预期not_applicable/trigger_absent_complete；全部建议均 no_trace,主协调代理,聚焦验收通过
+C25/LX0609-020,C25,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated；多个检查、监测、风险沟通及康复原子项无病程闭环,主协调代理,聚焦验收通过
+C25/LX0609-023,C25,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期compliant/requirement_satisfied；已找到的 course trace 与拒绝特殊闭环均 specific，无 generic/copied,主协调代理,未关闭
+C26/LX0609-020,C26,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated；MRI随访、监测、营养、对症药物和风险沟通等存在 high no_trace,主协调代理,聚焦验收通过
+C26/LX0609-023,C26,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期compliant/requirement_satisfied；有效 course trace 与拒绝特殊闭环均 specific；未发现 generic/copied course trace,主协调代理,未关闭
+C27/LX0609-020,C27,LX0609-020,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,compliant/requirement_satisfied,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期compliant/requirement_satisfied；会诊后病程明确记录继续康复理疗；同一康复治疗类别的多个细项可分别由 actual generic course trace 闭环,主协调代理,未关闭
+C27/LX0609-023,C27,LX0609-023,uncertain,确认缺陷,R07,确认缺陷，待按根因修复,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前uncertain/semantic_low_confidence，人工预期non_compliant/requirement_violated；实际 course trace 为笼统继续康复理疗,主协调代理,未关闭
+C30/LX0609-020,C30,LX0609-020,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated；内镜具体，禁食禁饮和后续会诊缺失，复查随访仅复制计划,主协调代理,聚焦验收通过
+C30/LX0609-023,C30,LX0609-023,non_compliant,人工复核通过,R07,正式Bundle只读核查通过,non_compliant/requirement_violated,.tmp/0910-full-audit/r07-audit-b.json,按会诊后daily/senior病程主证据合同复核；当前non_compliant/requirement_violated，人工预期non_compliant/requirement_violated；实际 course trace 中存在复制意见,主协调代理,聚焦验收通过
 C05/LX0609-017,C05,LX0609-017,non_compliant,待复核,R08,技术修复和模型对照完成，业务口径待确认,独立人工复核倾向compliant/requirement_within_threshold；第二对上级查房相似度0.7569，同时存在诊断补充及手术计划从明日推进到今日。Flash和35B均判实质复制，需明确不同层级查房必要复述边界。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：补齐复制判定合同并在同一1200字预算保留文书头尾；30例回归仍判non_compliant/threshold_exceeded，但命中对由0.8203改为0.7569；结论存在业务口径分歧，暂不关闭。,主协调代理（待业务口径确认）,未关闭
 C08/LX0609-017,C08,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,non_compliant/threshold_exceeded；两份独立上级查房相隔6分13秒、相似度0.9981，患者特异性病史、检查、诊断分析和计划几乎全部复制，仅标点和签名不同。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：Flash与35B修复后均保持不符合；30例Flash回归保存结果与预期一致，0重试，无目标外状态或原因变化。,主协调代理（独立复核已核对）,聚焦验收通过
 C11/LX0609-017,C11,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,compliant/requirement_within_threshold；疼痛、肿胀、体征和检查由阳性到弱阳性再到阴性，并形成复查及出院的连续处置变化，属于合理纵向重复。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：Flash与35B均由误报纠正为符合；30例Flash回归从non_compliant/threshold_exceeded改为compliant/requirement_within_threshold。,主协调代理（独立复核已核对）,聚焦验收通过
