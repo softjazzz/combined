@@ -450,3 +450,36 @@ R07共34条（020与023各17例）。复核前先冻结“会诊后病程主证�
 本轮复核时重跑`test_luxian_0609_native_consultation_episode_execution.py`共217项通过。
 
 本轮关闭20条待复核记录：确认缺陷仍为101/107（94.4%），待复核累计78/326（23.9%），全部179/433（41.3%）。R07剩余14条、F15剩余6条是当前未收口的高影响项，下一步按“建议抽取与逐建议执行关系”单独立闭环，最终30例2160项总回归尚未开始。
+
+### R07 覆盖度自相矛盾修复与判定输入录制
+
+提交`a46cecdc4`收紧覆盖度判定：`partial`覆盖必须相对本条原子建议成立，否则按无效覆盖降级为unknown，不再作为020“建议未落实”的证据。触发条件为两项确定性事实——同一句原文被多条原子建议共享，或未覆盖摘录已覆盖本条原文本身（含仅差少量前缀的近似整句）。会诊相关220项测试通过，Ruff与差分检查通过。
+
+该改动的归因用同输入A/B完成：录制30例真实模型响应后用真实执行器分别以守卫开／关重放，60项中只有C17/020与C19/020由`non_compliant`变为`uncertain`，其余28例（含全部20条已关闭记录）完全不变，0技术错误。C17/C19两条都在未关闭清单内，因此本次不关闭任何台账记录，只移除一条自相矛盾的判罚路径。C19/020由模型把未来计划写成`generic_trace`才凑出不符合，其证据方向仍须由下一子闭环解决。
+
+随后录制了30例的完整判定输入（`r07-decision-input-recorded.json`，只含别名、枚举、置信度与计数；含原文的本机版本为`-private`后缀，不进入提交），得到跨30例124条评估的状态分布：`specific_trace/high`48、`generic_trace/medium`20、`no_trace/high`34、`unknown/low`18、`generic_trace/high`14，另有少量medium/low。结论是020/023的判定瓶颈已不在覆盖度，而在两处：模型自报置信度普遍为medium，以及`unknown`评估。
+
+未关闭14条的录制签名与人工预期对照如下（`/`后为置信度）：
+
+| 记录    | 录制签名                                                         | 人工预期 |
+| ------- | ---------------------------------------------------------------- | -------- |
+| C02/023 | no_trace/high、generic_trace/medium                              | 不符合   |
+| C08/023 | generic_trace/medium、specific/high、unknown/low                 | 符合     |
+| C11/023 | no_trace/high、unknown/low、generic_trace/low、no_trace/high     | 符合     |
+| C17/020 | generic_trace/medium                                             | 符合     |
+| C17/023 | generic_trace/medium                                             | 不符合   |
+| C18/023 | generic_trace/medium、unknown/low×2                              | 不适用   |
+| C19/020 | generic_trace/medium                                             | 不符合   |
+| C19/023 | generic_trace/medium                                             | 不适用   |
+| C21/023 | no_trace/high、unknown/low                                       | 符合     |
+| C23/023 | no_trace/high、generic_trace/high、specific/high                 | 符合     |
+| C25/023 | 混合含generic/high、generic/medium、specific/high、unknown/low×3 | 符合     |
+| C26/023 | specific/high×12、no_trace/high、unknown/low                     | 符合     |
+| C27/020 | generic_trace/medium                                             | 符合     |
+| C27/023 | generic_trace/medium                                             | 不符合   |
+
+关键证据是**同一签名对应相反预期**：`generic_trace/medium`在C17/023、C27/023、C19/020对应“不符合”，在C21/023、C23/023却对应“符合”。因此仅凭枚举与置信度已无法复现人工预期，判别依据必须回到痕迹原文。逐条核对痕迹引文还给出两个方向性事实：C23/023的`generic_trace`引文实为“今日更改为头孢呋辛继续预防感染”这类已完成动作，属于模型低估具体性；C17/023的引文“遵呼吸科及心内科会诊意见用药”则是典型笼统痕迹，020应判符合、023应判不符合。
+
+因此下一步的候选机制有三类，已按影响面排序：一是让`unknown`评估可复核（影响C08、C11、C18、C21、C25、C26六条）；二是对模型选中的执行痕迹做时态与完成动作校验，把未来计划排除出执行痕迹（影响C19两条，可同时命中两条人工预期）；三是逐条校正specific／generic／copied分类（影响C23、C26等）。文档级正则不可行：78次痕迹选中中40次命中未来或建议用语，但多数是同一文书里既有已执行又有后续计划，直接按文档匹配会大面积误伤；校验必须落在模型自选的引文或命中句上，并用真实案例冻结正反例后再实施。
+
+本子闭环未关闭任何台账记录，确认缺陷仍为101/107（94.4%），待复核78/326（23.9%），全部179/433（41.3%）。
