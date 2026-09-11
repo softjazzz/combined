@@ -546,6 +546,49 @@ def _quote_is_grounded(*, quote: str, source: str) -> bool:
     return False
 
 
+_SELF_CONTRADICTION_RATIO = 0.8
+
+
+def _uncovered_fragment_covers_source(*, uncovered: str, source: str) -> bool:
+    """未覆盖片段已覆盖本条建议原文本身。
+
+    同一响应同时给出执行痕迹和“本条建议未落实”的整句摘录时，两条自述互相
+    矛盾，不能据此认定建议未执行。只比较归一化后的原文长度关系，不做同义
+    替换或医学解释。
+    """
+
+    fragment = _evidence_text(uncovered)
+    text = _evidence_text(source)
+    if not fragment or not text:
+        return False
+    if text in fragment:
+        return True
+    # 仅差少量前缀、标点或量词复述的近似整句同样视为同一段原文。
+    return (
+        len(text) >= 8
+        and len(fragment) >= _SELF_CONTRADICTION_RATIO * len(text)
+    )
+
+
+def _partial_coverage_is_usable(
+    *,
+    recommendation: "_Recommendation",
+    uncovered_quotes: Sequence[str],
+    source_quote_counts: Mapping[str, int],
+) -> bool:
+    """部分覆盖必须相对本条原子建议成立，否则不能作为“建议未落实”的证据。"""
+
+    source_quote = recommendation.source_quote
+    if source_quote_counts.get(_evidence_text(source_quote), 0) > 1:
+        # 同一句原文被拆成多条原子建议时，模型对整句的覆盖判断无法代表
+        # 本条动作，实测会把本条动作自身列为未覆盖。
+        return False
+    return not any(
+        _uncovered_fragment_covers_source(uncovered=quote, source=source_quote)
+        for quote in uncovered_quotes
+    )
+
+
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").split())
 
@@ -2628,6 +2671,12 @@ def _parse_executions(
         item.recommendation.recommendation_ref: item.recommendation
         for item in completed
     }
+    # 同一句原文被拆成多条原子建议时，模型对整句的覆盖判断无法代表本条
+    # 动作；该计数只用于覆盖度有效性校验，不参与业务状态。
+    source_quote_counts: dict[str, int] = {}
+    for item in recommendation_by_ref.values():
+        key = _evidence_text(item.source_quote)
+        source_quote_counts[key] = source_quote_counts.get(key, 0) + 1
     candidate_by_ref = {item.ref: item for item in candidates}
     ref_by_alias = {
         f"c{index}": candidate.ref
@@ -2869,6 +2918,14 @@ def _parse_executions(
                 _quote_is_grounded(quote=quote, source=source_quote)
                 for quote in uncovered_quotes
             )
+            # 覆盖度必须相对本条原子建议成立，否则按无效覆盖降级为未知，
+            # 不改变既有状态映射。
+            if coverage_valid:
+                coverage_valid = _partial_coverage_is_usable(
+                    recommendation=recommendation_by_ref[recommendation_ref],
+                    uncovered_quotes=uncovered_quotes,
+                    source_quote_counts=source_quote_counts,
+                )
         if not coverage_valid:
             coverage_state = "unknown"
             coverage_confidence = "low"

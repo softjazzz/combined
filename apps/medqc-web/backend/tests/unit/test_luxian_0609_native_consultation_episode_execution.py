@@ -663,6 +663,124 @@ def test_coverage_and_trace_state_conflict_only_downgrades_coverage(
     assert assessment.uncovered_source_quotes == ()
 
 
+@pytest.mark.parametrize(
+    "uncovered",
+    (
+        "建议复查血常规并复查肝功能",
+        "复查血常规并复查肝功能",
+    ),
+)
+def test_partial_coverage_covering_own_quote_cannot_fail_020(uncovered):
+    """未覆盖摘录已覆盖本条建议原文本身时，覆盖度自述与执行痕迹矛盾。"""
+
+    assessment = _parse_coverage_execution({
+        "recommendation_ref": "consultation_record-1#r1",
+        "execution_record_state": "specific_trace",
+        "trace_refs": ["daily_course_record-1"],
+        "execution_state": "absent",
+        "structured_action_refs": [],
+        "execution_quotes": ["复查血常规"],
+        "confidence": "high",
+        "recommendation_coverage_state": "partial",
+        "coverage_confidence": "high",
+        "uncovered_source_quotes": [uncovered],
+    })
+    completed = (_coverage_completed_recommendation(),)
+    model_episode = episode._Episode(
+        "consultation_record-1",
+        ("consultation_record-1",),
+        (),
+        ("consultation_record-1",),
+        "absent",
+        "clear",
+        "high",
+        (completed[0].recommendation,),
+    )
+
+    assert assessment.recommendation_coverage_state == "unknown"
+    assert assessment.coverage_confidence == "low"
+    assert assessment.uncovered_source_quotes == ()
+    assert episode._execution_outcome(
+        "LX0609-020",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=(assessment,),
+    ) == ("compliant", "requirement_satisfied")
+
+
+def test_shared_source_quote_atomic_items_cannot_fail_020_on_coverage():
+    """同一句原文被拆成多条原子建议时，整句覆盖判断不代表本条动作。"""
+
+    shared_quote = (
+        "给予红光照射以促进伤口愈合、CPM治疗、关节松动训练、"
+        "体适能训练以帮助恢复功能活动等康复治疗"
+    )
+    completed = (
+        _coverage_completed_recommendation(
+            "consultation_record-1#r1", source_quote=shared_quote
+        ),
+        _coverage_completed_recommendation(
+            "consultation_record-1#r2", source_quote=shared_quote
+        ),
+    )
+    candidate = _coverage_candidate()
+    payload = _execution(
+        {
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "generic_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [],
+            "confidence": "medium",
+            "recommendation_coverage_state": "partial",
+            "coverage_confidence": "high",
+            "uncovered_source_quotes": ["给予红光照射以促进伤口愈合"],
+        },
+        {
+            "recommendation_ref": "consultation_record-1#r2",
+            "execution_record_state": "generic_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [],
+            "confidence": "medium",
+            "recommendation_coverage_state": "partial",
+            "coverage_confidence": "high",
+            "uncovered_source_quotes": ["CPM治疗"],
+        },
+    )
+    model_episode = episode._Episode(
+        "consultation_record-1",
+        ("consultation_record-1",),
+        (),
+        ("consultation_record-1",),
+        "absent",
+        "clear",
+        "high",
+        tuple(item.recommendation for item in completed),
+    )
+    assessments = episode._parse_executions(
+        payload,
+        completed=completed,
+        allowed_refs={
+            item.recommendation.recommendation_ref: frozenset({candidate.ref})
+            for item in completed
+        },
+        candidates=(candidate,),
+    )
+
+    assert [
+        item.recommendation_coverage_state for item in assessments
+    ] == ["unknown", "unknown"]
+    assert episode._execution_outcome(
+        "LX0609-020",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=assessments,
+    ) != ("non_compliant", "requirement_violated")
+
+
 def _coverage_outcome_assessment(
     recommendation_ref: str,
     execution_record_state: str,
