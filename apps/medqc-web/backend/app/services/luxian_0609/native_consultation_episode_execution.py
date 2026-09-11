@@ -2433,6 +2433,27 @@ def _completed_recommendations(
     return tuple(completed)
 
 
+def _prompt_alias_by_ref(
+    candidates: Sequence[_CandidateDocument],
+    allowed_refs: Mapping[str, frozenset[str]],
+) -> dict[str, str]:
+    """本次提示实际渲染的候选中，按候选顺序稠密编号的别名映射。
+
+    旧实现按全量候选编号，而 payload 只渲染各建议允许集合的并集，别名因此
+    相对模型可见内容是稀疏的；模型返回的别名常常落在允许子集之外，只能按
+    违约降级为 unknown。提示与解析必须共用同一套编号，所以两侧都调用本函数，
+    由候选顺序与 allowed_refs 重算，不引入额外参数。
+    """
+
+    included = {ref for refs in allowed_refs.values() for ref in refs}
+    return {
+        candidate.ref: f"c{index}"
+        for index, candidate in enumerate(
+            (item for item in candidates if item.ref in included), start=1
+        )
+    }
+
+
 def _execution_prompt(
     *,
     completed: Sequence[_CompletedRecommendation],
@@ -2443,12 +2464,8 @@ def _execution_prompt(
     documents_by_ref: dict[str, dict[str, object]] = {}
     # 候选的内部 ref 同时承载来源类型和序号，大批检验明细下会在
     # candidate_documents 与每条建议的 allowed 列表中重复占用大量预算。
-    # Prompt 仅使用同一候选顺序派生的短别名；返回给 parser/证据链的白名单
-    # 仍保持原始内部 ref，候选集合和时序过滤均不改变。
-    alias_by_ref = {
-        candidate.ref: f"c{index}"
-        for index, candidate in enumerate(candidates, start=1)
-    }
+    # Prompt 仅使用短别名；别名在本次实际渲染的候选上稠密编号，返回给
+    # parser/证据链的白名单仍保持原始内部 ref，候选集合与时序过滤不变。
     trace_candidates = tuple(
         candidate
         for candidate in candidates
@@ -2487,7 +2504,7 @@ def _execution_prompt(
             if include:
                 related_refs.append(candidate.ref)
                 documents_by_ref.setdefault(candidate.ref, {
-                    "ref": alias_by_ref[candidate.ref],
+                    "ref": candidate.ref,
                     "source": candidate.source_key,
                     "date": candidate.observed_time.value.isoformat(),
                     "text": candidate.text,
@@ -2501,13 +2518,21 @@ def _execution_prompt(
             "normalized_action": item.recommendation.normalized_action,
             "source_quote": item.recommendation.source_quote,
             "opinion_date": item.opinion_time.value.isoformat(),
-            "allowed_candidate_refs": [
-                alias_by_ref[reference] for reference in related_refs
-            ],
+            "allowed_candidate_refs": list(related_refs),
         })
+    # 别名在本次实际渲染的候选上稠密编号；解析侧用同一函数重算，保证提示
+    # 与解析共用一套编号。
+    alias_by_ref = _prompt_alias_by_ref(candidates, allowed_refs)
+    for entry in entries:
+        entry["allowed_candidate_refs"] = [
+            alias_by_ref[reference] for reference in entry["allowed_candidate_refs"]
+        ]
     payload = json.dumps({
         "recommendations": entries,
-        "candidate_documents": list(documents_by_ref.values()),
+        "candidate_documents": [
+            {**document, "ref": alias_by_ref[document["ref"]]}
+            for document in documents_by_ref.values()
+        ],
     }, ensure_ascii=False, separators=(",", ":"))
     if len(payload) > _MAX_EXECUTION_PROMPT_CHARS:
         raise _SourceGap()
@@ -2678,9 +2703,11 @@ def _parse_executions(
         key = _evidence_text(item.source_quote)
         source_quote_counts[key] = source_quote_counts.get(key, 0) + 1
     candidate_by_ref = {item.ref: item for item in candidates}
+    # 与 _execution_prompt 使用同一别名编号；两侧只共享候选顺序与允许集合，
+    # 不依赖额外的调用参数。
     ref_by_alias = {
-        f"c{index}": candidate.ref
-        for index, candidate in enumerate(candidates, start=1)
+        alias: reference
+        for reference, alias in _prompt_alias_by_ref(candidates, allowed_refs).items()
     }
     prompt_candidate_refs = {
         ref for refs in allowed_refs.values() for ref in refs

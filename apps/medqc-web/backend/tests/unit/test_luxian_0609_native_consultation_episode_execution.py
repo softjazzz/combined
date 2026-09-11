@@ -781,6 +781,63 @@ def test_shared_source_quote_atomic_items_cannot_fail_020_on_coverage():
     ) != ("non_compliant", "requirement_violated")
 
 
+def test_prompt_aliases_are_dense_over_rendered_candidates():
+    """别名必须在本次真正渲染的候选上连续编号，不能按全量候选稀疏编号。"""
+
+    completed = (_coverage_completed_recommendation(),)
+    included = _coverage_candidate()
+    ineligible = episode._CandidateDocument(
+        "surgery_record-1",
+        "surgery_record",
+        episode._ObservedTime(datetime(2026, 7, 21, 8), True),
+        "手术记录内容",
+        "surgery-document-1",
+    )
+
+    prompt, allowed_refs = episode._execution_prompt(
+        completed=completed, candidates=(included, ineligible)
+    )
+
+    payload = json.loads(prompt.split("输入：", 1)[1])
+    assert [item["ref"] for item in payload["candidate_documents"]] == ["c1"]
+    assert payload["recommendations"][0]["allowed_candidate_refs"] == ["c1"]
+    assert allowed_refs["consultation_record-1#r1"] == frozenset({included.ref})
+
+
+def test_parser_resolves_aliases_with_prompt_numbering():
+    """解析侧必须与提示侧共用同一别名编号。"""
+
+    completed = (_coverage_completed_recommendation(),)
+    included = _coverage_candidate()
+    ineligible = episode._CandidateDocument(
+        "surgery_record-1",
+        "surgery_record",
+        episode._ObservedTime(datetime(2026, 7, 21, 8), True),
+        "手术记录内容",
+        "surgery-document-1",
+    )
+    _, allowed_refs = episode._execution_prompt(
+        completed=completed, candidates=(included, ineligible)
+    )
+
+    parsed = episode._parse_executions(
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["c1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [],
+            "confidence": "high",
+        }),
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=(included, ineligible),
+    )
+
+    assert parsed[0].trace_refs == (included.ref,)
+
+
 def _coverage_outcome_assessment(
     recommendation_ref: str,
     execution_record_state: str,
