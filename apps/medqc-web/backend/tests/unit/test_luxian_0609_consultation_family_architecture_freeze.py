@@ -8,6 +8,7 @@ import pytest
 
 from app.services.luxian_0609 import execution
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
+from app.services.luxian_0609 import consultation_opinion_freeze
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     SourceEvidenceQueryError,
@@ -369,6 +370,9 @@ async def test_formal_unified_chain_freezes_mixed_022_episodes_and_prompt_usage(
             _fact("consultation_record-3", opinion_state="missing"),
         )
     )
+    # 本用例比较两次运行各自构建的提示词，必须先清除第一阶段事实冻结，
+    # 否则第二次运行复用冻结结果、不会再产生提示词。
+    consultation_opinion_freeze.reset_opinion_freeze(visit_id="freeze-visit")
     await _run_formal_chain(
         monkeypatch,
         selected_rule_ids=("LX0609-022",),

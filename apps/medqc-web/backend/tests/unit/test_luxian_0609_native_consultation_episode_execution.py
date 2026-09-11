@@ -47,15 +47,6 @@ class _Client:
         return {"content": _materialize_recommendation_quotes(self.payload, prompt), "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}}
 
 
-@pytest.fixture(autouse=True)
-def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
-    """第一阶段事实冻结按用例隔离，避免用例之间互相复用冻结结果。"""
-
-    monkeypatch.setenv(
-        "LUXIAN_0609_OPINION_FREEZE_DIR", str(tmp_path / "opinion-freeze")
-    )
-
-
 class _SequentialClient:
     def __init__(self, *payloads):
         self.payloads = list(payloads)

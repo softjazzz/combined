@@ -21,6 +21,15 @@ from app.services.sync_idempotency import reset_sync_idempotency_memory_for_test
 pytest_plugins = ["tests.fixtures.semantic_rules_fixtures"]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
+    """会诊意见事实冻结按用例隔离：避免用例之间复用第一阶段事实。"""
+
+    monkeypatch.setenv(
+        "LUXIAN_0609_OPINION_FREEZE_DIR", str(tmp_path / "opinion-freeze")
+    )
+
+
 @pytest.fixture(scope="session")
 def app():
     """
