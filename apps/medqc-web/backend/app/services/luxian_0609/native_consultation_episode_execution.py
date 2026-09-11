@@ -210,6 +210,17 @@ _EMBEDDED_DECISION_COMMUNICATION_PATTERN = re.compile(
 _EMBEDDED_DECISION_DEFER_PATTERN = re.compile(
     r"(?:患者|家属).{0,16}(?:拒绝|不同意|暂不|暂缓|放弃|决定不|要求不)"
 )
+_TEXT_NORMALIZE_PATTERN = re.compile(r"[^\u4e00-\u9fffA-Za-z0-9]+")
+# S2 照抄阈值（我方口径标准汇编第三节 S2）：连续重合 ≥12 个汉字且占建议
+# 原文 ≥50% 即判 023-A 照抄。纯文本比对，不依赖模型选择了哪条痕迹。
+_COPIED_OVERLAP_MIN_CHARS = 12
+_COPIED_OVERLAP_RATIO = 0.5
+# S2 反例标记：病程写出本次执行的结果、报告或时间，说明它不是单纯照抄。
+_RESULT_OR_TIME_PATTERN = re.compile(
+    r"(?:未见异常|未见明显异常|阴性|阳性|回报|结果|报告已|已回报|"
+    r"复查(?:后|结果)|"
+    r"\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2})"
+)
 _EVALUATOR_VERSION = "consultation-episode-v2"
 _SIGNATURE_LABEL = (
     r"(?:(?:患者|家属|会诊(?:医师|医生)?|申请(?:医师|医生)?|"
@@ -2135,6 +2146,7 @@ def _consultation_execution_display_facts(
     assessments: Sequence[_ExecutionAssessment] | None,
     documents: Sequence[Mapping[str, str]],
     candidates: Sequence[_CandidateDocument] = (),
+    copied_opinion_refs: frozenset[str] = frozenset(),
 ) -> Mapping[str, Any]:
     """解释020的关联结果或023的执行质量结果。"""
 
@@ -2288,6 +2300,34 @@ def _consultation_execution_display_facts(
             for item in source_document_refs
         }.values()
     )[:8]
+    def _effective_execution_state(item: _CompletedRecommendation) -> str:
+        """逐条展示口径：S2 照抄命中按笼统/照抄呈现，其余沿用已找到的事实。"""
+
+        recommendation_ref = item.recommendation.recommendation_ref
+        assessment = assessments_by_recommendation.get(recommendation_ref)
+        if assessment is not None:
+            if assessment.execution_record_state == "specific_trace":
+                return "specific"
+            if assessment.execution_record_state in {
+                "generic_trace",
+                "copied_opinion",
+            }:
+                return "generic"
+            if (
+                assessment.execution_record_state == "no_trace"
+                and not assessment.execution_refs
+            ):
+                return (
+                    "generic"
+                    if recommendation_ref in copied_opinion_refs
+                    else "missing"
+                )
+            return "unknown"
+        return "generic" if recommendation_ref in copied_opinion_refs else "unknown"
+
+    effective_states = tuple(
+        _effective_execution_state(item) for item in completed_recommendations
+    )
     facts: dict[str, Any] = {
         "verification_kind": (
             "consultation_execution_quality_check"
@@ -2310,16 +2350,13 @@ def _consultation_execution_display_facts(
             len(completed_recommendations)
         ),
         "specific_execution_count": sum(
-            item.execution_record_state == "specific_trace"
-            for item in assessment_rows
+            state == "specific" for state in effective_states
         ),
         "generic_execution_count": sum(
-            item.execution_record_state in {"generic_trace", "copied_opinion"}
-            for item in assessment_rows
+            state == "generic" for state in effective_states
         ),
         "missing_execution_count": sum(
-            item.execution_record_state == "no_trace" and not item.execution_refs
-            for item in assessment_rows
+            state == "missing" for state in effective_states
         ),
         "relation_state": (
             relation_by_status_023 if rule_id == "LX0609-023" else relation_by_status_020
@@ -2336,20 +2373,7 @@ def _consultation_execution_display_facts(
             assessment = assessments_by_recommendation.get(
                 item.recommendation.recommendation_ref
             )
-            execution_state = "unknown"
-            if assessment is not None:
-                if assessment.execution_record_state == "specific_trace":
-                    execution_state = "specific"
-                elif assessment.execution_record_state in {
-                    "generic_trace",
-                    "copied_opinion",
-                }:
-                    execution_state = "generic"
-                elif (
-                    assessment.execution_record_state == "no_trace"
-                    and not assessment.execution_refs
-                ):
-                    execution_state = "missing"
+            execution_state = effective_states[recommendation_index - 1]
             opinion_evidence: list[dict[str, str]] = []
             opinion_document = documents_by_ref.get(item.recommendation.opinion_ref)
             opinion_document_id = _clean(
@@ -3066,6 +3090,101 @@ def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
     return "evaluation_unknown", "semantic_output_unknown"
 
 
+def _longest_common_substring_length(left: str, right: str) -> int:
+    """S2 照抄阈值使用的连续重合长度；只处理短文本。"""
+
+    if not left or not right:
+        return 0
+    previous = [0] * (len(right) + 1)
+    best = 0
+    for left_index in range(1, len(left) + 1):
+        current = [0] * (len(right) + 1)
+        left_char = left[left_index - 1]
+        for right_index in range(1, len(right) + 1):
+            if left_char == right[right_index - 1]:
+                matched = previous[right_index - 1] + 1
+                current[right_index] = matched
+                if matched > best:
+                    best = matched
+        previous = current
+    return best
+
+
+def _copy_has_independent_result(*, course_text: str, source_quote: str) -> bool:
+    """S2 反例：重合片段之外另有针对本患者的独立事实（本次结果或时间）。
+
+    病程写出本次执行的结果或时间时，即使包含会诊建议的检查名，也不属于照抄。
+    """
+
+    normalized_source = _TEXT_NORMALIZE_PATTERN.sub("", source_quote)
+    for raw_sentence in re.split(r"[。！？\n]", course_text):
+        sentence = raw_sentence.strip()
+        if not sentence:
+            continue
+        normalized_sentence = _TEXT_NORMALIZE_PATTERN.sub("", sentence)
+        if not normalized_sentence:
+            continue
+        overlap = _longest_common_substring_length(
+            normalized_sentence, normalized_source
+        )
+        if overlap < _COPIED_OVERLAP_MIN_CHARS:
+            continue
+        if _RESULT_OR_TIME_PATTERN.search(sentence):
+            return True
+    return False
+
+
+def _standard_copied_opinion_refs(
+    *,
+    completed: Sequence[_CompletedRecommendation],
+    candidates: Sequence[_CandidateDocument],
+    allowed_refs: Mapping[str, frozenset[str]],
+) -> frozenset[str]:
+    """S2：病程连续重合 ≥12 汉字且占建议原文 ≥50% 时判 023-A 照抄。
+
+    照抄只由文本阈值判定，不依赖模型选了哪条痕迹：病程逐字搬用会诊意见
+    就是 023 要抓的缺陷。判定只读取该建议已授权的会诊后病程候选，避免跨
+    文书误判；命中后只影响 023，不新增 trace_refs，因此不改变 020。
+    """
+
+    course_documents = tuple(
+        item
+        for item in candidates
+        if item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+    )
+    if not course_documents:
+        return frozenset()
+    hits: set[str] = set()
+    for item in completed:
+        source_quote = item.recommendation.source_quote
+        normalized_source = _TEXT_NORMALIZE_PATTERN.sub("", source_quote)
+        if len(normalized_source) < _COPIED_OVERLAP_MIN_CHARS:
+            continue
+        authorized = allowed_refs.get(
+            item.recommendation.recommendation_ref, frozenset()
+        )
+        for document in course_documents:
+            if document.ref not in authorized:
+                continue
+            normalized_course = _TEXT_NORMALIZE_PATTERN.sub("", document.text)
+            if not normalized_course:
+                continue
+            overlap = _longest_common_substring_length(
+                normalized_course, normalized_source
+            )
+            if overlap < _COPIED_OVERLAP_MIN_CHARS:
+                continue
+            if overlap / len(normalized_source) < _COPIED_OVERLAP_RATIO:
+                continue
+            if _copy_has_independent_result(
+                course_text=document.text, source_quote=source_quote
+            ):
+                continue
+            hits.add(item.recommendation.recommendation_ref)
+            break
+    return frozenset(hits)
+
+
 def _every_recommendation_has_trace(
     assessments: Sequence[_ExecutionAssessment] | None,
 ) -> bool:
@@ -3089,16 +3208,21 @@ def _execution_quality_outcome(
     assessments: Sequence[_ExecutionAssessment] | None,
     completed_recommendations: Sequence[_CompletedRecommendation],
     course_source_incomplete: bool,
+    copied_opinion_refs: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     """S1／S5／S6：023 只评价已找到的执行痕迹是否规范。
 
     023 的评价对象是**已经找到的**执行痕迹：没有任何痕迹时不适用；已找到的
     痕迹中存在笼统或照抄即不符合；已找到的痕迹全部具体即符合。未找到痕迹的
     建议与无法判定的条目都不参与 023 判罚，因此 023 不再产出“不确定”。
+    S2 照抄由文本阈值独立判定：病程逐字照搬会诊意见时，即使模型没有选中该
+    痕迹，023 仍判不符合。
     """
 
     if not completed_recommendations:
         return "not_applicable", "trigger_absent_complete"
+    if copied_opinion_refs:
+        return "non_compliant", "requirement_violated"
     rows = tuple(assessments or ())
     if not rows:
         return "evaluation_unknown", "semantic_low_confidence"
@@ -3130,6 +3254,7 @@ def _execution_outcome(
     source_technical: bool = False,
     source_incomplete_keys: frozenset[str] = frozenset(),
     context_only_candidate_present: bool = False,
+    copied_opinion_refs: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -3171,6 +3296,7 @@ def _execution_outcome(
             assessments=assessments,
             completed_recommendations=completed_recommendations,
             course_source_incomplete=course_source_incomplete,
+            copied_opinion_refs=copied_opinion_refs,
         )
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
@@ -3819,6 +3945,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     embedded_decision_refs: frozenset[str] = frozenset()
+    # S2 照抄命中集合：由文本阈值独立判定，不依赖模型选中了哪条执行痕迹。
+    copied_opinion_refs: frozenset[str] = frozenset()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
             for rule_id in stage_two_rule_ids:
@@ -3972,6 +4100,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     candidate_by_ref = {
                         item.ref: item for item in projection.candidates
                     }
+                    copied_opinion_refs = _standard_copied_opinion_refs(
+                        completed=completed_recommendations,
+                        candidates=projection.candidates,
+                        allowed_refs=allowed_refs,
+                    )
                     allowed_context_candidate_present = any(
                         ref in candidate_by_ref
                         and candidate_by_ref[ref].source_key
@@ -4281,6 +4414,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         episodes=episodes,
                         completed_recommendations=completed_recommendations,
                         assessments=None,
+                        copied_opinion_refs=copied_opinion_refs,
                     )
         if execution_assessments is not None:
             execution_assessments = _apply_embedded_decision_traces(
@@ -4297,6 +4431,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     source_technical=execution_source_technical,
                     source_incomplete_keys=execution_source_incomplete_keys,
                     context_only_candidate_present=context_only_candidate_present,
+                    copied_opinion_refs=copied_opinion_refs,
                 )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,
@@ -4398,6 +4533,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         execution_candidate_projection.candidates
                         if execution_candidate_projection is not None
                         else ()
+                    ),
+                    copied_opinion_refs=(
+                        copied_opinion_refs
+                        if rule_id == "LX0609-023"
+                        else frozenset()
                     ),
                 ),
             )
