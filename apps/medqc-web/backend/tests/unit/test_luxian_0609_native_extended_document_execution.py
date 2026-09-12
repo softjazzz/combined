@@ -9348,7 +9348,14 @@ async def test_074_course_marker_with_reason_and_basis_is_compliant_c20_pattern(
 
 
 @pytest.mark.asyncio
-async def test_074_empty_diagnosis_and_no_course_marker_is_applicability_gap_not_na():
+async def test_074_empty_diagnosis_and_no_course_marker_is_not_applicable():
+    """两条显式声明通道（病程正文 / 结构化栏）都完整可读且都无声明。
+
+    `diagnosis` 空表只说明静态诊断序列不可比，不构成“资料不足”：074 的触发
+    条件「观察到修正/补充诊断的显式声明」在两个完整通道上都是确定性否定，
+    因此应判 `not_applicable / trigger_absent_complete`，而不是 `data_gap`。
+    """
+
     client = _DiagnosisChangeClient()
     execution, reduced = await _evaluate(
         "LX0609-074",
@@ -9363,8 +9370,8 @@ async def test_074_empty_diagnosis_and_no_course_marker_is_applicability_gap_not
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "applicability_source_gap"
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
     assert execution.llm_call_count == 0
     assert client.calls == []
 
@@ -9406,8 +9413,12 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
 
 
 @pytest.mark.asyncio
-async def test_074_without_structured_change_declaration_keeps_applicability_gap():
-    """入院记录诊断没有修正/补充声明时，维持原有资料不足语义。"""
+async def test_074_without_structured_change_declaration_is_not_applicable():
+    """入院记录诊断没有修正/补充声明，且病程正文无变更表述 → 触发条件不成立。
+
+    声明来源可读（`入院诊断`/`出院诊断` 两类普通行 + 空名字的 `修正诊断` 行），
+    与病程正文通道一起构成两条完整可读的通道，均无声明时为确定性否定。
+    """
 
     client = _DiagnosisChangeClient()
     _, _, execution, reduced = await _evaluate_selected(
@@ -9426,8 +9437,48 @@ async def test_074_without_structured_change_declaration_keeps_applicability_gap
         llm_client=client,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "applicability_source_gap"
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "trigger_absent_complete"
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_074_no_declaration_produces_no_display_facts_or_evidence():
+    """确定性否定不得产出变更核查事实，也不得绑定逐行文书坐标。
+
+    判定携带的引用只能是两条完整可读声明通道的**来源快照**（绑定层对
+    not_applicable 的既有合同要求），不能是任何客户文书坐标。
+    """
+
+    client = _DiagnosisChangeClient()
+    snapshot, _, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {
+            "admission_record_diagnosis": ({
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": "肺部感染",
+            },),
+            "daily_course_record": ({
+                "document_id": "COURSE-NO-CHANGE-074",
+                "record_time": "2025-08-20 10:00:00",
+                "record_content": "病情平稳，继续当前治疗。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "trigger_absent_complete"
+    assert dict(execution.customer_display_facts) == {}
+    observations = {item.source_key: item for item in snapshot.observations}
+    assert execution.decisions[0].fact_refs == tuple(
+        sorted(
+            observations[source_key].snapshot_ref.removeprefix("sha256:")
+            for source_key in ("admission_record_diagnosis", "diagnosis")
+        )
+    )
+    assert set(snapshot.document_refs).isdisjoint(execution.decisions[0].fact_refs)
     assert execution.llm_call_count == 0
     assert client.calls == []
 
@@ -9505,6 +9556,8 @@ async def test_074_unavailable_structured_declaration_source_keeps_data_gap():
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert reduced[0].reason_code == "source_unavailable"
+    # 来源不可读时既不能断言“没有声明”，也不得产出核查事实或证据定位。
+    assert dict(execution.customer_display_facts) == {}
     assert execution.llm_call_count == 0
     assert client.calls == []
 
@@ -9547,6 +9600,12 @@ async def test_074_diagnosis_source_error_takes_priority_and_skips_model():
     ),
 )
 async def test_074_negated_conditional_or_generic_marker_is_not_an_event(text):
+    """否定/条件/泛指措辞不构成“已发生的变更”，也不构成资料缺口。
+
+    排除这些措辞后病程正文通道为空；入院记录诊断声明栏同为完整可读且无声明，
+    两条通道都是确定性否定 → `not_applicable / trigger_absent_complete`。
+    """
+
     client = _DiagnosisChangeClient()
     execution, reduced = await _evaluate(
         "LX0609-074",
@@ -9558,8 +9617,8 @@ async def test_074_negated_conditional_or_generic_marker_is_not_an_event(text):
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "applicability_source_gap"
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
     assert execution.llm_call_count == 0
     assert client.calls == []
 

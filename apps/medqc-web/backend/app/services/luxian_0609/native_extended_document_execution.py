@@ -4073,6 +4073,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for row in source_rows
                     if _has_explicit_diagnosis_change_event(_row_text(row))
                 )
+                # 触发条件不成立时，判定引用的来源快照就是两条完整可读的
+                # 声明通道；病程事件驱动的分支自行绑定逐行文书引用，其余
+                # 资料缺口分支维持空的来源引用集合。
+                decision_source_keys: tuple[str, ...] = ()
                 if diagnosis_error:
                     final_state, reason_code = "data_gap", diagnosis_error
                 elif daily_error or senior_error:
@@ -4093,11 +4097,26 @@ async def execute_luxian_0609_native_extended_document_rules(
                         admission_diagnosis_rows
                     )
                     if not declared_diagnosis_names:
-                        # 静态入院/出院诊断差异不能证明住院期间发生过诊断变更；
-                        # diagnosis 空表也不能反向证明没有发生变更。
+                        # 074 的触发条件只能由“观察到”修正/补充诊断的显式声明
+                        # 成立，它有两条并列且都完整可读的声明通道：病程正文
+                        # 变更表述（上面的 course_event_rows）与入院记录诊断的
+                        # 结构化变更声明栏。两条通道都无声明即为完整输入上的
+                        # 确定性否定，触发条件不成立，而不是资料缺口；来源
+                        # 不可读/截断已在上方 admission_diagnosis_error 分支
+                        # fail-closed 保持 data_gap。
                         final_state, reason_code = (
-                            "data_gap",
-                            "applicability_source_gap",
+                            "not_applicable",
+                            "trigger_absent_complete",
+                        )
+                        # 两条通道的读取证据：diagnosis 表与入院记录诊断声明栏
+                        # 均已完整读取且无声明。绑定为最终判定的 fact_refs 是
+                        # 公共绑定层对 not_applicable 的既有合同要求（见
+                        # decision_binding._requires_evidence_ref）；它们不是
+                        # 文书坐标，客户证据投影对 trigger_absent_complete 保持
+                        # 空定位。
+                        decision_source_keys = (
+                            "diagnosis",
+                            "admission_record_diagnosis",
                         )
                     else:
                         structured_candidate_rows = _reason_and_basis_candidate_rows(
@@ -4238,7 +4257,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     _decision(
                         rule_id=rule_id,
                         snapshot=evidence_snapshot,
-                        source_keys=(),
+                        source_keys=(
+                            decision_source_keys
+                            if final_state == "not_applicable"
+                            else ()
+                        ),
                         document_refs=course_binding.document_refs,
                         exact_document_refs=bool(course_event_rows),
                         final_state=(
