@@ -54,6 +54,7 @@ py -3.10 -m pytest -q --disable-warnings @files
 - 病历数：5。
 - 每份结果数：72；总结果数：360。
 - 72 条是当前客户交付完整范围：规则总表 77 条，扣除客户明确排除的 `033/034/035/041/042` 后为 72 条；其中 66 条正式执行，6 条按阶段策略输出 `not_executed`。这 5 条不是执行遗漏。
+  - ⚠️ **该执行/冻结计数已被取代（2026-09-12）**：现行权威为 **65 条执行 + 7 条暂停**（《LX0609-我方口径标准汇编》第一节「规则数口径」，提交 `8ed428a84`）。本文的「66 执行 + 6 冻结」是当时口径，**不得再引用**；72 条的构成（77 扣除 `033/034/035/041/042`）仍然有效。
 - 任务状态：`completed`。
 - 5 个 Record Result Envelope 均为 `canonical_straight_through`，每个包含 72 条结果。
 - Canonical 状态分布：`compliant=55`、`non_compliant=21`、`not_applicable=111`、`data_gap=143`、`not_executed=30`、`technical_error=0`。
