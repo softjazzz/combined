@@ -20,6 +20,18 @@ export interface ExamLabEventPresentation {
   events: ExamEventPresentationRow[]
 }
 
+/**
+ * `not_applicable` 三个互斥出口的客户文案（012/015 多事件卡片）。
+ *
+ * 真值源在后端 `backend/app/services/luxian_0609/customer_renderer.py`
+ * 的多事件 `not_applicable` 分支（`conclusion = "..."`）。此处逐字复制用于前端渲染，
+ * 并由 `__tests__/examLabEventPresentation.spec.ts` 的跨端一致性断言守护：
+ * 任一端改字，测试即失败。
+ */
+export const NOT_APPLICABLE_WINDOW_NOT_MATURE_TEXT = '报告后 24 小时评价窗口尚未届满，暂不判定'
+export const NOT_APPLICABLE_NEGATIVE_TEXT = '按报告结果判定为未检出需分析的阳性结果，本项不适用'
+export const NOT_APPLICABLE_UNKNOWN_TEXT = '未确认本次检查为需分析的目标事件，本项不适用'
+
 export function buildExamLabEventPresentation(
   item: SingleRecordQcResultItem,
 ): ExamLabEventPresentation | null {
@@ -79,10 +91,10 @@ export function buildExamLabEventPresentation(
         statusLabel: '不适用',
         description:
           positiveState === 'positive'
-            ? '报告后 24 小时评价窗口尚未届满，暂不判定'
+            ? NOT_APPLICABLE_WINDOW_NOT_MATURE_TEXT
             : positiveState === 'negative'
-              ? '按报告结果判定为未检出需分析的阳性结果，本项不适用'
-              : '未确认本次检查为需分析的目标事件，本项不适用',
+              ? NOT_APPLICABLE_NEGATIVE_TEXT
+              : NOT_APPLICABLE_UNKNOWN_TEXT,
       })
       continue
     }
