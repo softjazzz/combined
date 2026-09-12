@@ -68,6 +68,9 @@ function toAbsolute(relPaths) {
     .filter((abs) => abs === ROOT || abs.startsWith(ROOT + path.sep))
 }
 
+// 返回 null 表示「git 命令执行失败」，与「git 成功但输出为空」严格区分。
+// 两者都压成 '' 会让暂存区读取失败伪装成「没有文件要检查」，门禁静默通过
+// （与历史上双重前缀导致的空转同一类故障）。
 function gitOutput(args) {
   try {
     return execSync(`git ${args}`, {
@@ -76,12 +79,13 @@ function gitOutput(args) {
       encoding: 'utf8',
     })
   } catch {
-    return ''
+    return null
   }
 }
 
 function toAbsoluteFromGit(args) {
   const out = gitOutput(args)
+  if (out === null) return null
   return toAbsolute(
     out
       .split(/\r?\n/)
@@ -91,11 +95,21 @@ function toAbsoluteFromGit(args) {
 }
 
 function getStagedFiles() {
-  return toAbsoluteFromGit('diff --cached --name-only --diff-filter=ACMRTUXB')
+  const files = toAbsoluteFromGit('diff --cached --name-only --diff-filter=ACMRTUXB')
+  if (files === null) {
+    // 读取失败必须硬失败：否则 pre-commit 门禁会在「git 不可用 / 当前目录不是
+    // 仓库 / 索引损坏」时静默放行，这正是该门禁最危险的失效方式。
+    throw new Error(
+      'staged 模式无法读取 git 暂存区（git 执行失败，或当前目录不是 git 仓库、索引不可读）；' +
+        '禁止静默通过',
+    )
+  }
+  return files
 }
 
 function getTrackedFiles() {
   // 限定本应用目录，避免把 monorepo 其它应用的问题算到本门禁头上。
+  // 返回 null（git 失败）时由调用方退回目录遍历。
   return toAbsoluteFromGit(`ls-files -- ${SELF_PATHSPEC}`)
 }
 
@@ -133,8 +147,8 @@ async function collectFiles(mode) {
     // 只扫「仓库内容」（已跟踪文件）：工作目录树包含 .release-packages 等被
     // gitignore 的本地发布快照，把它们算作存量债会让该门禁永远红、无人理会。
     const tracked = getTrackedFiles()
-    if (tracked.length === 0) {
-      // git 不可用时退回目录遍历
+    if (!tracked || tracked.length === 0) {
+      // git 不可用（null）或确实没有已跟踪文件时，退回目录遍历
       const files = []
       await walk(ROOT, files)
       return files
@@ -198,6 +212,17 @@ async function main() {
       console.error(`- ${line}`)
     }
     process.exit(1)
+  }
+
+  if (files.length === 0) {
+    // 0 个文件本身是合法的（本次提交不含本应用文本文件），但必须把原因说清楚，
+    // 否则它与「检查了一批文件且全部通过」在日志上无法区分。
+    console.log(
+      mode === 'staged'
+        ? 'encoding check passed (staged): 本次暂存区没有本应用的文本文件，无需检查'
+        : 'encoding check passed (all): 没有可检查的已跟踪文本文件',
+    )
+    return
   }
 
   console.log(`encoding check passed (${mode}): ${files.length} text file(s) scanned`)
