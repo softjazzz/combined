@@ -1,7 +1,0 @@
-sheet2_row_id,visit_id,patient_name,replay_scope,llm_called,single_prompt_multi_subitem_verified,overall_result,primary_rule_id,recommended_rule_ids,sub_item_count,validation_conclusion,llm_error
-Sheet2-R0021,1915821,魏治伦,admission_issue_family_level,True,True,no_hit,SC-009,SC-009,5,pass,
-Sheet2-R0069,2030069,柯贤林,admission_issue_family_level,True,False,no_hit,SC-020,SC-020,1,fail,
-Sheet2-R0103,2073404,古正洪,admission_issue_family_level,True,True,partial_hit,SC-008,SC-008|SC-010|SC-012|SC-018|SC-020,5,pass,
-Sheet2-R0110,2326610,张仕枝,admission_issue_family_level,True,True,partial_hit,SC-009,SC-009|SC-011|SC-012|SC-010,5,pass,
-Sheet2-R0210,2256518,赖世成,admission_issue_family_level,True,True,partial_hit,SC-018,SC-018|SC-008|SC-010,3,pass,
-Sheet2-R0220,2268187,代云聪,consultation_record_quality,False,False,not_run,SC-069,SC-069,0,fail_no_family_prompt,客户样本验证页当前仅入院记录问题族具备 family-level 多 subitem prompt；SC-069 会诊记录质量没有同等 family prompt，不能证明真实可跑。

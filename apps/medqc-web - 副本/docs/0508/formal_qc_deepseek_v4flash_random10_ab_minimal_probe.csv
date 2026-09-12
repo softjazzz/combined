@@ -1,2 +1,0 @@
-probe_type,provider,endpoint_host,model,key_present,usage_total_tokens,has_choices,provider_error,upstream_http_error,parse_error,timeout,rate_limit,passed,error_summary,wall_clock_time
-minimal_chat,deepseek,api.deepseek.com,deepseek-v4-flash,True,74,True,0,0,0,0,0,True,,1.906

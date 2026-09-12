@@ -1,6 +1,0 @@
-
-> medical-qc-system@1.0.0 type-check
-> vue-tsc --noEmit
-
-src/components/medical/QCAnalysisPanelComponent.vue(508,11): error TS2353: Object literal may only specify known properties, and 'deduction' does not exist in type 'QCIssueItem | { code: string; severity: string; description: string; suggestion: string; }'.
-src/views/debug/ApiTestView.vue(487,7): error TS2353: Object literal may only specify known properties, and 'patient_name' does not exist in type 'CreateMedicalRecordRequest'.

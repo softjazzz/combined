@@ -1,2 +1,0 @@
-"""DRG service package."""
-

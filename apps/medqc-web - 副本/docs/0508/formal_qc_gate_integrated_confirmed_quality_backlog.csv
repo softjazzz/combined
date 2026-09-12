@@ -1,5 +1,0 @@
-priority,backlog_item,target_rules,problem_to_solve,fix_type,acceptance_criteria,expected_precision_gain
-P0,收紧 confirmed guardrail：短证据/空字段片段不得确认,"SC-105, SC-010, SC-015, SC-099",5 条 confirmed 被建议转 data_gap，核心是 quote 短、字段片段不足或缺完整文书覆盖。,confirmed_guardrail,当前 10 条回放中 evidence_too_short=true 的 confirmed 数降为 0；短 quote/记录头/空字段串统一转 data_quality_gap。,直接拦截大部分弱证据 confirmed，提高 confirmed 可展示纯度。
-P0,SC-123 二轮准入改为逐药品字段矩阵,SC-123,SC-123 4 条 confirmed 中 2 条保留、1 条 data_gap、1 条 rejected，说明 gate 后二轮仍会过度确认。,evidence_coverage_flag + second_pass_gate,每条 confirmed 必须列出具体出院药品及缺失字段；无逐药品 quote 或仅出院建议文本时不得 confirmed。,减少出院带药类过度确认，同时保留明确缺字段的候选。
-P0,SC-099 confirmed 需要手术记录与病理来源对照 quote,SC-099,SC-099 gate 已证明适用，但二轮仅凭“送病检”短句确认，缺 pathology 对照与规则要件证明。,evidence_coverage_flag + second_pass_gate,SC-099 confirmed 必须同时包含手术记录取材/送检 quote、病理来源 quote、缺失要件说明；缺 contrast_quote 转 data_quality_gap。,防止适用性成立被误当缺陷成立。
-P1,入院记录病史类规则增加完整上下文 coverage,"SC-010, SC-015, SC-013",入院记录类规则易因单段病史、性别/字段适用性或既往史语义导致误判。,applicability_gate_draft + evidence_coverage_flag,主诉/现病史/既往史类 confirmed 必须有完整入院记录字段覆盖和诊断依据对照；男性/月经史等不适用分支不进入 confirmed。,降低病史类规则的语义误判，但需更多样本验证后再接生产。

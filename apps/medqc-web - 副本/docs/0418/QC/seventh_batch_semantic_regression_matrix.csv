@@ -1,3 +1,0 @@
-case_id,stage,record_id,patient_name,issue_family,manual_issue_text,primary_rule_id,expected_status,actual_status,hit_type,target_document_type,current_status,candidate_rule_ids,matched_visit_id,actual_job_id,findings,evidence,notes
-semantic-b7-observe-001,seventh_batch_observe,1962806,钟星文,交接班记录缺失/缺项,管床医生发生变更未书写交接班记录,SC-062,observe,not_stored,observe,交接班记录,observe,SC-062,1962806,,,,观察位：问题文本直指 SC-062，但本地 PG 与 0426 快照均无 handoff/handover 正文，暂不能作为核心锚点。
-semantic-b7-blocked-001,seventh_batch_blocked,1931889,刘佳钦,手术同意书/知情同意签署异常,手术同意书签字人员非授权受托人,SC-128,blocked,blocked,blocked,知情同意书,blocked,SC-128,1931889,,,,blocked：问题文本最贴 SC-128，但本地 PG 中 `surgery_inform_consent/docpat_commu_record/surgery_record/presurg_summary/presurg_discussion` 均无正文，当前无法形成可交付核心锚点。

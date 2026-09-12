@@ -1,2 +1,0 @@
-probe_type,started_at,provider,provider_code,endpoint_host,model,config_source,key_present,key_source,key_prefix_hash,http_status,has_choices,usage_total_tokens,upstream_error_summary,exception_type,raw_error_summary,provider_error,upstream_http_error,provider_connection_error,parse_error,timeout,rate_limit,elapsed_seconds,success
-minimal_chat,2026-05-20T19:12:56,alibaba,alibaba,dashscope.aliyuncs.com,qwen3.5-35b-a3b,env,True,runtime_client_api_key,93fac017a605,200,True,28,,,,0,0,0,0,0,0,0.975,True

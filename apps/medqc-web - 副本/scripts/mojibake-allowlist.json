@@ -1,6 +1,0 @@
-{
-  "allowlist": [
-    "src/views/drg-grouper/sichuanDipData.ts",
-    "backend/alembic_upgrade_preview.sql"
-  ]
-}

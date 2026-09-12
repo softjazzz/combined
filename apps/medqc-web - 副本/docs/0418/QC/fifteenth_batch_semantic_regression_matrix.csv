@@ -1,8 +1,0 @@
-case_id,stage,record_id,patient_name,issue_family,manual_issue_text,primary_rule_id,expected_status,actual_status,expected_hit_type,actual_hit_type,target_document_type,current_status,notes,batch_job_id
-semantic-b15-core-001,fifteenth_batch,2255288,王树成,会诊记录时效,2026-3-4 8:28 书写呼吸科会诊记录，时间节点早于呼吸科会诊接收时间。,SC-071,non_compliant,non_compliant,same_family_hit,same_family_hit,会诊记录,core,,1d409887-c5d3-417b-9464-f1530a03f307
-semantic-b15-core-002,fifteenth_batch,2312534,陈桂钦,急会诊记录时效,4.1会诊记录未书写，病程记录未在规定时间内完成。,SC-072,non_compliant,non_compliant,same_family_hit,same_family_hit,会诊记录,core,,1d409887-c5d3-417b-9464-f1530a03f307
-semantic-b15-obs-001,fifteenth_batch,2017327,余廷久,住院超30天阶段小结/讨论缺失,患者住院超30天，未见住院超30天讨论记录及阶段小结。,SC-065,compliant,compliant,miss,miss,阶段小结,observe,当前快照仅有阶段小结空壳，最新 batch 仍返回 compliant，继续保留观察位。,1d409887-c5d3-417b-9464-f1530a03f307
-semantic-b15-obs-002,fifteenth_batch,2199041,陈锡芬,出院记录时效异常,患者2月2日出院，新建出院记录后未在24小时内完成出院记录。,SC-117,compliant,compliant,miss,miss,出院记录,observe,当前出院记录正文仍空，最新 batch 返回 compliant，继续保留观察位。,1d409887-c5d3-417b-9464-f1530a03f307
-semantic-b15-obs-003,fifteenth_batch,2199396,王生明,术前主刀医生查房/麻醉术前访视缺失,患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。,SC-086,compliant,compliant,miss,miss,术前小结/上级查房记录,observe,当前证据仍不足以稳定判缺陷，先保留观察位。,1d409887-c5d3-417b-9464-f1530a03f307
-semantic-b15-obs-004,fifteenth_batch,1962806,钟星文,交接班记录缺失/缺项,管床医生发生变更未书写交接班记录。,SC-062,compliant,compliant,miss,miss,交接班记录,observe,本地 PG 与快照均无交接班正文，最新 batch 仍返回 compliant，继续保留观察位。,1d409887-c5d3-417b-9464-f1530a03f307
-semantic-b15-skip-001,fifteenth_batch,1931889,刘佳钦,手术同意书/知情同意签署异常,手术同意书签字人员非授权受托人。,SC-128,compliant,compliant,miss,miss,知情同意书,skip,本地 PG 与 0426 快照均缺知情同意正文；当前 batch 返回 compliant 不作为有效验证，维持 blocked/skip。,1d409887-c5d3-417b-9464-f1530a03f307

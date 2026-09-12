@@ -1,7 +1,0 @@
-rule_id,rule_name,confirmed_count,keep_count,downgrade_to_data_gap_count,downgrade_to_rejected_by_system_count,main_root_cause,recommended_priority,recommended_action
-SC-010,现病史与主诉不符,1,0,1,0,规则适用性未证明,P1,设计规则适用性 gate 或完整 evidence coverage flag。
-SC-013,既往史记录不全(包括既往疾病史、传染病史、输血史、过敏史、预防接种史、手术外伤史等),1,1,0,0,无明显误确认,P2,继续观察
-SC-015,个人史、婚育史、月经史、家族史记录不全或与实际不符,1,0,1,0,证据短片段/截断,P1,收紧 confirmed guardrail，短 quote/缺对照转 data_gap。
-SC-099,术中取材情况和病理结果未在手术记录中记录,1,0,1,0,证据短片段/截断,P0,补 pathology/手术记录 contrast_quote 门槛，缺对照不得 confirmed。
-SC-105,术后首次病程记录缺项或描述不清,2,0,1,1,证据短片段/截断,P0,建立术后首次病程字段矩阵 coverage flag，空字段片段不足以 confirmed。
-SC-123,出院带药不详细(无药品名称、用药剂量、给药途径、用药时间，或药名、剂量写错),4,2,1,1,已有 applicability gate 可覆盖,P0,收紧逐药品字段缺失准入，出院带药候选仍需二轮 item-level 裁决。
