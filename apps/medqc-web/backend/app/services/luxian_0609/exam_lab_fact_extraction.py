@@ -967,6 +967,10 @@ def build_exam_lab_fact_prompt(
         item not in ALLOWED_RULE_IDS for item in selected
     ):
         raise ValueError("unsupported exam lab fact scope")
+    selected_families = {
+        "exam" if rule_id in EXAM_RULE_IDS else "culture"
+        for rule_id in selected
+    }
     imaging_events = events_for_family(projection, "exam")
     culture_events = events_for_family(projection, "culture")
     multi_event_schema = _uses_multi_event_schema(projection)
@@ -1018,12 +1022,21 @@ def build_exam_lab_fact_prompt(
             event_position=event_position,
         )
     }
-    prompt_context = "\n".join(
-        line
-        for line in projection.context.splitlines()
-        if "COURSE_DOC=" not in line
-        or any(f"COURSE_DOC={ref}|" in line for ref in allowed_prompt_course_refs)
+    prompt_document_header = re.compile(
+        r"^\[(?:EVENT_DOC|CANDIDATE_DOC)=[^|\]]+\|FAMILY=(exam|culture)\|"
     )
+    prompt_context_lines: list[str] = []
+    for line in projection.context.splitlines():
+        document_match = prompt_document_header.match(line)
+        if document_match is not None:
+            if document_match.group(1) in selected_families:
+                prompt_context_lines.append(line)
+            continue
+        if "COURSE_DOC=" not in line or any(
+            f"COURSE_DOC={ref}|" in line for ref in allowed_prompt_course_refs
+        ):
+            prompt_context_lines.append(line)
+    prompt_context = "\n".join(prompt_context_lines)
 
     def fact_skeleton(rule_id: str, event_position: int) -> dict[str, Any]:
         fact = {
