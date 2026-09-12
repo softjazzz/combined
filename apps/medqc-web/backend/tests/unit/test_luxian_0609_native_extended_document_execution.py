@@ -86,6 +86,11 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
         "mr_bloodtrans": bloodtrans_query_version,
         "bloodtrans_record": bloodtrans_query_version,
         "evaluation_context.horizon": "snapshot-provider-evaluation_context.horizon-v1",
+        # 074 的结构化变更声明来源是同一 Evidence Session 的决策支撑来源；
+        # 夹具默认保持可读且为空，只有显式列入 unavailable_sources 才不可用。
+        "admission_record_diagnosis": (
+            "snapshot-provider-admission_record_diagnosis-v1"
+        ),
     }
     observations = []
     sources = {}
@@ -9360,6 +9365,146 @@ async def test_074_empty_diagnosis_and_no_course_marker_is_applicability_gap_not
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "applicability_source_gap"
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_074_structured_change_declaration_without_reason_is_non_compliant():
+    """入院记录诊断显式声明补充诊断时，变更已发生，缺理由即确定问题。"""
+
+    client = _DiagnosisChangeClient()
+    _, _, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {
+            "admission_record_diagnosis": ({
+                "diagnosis_type": "补充诊断",
+                "diagnosis_name": "1.左膝半月板损伤；2.肺结节",
+                "diagnosis_no": None,
+                "diagnosis_time": None,
+                "record_time": None,
+            },),
+            "daily_course_record": ({
+                "record_time": "2025-08-20 10:00:00",
+                "record_content": "今日查房，患者一般情况可，继续当前治疗。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert dict(execution.customer_display_facts)["LX0609-074"] == {
+        "verification_kind": "diagnosis_change_documentation_check",
+        "diagnosis_change_count": 1,
+        "reason_recorded": False,
+        "basis_recorded": False,
+    }
+    # 结构化声明本身没有理由/依据标记的病程候选，不得触发受控抽取。
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_074_without_structured_change_declaration_keeps_applicability_gap():
+    """入院记录诊断没有修正/补充声明时，维持原有资料不足语义。"""
+
+    client = _DiagnosisChangeClient()
+    _, _, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {
+            "admission_record_diagnosis": (
+                {"diagnosis_type": "入院诊断", "diagnosis_name": "肺部感染"},
+                {"diagnosis_type": "出院诊断", "diagnosis_name": "细菌性肺炎"},
+                {"diagnosis_type": "修正诊断", "diagnosis_name": "   "},
+            ),
+            "daily_course_record": ({
+                "record_time": "2025-08-20 10:00:00",
+                "record_content": "今日查房，患者一般情况可，继续当前治疗。",
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "applicability_source_gap"
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+
+
+def test_074_structured_declaration_strips_signature_and_record_time() -> None:
+    """入院记录诊断名尾部的签名与记录时间必须剥离，不能进入变更后诊断名。"""
+
+    assert module._diagnosis_change_declarations((
+        {
+            "diagnosis_type": "补充诊断",
+            "diagnosis_name": (
+                "1.左膝半月板损伤；2.肺结节                                "
+                "医师签名：郭映江                               记录时间：2025-8-23"
+            ),
+        },
+    )) == ("1.左膝半月板损伤；2.肺结节",)
+
+
+@pytest.mark.asyncio
+async def test_074_structured_declaration_with_course_reason_and_basis_is_compliant():
+    """结构化声明 + 病程内已记录理由与依据（且提及变更后诊断名）走受控抽取。"""
+
+    declared_name = "细菌性肺炎"
+    course_text = (
+        "结合痰培养结果，修正诊断为细菌性肺炎。"
+        "诊断依据：痰培养提示肺炎克雷伯菌。"
+    )
+    client = _DiagnosisChangeClient(_diagnosis_change_item(
+        "doc_01",
+        reason_quote="结合痰培养结果，修正诊断为细菌性肺炎",
+        basis_quote="诊断依据：痰培养提示肺炎克雷伯菌",
+    ))
+    _, _, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {
+            "admission_record_diagnosis": ({
+                "diagnosis_type": "修正诊断",
+                "diagnosis_name": f"{declared_name}  医师签名：张三  记录时间：2025-08-20",
+            },),
+            "daily_course_record": ({
+                "record_time": "2025-08-20 10:00:00",
+                "record_content": course_text,
+            },),
+        },
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    # 命中理由/依据标记门禁的候选仍由受控抽取器给出事实级判定。
+    assert execution.llm_call_count == 1
+    assert len(client.calls) == 1
+    assert dict(execution.customer_display_facts)["LX0609-074"] == {
+        "verification_kind": "diagnosis_change_documentation_check",
+        "diagnosis_change_count": 1,
+        "reason_recorded": True,
+        "basis_recorded": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_074_unavailable_structured_declaration_source_keeps_data_gap():
+    """结构化声明来源不可读时不得断言“未发生变更”，应保持资料缺口。"""
+
+    client = _DiagnosisChangeClient()
+    _, _, execution, reduced = await _evaluate_selected(
+        ("LX0609-074",),
+        {"daily_course_record": ({
+            "record_time": "2025-08-20 10:00:00",
+            "record_content": "今日查房，患者一般情况可，继续当前治疗。",
+        },)},
+        unavailable_sources=frozenset({"admission_record_diagnosis"}),
+        llm_client=client,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_unavailable"
     assert execution.llm_call_count == 0
     assert client.calls == []
 

@@ -165,6 +165,24 @@ _DIAGNOSIS_CHANGE_EVENT_PATTERN = re.compile(
 _DIAGNOSIS_CHANGE_NON_EVENT_PREFIX_PATTERN = re.compile(
     r"(?:暂不|无需|不需|不必|不予|未予|未作|若需|如需|是否|应记录|应当记录).{0,8}$"
 )
+_ADMISSION_DIAGNOSIS_CHANGE_TYPES = frozenset({"修正诊断", "补充诊断"})
+# 客户入院记录诊断把签名与记录时间拼在诊断名尾部；解析“变更后诊断名”时
+# 必须剥离，否则同条关联判据永远匹配不上病程正文。
+_ADMISSION_DIAGNOSIS_LABEL_PATTERN = re.compile(
+    r"(?:医师签名|医生签名|签名|记录时间|记录日期|记录者|签名日期|日期|时间)\s*[:：]"
+)
+_ADMISSION_DIAGNOSIS_TIME_PATTERN = re.compile(
+    r"\d{4}[-/年]\d{1,2}(?:[-/月]\d{1,2}日?)?"
+    r"(?:[ T]?\d{1,2}[:：]\d{1,2}(?:[:：]\d{1,2})?)?"
+)
+# 074 的唯一理由/依据标记门禁：新旧两条触发路径共用，禁止把普通病程直接
+# 送受控抽取器。
+_DIAGNOSIS_CHANGE_REASON_MARKERS = (
+    "修正诊断",
+    "补充诊断",
+    "修改理由",
+)
+_DIAGNOSIS_CHANGE_BASIS_MARKERS = ("诊断依据", "依据为", "依据：", "依据:")
 _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?:药品|药物|用药|服药|服用|口服|停药|带药)"
 )
@@ -818,6 +836,62 @@ def _has_explicit_diagnosis_change_event(text: str) -> bool:
         if _DIAGNOSIS_CHANGE_NON_EVENT_PREFIX_PATTERN.search(prefix) is None:
             return True
     return False
+
+
+def _normalized_admission_diagnosis_name(raw_name: Any) -> str:
+    """剥离入院记录诊断名尾部的签名/记录时间，只保留变更后诊断名。"""
+
+    text = _clean(raw_name)
+    if not text:
+        return ""
+    cleaned_parts: list[str] = []
+    for line in text.splitlines():
+        head = _ADMISSION_DIAGNOSIS_LABEL_PATTERN.split(line, maxsplit=1)[0]
+        cleaned_parts.append(_ADMISSION_DIAGNOSIS_TIME_PATTERN.sub(" ", head))
+    normalized = " ".join(" ".join(cleaned_parts).split())
+    return normalized.strip(" \t\r\n;；,，。.")
+
+
+def _diagnosis_change_declarations(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """客户入院记录诊断中显式声明的“修正/补充诊断”名称（去重保序）。
+
+    该来源所有类型行都没有诊断序号与诊断时间，只能作为“变更已经发生”的
+    触发信号：不能挂成 diagnosis_rows，也不能据此做时间序校验。
+    """
+
+    declarations: list[str] = []
+    for row in rows:
+        if _clean(row.get("diagnosis_type")) not in _ADMISSION_DIAGNOSIS_CHANGE_TYPES:
+            continue
+        name = _normalized_admission_diagnosis_name(row.get("diagnosis_name"))
+        if name and name not in declarations:
+            declarations.append(name)
+    return tuple(declarations)
+
+
+def _reason_and_basis_candidate_rows(
+    rows_by_source: Sequence[tuple[str, Sequence[Mapping[str, Any]]]],
+    *,
+    changed_diagnosis_names: Sequence[str],
+) -> tuple[tuple[datetime | None, str, str, Mapping[str, Any]], ...]:
+    """复用 074 旧路径的理由/依据标记门禁，确认病程确实记录了变更事由。"""
+
+    reason_markers = _DIAGNOSIS_CHANGE_REASON_MARKERS
+    basis_markers = _DIAGNOSIS_CHANGE_BASIS_MARKERS
+    candidates = tuple(
+        (_row_time(row), _row_text(row), source_key, row)
+        for source_key, source_rows in rows_by_source
+        for row in source_rows
+        if any(marker in _row_text(row) for marker in reason_markers)
+        and any(marker in _row_text(row) for marker in basis_markers)
+    )
+    return tuple(
+        candidate
+        for candidate in candidates
+        if any(name in candidate[1] for name in changed_diagnosis_names)
+    )
 
 
 def _material_text(row: Mapping[str, Any]) -> str:
@@ -1844,6 +1918,16 @@ async def execute_luxian_0609_native_extended_document_rules(
         evidence_materials, "inpat_nondrug_order"
     )
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
+    # 074 的结构化变更声明只作为触发信号：该来源缺少诊断序号与诊断时间，
+    # 绝不能挂成 diagnosis_rows。
+    (
+        admission_diagnosis_rows,
+        admission_diagnosis_error,
+    ) = (
+        _source_rows(evidence_materials, "admission_record_diagnosis")
+        if "LX0609-074" in selected
+        else ((), "")
+    )
     diffcase_rows, diffcase_error = _source_rows(
         evidence_materials, "diffcase_discussion_record"
     )
@@ -3981,7 +4065,7 @@ async def execute_luxian_0609_native_extended_document_rules(
         if rule_id == "LX0609-074":
             if not diagnosis_rows:
                 course_event_rows = tuple(
-                    (source_key, row, _row_text(row))
+                    (_row_text(row), source_key, row)
                     for source_key, source_rows in (
                         ("daily_course_record", daily_rows),
                         ("senior_course_record", senior_rows),
@@ -3996,17 +4080,82 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "data_gap",
                         daily_error or senior_error,
                     )
-                elif not course_event_rows:
-                    # 静态入院/出院诊断差异不能证明住院期间发生过诊断变更；
-                    # diagnosis 空表也不能反向证明没有发生变更。
+                elif admission_diagnosis_error:
+                    # 结构化变更声明的来源不可读或截断时不能断言“未发生变更”。
                     final_state, reason_code = (
                         "data_gap",
-                        "applicability_source_gap",
+                        admission_diagnosis_error,
                     )
+                elif not course_event_rows:
+                    # 入院记录诊断显式声明了修正/补充诊断时，变更已经发生；
+                    # 后续只按同一理由/依据门禁判断是否记录了事由。
+                    declared_diagnosis_names = _diagnosis_change_declarations(
+                        admission_diagnosis_rows
+                    )
+                    if not declared_diagnosis_names:
+                        # 静态入院/出院诊断差异不能证明住院期间发生过诊断变更；
+                        # diagnosis 空表也不能反向证明没有发生变更。
+                        final_state, reason_code = (
+                            "data_gap",
+                            "applicability_source_gap",
+                        )
+                    else:
+                        structured_candidate_rows = _reason_and_basis_candidate_rows(
+                            (
+                                ("daily_course_record", daily_rows),
+                                ("senior_course_record", senior_rows),
+                            ),
+                            changed_diagnosis_names=declared_diagnosis_names,
+                        )
+                        final_state, reason_code = (
+                            "non_compliant",
+                            "requirement_violated",
+                        )
+                        has_reason_and_basis = bool(structured_candidate_rows)
+                        display.append((rule_id, {
+                            "verification_kind": "diagnosis_change_documentation_check",
+                            "diagnosis_change_count": len(declared_diagnosis_names),
+                            "reason_recorded": has_reason_and_basis,
+                            "basis_recorded": has_reason_and_basis,
+                        }))
+                        structured_binding = bind_consumed_continuity_document_rows(
+                            snapshot=evidence_snapshot,
+                            materials=evidence_materials,
+                            consumed_rows=tuple(
+                                (source_key, row)
+                                for _time, _text, source_key, row in structured_candidate_rows
+                            ),
+                        )
+                        decisions.append(
+                            _decision(
+                                rule_id=rule_id,
+                                snapshot=evidence_snapshot,
+                                source_keys=(
+                                    ()
+                                    if structured_binding.document_refs
+                                    else ("diagnosis",)
+                                ),
+                                document_refs=structured_binding.document_refs,
+                                exact_document_refs=bool(
+                                    structured_binding.document_refs
+                                ),
+                                final_state=(
+                                    "technical_error"
+                                    if structured_binding.binding_failed
+                                    else final_state
+                                ),
+                                reason_code=(
+                                    "snapshot_mismatch"
+                                    if structured_binding.binding_failed
+                                    else reason_code
+                                ),
+                            )
+                        )
+                        continue
                 else:
                     event_times = tuple(
                         _parse_datetime(authoritative_document_time_value(row))
-                        for _source_key, row, _text in course_event_rows
+                        for _text, _source_key, row in course_event_rows
                     )
                     if any(value is None for value in event_times):
                         final_state, reason_code = (
@@ -4030,7 +4179,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                         source_type=source_key,
                                         text=text,
                                     )
-                                    for index, (source_key, _row, text) in enumerate(
+                                    for index, (text, source_key, _row) in enumerate(
                                         course_event_rows, 1
                                     )
                                 ),
@@ -4082,7 +4231,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     materials=evidence_materials,
                     consumed_rows=tuple(
                         (source_key, row)
-                        for source_key, row, _text in course_event_rows
+                        for _text, source_key, row in course_event_rows
                     ),
                 )
                 decisions.append(
@@ -4195,17 +4344,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                         )
                         for row in source_rows
                     )
-                    reason_markers = (
-                        "修正诊断",
-                        "补充诊断",
-                        "修改理由",
-                    )
-                    basis_markers = ("诊断依据", "依据为", "依据：", "依据:")
                     candidate_rows = tuple(
                         (record_time, text, source_key, row)
                         for record_time, text, source_key, row in course_rows
-                        if any(marker in text for marker in reason_markers)
-                        and any(marker in text for marker in basis_markers)
+                        if any(
+                            marker in text
+                            for marker in _DIAGNOSIS_CHANGE_REASON_MARKERS
+                        )
+                        and any(
+                            marker in text
+                            for marker in _DIAGNOSIS_CHANGE_BASIS_MARKERS
+                        )
                     )
                     if len(change_events) == 1:
                         changed_diagnosis_name = change_events[0][1]
