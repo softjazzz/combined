@@ -63,6 +63,37 @@ EXECUTOR_KEY = "exam_lab"
 _TYPED_DECISION_RULE_IDS = frozenset(EXAM_LAB_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "exam-lab-ruledecision-shadow-v2"
 
+# LX0609-012 的客户契约允许状态（`docs/0602/luxian_0609_formal_rule_catalog.csv`
+# 中含 `LX-012` 的目录行 `allowed_result_statuses`：hit; not_hit; data_quality_gap;
+# not_applicable; needs_manual_review）不含 `evaluation_unknown`。运行时
+# `rule_contracts.py` 的 `ALLOWED_FINAL_STATES` 是全 75 点共享词表、无权判定单
+# 规则合法性，运行时也没有单规则允许状态的消费者，因此在本规则执行器内显式声明
+# 012 的交付状态集合。目录词表与运行时状态的权威对应见
+# `luxian_0609_result_schema.py::_STATUS_MAP`：hit→non_compliant、
+# not_hit→compliant、data_quality_gap→data_gap、needs_manual_review→
+# ai_suggested_non_compliant、rejected_by_gate→not_applicable。执行器自身只产出
+# 前四类确定状态（ai_suggested_* 由后续人工/后处理产生），故此处集合为四项。
+_LX0609_012_ALLOWED_FINAL_STATES = frozenset(
+    {"compliant", "non_compliant", "not_applicable", "data_gap"}
+)
+
+
+def _contract_allowed_status(rule_id: str, status: str) -> str:
+    """把执行结果收敛到该规则客户契约允许的交付状态。
+
+    只有 012 会出现契约外的语义不确定：`evaluation_unknown` 不在其允许集合内，
+    按客户口径以等价的资料缺口 `data_gap` 表达（原因码与客户文案全部沿用既有
+    值，映射层不重写业务状态）。映射层会把内部原因码
+    `exam_lab_text_fact_unknown` 收敛为 `data_gap` 允许的
+    `required_field_missing`，状态与原因码同时落在契约内。
+    `technical_error` 是执行失败语义、也不在本规则契约集合内，但属另一问题，
+    保持原样；其它规则一律不动。
+    """
+
+    if rule_id != "LX0609-012":
+        return status
+    return "data_gap" if status == "evaluation_unknown" else status
+
 
 _EXAM_SOURCE_KEYS = ("exam_master", "exam_item_report")
 _CULTURE_SOURCE_KEYS = ("labtest_master", "labtest_item_report")
@@ -1086,12 +1117,15 @@ def _single_text_fact_outcome(
     if fact.applicability != "applicable":
         return _ExamLabOutcome(
             rule_id,
-            "evaluation_unknown"
-            if rule_id in {"LX0609-012", "LX0609-015"}
-            and event is not None
-            and event.target_confirmed
-            and event.result_text_available
-            else "data_gap",
+            _contract_allowed_status(
+                rule_id,
+                "evaluation_unknown"
+                if rule_id in {"LX0609-012", "LX0609-015"}
+                and event is not None
+                and event.target_confirmed
+                and event.result_text_available
+                else "data_gap",
+            ),
             "exam_lab_text_fact_unknown",
             refs,
         )
@@ -1101,9 +1135,12 @@ def _single_text_fact_outcome(
         if fact.positive_state != "positive":
             return _ExamLabOutcome(
                 rule_id,
-                "evaluation_unknown"
-                if event is not None and event.result_text_available
-                else "data_gap",
+                _contract_allowed_status(
+                    rule_id,
+                    "evaluation_unknown"
+                    if event is not None and event.result_text_available
+                    else "data_gap",
+                ),
                 "exam_lab_text_fact_unknown",
                 refs,
             )
@@ -1148,12 +1185,15 @@ def _single_text_fact_outcome(
     if fact.semantic_state != "present":
         return _ExamLabOutcome(
             rule_id,
-            "data_gap"
-            if event is None
-            or not event.result_text_available
-            or projection.course_time_incomplete
-            or projection.course_projection_truncated
-            else "evaluation_unknown",
+            _contract_allowed_status(
+                rule_id,
+                "data_gap"
+                if event is None
+                or not event.result_text_available
+                or projection.course_time_incomplete
+                or projection.course_projection_truncated
+                else "evaluation_unknown",
+            ),
             "exam_lab_text_fact_unknown",
             refs,
         )

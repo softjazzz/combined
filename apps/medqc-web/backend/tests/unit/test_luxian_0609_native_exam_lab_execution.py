@@ -35,6 +35,9 @@ from app.services.luxian_0609.evidence_snapshot import (
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
+from app.services.luxian_0609.decision_model import (
+    ALLOWED_REASON_CODES_BY_FINAL_STATE,
+)
 from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
@@ -3230,8 +3233,8 @@ async def test_lx0609_015_same_culture_action_remains_compliant(monkeypatch):
             "unknown",
             "unknown",
             "unknown",
-            "evaluation_unknown",
-            "semantic_output_unknown",
+            "data_gap",
+            "required_field_missing",
             1,
         ),
     ),
@@ -3388,9 +3391,11 @@ async def test_lx0609_012_not_mature_window_stays_not_applicable_through_canonic
 
 
 @pytest.mark.asyncio
-async def test_lx0609_012_complete_ambiguous_semantics_is_uncertain_in_canonical(
+async def test_lx0609_012_complete_ambiguous_semantics_is_contract_data_gap(
     monkeypatch,
 ):
+    """012 的语义不确定必须收敛为契约允许的 data_gap，而不是 uncertain。"""
+
     snapshot, materials = _typed_session(
         monkeypatch,
         exam_rows=(
@@ -3448,11 +3453,183 @@ async def test_lx0609_012_complete_ambiguous_semantics_is_uncertain_in_canonical
         },
     )
 
-    assert result.decisions[0].evidence_state.value == "conflict"
-    assert reduced[0].final_state.value == "evaluation_unknown"
-    assert reduced[0].reason_code == "semantic_output_unknown"
-    assert canonical[0]["status"] == "uncertain"
-    assert canonical[0]["reason_code"] == "semantic_output_unknown"
+    assert result.decisions[0].applicability.value == "unknown"
+    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.decisions[0].reason_code == "required_field_missing"
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "required_field_missing"
+    assert canonical[0]["status"] == "data_gap"
+    assert canonical[0]["reason_code"] == "required_field_missing"
+    assert canonical[0]["status"] != "uncertain"
+
+
+def _ambiguous_exam_projection() -> ExamLabTextProjection:
+    return ExamLabTextProjection(
+        context="",
+        document_refs=frozenset({"E01-01"}),
+        course_times={},
+        imaging_event=ExamLabSingleEvent(
+            "exam",
+            ("E01-01",),
+            datetime(2026, 4, 26, 8),
+            datetime(2026, 4, 26, 10),
+            frozenset(),
+            result_text_available=True,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "fact",
+    (
+        # 分支一：模型未给出适用性结论（applicability=unknown）。
+        ExamLabEventFact(
+            "LX0609-012", "unknown", "unknown", "unknown", (), ("E01-01",)
+        ),
+        # 分支二：阳性三态未定（positive_state=unknown）。
+        ExamLabEventFact(
+            "LX0609-012", "applicable", "present", "unknown", (), ("E01-01",)
+        ),
+        # 分支三：报告语义未定（semantic_state=unknown）。
+        ExamLabEventFact(
+            "LX0609-012", "applicable", "unknown", "positive", (), ("E01-01",)
+        ),
+    ),
+)
+def test_lx0609_012_semantic_unknown_branches_are_contract_data_gap(fact):
+    """012 的三个语义不确定分支都必须落在契约允许集合内，不再产出 uncertain。"""
+
+    outcome = exam_lab._text_fact_outcome(
+        rule_id="LX0609-012", facts=(fact,), projection=_ambiguous_exam_projection()
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "exam_lab_text_fact_unknown"
+    assert outcome.status in exam_lab._LX0609_012_ALLOWED_FINAL_STATES
+    assert "uncertain" not in exam_lab._LX0609_012_ALLOWED_FINAL_STATES
+    assert outcome.status != "evaluation_unknown"
+
+
+def test_contract_status_conformance_is_scoped_to_lx0609_012():
+    """契约收敛只作用于 012；012 的允许状态与其它规则一律原样透传。"""
+
+    assert exam_lab._contract_allowed_status("LX0609-012", "evaluation_unknown") == (
+        "data_gap"
+    )
+    for allowed in ("compliant", "non_compliant", "not_applicable", "data_gap"):
+        assert exam_lab._contract_allowed_status("LX0609-012", allowed) == allowed
+    # 执行失败语义不在本任务范围，保持原样，避免掩盖可重试语义。
+    assert exam_lab._contract_allowed_status("LX0609-012", "technical_error") == (
+        "technical_error"
+    )
+    for other_rule_id in ("LX0609-010", "LX0609-011", "LX0609-014", "LX0609-015"):
+        assert (
+            exam_lab._contract_allowed_status(other_rule_id, "evaluation_unknown")
+            == "evaluation_unknown"
+        )
+
+    # 015 同一语义不确定形状仍保留原有 evaluation_unknown（本任务不得顺带改 015）。
+    culture_projection = ExamLabTextProjection(
+        context="",
+        document_refs=frozenset({"L03-01"}),
+        course_times={},
+        culture_event=ExamLabSingleEvent(
+            "culture",
+            ("L03-01",),
+            None,
+            datetime(2026, 4, 26, 10),
+            frozenset(),
+            result_text_available=True,
+        ),
+    )
+    unknown_culture = ExamLabEventFact(
+        "LX0609-015", "applicable", "unknown", "unknown", (), ("L03-01",)
+    )
+    assert (
+        exam_lab._text_fact_outcome(
+            rule_id="LX0609-015",
+            facts=(unknown_culture,),
+            projection=culture_projection,
+        ).status
+        == "evaluation_unknown"
+    )
+
+
+@pytest.mark.asyncio
+async def test_lx0609_012_delivered_status_and_reason_code_are_contract_allowed(
+    monkeypatch,
+):
+    """契约自证：012 语义不确定交付的 status 与 reason_code 都必须在允许集合内。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-26 10:00:00",
+                "exam_conclusion": "右肺占位，性质待定。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "已查看胸部CT，是否调整方案待进一步评估。",
+            },
+        ),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 10:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=_Client(
+            [
+                _fact_response(
+                    ("LX0609-012",),
+                    applicability="unknown",
+                    semantic_state="unknown",
+                    positive_state="unknown",
+                )
+            ]
+        ),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )[0]
+
+    # 契约状态集合（docs/0602/luxian_0609_formal_rule_catalog.csv 的 012 目录行折算为
+    # 运行时状态）与运行时原因码表逐条对照：status 与 reason_code 都必须合法。
+    assert canonical["status"] in exam_lab._LX0609_012_ALLOWED_FINAL_STATES
+    assert canonical["status"] != "uncertain"
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "required_field_missing"
+    assert canonical["reason_code"] in ALLOWED_REASON_CODES_BY_FINAL_STATE[
+        canonical["status"]
+    ]
+    assert canonical["reason_code"] not in ALLOWED_REASON_CODES_BY_FINAL_STATE[
+        "evaluation_unknown"
+    ]
 
 
 @pytest.mark.asyncio
@@ -4625,7 +4802,7 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
 async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
     monkeypatch,
 ):
-    """明确违规优先；资料完整但语义不明的事件保留待确认事实。"""
+    """明确违规优先；资料完整但语义不明的事件收敛为契约内 data_gap。"""
 
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -4690,9 +4867,13 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
     assert reduced[0].final_state.value == "non_compliant"
     display = dict(result.customer_display_facts)["LX0609-012"]
     assert [item["event_status"] for item in display["event_results"]] == [
-        "evaluation_unknown",
+        "data_gap",
         "non_compliant",
     ]
+    assert all(
+        item["event_status"] != "evaluation_unknown"
+        for item in display["event_results"]
+    )
     assert display["event_results"][0]["positive_state"] == "unknown"
 
     canonical = aggregate_luxian_0609_results(
@@ -4706,13 +4887,15 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
         },
     )
     assert canonical[0]["status"] == "non_compliant"
+    assert canonical[0]["customer_display_facts"]["failure_kind"] == (
+        "exam_lab_requirement_not_documented"
+    )
     assert canonical[0]["customer_display_facts"]["event_results"][0] == {
         "event_position": 1,
-        "event_status": "evaluation_unknown",
+        "event_status": "data_gap",
         "report_time": "2026-04-01 12:00:00",
         "positive_state": "unknown",
         "response_record_count": 0,
-        "applicable": True,
     }
 
 
