@@ -2175,11 +2175,23 @@ def customer_finding_from_controlled_facts(
                         else f"未找到报告后24小时内的{requirement_label}"
                     )
                 elif event_status == "not_applicable":
-                    conclusion = (
-                        "报告未明确阳性，本项不适用"
-                        if analysis_rule
-                        else "本次事件不适用"
-                    )
+                    # 012/015 的 not_applicable 有两个互斥出口（见
+                    # native_exam_lab_execution._single_text_fact_outcome）：
+                    # 报告判定为阴性（positive_state=negative），或报告阳性但
+                    # 报告后 24 小时评价窗口尚未届满（positive_state=positive，
+                    # 且 reason_code 只会是 evaluation_window_not_mature）。
+                    # 二者事实完全不同，不能合并成一句话。
+                    positive_state = str(item.get("positive_state") or "")
+                    if not analysis_rule:
+                        conclusion = "本次事件不适用"
+                    elif positive_state == "positive":
+                        conclusion = "报告后 24 小时评价窗口尚未届满，暂不判定"
+                    elif positive_state == "negative":
+                        # 引擎的阴性标签由受控抽取产生，只能表述为系统判定，
+                        # 不得当作临床事实向客户断言。
+                        conclusion = "按报告结果判定为未检出需分析的阳性结果，本项不适用"
+                    else:
+                        conclusion = "未确认本次检查为需分析的目标事件，本项不适用"
                 elif event_status == "data_gap":
                     uncertain_label = (
                         "阳性结果是否已分析或处置"

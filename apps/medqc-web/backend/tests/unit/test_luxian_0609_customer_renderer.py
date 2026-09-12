@@ -2178,6 +2178,108 @@ def test_exam_lab_window_not_mature_is_customer_not_applicable(rule_id):
     assert "无需提前补写" in result["suggestion"]
 
 
+WINDOW_NOT_MATURE_COPY = "报告后 24 小时评价窗口尚未届满，暂不判定"
+NEGATIVE_NOT_APPLICABLE_COPY = "按报告结果判定为未检出需分析的阳性结果，本项不适用"
+NEUTRAL_NOT_APPLICABLE_COPY = "未确认本次检查为需分析的目标事件，本项不适用"
+
+
+def _multi_event_analysis_facts(*, second_event_positive_state):
+    """构造仅第二事件阳性标签不同的多事件 012 客户事实。
+
+    其余字段逐字段相同，用于锁定"文案差异只来自真实原因"。
+    """
+
+    second_event = {
+        "event_position": 2,
+        "event_status": "not_applicable",
+        "report_time": "2026-04-04 12:00:00",
+        "response_record_count": 0,
+    }
+    if second_event_positive_state is not None:
+        second_event["positive_state"] = second_event_positive_state
+    return {
+        "verification_kind": "exam_lab_requirement_checked",
+        "subject": "ct_mri",
+        "requirement": "positive_result_analysis_within_24h",
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+        "threshold_hours": 24,
+        "event_count": 2,
+        "event_position": 2,
+        "reviewed_record_scope": "首次病程记录及后续病程记录",
+        "event_results": [
+            {
+                "event_position": 1,
+                "event_status": "compliant",
+                "report_time": "2026-04-01 12:00:00",
+                "positive_state": "positive",
+                "response_record_count": 1,
+                "response_record_time": "2026-04-01 16:24:00",
+                "interval_hours": 4.4,
+                "requirement_met": True,
+            },
+            second_event,
+        ],
+    }
+
+
+def test_012_multi_event_window_not_mature_and_negative_copies_are_distinct() -> None:
+    window_facts = _multi_event_analysis_facts(second_event_positive_state="positive")
+    negative_facts = _multi_event_analysis_facts(second_event_positive_state="negative")
+    window_frozen = json.loads(json.dumps(window_facts))
+    negative_frozen = json.loads(json.dumps(negative_facts))
+
+    window_finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-012", facts=window_facts
+    )
+    negative_finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-012", facts=negative_facts
+    )
+
+    # 窗口未成熟：必须写明评价窗口尚未届满，不得断言报告未明确阳性。
+    assert WINDOW_NOT_MATURE_COPY in window_finding
+    assert NEGATIVE_NOT_APPLICABLE_COPY not in window_finding
+    assert "报告未明确阳性" not in window_finding
+    # 明确阴性：只能表述为系统判定，不得当成临床事实断言。
+    assert NEGATIVE_NOT_APPLICABLE_COPY in negative_finding
+    assert WINDOW_NOT_MATURE_COPY not in negative_finding
+    assert "报告未明确阳性" not in negative_finding
+    # 两种真实原因的文案必须互不相同。
+    assert window_finding != negative_finding
+    # 渲染只读事实：不得改写任何客户展示事实。
+    assert window_facts == window_frozen
+    assert negative_facts == negative_frozen
+    # 差异只来自 not_applicable 事件的 positive_state。
+    assert window_facts["event_results"][1].pop("positive_state") == "positive"
+    assert negative_facts["event_results"][1].pop("positive_state") == "negative"
+    assert window_facts == negative_facts
+
+
+@pytest.mark.parametrize("positive_state", ["unknown", "not_relevant", None])
+def test_012_multi_event_unconfirmed_positive_state_uses_neutral_copy(
+    positive_state,
+) -> None:
+    facts = _multi_event_analysis_facts(second_event_positive_state=positive_state)
+
+    finding = customer_finding_from_controlled_facts(rule_id="LX0609-012", facts=facts)
+
+    assert NEUTRAL_NOT_APPLICABLE_COPY in finding
+    assert WINDOW_NOT_MATURE_COPY not in finding
+    assert NEGATIVE_NOT_APPLICABLE_COPY not in finding
+
+
+@pytest.mark.parametrize("rule_id", ["LX0609-011", "LX0609-014"])
+def test_record_rule_multi_event_not_applicable_copy_is_unchanged(rule_id) -> None:
+    facts = _multi_event_analysis_facts(second_event_positive_state="not_relevant")
+
+    finding = customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts)
+
+    assert "本次事件不适用" in finding
+    assert WINDOW_NOT_MATURE_COPY not in finding
+    assert NEGATIVE_NOT_APPLICABLE_COPY not in finding
+    assert NEUTRAL_NOT_APPLICABLE_COPY not in finding
+
+
 @pytest.mark.parametrize(
     ("rule_id", "expected_finding", "expected_evidence"),
     [
