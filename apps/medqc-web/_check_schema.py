@@ -1,7 +1,8 @@
+import os
 """检查 first_course_record 表结构"""
 import sqlalchemy as sa
 
-engine = sa.create_engine('postgresql://postgres:lxry888@localhost:5432/medqc')
+engine = sa.create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
     rows = conn.execute(sa.text("""
         SELECT column_name, data_type, is_nullable, column_default

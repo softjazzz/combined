@@ -1,7 +1,8 @@
+import os
 """查询并修复用户名乱码"""
 import psycopg2
 
-conn = psycopg2.connect("postgresql://postgres:lxry888@localhost:5432/medqc")
+conn = psycopg2.connect(os.environ["DATABASE_URL"])
 cur = conn.cursor()
 
 # 查看 sys.sys_users 表的所有用户

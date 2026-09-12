@@ -1,5 +1,6 @@
+import os
 # -*- coding: utf-8 -*-
-import os; os.environ["DATABASE_URL"] = "postgresql://postgres:lxry888@localhost:5432/medqc"
+import os  # DATABASE_URL 由环境提供（backend/.env），禁止在源码写明文口令
 from sqlalchemy import create_engine, text
 e = create_engine(os.environ["DATABASE_URL"])
 with e.connect() as c:

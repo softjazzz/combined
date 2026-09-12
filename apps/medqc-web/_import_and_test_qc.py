@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """
 从 Workstation V2 导入两份完整病历到 PG，然后调 /api/v1/qc/sichuan/evaluate 测试分段质控
@@ -546,7 +547,7 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 # 第二部分：导入 PG
 # ============================================================
 
-DB_URL = 'postgresql://postgres:lxry888@localhost:5432/medqc'
+DB_URL = os.environ["DATABASE_URL"]
 
 def import_to_pg():
     """将两份完整病历导入 PG 的 admission_record 表（record_content 列）"""

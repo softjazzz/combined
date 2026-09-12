@@ -1,3 +1,4 @@
+import os
 """
 按文书类型切分病历，导入 PG 各表，逐文书调 QC API
 
@@ -6,7 +7,7 @@
 import json, re, time, requests, sqlalchemy as sa
 from _import_and_test_qc import CASE_1_ZHANGSAN
 
-DB_URL = 'postgresql://postgres:lxry888@localhost:5432/medqc'
+DB_URL = os.environ["DATABASE_URL"]
 API = 'http://localhost:8001'
 PID = 'P-ZS-2026'
 VID = 'V-ZS-001'

@@ -41,7 +41,7 @@ def main() -> int:
         return 1
 
     env = os.environ.copy()
-    env.setdefault("DATABASE_URL", "postgresql://ci_user:ci_pass@127.0.0.1:5432/medqc_ci")
+    env.setdefault("DATABASE_URL", os.environ.get("MEDQC_CI_DATABASE_URL", ""))
 
     python = sys.executable
     heads_output = _run([python, "-m", "alembic", "-c", "alembic.ini", "heads"], env)
