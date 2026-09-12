@@ -29,7 +29,9 @@ from typing import Any, Mapping, Sequence
 
 logger = logging.getLogger(__name__)
 
-FREEZE_SCHEMA_VERSION = "consultation-opinion-freeze-v1"
+# v2：新增落盘前逐字落地校验。校验合同属于冻结语义的一部分，版本变化时旧
+# 冻结必须自动失效重抽，否则改动前落盘的不可落地摘录会被继续复用。
+FREEZE_SCHEMA_VERSION = "consultation-opinion-freeze-v2"
 _ENV_STORE_DIR = "LUXIAN_0609_OPINION_FREEZE_DIR"
 _PAYLOAD_KEYS = ("episodes", "consultation_event_facts")
 _SAFE_NAME = re.compile(r"[^0-9A-Za-z_.-]+")

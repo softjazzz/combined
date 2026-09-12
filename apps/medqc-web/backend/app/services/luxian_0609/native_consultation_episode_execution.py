@@ -1958,6 +1958,36 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
     return tuple(episodes)
 
 
+def _episode_recommendations_are_grounded(
+    episodes: Sequence[_Episode],
+    documents: Sequence[Mapping[str, str]],
+) -> bool:
+    """已解析建议的 source_quote 必须能由该建议所属意见文书逐字支持。
+
+    问题证据：第一阶段模型可能给出 schema 完全合法、但在意见原文中并不存在
+    的摘录。S2 的照抄阈值直接用 source_quote 与病程文本做最大连续重合比对，
+    S6 又要求“声明痕迹必须逐字落地”，两者都建立在摘录可复现之上；一旦把
+    无法落地的摘录冻结下来，后续所有判定都继承这个伪造证据，且因为冻结命中
+    不再调用模型，错误会长期固化。
+
+    判定只复用 _quote_is_grounded 的归一化与否定/剂量相邻规则，不做同义替换
+    或医学解释；任何一条不通过即整体不通过。
+    """
+
+    documents_by_ref = {str(item["ref"]): item for item in documents}
+    for episode in episodes:
+        for recommendation in episode.recommendations:
+            document = documents_by_ref.get(recommendation.opinion_ref)
+            if document is None:
+                return False
+            if not _quote_is_grounded(
+                quote=recommendation.source_quote,
+                source=str(document.get("text") or ""),
+            ):
+                return False
+    return True
+
+
 def _consultation_semantic_display_facts(
     *,
     rule_id: str,
@@ -3928,6 +3958,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             payload = dict(_payload(response))
         episodes = _parse(payload, documents)
         if frozen is None:
+            # 不可逐字落地的事实不得冻结：否则伪造摘录会被长期复用，
+            # 且 S2 照抄判定与 S6 痕迹落地都建立在摘录可复现之上。
+            if not _episode_recommendations_are_grounded(episodes, documents):
+                raise _SemanticInvalid()
             freeze_state = save_opinion_payload(
                 visit_id=visit_id,
                 documents=documents,

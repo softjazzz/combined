@@ -7328,6 +7328,58 @@ async def test_invalid_stage_one_output_is_not_frozen(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_ungrounded_stage_one_quote_is_not_frozen(monkeypatch, tmp_path):
+    """逐字落地校验：schema 合法但原文中不存在的摘录，既不冻结也不出结论。
+
+    夹具正文为“申请会诊；复查血常规”，这里给出的摘录是一个合法字符串但
+    在意见原文中不存在。冻结后 S2 会用这条摘录与病程做最长连续重合比对、
+    S6 也会要求痕迹逐字落地，伪造摘录一旦落盘会被长期复用。
+    """
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("申请会诊", "专科会诊意见"),
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    recommendations=[
+                        {
+                            "recommendation_ref": "consultation_record-1#r1",
+                            "action_type": "test",
+                            "source_quote": "改用头孢呋辛抗菌治疗",
+                            "normalized_action": "改用头孢呋辛抗菌治疗",
+                            "opinion_ref": "consultation_record-1",
+                        }
+                    ],
+                )
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v-freeze-ungrounded",
+        source_schema=None,
+        llm_client=client,
+        opinion_freeze_dir=tmp_path,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert result.llm_call_count == 1
+    assert list(tmp_path.glob("*.json")) == []
+
+
+@pytest.mark.asyncio
 async def test_valid_stage_one_output_is_frozen_then_reused_without_model_call(
     monkeypatch, tmp_path
 ):
