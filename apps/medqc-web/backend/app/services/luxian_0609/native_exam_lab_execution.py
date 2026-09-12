@@ -1303,7 +1303,18 @@ def _fact_for_outcome_display(
 ) -> ExamLabEventFact:
     """选择实际决定规则状态的事件，避免展示另一事件的时间和证据。"""
 
-    rule_facts = tuple(item for item in facts if item.rule_id == rule_id)
+    # M15：主事实的候选顺序必须与逐事件列表同序（都按 event_position 升序）。
+    # 此前这里按 facts 的原始顺序（即模型输出顺序）遍历，于是"第一个状态与总状态
+    # 相符的事件"取决于模型把哪一条排在前，顶层 report_time/证据可能取自列表中间
+    # 的事件（实测 C04 的 r3：顶层 report_time 取的是位置 3 的事件，而列表首项是
+    # 位置 1）。排序只改变**候选顺序**，不改变判据本身：仍然是取第一个状态与总状态
+    # 相符的事件，找不到才退回首项。
+    rule_facts = tuple(
+        sorted(
+            (item for item in facts if item.rule_id == rule_id),
+            key=lambda item: item.event_position,
+        )
+    )
     for fact in rule_facts:
         event_outcome = _single_text_fact_outcome(
             rule_id=rule_id,

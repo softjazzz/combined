@@ -159,3 +159,25 @@ def test_contract_still_rejects_unknown_extra_key() -> None:
     display["event_results"][0]["unexpected_key"] = "x"
 
     assert safe_exam_lab_customer_display_facts(rule_id="LX0609-012", raw=display) is None
+
+
+def _top_level(facts: dict[str, Any]) -> dict[str, Any]:
+    """顶层字段（排除逐事件列表）。这些字段由"主事实"决定，属客户可见。"""
+
+    return {key: value for key, value in facts.items() if key != "event_results"}
+
+
+def test_unordered_input_does_not_change_primary_fact_fields() -> None:
+    """M15：乱序输入不得改变顶层主事实字段。
+
+    修复前实测（受控还原 HEAD 对照）：升序输入顶层 `report_time=2026-04-01 12:00:00`、
+    `event_position=1`；乱序输入变成 `report_time=2026-04-02 12:00:00`、`event_position=2`
+    ——主事实跟随模型输出顺序，与客户看到的逐事件列表首项不一致。收口后两者必须相同。
+    """
+
+    ascending = _display(positions=(1, 2))
+    descending = _display(positions=(2, 1))
+
+    assert _top_level(descending) == _top_level(ascending)
+    assert descending["report_time"] == "2026-04-01 12:00:00"
+    assert descending["event_position"] == 1
