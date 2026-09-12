@@ -61,6 +61,19 @@ function hasUtf8Bom(buffer) {
   return buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf
 }
 
+function getRepoRoot() {
+  try {
+    const out = execSync('git rev-parse --show-toplevel', {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    })
+    return out.trim() || ROOT
+  } catch {
+    return ROOT
+  }
+}
+
 function getStagedFiles() {
   try {
     const out = execSync('git diff --cached --name-only --diff-filter=ACMRTUXB', {
@@ -68,11 +81,14 @@ function getStagedFiles() {
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     })
+    // git 在子目录下仍输出「仓库根相对」路径，必须相对仓库根拼接；
+    // 若相对 process.cwd() 拼接会产生双重前缀，导致文件全部 stat 失败并被静默跳过。
+    const repoRoot = getRepoRoot()
     return out
       .split(/\r?\n/)
       .map((s) => s.trim())
       .filter(Boolean)
-      .map((rel) => path.join(ROOT, rel))
+      .map((rel) => path.join(repoRoot, rel))
   } catch {
     return []
   }
@@ -86,16 +102,22 @@ async function collectFiles(mode) {
   }
 
   const staged = getStagedFiles()
+  const candidates = staged.filter((abs) => TEXT_EXTS.has(path.extname(abs).toLowerCase()))
   const files = []
-  for (const abs of staged) {
-    const ext = path.extname(abs).toLowerCase()
-    if (!TEXT_EXTS.has(ext)) continue
+  for (const abs of candidates) {
     try {
       const st = await fs.stat(abs)
       if (st.isFile()) files.push(abs)
     } catch {
       // ignore deleted/moved files
     }
+  }
+  if (candidates.length > 0 && files.length === 0) {
+    // 静默空转是危险的：此前路径解析失效时该门禁永远报 passed。
+    throw new Error(
+      `staged 模式解析到 ${candidates.length} 个暂存文本文件，但 0 个可读；` +
+        '路径解析可能失效，禁止静默通过'
+    )
   }
   return files
 }
