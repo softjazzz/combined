@@ -18,6 +18,7 @@ from app.services.luxian_0609.exam_lab_fact_extraction import (
 from app.services.luxian_0609.exam_lab_result_mapping import (
     ExamLabOutcome,
     build_exam_lab_rule_decision,
+    safe_exam_lab_customer_display_facts,
 )
 from app.services.luxian_0609 import source_registry
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
@@ -5848,3 +5849,260 @@ async def test_010_unclassified_reported_imaging_with_ct_order_is_data_gap(monke
     assert canonical["reason_code"] == "required_field_missing"
     assert result.llm_call_count == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_multi_event_unordered_model_facts_are_projected_in_ascending_order(
+    monkeypatch,
+):
+    """模型乱序返回完整事件集合时，必须按 event_position 升序投影且不得升级技术异常。
+
+    口径来源：`exam_lab_result_mapping.safe_exam_lab_customer_display_facts` 要求
+    `event_results` 第 N 项的 `event_position` 恰好等于 N（顺序合同），而受控事实
+    抽取的提示词与输出骨架只要求“每个规则与事件组合各一条”，从未要求模型升序
+    输出。模型因此可能返回 [2,3,1,4] 这类集合完整但物理乱序的事件。
+    """
+
+    exam_rows = tuple(
+        {
+            "exam_id": f"EXAM-{position}",
+            "exam_name": "胸部CT" if position % 2 else "头颅MRI",
+            "exam_time": f"2026-04-{position:02d} 08:00:00",
+            "report_time": f"2026-04-{position:02d} 12:00:00",
+            "exam_conclusion": f"阳性：第{position}次检查存在明确异常。",
+        }
+        for position in range(1, 5)
+    )
+    report_rows = tuple(
+        {
+            "exam_id": f"EXAM-{position}",
+            "report_time": f"2026-04-{position:02d} 12:00:00",
+            "exam_item_name": "CT/MRI报告",
+            "exam_result": f"阳性：第{position}次检查存在明确异常。",
+        }
+        for position in range(1, 5)
+    )
+    course_rows = tuple(
+        {
+            "record_time": f"2026-04-{position:02d} 13:00:00",
+            "record_content": f"第{position}次结果已复核，并完成临床判断与处置。",
+        }
+        for position in range(1, 5)
+    )
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=exam_rows,
+        exam_report_rows=report_rows,
+        nondrug_order_rows=tuple(
+            {
+                "order_id": f"ORDER-{position}",
+                "order_name": "胸部CT" if position % 2 else "头颅MRI",
+                "order_time": f"2026-04-{position:02d} 08:00:00",
+            }
+            for position in range(1, 5)
+        ),
+        course_rows=course_rows,
+        evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
+    )
+    client = _Client([
+        {
+            "schema_version": "lx0609-exam-lab-text-facts-v4",
+            "facts": [
+                {
+                    "rule_id": rule_id,
+                    "event_position": event_position,
+                    "applicability": "applicable",
+                    "semantic_state": "present",
+                    "positive_state": (
+                        "positive" if rule_id == "LX0609-012" else "not_relevant"
+                    ),
+                    "course_doc_positions": [event_position],
+                }
+                for rule_id in ("LX0609-011", "LX0609-012")
+                # 集合完整（1..4 各一条）但物理顺序乱序。
+                for event_position in (2, 3, 1, 4)
+            ],
+        }
+    ])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011", "LX0609-012"),
+        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011", "LX0609-012"),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-011", "LX0609-012"),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-011"}, {"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    assert result.llm_call_count == 1
+    assert not result.parse_failure_kinds
+    display_facts = dict(result.customer_display_facts)
+    for rule_id in ("LX0609-011", "LX0609-012"):
+        assert display_facts[rule_id]["event_count"] == 4
+        assert [
+            item["event_position"]
+            for item in display_facts[rule_id]["event_results"]
+        ] == [1, 2, 3, 4]
+    # 顺序归一化后事实合同必须通过：不得被改写成 technical_error 并丢弃事实。
+    assert {item["status"] for item in canonical} == {"compliant"}
+    assert all("customer_display_facts" in item for item in canonical)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "positions",
+    [(1, 1), (1,)],
+    ids=["duplicate_event_position", "missing_event_position"],
+)
+async def test_multi_event_incomplete_position_set_still_fails_closed(
+    monkeypatch, positions
+):
+    """event_position 重号或缺号不得被升序投影静默修补，仍必须技术异常关闭。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EXAM-1",
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-01 12:00:00",
+                "exam_conclusion": "阳性：存在明确异常。",
+            },
+            {
+                "exam_id": "EXAM-2",
+                "exam_name": "头颅MRI",
+                "report_time": "2026-04-04 12:00:00",
+                "exam_conclusion": "阳性：存在明确异常。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-04 13:00:00",
+                "record_content": "结果已复核并完成处置。",
+            },
+        ),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
+    )
+    invalid = {
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-012",
+                "event_position": event_position,
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "positive",
+                "course_doc_positions": [1],
+            }
+            for event_position in positions
+        ],
+    }
+    # 首次解析与重试都必须失败，闭合到执行器技术异常。
+    client = _Client([invalid, invalid])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    assert result.llm_call_count == 2
+    assert "scope" in result.parse_failure_kinds
+    assert canonical[0]["status"] == "technical_error"
+    assert canonical[0]["reason_code"] == "model_invalid_output"
+    assert "customer_display_facts" not in canonical[0]
+
+
+def test_event_projection_does_not_repair_duplicate_positions():
+    """升序投影只排序、不重编号：重号事件仍按原样输出并被既有事实合同拒绝。"""
+
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_name": "胸部CT",
+                    "report_time": "2026-04-01 12:00:00",
+                    "exam_conclusion": "阳性：存在明确异常。",
+                },
+                {
+                    "exam_id": "EXAM-2",
+                    "exam_name": "头颅MRI",
+                    "report_time": "2026-04-04 12:00:00",
+                    "exam_conclusion": "阳性：存在明确异常。",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-04-04 13:00:00",
+                    "record_content": "结果已复核并完成处置。",
+                },
+            ),
+        }
+    )
+    facts = tuple(
+        ExamLabEventFact(
+            rule_id="LX0609-012",
+            applicability="unknown",
+            semantic_state="unknown",
+            positive_state="unknown",
+            course_doc_refs=(),
+            evidence_refs=(),
+            event_position=1,
+        )
+        for _ in range(2)
+    )
+    outcome = exam_lab._text_fact_outcome(
+        rule_id="LX0609-012",
+        facts=facts,
+        projection=projection,
+    )
+    display = exam_lab._display_facts_for_text_outcome(
+        rule_id="LX0609-012",
+        facts=facts,
+        projection=projection,
+        outcome=outcome,
+    )
+
+    assert display["event_count"] == 2
+    assert [item["event_position"] for item in display["event_results"]] == [1, 1]
+    assert safe_exam_lab_customer_display_facts(
+        rule_id="LX0609-012", raw=display
+    ) is None

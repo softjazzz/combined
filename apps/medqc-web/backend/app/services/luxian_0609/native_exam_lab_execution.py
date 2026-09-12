@@ -1330,7 +1330,22 @@ def _display_facts_for_text_outcome(
         projection=projection,
         outcome=outcome,
     )
-    rule_facts = tuple(item for item in facts if item.rule_id == rule_id)
+    # 顺序合同：`exam_lab_result_mapping.safe_exam_lab_customer_display_facts`
+    # 的校验要求 event_results 第 N 项的 event_position 恰好等于 N
+    # （`exam_lab_result_mapping.py:427-441`），即物理顺序必须是 1..event_count
+    # 升序。但受控事实抽取的提示词与输出骨架都只要求“每个规则与事件组合各一条”，
+    # 从未要求模型按 event_position 升序输出；解析器也只按集合完整性校验，对顺序
+    # 不敏感。模型因此可能返回完整但乱序的事件（实测 [2,3,1,4] / [2,3,4,1]）。
+    # 这里统一按 event_position 升序投影，与上述顺序合同口径一致；排序是稳定
+    # 排序，只调整顺序，不改变事件内容、数量与任何字段取值。
+    # event_position 出现重号或缺号时，这里**不做静默修补**（不重编号、不补项），
+    # 按原序保留，交由 `exam_lab_result_mapping` 的既有集合完整性校验拒绝。
+    rule_facts = tuple(
+        sorted(
+            (item for item in facts if item.rule_id == rule_id),
+            key=lambda item: item.event_position,
+        )
+    )
     multi_event = len(rule_facts) > 1
     event_results: list[dict[str, Any]] = []
     source_document_refs: list[Mapping[str, str]] = []
