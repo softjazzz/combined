@@ -77,7 +77,12 @@ export function buildExamLabEventPresentation(
         eventStatus,
         tone: 'neutral',
         statusLabel: '不适用',
-        description: '报告未明确阳性，无需核对临床分析记录',
+        description:
+          positiveState === 'positive'
+            ? '报告后 24 小时评价窗口尚未届满，暂不判定'
+            : positiveState === 'negative'
+              ? '按报告结果判定为未检出需分析的阳性结果，本项不适用'
+              : '未确认本次检查为需分析的目标事件，本项不适用',
       })
       continue
     }
