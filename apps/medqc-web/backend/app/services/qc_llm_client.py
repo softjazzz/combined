@@ -69,6 +69,7 @@ class SichuanQCLLMClient:
             self.enable_thinking: bool = bool(
                 custom_params.get("enable_thinking", False)
             )
+            self.thinking_budget = custom_params.get("thinking_budget")
             self.reasoning_effort: str = (
                 str(custom_params.get("reasoning_effort") or "").strip().lower()
             )
@@ -125,6 +126,7 @@ class SichuanQCLLMClient:
             self.top_p = 0.9
             self.max_tokens = self.DEFAULT_MAX_TOKENS
             self.enable_thinking = False
+            self.thinking_budget = None
             self.reasoning_effort = ""
 
             logger.info(
@@ -418,7 +420,16 @@ class SichuanQCLLMClient:
                 in {"dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"}
             )
         ):
-            return {"enable_thinking": self.enable_thinking}
+            extra: Dict[str, Any] = {"enable_thinking": self.enable_thinking}
+            if self.enable_thinking and self.thinking_budget is not None:
+                if (
+                    isinstance(self.thinking_budget, bool)
+                    or not isinstance(self.thinking_budget, int)
+                    or self.thinking_budget <= 0
+                ):
+                    raise ValueError("thinking_budget must be a positive integer")
+                extra["thinking_budget"] = self.thinking_budget
+            return extra
         return {"enable_thinking": False}
 
     @staticmethod

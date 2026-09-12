@@ -397,6 +397,8 @@ class LLMConfigLoader:
                     client.max_tokens = int(custom_params.get("max_tokens", 16384))
                 if hasattr(client, "enable_thinking"):
                     client.enable_thinking = bool(custom_params.get("enable_thinking", False))
+                if hasattr(client, "thinking_budget"):
+                    client.thinking_budget = custom_params.get("thinking_budget")
                 if hasattr(client, "reasoning_effort"):
                     client.reasoning_effort = str(custom_params.get("reasoning_effort") or "").strip().lower()
 
