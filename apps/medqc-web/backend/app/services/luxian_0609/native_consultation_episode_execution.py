@@ -551,6 +551,8 @@ class _SemanticUnresolved(Exception):
 _NEGATION_PREFIX = re.compile(r"(?:不|无|未|否认|禁止|避免)$")
 _DOSE_OR_NUMERIC = re.compile(r"\d+(?:\.\d+)?")
 _DOSE_VALUE = re.compile(r"\d+(?:\.\d+)?(?:mg|g|ml|μg|ug|片|次|日|h|小时|%)", re.IGNORECASE)
+# 模型用省略号连接同一文书内的多段原文时的分段标记。
+_SEGMENT_SPLIT_PATTERN = re.compile(r"(?:\.{2,}|…+)")
 
 
 def _evidence_text(value: str) -> str:
@@ -576,6 +578,43 @@ def _quote_is_grounded(*, quote: str, source: str) -> bool:
             return True
         offset = normalized_source.find(normalized_quote, offset + 1)
     return False
+
+
+def _recommendation_quote_is_grounded(*, quote: str, source: str) -> bool:
+    """建议摘录的落地校验：不启用“紧邻剂量”规则，省略号拼接逐段校验。
+
+    与 `_quote_is_grounded` 的两点差别，均由 0910 真实病例实测确定：
+
+    1. **不启用紧邻剂量规则**。该规则是给第二阶段执行痕迹用的（防止摘录
+       截去剂量改变含义）；建议摘录本身取自会诊意见原文，紧邻剂量是正常
+       现象。实测 C11「…明确血小板减少原因」后缀紧跟「治疗上予以咖啡酸片
+       2片」、C26「…协助指导脑梗死病因」后缀紧跟「加用血塞通0.4gqd」，
+       两条引文都逐字可复现却被误判不可落地。
+    2. **省略号拼接逐段校验**。模型会用省略号把同一文书内的多段原文连成
+       一条建议（实测 C08、C25），整体不是连续子串。逐段要求可定位，既能
+       放行拼接形式，又能拦住真正编造的文本。
+
+    否定前缀规则保留：它拦的是把「不建议使用 X」截成「建议使用 X」。
+    """
+
+    normalized_source = _evidence_text(source)
+    if not normalized_source:
+        return False
+    segments = [
+        segment
+        for segment in _SEGMENT_SPLIT_PATTERN.split(_evidence_text(quote))
+        if segment
+    ]
+    if not segments:
+        return False
+    for segment in segments:
+        offset = normalized_source.find(segment)
+        if offset < 0:
+            return False
+        prefix = normalized_source[max(0, offset - 3):offset]
+        if _NEGATION_PREFIX.search(prefix):
+            return False
+    return True
 
 
 _SELF_CONTRADICTION_RATIO = 0.8
@@ -1970,8 +2009,8 @@ def _episode_recommendations_are_grounded(
     无法落地的摘录冻结下来，后续所有判定都继承这个伪造证据，且因为冻结命中
     不再调用模型，错误会长期固化。
 
-    判定只复用 _quote_is_grounded 的归一化与否定/剂量相邻规则，不做同义替换
-    或医学解释；任何一条不通过即整体不通过。
+    具体判据见 _recommendation_quote_is_grounded（复用同一归一化，不做同义
+    替换或医学解释）；任何一条不通过即整体不通过。
     """
 
     documents_by_ref = {str(item["ref"]): item for item in documents}
@@ -1980,7 +2019,7 @@ def _episode_recommendations_are_grounded(
             document = documents_by_ref.get(recommendation.opinion_ref)
             if document is None:
                 return False
-            if not _quote_is_grounded(
+            if not _recommendation_quote_is_grounded(
                 quote=recommendation.source_quote,
                 source=str(document.get("text") or ""),
             ):

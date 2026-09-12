@@ -7379,6 +7379,59 @@ async def test_ungrounded_stage_one_quote_is_not_frozen(monkeypatch, tmp_path):
     assert list(tmp_path.glob("*.json")) == []
 
 
+def test_recommendation_quote_allows_adjacent_dose():
+    """建议摘录不启用「紧邻剂量」规则：紧跟剂量属正常，不构成不可落地。
+
+    0910 实测 C11、C26 两条引文逐字可复现，只因后缀紧跟「治疗上予以咖啡酸片
+    2片」「加用血塞通0.4gqd」被判不可落地。
+    """
+
+    source = "会诊意见：建议完善腹部彩超，明确血小板减少原因，治疗上予以咖啡酸片2片 tid。"
+    assert (
+        episode._recommendation_quote_is_grounded(
+            quote="建议完善腹部彩超，明确血小板减少原因", source=source
+        )
+        is True
+    )
+
+
+def test_recommendation_quote_allows_ellipsis_joined_segments():
+    """模型用省略号连接同一文书内的多段原文时逐段校验，不因拼接形式拒收。"""
+
+    source = "1、建议糖尿病饮食，监测血糖。2、现建议阿托伐他汀10mg qn稳定斑块。"
+    assert (
+        episode._recommendation_quote_is_grounded(
+            quote="建议糖尿病饮食，监测血糖...现建议阿托伐他汀10mg qn稳定斑块",
+            source=source,
+        )
+        is True
+    )
+
+
+def test_recommendation_quote_rejects_invented_segment():
+    """省略号拼接只放行拼接形式，不放行编造内容：任一段原文不存在即拒收。"""
+
+    source = "1、建议糖尿病饮食，监测血糖。"
+    assert (
+        episode._recommendation_quote_is_grounded(
+            quote="建议糖尿病饮食...加用阿司匹林抗血小板", source=source
+        )
+        is False
+    )
+
+
+def test_recommendation_quote_rejects_truncated_negation():
+    """截去否定词的摘录必须拒收，否则「不建议使用 X」会被读成建议执行。"""
+
+    source = "会诊意见：不建议使用糖皮质激素。"
+    assert (
+        episode._recommendation_quote_is_grounded(
+            quote="建议使用糖皮质激素", source=source
+        )
+        is False
+    )
+
+
 @pytest.mark.asyncio
 async def test_valid_stage_one_output_is_frozen_then_reused_without_model_call(
     monkeypatch, tmp_path
