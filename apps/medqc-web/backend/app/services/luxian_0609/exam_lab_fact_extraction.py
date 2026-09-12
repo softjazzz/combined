@@ -70,6 +70,22 @@ _IMAGING_CLINICAL_ANALYSIS_PATTERN = re.compile(
 )
 _CULTURE_NEGATIVE_PATTERN = re.compile(r"无生长|未检出|培养阴性|阴性")
 _CULTURE_POSITIVE_PATTERN = re.compile(r"培养阳性|检出.{0,12}菌|分离出.{0,12}菌|药敏结果")
+_CULTURE_ORGANISM_ITEM_PATTERN = re.compile(
+    r"^\s*细菌结果\s*(?:[（(][^（）()]*[）)])?\s*\d*\s*[:：]?\s*$"
+)
+_CULTURE_CHINESE_NAME_PATTERN = re.compile(
+    r"(?=[\u4e00-\u9fff·\s]{3,}$)[\u4e00-\u9fff·\s]*(?:菌|酵母|支原体|衣原体|螺旋体|立克次体)"
+)
+_CULTURE_ORGANISM_EXCLUDED_PATTERN = re.compile(
+    r"未填写|未检出|未发现|(?:无(?:细菌)?生长|无菌|无细菌|未培养出|未分离出|未生长)|培养阴性|阴性|阳性|待(?:定|查|检|报告)|"
+    r"待排|不除外|不能除外|污染|正常|菌群|混合(?:菌|生长)|暂无|无结果|未见|未出|"
+    r"未完成|培养中|详见|未知|疑似|可能|未(?:鉴定|确定)|待鉴定|革兰(?:阳性|阴性)"
+)
+_CULTURE_ORGANISM_CONFLICT_PATTERN = re.compile(
+    r"未检出|未发现|(?:无(?:细菌)?生长|无菌|无细菌|未培养出|未分离出|未生长)|培养阴性|阴性|待(?:定|查|检|报告)|"
+    r"待排|不除外|不能除外|污染|正常|菌群|混合(?:菌|生长)|暂无|无结果|未见|未出|"
+    r"未完成|培养中|详见|未知|疑似|可能|未(?:鉴定|确定)|待鉴定|革兰(?:阳性|阴性)"
+)
 _EVENT_BODY_ALIASES = {
     "颅脑": ("头颅",),
 }
@@ -614,6 +630,37 @@ def build_exam_lab_text_projection(
             for row in rows
             for field in result_fields
         )
+        structured_organism_results = tuple(
+            _clean(row.get("result"))
+            for row in rows
+            if _CULTURE_ORGANISM_ITEM_PATTERN.fullmatch(
+                _clean(row.get("item_name"))
+            )
+            and len(_clean(row.get("result"))) >= 3
+            and _CULTURE_CHINESE_NAME_PATTERN.fullmatch(
+                _clean(row.get("result"))
+            )
+            and not _CULTURE_ORGANISM_EXCLUDED_PATTERN.search(
+                _clean(row.get("result"))
+            )
+        ) if family == "culture" else ()
+        structured_organism_item_seen = any(
+            _CULTURE_ORGANISM_ITEM_PATTERN.fullmatch(
+                _clean(row.get("item_name"))
+            )
+            and _clean(row.get("result"))
+            for row in rows
+        ) if family == "culture" else False
+        structured_organism_conflict = (
+            any(
+                _CULTURE_ORGANISM_CONFLICT_PATTERN.search(_clean(row.get(field)))
+                for row in rows
+                if "药敏" not in _clean(row.get("item_name"))
+                for field in ("result", "abnormal_indicator", "record_content")
+            )
+            if structured_organism_item_seen
+            else False
+        )
         if not target_confirmed:
             positive_hint = "unknown"
         elif family == "exam":
@@ -626,6 +673,12 @@ def build_exam_lab_text_projection(
                 and not negative_pattern.search(material)
                 and not uncertain_pattern.search(material)
                 else "unknown"
+            )
+        elif family == "culture" and structured_organism_item_seen and structured_organism_conflict:
+            positive_hint = "unknown"
+        elif family == "culture" and structured_organism_results:
+            positive_hint = (
+                "unknown" if structured_organism_conflict else "positive"
             )
         elif family == "culture" and (
             culture_indicator_positive or culture_indicator_negative
@@ -1098,7 +1151,7 @@ def build_exam_lab_fact_prompt(
     return f"""你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。
 本次必须恰好覆盖这些规则ID，不得遗漏、重复、增加或改名：{json.dumps(selected, ensure_ascii=False)}。
 010=CT/MRI检查前原因；011=CT/MRI报告后记录结果；012=检出异常病灶或异常征象的CT/MRI结果分析；014=培养报告后记录结果；015=阳性菌/药敏分析处置。
-CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性；阳性但药敏待出时015为unknown。
+CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性。015依据已报告的阳性菌评价分析、临床意义或处理，不以药敏报告齐全为前提；已明确检出菌名但药敏待出，仍应评价对已有阳性结果的分析。培养报告同一事件的细菌结果/菌种鉴定栏中已填写明确菌名，即已有阳性菌结果；其他备选菌栏、备注或培养总栏为空，不得将这个已填写菌名的结果降为unknown或negative。具体抗菌药物是否符合药敏不在015判定范围内。
 Python已按业务键拆分事件。逐规则事件目录={json.dumps(rule_event_catalog, ensure_ascii=False, separators=(',', ':'))}。010目录中的病程已由Python严格裁剪为对应检查前48小时；你只判断该次检查的原因或目的是否被实质记录，单纯提及检查、复述既往结果或泛泛写“完善检查”不等于写明原因。病程文书按COURSE_DOC字典序固定编号，全局位置为COURSE_DOC_POSITION={json.dumps(list(range(1, len(course_refs_in_position_order) + 1)), ensure_ascii=False)}。每条事实只能使用对应规则、对应事件course_doc_positions列出的病程；判断该规则时必须忽略目录外正文，即使它因同批其他规则而出现在材料中，也不得据此改变semantic_state或作为间接依据。
 模型只能输出 {"event_position 和 " if multi_event_schema else ""}course_doc_positions（均为1开始的整数位置），不能输出 EVENT_DOC/COURSE_DOC ID、course_doc_refs、evidence_refs 或任何其他引用字段。EVENT_DOC由Python按事件目录自动绑定。
 semantic_state=present时，course_doc_positions必须非空；semantic_state=absent或unknown时course_doc_positions必须为空。
