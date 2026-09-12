@@ -424,20 +424,36 @@ def safe_exam_lab_customer_display_facts(
             "requirement_met",
         }
         safe_event_results: list[dict[str, Any]] = []
-        for expected_position, item in enumerate(raw_event_results, start=1):
+        # 顺序合同（2026-09-12 收口）：事实的**语义**由 event_position 决定，物理顺序
+        # 不是合同的一部分。此前用 enumerate 下标与 event_position 做相等比对，会把
+        # 「位置集合完整、但模型返回乱序」判成合同失败，继而在 finalizer 被升级为
+        # technical_error（实测 C04 的 r2/r3；生产端已在执行器内改为升序投影）。
+        # 这里改为按 event_position 建键：**仍然严格要求位置集合恰为 1..event_count
+        # 且不重不漏**，值校验（允许键、event_status 枚举、时间格式、计数非负等）
+        # 一条都没有放宽，只是不再要求物理顺序。
+        by_position: dict[int, Mapping[str, Any]] = {}
+        for item in raw_event_results:
+            if not isinstance(item, Mapping) or set(item) - allowed_event_keys:
+                return None
+            item_position = item.get("event_position")
             if (
-                not isinstance(item, Mapping)
-                or set(item) - allowed_event_keys
-                or item.get("event_position") != expected_position
-                or item.get("event_status")
-                not in {
-                    "compliant",
-                    "non_compliant",
-                    "not_applicable",
-                    "data_gap",
-                    "evaluation_unknown",
-                }
+                type(item_position) is not int
+                or not 1 <= item_position <= event_count
+                or item_position in by_position
             ):
+                return None
+            by_position[item_position] = item
+        if set(by_position) != set(range(1, event_count + 1)):
+            return None
+        for expected_position in range(1, event_count + 1):
+            item = by_position[expected_position]
+            if item.get("event_status") not in {
+                "compliant",
+                "non_compliant",
+                "not_applicable",
+                "data_gap",
+                "evaluation_unknown",
+            }:
                 return None
             safe_item: dict[str, Any] = {
                 "event_position": expected_position,
