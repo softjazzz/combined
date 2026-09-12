@@ -83,6 +83,36 @@ _DISCHARGE_TARGET_SOURCES = ("diagnosis", "discharge_record")
 _MAX_ROWS_PER_SOURCE = 8
 _MAX_ROW_CHARS = 1400
 _MAX_CONTEXT_CHARS = 18000
+# 027「明示可疑」判别器的取文口径（A 案，见
+# `docs/plans/2026-09-12-0910-issue-backlog.md` §15.3）：出院记录的**叙事列**。
+# 实测（`s027_probe_discharge_columns.py`，只读）：本样本库 `record_content` 30/30 为空，
+# 正文实际落在 `treatment_course`（30/30）与 `discharge_order`（30/30）；只扫
+# `record_content` 会得到假的「无证据」（M1 调查报告 §4.1）。
+#
+# 这里只取执行器**实际已加载**的列：`source_evidence_reader._NATIVE_SOURCE_FIELDS
+# ["discharge_record"]` 的当前白名单（见下方 `_DISCHARGE_LOADED_COLUMNS`）。
+# 该表在 `cdm.discharge_record` 上确实存在、但**不在加载白名单**内的列
+# （`admission_condition`/`positive_assist_exam`/`discharge_condition`/
+# `condition_transform`）不在此列表：本样本库它们 0/30 非空或未加载，引用它们
+# 只会造成「扫描了但读不到」的假安全感。若后续需要扩大取文范围，必须同时改
+# `source_evidence_reader` 的加载白名单（该文件不在任务 S 的白名单内）。
+_DISCHARGE_LOADED_COLUMNS = (
+    "document_title",
+    "discharge_order",
+    "discharge_medications",
+    "treatment_course",
+    "record_content",
+)
+# 口径来源：`docs/plans/2026-09-12-0910-qc-closure-prioritization.md` §八 D3 与
+# `docs/plans/2026-09-12-0910-issue-backlog.md` §15.3 主协调裁定 A 案。
+# 「考虑:Ca 伴瘤周转移可能」「考虑:转移可能」属**明示未决可疑**，不等于「确无恶性证据」，
+# 故不得据此判 `not_applicable`（D3「确无 ≠ 未找到」，M1 报告 §4.3/5.2）。
+_EXPLICIT_MALIGNANCY_SUSPICION_PATTERNS = (
+    re.compile(r"考虑.{0,6}(?:Ca|癌|恶性|转移)"),
+    re.compile(r"转移可能"),
+    re.compile(r"恶性可能"),
+    re.compile(r"Ca[?？]"),
+)
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _MALIGNANT_CODE_PATTERN = re.compile(r"^C[0-9]{2}(?:[.A-Z0-9-]*)$")
 _PRESENT_FACT_STATES = frozenset({"present", "performed", "available", "positive"})
@@ -243,14 +273,7 @@ def _typed_decision_from_outcome(
             if observation.source_key in _TYPED_RULE_SOURCE_KEYS[outcome.rule_id]
         )
 
-    if outcome.rule_id == "LX0609-027" and outcome.reason_code == "malignancy_semantics_uncertain":
-        dimensions = (
-            ApplicabilityState.UNKNOWN,
-            EvidenceState.CONFLICT,
-            QcDirection.UNKNOWN,
-            "semantic_low_confidence",
-        )
-    elif outcome.status == "compliant":
+    if outcome.status == "compliant":
         dimensions = (
             ApplicabilityState.APPLICABLE,
             EvidenceState.SUFFICIENT,
@@ -321,6 +344,53 @@ def _typed_decision_from_outcome(
 
 def _clean(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _discharge_narrative_text(material: SourceMaterial) -> str:
+    """拼接已加载的 discharge_record 叙事列文本（不含坐标与患者身份列）。"""
+
+    parts: list[str] = []
+    for row in material.rows:
+        if not isinstance(row, Mapping):
+            continue
+        for key in _DISCHARGE_LOADED_COLUMNS:
+            if key in row:
+                value = row.get(key)
+                if value:
+                    parts.append(str(value))
+    return "\n".join(parts)
+
+
+def _has_explicit_malignancy_suspicion(
+    *,
+    discharge_material: SourceMaterial,
+    uncertain_rows: Sequence[tuple[str, Mapping[str, Any]]],
+) -> bool:
+    """判定输入是否**明示未决恶性可疑**（A 案判别器，纯确定性正则，不调用模型）。
+
+    口径来源：`docs/plans/2026-09-12-0910-qc-closure-prioritization.md` §八 D3「不触发，
+    判 not_applicable + trigger_absent_complete」只适用于「**确无**明确恶性证据」；
+    `docs/plans/2026-09-12-0910-issue-backlog.md` §15.3 主协调裁定取 A 案：出院记录
+    叙事列或不确定诊断名出现「考虑…Ca/癌/恶性/转移」「转移可能」「恶性可能」「Ca?」
+    即属**明示未决可疑**（≠ 确无），维持 `data_gap`，不得对客户宣告「本项不适用」。
+
+    输入只取执行器**已加载**的材料：同一 Evidence Session 的 `discharge_record` 行
+    （不新增查询、不调用模型）与恶性分类回执中的不确定诊断行。
+    """
+
+    texts = [_discharge_narrative_text(discharge_material)]
+    texts.extend(
+        str(row.get("diagnosis_name") or row.get("diagnosis") or "")
+        for _source_key, row in uncertain_rows
+        if isinstance(row, Mapping)
+    )
+    haystack = "\n".join(text for text in texts if text)
+    if not haystack:
+        return False
+    return any(
+        pattern.search(haystack)
+        for pattern in _EXPLICIT_MALIGNANCY_SUSPICION_PATTERNS
+    )
 
 
 def _documents(evidence_payload: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
@@ -1748,17 +1818,37 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     )
                     continue
                 if malignancy.state != "confirmed":
+                    # 027 的非 confirmed 出口分两条（`docs/plans/2026-09-12-0910-issue-backlog.md`
+                    # §15.4 主协调裁定）：
+                    # ① 语义不确定（`malignancy_semantics_uncertain`）且输入**确无**明示恶性可疑
+                    #    ⇒ 属「完整输入上的确定性否定」，判 `not_applicable` + `trigger_absent_complete`，
+                    #    不携带适用性不确定事实与逐条文书引用（既有 21 条 not_applicable 走同一路径）。
+                    # ② 来源缺失/内容不可读，以及**明示未决可疑**（C17 类）⇒ 维持现状
+                    #    `data_gap` + 原原因码 + 逐条文书引用（事实合同受限，见下）。
+                    if malignancy.reason_code == "malignancy_semantics_uncertain" and not _has_explicit_malignancy_suspicion(
+                        discharge_material=source_for_rule("discharge_record"),
+                        uncertain_rows=malignancy.uncertain_rows,
+                    ):
+                        emit_outcome(
+                            rule_id,
+                            "not_applicable",
+                            "trigger_absent_complete",
+                            executor_type="program",
+                        )
+                        continue
                     emit_outcome(
                         rule_id,
                         "data_gap",
                         malignancy.reason_code,
                         executor_type="program",
-                        display_facts=(
-                            {"verification_kind": "malignant_diagnosis_applicability_uncertain",
-                             "malignancy_state": "unknown",
-                             "uncertain_diagnosis_count": len(malignancy.uncertain_rows)}
-                            if malignancy.reason_code == "malignancy_semantics_uncertain" else None
-                        ),
+                        # 维持 `data_gap` 出口的现状；**不再携带**
+                        # `malignant_diagnosis_applicability_uncertain` 事实：该事实合同
+                        # 只允许 `uncertain` 终态（`tumor_pathology_result_mapping.py:247`），
+                        # 而 027 的客户契约不允许 `uncertain`（catalog 027 行
+                        # `allowed_result_statuses = hit; not_hit; data_quality_gap;
+                        # not_applicable; needs_manual_review`）。携带它会让 finalizer 把本
+                        # 分支降级为 `technical_error/model_invalid_output`（已实测），
+                        # 那是比资料缺口更差的交付语义。
                         fact_refs=typed_document_refs(*(
                             (source_key, (row,)) for source_key, row in malignancy.uncertain_rows
                         )),
