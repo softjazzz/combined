@@ -30,6 +30,7 @@ const SKIP_DIRS = new Set([
   '.git',
   '.husky',
   '.tmp',
+  '.release-packages',
   'coverage',
   'dist',
   'node_modules',
@@ -40,6 +41,62 @@ const decoder = new TextDecoder('utf-8', { fatal: true })
 
 function toPosix(p) {
   return p.split(path.sep).join('/')
+}
+
+function getRepoRoot() {
+  try {
+    const out = execSync('git rev-parse --show-toplevel', {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    })
+    return out.trim() || ROOT
+  } catch {
+    return ROOT
+  }
+}
+
+// 所有 git 调用统一在仓库根执行：git ls-files 在子目录下输出 cwd 相对路径，
+// 而 git diff --cached --name-only 输出仓库根相对路径；混用会产生双重前缀或
+// 找不到文件，导致门禁静默空转（历史故障）。这里统一成「仓库根相对」。
+const REPO_ROOT = getRepoRoot()
+const SELF_PATHSPEC = toPosix(path.relative(REPO_ROOT, ROOT)) || '.'
+
+function toAbsolute(relPaths) {
+  return relPaths
+    .map((rel) => path.join(REPO_ROOT, rel))
+    .filter((abs) => abs === ROOT || abs.startsWith(ROOT + path.sep))
+}
+
+function gitOutput(args) {
+  try {
+    return execSync(`git ${args}`, {
+      cwd: REPO_ROOT,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    })
+  } catch {
+    return ''
+  }
+}
+
+function toAbsoluteFromGit(args) {
+  const out = gitOutput(args)
+  return toAbsolute(
+    out
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  )
+}
+
+function getStagedFiles() {
+  return toAbsoluteFromGit('diff --cached --name-only --diff-filter=ACMRTUXB')
+}
+
+function getTrackedFiles() {
+  // 限定本应用目录，避免把 monorepo 其它应用的问题算到本门禁头上。
+  return toAbsoluteFromGit(`ls-files -- ${SELF_PATHSPEC}`)
 }
 
 async function walk(dir, out) {
@@ -57,54 +114,10 @@ async function walk(dir, out) {
   }
 }
 
-function hasUtf8Bom(buffer) {
-  return buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf
-}
-
-function getRepoRoot() {
-  try {
-    const out = execSync('git rev-parse --show-toplevel', {
-      cwd: ROOT,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf8',
-    })
-    return out.trim() || ROOT
-  } catch {
-    return ROOT
-  }
-}
-
-function getStagedFiles() {
-  try {
-    const out = execSync('git diff --cached --name-only --diff-filter=ACMRTUXB', {
-      cwd: ROOT,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf8',
-    })
-    // git 在子目录下仍输出「仓库根相对」路径，必须相对仓库根拼接；
-    // 若相对 process.cwd() 拼接会产生双重前缀，导致文件全部 stat 失败并被静默跳过。
-    const repoRoot = getRepoRoot()
-    return out
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((rel) => path.join(repoRoot, rel))
-  } catch {
-    return []
-  }
-}
-
-async function collectFiles(mode) {
-  if (mode === 'all') {
-    const files = []
-    await walk(ROOT, files)
-    return files
-  }
-
-  const staged = getStagedFiles()
-  const candidates = staged.filter((abs) => TEXT_EXTS.has(path.extname(abs).toLowerCase()))
+async function existingTextFiles(candidates) {
   const files = []
   for (const abs of candidates) {
+    if (!TEXT_EXTS.has(path.extname(abs).toLowerCase())) continue
     try {
       const st = await fs.stat(abs)
       if (st.isFile()) files.push(abs)
@@ -112,14 +125,40 @@ async function collectFiles(mode) {
       // ignore deleted/moved files
     }
   }
-  if (candidates.length > 0 && files.length === 0) {
+  return files
+}
+
+async function collectFiles(mode) {
+  if (mode === 'all') {
+    // 只扫「仓库内容」（已跟踪文件）：工作目录树包含 .release-packages 等被
+    // gitignore 的本地发布快照，把它们算作存量债会让该门禁永远红、无人理会。
+    const tracked = getTrackedFiles()
+    if (tracked.length === 0) {
+      // git 不可用时退回目录遍历
+      const files = []
+      await walk(ROOT, files)
+      return files
+    }
+    return existingTextFiles(tracked)
+  }
+
+  const candidates = getStagedFiles()
+  const files = await existingTextFiles(candidates)
+  const textCandidates = candidates.filter((abs) =>
+    TEXT_EXTS.has(path.extname(abs).toLowerCase())
+  )
+  if (textCandidates.length > 0 && files.length === 0) {
     // 静默空转是危险的：此前路径解析失效时该门禁永远报 passed。
     throw new Error(
-      `staged 模式解析到 ${candidates.length} 个暂存文本文件，但 0 个可读；` +
+      `staged 模式解析到 ${textCandidates.length} 个暂存文本文件，但 0 个可读；` +
         '路径解析可能失效，禁止静默通过'
     )
   }
   return files
+}
+
+function hasUtf8Bom(buffer) {
+  return buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf
 }
 
 async function main() {
