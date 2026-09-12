@@ -1414,10 +1414,19 @@ def test_fact_parser_rejects_invalid_course_doc_positions(course_doc_positions):
     ("semantic_state", "course_doc_positions"),
     (("present", []), ("absent", [1]), ("unknown", [1])),
 )
-def test_fact_parser_rejects_course_positions_inconsistent_with_semantic_state(
+def test_fact_parser_downgrades_course_positions_inconsistent_with_semantic_state(
     semantic_state,
     course_doc_positions,
 ):
+    """M14（有意行为变更）：语义与引用自相矛盾时降级，不再整批硬失败。
+
+    变更前的契约是"单事件下任一自相矛盾即 raise"，会把**同批其它规则**一并打成
+    `technical_error`（实测 C15 的 r4：011 声称 present 但引用为空，连累同批的 012）。
+    现在与多事件同一策略：把该事件保守降为 `unknown`（→ 资料不足，可交付）。
+    **引用越界（引用了允许集合之外 / 本事件白名单之外的病程）仍然整批 fail-closed**，
+    由 `test_010_parser_rejects_post_exam_course_reference` 等用例守卫。
+    """
+
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
@@ -1430,12 +1439,16 @@ def test_fact_parser_rejects_course_positions_inconsistent_with_semantic_state(
     payload = _fact_response(("LX0609-010",), semantic_state=semantic_state)
     payload["facts"][0]["course_doc_positions"] = course_doc_positions
 
-    with pytest.raises(ValueError, match="evidence ref mismatch"):
-        parse_exam_lab_fact_response(
-            response={"content": json.dumps(payload)},
-            selected_rule_ids=("LX0609-010",),
-            projection=projection,
-        )
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(payload)},
+        selected_rule_ids=("LX0609-010",),
+        projection=projection,
+    )
+
+    assert facts[0].semantic_state == "unknown", "自相矛盾必须降级为 unknown"
+    # 注意：`evidence_refs` 里的 EVENT_DOC 由 Python 唯一绑定（见解析器 `:1307` 注释），
+    # 不随降级清除；这里断言的是**模型选择的病程引用**必须被清空。
+    assert tuple(facts[0].course_doc_refs) == (), "降级后不得保留任何病程引用"
 
 
 @pytest.mark.parametrize("legacy_field", ("course_doc_refs", "evidence_refs"))

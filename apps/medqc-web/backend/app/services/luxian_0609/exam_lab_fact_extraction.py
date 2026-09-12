@@ -1314,7 +1314,28 @@ def parse_exam_lab_fact_response(
             or (semantic != "present" and normalized_course)
             or (applicability != "applicable" and semantic == "present")
         )
-        if reference_invalid and not multi_event_schema:
+        # M14：把「引用越界」与「自相矛盾」分开处理。
+        # ① 引用越界（模型引用了允许集合/本事件白名单之外的病程）：**仍整批
+        #    fail-closed**，010 的跨事件、跨规则课程范围守卫依赖这条拒绝；
+        # ② 自相矛盾（声称 present 却没给引用 / 声称非 present 却给了引用 /
+        #    不适用却声称 present）：改为与多事件同一策略——把该事件保守降为
+        #    unknown（→ 资料不足，可交付），不再整批硬失败。
+        # 之所以放宽 ②：此前单事件路径直接 `raise`，会把**同批其它规则**一并打成
+        # technical_error（实测 C15 的 r4：011 声称 present 但引用为空，连累同批的
+        # 012 也变成 technical_error），既违反「technical_error 不得进入交付结果」，
+        # 也造成跨规则污染；而紧随其后的降级块本就是为这种情况准备的。
+        # 字段形状/位置越界（上方 `:1212` 的 reference_invalid）、JSON、schema 与
+        # 规则范围错误同样保持整批 fail-closed，本改动不放宽这些。
+        citation_out_of_scope = any(
+            item not in allowed_course for item in normalized_course
+        ) or any(item not in allowed_event_course for item in normalized_course)
+        semantic_inconsistent = (
+            (semantic == "present" and not normalized_course)
+            or (semantic != "present" and normalized_course)
+            or (applicability != "applicable" and semantic == "present")
+        )
+        reference_invalid = citation_out_of_scope or semantic_inconsistent
+        if citation_out_of_scope and not multi_event_schema:
             raise ExamLabFactParseError("evidence_ref")
         if reference_invalid:
             # 单个事件的模型引用不合法时，只将该事件保守降为 unknown。
