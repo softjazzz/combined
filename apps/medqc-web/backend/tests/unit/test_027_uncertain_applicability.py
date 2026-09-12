@@ -160,8 +160,14 @@ def test_027_explicit_suspicion_discriminator_hits_only_explicit_wording():
 
 @pytest.mark.parametrize("source", ["diagnosis", "discharge_record_diagnosis"])
 @pytest.mark.asyncio
-async def test_027_explicit_suspicion_stays_data_gap_without_uncertain_facts(source):
-    """C17 类「明示未决可疑」维持 data_gap，且不携带只允许 uncertain 终态的事实。"""
+async def test_027_explicit_suspicion_stays_data_gap_with_uncertain_facts(source):
+    """C17 类「明示未决可疑」维持 data_gap，**并携带**「恶性性质未决」事实（M17）。
+
+    M17 变更：此前该事实只允许 `uncertain` 终态（027 契约不允许交付 `uncertain`），
+    故执行器只能丢弃它、客户看不到未决线索；事实合同同步接受 `data_gap` 后恢复携带。
+    本用例同时防两类回归：① 携带该事实**不得**把结果升级为 `technical_error`；
+    ② 状态与原因码仍为 `data_gap`（该事实是纯展示事实，不参与判定）。
+    """
 
     rows = [
         {"document_id": "suspicious", "diagnosis_name": "合成占位性病变"},
@@ -189,12 +195,17 @@ async def test_027_explicit_suspicion_stays_data_gap_without_uncertain_facts(sou
     )
     decision = result.decisions[0]
     assert (decision.applicability.value, decision.reason_code) == ("applicable", "required_field_missing")
-    # `malignant_diagnosis_applicability_uncertain` 事实只允许 `uncertain` 终态（027 契约不含），
-    # 携带它会被 finalizer 降级为 technical_error（本用例即防回归）。
-    assert result.customer_display_facts == ()
+    # M17：恢复携带「恶性性质未决」事实，客户才能看到未决可疑线索。
+    facts = dict(result.customer_display_facts)
+    assert set(facts) == {"LX0609-027"}
+    uncertain_facts = facts["LX0609-027"]
+    assert uncertain_facts["verification_kind"] == "malignant_diagnosis_applicability_uncertain"
+    assert uncertain_facts["malignancy_state"] == "unknown"
+    assert isinstance(uncertain_facts["uncertain_diagnosis_count"], int)
+    assert uncertain_facts["uncertain_diagnosis_count"] >= 1
     reduced = bind_and_reduce_luxian_0609_rule_decisions(decisions=result.decisions, expected_rule_ids=("LX0609-027",), snapshot=session.snapshot, evidence_materials=session.materials)[0]
     final = finalize_luxian_0609_reduced_customer_result(
-        decision=reduced, raw_customer_display_facts=dict(result.customer_display_facts).get("LX0609-027"),
+        decision=reduced, raw_customer_display_facts=uncertain_facts,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
     assert reduced.final_state.value == "data_gap"
@@ -208,6 +219,10 @@ async def test_027_explicit_suspicion_stays_data_gap_without_uncertain_facts(sou
         "required_field_missing",
     }
     assert final["status"] != "technical_error"
+    # M17 的关键断言：携带该事实后，客户展示事实仍然存在（未被 finalizer 丢弃）
+    assert final["customer_display_facts"]["verification_kind"] == (
+        "malignant_diagnosis_applicability_uncertain"
+    )
 
 
 @pytest.mark.parametrize("count", [True, 0, -1, "1"])

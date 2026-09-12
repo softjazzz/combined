@@ -1841,14 +1841,20 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         "data_gap",
                         malignancy.reason_code,
                         executor_type="program",
-                        # 维持 `data_gap` 出口的现状；**不再携带**
-                        # `malignant_diagnosis_applicability_uncertain` 事实：该事实合同
-                        # 只允许 `uncertain` 终态（`tumor_pathology_result_mapping.py:247`），
-                        # 而 027 的客户契约不允许 `uncertain`（catalog 027 行
-                        # `allowed_result_statuses = hit; not_hit; data_quality_gap;
-                        # not_applicable; needs_manual_review`）。携带它会让 finalizer 把本
-                        # 分支降级为 `technical_error/model_invalid_output`（已实测），
-                        # 那是比资料缺口更差的交付语义。
+                        # M17：本分支**恢复携带** `malignant_diagnosis_applicability_uncertain`
+                        # 事实。此前为规避 finalizer 降级而丢弃它，代价是客户看不到
+                        # 「影像提示恶性可能、缺病理」这条未决线索（C17 只显示"资料不足"）。
+                        # 现在事实合同已同步接受 `data_gap` 终态
+                        # （`tumor_pathology_result_mapping.py:247`），故可以带。
+                        # 该事实仍是**纯展示事实**：不改变状态与原因码，只让客户文案
+                        # 说出"恶性性质尚不明确、暂不能确定是否适用"。
+                        display_facts=(
+                            {
+                                "verification_kind": "malignant_diagnosis_applicability_uncertain",
+                                "malignancy_state": "unknown",
+                                "uncertain_diagnosis_count": len(malignancy.uncertain_rows),
+                            }
+                        ),
                         fact_refs=typed_document_refs(*(
                             (source_key, (row,)) for source_key, row in malignancy.uncertain_rows
                         )),

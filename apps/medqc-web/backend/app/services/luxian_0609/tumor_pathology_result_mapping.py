@@ -245,7 +245,15 @@ def tumor_pathology_customer_fact_status_is_valid(
         return False
     normalized_rule_id = str(rule_id or "").strip().upper()
     if normalized_rule_id == "LX0609-027" and safe_facts.get("verification_kind") == "malignant_diagnosis_applicability_uncertain":
-        return normalized_status == "uncertain"
+        # M17：该事实同时允许 `uncertain` 与 `data_gap`。
+        # 027 的客户契约不允许交付 `uncertain`（catalog 027 行 allowed_result_statuses
+        # = hit; not_hit; data_quality_gap; not_applicable; needs_manual_review），
+        # 故「诊断恶性性质未决」只能以 `data_gap` 交付；此前这里只接受 `uncertain`，
+        # 于是执行器只能丢弃该事实（客户看不到未决线索），一旦携带就被本校验判为
+        # 不自洽 → finalizer 升级为 `technical_error/model_invalid_output`。
+        # 该事实是**纯展示事实**，不参与判定，故接受 `data_gap` 不放松任何判据。
+        # 作用域仅限 `LX0609-027`，`013`/`019`/`026` 不受影响。
+        return normalized_status in {"uncertain", "data_gap"}
     if normalized_rule_id in {"LX0609-013", "LX0609-027"}:
         if (
             normalized_rule_id == "LX0609-013"
