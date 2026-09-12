@@ -3282,6 +3282,19 @@ def not_applicable_customer_message(*, rule_id: str, reason_code: str) -> tuple[
     )
 
 
+# LX0609-074 空证据定位说明的唯一文案所有者。
+#
+# 该规则的触发信号可以来自入院记录中的结构化修正/补充诊断声明。当该声明成立、
+# 且病程未记录修改理由与诊断依据时，判定成立；但可引用的坐标只能指向入院记录，
+# 而客户可见的文书正文按 `bundles/emr_view.py` 的诊断类型白名单不含该行。此时
+# 不提供逐条证据定位，也不补弱坐标（会给客户“看起来可核对、实际无法核对”的假象），
+# 而是在客户结论里说明为什么不提供证据定位。
+LX0609_074_NO_EVIDENCE_LOCATION_NOTE = (
+    "本项依据入院记录中的结构化诊断声明作出判定；"
+    "该声明当前不在客户可见的文书正文范围内，因此本项不提供逐条证据定位。"
+)
+
+
 def render_luxian_0609_customer_result(
     *,
     decision: ReducedRuleDecision,

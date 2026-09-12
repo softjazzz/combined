@@ -14,6 +14,7 @@ from .customer_evidence_enrichment import (
     project_selected_document_evidence,
 )
 from .customer_renderer import (
+    LX0609_074_NO_EVIDENCE_LOCATION_NOTE,
     customer_finding_from_controlled_facts,
     render_luxian_0609_customer_result,
 )
@@ -889,6 +890,21 @@ def finalize_luxian_0609_reduced_customer_result(
     )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
+    if (
+        rule_id == "LX0609-074"
+        and not customer_evidence
+        and str(result.get("status") or "").strip().lower() == "non_compliant"
+    ):
+        # 074 的空证据定位是已知且可解释的缺口：判定依据来自入院记录的结构化
+        # 诊断声明，而客户可见的文书正文不含该行。这里只在客户结论后追加一句
+        # 固定说明：不改原有结论句子、不改事实、不改证据、不改状态与原因码；
+        # 文案常量唯一所有者在 customer_renderer，Finalizer 不另写字面量。
+        base_conclusion = str(
+            result.get("customer_conclusion") or result.get("findings") or ""
+        ).strip()
+        result["customer_conclusion"] = (
+            f"{base_conclusion}{LX0609_074_NO_EVIDENCE_LOCATION_NOTE}"
+        )
     return finalize_luxian_0609_canonical_result(result)
 
 
