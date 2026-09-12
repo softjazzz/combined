@@ -410,6 +410,15 @@ class SichuanQCLLMClient:
                     extra["reasoning_effort"] = self.reasoning_effort
                 return extra
             return {"thinking": {"type": "disabled"}}
+        if (
+            (self.model or "").lower().startswith("qwen3")
+            and (
+                self.provider_code == "alibaba"
+                or self._endpoint_host()
+                in {"dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"}
+            )
+        ):
+            return {"enable_thinking": self.enable_thinking}
         return {"enable_thinking": False}
 
     @staticmethod
