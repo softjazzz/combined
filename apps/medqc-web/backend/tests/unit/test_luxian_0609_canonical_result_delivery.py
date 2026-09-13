@@ -41,6 +41,7 @@ from app.services.sample_validation_rule_sets import (
     LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
 )
 from app.services.qc_workspace.canonical_result_store import (
+    canonical_envelope_items_are_consistent,
     envelope_item_from_rule_result,
     safe_customer_display_facts,
 )
@@ -1088,7 +1089,7 @@ def test_completed_projection_rejects_canonical_items_without_unique_rule_id(
     }
 
 
-def test_single_record_result_adds_authoritative_presentation_metadata_without_mutating_envelope(
+def test_single_record_result_rejects_historical_non_deliverable_status_without_projection(
     monkeypatch,
 ):
     canonical_item = {
@@ -1148,15 +1149,9 @@ def test_single_record_result_adds_authoritative_presentation_metadata_without_m
         rule_set_version="2026-06-09",
     )
 
-    assert result["state"] == "ready"
-    assert result["record_ref"] == "rec_1234567890abcdef12345678"
-    assert result["items"] == [
-        {
-            **original_canonical_item,
-            "source_document": "手术记录",
-            "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
-        }
-    ]
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "canonical_result_envelope_invalid"
+    assert result["items"] == []
     assert canonical_item == original_canonical_item
     assert json.dumps(envelope, ensure_ascii=False) == original_envelope_json
 
@@ -1586,9 +1581,7 @@ def test_exact_batch_html_rejects_historical_status_inconsistency_without_legacy
         ("compliant", True),
         ("non_compliant", False),
         ("data_gap", None),
-        ("uncertain", None),
         ("not_applicable", None),
-        ("technical_error", None),
         ("not_executed", None),
         ("ai_suggested_compliant", None),
         ("ai_suggested_non_compliant", None),
@@ -1634,6 +1627,53 @@ def test_writer_accepts_frozen_canonical_status_semantics(status, is_compliant):
     )
 
     assert len(session.statements) == 2
+
+
+@pytest.mark.parametrize("status", ["uncertain", "technical_error"])
+def test_canonical_consistency_rejects_non_deliverable_status(status):
+    item = {
+        "rule_id": "LX0609-001",
+        "status": status,
+        "result_status": status,
+        "is_compliant": None,
+    }
+
+    assert not canonical_envelope_items_are_consistent([item])
+
+
+@pytest.mark.parametrize("status", ["uncertain", "technical_error"])
+def test_writer_rejects_non_deliverable_status_before_mutating_any_envelope(status):
+    session = _WriteSession()
+    item = {
+        "record_id": "visit-1",
+        "visit_id": "visit-1",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "rule_id": "LX0609-001",
+        "status": status,
+        "result_status": status,
+        "display_status": status,
+        "is_compliant": None,
+    }
+
+    with pytest.raises(ValueError, match="Canonical Envelope 状态字段"):
+        CustomQCWorkspaceService()._write_record_result_envelopes(
+            session,
+            job_row={
+                "id": "job-current",
+                "created_by": "reviewer-a",
+                "filters_json": json.dumps(
+                    {
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                    }
+                ),
+            },
+            items=[item],
+            now=datetime(2026, 8, 15, 10, 0, 0),
+        )
+
+    assert session.statements == []
 
 
 def test_writer_rejects_unexplained_current_lx0609_defect_without_rejudging_status():
@@ -1746,10 +1786,10 @@ def test_writer_marks_envelope_as_canonical_straight_through():
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
                 "rule_id": "LX0609-001",
-                "status": "uncertain",
-                "result_status": "uncertain",
-                "reason_code": "customer_explanation_incomplete",
-                "is_compliant": None,
+                "status": "compliant",
+                "result_status": "compliant",
+                "reason_code": "requirement_satisfied",
+                "is_compliant": True,
                 "conclusion": "引擎结论原文",
             }
         ],
@@ -1759,10 +1799,10 @@ def test_writer_marks_envelope_as_canonical_straight_through():
     insert_params = session.statements[-1].compile().params
     envelope = json.loads(insert_params["envelope_json"])
     assert envelope["delivery_mode"] == "canonical_straight_through"
-    assert envelope["items"][0]["status"] == "uncertain"
-    assert envelope["items"][0]["result_status"] == "uncertain"
-    assert envelope["items"][0]["reason_code"] == "customer_explanation_incomplete"
-    assert envelope["items"][0]["is_compliant"] is None
+    assert envelope["items"][0]["status"] == "compliant"
+    assert envelope["items"][0]["result_status"] == "compliant"
+    assert envelope["items"][0]["reason_code"] == "requirement_satisfied"
+    assert envelope["items"][0]["is_compliant"] is True
     assert envelope["items"][0]["conclusion"] == "引擎结论原文"
 
 

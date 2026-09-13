@@ -59,6 +59,8 @@ _CUSTOMER_STATUSES = {
     "technical_error",
     "uncertain",
 }
+# 运行时仍需保留这两种状态来表达执行/诊断失败，但正式 Canonical Envelope 不得交付。
+_CANONICAL_UNDELIVERABLE_STATUSES = frozenset({"uncertain", "technical_error"})
 _RECOMMENDATION_EVIDENCE_SOURCE_TYPES = {
     "consultation_record",
     "daily_course_record",
@@ -126,6 +128,7 @@ def canonical_envelope_items_are_consistent(items: Any) -> bool:
             not rule_id
             or rule_id in delivered_rule_ids
             or status not in CANONICAL_RESULT_STATUSES
+            or status in _CANONICAL_UNDELIVERABLE_STATUSES
             or result_status != status
             or (display_status and display_status != status)
             or item.get("is_compliant") is not expected_is_compliant
