@@ -6119,3 +6119,54 @@ def test_event_projection_does_not_repair_duplicate_positions():
     assert safe_exam_lab_customer_display_facts(
         rule_id="LX0609-012", raw=display
     ) is None
+
+
+@pytest.mark.asyncio
+async def test_typed_value_failure_retries_only_failed_rule_and_keeps_valid_sibling(
+    monkeypatch,
+):
+    """011 的枚举错误不能污染同批已通过的 012，重试只询问 011。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EXAM-011-012",
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "阳性：右肺结节。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "检查结果已记录并完成临床分析。",
+            },
+        ),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-27"},),
+    )
+    first_response = _fact_response(("LX0609-011", "LX0609-012"))
+    first_response["facts"][0]["semantic_state"] = "unsupported"
+    retry_response = _fact_response(("LX0609-011",), semantic_state="unsupported")
+    client = _Client([first_response, retry_response])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011", "LX0609-012"),
+        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011", "LX0609-012"),
+    )
+
+    decisions = {item.rule_id: item for item in result.decisions}
+    assert decisions["LX0609-011"].evidence_state.value == "technical_error"
+    assert decisions["LX0609-011"].reason_code == "model_invalid_output"
+    assert decisions["LX0609-012"].evidence_state.value == "sufficient"
+    assert decisions["LX0609-012"].qc_direction.value == "satisfied"
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
+    assert '"rule_id":"LX0609-011"' in client.prompts[1]
+    assert '"rule_id":"LX0609-012"' not in client.prompts[1]
+    assert result.parse_failure_kinds == ("value",)

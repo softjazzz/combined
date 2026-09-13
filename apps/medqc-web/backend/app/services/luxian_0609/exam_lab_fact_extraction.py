@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 import hashlib
 import json
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from .evidence_material import build_material_document_refs
 from .source_evidence_reader import canonical_source_evidence
@@ -328,6 +328,20 @@ class ExamLabFactParseError(ValueError):
             "evidence_ref": "evidence ref mismatch",
         }[failure_kind]
         super().__init__(f"exam lab fact response {legacy_message}")
+
+
+@dataclass(frozen=True)
+class ExamLabFactParsePartition:
+    """共享事实响应按规则隔离后的结果。
+
+    ``facts`` 只包含通过严格事实解析的规则；``rule_failures`` 只记录能够由
+    ``rule_id`` 与事件身份唯一归属、且属于单项字段/枚举的解析失败。顶层响应、
+    规则/事件范围和证据引用错误不会进入该容器，而是继续抛出
+    :class:`ExamLabFactParseError`，由调用方整批闭合。
+    """
+
+    facts: tuple[ExamLabEventFact, ...]
+    rule_failures: Mapping[str, str]
 
 
 def _clean(value: Any) -> str:
@@ -1179,11 +1193,14 @@ def _response_text(response: Mapping[str, Any]) -> str:
     return str(response.get("content") or response.get("text") or "")
 
 
-def parse_exam_lab_fact_response(
-    *, response: Mapping[str, Any], selected_rule_ids: Sequence[str],
-    projection: ExamLabTextProjection,
-) -> tuple[ExamLabEventFact, ...]:
-    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", _response_text(response), flags=re.I).strip()
+def _decode_exam_lab_fact_payload(
+    *, response: Mapping[str, Any], projection: ExamLabTextProjection
+) -> Mapping[str, Any]:
+    """解析共享响应外壳；外壳错误始终是整批失败。"""
+
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>", "", _response_text(response), flags=re.I
+    ).strip()
     match = re.search(r"\{[\s\S]*\}", cleaned)
     if not match:
         raise ExamLabFactParseError("not_json")
@@ -1202,6 +1219,17 @@ def parse_exam_lab_fact_response(
         or not isinstance(payload.get("facts"), list)
     ):
         raise ExamLabFactParseError("schema_version")
+    return payload
+
+
+def parse_exam_lab_fact_response(
+    *, response: Mapping[str, Any], selected_rule_ids: Sequence[str],
+    projection: ExamLabTextProjection,
+) -> tuple[ExamLabEventFact, ...]:
+    payload = _decode_exam_lab_fact_payload(
+        response=response,
+        projection=projection,
+    )
 
     expected = tuple(str(item).strip().upper() for item in selected_rule_ids)
     if not expected or len(expected) != len(set(expected)):
@@ -1496,3 +1524,149 @@ def parse_exam_lab_fact_response(
     if covered != expected_pairs or len(facts) != len(expected_pairs):
         raise ExamLabFactParseError("scope")
     return tuple(facts)
+
+
+def parse_exam_lab_fact_response_isolated(
+    *, response: Mapping[str, Any], selected_rule_ids: Sequence[str],
+    projection: ExamLabTextProjection,
+    _strict_parser: Callable[..., tuple[ExamLabEventFact, ...]] | None = None,
+) -> ExamLabFactParsePartition:
+    """按 ``rule_id`` 隔离单项 value 错误，同时保留共享提取。
+
+    这不是放宽公开严格解析器的入口。先校验整个响应的规则/事件身份和引用
+    范围，再把每个请求规则交给原有严格解析器；因此只有能唯一归属某条规则
+    的字段形状或枚举错误才会进入 ``rule_failures``。调用方可以仅重试这些
+    规则，而不会把已通过的规则重新送入模型。
+    """
+
+    payload = _decode_exam_lab_fact_payload(
+        response=response,
+        projection=projection,
+    )
+    expected = tuple(str(item).strip().upper() for item in selected_rule_ids)
+    if (
+        not expected
+        or len(expected) != len(set(expected))
+        or any(rule_id not in ALLOWED_RULE_IDS for rule_id in expected)
+    ):
+        raise ExamLabFactParseError("scope")
+
+    multi_event_schema = _uses_multi_event_schema(projection)
+    expected_pairs = {
+        (rule_id, event_position)
+        for rule_id in expected
+        for event_position in range(
+            1,
+            len(events_for_family(
+                projection,
+                "exam" if rule_id in EXAM_RULE_IDS else "culture",
+            )) + 1,
+        )
+    }
+    required_keys = {
+        "rule_id", "applicability", "semantic_state", "positive_state",
+        "course_doc_positions",
+    }
+    if multi_event_schema:
+        required_keys.add("event_position")
+    rows_by_rule: dict[str, list[Mapping[str, Any]]] = {
+        rule_id: [] for rule_id in expected
+    }
+    covered: set[tuple[str, int]] = set()
+    allowed_course = set(projection.course_times)
+    course_refs_in_position_order = tuple(sorted(projection.course_times))
+
+    for raw in payload["facts"]:
+        if not isinstance(raw, Mapping):
+            # 无法从非对象确定归属，必须整批失败。
+            raise ExamLabFactParseError("value")
+        rule_id = str(raw.get("rule_id") or "").strip().upper()
+        if rule_id not in ALLOWED_RULE_IDS:
+            # 已知但未请求的同族规则仍沿用公开解析器的冗余忽略；未知 ID
+            # 不能被归并到任何重试请求。
+            raise ExamLabFactParseError("scope")
+        if rule_id not in rows_by_rule:
+            continue
+        event_position = raw.get("event_position") if multi_event_schema else 1
+        fact_key = (rule_id, event_position)
+        if (
+            not isinstance(event_position, int)
+            or isinstance(event_position, bool)
+            or fact_key not in expected_pairs
+            or fact_key in covered
+        ):
+            # 事件身份错误/重复不能安全分配给单条 value 重试。
+            raise ExamLabFactParseError("scope")
+        covered.add(fact_key)
+        rows_by_rule[rule_id].append(raw)
+
+        # 缺字段、额外字段或枚举错误由原严格解析器归类为该规则的 value
+        # 失败。引用字段则单独先做全局结构检查，防止引用越界被隔离吞掉。
+        if not required_keys.issubset(raw) or set(raw) != required_keys:
+            continue
+        course_positions = raw.get("course_doc_positions")
+        if (
+            not isinstance(course_positions, list)
+            or any(
+                not isinstance(position, int) or isinstance(position, bool)
+                for position in course_positions
+            )
+            or len(course_positions) != len(set(course_positions))
+            or any(
+                position < 1 or position > len(allowed_course)
+                for position in course_positions
+            )
+        ):
+            raise ExamLabFactParseError("evidence_ref")
+
+        # 011/012/014/015 的病程引用必须落在该事件的 Python 白名单内；
+        # 010 的既有多事件共享病程语义仍由公开解析器单独处理。
+        if rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
+            allowed_event_course = set(_course_refs_for_rule_event(
+                projection,
+                rule_id=rule_id,
+                event_position=event_position,
+            ))
+            referenced = {
+                course_refs_in_position_order[position - 1]
+                for position in course_positions
+            }
+            if not referenced.issubset(allowed_event_course):
+                raise ExamLabFactParseError("evidence_ref")
+
+    if covered != expected_pairs:
+        raise ExamLabFactParseError("scope")
+
+    strict_parser = _strict_parser or parse_exam_lab_fact_response
+    facts: list[ExamLabEventFact] = []
+    rule_failures: dict[str, str] = {}
+    schema_version = payload["schema_version"]
+    for rule_id in expected:
+        rule_payload = {
+            "schema_version": schema_version,
+            "facts": rows_by_rule[rule_id],
+        }
+        try:
+            facts.extend(strict_parser(
+                response={
+                    "content": json.dumps(
+                        rule_payload,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                },
+                selected_rule_ids=(rule_id,),
+                projection=projection,
+            ))
+        except ExamLabFactParseError as exc:
+            if exc.failure_kind != "value":
+                raise
+            rule_failures[rule_id] = exc.failure_kind
+        except ValueError:
+            # 公开解析器内部的非受控 ValueError 不是可归属的模型字段错误，
+            # 交由执行器按整批失败处理。
+            raise
+    return ExamLabFactParsePartition(
+        facts=tuple(facts),
+        rule_failures=rule_failures,
+    )

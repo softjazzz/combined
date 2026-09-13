@@ -27,6 +27,7 @@ from .exam_lab_fact_extraction import (
     event_for_fact,
     events_for_family,
     parse_exam_lab_fact_response,
+    parse_exam_lab_fact_response_isolated,
 )
 from .exam_lab_result_mapping import (
     ExamLabOutcome as _ExamLabOutcome,
@@ -2029,31 +2030,41 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     completion_tokens += completion
                     total_tokens += total
                     api_time += elapsed
+                    isolated_rule_failures: dict[str, str] = {}
                     try:
-                        text_facts = parse_exam_lab_fact_response(
+                        partition = parse_exam_lab_fact_response_isolated(
                             response=response,
                             selected_rule_ids=eligible_rule_ids,
                             projection=projection,
+                            # 保留 native 模块上的严格解析符号，既不改变公开
+                            # 解析行为，也让既有测试/诊断替换点继续生效。
+                            _strict_parser=parse_exam_lab_fact_response,
                         )
-                    except (ExamLabFactParseError, ValueError) as exc:
-                        # 保持严格解析合同；仅对模型偶发的 value/schema 输出重试一次，
-                        # 避免单次非法响应让整批检查检验规则永久技术失败。
-                        failure_kind = getattr(exc, "failure_kind", "value")
-                        parse_failure_kinds.append(failure_kind)
-                        logger.warning(
-                            "exam_lab_fact_parse_failed parse_failure_kind=%s",
-                            failure_kind,
-                        )
-                        if isinstance(exc, (ExamLabFactParseError, ValueError)):
+                        text_facts = partition.facts
+                        isolated_rule_failures = dict(partition.rule_failures)
+                        if isolated_rule_failures:
+                            # 首轮共享提取只记一次受控失败类别；重试仅携带
+                            # 失败规则，其余已通过事实继续留在 text_facts。
+                            failure_kind = next(iter(isolated_rule_failures.values()))
+                            parse_failure_kinds.append(failure_kind)
+                            logger.warning(
+                                "exam_lab_fact_parse_failed parse_failure_kind=%s",
+                                failure_kind,
+                            )
                             logger.warning(
                                 "exam_lab_fact_parse_failed parse_failure_kind=%s; retrying once",
                                 failure_kind,
+                            )
+                            retry_rule_ids = tuple(
+                                rule_id
+                                for rule_id in eligible_rule_ids
+                                if rule_id in isolated_rule_failures
                             )
                             llm_call_count += 1
                             try:
                                 retry_response = await llm_client.generate(
                                     build_exam_lab_fact_prompt(
-                                        selected_rule_ids=eligible_rule_ids,
+                                        selected_rule_ids=retry_rule_ids,
                                         projection=projection,
                                     )
                                 )
@@ -2062,21 +2073,67 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 completion_tokens += retry_completion
                                 total_tokens += retry_total
                                 api_time += retry_elapsed
-                                text_facts = parse_exam_lab_fact_response(
+                                retry_partition = parse_exam_lab_fact_response_isolated(
                                     response=retry_response,
+                                    selected_rule_ids=retry_rule_ids,
+                                    projection=projection,
+                                    _strict_parser=parse_exam_lab_fact_response,
+                                )
+                                text_facts = tuple(
+                                    (*text_facts, *retry_partition.facts)
+                                )
+                                for rule_id in retry_rule_ids:
+                                    isolated_rule_failures.pop(rule_id, None)
+                                isolated_rule_failures.update(
+                                    retry_partition.rule_failures
+                                )
+                            except Exception as retry_exc:  # noqa: BLE001
+                                # 重试响应的顶层/范围错误仍闭合失败规则；首轮
+                                # 已通过的其它规则保留，不把异常扩散回它们。
+                                logger.warning("exam_lab_fact_retry_failed")
+                                for rule_id in retry_rule_ids:
+                                    isolated_rule_failures.setdefault(
+                                        rule_id,
+                                        getattr(retry_exc, "failure_kind", "value"),
+                                    )
+                    except (ExamLabFactParseError, ValueError) as exc:
+                        # 顶层 JSON/schema、规则/事件身份、引用范围错误，以及
+                        # 非受控 ValueError，仍按原合同让整批进入一次重试。
+                        failure_kind = getattr(exc, "failure_kind", "value")
+                        parse_failure_kinds.append(failure_kind)
+                        logger.warning(
+                            "exam_lab_fact_parse_failed parse_failure_kind=%s",
+                            failure_kind,
+                        )
+                        logger.warning(
+                            "exam_lab_fact_parse_failed parse_failure_kind=%s; retrying once",
+                            failure_kind,
+                        )
+                        llm_call_count += 1
+                        try:
+                            retry_response = await llm_client.generate(
+                                build_exam_lab_fact_prompt(
                                     selected_rule_ids=eligible_rule_ids,
                                     projection=projection,
                                 )
-                            except Exception as retry_exc:  # noqa: BLE001
-                                parse_failure_kinds.append(getattr(retry_exc, "failure_kind", "value"))
-                                logger.warning("exam_lab_fact_retry_failed")
-                                text_facts = None
-                        else:
+                            )
+                            retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
+                            prompt_tokens += retry_prompt
+                            completion_tokens += retry_completion
+                            total_tokens += retry_total
+                            api_time += retry_elapsed
+                            text_facts = parse_exam_lab_fact_response(
+                                response=retry_response,
+                                selected_rule_ids=eligible_rule_ids,
+                                projection=projection,
+                            )
+                        except Exception:  # noqa: BLE001
+                            logger.warning("exam_lab_fact_retry_failed")
                             text_facts = None
                     for rule_id in eligible_rule_ids:
                         outcome = (
                             _ExamLabOutcome(rule_id, "technical_error", "exam_lab_llm_invalid_output")
-                            if text_facts is None
+                            if text_facts is None or rule_id in isolated_rule_failures
                             else _text_fact_outcome(
                                 rule_id=rule_id,
                                 facts=text_facts,
@@ -2096,6 +2153,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                     outcome=outcome,
                                 )
                                 if text_facts is not None
+                                and rule_id not in isolated_rule_failures
                                 else None
                             ),
                         )
