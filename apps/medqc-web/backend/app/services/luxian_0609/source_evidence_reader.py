@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import re
@@ -15,9 +15,22 @@ from app.services.bundles import assembly as bundle_assembly
 from .surgery_procedure_catalog import catalog_surgery_state
 
 
-PERFORMED_TIME_FORMATS = (
-    "%Y-%m-%d %H:%M:%S+08",
-    "%Y-%m-%d %H:%M:%S+08:00",
+_PERFORMED_TIME_TEXT_PATTERN = re.compile(
+    r"(?P<naive>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?P<offset>Z|[+-]\d{2}(?::\d{2})?)"
+)
+# 只接受本流水线实际会产出的两种显式写法：医院本地 `+08` 与 UTC `+00`/`Z`。
+# `surgery_record` 的时间列是 text：客户 timestamptz 列经本机导入后，同一列里
+# 同时存在 `+08`（148 行）与 `+00`（15 行）两种写法，两者表示同一精确时刻。
+# 其它偏移（如 `+09`）在全部 445 个取值中从未出现，也不是本地导入的产物，
+# 继续按“非精确时间”拒绝，避免把来历不明的时间当作已实施证据。
+_PERFORMED_TIME_OFFSETS: Mapping[str, timezone] = MappingProxyType(
+    {
+        "Z": timezone.utc,
+        "+00": timezone.utc,
+        "+00:00": timezone.utc,
+        "+08": timezone(timedelta(hours=8)),
+        "+08:00": timezone(timedelta(hours=8)),
+    }
 )
 _HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 SURGERY_TIME_FIELDS = (
@@ -906,22 +919,33 @@ def read_luxian_0609_course_round_timeline(
 
 
 def parse_strict_performed_time(value: Any) -> datetime | None:
-    """仅接受整值、trim 后可 round-trip 的已验收北京时间。"""
+    """仅接受整值、带已批准显式时区且可归一为北京时间的已实施手术时间。
+
+    `surgery_record` 的时间列是 text，客户 timestamptz 列经本机导入后同一列
+    内并存 `+08` 与 `+00` 两种写法；文本带 `+00` 与 datetime 带 UTC 表示的
+    是同一精确时刻，必须得到同一结果，否则真实已实施手术会被降为「未实施」，
+    使 029/030/032 等规则误判为不适用。因此两条分支都先还原绝对时刻，再折算
+    为医院本地（Asia/Shanghai）墙钟时间。
+    未带时区、形状不完整或未经批准的偏移（如 `+09`）仍被拒绝，不作为
+    「已实施」证据。
+    """
     if isinstance(value, datetime):
         if value.tzinfo is None or value.utcoffset() is None:
             return None
         return value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
     if not isinstance(value, str):
         return None
-    candidate = value.strip()
-    for time_format in PERFORMED_TIME_FORMATS:
-        try:
-            parsed = datetime.strptime(candidate, time_format)
-        except ValueError:
-            continue
-        if parsed.strftime(time_format) == candidate:
-            return parsed
-    return None
+    matched = _PERFORMED_TIME_TEXT_PATTERN.fullmatch(value.strip())
+    if matched is None:
+        return None
+    offset = _PERFORMED_TIME_OFFSETS.get(matched.group("offset"))
+    if offset is None:
+        return None
+    try:
+        naive = datetime.strptime(matched.group("naive"), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    return naive.replace(tzinfo=offset).astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
 
 
 def has_strict_performed_time(row: Mapping[str, Any]) -> bool:

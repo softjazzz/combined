@@ -36,6 +36,38 @@ def test_shared_strict_performed_parser_and_digest_accept_only_exact_whole_value
     assert "Authorization_sensitive_marker" not in digest
 
 
+def test_strict_performed_parser_normalizes_explicit_offsets_to_hospital_time():
+    """同一精确时刻的文本与 datetime 表示必须给出同一北京时间。
+
+    cdm.surgery_record.surgery_begin_time 为 text 列：客户 timestamptz 列经本机
+    导入后同一列里并存 `+08`（148 行）与 `+00`（15 行）；只认 `+08` 会把 15 台
+    真实已实施手术降为「未实施」，进而在 029/030/032 上误判为不适用。
+    未经批准的偏移（如 `+09`）在数据中从未出现，仍按非精确时间拒绝。
+    """
+
+    expected = datetime(2025, 7, 29, 14, 40, 0)
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 06:40:00+00") == expected
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 06:40:00+00:00") == expected
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 06:40:00Z") == expected
+    assert source_evidence_reader.parse_strict_performed_time(
+        datetime(2025, 7, 29, 6, 40, tzinfo=timezone.utc)
+    ) == expected
+    # 北京时间写法与首尾空白保持既有行为
+    assert source_evidence_reader.parse_strict_performed_time(" 2025-07-29 14:40:00+08 ") == expected
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 14:40:00+08:00") == expected
+    # 无时区、形状不完整或未经批准的偏移仍不得作为“已实施”证据
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 14:40:00") is None
+    assert source_evidence_reader.parse_strict_performed_time("2025-7-29 14:40:00+08") is None
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 14:40:00+09") is None
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 14:40:00+09:00") is None
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 14:40:00-05:00") is None
+    assert source_evidence_reader.parse_strict_performed_time("2025-07-29 14:40:00+25") is None
+    assert source_evidence_reader.parse_strict_performed_time("NOT_A_TIME") is None
+    assert source_evidence_reader.has_strict_performed_time(
+        {"surgery_begin_time": "2025-07-29 06:40:00+00"}
+    )
+
+
 def test_shared_performed_fact_accepts_only_approved_source_representations():
     assert source_evidence_reader.has_trusted_performed_surgery(
         source_key="surgery_record",
@@ -398,12 +430,19 @@ def test_provider_032_target_qualification_rejects_title_only_and_shells(monkeyp
         ("surgery_end_time", "2026-01-01 09:00:00+08", True),
         ("surgery_begin_time", " 2026-01-01 08:00:00+08 ", True),
         ("surgery_begin_time", "2026-01-01 08:00:00+08:00", True),
+        # 显式偏移即为绝对时刻；只接受本流水线实际产出的 +08 与 +00/Z，
+        # 折算为北京时间后才判“已实施”。真实证据：cdm.surgery_record.
+        # surgery_begin_time 为 text 列，163 行中 148 行 `+08`、15 行 `+00`。
+        ("surgery_begin_time", "2026-01-01 08:00:00+00", True),
+        ("surgery_begin_time", "2026-01-01 08:00:00+00:00", True),
+        # 未在数据中出现过的偏移仍视为非精确时间
         ("surgery_begin_time", "2026-01-01 08:00:00+09", False),
         ("surgery_begin_time", "prefix 2026-01-01 08:00:00+08", False),
         ("surgery_begin_time", "2026-01-01 08:00:00+08 suffix", False),
         ("surgery_begin_time", '"2026-01-01 08:00:00+08"', False),
         ("surgery_begin_time", "2026-01-01  08:00:00+08", False),
         ("surgery_begin_time", "2026-01-01T08:00:00Z", False),
+        ("surgery_begin_time", "2026-01-01 08:00:00+25", False),
         ("surgery_begin_time", "1704067200", False),
         ("surgery_begin_time", '["2026-01-01 08:00:00+08"]', False),
     ],
