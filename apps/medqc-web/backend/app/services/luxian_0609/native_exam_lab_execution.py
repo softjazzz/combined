@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import json
 import logging
 import re
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence, cast
 
 from .decision_model import RuleDecision
 from .evidence_material import (
@@ -23,6 +23,7 @@ from .exam_lab_fact_extraction import (
     ExamLabTextProjection,
     _event_identity_mentions_course,
     build_exam_lab_fact_prompt,
+    build_exam_lab_fact_response_format,
     build_exam_lab_text_projection,
     event_for_fact,
     events_for_family,
@@ -256,6 +257,17 @@ _CONTROLLED_MESSAGES = {
 
 class ExamLabLLMClient(Protocol):
     async def generate(self, prompt: str) -> dict[str, Any]: ...
+
+
+class _StrictJsonSchemaExamLabClient(Protocol):
+    def supports_strict_json_schema(self) -> bool: ...
+
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        response_format: Mapping[str, Any],
+    ) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -1069,6 +1081,37 @@ def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
     completion = int(usage.get("completion_tokens") or 0)
     total = int(usage.get("total_tokens") or prompt + completion)
     return prompt, completion, total, float(response.get("_api_time") or 0.0)
+
+
+def _supports_strict_json_schema(llm_client: ExamLabLLMClient) -> bool:
+    capability = getattr(llm_client, "supports_strict_json_schema", None)
+    if not callable(capability):
+        return False
+    return capability() is True
+
+
+async def _generate_exam_lab_fact_response(
+    *,
+    llm_client: ExamLabLLMClient,
+    selected_rule_ids: Sequence[str],
+    projection: ExamLabTextProjection,
+) -> dict[str, Any]:
+    """执行一次 typed 事实抽取；Schema 能力必须由客户端显式声明。"""
+
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=selected_rule_ids,
+        projection=projection,
+    )
+    if not _supports_strict_json_schema(llm_client):
+        return await llm_client.generate(prompt)
+    strict_client = cast(_StrictJsonSchemaExamLabClient, llm_client)
+    return await strict_client.generate(
+        prompt,
+        response_format=build_exam_lab_fact_response_format(
+            selected_rule_ids=selected_rule_ids,
+            projection=projection,
+        ),
+    )
 
 
 def _single_text_fact_outcome(
@@ -2012,11 +2055,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
             elif eligible_rule_ids:
                 llm_call_count += 1
                 try:
-                    response = await llm_client.generate(
-                        build_exam_lab_fact_prompt(
-                            selected_rule_ids=eligible_rule_ids,
-                            projection=projection,
-                        )
+                    response = await _generate_exam_lab_fact_response(
+                        llm_client=llm_client,
+                        selected_rule_ids=eligible_rule_ids,
+                        projection=projection,
                     )
                 except Exception:
                     response = None
@@ -2062,11 +2104,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             )
                             llm_call_count += 1
                             try:
-                                retry_response = await llm_client.generate(
-                                    build_exam_lab_fact_prompt(
-                                        selected_rule_ids=retry_rule_ids,
-                                        projection=projection,
-                                    )
+                                retry_response = await _generate_exam_lab_fact_response(
+                                    llm_client=llm_client,
+                                    selected_rule_ids=retry_rule_ids,
+                                    projection=projection,
                                 )
                                 retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
                                 prompt_tokens += retry_prompt
@@ -2111,11 +2152,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         )
                         llm_call_count += 1
                         try:
-                            retry_response = await llm_client.generate(
-                                build_exam_lab_fact_prompt(
-                                    selected_rule_ids=eligible_rule_ids,
-                                    projection=projection,
-                                )
+                            retry_response = await _generate_exam_lab_fact_response(
+                                llm_client=llm_client,
+                                selected_rule_ids=eligible_rule_ids,
+                                projection=projection,
                             )
                             retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
                             prompt_tokens += retry_prompt

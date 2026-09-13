@@ -1026,14 +1026,96 @@ def build_exam_lab_text_projection(
     )
 
 
+def _normalize_exam_lab_fact_rule_ids(
+    selected_rule_ids: Sequence[str],
+) -> tuple[str, ...]:
+    selected = tuple(str(item).strip().upper() for item in selected_rule_ids)
+    if (
+        not selected
+        or len(selected) != len(set(selected))
+        or any(item not in ALLOWED_RULE_IDS for item in selected)
+    ):
+        raise ValueError("unsupported exam lab fact scope")
+    return selected
+
+
+def build_exam_lab_fact_response_format(
+    *, selected_rule_ids: Sequence[str], projection: ExamLabTextProjection
+) -> dict[str, Any]:
+    """为当前事实抽取批次构造严格 JSON Schema 响应格式。
+
+    Schema 只约束响应的对象形状、字段和枚举；规则/事件覆盖、病程位置
+    白名单及语义一致性仍由下方严格解析器负责。
+    """
+
+    selected = _normalize_exam_lab_fact_rule_ids(selected_rule_ids)
+    multi_event_schema = _uses_multi_event_schema(projection)
+    schema_version = (
+        MULTI_EVENT_SCHEMA_VERSION if multi_event_schema else SCHEMA_VERSION
+    )
+    fact_properties: dict[str, Any] = {
+        "rule_id": {"type": "string", "enum": list(selected)},
+        "applicability": {
+            "type": "string",
+            "enum": sorted(_ALLOWED_APPLICABILITY),
+        },
+        "semantic_state": {
+            "type": "string",
+            "enum": sorted(_ALLOWED_SEMANTIC),
+        },
+        "positive_state": {
+            "type": "string",
+            "enum": sorted(_ALLOWED_POSITIVE),
+        },
+        "course_doc_positions": {
+            "type": "array",
+            "items": {"type": "integer"},
+        },
+    }
+    required_fact_keys = [
+        "rule_id",
+        "applicability",
+        "semantic_state",
+        "positive_state",
+        "course_doc_positions",
+    ]
+    if multi_event_schema:
+        fact_properties["event_position"] = {"type": "integer"}
+        required_fact_keys.append("event_position")
+    fact_schema = {
+        "type": "object",
+        "properties": fact_properties,
+        "required": required_fact_keys,
+        "additionalProperties": False,
+    }
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "lx0609_exam_lab_facts",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "schema_version": {
+                        "type": "string",
+                        "enum": [schema_version],
+                    },
+                    "facts": {
+                        "type": "array",
+                        "items": fact_schema,
+                    },
+                },
+                "required": ["schema_version", "facts"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
 def build_exam_lab_fact_prompt(
     *, selected_rule_ids: Sequence[str], projection: ExamLabTextProjection
 ) -> str:
-    selected = tuple(str(item).strip().upper() for item in selected_rule_ids)
-    if not selected or len(selected) != len(set(selected)) or any(
-        item not in ALLOWED_RULE_IDS for item in selected
-    ):
-        raise ValueError("unsupported exam lab fact scope")
+    selected = _normalize_exam_lab_fact_rule_ids(selected_rule_ids)
     selected_families = {
         "exam" if rule_id in EXAM_RULE_IDS else "culture"
         for rule_id in selected

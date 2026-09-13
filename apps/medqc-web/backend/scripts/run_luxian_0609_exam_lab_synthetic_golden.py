@@ -56,10 +56,54 @@ class _CapturingLLMClient:
     def __init__(self, delegate: SichuanQCLLMClient) -> None:
         self._delegate = delegate
         self.response: Mapping[str, Any] | None = None
+        self.selected_rule_ids: tuple[str, ...] | None = None
 
-    async def generate(self, prompt: str) -> dict[str, Any]:
-        self.response = await self._delegate.generate(prompt)
+    def reset(self) -> None:
+        self.response = None
+        self.selected_rule_ids = None
+
+    @staticmethod
+    def _rule_ids_from_response_format(
+        response_format: Any,
+    ) -> tuple[str, ...] | None:
+        if not isinstance(response_format, Mapping):
+            return None
+        json_schema = response_format.get("json_schema")
+        if not isinstance(json_schema, Mapping):
+            return None
+        schema = json_schema.get("schema")
+        if not isinstance(schema, Mapping):
+            return None
+        properties = schema.get("properties")
+        if not isinstance(properties, Mapping):
+            return None
+        facts = properties.get("facts")
+        if not isinstance(facts, Mapping):
+            return None
+        items = facts.get("items")
+        if not isinstance(items, Mapping):
+            return None
+        fact_properties = items.get("properties")
+        if not isinstance(fact_properties, Mapping):
+            return None
+        rule_id = fact_properties.get("rule_id")
+        if not isinstance(rule_id, Mapping):
+            return None
+        enum = rule_id.get("enum")
+        if not isinstance(enum, list) or not enum:
+            return None
+        selected = tuple(str(value).strip().upper() for value in enum)
+        return selected if len(selected) == len(set(selected)) else None
+
+    async def generate(self, prompt: str, **kwargs: Any) -> dict[str, Any]:
+        self.selected_rule_ids = self._rule_ids_from_response_format(
+            kwargs.get("response_format")
+        )
+        self.response = await self._delegate.generate(prompt, **kwargs)
         return dict(self.response)
+
+    def supports_strict_json_schema(self) -> bool:
+        return self._delegate.supports_strict_json_schema()
 
 
 _POSITIVE_EXAM = {
@@ -245,6 +289,7 @@ def _safe_parsed_fact_states(
     *,
     scenario: Scenario,
     response: Mapping[str, Any] | None,
+    selected_rule_ids: tuple[str, ...] | None = None,
 ) -> tuple[tuple[str, str, str, str, int], ...] | tuple[()]:
     """诊断 parse/reducer 边界；绝不输出正文、提示词或模型响应。"""
     if response is None:
@@ -267,7 +312,7 @@ def _safe_parsed_fact_states(
     try:
         facts = parse_exam_lab_fact_response(
             response=response,
-            selected_rule_ids=EXAM_LAB_RULE_IDS,
+            selected_rule_ids=selected_rule_ids or EXAM_LAB_RULE_IDS,
             projection=projection,
         )
     except ValueError:
@@ -290,7 +335,7 @@ async def _run() -> dict[str, Any]:
     )
     rows: list[dict[str, Any]] = []
     for scenario in SCENARIOS:
-        client.response = None
+        client.reset()
         session = _session_for(scenario)
         started = perf_counter()
         result = await execute_luxian_0609_native_exam_lab_rules(
@@ -306,6 +351,7 @@ async def _run() -> dict[str, Any]:
             decisions=result.decisions,
             expected_rule_ids=EXAM_LAB_RULE_IDS,
             snapshot=session.snapshot,
+            evidence_materials=session.materials,
         )
         actual = tuple(item.final_state.value for item in reduced)
         llm_calls = int(result.llm_call_count)
@@ -327,6 +373,7 @@ async def _run() -> dict[str, Any]:
             "expected_llm_calls": scenario.expected_llm_calls,
             "llm_calls": llm_calls,
             "llm_calls_match": llm_calls == scenario.expected_llm_calls,
+            "executor_parse_failure_kinds": result.parse_failure_kinds,
             "passed": (
                 actual == scenario.expected
                 and llm_calls == scenario.expected_llm_calls
@@ -337,6 +384,7 @@ async def _run() -> dict[str, Any]:
             "parsed_fact_states": _safe_parsed_fact_states(
                 scenario=scenario,
                 response=client.response,
+                selected_rule_ids=client.selected_rule_ids,
             ),
         })
     return {
@@ -352,6 +400,9 @@ async def _run() -> dict[str, Any]:
         "llm_call_contract_safe": all(row["llm_calls_match"] for row in rows),
         "technical_error_count": sum(
             actual == "technical_error" for row in rows for actual in row["actual"]
+        ),
+        "executor_parse_failure_count": sum(
+            len(row["executor_parse_failure_kinds"]) for row in rows
         ),
         "cases": rows,
     }

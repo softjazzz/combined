@@ -12,6 +12,7 @@ from app.services.luxian_0609.exam_lab_fact_extraction import (
     ExamLabSingleEvent,
     ExamLabTextProjection,
     build_exam_lab_fact_prompt,
+    build_exam_lab_fact_response_format,
     build_exam_lab_text_projection,
     parse_exam_lab_fact_response,
 )
@@ -390,6 +391,19 @@ class _Client:
         }
 
 
+class _StrictSchemaClient(_Client):
+    def __init__(self, outputs: list[object]) -> None:
+        super().__init__(outputs)
+        self.response_formats: list[dict] = []
+
+    def supports_strict_json_schema(self) -> bool:
+        return True
+
+    async def generate(self, prompt: str, *, response_format: dict) -> dict:
+        self.response_formats.append(response_format)
+        return await super().generate(prompt)
+
+
 def _fact_response(
     rule_ids: tuple[str, ...],
     *,
@@ -422,6 +436,121 @@ def _fact_response(
         "schema_version": "lx0609-exam-lab-text-facts-v3",
         "facts": facts,
     }
+
+
+@pytest.mark.asyncio
+async def test_typed_strict_schema_client_receives_dynamic_schema_on_first_and_isolated_retry(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EXAM-011-012",
+                "exam_type": "CT",
+                "exam_name": "胸部CT",
+                "exam_time": "2026-04-26 08:00:00",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "阳性：右肺结节。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "检查结果已记录并完成临床分析。",
+            },
+        ),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-27"},),
+    )
+    first_response = _fact_response(("LX0609-011", "LX0609-012"))
+    first_response["facts"][0]["semantic_state"] = "unsupported"
+    retry_response = _fact_response(("LX0609-011",), semantic_state="present")
+    client = _StrictSchemaClient([first_response, retry_response])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011", "LX0609-012"),
+        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011", "LX0609-012"),
+    )
+
+    assert result.llm_call_count == 2
+    assert len(client.response_formats) == 2
+    first_schema = client.response_formats[0]["json_schema"]
+    retry_schema = client.response_formats[1]["json_schema"]
+    assert first_schema["strict"] is True
+    assert retry_schema["strict"] is True
+    assert first_schema["schema"]["additionalProperties"] is False
+    assert retry_schema["schema"]["additionalProperties"] is False
+    assert first_schema["schema"]["properties"]["schema_version"]["enum"] == [
+        "lx0609-exam-lab-text-facts-v3"
+    ]
+    assert retry_schema["schema"]["properties"]["schema_version"]["enum"] == [
+        "lx0609-exam-lab-text-facts-v3"
+    ]
+    first_fact_schema = first_schema["schema"]["properties"]["facts"]["items"]
+    retry_fact_schema = retry_schema["schema"]["properties"]["facts"]["items"]
+    assert "event_position" not in first_fact_schema["properties"]
+    assert "event_position" not in first_fact_schema["required"]
+    assert "event_position" not in retry_fact_schema["properties"]
+    assert "event_position" not in retry_fact_schema["required"]
+    assert first_fact_schema["additionalProperties"] is False
+    assert retry_fact_schema["additionalProperties"] is False
+    assert first_fact_schema["properties"]["rule_id"]["enum"] == [
+        "LX0609-011",
+        "LX0609-012",
+    ]
+    assert retry_fact_schema["properties"]["rule_id"]["enum"] == [
+        "LX0609-011"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_typed_strict_schema_client_receives_schema_on_batch_retry(monkeypatch):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=(
+            {
+                "test_type": "血培养",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "培养阳性。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "记录血培养结果。",
+            },
+        ),
+    )
+    response = _fact_response(
+        ("LX0609-014", "LX0609-015"),
+        applicability="unknown",
+        semantic_state="unknown",
+    )
+    client = _StrictSchemaClient(["plain text", response])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-014", "LX0609-015"),
+        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-014", "LX0609-015"),
+    )
+
+    assert result.llm_call_count == 2
+    assert result.parse_failure_kinds == ("not_json",)
+    assert len(client.response_formats) == 2
+    for response_format in client.response_formats:
+        assert response_format["type"] == "json_schema"
+        assert response_format["json_schema"]["schema"]["properties"]["facts"][
+            "items"
+        ]["properties"]["rule_id"]["enum"] == ["LX0609-014", "LX0609-015"]
 
 
 @pytest.mark.asyncio
@@ -5260,6 +5389,44 @@ def test_exam_lab_fact_prompt_contains_per_rule_decision_table_for_single_event(
     assert '"course_doc_positions":[1]' in prompt
     assert '"course_doc_refs":' not in prompt
     assert '"evidence_refs":' not in prompt
+
+
+def test_exam_lab_fact_response_format_builds_strict_v4_schema_with_event_position():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_type": "CT",
+                    "exam_name": "胸部CT",
+                    "exam_time": "2026-04-26 08:00:00",
+                    "report_time": "2026-04-26 12:00:00",
+                },
+                {
+                    "exam_id": "EXAM-2",
+                    "exam_type": "MRI",
+                    "exam_name": "头颅MRI",
+                    "exam_time": "2026-04-27 08:00:00",
+                    "report_time": "2026-04-27 12:00:00",
+                },
+            ),
+        }
+    )
+    assert len(projection.imaging_events) == 2
+
+    response_format = build_exam_lab_fact_response_format(
+        selected_rule_ids=("LX0609-011",),
+        projection=projection,
+    )
+
+    schema = response_format["json_schema"]["schema"]
+    assert schema["properties"]["schema_version"]["enum"] == [
+        "lx0609-exam-lab-text-facts-v4"
+    ]
+    fact_schema = schema["properties"]["facts"]["items"]
+    assert fact_schema["properties"]["event_position"] == {"type": "integer"}
+    assert "event_position" in fact_schema["required"]
+    assert fact_schema["additionalProperties"] is False
 
 
 @pytest.mark.asyncio
