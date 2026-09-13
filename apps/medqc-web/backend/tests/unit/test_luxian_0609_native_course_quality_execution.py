@@ -7147,6 +7147,27 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     unknown_facts = rule_018_contract._parse_lx018_atomic_facts(unknown_response)
     assert unknown_facts is not None
     assert rule_018_contract._aggregate_lx018_atomic_facts(unknown_facts)[:2] == (
+        "supported",
+        "supported",
+    )
+
+    relevant_unknown_response = {
+        "content": json.dumps(
+            {
+                **valid,
+                "anatomic_relation": "unknown",
+                "symptom_relation": "not_applicable",
+                "disease_direction_relation": "supports",
+            }
+        )
+    }
+    relevant_unknown_facts = rule_018_contract._parse_lx018_atomic_facts(
+        relevant_unknown_response
+    )
+    assert relevant_unknown_facts is not None
+    assert rule_018_contract._aggregate_lx018_atomic_facts(
+        relevant_unknown_facts
+    )[:2] == (
         "unknown",
         "insufficient_information",
     )
@@ -7159,6 +7180,8 @@ def test_018_prompt_freezes_localizing_and_nonspecific_boundaries() -> None:
     assert "不要求主诉能唯一锁定该疾病" in prompt
     assert "单独心悸对冠心病" in prompt
     assert "单独咳嗽对肺占位" in prompt
+    assert "关系字段不得判supports" in prompt
+    assert "直接写出与第一诊断相同" in prompt
     assert "右侧大脑半球病变与左侧肢体无力" in prompt
     assert "最多80个汉字" in prompt
 

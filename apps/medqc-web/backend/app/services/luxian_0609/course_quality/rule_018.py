@@ -256,9 +256,10 @@ def _lx018_prompt(*, context: str) -> str:
         "解剖、器官系统或疾病方向线索；不要求主诉能唯一锁定该疾病。例如单侧肢体无力对脑血管病、"
         "急性上腹痛对胆道疾病、"
         "右腰腹痛对右侧输尿管结石、腰背痛对腰椎病变、咽痛伴发热对扁桃体炎，均可具有定位价值。"
-        "仅写身体部位并不自动算有定位价值，必须结合本次第一诊断判断。单独心悸对冠心病、"
-        "单独咳嗽对肺占位、背部疼痛对颈椎病等缺少相符定位或疾病方向的组合，应归入"
-        "nonspecific_symptom_or_sign或在关系字段判conflicts。\n"
+        "仅写身体部位并不自动算有定位价值，必须结合本次第一诊断判断。以下边界必须严格执行："
+        "单独心悸对冠心病、单独咳嗽对肺占位、背部疼痛对颈椎病，均应将chief_signal_kind判为"
+        "nonspecific_symptom_or_sign，关系字段不得判supports。主诉已经直接写出与第一诊断相同"
+        "或明确同义的疾病/检查发现时，应判localized_symptom_or_sign且disease_direction_relation=supports。\n"
         "anatomic_relation、laterality_relation、symptom_relation、disease_course_relation、"
         "disease_direction_relation分别只能取supports、conflicts、nonspecific、"
         "not_applicable、unknown。supports表示材料明确支持该关系，conflicts表示明确冲突；"
@@ -438,9 +439,7 @@ def _aggregate_lx018_atomic_facts(
     )
     if any(value == "conflicts" for value in relations.values()):
         return "mismatch", "diagnosis_mismatch", dimensions
-    if signal_kind == "unknown" or any(
-        value == "unknown" for value in relations.values()
-    ):
+    if signal_kind == "unknown":
         return "unknown", "insufficient_information", dimensions
     if signal_kind == "nonspecific_symptom_or_sign":
         return "unsupported", "symptom_only", dimensions
@@ -462,6 +461,8 @@ def _aggregate_lx018_atomic_facts(
         return "unknown", "insufficient_information", dimensions
     if any(relations[field_name] == "supports" for field_name in support_fields):
         return "supported", "supported", dimensions
+    if any(relations[field_name] == "unknown" for field_name in support_fields):
+        return "unknown", "insufficient_information", dimensions
     return (
         "unsupported",
         "site_symptom_not_specific"
