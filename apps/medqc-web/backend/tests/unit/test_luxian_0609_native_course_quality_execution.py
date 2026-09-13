@@ -7177,6 +7177,7 @@ def test_018_prompt_freezes_localizing_and_nonspecific_boundaries() -> None:
     prompt = rule_018_contract._lx018_prompt(context="受控测试材料")
 
     assert "单侧肢体无力" in prompt
+    assert "与本次第一诊断临床相容并形成病因支持" in prompt
     assert "不要求主诉能唯一锁定该疾病" in prompt
     assert "单独心悸对冠心病" in prompt
     assert "单独咳嗽对肺占位" in prompt
@@ -7184,6 +7185,23 @@ def test_018_prompt_freezes_localizing_and_nonspecific_boundaries() -> None:
     assert "直接写出与第一诊断相同" in prompt
     assert "右侧大脑半球病变与左侧肢体无力" in prompt
     assert "最多80个汉字" in prompt
+
+
+def test_018_event_or_etiology_fact_is_itself_supportive() -> None:
+    facts = {
+        "chief_signal_kind": "event_or_etiology",
+        "anatomic_relation": "not_applicable",
+        "laterality_relation": "not_applicable",
+        "symptom_relation": "not_applicable",
+        "disease_course_relation": "not_applicable",
+        "disease_direction_relation": "not_applicable",
+        "medical_analysis": "外伤事件与骨折诊断相容。",
+    }
+
+    assert rule_018_contract._aggregate_lx018_atomic_facts(facts)[:2] == (
+        "supported",
+        "supported",
+    )
 
 
 @pytest.mark.asyncio

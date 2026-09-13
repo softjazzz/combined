@@ -251,7 +251,8 @@ def _lx018_prompt(*, context: str) -> str:
         "你只从本次入院记录的主诉和受控第一诊断中抽取医学关系原子事实。"
         "不要评价主诉字数，不要输出整条质控规则是否合规，也不要引入出院诊断或后续病程诊断。\n"
         "chief_signal_kind只能取event_or_etiology、localized_symptom_or_sign、"
-        "nonspecific_symptom_or_sign、unknown。event_or_etiology指外伤、暴露、操作等明确事件或病因；"
+        "nonspecific_symptom_or_sign、unknown。event_or_etiology只在外伤、暴露、操作等明确事件或病因"
+        "与本次第一诊断临床相容并形成病因支持时使用；事件存在但与第一诊断无关时不得使用该枚举。"
         "localized_symptom_or_sign指单个症状、体征或症状组合能为该第一诊断提供有意义的"
         "解剖、器官系统或疾病方向线索；不要求主诉能唯一锁定该疾病。例如单侧肢体无力对脑血管病、"
         "急性上腹痛对胆道疾病、"
@@ -446,12 +447,9 @@ def _aggregate_lx018_atomic_facts(
         return "unsupported", "symptom_only", dimensions
 
     if signal_kind == "event_or_etiology":
-        support_fields = {
-            "anatomic_relation",
-            "symptom_relation",
-            "disease_course_relation",
-            "disease_direction_relation",
-        }
+        # 枚举本身已声明事件/病因与第一诊断形成支持；关系字段只补充支持维度，
+        # 不再让模型把同一事实重复编码时的漏填覆盖该原子事实。
+        return "supported", "supported", dimensions
     elif signal_kind == "localized_symptom_or_sign":
         support_fields = {
             "anatomic_relation",
