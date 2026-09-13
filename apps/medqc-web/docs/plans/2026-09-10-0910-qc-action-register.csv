@@ -203,41 +203,41 @@ C30/LX0609-038,C30,LX0609-038,data_gap,待复核,R02,真实API双轮聚焦验收
 C30/LX0609-064,C30,LX0609-064,not_applicable,待复核,R02,真实API双轮聚焦验收通过,not_applicable/performed_event_absent,docs/acceptance/2026-09-13-r02-064-066-operation-evidence.md；.tmp/0910-full-audit/r02-remaining-before-after-all-private.json,非手术操作不触发术后病程规则；状态和原因保持不变，结果已补齐实际mr_surgery文书定位；双轮30例一致；413项聚焦测试通过；0次LLM调用、0次重试、0 Token,主协调代理,聚焦验收通过
 C30/LX0609-065,C30,LX0609-065,not_applicable,待复核,R02,真实API双轮聚焦验收通过,not_applicable/performed_event_absent,docs/acceptance/2026-09-13-r02-064-066-operation-evidence.md；.tmp/0910-full-audit/r02-remaining-before-after-all-private.json,非手术操作不触发术后病程规则；状态和原因保持不变，结果已补齐实际mr_surgery文书定位；双轮30例一致；413项聚焦测试通过；0次LLM调用、0次重试、0 Token,主协调代理,聚焦验收通过
 C30/LX0609-066,C30,LX0609-066,not_applicable,待复核,R02,真实API双轮聚焦验收通过,not_applicable/performed_event_absent,docs/acceptance/2026-09-13-r02-064-066-operation-evidence.md；.tmp/0910-full-audit/r02-remaining-before-after-all-private.json,非手术操作不触发术后病程规则；状态和原因保持不变，结果已补齐实际mr_surgery文书定位；双轮30例一致；413项聚焦测试通过；0次LLM调用、0次重试、0 Token,主协调代理,聚焦验收通过
-C01/LX0609-039,C01,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C01/LX0609-040,C01,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C02/LX0609-039,C02,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C02/LX0609-040,C02,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C03/LX0609-039,C03,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C03/LX0609-040,C03,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C04/LX0609-039,C04,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C04/LX0609-040,C04,LX0609-040,compliant,待复核,R03,未启动,,,,主协调代理,未关闭
-C05/LX0609-039,C05,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C05/LX0609-040,C05,LX0609-040,non_compliant,待复核,R03,未启动,,,,主协调代理,未关闭
-C07/LX0609-039,C07,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C07/LX0609-040,C07,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C09/LX0609-039,C09,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C09/LX0609-040,C09,LX0609-040,non_compliant,待复核,R03,未启动,,,,主协调代理,未关闭
-C10/LX0609-039,C10,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C10/LX0609-040,C10,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C12/LX0609-039,C12,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C15/LX0609-039,C15,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C17/LX0609-039,C17,LX0609-039,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C17/LX0609-040,C17,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C19/LX0609-039,C19,LX0609-039,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C19/LX0609-040,C19,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C23/LX0609-039,C23,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C23/LX0609-040,C23,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C25/LX0609-039,C25,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C27/LX0609-039,C27,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C27/LX0609-040,C27,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C28/LX0609-039,C28,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C28/LX0609-040,C28,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C29/LX0609-039,C29,LX0609-039,data_gap,待复核,R03,未启动,,,,主协调代理,未关闭
-C29/LX0609-040,C29,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C30/LX0609-039,C30,LX0609-039,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C30/LX0609-040,C30,LX0609-040,not_applicable,待复核,R03,未启动,,,,主协调代理,未关闭
-C04/LX0609-024,C04,LX0609-024,data_gap,待复核,R04,未启动,,,,主协调代理,未关闭
-C04/LX0609-026,C04,LX0609-026,not_applicable,待复核,R04,未启动,,,,主协调代理,未关闭
+C01/LX0609-039,C01,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C01/LX0609-040,C01,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C02/LX0609-039,C02,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C02/LX0609-040,C02,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C03/LX0609-039,C03,LX0609-039,data_gap,待复核,R03,已完成,最终状态=data_gap；原因码=applicability_source_gap,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C03/LX0609-040,C03,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C04/LX0609-039,C04,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C04/LX0609-040,C04,LX0609-040,compliant,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C05/LX0609-039,C05,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C05/LX0609-040,C05,LX0609-040,non_compliant,待复核,R03,已完成,最终状态=non_compliant；原因码=requirement_violated,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C07/LX0609-039,C07,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C07/LX0609-040,C07,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C09/LX0609-039,C09,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C09/LX0609-040,C09,LX0609-040,non_compliant,待复核,R03,已完成,最终状态=non_compliant；原因码=requirement_violated,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C10/LX0609-039,C10,LX0609-039,data_gap,待复核,R03,已完成,最终状态=data_gap；原因码=applicability_source_gap,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C10/LX0609-040,C10,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C12/LX0609-039,C12,LX0609-039,data_gap,待复核,R03,已完成,最终状态=data_gap；原因码=applicability_source_gap,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C15/LX0609-039,C15,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C17/LX0609-039,C17,LX0609-039,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=performed_event_absent,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C17/LX0609-040,C17,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C19/LX0609-039,C19,LX0609-039,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=performed_event_absent,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C19/LX0609-040,C19,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C23/LX0609-039,C23,LX0609-039,data_gap,待复核,R03,已完成,最终状态=data_gap；原因码=applicability_source_gap,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C23/LX0609-040,C23,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C25/LX0609-039,C25,LX0609-039,data_gap,待复核,R03,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C27/LX0609-039,C27,LX0609-039,data_gap,待复核,R03,已完成,最终状态=data_gap；原因码=applicability_source_gap,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C27/LX0609-040,C27,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C28/LX0609-039,C28,LX0609-039,data_gap,待复核,R03,已完成,最终状态=data_gap；原因码=applicability_source_gap,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C28/LX0609-040,C28,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C29/LX0609-039,C29,LX0609-039,data_gap,待复核,R03,已完成,最终状态=not_applicable；原因码=performed_event_absent,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C29/LX0609-040,C29,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C30/LX0609-039,C30,LX0609-039,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=performed_event_absent,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复医师职称归一和主手术术者筛选；117 项聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C30/LX0609-040,C30,LX0609-040,not_applicable,待复核,R03,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,绑定正式组合手术名与精确手术时间；聚焦测试及正式双轮回归通过,主协调代理,已关闭
+C04/LX0609-024,C04,LX0609-024,data_gap,待复核,R04,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复明确淋巴结处理被无关截断门禁覆盖；聚焦测试及正式双轮回归逐项一致,主协调代理,已关闭
+C04/LX0609-026,C04,LX0609-026,not_applicable,待复核,R04,已完成,最终状态=not_applicable；原因码=trigger_absent_complete,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,未发现代码缺陷；医嘱与病程 Bundle/Evidence 关联经正式双轮回归确认,主协调代理,已关闭
 C04/LX0609-027,C04,LX0609-027,compliant,待复核,R04,未启动,,,,主协调代理,未关闭
 C11/LX0609-027,C11,LX0609-027,uncertain,待复核,R04,未启动,,,,主协调代理,未关闭
 C13/LX0609-027,C13,LX0609-027,uncertain,待复核,R04,未启动,,,,主协调代理,未关闭
@@ -247,7 +247,7 @@ C17/LX0609-027,C17,LX0609-027,uncertain,待复核,R04,未启动,,,,主协调代�
 C22/LX0609-027,C22,LX0609-027,uncertain,待复核,R04,未启动,,,,主协调代理,未关闭
 C26/LX0609-027,C26,LX0609-027,uncertain,待复核,R04,未启动,,,,主协调代理,未关闭
 C29/LX0609-019,C29,LX0609-019,non_compliant,待复核,R04,正式API双轮回归通过,data_gap/required_field_missing；病理最终诊断缺失，无法按报告结果核对病程,.tmp/0910-full-audit/r04-019-final-comparison-private.json,原始CDM三份报告均有报告时间但诊断和正文为空。两次30例正式任务语义完全一致；0调用0重试0Token，三份报告均保留定位与具体缺失字段。,主协调代理,聚焦验收通过
-C29/LX0609-024,C29,LX0609-024,data_gap,待复核,R04,未启动,,,,主协调代理,未关闭
+C29/LX0609-024,C29,LX0609-024,data_gap,待复核,R04,已完成,最终状态=not_applicable；原因码=performed_event_absent,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,修复明确淋巴结处理被无关截断门禁覆盖；聚焦测试及正式双轮回归逐项一致,主协调代理,已关闭
 C01/LX0609-011,C01,LX0609-011,data_gap,待复核,R05,未启动,,,,主协调代理,未关闭
 C01/LX0609-012,C01,LX0609-012,uncertain,待复核,R05,未启动,,,,主协调代理,未关闭
 C01/LX0609-015,C01,LX0609-015,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
@@ -343,43 +343,43 @@ C08/LX0609-017,C08,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收�
 C11/LX0609-017,C11,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,compliant/requirement_within_threshold；疼痛、肿胀、体征和检查由阳性到弱阳性再到阴性，并形成复查及出院的连续处置变化，属于合理纵向重复。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：Flash与35B均由误报纠正为符合；30例Flash回归从non_compliant/threshold_exceeded改为compliant/requirement_within_threshold。,主协调代理（独立复核已核对）,聚焦验收通过
 C19/LX0609-017,C19,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,non_compliant/threshold_exceeded；不同层级医师次日记录相似度0.9869，病史、查体、检查、诊断依据和计划整体复用，只有局部诊断名称变化。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：Flash与35B修复后均保持不符合；30例Flash回归保存结果与预期一致，0重试，无目标外状态或原因变化。,主协调代理（独立复核已核对）,聚焦验收通过
 C28/LX0609-017,C28,LX0609-017,non_compliant,待复核,R08,真实API聚焦验收通过，待总回归,compliant/requirement_within_threshold；一份实际为术前讨论、一份为主治查房，共同复述稳定术前事实但各自保留参会意见、风险处理和独立计划，属于跨角色必要复述。,.tmp/0910-full-audit/r08-017-final-verification.json; .tmp/0910-full-audit/r08-017-independent-business-review.json,ebaf37192：传入文书标题并明确跨角色判据后，Flash与35B均纠正为符合；30例Flash回归从non_compliant/threshold_exceeded改为compliant/requirement_within_threshold。,主协调代理（独立复核已核对）,聚焦验收通过
-C01/LX0609-018,C01,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C02/LX0609-018,C02,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C03/LX0609-018,C03,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C04/LX0609-018,C04,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C05/LX0609-018,C05,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C06/LX0609-018,C06,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C07/LX0609-018,C07,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C08/LX0609-018,C08,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C09/LX0609-018,C09,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C10/LX0609-018,C10,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C11/LX0609-018,C11,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C12/LX0609-018,C12,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C13/LX0609-018,C13,LX0609-018,non_compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C14/LX0609-018,C14,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C14/LX0609-077,C14,LX0609-077,non_compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C15/LX0609-018,C15,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C16/LX0609-018,C16,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C17/LX0609-018,C17,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C17/LX0609-077,C17,LX0609-077,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C18/LX0609-018,C18,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C19/LX0609-018,C19,LX0609-018,non_compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C20/LX0609-018,C20,LX0609-018,data_gap,待复核,R09,未启动,,,,主协调代理,未关闭
-C20/LX0609-077,C20,LX0609-077,data_gap,待复核,R09,未启动,,,,主协调代理,未关闭
-C21/LX0609-018,C21,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C22/LX0609-018,C22,LX0609-018,non_compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C22/LX0609-077,C22,LX0609-077,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C23/LX0609-018,C23,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C24/LX0609-018,C24,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C25/LX0609-018,C25,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C26/LX0609-018,C26,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C27/LX0609-018,C27,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C28/LX0609-018,C28,LX0609-018,data_gap,待复核,R09,未启动,,,,主协调代理,未关闭
-C28/LX0609-077,C28,LX0609-077,data_gap,待复核,R09,未启动,,,,主协调代理,未关闭
-C29/LX0609-018,C29,LX0609-018,non_compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C29/LX0609-077,C29,LX0609-077,non_compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C30/LX0609-018,C30,LX0609-018,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
-C30/LX0609-077,C30,LX0609-077,compliant,待复核,R09,未启动,,,,主协调代理,未关闭
+C01/LX0609-018,C01,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C02/LX0609-018,C02,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C03/LX0609-018,C03,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C04/LX0609-018,C04,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C05/LX0609-018,C05,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C06/LX0609-018,C06,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C07/LX0609-018,C07,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C08/LX0609-018,C08,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C09/LX0609-018,C09,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C10/LX0609-018,C10,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C11/LX0609-018,C11,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C12/LX0609-018,C12,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C13/LX0609-018,C13,LX0609-018,non_compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C14/LX0609-018,C14,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C14/LX0609-077,C14,LX0609-077,non_compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,接入同文书首次病程诊断并收敛状态合同；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C15/LX0609-018,C15,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C16/LX0609-018,C16,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C17/LX0609-018,C17,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C17/LX0609-077,C17,LX0609-077,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,接入同文书首次病程诊断并收敛状态合同；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C18/LX0609-018,C18,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C19/LX0609-018,C19,LX0609-018,non_compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C20/LX0609-018,C20,LX0609-018,data_gap,待复核,R09,已完成,最终状态=data_gap；原因码=required_field_missing,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C20/LX0609-077,C20,LX0609-077,data_gap,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,接入同文书首次病程诊断并收敛状态合同；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C21/LX0609-018,C21,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C22/LX0609-018,C22,LX0609-018,non_compliant,待复核,R09,已完成,最终状态=non_compliant；原因码=requirement_violated,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C22/LX0609-077,C22,LX0609-077,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,接入同文书首次病程诊断并收敛状态合同；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C23/LX0609-018,C23,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C24/LX0609-018,C24,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C25/LX0609-018,C25,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C26/LX0609-018,C26,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C27/LX0609-018,C27,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C28/LX0609-018,C28,LX0609-018,data_gap,待复核,R09,已完成,最终状态=data_gap；原因码=required_field_missing,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C28/LX0609-077,C28,LX0609-077,data_gap,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,接入同文书首次病程诊断并收敛状态合同；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C29/LX0609-018,C29,LX0609-018,non_compliant,待复核,R09,已完成,最终状态=non_compliant；原因码=requirement_violated,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C29/LX0609-077,C29,LX0609-077,non_compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,接入同文书首次病程诊断并收敛状态合同；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C30/LX0609-018,C30,LX0609-018,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,原子事实抽取后由 Python 聚合；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
+C30/LX0609-077,C30,LX0609-077,compliant,待复核,R09,已完成,最终状态=compliant；原因码=requirement_satisfied,.tmp/0910-full-audit/three-safe-workstreams-closure-full-r1-summary-private.json；.tmp/0910-full-audit/three-safe-workstreams-closure-full-r2-summary-private.json,接入同文书首次病程诊断并收敛状态合同；同一 HEAD 四轮固定输入及正式双轮回归逐项一致，0 重试,主协调代理,已关闭
 C01/LX0609-074,C01,LX0609-074,not_applicable,待复核,R10,真实API聚焦验收通过，待总回归,non_compliant/requirement_violated；1次补充诊断，修改理由未记录、诊断依据已记录,.tmp/0910-full-audit/f06-074-final-model-comparison.json；Flash job e75e6a1a-80b2-42ea-978c-86c4c21d8d16；35B job 3a02fa41-a10f-4a6a-a45d-71bd3c6f552f；src_f7af9ef346c887461b020cfa,提交528f04977、5e8387941、7352f4d5c、472ed0798；355项聚焦测试通过；两模型30例074结果一致：27 data_gap、2 non_compliant、1 compliant，3次调用、0重试、0技术错误,主协调代理,聚焦验收通过
 C02/LX0609-074,C02,LX0609-074,not_applicable,发现缺陷,R10,真实API聚焦验收通过，待总回归,not_applicable/trigger_absent_complete；诊断表与入院记录诊断声明栏均已完整读取且均无修正/补充诊断声明,.tmp/0910-full-audit/g074-full30-m-not-applicable-r2.json；.tmp/0910-full-audit/g074-full30-m-not-applicable.json（第一轮）；docs/plans/2026-09-12-0910-issue-backlog.md §八,提交2cd8b52a4（074 触发源补全：读取入院记录结构化修正/补充诊断声明）+ f0fc25a47（无声明 22 例由 data_gap/applicability_source_gap 改为 not_applicable/trigger_absent_complete）；两轮重放（m-not-applicable 与 -r2）逐例一致；392 项聚焦测试通过；零模型调用。注意：本行 baseline_status 的 not_applicable 来自更早的旧缺陷状态，与本次判定的 not_applicable/trigger_absent_complete 并非同一推导，不可据此认为「未变化」。本行 independent_expectation / evidence_reference / change_and_verification 三列由主协调于 2026-09-12 事后回填（评审发现「代码改了、账没记」；此前三列全空）,主协调代理,聚焦验收通过
 C03/LX0609-074,C03,LX0609-074,not_applicable,发现缺陷,R10,真实API聚焦验收通过，待总回归,not_applicable/trigger_absent_complete；诊断表与入院记录诊断声明栏均已完整读取且均无修正/补充诊断声明,.tmp/0910-full-audit/g074-full30-m-not-applicable-r2.json；.tmp/0910-full-audit/g074-full30-m-not-applicable.json（第一轮）；docs/plans/2026-09-12-0910-issue-backlog.md §八,提交2cd8b52a4（074 触发源补全：读取入院记录结构化修正/补充诊断声明）+ f0fc25a47（无声明 22 例由 data_gap/applicability_source_gap 改为 not_applicable/trigger_absent_complete）；两轮重放（m-not-applicable 与 -r2）逐例一致；392 项聚焦测试通过；零模型调用。注意：本行 baseline_status 的 not_applicable 来自更早的旧缺陷状态，与本次判定的 not_applicable/trigger_absent_complete 并非同一推导，不可据此认为「未变化」。本行 independent_expectation / evidence_reference / change_and_verification 三列由主协调于 2026-09-12 事后回填（评审发现「代码改了、账没记」；此前三列全空）,主协调代理,聚焦验收通过
