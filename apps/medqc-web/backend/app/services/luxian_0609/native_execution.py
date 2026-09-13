@@ -20,7 +20,8 @@ from .evidence_material import (
     EvidenceMaterialUnavailable,
     Luxian0609EvidenceMaterialStore,
 )
-from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
 
 
 # 029 已迁入 surgery_document 异步执行器；这里仅保留纯存在性判定。
@@ -60,7 +61,9 @@ _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
         "LX0609-029": frozenset(
             {"presurg_summary", "surgery_record", "mr_surgery"}
         ),
-        "LX0609-030": frozenset({"surgery_record", "mr_surgery"}),
+        "LX0609-030": frozenset(
+            {"inpat_nondrug_order", "surgery_record", "mr_surgery"}
+        ),
         "LX0609-032": frozenset(
             {"surgery_safecheck_record", "surgery_record", "mr_surgery"}
         ),
@@ -440,6 +443,18 @@ def _selected_surgery_presence_fact_refs(
             if final_state != "data_gap":
                 raise
     selected = tuple(dict.fromkeys(refs))
+    if rule_id == "LX0609-030" and final_state == "non_compliant" and not selected:
+        order_rows = materials.document_rows(
+            "inpat_nondrug_order", snapshot=snapshot
+        )
+        selected = tuple(
+            reference
+            for reference, row in order_rows
+            if classify_current_visit_surgery_order_rows(
+                rows=(row,), completeness=SourceCompleteness.COMPLETE
+            )[0]
+            == "affirmed"
+        )
     if not selected and final_state != "data_gap":
         raise ValueError("surgery presence selected evidence is empty")
     return selected
@@ -545,6 +560,8 @@ def execute_luxian_0609_native_rules(
         return _technical_results(selected, reason_code="native_execution_failure")
 
     def result_reason(rule_id: str, final_state: str) -> str:
+        if final_state == "data_gap":
+            return "required_field_missing"
         if final_state != "non_compliant":
             return "native_deterministic"
         if rule_id == "LX0609-030":

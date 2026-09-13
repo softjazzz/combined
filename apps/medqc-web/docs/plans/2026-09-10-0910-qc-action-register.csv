@@ -168,7 +168,7 @@ C10/LX0609-031,C10,LX0609-031,data_gap,待复核,R02,未启动,,,,主协调代�
 C10/LX0609-037,C10,LX0609-037,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C10/LX0609-038,C10,LX0609-038,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C17/LX0609-029,C17,LX0609-029,non_compliant,待复核,R02,未启动,,,,主协调代理,未关闭
-C17/LX0609-030,C17,LX0609-030,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
+C17/LX0609-030,C17,LX0609-030,not_applicable,待复核,R02,真实API双轮聚焦验收通过,non_compliant/required_document_missing；明确手术医嘱且无手术记录,.tmp/0910-full-audit/r02-030-final-comparison-private.json（2026-09-13，30例双轮正式API验收；含患者结果的明细产物保留在-private文件，未提交）,typed主链补齐结构化手术医嘱触发、精确医嘱证据绑定和不确定覆盖的数据不足语义；120项聚焦测试通过；正式任务2382334c-4fac-4854-b3c6-9353f4fffcae与3d111cb8-293f-45c3-9f69-c4cc6d520ed5结果完全一致，14合规/13不适用/1不合规/2数据不足，0 LLM/0重试/0 Token,主协调代理,聚焦验收通过
 C17/LX0609-031,C17,LX0609-031,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C17/LX0609-032,C17,LX0609-032,not_applicable,待复核,R02,R02单病例逐项核查完成,not_applicable/trigger_absent_complete；正式surgery_record为0，不满足032“有手术记录”触发条件,.tmp/0910-full-audit/r02-032-c17-current-private.json；docs/acceptance/2026-09-13-r02-032-c17-audit.md,无需代码修改；首页操作清单不替代正式手术记录触发032；当前Bundle/Evidence批次463e0f42-6c99-4946-838f-1887d337ef9b为不适用，0次模型调用、0重试,主协调代理,聚焦验收通过
 C17/LX0609-038,C17,LX0609-038,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
@@ -176,7 +176,7 @@ C17/LX0609-064,C17,LX0609-064,not_applicable,待复核,R02,未启动,,,,主协�
 C17/LX0609-065,C17,LX0609-065,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C17/LX0609-066,C17,LX0609-066,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C19/LX0609-029,C19,LX0609-029,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
-C19/LX0609-030,C19,LX0609-030,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
+C19/LX0609-030,C19,LX0609-030,not_applicable,待复核,R02,真实API双轮聚焦验收通过,not_applicable/trigger_absent_complete；完整来源无手术触发,.tmp/0910-full-audit/r02-030-final-comparison-private.json（2026-09-13，30例双轮正式API验收；含患者结果的明细产物保留在-private文件，未提交）,typed主链补齐结构化手术医嘱触发、精确医嘱证据绑定和不确定覆盖的数据不足语义；120项聚焦测试通过；正式任务2382334c-4fac-4854-b3c6-9353f4fffcae与3d111cb8-293f-45c3-9f69-c4cc6d520ed5结果完全一致，14合规/13不适用/1不合规/2数据不足，0 LLM/0重试/0 Token,主协调代理,聚焦验收通过
 C19/LX0609-031,C19,LX0609-031,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C19/LX0609-032,C19,LX0609-032,not_applicable,待复核,R02,真实API聚焦验收通过，待总回归,not_applicable/trigger_absent_complete；治疗性操作不进入现有正式手术文书触发合同,.tmp/0910-full-audit/typed-032-event-contract/independent-verification.json；r02-independent-surgery-review.json,按医院时区精确关联手术与安全核查时间，区分实质手术记录和稀疏时间壳；正式任务30/30成功、0模型调用，保存与公开结果一致；C01定位2份手术记录和1份安全核查记录,主协调代理,聚焦验收通过
 C19/LX0609-038,C19,LX0609-038,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
@@ -187,7 +187,7 @@ C23/LX0609-029,C23,LX0609-029,data_gap,待复核,R02,未启动,,,,主协调代�
 C27/LX0609-029,C27,LX0609-029,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C29/LX0609-003,C29,LX0609-003,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C29/LX0609-029,C29,LX0609-029,non_compliant,待复核,R02,未启动,,,,主协调代理,未关闭
-C29/LX0609-030,C29,LX0609-030,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
+C29/LX0609-030,C29,LX0609-030,not_applicable,待复核,R02,真实API双轮聚焦验收通过,data_gap/required_field_missing；有效麻醉类医嘱类型未覆盖,.tmp/0910-full-audit/r02-030-final-comparison-private.json（2026-09-13，30例双轮正式API验收；含患者结果的明细产物保留在-private文件，未提交）,typed主链补齐结构化手术医嘱触发、精确医嘱证据绑定和不确定覆盖的数据不足语义；120项聚焦测试通过；正式任务2382334c-4fac-4854-b3c6-9353f4fffcae与3d111cb8-293f-45c3-9f69-c4cc6d520ed5结果完全一致，14合规/13不适用/1不合规/2数据不足，0 LLM/0重试/0 Token,主协调代理,聚焦验收通过
 C29/LX0609-031,C29,LX0609-031,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C29/LX0609-032,C29,LX0609-032,not_applicable,待复核,R02,真实API聚焦验收通过，待总回归,not_applicable/trigger_absent_complete；诊断性操作不进入030/032的正式手术文书触发合同,.tmp/0910-full-audit/typed-032-event-contract/independent-verification.json；r02-independent-surgery-review.json,按医院时区精确关联手术与安全核查时间，区分实质手术记录和稀疏时间壳；正式任务30/30成功、0模型调用，保存与公开结果一致；C01定位2份手术记录和1份安全核查记录,主协调代理,聚焦验收通过
 C29/LX0609-064,C29,LX0609-064,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
@@ -195,7 +195,7 @@ C29/LX0609-065,C29,LX0609-065,data_gap,待复核,R02,未启动,,,,主协调代�
 C29/LX0609-066,C29,LX0609-066,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C30/LX0609-003,C30,LX0609-003,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C30/LX0609-029,C30,LX0609-029,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
-C30/LX0609-030,C30,LX0609-030,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
+C30/LX0609-030,C30,LX0609-030,not_applicable,待复核,R02,真实API双轮聚焦验收通过,data_gap/required_field_missing；有效麻醉类医嘱类型未覆盖,.tmp/0910-full-audit/r02-030-final-comparison-private.json（2026-09-13，30例双轮正式API验收；含患者结果的明细产物保留在-private文件，未提交）,typed主链补齐结构化手术医嘱触发、精确医嘱证据绑定和不确定覆盖的数据不足语义；120项聚焦测试通过；正式任务2382334c-4fac-4854-b3c6-9353f4fffcae与3d111cb8-293f-45c3-9f69-c4cc6d520ed5结果完全一致，14合规/13不适用/1不合规/2数据不足，0 LLM/0重试/0 Token,主协调代理,聚焦验收通过
 C30/LX0609-031,C30,LX0609-031,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C30/LX0609-032,C30,LX0609-032,not_applicable,待复核,R02,真实API聚焦验收通过，待总回归,not_applicable/trigger_absent_complete；治疗性内镜操作不进入现有正式手术文书触发合同,.tmp/0910-full-audit/typed-032-event-contract/independent-verification.json；r02-independent-surgery-review.json,按医院时区精确关联手术与安全核查时间，区分实质手术记录和稀疏时间壳；正式任务30/30成功、0模型调用，保存与公开结果一致；C01定位2份手术记录和1份安全核查记录,主协调代理,聚焦验收通过
 C30/LX0609-037,C30,LX0609-037,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭

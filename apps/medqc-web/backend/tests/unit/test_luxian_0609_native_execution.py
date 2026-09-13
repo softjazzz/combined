@@ -28,13 +28,16 @@ from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 def _typed_session(
     *,
     visit_id: str = "safe-visit",
+    inpat_nondrug_order_rows: tuple[dict, ...] = (),
     surgery_record_rows: tuple[dict, ...] = (),
     surgery_safecheck_record_rows: tuple[dict, ...] = (),
     mr_surgery_rows: tuple[dict, ...] = (),
     truncated_source_keys: frozenset[str] = frozenset(),
 ):
     query_versions = {
+        "inpat_nondrug_order": "snapshot-provider-inpat_nondrug_order-v1",
         "presurg_summary": "snapshot-provider-presurg_summary-v1",
+        "surgery_application": "snapshot-provider-surgery_application-v1",
         "surgery_record": "snapshot-provider-surgery_record-v2",
         "mr_surgery": "snapshot-provider-surgery_record-v2",
         "surgery_safecheck_record": (
@@ -45,7 +48,9 @@ def _typed_session(
     sources = {}
     for source_key, query_version in query_versions.items():
         rows = (
-            surgery_record_rows
+            inpat_nondrug_order_rows
+            if source_key == "inpat_nondrug_order"
+            else surgery_record_rows
             if source_key == "surgery_record"
             else surgery_safecheck_record_rows
             if source_key == "surgery_safecheck_record"
@@ -101,6 +106,82 @@ def _typed_session(
         snapshot=snapshot,
         sources=sources,
     )
+
+
+def test_native_030_order_without_surgery_record_is_non_compliant_with_order_ref():
+    snapshot, materials = _typed_session(
+        inpat_nondrug_order_rows=(
+            {
+                "order_id": "surgery-order-030",
+                "order_type": "手术",
+                "order_status": "新开",
+            },
+        ),
+    )
+
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=("LX0609-030",),
+        visit_id="safe-visit",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        source_schema=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-030",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-030",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    expected_order_ref = materials.document_rows(
+        "inpat_nondrug_order", snapshot=snapshot
+    )[0][0]
+    assert result.results == ()
+    assert len(result.decisions) == 1
+    assert result.decisions[0].fact_refs == (expected_order_ref,)
+    assert reduced[0].final_state.value == "non_compliant"
+    assert reduced[0].reason_code == "required_document_missing"
+
+
+def test_native_030_uncertain_order_is_deliverable_data_gap():
+    snapshot, materials = _typed_session(
+        inpat_nondrug_order_rows=(
+            {
+                "order_id": "uncertain-order-030",
+                "order_type": "麻醉",
+                "order_status": "新开",
+            },
+        ),
+    )
+
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=("LX0609-030",),
+        visit_id="safe-visit",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        source_schema=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-030",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-030",),
+        snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert result.results == ()
+    assert len(result.decisions) == 1
+    order_ref = materials.document_rows(
+        "inpat_nondrug_order", snapshot=snapshot
+    )[0][0]
+    assert order_ref not in result.decisions[0].fact_refs
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "required_field_missing"
 
 
 def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeypatch):

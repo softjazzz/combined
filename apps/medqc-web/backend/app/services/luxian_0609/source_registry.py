@@ -429,6 +429,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 029 的新增适用触发仅为结构化手术医嘱；严格已实施手术仍由执行器
     # 复用既有 surgery_record/mr_surgery 事实。申请单不参与本次判定。
     "LX0609-029": ("inpat_nondrug_order",),
+    # 030 以结构化手术医嘱触发“有医嘱但无手术记录”，必须在同一快照
+    # 绑定命中的医嘱行，不能退回来源级观察引用。
+    "LX0609-030": ("inpat_nondrug_order",),
     # 麻醉同意书、访视和记录单规则都必须先由结构化手术清单确认
     # 本次住院是否实施麻醉以及麻醉方式，才能正确处理局麻例外。
     "LX0609-034": ("mr_surgery",),

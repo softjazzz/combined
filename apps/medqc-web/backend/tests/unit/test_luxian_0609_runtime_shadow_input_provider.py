@@ -168,7 +168,8 @@ def test_provider_does_not_promote_untyped_or_descriptive_mr_surgery_rows(monkey
 def test_provider_distinguishes_unavailable_and_error_without_echo(monkeypatch, mode, status, code):
     def _reader(**kwargs):
         if kwargs["source_key"] == "surgery_record":
-            if mode == "unavailable": raise provider._SourceUnavailable()
+            if mode == "unavailable":
+                raise provider._SourceUnavailable()
             raise RuntimeError("Bearer_secret")
         return []
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
@@ -573,7 +574,13 @@ def test_runtime_reader_selects_and_stably_orders_typed_mr_surgery_before_limit(
 
 def test_provider_reuses_single_snapshot_materials_without_family_self_query(monkeypatch):
     rows_by_source = {
-        "inpat_nondrug_order": ({"order_id": "order-private"},),
+        "inpat_nondrug_order": (
+            {
+                "order_id": "order-private",
+                "order_type": "手术",
+                "order_status": "新开",
+            },
+        ),
         "surgery_application": ({"order_id": "application-private"},),
         "surgery_record": (
             {"surgery_begin_time": "2026-01-01 08:00:00+08"},
@@ -646,6 +653,18 @@ def test_provider_reuses_single_snapshot_materials_without_family_self_query(mon
     )
     assert len(surgery_record_outcome.positive_signals) == 1
     assert surgery_record_outcome.positive_signals[0].event_status == "performed"
+    surgery_order_outcome = next(
+        item
+        for item in result.extraction_inputs
+        if item.source_key == "inpat_nondrug_order"
+    )
+    assert surgery_order_outcome.state == "complete"
+    assert len(surgery_order_outcome.positive_signals) == 1
+    assert (
+        surgery_order_outcome.positive_signals[0].fact_type
+        == "current_visit_surgery_order_confirmed"
+    )
+    assert surgery_order_outcome.positive_signals[0].event_status == "ordered"
     assert {
         item.rule_id: item.qualified_document_count
         for item in result.target_qualifications
@@ -731,7 +750,79 @@ def test_provider_reuses_truncated_bounded_prefix_without_hiding_snapshot_truth(
     assert len(session.materials.bounded_rows("inpat_nondrug_order")) == 1
     assert observation.query_status is QueryStatus.AVAILABLE
     assert observation.error_code == ""
-    assert outcome.state == "complete"
-    assert outcome.reason_code == ""
-    assert outcome.processed_record_count == 1
+    assert outcome.state == "not_run"
+    assert outcome.reason_code == "extractor_not_run"
+    assert outcome.processed_record_count == 0
+    assert outcome.positive_signals == ()
     assert "private-order" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    ("order_type", "expected_state", "expected_reason"),
+    [
+        ("麻醉", "not_run", "extractor_not_run"),
+        ("治疗", "complete", ""),
+    ],
+)
+def test_provider_distinguishes_uncertain_and_negated_complete_order_rows(
+    monkeypatch,
+    order_type,
+    expected_state,
+    expected_reason,
+):
+    def _snapshot_reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            (
+                {
+                    "order_id": "private-order",
+                    "order_type": order_type,
+                    "order_status": "新开",
+                },
+            )
+            if source_key == "inpat_nondrug_order"
+            else ()
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    plan = _plan("LX0609-030")
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-030",),
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=_snapshot_reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("surgery_presence",)
+        ),
+    )
+    monkeypatch.setattr(
+        provider,
+        "read_luxian_0609_runtime_source_rows",
+        lambda **_kwargs: pytest.fail("统一快照链不得再次查询数据库"),
+    )
+
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=plan,
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    outcome = next(
+        item
+        for item in result.extraction_inputs
+        if item.source_key == "inpat_nondrug_order"
+    )
+    assert outcome.state == expected_state
+    assert outcome.reason_code == expected_reason
+    assert outcome.positive_signals == ()
