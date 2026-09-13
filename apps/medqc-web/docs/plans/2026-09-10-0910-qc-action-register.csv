@@ -170,7 +170,7 @@ C10/LX0609-038,C10,LX0609-038,data_gap,待复核,R02,未启动,,,,主协调代�
 C17/LX0609-029,C17,LX0609-029,non_compliant,待复核,R02,未启动,,,,主协调代理,未关闭
 C17/LX0609-030,C17,LX0609-030,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C17/LX0609-031,C17,LX0609-031,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
-C17/LX0609-032,C17,LX0609-032,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
+C17/LX0609-032,C17,LX0609-032,not_applicable,待复核,R02,R02单病例逐项核查完成,not_applicable/trigger_absent_complete；正式surgery_record为0，不满足032“有手术记录”触发条件,.tmp/0910-full-audit/r02-032-c17-current-private.json；docs/acceptance/2026-09-13-r02-032-c17-audit.md,无需代码修改；首页操作清单不替代正式手术记录触发032；当前Bundle/Evidence批次463e0f42-6c99-4946-838f-1887d337ef9b为不适用，0次模型调用、0重试,主协调代理,聚焦验收通过
 C17/LX0609-038,C17,LX0609-038,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C17/LX0609-064,C17,LX0609-064,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C17/LX0609-065,C17,LX0609-065,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
@@ -263,7 +263,7 @@ C07/LX0609-011,C07,LX0609-011,data_gap,待复核,R05,未启动,,,,主协调代�
 C07/LX0609-012,C07,LX0609-012,compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C07/LX0609-015,C07,LX0609-015,not_applicable,待复核,R05,未启动,,,,主协调代理,未关闭
 C08/LX0609-012,C08,LX0609-012,compliant,待复核,R05,未启动,,,,主协调代理,未关闭
-C08/LX0609-014,C08,LX0609-014,data_gap,待复核,R05,未启动,,,,主协调代理,未关闭
+C08/LX0609-014,C08,LX0609-014,data_gap,待复核,R05,R05四例逐项核查完成,data_gap/association_failed；未形成可定位培养报告事件，相关病程表述无法绑定报告,.tmp/0910-full-audit/r05-014-four-current-private.json；docs/acceptance/2026-09-13-r05-014-four-case-audit.md,无需代码修改；当前Bundle/Evidence批次a84c730c-6a95-4aa5-9f95-977e72e5d576结果一致，证据定位3份相关病程资料,主协调代理,聚焦验收通过
 C08/LX0609-015,C08,LX0609-015,data_gap,待复核,R05,未启动,,,,主协调代理,未关闭
 C09/LX0609-012,C09,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C10/LX0609-012,C10,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
@@ -273,7 +273,7 @@ C12/LX0609-012,C12,LX0609-012,uncertain,待复核,R05,未启动,,,,主协调代�
 C13/LX0609-012,C13,LX0609-012,compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C14/LX0609-011,C14,LX0609-011,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C14/LX0609-012,C14,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
-C14/LX0609-014,C14,LX0609-014,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
+C14/LX0609-014,C14,LX0609-014,non_compliant,待复核,R05,R05四例逐项核查完成,non_compliant/requirement_violated；首个培养事件对应病程晚于报告约24.41小时，确定违规优先于其他事件资料缺口,.tmp/0910-full-audit/r05-014-four-current-private.json；docs/acceptance/2026-09-13-r05-014-four-case-audit.md,无需代码修改；当前Bundle/Evidence批次a84c730c-6a95-4aa5-9f95-977e72e5d576结果一致，3个事件及23条客户证据可回读,主协调代理,聚焦验收通过
 C15/LX0609-012,C15,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C16/LX0609-012,C16,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C17/LX0609-012,C17,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
@@ -284,11 +284,11 @@ C19/LX0609-012,C19,LX0609-012,compliant,待复核,R05,未启动,,,,主协调代�
 C20/LX0609-012,C20,LX0609-012,not_applicable,待复核,R05,未启动,,,,主协调代理,未关闭
 C22/LX0609-012,C22,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C23/LX0609-012,C23,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
-C23/LX0609-014,C23,LX0609-014,data_gap,待复核,R05,未启动,,,,主协调代理,未关闭
+C23/LX0609-014,C23,LX0609-014,data_gap,待复核,R05,R05四例逐项核查完成,data_gap/association_failed；无可定位培养报告事件，相关会诊资料不能证明报告身份和报告时间,.tmp/0910-full-audit/r05-014-four-current-private.json；docs/acceptance/2026-09-13-r05-014-four-case-audit.md,无需代码修改；当前Bundle/Evidence批次a84c730c-6a95-4aa5-9f95-977e72e5d576结果一致，证据定位1份相关会诊资料,主协调代理,聚焦验收通过
 C23/LX0609-015,C23,LX0609-015,data_gap,待复核,R05,未启动,,,,主协调代理,未关闭
 C24/LX0609-012,C24,LX0609-012,compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C25/LX0609-012,C25,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
-C25/LX0609-014,C25,LX0609-014,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
+C25/LX0609-014,C25,LX0609-014,non_compliant,待复核,R05,R05四例逐项核查完成,non_compliant/requirement_violated；培养报告事件可确认，报告后24小时内未见对应结果记录,.tmp/0910-full-audit/r05-014-four-current-private.json；docs/acceptance/2026-09-13-r05-014-four-case-audit.md,无需代码修改；当前Bundle/Evidence批次a84c730c-6a95-4aa5-9f95-977e72e5d576结果一致，报告证据可回读,主协调代理,聚焦验收通过
 C26/LX0609-012,C26,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C27/LX0609-012,C27,LX0609-012,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
 C29/LX0609-011,C29,LX0609-011,non_compliant,待复核,R05,未启动,,,,主协调代理,未关闭
