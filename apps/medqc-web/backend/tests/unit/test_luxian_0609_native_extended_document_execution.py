@@ -8705,6 +8705,68 @@ async def test_066_noncompliant_fact_refs_only_include_surgery_without_first_cou
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ("LX0609-064", "LX0609-065", "LX0609-066"))
+@pytest.mark.parametrize(
+    ("surgery_code", "surgery_name"),
+    (
+        ("34.0401", "胸腔闭式引流术"),
+        ("45.1300X004", "胃-十二指肠镜检查"),
+    ),
+)
+async def test_postoperative_not_applicable_binds_catalog_confirmed_operation_ref(
+    rule_id: str, surgery_code: str, surgery_name: str
+) -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        (rule_id,),
+        {
+            "mr_surgery": ({
+                "document_id": f"OP-{rule_id}-{surgery_code}",
+                "surgery_code": surgery_code,
+                "surgery_name": surgery_name,
+                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+            },),
+        },
+    )
+
+    operation_ref = next(
+        reference
+        for reference, _row in materials.document_rows("mr_surgery", snapshot=snapshot)
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "performed_event_absent"
+    assert execution.decisions[0].fact_refs == (operation_ref,)
+    assert dict(execution.customer_display_facts) == {}
+    assert execution.llm_call_count == execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_postoperative_not_applicable_unknown_operation_keeps_source_anchor() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-066",),
+        {
+            "mr_surgery": ({
+                "document_id": "OP-UNKNOWN",
+                "surgery_code": "99.9999",
+                "surgery_name": "未纳入目录的操作",
+                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+            },),
+        },
+    )
+
+    source_anchor = next(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key == "surgery_record"
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "performed_event_absent"
+    assert execution.decisions[0].fact_refs == (source_anchor,)
+    assert execution.llm_call_count == execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_065_multisurgery_fact_refs_keep_each_event_with_its_own_round() -> None:
     snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-065",),

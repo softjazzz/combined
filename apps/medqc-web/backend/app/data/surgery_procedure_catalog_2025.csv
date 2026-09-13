@@ -1753,6 +1753,7 @@ code,name,category,effective_level,raw_level,source
 34.0103,胸壁切开血肿清除术,手术,二级,二级,national_catalog
 34.0200X001,开胸探查术,手术,三级,院内三级,hospital_performance
 34.0200X003,胸腔镜中转开胸探查术,手术,四级,院内四级,hospital_performance
+34.0401,胸腔闭式引流术,治疗性操作,,,national_catalog
 34.0900X011,开胸止血术,手术,三级,院内三级,hospital_performance
 34.0901,胸膜切开血肿清除术,手术,二级,二级,national_catalog
 34.0902,胸腔切开脓肿清除术,手术,二级,二级,national_catalog
@@ -2934,6 +2935,7 @@ code,name,category,effective_level,raw_level,source
 45.0201,小肠切开异物取出术,手术,二级,二级,national_catalog
 45.0203,小肠切开减压术,手术,二级,二级,national_catalog
 45.0303,大肠切开减压术,手术,二级,二级,national_catalog
+45.1300X004,胃-十二指肠镜检查,诊断性操作,,,national_catalog
 45.1400X003,胃十二指肠镜下小肠刷洗活检,诊断性操作,一级,一级,national_catalog
 45.1401,内镜下小肠活组织检查,诊断性操作,一级,一级,national_catalog
 45.1402,内镜下回肠活组织检查,诊断性操作,一级,一级,national_catalog

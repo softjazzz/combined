@@ -3286,6 +3286,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     ),
                 }))
             selected_postoperative_rows: list[Mapping[str, Any]] = []
+            if (
+                gate_outcome == ("not_applicable", "performed_event_absent")
+                and surgery_applicability.procedure_kind == "non_surgical_operation"
+            ):
+                selected_postoperative_rows.extend(
+                    row
+                    for row in mr_surgery_rows
+                    if catalog_surgery_state(row) is False
+                )
             if surgery_events:
                 if linkage_error:
                     selected_postoperative_rows.extend(
@@ -3336,6 +3345,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                 surgery_record_rows=surgery_record_rows,
             )
             selected_postoperative_rows: list[Mapping[str, Any]] = []
+            if (
+                gate_outcome == ("not_applicable", "performed_event_absent")
+                and surgery_applicability.procedure_kind == "non_surgical_operation"
+            ):
+                selected_postoperative_rows.extend(
+                    row
+                    for row in mr_surgery_rows
+                    if catalog_surgery_state(row) is False
+                )
             if gate_outcome is not None:
                 final_state, reason_code = gate_outcome
             elif not surgery_events:

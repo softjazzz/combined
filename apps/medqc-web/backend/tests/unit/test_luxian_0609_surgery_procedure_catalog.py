@@ -72,6 +72,27 @@ def test_bronchoscopy_operation_codes_override_structured_surgery_level(
     assert has_qualified_traditional_surgery_row(row) is False
 
 
+@pytest.mark.parametrize(
+    ("code", "name", "category"),
+    (
+        ("34.0401", "胸腔闭式引流术", "治疗性操作"),
+        ("45.1300X004", "胃-十二指肠镜检查", "诊断性操作"),
+    ),
+)
+def test_catalog_contains_authoritative_non_surgical_operation_codes(
+    code: str, name: str, category: str
+) -> None:
+    item = classify_surgery_procedure(code=code)
+
+    assert item is not None
+    assert item.name == name
+    assert item.category == category
+    assert item.effective_level == ""
+    assert item.raw_level == ""
+    assert item.source == "national_catalog"
+    assert item.is_surgery is False
+
+
 def test_composite_exact_names_choose_highest_surgery_level() -> None:
     item = classify_surgery_procedure(
         name="颅内血肿清除术+硬脑膜补片修补术+颅骨去骨瓣减压术"
@@ -86,5 +107,5 @@ def test_composite_exact_names_choose_highest_surgery_level() -> None:
 def test_catalog_exposes_same_read_only_items_used_by_classifier() -> None:
     catalog = load_surgery_procedure_catalog()
 
-    assert len(catalog) == 6511
+    assert len(catalog) == 6513
     assert next(item for item in catalog if item.code == "01.2408").effective_level == "四级"

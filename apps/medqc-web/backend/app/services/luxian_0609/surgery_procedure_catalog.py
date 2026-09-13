@@ -70,7 +70,7 @@ def _catalog_indexes() -> tuple[
                 raise ValueError("duplicate surgery/procedure catalog key")
             by_code[item.code] = item
             by_name[_normalize_name(item.name)] = item
-    if len(by_code) != 6511 or len(by_name) != len(by_code):
+    if len(by_code) != 6513 or len(by_name) != len(by_code):
         raise ValueError("unexpected surgery/procedure catalog size")
     return by_code, by_name
 
