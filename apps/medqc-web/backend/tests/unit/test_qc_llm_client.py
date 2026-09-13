@@ -33,6 +33,32 @@ def test_client_should_record_model_role_metadata():
     assert client.adjudicator_model_source == "env_adjudicator_model"
 
 
+@pytest.mark.parametrize(
+    ("provider_code", "api_endpoint", "model", "expected"),
+    [
+        ("alibaba", "https://dashscope.aliyuncs.com/v1", "qwen3.7-flash", True),
+        ("alibaba", "https://llm.example.test/v1", "qwen3.8-max-instruct", False),
+        ("", "https://dashscope-intl.aliyuncs.com/v1", "qwen3.7-plus", True),
+        ("deepseek", "https://dashscope.aliyuncs.com/v1", "qwen3.7-max", False),
+        ("siliconflow", "https://api.siliconflow.cn/v1", "qwen3.8-flash", False),
+        ("alibaba", "https://dashscope.aliyuncs.com/v1", "qwen3.6-35b", False),
+    ],
+)
+def test_supports_strict_json_schema_capability_matrix(
+    provider_code, api_endpoint, model, expected
+):
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": api_endpoint,
+            "api_key": "dummy",
+            "model": model,
+            "provider_code": provider_code,
+        }
+    )
+
+    assert client.supports_strict_json_schema() is expected
+
+
 def test_strip_think_tags():
     raw = "<think>reasoning...</think>\n[{\"rule_id\":\"SC-001\"}]"
     cleaned = SichuanQCLLMClient._strip_think_tags(raw)
@@ -399,3 +425,82 @@ async def test_generate_rejects_invalid_completion_cap_before_http(
         await client.generate("prompt", max_completion_tokens=invalid_cap)
 
     assert http_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_generate_forwards_response_format_as_deep_copy(monkeypatch):
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "qc_result",
+            "schema": {
+                "type": "object",
+                "properties": {"status": {"type": "string"}},
+            },
+        },
+    }
+    sent_payloads = []
+
+    async def fake_safe_post_json(**kwargs):
+        sent_payloads.append(kwargs["payload"])
+        return {
+            "choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+        }
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://dashscope.aliyuncs.com/v1",
+            "api_key": "sk-test",
+            "model": "qwen3.7-flash",
+            "provider_code": "alibaba",
+        }
+    )
+
+    await client.generate("prompt", response_format=response_format)
+
+    response_format["json_schema"]["schema"]["properties"]["status"]["type"] = "integer"
+    sent_response_format = sent_payloads[0]["response_format"]
+    assert sent_response_format["type"] == "json_schema"
+    assert (
+        sent_response_format["json_schema"]["schema"]["properties"]["status"]["type"]
+        == "string"
+    )
+    assert sent_response_format is not response_format
+    assert sent_response_format["json_schema"] is not response_format["json_schema"]
+    assert sent_payloads[0]["temperature"] == 0.2
+    assert sent_payloads[0]["top_p"] == 0.9
+    assert sent_payloads[0]["max_tokens"] == 16384
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_response_format",
+    ["json_object", [], {"type": "text"}, {"type": "xml"}, {"type": None}],
+)
+async def test_generate_rejects_invalid_response_format_before_http(
+    monkeypatch, invalid_response_format
+):
+    http_call_count = 0
+
+    async def fake_safe_post_json(**_kwargs):
+        nonlocal http_call_count
+        http_call_count += 1
+        return {}
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-reasoner",
+            "provider_code": "deepseek",
+        }
+    )
+
+    with pytest.raises(ValueError, match="response_format"):
+        await client.generate("prompt", response_format=invalid_response_format)
+
+    assert http_call_count == 0
+    assert client.call_count == 0

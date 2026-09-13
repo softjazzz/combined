@@ -4,6 +4,8 @@ QC LLM client.
 Wraps network calls to LLM API and keeps stats for QC workflows.
 """
 
+from collections.abc import Mapping
+from copy import deepcopy
 import logging
 import re
 import time
@@ -153,6 +155,7 @@ class SichuanQCLLMClient:
         *,
         max_completion_tokens: int | None = None,
         allow_length_retry: bool = True,
+        response_format: Mapping[str, Any] | None = None,
     ) -> Dict[str, Any]:
         if max_completion_tokens is not None and (
             isinstance(max_completion_tokens, bool)
@@ -164,6 +167,7 @@ class SichuanQCLLMClient:
                 "max_completion_tokens must be a positive integer no greater than "
                 f"{self.MAX_TOKENS_HARD_CAP}"
             )
+        response_format_payload = self._copy_response_format(response_format)
 
         self.call_count += 1
         api_start = time.time()
@@ -208,6 +212,8 @@ class SichuanQCLLMClient:
             "stream": False,
         }
         payload.update(self._build_provider_specific_payload())
+        if response_format_payload is not None:
+            payload["response_format"] = deepcopy(response_format_payload)
 
         try:
             attempt_no += 1
@@ -248,6 +254,10 @@ class SichuanQCLLMClient:
                 ):
                     retry_payload = dict(payload)
                     retry_payload["max_tokens"] = retry_tokens
+                    if response_format_payload is not None:
+                        retry_payload["response_format"] = deepcopy(
+                            response_format_payload
+                        )
                     logger.warning(
                         "Retrying once after length cutoff: model=%s max_tokens=%s -> %s",
                         self.model,
@@ -431,6 +441,43 @@ class SichuanQCLLMClient:
                 extra["thinking_budget"] = self.thinking_budget
             return extra
         return {"enable_thinking": False}
+
+    @staticmethod
+    def _copy_response_format(
+        response_format: Mapping[str, Any] | None,
+    ) -> Dict[str, Any] | None:
+        if response_format is None:
+            return None
+        if not isinstance(response_format, Mapping):
+            raise ValueError("response_format must be a mapping")
+        response_type = response_format.get("type")
+        if response_type not in {"json_object", "json_schema"}:
+            raise ValueError(
+                "response_format type must be one of: json_object, json_schema"
+            )
+        return deepcopy(dict(response_format))
+
+    def supports_strict_json_schema(self) -> bool:
+        provider_code = str(self.provider_code or "").strip().lower()
+        dashscope_hosts = {
+            "dashscope.aliyuncs.com",
+            "dashscope-intl.aliyuncs.com",
+        }
+        if (
+            provider_code not in {"", "alibaba"}
+            or self._endpoint_host() not in dashscope_hosts
+        ):
+            return False
+        model = str(self.model or "").strip().lower()
+        return model.startswith(
+            (
+                "qwen3.7-flash",
+                "qwen3.7-plus",
+                "qwen3.7-max",
+                "qwen3.8-flash",
+                "qwen3.8-max",
+            )
+        )
 
     @staticmethod
     def _extract_usage_breakdown(result: Dict[str, Any]) -> Dict[str, int]:

@@ -169,6 +169,12 @@ class _Luxian0609PrivacyRedactingLLMClient:
             **kwargs,
         )
 
+    def supports_strict_json_schema(self) -> bool:
+        capability = getattr(self.delegate, "supports_strict_json_schema", None)
+        if not callable(capability):
+            return False
+        return bool(capability())
+
 
 def wrap_luxian_0609_llm_client(client: Any) -> Any:
     if client is None or isinstance(client, _Luxian0609PrivacyRedactingLLMClient):

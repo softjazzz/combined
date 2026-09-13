@@ -17,6 +17,16 @@ class _CaptureClient:
         return {"content": "{}", "kwargs": kwargs}
 
 
+class _StrictSchemaCaptureClient(_CaptureClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.capability_calls = 0
+
+    def supports_strict_json_schema(self) -> bool:
+        self.capability_calls += 1
+        return True
+
+
 def test_redaction_removes_patient_identifiers_and_preserves_clinician_names():
     prompt = """
 患者基本信息：姓名：张三；患者张三，女，45岁。
@@ -74,6 +84,17 @@ async def test_wrapper_only_sends_redacted_prompt_and_forwards_call_contract():
         "max_completion_tokens": 512,
         "allow_length_retry": False,
     }
+
+
+def test_wrapper_forwards_strict_schema_capability_and_defaults_missing_to_false():
+    supported_delegate = _StrictSchemaCaptureClient()
+    supported_client = wrap_luxian_0609_llm_client(supported_delegate)
+
+    assert supported_client.supports_strict_json_schema() is True
+    assert supported_delegate.capability_calls == 1
+
+    missing_client = wrap_luxian_0609_llm_client(_CaptureClient())
+    assert missing_client.supports_strict_json_schema() is False
 
 
 def test_wrapper_keeps_none_and_is_idempotent():
