@@ -48,6 +48,27 @@ def test_061_still_rejects_invalid_interval_values(invalid):
     assert safe_discharge_customer_display_facts(rule_id="LX0609-061", raw=raw) is None
 
 
+def test_061_accepts_evaluation_context_horizon_source_through_finalizer():
+    raw = {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-09-08 12:00:00",
+        "discharge_time_source": "evaluation_context.horizon",
+        "record_time": "2026-09-08 10:00:00",
+        "threshold_hours": 24,
+        "actual_interval_hours": 2,
+    }
+
+    result, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={"rule_id": "LX0609-061", "status": "compliant", "reason_code": "ok"},
+        raw_facts=raw,
+    )
+
+    assert handled
+    assert result["status"] == "compliant"
+    assert result["reason_code"] == "ok"
+    assert result["customer_display_facts"] == raw
+
+
 @pytest.mark.parametrize(
     ("rule_id", "raw", "status"),
     [

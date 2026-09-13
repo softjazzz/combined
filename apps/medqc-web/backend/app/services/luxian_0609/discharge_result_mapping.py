@@ -36,6 +36,7 @@ _TIME_SOURCES = frozenset(
         "discharge_record.discharge_datetime",
         "discharge_record.discharge_time",
         "discharge_record.discharge_date",
+        "evaluation_context.horizon",
     }
 )
 _LEGACY_INTERNAL_KEYS = frozenset(

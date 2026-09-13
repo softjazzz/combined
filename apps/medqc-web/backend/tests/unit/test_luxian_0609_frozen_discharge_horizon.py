@@ -40,6 +40,20 @@ def test_frozen_final_wins_over_changed_missing_or_failed_live_sources(live):
         assert session.materials.rows(CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY)[0]["discharge_datetime"] == live
 
 
+@pytest.mark.parametrize("rule_id", ("LX0609-061", "LX0609-067", "LX0609-068"))
+def test_discharge_documentation_rules_receive_the_frozen_discharge_horizon(rule_id):
+    session = build_luxian_0609_evidence_read_session(
+        **{**_kwargs(live="2026-07-20 12:00:00"), "selected_rule_ids": (rule_id,)}
+    )
+
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0] == {
+        "horizon_date": "2026-06-10",
+        "horizon_datetime": "2026-06-10T12:00:00",
+        "basis": "discharge_date",
+        "row_ref": session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0]["row_ref"],
+    }
+
+
 def test_repeated_calls_do_not_refresh_frozen_endpoint():
     for live in ("2026-07-20 12:00:00", "2026-07-30 13:00:00"):
         snapshot = build_luxian_0609_evidence_snapshot(**_kwargs(live=live))

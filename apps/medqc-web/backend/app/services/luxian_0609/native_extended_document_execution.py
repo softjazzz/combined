@@ -260,6 +260,9 @@ _AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN = re.compile(
     r"(?:未|未予|尚未|拒绝|拒不).{0,8}"
     r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)"
 )
+_BLOCKING_DISCHARGE_HORIZON_ERRORS = frozenset(
+    {"authoritative_time_missing", "authoritative_time_conflict"}
+)
 
 
 def _critical_value_event_key(
@@ -766,32 +769,64 @@ def _death_context(
 def _discharge_time(
     registration_rows: Sequence[Mapping[str, Any]],
     discharge_rows: Sequence[Mapping[str, Any]],
+    horizon_rows: Sequence[Mapping[str, Any]] = (),
+    horizon_error: str = "",
 ) -> datetime | None:
-    return _discharge_time_with_source(registration_rows, discharge_rows)[0]
+    return _discharge_time_with_source(
+        registration_rows,
+        discharge_rows,
+        horizon_rows,
+        horizon_error,
+    )[0]
 
 
 def _discharge_time_with_source(
     registration_rows: Sequence[Mapping[str, Any]],
     discharge_rows: Sequence[Mapping[str, Any]],
+    horizon_rows: Sequence[Mapping[str, Any]] = (),
+    horizon_error: str = "",
 ) -> tuple[datetime | None, str]:
-    source_groups = (
-        (
-            "inpat_registration",
-            registration_rows,
-            ("discharge_datetime", "discharge_time"),
-        ),
-        (
-            "discharge_record",
-            discharge_rows,
-            ("discharge_datetime", "discharge_time", "discharge_date"),
-        ),
-    )
-    for source_name, rows, field_names in source_groups:
-        for row in rows:
-            for field_name in field_names:
-                parsed = _parse_datetime(row.get(field_name))
-                if parsed is not None:
-                    return parsed, f"{source_name}.{field_name}"
+    if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS:
+        return None, ""
+    if len(horizon_rows) == 1:
+        horizon_row = horizon_rows[0]
+        if _clean(horizon_row.get("basis")) == "discharge_date":
+            horizon_time = _parse_datetime(horizon_row.get("horizon_datetime"))
+            horizon_date = _parse_datetime(horizon_row.get("horizon_date"))
+            if (
+                horizon_time is not None
+                and horizon_date is not None
+                and horizon_time.date() != horizon_date.date()
+            ):
+                return None, ""
+            if horizon_time is not None or horizon_date is not None:
+                return (
+                    horizon_time or horizon_date,
+                    "evaluation_context.horizon",
+                )
+
+    for row in registration_rows:
+        for field_name in ("discharge_datetime", "discharge_time"):
+            parsed = _parse_datetime(row.get(field_name))
+            if parsed is not None:
+                return parsed, f"inpat_registration.{field_name}"
+
+    for row in discharge_rows:
+        discharge_date = _parse_datetime(row.get("discharge_date"))
+        precise_time: tuple[datetime, str] | None = None
+        for field_name in ("discharge_datetime", "discharge_time"):
+            parsed = _parse_datetime(row.get(field_name))
+            if parsed is not None:
+                precise_time = (parsed, field_name)
+                break
+        # CDM 标准 discharge_date 决定业务日；同日的兼容时间补足精度，
+        # 跨日矛盾时不能让兼容字段覆盖标准日期。
+        if discharge_date is not None:
+            if precise_time is not None and precise_time[0].date() == discharge_date.date():
+                return precise_time[0], f"discharge_record.{precise_time[1]}"
+            return discharge_date, "discharge_record.discharge_date"
+        if precise_time is not None:
+            return precise_time[0], f"discharge_record.{precise_time[1]}"
     return None, ""
 
 
@@ -1854,9 +1889,33 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     horizon_rows, horizon_error = (
         _source_rows(evidence_materials, "evaluation_context.horizon")
-        if {"LX0609-051", "LX0609-052", "LX0609-055", "LX0609-064", "LX0609-065", "LX0609-072"}.intersection(selected)
+        if {
+            "LX0609-051",
+            "LX0609-052",
+            "LX0609-055",
+            "LX0609-061",
+            "LX0609-064",
+            "LX0609-065",
+            "LX0609-067",
+            "LX0609-068",
+            "LX0609-072",
+        }.intersection(selected)
         else ((), "")
     )
+    if not horizon_rows and not horizon_error:
+        horizon_observation = next(
+            (
+                observation
+                for observation in evidence_snapshot.observations
+                if observation.source_key == "evaluation_context.horizon"
+            ),
+            None,
+        )
+        if (
+            horizon_observation is not None
+            and horizon_observation.query_state.value == "empty"
+        ):
+            horizon_error = _clean(horizon_observation.reason_code)
     (
         critical_horizon_date,
         critical_horizon_datetime,
@@ -2907,6 +2966,11 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-061":
+            discharge_horizon_error = (
+                horizon_error
+                if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS
+                else ""
+            )
             registration_discharge_times = _registration_discharge_times(
                 registration_rows
             )
@@ -2918,11 +2982,17 @@ async def execute_luxian_0609_native_extended_document_rules(
             discharge_time, discharge_time_source = _discharge_time_with_source(
                 registration_rows,
                 discharge_rows,
+                horizon_rows,
+                discharge_horizon_error,
             )
+            if discharge_time_source == "evaluation_context.horizon":
+                registration_time_conflicts = ()
             outcome = evaluate_discharge_documentation_timeliness(
                 death_state=death_state,
                 death_error=death_error,
-                registration_error=registration_error,
+                registration_error=(
+                    registration_error or discharge_horizon_error
+                ),
                 discharge_error=discharge_error,
                 discharge_time=(
                     None
@@ -3598,12 +3668,24 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-067":
+            discharge_horizon_error = (
+                horizon_error
+                if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS
+                else ""
+            )
             outcome = evaluate_predischarge_course_presence(
                 death_state=death_state,
                 death_error=death_error,
-                registration_error=registration_error,
+                registration_error=(
+                    registration_error or discharge_horizon_error
+                ),
                 discharge_error=discharge_error,
-                discharge_time=_discharge_time(registration_rows, discharge_rows),
+                discharge_time=_discharge_time(
+                    registration_rows,
+                    discharge_rows,
+                    horizon_rows,
+                    discharge_horizon_error,
+                ),
                 daily_error=daily_error,
                 senior_error=senior_error,
                 daily_rows=daily_rows,
@@ -3696,8 +3778,20 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                 )
                 continue
-            source_error = registration_error or discharge_error
-            discharge_time = _discharge_time(registration_rows, discharge_rows)
+            discharge_horizon_error = (
+                horizon_error
+                if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS
+                else ""
+            )
+            source_error = (
+                discharge_horizon_error or registration_error or discharge_error
+            )
+            discharge_time = _discharge_time(
+                registration_rows,
+                discharge_rows,
+                horizon_rows,
+                discharge_horizon_error,
+            )
             approval_match: tuple[str, str, Mapping[str, Any]] | None = None
             selected_course_document_ids: tuple[tuple[str, str], ...] = ()
             render_display = False

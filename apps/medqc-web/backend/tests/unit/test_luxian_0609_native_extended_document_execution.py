@@ -54,7 +54,13 @@ from app.services.luxian_0609.source_registry import (
 )
 
 
-def _session(rows_by_source, *, unavailable_sources=frozenset()):
+def _session(
+    rows_by_source,
+    *,
+    unavailable_sources=frozenset(),
+    source_reason_codes=None,
+):
+    source_reason_codes = source_reason_codes or {}
     bloodtrans_query_version = resolve_luxian_0609_physical_source_entry(
         "mr_bloodtrans"
     ).query_version
@@ -131,6 +137,7 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
                     completeness=completeness,
                     document_refs=document_refs,
                 ),
+                reason_code=source_reason_codes.get(source_key, ""),
             )
         )
     snapshot = Luxian0609EvidenceSnapshot.create(
@@ -238,6 +245,7 @@ async def _evaluate_selected(
     rows_by_source,
     *,
     unavailable_sources=frozenset(),
+    source_reason_codes=None,
     llm_client=None,
 ):
     rows_by_source = dict(rows_by_source)
@@ -258,7 +266,9 @@ async def _evaluate_selected(
             "basis": "evaluation_as_of",
         },)
     snapshot, materials = _session(
-        rows_by_source, unavailable_sources=unavailable_sources
+        rows_by_source,
+        unavailable_sources=unavailable_sources,
+        source_reason_codes=source_reason_codes,
     )
     result = await execute_luxian_0609_native_extended_document_rules(
         rule_ids=rule_ids,
@@ -451,14 +461,29 @@ def test_death_and_ordinary_discharge_rules_bind_mutual_exclusion_sources() -> N
             "evaluation_context.horizon",
         },
         "LX0609-060": {"inpat_registration", "discharge_record"},
-        "LX0609-061": {"inpat_registration", "death_record"},
-        "LX0609-068": {"inpat_registration", "death_record"},
+        "LX0609-061": {
+            "evaluation_context.horizon",
+            "inpat_registration",
+            "death_record",
+        },
+        "LX0609-068": {
+            "evaluation_context.horizon",
+            "inpat_registration",
+            "death_record",
+        },
     }
 
     assert {
         rule_id: set(resolve_luxian_0609_decision_support_source_keys((rule_id,)))
         for rule_id in expected_by_rule
     } == expected_by_rule
+
+
+def test_067_binds_the_frozen_discharge_horizon() -> None:
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-067",))) == {
+        "evaluation_context.horizon",
+        "inpat_registration",
+    }
 
 
 @pytest.mark.asyncio
@@ -1338,6 +1363,104 @@ async def test_061_fails_closed_when_registration_discharge_times_conflict() -> 
             "2026-07-01 12:00:00",
             "2026-07-02 12:00:00",
         ]
+
+
+@pytest.mark.asyncio
+async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
+    """061/067/068 必须共用 Bundle 已冻结的权威出院终点。"""
+
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-061", "LX0609-067", "LX0609-068"),
+        {
+            "inpat_registration": ({"patient_status": "出院"},),
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-03",
+                "horizon_datetime": "2026-07-03 08:00:00",
+                "basis": "discharge_date",
+            },),
+            "discharge_record": ({
+                "discharge_date": "2026-07-02",
+                "discharge_time": "2026-07-01 08:00:00",
+                "submit_datetime": "2026-07-02 12:00:00",
+            },),
+            "senior_course_record": ({
+                "document_id": "SENIOR-DISCHARGE-DATE",
+                "record_time": "2026-07-02 09:00:00",
+                "record_content": "上级医师查房后同意患者出院。",
+            },),
+        },
+    )
+
+    decisions = {item.rule_id: item for item in reduced}
+    assert decisions["LX0609-061"].final_state is CustomerFinalState.DATA_GAP
+    assert decisions["LX0609-061"].reason_code == "authoritative_time_conflict"
+    assert decisions["LX0609-067"].final_state is CustomerFinalState.COMPLIANT
+    assert decisions["LX0609-068"].final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-061"]["discharge_time_source"] == "evaluation_context.horizon"
+    assert facts["LX0609-067"]["checked_dates"] == ["2026-07-02", "2026-07-03"]
+    assert facts["LX0609-068"]["checked_dates"] == ("2026-07-02", "2026-07-03")
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reason_code",
+    ("authoritative_time_missing", "authoritative_time_conflict"),
+)
+async def test_discharge_family_never_falls_back_from_invalid_frozen_horizon(
+    reason_code,
+) -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-061", "LX0609-067", "LX0609-068"),
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 08:00:00",
+            },),
+            "discharge_record": ({
+                "discharge_time": "2026-07-03 08:00:00",
+                "submit_datetime": "2026-07-03 09:00:00",
+            },),
+            "senior_course_record": ({
+                "document_id": "SHOULD-NOT-BE-CONSUMED",
+                "record_time": "2026-07-03 07:00:00",
+                "record_content": "上级医师查房后同意患者出院。",
+            },),
+        },
+        source_reason_codes={"evaluation_context.horizon": reason_code},
+    )
+
+    assert [decision.final_state for decision in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert [decision.reason_code for decision in reduced] == [reason_code] * 3
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_061_preserves_same_day_discharge_time_precision() -> None:
+    """日期与时间同日时保留时分秒，避免午夜值掩盖负时间间隔。"""
+
+    result, reduced = await _evaluate(
+        "LX0609-061",
+        {
+            "inpat_registration": ({"patient_status": "出院"},),
+            "discharge_record": ({
+                "discharge_date": "2026-07-03",
+                "discharge_time": "2026-07-03 12:00:00",
+                "submit_datetime": "2026-07-03 11:30:00",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_conflict"
+    facts = dict(result.customer_display_facts)["LX0609-061"]
+    assert facts["discharge_time"] == "2026-07-03 12:00:00"
+    assert facts["discharge_time_source"] == "discharge_record.discharge_time"
 
 
 @pytest.mark.asyncio
