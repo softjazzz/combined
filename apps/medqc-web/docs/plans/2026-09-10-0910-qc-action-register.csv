@@ -185,7 +185,7 @@ C19/LX0609-065,C19,LX0609-065,not_applicable,待复核,R02,未启动,,,,主协�
 C19/LX0609-066,C19,LX0609-066,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
 C23/LX0609-029,C23,LX0609-029,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C27/LX0609-029,C27,LX0609-029,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
-C29/LX0609-003,C29,LX0609-003,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
+C29/LX0609-003,C29,LX0609-003,data_gap,待复核,R02,真实API双轮聚焦验收通过,not_applicable/performed_event_absent,.tmp/0910-full-audit/r02-003-037-source-audit-private.json；.tmp/0910-full-audit/r02-003-037-comparison-private.json,复用031已验收权威目录补丁；三项支气管镜记录均为诊断性操作；双轮30例逐字段一致；0次LLM调用,主协调代理,聚焦验收通过
 C29/LX0609-029,C29,LX0609-029,non_compliant,待复核,R02,未启动,,,,主协调代理,未关闭
 C29/LX0609-030,C29,LX0609-030,not_applicable,待复核,R02,真实API双轮聚焦验收通过,data_gap/required_field_missing；有效麻醉类医嘱类型未覆盖,.tmp/0910-full-audit/r02-030-final-comparison-private.json（2026-09-13，30例双轮正式API验收；含患者结果的明细产物保留在-private文件，未提交）,typed主链补齐结构化手术医嘱触发、精确医嘱证据绑定和不确定覆盖的数据不足语义；120项聚焦测试通过；正式任务2382334c-4fac-4854-b3c6-9353f4fffcae与3d111cb8-293f-45c3-9f69-c4cc6d520ed5结果完全一致，14合规/13不适用/1不合规/2数据不足，0 LLM/0重试/0 Token,主协调代理,聚焦验收通过
 C29/LX0609-031,C29,LX0609-031,data_gap,待复核,R02,真实API双轮聚焦验收通过,not_applicable/performed_event_absent,.tmp/0910-full-audit/r02-031-c29-catalog-audit-private.json；.tmp/0910-full-audit/r02-031-final-comparison-private.json,补齐33.2200X003及33.2403诊断性操作目录；仅C29由数据不足纠正为不适用；其余29例逐字段零回退,主协调代理,聚焦验收通过
@@ -193,7 +193,7 @@ C29/LX0609-032,C29,LX0609-032,not_applicable,待复核,R02,真实API聚焦验收
 C29/LX0609-064,C29,LX0609-064,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C29/LX0609-065,C29,LX0609-065,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C29/LX0609-066,C29,LX0609-066,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
-C30/LX0609-003,C30,LX0609-003,not_applicable,待复核,R02,未启动,,,,主协调代理,未关闭
+C30/LX0609-003,C30,LX0609-003,not_applicable,待复核,R02,真实API双轮聚焦验收通过,not_applicable/performed_event_absent,.tmp/0910-full-audit/r02-003-037-source-audit-private.json；.tmp/0910-full-audit/r02-003-037-comparison-private.json,权威目录确认仅有治疗性操作；双轮30例逐字段一致；0次LLM调用,主协调代理,聚焦验收通过
 C30/LX0609-029,C30,LX0609-029,data_gap,待复核,R02,未启动,,,,主协调代理,未关闭
 C30/LX0609-030,C30,LX0609-030,not_applicable,待复核,R02,真实API双轮聚焦验收通过,data_gap/required_field_missing；有效麻醉类医嘱类型未覆盖,.tmp/0910-full-audit/r02-030-final-comparison-private.json（2026-09-13，30例双轮正式API验收；含患者结果的明细产物保留在-private文件，未提交）,typed主链补齐结构化手术医嘱触发、精确医嘱证据绑定和不确定覆盖的数据不足语义；120项聚焦测试通过；正式任务2382334c-4fac-4854-b3c6-9353f4fffcae与3d111cb8-293f-45c3-9f69-c4cc6d520ed5结果完全一致，14合规/13不适用/1不合规/2数据不足，0 LLM/0重试/0 Token,主协调代理,聚焦验收通过
 C30/LX0609-031,C30,LX0609-031,not_applicable,待复核,R02,真实API双轮聚焦验收通过,not_applicable/performed_event_absent,.tmp/0910-full-audit/r02-031-five-case-source-audit-private.json；.tmp/0910-full-audit/r02-031-final-comparison-private.json,权威目录确认仅有治疗性操作；双轮30例结果一致；109项聚焦测试通过；0次LLM调用,主协调代理,聚焦验收通过
