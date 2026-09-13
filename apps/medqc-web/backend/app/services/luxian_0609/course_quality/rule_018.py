@@ -251,14 +251,20 @@ def _lx018_prompt(*, context: str) -> str:
         "你只从本次入院记录的主诉和受控第一诊断中抽取医学关系原子事实。"
         "不要评价主诉字数，不要输出整条质控规则是否合规，也不要引入出院诊断或后续病程诊断。\n"
         "chief_signal_kind只能取event_or_etiology、localized_symptom_or_sign、"
-        "nonspecific_symptom_or_sign、unknown。它表示主诉核心是病因/事件、"
-        "明确部位的症状或体征、非特异症状或体征，或无法判断。\n"
+        "nonspecific_symptom_or_sign、unknown。event_or_etiology指外伤、暴露、操作等明确事件或病因；"
+        "localized_symptom_or_sign只指能作解剖定位或疾病方向定位的局灶体征，例如单侧肢体无力、"
+        "局部肿块或明确畸形。仅写了身体部位并不等于具有定位价值；咳嗽、心悸、发热、头晕以及"
+        "一般性的胸痛、腹痛、腰背痛等常见症状，即使带有部位，也应归入"
+        "nonspecific_symptom_or_sign，除非主诉同时给出能缩小到第一诊断的特异线索。\n"
         "anatomic_relation、laterality_relation、symptom_relation、disease_course_relation、"
         "disease_direction_relation分别只能取supports、conflicts、nonspecific、"
         "not_applicable、unknown。supports表示材料明确支持该关系，conflicts表示明确冲突；"
-        "没有对应维度用not_applicable，材料不足用unknown。不要根据医疗常识补造病历没有的事实。\n"
+        "没有对应维度用not_applicable，材料不足用unknown。解剖和侧别按临床生理关系判断，"
+        "不能机械比较字面同侧：例如右侧大脑半球病变与左侧肢体无力是典型对侧定位，应判supports。"
+        "当核心只是上面列出的常见非特异症状时，关系字段应使用nonspecific或not_applicable，"
+        "不能仅因该症状可能出现在第一诊断中就判supports。不要补造病历没有的事实。\n"
         "medical_analysis只能作展示说明，不能决定状态；用中文说明采用的原子事实，"
-        "不得复述姓名、住院号等身份信息，最长600字。\n"
+        "不得复述姓名、住院号等身份信息，最多80个汉字，不要解释枚举定义。\n"
         "严格输出JSON对象："
         '{"chief_signal_kind":"event_or_etiology|localized_symptom_or_sign|nonspecific_symptom_or_sign|unknown",'
         '"anatomic_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
@@ -327,7 +333,7 @@ def _parse_lx018_medical_analysis(response: Mapping[str, Any]) -> str:
     if not payload:
         return ""
     value = str(payload.get("medical_analysis") or "").strip()
-    return value[:2000] if value and "\x00" not in value else ""
+    return value[:200] if value and "\x00" not in value else ""
 
 
 def _lx018_semantic_criterion_result(

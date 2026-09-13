@@ -7152,6 +7152,15 @@ def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
     )
 
 
+def test_018_prompt_freezes_localizing_and_nonspecific_boundaries() -> None:
+    prompt = rule_018_contract._lx018_prompt(context="受控测试材料")
+
+    assert "单侧肢体无力" in prompt
+    assert "咳嗽、心悸、发热、头晕" in prompt
+    assert "右侧大脑半球病变与左侧肢体无力" in prompt
+    assert "最多80个汉字" in prompt
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("model_output", "criterion_reason"),
