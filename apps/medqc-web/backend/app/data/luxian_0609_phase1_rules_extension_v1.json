@@ -553,7 +553,7 @@
     "positive_example": "第一诊断为急性胆囊炎，鉴别诊断围绕消化性溃疡穿孔、急性胰腺炎展开。",
     "negative_example": "鉴别诊断列出与第一诊断明显无关的系统疾病，且未说明关联。",
     "category": "首次病程记录",
-    "applicable_documents": ["first_course_record"],
+    "applicable_documents": ["first_course_record", "first_course_record_diagnosis"],
     "applicable_document_labels": ["首次病程记录"],
     "data_dependencies": ["第一诊断", "鉴别诊断"],
     "dependency_type": "受控语义关联",
@@ -571,6 +571,7 @@
       }
     ],
     "mapped_rule_ids": ["LX0609-077"],
-    "primary_execution_rule_id": "LX0609-077"
+    "primary_execution_rule_id": "LX0609-077",
+    "allowed_result_statuses": ["compliant", "non_compliant", "data_gap"]
   }
 ]

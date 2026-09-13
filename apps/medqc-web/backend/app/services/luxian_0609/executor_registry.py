@@ -231,6 +231,7 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "inpat_registration.discharge_horizon",
         "discharge_record",
     ),
+    "LX0609-077": ("first_course_record_diagnosis",),
 }
 
 

@@ -20,6 +20,24 @@ LX018_DIAGNOSIS_SOURCES = ("diagnosis", "admission_record_diagnosis")
 LX018_DIAGNOSTIC_RELATION_STATES = frozenset(
     {"supported", "unsupported", "mismatch", "unknown"}
 )
+LX018_CHIEF_SIGNAL_KINDS = frozenset(
+    {
+        "event_or_etiology",
+        "localized_symptom_or_sign",
+        "nonspecific_symptom_or_sign",
+        "unknown",
+    }
+)
+LX018_ATOMIC_RELATION_FIELDS = (
+    "anatomic_relation",
+    "laterality_relation",
+    "symptom_relation",
+    "disease_course_relation",
+    "disease_direction_relation",
+)
+LX018_ATOMIC_RELATION_VALUES = frozenset(
+    {"supports", "conflicts", "nonspecific", "not_applicable", "unknown"}
+)
 LX018_DIAGNOSTIC_REASON_DIMENSIONS = frozenset(
     {
         "anatomic_site",
@@ -227,25 +245,27 @@ def _lx018_primary_diagnosis_available(documents: Mapping[str, Any]) -> bool:
 
 
 def _lx018_prompt(*, context: str) -> str:
-    """模型只判断医学诊断指向，不接触字数阈值或最终质控状态。"""
+    """模型只抽取主诉与第一诊断之间的原子事实，不输出最终状态。"""
 
     return (
-        "你只核对本次入院记录主诉与入院第一诊断之间的医学诊断指向关系。"
+        "你只从本次入院记录的主诉和受控第一诊断中抽取医学关系原子事实。"
         "不要评价主诉字数，不要输出整条质控规则是否合规，也不要引入出院诊断或后续病程诊断。\n"
-        "diagnostic_relation_state只能取supported、unsupported、mismatch、unknown："
-        "supported表示主诉的部位、症状特征或病程足以支持第一诊断方向；"
-        "unsupported表示主诉信息存在但特异性不足；mismatch表示部位、侧别或症状方向冲突；"
-        "unknown表示材料本身无法形成可靠医学判断。\n"
-        "diagnostic_reason_dimensions只能从anatomic_site、laterality、symptom_pattern、"
-        "disease_course、disease_direction中选择实际参与判断的维度。"
-        "diagnostic_rationale_code只能取symptom_only、site_symptom_not_specific、"
-        "diagnosis_mismatch、insufficient_information、supported。"
-        "medical_analysis请用中文具体说明：主诉提供了哪些诊断线索、第一诊断需要哪些关键线索、"
-        "两者为何支持、不足或冲突；不得复述姓名、住院号等身份信息，最长600字。\n"
+        "chief_signal_kind只能取event_or_etiology、localized_symptom_or_sign、"
+        "nonspecific_symptom_or_sign、unknown。它表示主诉核心是病因/事件、"
+        "明确部位的症状或体征、非特异症状或体征，或无法判断。\n"
+        "anatomic_relation、laterality_relation、symptom_relation、disease_course_relation、"
+        "disease_direction_relation分别只能取supports、conflicts、nonspecific、"
+        "not_applicable、unknown。supports表示材料明确支持该关系，conflicts表示明确冲突；"
+        "没有对应维度用not_applicable，材料不足用unknown。不要根据医疗常识补造病历没有的事实。\n"
+        "medical_analysis只能作展示说明，不能决定状态；用中文说明采用的原子事实，"
+        "不得复述姓名、住院号等身份信息，最长600字。\n"
         "严格输出JSON对象："
-        '{"diagnostic_relation_state":"supported|unsupported|mismatch|unknown",'
-        '"diagnostic_reason_dimensions":[],'
-        '"diagnostic_rationale_code":"supported|symptom_only|site_symptom_not_specific|diagnosis_mismatch|insufficient_information",'
+        '{"chief_signal_kind":"event_or_etiology|localized_symptom_or_sign|nonspecific_symptom_or_sign|unknown",'
+        '"anatomic_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
+        '"laterality_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
+        '"symptom_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
+        '"disease_course_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
+        '"disease_direction_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
         '"medical_analysis":"..."}。\n'
         f"受控材料：\n{context}"
     )
@@ -350,4 +370,113 @@ def _lx018_unknown_semantic_result(reason_code: str) -> CriterionResult:
         reason_dimensions=(),
         rationale_code=reason_code,
         medical_analysis="",
+    )
+
+
+def _parse_lx018_atomic_facts(
+    response: Mapping[str, Any],
+) -> dict[str, str] | None:
+    """严格解析 018 的原子事实输出；旧的总状态字段不再作为输入。"""
+
+    payload = _response_json_payload(response)
+    if payload is None:
+        return None
+    signal_kind = _clean(payload.get("chief_signal_kind"))
+    if signal_kind not in LX018_CHIEF_SIGNAL_KINDS:
+        return None
+    facts: dict[str, str] = {"chief_signal_kind": signal_kind}
+    for field_name in LX018_ATOMIC_RELATION_FIELDS:
+        value = _clean(payload.get(field_name))
+        if value not in LX018_ATOMIC_RELATION_VALUES:
+            return None
+        facts[field_name] = value
+    if "medical_analysis" in payload and not isinstance(
+        payload.get("medical_analysis"), str
+    ):
+        return None
+    medical_analysis = _parse_lx018_medical_analysis(response)
+    if signal_kind == "unknown" and any(
+        facts[field_name] in {"supports", "conflicts"}
+        for field_name in LX018_ATOMIC_RELATION_FIELDS
+    ):
+        # 无法识别主诉类型时，不能同时声称有明确的支持/冲突事实。
+        return None
+    facts["medical_analysis"] = medical_analysis
+    return facts
+
+
+def _aggregate_lx018_atomic_facts(
+    facts: Mapping[str, str],
+) -> tuple[str, str, tuple[str, ...]]:
+    """以确定性规则把原子事实汇总为内部诊断关系和受控原因码。"""
+
+    signal_kind = facts.get("chief_signal_kind", "")
+    relations = {
+        field_name: facts.get(field_name, "")
+        for field_name in LX018_ATOMIC_RELATION_FIELDS
+    }
+    dimensions_by_field = {
+        "anatomic_relation": "anatomic_site",
+        "laterality_relation": "laterality",
+        "symptom_relation": "symptom_pattern",
+        "disease_course_relation": "disease_course",
+        "disease_direction_relation": "disease_direction",
+    }
+    dimensions = tuple(
+        dimensions_by_field[field_name]
+        for field_name in LX018_ATOMIC_RELATION_FIELDS
+        if relations[field_name] in {"supports", "conflicts"}
+    )
+    if any(value == "conflicts" for value in relations.values()):
+        return "mismatch", "diagnosis_mismatch", dimensions
+    if signal_kind == "unknown" or any(
+        value == "unknown" for value in relations.values()
+    ):
+        return "unknown", "insufficient_information", dimensions
+    if signal_kind == "nonspecific_symptom_or_sign":
+        return "unsupported", "symptom_only", dimensions
+
+    if signal_kind == "event_or_etiology":
+        support_fields = {
+            "anatomic_relation",
+            "symptom_relation",
+            "disease_course_relation",
+            "disease_direction_relation",
+        }
+    elif signal_kind == "localized_symptom_or_sign":
+        support_fields = {
+            "anatomic_relation",
+            "laterality_relation",
+            "symptom_relation",
+        }
+    else:
+        return "unknown", "insufficient_information", dimensions
+    if any(relations[field_name] == "supports" for field_name in support_fields):
+        return "supported", "supported", dimensions
+    return (
+        "unsupported",
+        "site_symptom_not_specific"
+        if signal_kind == "localized_symptom_or_sign"
+        else "symptom_only",
+        dimensions,
+    )
+
+
+def _lx018_atomic_semantic_result(
+    response: Mapping[str, Any],
+) -> tuple[CriterionResult, str] | None:
+    """返回原子事实汇总结果；``None`` 表示模型输出不符合原子合同。"""
+
+    facts = _parse_lx018_atomic_facts(response)
+    if facts is None:
+        return None
+    relation_state, rationale_code, dimensions = _aggregate_lx018_atomic_facts(facts)
+    return (
+        _lx018_semantic_criterion_result(
+            relation_state=relation_state,
+            reason_dimensions=dimensions,
+            rationale_code=rationale_code,
+            medical_analysis=facts.get("medical_analysis", ""),
+        ),
+        relation_state,
     )

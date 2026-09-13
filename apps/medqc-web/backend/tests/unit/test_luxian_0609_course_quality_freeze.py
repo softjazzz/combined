@@ -414,9 +414,12 @@ async def test_course_quality_freezes_native_binding_aggregate_outputs(
 async def test_course_quality_freezes_lx018_semantic_stub_prompt_usage_and_canonical_result() -> None:
     client = _StubClient(
         {
-            "diagnostic_relation_state": "supported",
-            "diagnostic_reason_dimensions": ["symptom_pattern"],
-            "diagnostic_rationale_code": "supported",
+            "chief_signal_kind": "localized_symptom_or_sign",
+            "anatomic_relation": "not_applicable",
+            "laterality_relation": "not_applicable",
+            "symptom_relation": "supports",
+            "disease_course_relation": "not_applicable",
+            "disease_direction_relation": "not_applicable",
             "medical_analysis": "主诉与第一诊断方向一致。",
         }
     )

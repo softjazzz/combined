@@ -246,9 +246,11 @@ class _SemanticClient:
         self.state = state
         self.invalid = invalid
         self.prompts: list[str] = []
+        self.calls: list[dict[str, object]] = []
 
-    async def generate(self, prompt: str, **_kwargs: object) -> dict[str, object]:
+    async def generate(self, prompt: str, **kwargs: object) -> dict[str, object]:
         self.prompts.append(prompt)
+        self.calls.append(dict(kwargs))
         content = (
             "不是JSON"
             if self.invalid
@@ -258,7 +260,7 @@ class _SemanticClient:
                     self.state,
                     "obvious_unrelated_item"
                     if self.state == "unrelated"
-                    else "insufficient_semantic_context"
+                    else "insufficient_information"
                     if self.state == "unknown"
                     else "same_clinical_problem",
                 )
@@ -283,6 +285,14 @@ def _077_rows() -> dict[str, list[Mapping[str, object]]]:
                 "record_content": "初步诊断：急性胆囊炎。鉴别诊断：消化性溃疡穿孔；急性胰腺炎。",
             }
         ],
+        "first_course_record_diagnosis": [
+            {
+                "document_id": "first-course-077",
+                "diagnosis_type": "初步诊断",
+                "diagnosis_no": "1",
+                "diagnosis_name": "1.急性胆囊炎；2.慢性胆囊炎",
+            }
+        ],
         "diagnosis": [],
         "admission_record_diagnosis": [],
     }
@@ -299,6 +309,12 @@ def test_077_required_structured_fields_survive_the_production_source_projection
         "differential_diagnosis",
     }.issubset(approved)
     assert "unrelated_private_field" not in approved
+    diagnosis_fields = source_evidence_reader._NATIVE_SOURCE_FIELDS[
+        "first_course_record_diagnosis"
+    ]
+    assert {"document_id", "diagnosis_type", "diagnosis_name"}.issubset(
+        diagnosis_fields
+    )
 
 
 @pytest.mark.asyncio
@@ -314,6 +330,9 @@ async def test_077_can_read_first_diagnosis_from_the_bounded_first_course_body()
             "诊疗计划：完善检查。"
         ),
     }
+    rows["first_course_record_diagnosis"][0]["document_id"] = (
+        "first-course-077-body-only"
+    )
     session = _session("LX0609-077", rows)
     client = _SemanticClient("related")
 
@@ -339,7 +358,7 @@ async def test_077_can_read_first_diagnosis_from_the_bounded_first_course_body()
     [
         ("related", CustomerFinalState.COMPLIANT),
         ("unrelated", CustomerFinalState.NON_COMPLIANT),
-        ("unknown", CustomerFinalState.EVALUATION_UNKNOWN),
+        ("unknown", CustomerFinalState.DATA_GAP),
     ],
 )
 async def test_077_runs_one_controlled_semantic_call_on_the_formal_native_family(
@@ -359,15 +378,77 @@ async def test_077_runs_one_controlled_semantic_call_on_the_formal_native_family
     reduced, result = _canonical("LX0609-077", session, execution)
 
     assert reduced.final_state is expected
-    assert result["status"] == expected.value.replace("evaluation_unknown", "uncertain")
+    assert result["status"] == expected.value
     assert execution.llm_call_count == 1
     assert len(client.prompts) == 1
     assert "急性胆囊炎" in client.prompts[0]
+    assert "慢性胆囊炎" in client.prompts[0]
+    assert client.calls == [
+        {"max_completion_tokens": 180, "allow_length_retry": False}
+    ]
     assert "消化性溃疡穿孔" in client.prompts[0]
     assert any(
         item.get("source_document_id") == "first-course-077"
         for item in result.get("customer_evidence", [])
     )
+    evidence_source_types = {
+        item.get("source_type") for item in result.get("customer_evidence", [])
+    }
+    assert evidence_source_types == {
+        "first_course_record",
+        "first_course_record_diagnosis",
+    }
+
+
+@pytest.mark.asyncio
+async def test_077_rejects_unbound_structured_diagnosis_without_model_call() -> None:
+    rows = _077_rows()
+    rows["first_course_record_diagnosis"][0]["document_id"] = "another-document"
+    session = _session("LX0609-077", rows)
+    client = _SemanticClient("related")
+
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-077",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-077",),
+    )
+    reduced, result = _canonical("LX0609-077", session, execution)
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "linkage_unresolved"
+    assert result["status"] == "data_gap"
+    assert execution.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_077_bound_structured_diagnosis_is_authoritative_over_body_fallback() -> None:
+    rows = _077_rows()
+    rows["first_course_record"][0]["first_diagnosis"] = "正文回退诊断"
+    rows["first_course_record"][0]["record_content"] = (
+        "初步诊断：正文回退诊断。鉴别诊断：消化性溃疡穿孔。"
+    )
+    session = _session("LX0609-077", rows)
+    client = _SemanticClient("related")
+
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-077",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-077")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-077",),
+    )
+    reduced, _result = _canonical("LX0609-077", session, execution)
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert "第一诊断：急性胆囊炎" in client.prompts[0]
+    assert "正文回退诊断" not in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -399,7 +480,7 @@ async def test_077_missing_inputs_are_data_gap_without_calling_model() -> None:
 
 
 @pytest.mark.asyncio
-async def test_077_invalid_model_output_is_technical_error() -> None:
+async def test_077_invalid_model_output_is_data_gap() -> None:
     session = _session("LX0609-077", _077_rows())
     execution = await execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-077",),
@@ -412,9 +493,10 @@ async def test_077_invalid_model_output_is_technical_error() -> None:
     )
     reduced, result = _canonical("LX0609-077", session, execution)
 
-    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
-    assert result["status"] == "technical_error"
-    assert reduced.reason_code == "model_invalid_output"
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert result["status"] == "data_gap"
+    assert reduced.reason_code == "source_readiness_unproven"
+    assert result["criterion_results"][0]["reason_code"] == "model_invalid_output"
 
 
 @pytest.mark.asyncio

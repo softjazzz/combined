@@ -20,17 +20,28 @@ from ..evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
-from .rule_018 import _lx018_primary_diagnosis_resolution
 from .shared import clean_text, response_json_payload
 
 
 RULE_ID = "LX0609-077"
 SOURCE_KEYS = (
     "first_course_record",
-    "diagnosis",
-    "admission_record_diagnosis",
+    "first_course_record_diagnosis",
+)
+ALLOWED_RESULT_STATUSES = frozenset({"compliant", "non_compliant", "data_gap"})
+_DELIVERABLE_DATA_GAP_REASONS = frozenset(
+    {
+        "source_unavailable",
+        "source_truncated",
+        "source_readiness_unproven",
+        "required_field_missing",
+        "linkage_unresolved",
+    }
 )
 _RELATION_STATES = frozenset({"related", "unrelated", "unknown"})
+_RATIONALE_CODES = frozenset(
+    {"same_clinical_problem", "obvious_unrelated_item", "insufficient_information"}
+)
 _DIFFERENTIAL_SECTION = re.compile(
     r"鉴别诊断\s*[:：]\s*(?P<body>.+?)(?=\n\s*(?:诊疗计划|治疗计划|诊治计划|医师签名)\s*[:：]|$)",
     re.DOTALL,
@@ -39,6 +50,11 @@ _FIRST_DIAGNOSIS_IN_BODY = re.compile(
     r"(?:第一诊断|初步诊断)\s*[:：]\s*(?:\d+[.、]?\s*)?(?P<diagnosis>[^；;，,。\n]{2,100})"
 )
 _MAX_DIFFERENTIAL_CHARS = 5000
+_MAX_DIAGNOSIS_CHARS = 1600
+_NUMBERED_DIAGNOSIS_ITEM_PATTERN = re.compile(
+    r"(?:^|(?=\d+\s*[、.．,，]))\d+\s*[、.．,，]\s*"
+    r"(.*?)(?=\d+\s*[、.．,，]|$)"
+)
 
 
 class Rule077LLMClient(Protocol):
@@ -53,6 +69,15 @@ class Rule077Execution:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass(frozen=True)
+class _FirstDiagnosisEvidence:
+    state: str
+    first: str
+    full_text: str
+    refs: tuple[str, ...]
+    reason_code: str = ""
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -84,23 +109,129 @@ def _differential_text(row: Mapping[str, Any]) -> str:
     return clean_text(match.group("body"))[:_MAX_DIFFERENTIAL_CHARS] if match else ""
 
 
-def _first_diagnosis(
-    rows: tuple[Mapping[str, Any], ...],
-    diagnosis_documents: Mapping[str, list[Mapping[str, Any]]],
-) -> str:
-    for row in rows:
-        value = clean_text(
-            row.get("first_diagnosis")
-            or row.get("primary_diagnosis")
-            or row.get("initial_diagnosis")
+def _diagnosis_items(value: Any) -> tuple[str, ...]:
+    text = clean_text(value)
+    if not text:
+        return ()
+    numbered = tuple(
+        clean_text(item)
+        for item in _NUMBERED_DIAGNOSIS_ITEM_PATTERN.findall(text)
+        if clean_text(item)
+    )
+    return numbered or (text,)
+
+
+def _first_course_row_diagnosis(row: Mapping[str, Any]) -> tuple[str, ...]:
+    value = clean_text(
+        row.get("first_diagnosis")
+        or row.get("primary_diagnosis")
+        or row.get("initial_diagnosis")
+    )
+    if value:
+        return _diagnosis_items(value)
+    body_match = _FIRST_DIAGNOSIS_IN_BODY.search(_row_text(row))
+    return _diagnosis_items(body_match.group("diagnosis")) if body_match else ()
+
+
+def _first_diagnosis_evidence(
+    first_course_pairs: tuple[tuple[str, Mapping[str, Any]], ...],
+    diagnosis_pairs: tuple[tuple[str, Mapping[str, Any]], ...],
+) -> _FirstDiagnosisEvidence:
+    """按首次病程文书 ID 绑定诊断行，拒绝用数据库行序猜第一诊断。"""
+
+    course_refs = tuple(reference for reference, _row in first_course_pairs)
+    course_document_ids = {
+        clean_text(row.get("document_id"))
+        for _reference, row in first_course_pairs
+        if clean_text(row.get("document_id"))
+    }
+    if len(course_document_ids) > 1:
+        return _FirstDiagnosisEvidence(
+            "unknown",
+            "",
+            "",
+            course_refs,
+            "diagnosis_binding_conflict",
         )
-        if value:
-            return value[:200]
-        body_match = _FIRST_DIAGNOSIS_IN_BODY.search(_row_text(row))
-        if body_match:
-            return clean_text(body_match.group("diagnosis"))[:200]
-    state, value = _lx018_primary_diagnosis_resolution(diagnosis_documents)
-    return value[:200] if state == "available" else ""
+
+    structured_refs = tuple(reference for reference, _row in diagnosis_pairs)
+    bound_rows: list[tuple[str, Mapping[str, Any]]] = []
+    unbound_rows = False
+    for reference, row in diagnosis_pairs:
+        row_document_id = clean_text(row.get("document_id"))
+        if not row_document_id:
+            unbound_rows = True
+        elif row_document_id in course_document_ids:
+            bound_rows.append((reference, row))
+        else:
+            unbound_rows = True
+    if diagnosis_pairs and (unbound_rows or not bound_rows):
+        return _FirstDiagnosisEvidence(
+            "unknown",
+            "",
+            "",
+            tuple(dict.fromkeys((*course_refs, *structured_refs))),
+            "diagnosis_binding_conflict" if bound_rows else "diagnosis_binding_unavailable",
+        )
+
+    if bound_rows:
+        candidates: list[tuple[str, tuple[str, ...]]] = []
+        for _reference, row in bound_rows:
+            if clean_text(row.get("diagnosis_type")) != "初步诊断":
+                continue
+            items = _diagnosis_items(
+                row.get("diagnosis_name") or row.get("diagnosis")
+            )
+            if items:
+                candidates.append((items[0], items))
+        if not candidates:
+            return _FirstDiagnosisEvidence(
+                "unknown",
+                "",
+                "",
+                tuple(dict.fromkeys((*course_refs, *structured_refs))),
+                "diagnosis_field_missing",
+            )
+        first_values = {first for first, _items in candidates}
+        if len(first_values) != 1:
+            return _FirstDiagnosisEvidence(
+                "unknown",
+                "",
+                "",
+                tuple(dict.fromkeys((*course_refs, *structured_refs))),
+                "diagnosis_binding_conflict",
+            )
+        full_items = tuple(
+            dict.fromkeys(item for _first, items in candidates for item in items)
+        )
+        return _FirstDiagnosisEvidence(
+            "available",
+            next(iter(first_values))[:200],
+            "；".join(full_items)[:_MAX_DIAGNOSIS_CHARS],
+            tuple(dict.fromkeys((*course_refs, *structured_refs))),
+        )
+
+    candidates = [
+        items
+        for _reference, row in first_course_pairs
+        if (items := _first_course_row_diagnosis(row))
+    ]
+    if not candidates:
+        return _FirstDiagnosisEvidence(
+            "missing", "", "", course_refs, "diagnosis_field_missing"
+        )
+    first_values = {items[0] for items in candidates}
+    if len(first_values) != 1:
+        return _FirstDiagnosisEvidence(
+            "unknown", "", "", course_refs, "diagnosis_binding_conflict"
+        )
+    full_items = tuple(dict.fromkeys(item for items in candidates for item in items))
+    return _FirstDiagnosisEvidence(
+        "available",
+        next(iter(first_values))[:200],
+        "；".join(full_items)[:_MAX_DIAGNOSIS_CHARS],
+        course_refs,
+    )
 
 
 def _criterion(
@@ -128,6 +259,14 @@ def _decision(
     reason_code: str,
     criterion: CriterionResult | None = None,
 ) -> RuleDecision:
+    if status not in ALLOWED_RESULT_STATUSES:
+        raise ValueError("LX0609-077 produced a status outside its rule contract")
+    if status == "data_gap" and reason_code not in _DELIVERABLE_DATA_GAP_REASONS:
+        reason_code = (
+            "linkage_unresolved"
+            if "binding" in reason_code
+            else "required_field_missing"
+        )
     dimensions = {
         "compliant": (
             ApplicabilityState.APPLICABLE,
@@ -147,18 +286,6 @@ def _decision(
             QcDirection.UNKNOWN,
             None,
         ),
-        "uncertain": (
-            ApplicabilityState.APPLICABLE,
-            EvidenceState.CONFLICT,
-            QcDirection.UNKNOWN,
-            None,
-        ),
-        "technical_error": (
-            ApplicabilityState.ERROR,
-            EvidenceState.TECHNICAL_ERROR,
-            QcDirection.UNKNOWN,
-            None,
-        ),
     }
     applicability, evidence_state, direction, confidence = dimensions[status]
     return RuleDecision(
@@ -175,20 +302,21 @@ def _decision(
     )
 
 
-def _prompt(*, first_diagnosis: str, differential: str) -> str:
+def _prompt(*, first_diagnosis: str, full_diagnosis: str, differential: str) -> str:
     return f"""你是病历质控中的鉴别诊断关联性核对器。
 
-只判断首次病程记录中已经写出的鉴别诊断，是否围绕第一诊断的疾病系统、解剖部位或同一临床问题展开。不要判断诊断是否正确，不要补充病历中不存在的诊断。
+只判断首次病程记录中已经写出的鉴别诊断，是否是用于解释相同主诉、体征、检查发现或同一临床问题的合理备选诊断。不要判断诊断是否正确，不要补充病历中不存在的诊断。疾病系统相同本身不是充分条件，跨系统也不是否决条件；只有明显不能解释同一临床问题且正文未说明关联时才判 unrelated。
 
 第一诊断：{first_diagnosis}
+初步诊断完整列表/文本：{full_diagnosis}
 鉴别诊断：{differential}
 
 relation_state 只能是 related、unrelated、unknown：
-- related：各项鉴别诊断与第一诊断存在合理临床关联；
+- related：各项鉴别诊断与第一诊断或同一临床问题存在合理临床关联；
 - unrelated：至少一项明显无关且正文未解释关联；
 - unknown：信息存在但无法可靠判断。
 
-只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|obvious_unrelated_item|insufficient_semantic_context"}}。"""
+只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|obvious_unrelated_item|insufficient_information"}}。"""
 
 
 async def evaluate_rule_077(
@@ -213,67 +341,101 @@ async def evaluate_rule_077(
 
     first_course_pairs = material_rows["first_course_record"]
     first_course_rows = tuple(row for _reference, row in first_course_pairs)
-    course_refs = tuple(reference for reference, _row in first_course_pairs)
-    diagnosis_documents = {
-        key: [row for _reference, row in material_rows[key]]
-        for key in ("diagnosis", "admission_record_diagnosis")
-    }
-    diagnosis_refs = tuple(
-        reference
-        for key in ("diagnosis", "admission_record_diagnosis")
-        for reference, _row in material_rows[key]
-    )
-    refs = tuple(dict.fromkeys((*course_refs, *diagnosis_refs)))
+    first_course_diagnosis_pairs = material_rows["first_course_record_diagnosis"]
 
     if not first_course_rows:
         return Rule077Execution(
             _decision(snapshot=snapshot, refs=(), status="data_gap", reason_code="required_field_missing")
         )
-    first_diagnosis = _first_diagnosis(first_course_rows, diagnosis_documents)
+    diagnosis_evidence = _first_diagnosis_evidence(
+        first_course_pairs,
+        first_course_diagnosis_pairs,
+    )
+    refs = diagnosis_evidence.refs
     differential = next(
         (value for row in first_course_rows if (value := _differential_text(row))),
         "",
     )
-    if not first_diagnosis or not differential:
+    if diagnosis_evidence.state != "available" or not differential:
+        reason_code = (
+            diagnosis_evidence.reason_code
+            if diagnosis_evidence.state != "available"
+            else "required_field_missing"
+        )
         criterion = _criterion(
             status=CriterionStatus.UNKNOWN,
-            reason_code="required_field_missing",
-            refs=course_refs,
+            reason_code=reason_code,
+            refs=refs,
             actual="missing_required_input",
         )
         return Rule077Execution(
             _decision(
                 snapshot=snapshot,
-                refs=course_refs,
+                refs=refs,
                 status="data_gap",
-                reason_code="required_field_missing",
+                reason_code=reason_code,
                 criterion=criterion,
             )
         )
     if llm_client is None:
+        criterion = _criterion(
+            status=CriterionStatus.UNKNOWN,
+            reason_code="model_transport_error",
+            refs=refs,
+            actual="model_unavailable",
+        )
         return Rule077Execution(
             _decision(
                 snapshot=snapshot,
                 refs=refs,
-                status="technical_error",
-                reason_code="model_transport_error",
+                status="data_gap",
+                reason_code="source_readiness_unproven",
+                criterion=criterion,
             )
         )
 
     try:
         response = await llm_client.generate(
-            _prompt(first_diagnosis=first_diagnosis, differential=differential),
+            _prompt(
+                first_diagnosis=diagnosis_evidence.first,
+                full_diagnosis=diagnosis_evidence.full_text,
+                differential=differential,
+            ),
             max_completion_tokens=180,
             allow_length_retry=False,
         )
     except TimeoutError:
+        criterion = _criterion(
+            status=CriterionStatus.UNKNOWN,
+            reason_code="model_timeout",
+            refs=refs,
+            actual="model_timeout",
+        )
         return Rule077Execution(
-            _decision(snapshot=snapshot, refs=refs, status="technical_error", reason_code="model_timeout"),
+            _decision(
+                snapshot=snapshot,
+                refs=refs,
+                status="data_gap",
+                reason_code="source_readiness_unproven",
+                criterion=criterion,
+            ),
             llm_call_count=1,
         )
     except Exception:
+        criterion = _criterion(
+            status=CriterionStatus.UNKNOWN,
+            reason_code="model_transport_error",
+            refs=refs,
+            actual="model_transport_error",
+        )
         return Rule077Execution(
-            _decision(snapshot=snapshot, refs=refs, status="technical_error", reason_code="model_transport_error"),
+            _decision(
+                snapshot=snapshot,
+                refs=refs,
+                status="data_gap",
+                reason_code="source_readiness_unproven",
+                criterion=criterion,
+            ),
             llm_call_count=1,
         )
 
@@ -281,23 +443,39 @@ async def evaluate_rule_077(
     payload = response_json_payload(response)
     state = clean_text(payload.get("relation_state")) if payload else ""
     rationale = clean_text(payload.get("rationale_code")) if payload else ""
-    if state not in _RELATION_STATES or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", rationale):
+    rationale_matches_state = {
+        "related": "same_clinical_problem",
+        "unrelated": "obvious_unrelated_item",
+        "unknown": "insufficient_information",
+    }
+    if (
+        state not in _RELATION_STATES
+        or rationale not in _RATIONALE_CODES
+        or rationale != rationale_matches_state.get(state)
+    ):
+        criterion = _criterion(
+            status=CriterionStatus.UNKNOWN,
+            reason_code="model_invalid_output",
+            refs=refs,
+            actual="invalid_output",
+        )
         decision = _decision(
             snapshot=snapshot,
             refs=refs,
-            status="technical_error",
-            reason_code="model_invalid_output",
+            status="data_gap",
+            reason_code="source_readiness_unproven",
+            criterion=criterion,
         )
     else:
         status = {
             "related": "compliant",
             "unrelated": "non_compliant",
-            "unknown": "uncertain",
+            "unknown": "data_gap",
         }[state]
         reason_code = {
             "related": "requirement_satisfied",
             "unrelated": "requirement_violated",
-            "unknown": "semantic_low_confidence",
+            "unknown": "source_readiness_unproven",
         }[state]
         criterion = _criterion(
             status={

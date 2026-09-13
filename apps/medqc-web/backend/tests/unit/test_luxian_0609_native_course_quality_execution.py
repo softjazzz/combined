@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from app.services.luxian_0609 import native_course_quality_execution as course
+from app.services.luxian_0609.course_quality import rule_018 as rule_018_contract
 from app.services.luxian_0609.course_quality import rules_016_017
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
@@ -229,13 +230,62 @@ class _Client:
     ) -> None:
         self.outputs = list(outputs)
         self.prompts: list[str] = []
+        self.calls: list[dict[str, Any]] = []
         self.complete_009_candidates = complete_009_candidates
 
-    async def generate(self, prompt: str, **_: Any) -> dict:
+    async def generate(self, prompt: str, **kwargs: Any) -> dict:
         self.prompts.append(prompt)
+        self.calls.append(dict(kwargs))
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
             raise output
+        # 既有冻结样例沿用旧总状态字段；仅在测试夹具边界转换为新版原子事实，
+        # 生产执行器本身不接受旧字段。
+        if (
+            isinstance(output, dict)
+            and "diagnostic_relation_state" in output
+            and "chief_signal_kind" not in output
+        ):
+            state = str(output.get("diagnostic_relation_state") or "")
+            dimensions = set(output.get("diagnostic_reason_dimensions") or [])
+            if state == "unknown":
+                atomic = {
+                    "chief_signal_kind": "unknown",
+                    **{field: "unknown" for field in course.LX018_ATOMIC_RELATION_FIELDS},
+                }
+            else:
+                atomic = {
+                    "chief_signal_kind": (
+                        "nonspecific_symptom_or_sign"
+                        if state == "unsupported"
+                        else "localized_symptom_or_sign"
+                    ),
+                    "anatomic_relation": "not_applicable",
+                    "laterality_relation": "not_applicable",
+                    "symptom_relation": "not_applicable",
+                    "disease_course_relation": "not_applicable",
+                    "disease_direction_relation": "not_applicable",
+                }
+                relation = "conflicts" if state == "mismatch" else "supports"
+                dimension_to_field = {
+                    "anatomic_site": "anatomic_relation",
+                    "laterality": "laterality_relation",
+                    "symptom_pattern": "symptom_relation",
+                    "disease_course": "disease_course_relation",
+                    "disease_direction": "disease_direction_relation",
+                }
+                selected = next(
+                    (
+                        dimension_to_field[dimension]
+                        for dimension in dimensions
+                        if dimension in dimension_to_field
+                    ),
+                    "symptom_relation",
+                )
+                atomic[selected] = relation
+            if isinstance(output.get("medical_analysis"), str):
+                atomic["medical_analysis"] = output["medical_analysis"]
+            output = atomic
         if (
             self.complete_009_candidates
             and isinstance(output, dict)
@@ -4692,6 +4742,9 @@ async def test_typed_018_combines_length_and_diagnostic_direction(
     assert reduced[0].criterion_results[1].status.value == "passed"
     assert result.llm_call_count == 1
     assert result.total_tokens == 45
+    assert client.calls == [
+        {"max_completion_tokens": 600, "allow_length_retry": False}
+    ]
     assert len(client.prompts) == 1
     assert "稳定型心绞痛" in client.prompts[0]
 
@@ -7046,7 +7099,188 @@ async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
 
     assert [item["status"] for item in result.results] == [
         "data_gap",
-        "technical_error",
+        "data_gap",
     ]
     assert result.llm_call_count == 1
+    assert client.calls[-1] == {
+        "max_completion_tokens": 600,
+        "allow_length_retry": False,
+    }
     assert secret not in repr(result)
+
+
+def test_018_atomic_facts_reject_invalid_enums_and_preserve_conflicts() -> None:
+    valid = {
+        "chief_signal_kind": "localized_symptom_or_sign",
+        "anatomic_relation": "supports",
+        "laterality_relation": "not_applicable",
+        "symptom_relation": "supports",
+        "disease_course_relation": "not_applicable",
+        "disease_direction_relation": "not_applicable",
+        "medical_analysis": "主诉部位与第一诊断方向一致。",
+    }
+
+    invalid_enum = {"content": json.dumps({**valid, "symptom_relation": "maybe"})}
+    assert rule_018_contract._parse_lx018_atomic_facts(invalid_enum) is None
+
+    legacy_total_state = {
+        "content": json.dumps({
+            "diagnostic_relation_state": "supported",
+            "diagnostic_reason_dimensions": ["symptom_pattern"],
+        })
+    }
+    assert rule_018_contract._parse_lx018_atomic_facts(legacy_total_state) is None
+
+    conflict_response = {
+        "content": json.dumps({**valid, "anatomic_relation": "conflicts"})
+    }
+    conflict_facts = rule_018_contract._parse_lx018_atomic_facts(conflict_response)
+    assert conflict_facts is not None
+    assert rule_018_contract._aggregate_lx018_atomic_facts(conflict_facts)[:2] == (
+        "mismatch",
+        "diagnosis_mismatch",
+    )
+
+    unknown_response = {
+        "content": json.dumps({**valid, "disease_direction_relation": "unknown"})
+    }
+    unknown_facts = rule_018_contract._parse_lx018_atomic_facts(unknown_response)
+    assert unknown_facts is not None
+    assert rule_018_contract._aggregate_lx018_atomic_facts(unknown_facts)[:2] == (
+        "unknown",
+        "insufficient_information",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_output", "criterion_reason"),
+    [
+        (RuntimeError("transport failed"), "model_transport_error"),
+        ("not-json", "model_invalid_output"),
+    ],
+)
+async def test_typed_018_model_failure_and_invalid_output_are_controlled(
+    model_output: object,
+    criterion_reason: str,
+) -> None:
+    admission_row = {**_row("首次入院记录"), "chief_complaint": "左侧胸痛"}
+    diagnosis_row = {
+        "diagnosis_type": "入院诊断",
+        "diagnosis_no": "1",
+        "diagnosis_name": "冠心病",
+    }
+
+    def read(**kwargs: object):
+        source_key = str(kwargs["source_key"])
+        rows = (
+            [admission_row]
+            if source_key == "admission_record"
+            else [diagnosis_row]
+            if source_key == "diagnosis"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([model_output])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-018",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_readiness_unproven"
+    assert result.results == ()
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45 if isinstance(model_output, str) else result.total_tokens == 0
+    criterion = reduced[0].criterion_results[-1]
+    assert criterion.reason_code == "semantic_low_confidence"
+    assert criterion.rationale_code == criterion_reason
+    assert client.calls == [
+        {"max_completion_tokens": 600, "allow_length_retry": False}
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_output", [RuntimeError("transport failed"), "not-json"])
+async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolved(
+    model_output: object,
+) -> None:
+    admission_row = {
+        **_row("首次入院记录"),
+        "chief_complaint": "左侧胸痛反复发作并伴活动后气促持续超过二十个汉字",
+    }
+    diagnosis_row = {
+        "diagnosis_type": "入院诊断",
+        "diagnosis_no": "1",
+        "diagnosis_name": "冠心病",
+    }
+
+    def read(**kwargs: object):
+        source_key = str(kwargs["source_key"])
+        rows = (
+            [admission_row]
+            if source_key == "admission_record"
+            else [diagnosis_row]
+            if source_key == "diagnosis"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([model_output])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-018",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert result.llm_call_count == 1

@@ -23,16 +23,14 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .course_quality.rule_018 import (
     LX018_DIAGNOSIS_SOURCES as _LX018_DIAGNOSIS_SOURCES,
-    LX018_DIAGNOSTIC_RELATION_STATES as _LX018_DIAGNOSTIC_RELATION_STATES,
     _lx018_length_criterion_result,
+    _lx018_atomic_semantic_result,
     _lx018_primary_diagnosis_available,
     _lx018_primary_diagnosis_resolution,
     _lx018_prompt,
     _lx018_semantic_criterion_result,
     _lx018_unknown_semantic_result,
-    _parse_lx018_diagnostic_rationale_code,
-    _parse_lx018_diagnostic_relation,
-    _parse_lx018_medical_analysis,
+    _parse_lx018_diagnostic_rationale_code,  # noqa: F401 (legacy test helper)
 )
 from .course_quality.rule_007 import (
     RULE_007_RECORD_SOURCES as _RULE_007_RECORD_SOURCES,
@@ -560,7 +558,12 @@ def _course_semantic_decision(
     else:
         reason_code = (
             outcome.reason_code
-            if outcome.reason_code in {"source_unavailable", "source_truncated"}
+            if outcome.reason_code
+            in {
+                "source_unavailable",
+                "source_truncated",
+                "source_readiness_unproven",
+            }
             else "required_field_missing"
         )
         dimensions = (
@@ -927,12 +930,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                             "non_compliant"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
-                            else "technical_error"
+                            else "data_gap"
                             if rule_id == "LX0609-018"
                             else "data_gap"
                         ),
                         reason_code=(
-                            "model_transport_error"
+                            "source_readiness_unproven"
                             if rule_id == "LX0609-018"
                             else "course_llm_unavailable"
                         ),
@@ -951,7 +954,15 @@ async def execute_luxian_0609_native_course_quality_rules(
                 response = await llm_client.generate(
                     _lx018_prompt(context=context)
                     if rule_id == "LX0609-018"
-                    else _prompt(wrapper, context=context)
+                    else _prompt(wrapper, context=context),
+                    **(
+                        {
+                            "max_completion_tokens": 600,
+                            "allow_length_retry": False,
+                        }
+                        if rule_id == "LX0609-018"
+                        else {}
+                    ),
                 )
             except Exception:
                 unresolved_semantic = (
@@ -966,9 +977,15 @@ async def execute_luxian_0609_native_course_quality_rules(
                             "non_compliant"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
+                            else "data_gap"
+                            if rule_id == "LX0609-018"
                             else "technical_error"
                         ),
-                        reason_code="model_transport_error",
+                        reason_code=(
+                            "source_readiness_unproven"
+                            if rule_id == "LX0609-018"
+                            else "model_transport_error"
+                        ),
                         executor_type="llm",
                         criterion_results=(
                             (length_result, unresolved_semantic)
@@ -986,13 +1003,8 @@ async def execute_luxian_0609_native_course_quality_rules(
             api_time += elapsed
             is_compliant = _parse_is_compliant(response)
             if rule_id == "LX0609-018":
-                payload = _response_json_payload(response)
-                raw_relation_state = (
-                    _clean(payload.get("diagnostic_relation_state"))
-                    if payload
-                    else ""
-                )
-                if raw_relation_state not in _LX018_DIAGNOSTIC_RELATION_STATES:
+                atomic_result = _lx018_atomic_semantic_result(response)
+                if atomic_result is None:
                     unresolved_semantic = _lx018_unknown_semantic_result(
                         "model_invalid_output"
                     )
@@ -1003,9 +1015,14 @@ async def execute_luxian_0609_native_course_quality_rules(
                                 "non_compliant"
                                 if length_result is not None
                                 and length_result.status is CriterionStatus.FAILED
-                                else "technical_error"
+                                else "data_gap"
                             ),
-                            reason_code="model_invalid_output",
+                            reason_code=(
+                                "requirement_violated"
+                                if length_result is not None
+                                and length_result.status is CriterionStatus.FAILED
+                                else "source_readiness_unproven"
+                            ),
                             executor_type="llm",
                             prompt_tokens=prompt,
                             completion_tokens=completion,
@@ -1019,22 +1036,11 @@ async def execute_luxian_0609_native_course_quality_rules(
                         )
                     )
                     continue
-                relation_state, reason_dimensions = _parse_lx018_diagnostic_relation(
-                    response
-                )
-                rationale_code = _parse_lx018_diagnostic_rationale_code(
-                    response,
-                    relation_state=relation_state,
-                    dimensions=reason_dimensions,
-                )
-                semantic_result = _lx018_semantic_criterion_result(
-                    relation_state=relation_state,
-                    reason_dimensions=reason_dimensions,
-                    rationale_code=rationale_code,
-                    medical_analysis=_parse_lx018_medical_analysis(response),
-                )
+                semantic_result, _relation_state = atomic_result
                 assert length_result is not None
-                if semantic_result.status is CriterionStatus.FAILED:
+                if semantic_result.status is CriterionStatus.UNKNOWN:
+                    status = "data_gap"
+                elif semantic_result.status is CriterionStatus.FAILED:
                     status = "non_compliant"
                 elif length_result.status is CriterionStatus.FAILED:
                     status = "non_compliant"
@@ -1044,14 +1050,14 @@ async def execute_luxian_0609_native_course_quality_rules(
                 ):
                     status = "compliant"
                 else:
-                    status = "evaluation_unknown"
+                    status = "data_gap"
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
                         status=status,
                         reason_code=(
-                            "semantic_low_confidence"
-                            if status == "evaluation_unknown"
+                            "source_readiness_unproven"
+                            if status == "data_gap"
                             else "course_customer_prompt"
                         ),
                         executor_type="llm",
@@ -1308,12 +1314,10 @@ async def execute_luxian_0609_native_course_quality_rules(
                         "non_compliant"
                         if length_result is not None
                         and length_result.status is CriterionStatus.FAILED
-                        else "technical_error"
-                        if rule_id == "LX0609-018"
                         else "data_gap"
                     ),
                     (
-                        "model_transport_error"
+                        "source_readiness_unproven"
                         if rule_id == "LX0609-018"
                         else "course_llm_unavailable"
                     ),
@@ -1332,7 +1336,15 @@ async def execute_luxian_0609_native_course_quality_rules(
             response = await llm_client.generate(
                 _lx018_prompt(context=context)
                 if rule_id == "LX0609-018"
-                else _prompt(wrapper, context=context)
+                else _prompt(wrapper, context=context),
+                **(
+                    {
+                        "max_completion_tokens": 600,
+                        "allow_length_retry": False,
+                    }
+                    if rule_id == "LX0609-018"
+                    else {}
+                ),
             )
         except Exception:
             unresolved_semantic = (
@@ -1347,12 +1359,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                         "non_compliant"
                         if length_result is not None
                         and length_result.status is CriterionStatus.FAILED
-                        else "technical_error"
+                        else "data_gap"
                         if rule_id == "LX0609-018"
                         else "data_gap"
                     ),
                     (
-                        "model_transport_error"
+                        "source_readiness_unproven"
                         if rule_id == "LX0609-018"
                         else "course_llm_failure"
                     ),
@@ -1387,13 +1399,8 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             continue
         if rule_id == "LX0609-018":
-            payload = _response_json_payload(response)
-            raw_relation_state = (
-                _clean(payload.get("diagnostic_relation_state"))
-                if payload
-                else ""
-            )
-            if raw_relation_state not in _LX018_DIAGNOSTIC_RELATION_STATES:
+            atomic_result = _lx018_atomic_semantic_result(response)
+            if atomic_result is None:
                 unresolved_semantic = _lx018_unknown_semantic_result(
                     "model_invalid_output"
                 )
@@ -1404,9 +1411,14 @@ async def execute_luxian_0609_native_course_quality_rules(
                             "non_compliant"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
-                            else "technical_error"
+                            else "data_gap"
                         ),
-                        "model_invalid_output",
+                        (
+                            "requirement_violated"
+                            if length_result is not None
+                            and length_result.status is CriterionStatus.FAILED
+                            else "source_readiness_unproven"
+                        ),
                         executor_type="llm",
                         prompt_tokens=prompt,
                         completion_tokens=completion,
@@ -1420,22 +1432,11 @@ async def execute_luxian_0609_native_course_quality_rules(
                     )
                 )
                 continue
-            relation_state, reason_dimensions = _parse_lx018_diagnostic_relation(
-                response
-            )
-            rationale_code = _parse_lx018_diagnostic_rationale_code(
-                response,
-                relation_state=relation_state,
-                dimensions=reason_dimensions,
-            )
-            semantic_result = _lx018_semantic_criterion_result(
-                relation_state=relation_state,
-                reason_dimensions=reason_dimensions,
-                rationale_code=rationale_code,
-                medical_analysis=_parse_lx018_medical_analysis(response),
-            )
+            semantic_result, _relation_state = atomic_result
             assert length_result is not None
-            if semantic_result.status is CriterionStatus.FAILED:
+            if semantic_result.status is CriterionStatus.UNKNOWN:
+                status = "data_gap"
+            elif semantic_result.status is CriterionStatus.FAILED:
                 status = "non_compliant"
             elif length_result.status is CriterionStatus.FAILED:
                 status = "non_compliant"
@@ -1445,14 +1446,14 @@ async def execute_luxian_0609_native_course_quality_rules(
             ):
                 status = "compliant"
             else:
-                status = "evaluation_unknown"
+                status = "data_gap"
             results.append(
                 _result(
                     rule_id,
                     status,
                     (
-                        "semantic_low_confidence"
-                        if status == "evaluation_unknown"
+                        "source_readiness_unproven"
+                        if status == "data_gap"
                         else "course_customer_prompt"
                     ),
                     executor_type="llm",
