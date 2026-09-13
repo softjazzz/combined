@@ -332,10 +332,98 @@ def _deterministic_024_outcome(
     materials: Luxian0609EvidenceMaterialStore,
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> _SurgeryTextOutcome | None:
-    """只收口手术记录中高特异性的非恶性急救手术事实。"""
+    """收口手术记录中已实施且高特异性的 024 事实。"""
 
     row_texts = tuple((row, _row_text(row)) for row in surgery_rows)
     text = _clean(" ".join(row_text for _, row_text in row_texts if row_text))
+
+    # 024 的合规短路只接受完整正式手术记录中的肯定淋巴结处理事实。
+    # 不能把计划、建议或未实施描述当成已完成手术事实，也不能在材料仓
+    # 无法返回实际命中文书引用时生成客户可见的合规结论。
+    surgery_observation = next(
+        (
+            item
+            for item in snapshot.observations
+            if item.source_key == "surgery_record"
+        ),
+        None,
+    )
+    if (
+        surgery_observation is not None
+        and surgery_observation.query_state.value == "available"
+        and surgery_observation.completeness.value == "complete"
+        # 先保留原有非恶性创伤/急救手术的 N/A 优先级，避免新短路
+        # 改变该既有例外的语义。
+        and not (
+            _TRAUMA_DIAGNOSIS_PATTERN.search(text)
+            and _RESCUE_SURGERY_PATTERN.search(text)
+            and _MALIGNANT_SURGERY_PATTERN.search(text)
+        )
+    ):
+        lymph_node_action_pattern = re.compile(
+            r"(?:清扫|切除|采样|取样|活检|送检|摘除|清除)\s*"
+            r"(?:[0-9０-９一二三四五六七八九十百千万]+(?:组|站|枚)?"
+            r"[\s、,，至\-－~～]*)*淋巴结"
+            r"|淋巴结\s*(?:清扫|切除|采样|取样|活检|送检|摘除|清除)"
+        )
+        negative_or_planned_pattern = re.compile(
+            r"(?:拟|计划|建议|准备|将|待|考虑|未|未予|未行|未做|未进行|未清扫|"
+            r"没有|无|不|否认|取消|拒绝)"
+            r"[^。；;！？!?，,]{0,8}"
+            r"(?:清扫|切除|采样|取样|活检|送检|淋巴结)"
+            r"|(?:清扫|切除|采样|取样|活检|送检|淋巴结)"
+            r"[^。；;！？!?，,]{0,8}"
+            r"(?:未予|未行|未做|未进行|未清扫|取消|拒绝|计划|建议)"
+        )
+        matching_document_refs: list[str] = []
+        for row, row_text in row_texts:
+            if (
+                not has_strict_performed_time(row)
+                or not _clean(row.get("document_id") or row.get("id"))
+                or not _clean(row.get("surgery_name"))
+                or not _clean(row.get("surgery_process"))
+            ):
+                continue
+            matched = tuple(lymph_node_action_pattern.finditer(row_text))
+            if not matched or any(
+                negative_or_planned_pattern.search(
+                    row_text[
+                        max(
+                            (
+                                row_text.rfind(mark, 0, item.start())
+                                for mark in "。；;！？!?，,\\n"
+                            ),
+                            default=-1,
+                        )
+                        + 1 : min(
+                            (
+                                next_position
+                                for mark in "。；;！？!?，,\\n"
+                                if (next_position := row_text.find(mark, item.end())) >= 0
+                            ),
+                            default=len(row_text),
+                        )
+                    ]
+                )
+                for item in matched
+            ):
+                continue
+            ref = _material_document_ref_for_row(
+                materials=materials,
+                snapshot=snapshot,
+                source_key="surgery_record",
+                selected_row=row,
+            )
+            if ref:
+                matching_document_refs.append(ref)
+        if matching_document_refs:
+            return _SurgeryTextOutcome(
+                "LX0609-024",
+                "compliant",
+                "lymph_node_documentation_confirmed",
+                selected_document_refs=tuple(dict.fromkeys(matching_document_refs)),
+            )
+
     if (
         not text
         or not _TRAUMA_DIAGNOSIS_PATTERN.search(text)

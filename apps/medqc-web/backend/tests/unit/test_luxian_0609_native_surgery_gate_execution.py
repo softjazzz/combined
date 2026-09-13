@@ -1280,6 +1280,130 @@ async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() ->
 
 
 @pytest.mark.asyncio
+async def test_typed_024_short_circuits_confirmed_lymph_fact_before_unrelated_source_overflow() -> None:
+    """正式手术记录已确认清扫时，不被无关诊断行数门控为资料缺口。"""
+
+    selected = ("LX0609-024",)
+    surgery_row = {
+        "document_id": "c04-surgery-1",
+        "surgery_begin_time": "2026-01-01 08:00:00+08",
+        "surgery_name": "胸腔镜下右肺上叶切除+纵隔淋巴结清扫术",
+        "surgery_process": "术中清扫11组、10组、7组淋巴结，送冰冻切片。",
+    }
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            "surgery_record": (surgery_row,),
+            "admission_record_diagnosis": ({"diagnosis_name": "右肺腺癌"},),
+            "discharge_record_diagnosis": tuple(
+                {"diagnosis_name": f"无关诊断{index}"} for index in range(7)
+            ),
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    client = _Client(
+        [
+            {
+                "schema_version": "lx0609_malignancy_v1",
+                "results": [{"ref": "D01", "state": "explicit_malignant"}],
+            }
+        ]
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        wrapper_rules=[_wrapper("LX0609-024")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        malignancy_resolver=MalignancyFactResolver(client),
+    )
+
+    assert len(session.materials.rows("discharge_record_diagnosis")) == 7
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert len(result.decisions) == 1
+    decision = result.decisions[0]
+    assert decision.applicability.value == "applicable"
+    assert decision.evidence_state.value == "sufficient"
+    assert decision.qc_direction.value == "satisfied"
+    assert decision.reason_code == "requirement_satisfied"
+    selected_document_ref = session.materials.document_rows(
+        "surgery_record", snapshot=session.snapshot
+    )[0][0]
+    assert selected_document_ref in decision.fact_refs
+
+
+@pytest.mark.parametrize(
+    "surgery_process",
+    (
+        "拟行淋巴结清扫术，术中情况待定。",
+        "计划清扫淋巴结。",
+        "建议行淋巴结清扫。",
+        "未行淋巴结清扫。",
+        "未清扫淋巴结。",
+    ),
+)
+def test_deterministic_024_rejects_planned_or_negative_lymph_fact(
+    surgery_process: str,
+) -> None:
+    """计划和否定表述不能短路成 024 合规。"""
+
+    surgery_row = {
+        "document_id": "planned-surgery-1",
+        "surgery_begin_time": "2026-01-01 08:00:00+08",
+        "surgery_name": "右肺切除术",
+        "surgery_process": surgery_process,
+    }
+
+    def reader(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=(surgery_row,) if kwargs["source_key"] == "surgery_record" else (),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-024",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    outcome = surgery._deterministic_024_outcome(
+        surgery_rows=session.materials.rows("surgery_record"),
+        materials=session.materials,
+        snapshot=session.snapshot,
+    )
+
+    assert outcome is None
+
+
+@pytest.mark.asyncio
 async def test_typed_024_complete_uncoded_nonmalignant_diagnosis_stops_before_surgery_llm():
     selected = ("LX0609-024",)
 
