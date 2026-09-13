@@ -1685,6 +1685,91 @@ def _patch_typed_039_present_sources(monkeypatch) -> None:
     )
 
 
+def _patch_typed_039_unknown_emergency(monkeypatch) -> None:
+    _patch_typed_039_present_sources(monkeypatch)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "")
+            if source_key == "surgery_record"
+            else ("unknown", "")
+            if source_key == "rescue_record"
+            else ("absent", "")
+        ),
+    )
+
+
+def test_typed_039_unknown_emergency_with_confirmed_participation_is_compliant(
+    monkeypatch,
+):
+    _patch_typed_039_unknown_emergency(monkeypatch)
+    materials = _RowsOnlyMaterials(
+        {
+            "surgery_record": (
+                {"document_id": "surgery-unknown", "surgeon": "韩平"},
+            ),
+            "presurg_discussion": (
+                {
+                    "document_id": "discussion-unknown",
+                    "discuss_staff": "韩平、刘娟",
+                },
+            ),
+        }
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=materials,
+    )
+
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "surgeon_participation_confirmed"
+    assert outcome.customer_display_facts is None
+
+
+def test_typed_039_unknown_emergency_with_missing_discussion_is_data_gap(monkeypatch):
+    _patch_typed_039_unknown_emergency(monkeypatch)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: (
+            "empty" if source_key == "presurg_discussion" else "available"
+        ),
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials(
+            {"surgery_record": ({"surgeon": "韩平"},)}
+        ),
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
+    assert outcome.customer_display_facts is None
+
+
+def test_typed_039_unknown_emergency_with_unmatched_surgeon_is_data_gap(monkeypatch):
+    _patch_typed_039_unknown_emergency(monkeypatch)
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials(
+            {
+                "surgery_record": ({"surgeon": "韩平"},),
+                "presurg_discussion": ({"discuss_staff": "刘娟"},),
+            }
+        ),
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
+    assert outcome.customer_display_facts is None
+
+
 def test_typed_039_is_compliant_when_surgeon_is_in_discussion_staff(monkeypatch):
     _patch_typed_039_present_sources(monkeypatch)
     materials = _RowsOnlyMaterials(

@@ -29,9 +29,11 @@ class _LLM:
         self.state = state
         self.invalid = invalid
         self.calls = 0
+        self.prompts: list[str] = []
 
     async def generate(self, prompt: str) -> dict:
         self.calls += 1
+        self.prompts.append(prompt)
         assert "SC-083" not in prompt
         assert "CL-108" not in prompt
         content = (
@@ -207,6 +209,149 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
             "discuss_staff",
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_replaces_midnight_placeholder_with_strict_formal_time():
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "document_id": "mr-c05",
+                    "surgery_id": "mr-c05-event",
+                    "surgery_code": "80.5200",
+                    "surgery_name": "椎间盘化学溶解术",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2025-08-22 00:00:00",
+                }
+            ],
+            "surgery_record": [
+                {
+                    "document_id": "formal-c05",
+                    "surgery_code": None,
+                    "surgery_name": "椎间盘化学溶解术+周围神经松解术",
+                    "surgery_begin_time": "2025-08-22 08:00:00+00",
+                }
+            ],
+            "presurg_discussion": [
+                {
+                    "document_id": "discussion-c05",
+                    "record_time": "2025-08-22 15:27:29",
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
+                }
+            ],
+        }
+    )
+    llm = _LLM()
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].reason_code == "requirement_satisfied"
+    assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
+    assert llm.calls == 1
+    assert "骨科甲主任医师" in llm.prompts[0]
+    assert set(execution.decisions[0].fact_refs) == _material_document_refs(
+        session,
+        "mr_surgery",
+        "surgery_record",
+        "presurg_discussion",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "formal_rows",
+    (
+        (
+            {
+                "document_id": "formal-unrelated",
+                "surgery_code": "OTHER-040",
+                "surgery_name": "其他手术",
+                "surgery_begin_time": "2025-08-22 08:00:00+00",
+            },
+        ),
+        (
+            {
+                "document_id": "formal-ambiguous-a",
+                "surgery_code": None,
+                "surgery_name": "椎间盘化学溶解术+周围神经松解术",
+                "surgery_begin_time": "2025-08-22 08:00:00+00",
+            },
+            {
+                "document_id": "formal-ambiguous-b",
+                "surgery_code": None,
+                "surgery_name": "椎间盘化学溶解术+周围神经松解术",
+                "surgery_begin_time": "2025-08-22 08:30:00+00",
+            },
+        ),
+        (
+            {
+                "document_id": "formal-no-timezone",
+                "surgery_code": None,
+                "surgery_name": "椎间盘化学溶解术+周围神经松解术",
+                "surgery_begin_time": "2025-08-22 08:00:00",
+            },
+        ),
+        (
+            {
+                "document_id": "formal-name-substring",
+                "surgery_code": None,
+                "surgery_name": "椎间盘化学溶解术相关记录",
+                "surgery_begin_time": "2025-08-22 08:00:00+00",
+            },
+        ),
+    ),
+)
+async def test_typed_mdt_does_not_replace_midnight_for_unreliable_formal_association(
+    formal_rows,
+):
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "document_id": "mr-c05",
+                    "surgery_id": "mr-c05-event",
+                    "surgery_code": "80.5200",
+                    "surgery_name": "椎间盘化学溶解术",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2025-08-22 00:00:00",
+                }
+            ],
+            "surgery_record": list(formal_rows),
+            "presurg_discussion": [
+                {
+                    "document_id": "discussion-c05",
+                    "record_time": "2025-08-22 15:27:29",
+                    "discuss_staff": "骨科甲主任医师、麻醉科乙主任医师",
+                }
+            ],
+        }
+    )
+    llm = _LLM()
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].reason_code == "requirement_violated"
+    assert execution.decisions[0].qc_direction is QcDirection.DEFECT
+    assert llm.calls == 0
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -22,10 +22,15 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
+    parse_strict_performed_time,
     read_luxian_0609_native_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
-from .surgery_procedure_catalog import catalog_surgery_state, effective_surgery_level
+from .surgery_procedure_catalog import (
+    _COMPOSITE_SEPARATOR,
+    catalog_surgery_state,
+    effective_surgery_level,
+)
 
 
 RULE_ID = "LX0609-040"
@@ -143,6 +148,113 @@ def _parse_datetime(value: Any) -> datetime | None:
         return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
     except ValueError:
         return None
+
+
+_SURGERY_CODE_FIELDS = (
+    "surgery_code",
+)
+_SURGERY_NAME_FIELDS = (
+    "surgery_name",
+)
+
+
+def _normalized_surgery_identity(row: Mapping[str, Any], fields: Sequence[str]) -> str:
+    for field in fields:
+        value = _clean(row.get(field))
+        if value:
+            return re.sub(r"\s+", "", value).casefold()
+    return ""
+
+
+def _strict_formal_surgery_begin(row: Mapping[str, Any]) -> datetime | None:
+    """Return one exact local start only when all supplied start fields are strict."""
+
+    raw_values = [
+        row.get(field)
+        for field in ("surgery_begin_time", "surgery_begin_datetime")
+        if _clean(row.get(field))
+    ]
+    if not raw_values:
+        return None
+    parsed_values: list[datetime] = []
+    for value in raw_values:
+        parsed = parse_strict_performed_time(value)
+        if parsed is None:
+            return None
+        parsed_values.append(parsed)
+    return parsed_values[0] if len(set(parsed_values)) == 1 else None
+
+
+def _formal_surgery_matches_target(
+    *, target: Mapping[str, Any], formal: Mapping[str, Any]
+) -> bool:
+    """Require a stable code or exact name before associating two surgery rows."""
+
+    target_code = _normalized_surgery_identity(target, _SURGERY_CODE_FIELDS)
+    formal_code = _normalized_surgery_identity(formal, _SURGERY_CODE_FIELDS)
+    target_name = _normalized_surgery_identity(target, _SURGERY_NAME_FIELDS)
+    formal_name = _normalized_surgery_identity(formal, _SURGERY_NAME_FIELDS)
+    formal_name_components = tuple(
+        component
+        for component in _COMPOSITE_SEPARATOR.split(formal_name)
+        if component
+    )
+    name_match = bool(target_name and target_name in formal_name_components)
+    if target_code and formal_code:
+        if target_code != formal_code:
+            return False
+        return not target_name or not formal_name or name_match
+    return name_match
+
+
+def _formal_surgery_start_for_midnight_level4(
+    *,
+    level4: Sequence[Mapping[str, Any]],
+    snapshot: Luxian0609EvidenceSnapshot | None,
+    materials: Luxian0609EvidenceMaterialStore | None,
+) -> tuple[datetime, str] | None:
+    """Resolve a midnight mr_surgery placeholder through one complete formal row."""
+
+    if snapshot is None or materials is None or len(level4) != 1:
+        return None
+    target = level4[0]
+    target_start = _parse_datetime(target.get("surgery_begin_datetime"))
+    if target_start is None or target_start.time() != time(0, 0):
+        return None
+    observation = next(
+        (
+            item
+            for item in snapshot.observations
+            if item.source_key == "surgery_record"
+        ),
+        None,
+    )
+    if observation is None:
+        return None
+    if observation.query_state.value != "available":
+        return None
+    if observation.completeness.value != "complete":
+        return None
+    try:
+        formal_rows = tuple(materials.rows("surgery_record"))
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return None
+    matches: list[tuple[datetime, str]] = []
+    for formal in formal_rows:
+        formal_start = _strict_formal_surgery_begin(formal)
+        if formal_start is None or formal_start.date() != target_start.date():
+            continue
+        if _formal_surgery_matches_target(target=target, formal=formal):
+            formal_refs = _selected_material_fact_refs(
+                materials=materials,
+                snapshot=snapshot,
+                source_key="surgery_record",
+                rows=(formal,),
+            )
+            if len(formal_refs) != 1:
+                return None
+            matches.append((formal_start, formal_refs[0]))
+    return matches[0] if len(matches) == 1 else None
 
 
 def _original_texts(value: Any) -> tuple[str, ...]:
@@ -915,6 +1027,17 @@ async def execute_luxian_0609_native_mdt_rule(
             ),
             selected_fact_refs=selected_trigger_fact_refs,
         )
+    earliest_level4 = min(level4_session_times)
+    formal_level4_match = _formal_surgery_start_for_midnight_level4(
+        level4=level4,
+        snapshot=evidence_snapshot,
+        materials=evidence_materials,
+    )
+    if formal_level4_match is not None:
+        earliest_level4, formal_ref = formal_level4_match
+        selected_trigger_fact_refs = tuple(
+            dict.fromkeys((*selected_trigger_fact_refs, formal_ref))
+        )
 
     try:
         documents: list[tuple[int, datetime, str, str, str]] = []
@@ -943,7 +1066,7 @@ async def execute_luxian_0609_native_mdt_rule(
                 record_time = _parse_datetime(row.get("record_time"))
                 if record_time is None:
                     return finish(_MdtRuleOutcome("data_gap", "data_gap", "authoritative_time_missing"), selected_fact_refs=selected_trigger_fact_refs)
-                if record_time > min(level4_session_times):
+                if record_time > earliest_level4:
                     continue
                 value = row.get("discuss_staff")
                 available = "discuss_staff" in row
@@ -979,9 +1102,6 @@ async def execute_luxian_0609_native_mdt_rule(
             selected_fact_refs=selected_trigger_fact_refs,
         )
 
-    earliest_level4 = min(
-        _parse_datetime(row.get("surgery_begin_datetime")) for row in level4
-    )
     eligible = [item for item in documents if item[1] <= earliest_level4]
     if not eligible:
         return finish(

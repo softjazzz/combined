@@ -1089,10 +1089,7 @@ def _typed_terminal_outcome(
             return _SurgeryDocumentOutcome(
                 rule_id, "not_applicable", "emergency_rescue_exception", "program"
             )
-        if emergency_state != "absent":
-            return _SurgeryDocumentOutcome(
-                rule_id, "data_gap", "emergency_exception_unresolved", "program"
-            )
+        emergency_exception_unknown = emergency_state != "absent"
         blocker = _typed_source_gate(
             rule_id=rule_id,
             source_key="presurg_discussion",
@@ -1101,6 +1098,13 @@ def _typed_terminal_outcome(
         if blocker is not None:
             return blocker
         if _typed_observation_state(snapshot, "presurg_discussion") == "empty":
+            if emergency_exception_unknown:
+                return _SurgeryDocumentOutcome(
+                    rule_id,
+                    "data_gap",
+                    "surgeon_participation_unresolved",
+                    "program",
+                )
             facts = _with_trigger_document_id(
                 {
                     "failure_kind": "preop_discussion_missing",
@@ -1136,17 +1140,22 @@ def _typed_terminal_outcome(
         all_surgeons_matched = bool(surgeons) and surgeons.issubset(
             discussion_participants
         )
+        if emergency_exception_unknown and not all_surgeons_matched:
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "surgeon_participation_unresolved", "program"
+            )
         identity_facts = {
             "surgeons": sorted(surgeons),
             "discussion_participants": sorted(discussion_participants),
             "matched_surgeons": sorted(matched_surgeons),
             "performed_surgery_confirmed": True,
-            "emergency_rescue_exception_absent": True,
             "discussion_state": "present",
             "surgeon_participation_state": (
                 "confirmed" if all_surgeons_matched else "absent"
             ),
         }
+        if not emergency_exception_unknown:
+            identity_facts["emergency_rescue_exception_absent"] = True
         if all_surgeons_matched:
             identity_facts["verification_kind"] = (
                 "preop_discussion_surgeon_participation_confirmed"
@@ -1156,7 +1165,7 @@ def _typed_terminal_outcome(
                 "compliant",
                 "surgeon_participation_confirmed",
                 "program",
-                identity_facts,
+                identity_facts if not emergency_exception_unknown else None,
             )
         return _SurgeryDocumentOutcome(
             rule_id,
