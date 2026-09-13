@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from ..source_evidence_reader import authoritative_document_time_value
+
+
+_LX0609_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 def _clean(value: Any) -> str:
@@ -21,7 +25,9 @@ def _parse_datetime(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
-    return parsed.replace(tzinfo=None)
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(_LX0609_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+    return parsed
 
 
 def _row_time(row: Mapping[str, Any]) -> datetime | None:

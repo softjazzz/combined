@@ -1142,6 +1142,46 @@ async def test_061_discharge_record_uses_24_hour_threshold(
     assert reduced.final_state is expected_state
 
 
+def test_shared_datetime_parser_normalizes_aware_offsets_to_hospital_time() -> None:
+    utc_time = module._parse_datetime("2026-01-01T00:00:00+00:00")
+    shanghai_time = module._parse_datetime("2026-01-01T08:00:00+08:00")
+    naive_time = module._parse_datetime("2026-01-01 08:00:00")
+
+    assert utc_time == shanghai_time == datetime(2026, 1, 1, 8, 0, 0)
+    assert naive_time == datetime(2026, 1, 1, 8, 0, 0)
+
+
+@pytest.mark.asyncio
+async def test_061_equivalent_aware_offsets_keep_timeliness_decision() -> None:
+    base_rows = {
+        "inpat_registration": ({
+            "patient_status": "出院",
+            "discharge_datetime": "2026-01-01T00:00:00+00:00",
+        },),
+        "discharge_record": ({
+            "record_time": "2026-01-02T00:00:00+00:00",
+        },),
+    }
+    equivalent_rows = {
+        **base_rows,
+        "discharge_record": ({
+            "record_time": "2026-01-02T08:00:00+08:00",
+        },),
+    }
+
+    _, base_reduced = await _evaluate("LX0609-061", base_rows)
+    _, equivalent_reduced = await _evaluate("LX0609-061", equivalent_rows)
+
+    assert (base_reduced.final_state, base_reduced.reason_code) == (
+        CustomerFinalState.COMPLIANT,
+        "requirement_within_threshold",
+    )
+    assert (equivalent_reduced.final_state, equivalent_reduced.reason_code) == (
+        CustomerFinalState.COMPLIANT,
+        "requirement_within_threshold",
+    )
+
+
 @pytest.mark.asyncio
 async def test_061_exposes_the_authoritative_discharge_time_source() -> None:
     result, reduced = await _evaluate(
