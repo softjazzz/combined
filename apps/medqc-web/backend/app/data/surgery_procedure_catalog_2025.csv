@@ -1716,7 +1716,9 @@ code,name,category,effective_level,raw_level,source
 33.1X06,胸腔镜下肺切开血肿清除术,手术,四级,国考四级手术,hospital_performance
 33.2000,胸腔镜肺活组织检查,手术,三级,院内三级,hospital_performance
 33.2100,经人工造口的支气管镜检查,诊断性操作,二级,二级,national_catalog
+33.2200X003,纤维支气管镜检查,诊断性操作,二级,二级,national_catalog
 33.2400X001,支气管镜下支气管活检,诊断性操作,三级,院内三级,hospital_performance
+33.2403,纤维支气管镜检查伴肺泡灌洗术,诊断性操作,二级,二级,national_catalog
 33.2700X001,支气管镜下肺活检,诊断性操作,二级,二级,national_catalog
 33.3400,胸廓成形术,手术,四级,国考四级手术,hospital_performance
 33.3401,部分胸廓成形术,手术,四级,国考四级手术,hospital_performance

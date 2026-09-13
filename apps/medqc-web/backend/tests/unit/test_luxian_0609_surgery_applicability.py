@@ -79,6 +79,41 @@ def test_non_surgical_operation_does_not_trigger_surgery_rules():
     assert result.procedure_kind == "non_surgical_operation"
 
 
+def test_c29_bronchoscopy_operations_do_not_trigger_surgery_rules():
+    session = _session(
+        {
+            "mr_surgery": (
+                {
+                    "surgery_code": "33.2200X003",
+                    "surgery_name": "纤维支气管镜检查",
+                    "surgery_begin_datetime": datetime(2026, 8, 1, 9, 0),
+                    "surgical_level": "二级",
+                },
+                {
+                    "surgery_code": "33.2403",
+                    "surgery_name": "纤维支气管镜检查伴肺泡灌洗术",
+                    "surgery_begin_datetime": datetime(2026, 8, 1, 9, 30),
+                    "surgical_level": "二级",
+                },
+                {
+                    "surgery_code": "33.2700X001",
+                    "surgery_name": "支气管镜下肺活检",
+                    "surgery_begin_datetime": datetime(2026, 8, 1, 10, 0),
+                    "surgical_level": "二级",
+                },
+            )
+        }
+    )
+
+    result = resolve_surgery_applicability(
+        snapshot=session.snapshot, materials=session.materials
+    )
+
+    assert result.state == "not_applicable"
+    assert result.reason_code == "performed_event_absent"
+    assert result.procedure_kind == "non_surgical_operation"
+
+
 def test_performed_level_four_surgery_uses_approved_catalog_level_and_source():
     session = _session(
         {
