@@ -110,6 +110,8 @@ def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    if raw.get("verification_kind") == "pathology_report_field_gap":
+        return _safe_013(raw)
     raw_checked = raw.get("checked_target_sources")
     checked = _safe_checked_sources(
         raw_checked,
@@ -267,6 +269,8 @@ def tumor_pathology_customer_fact_status_is_valid(
             and requirement_met == (normalized_status == "compliant")
         )
     if normalized_rule_id == "LX0609-019":
+        if safe_facts.get("verification_kind") == "pathology_report_field_gap":
+            return normalized_status == "data_gap"
         if (
             safe_facts.get("verification_kind")
             == "pathology_sampling_documentation_check"

@@ -1605,7 +1605,10 @@ def customer_finding_from_controlled_facts(
 
     kind = str(facts.get("verification_kind") or facts.get("failure_kind") or "")
 
-    if rule_id == "LX0609-013" and kind == "pathology_report_field_gap":
+    if (
+        rule_id in {"LX0609-013", "LX0609-019"}
+        and kind == "pathology_report_field_gap"
+    ):
         missing_fields = pathology_report_gap_missing_fields(facts)
         report_gaps = facts.get("report_gaps")
         if missing_fields and isinstance(report_gaps, list):
@@ -3336,7 +3339,7 @@ def render_luxian_0609_customer_result(
                 rule_id=decision.rule_id,
                 facts=safe_customer_display_facts,
             )
-            if decision.rule_id == "LX0609-013"
+            if decision.rule_id in {"LX0609-013", "LX0609-019"}
             else ""
         )
         pathology_report_gap_fields = (

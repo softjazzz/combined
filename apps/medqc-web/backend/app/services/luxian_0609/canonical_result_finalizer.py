@@ -942,7 +942,8 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     from .tumor_pathology_result_mapping import pathology_report_gap_missing_fields
     pathology_report_gap_fields = (
         pathology_report_gap_missing_fields(result.get("customer_display_facts"))
-        if rule_id == "LX0609-013" and reason_code == "required_field_missing"
+        if rule_id in {"LX0609-013", "LX0609-019"}
+        and reason_code == "required_field_missing"
         else None
     )
     if pathology_report_gap_fields is not None:

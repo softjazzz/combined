@@ -1614,12 +1614,18 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     executor_type="program",
                 )
                 continue
+            requires_complete_pathology_result = rule_id == "LX0609-013" or (
+                rule_id == "LX0609-019" and typed_rule
+            )
             complete_pathology_report_row = (
                 _complete_pathology_result_row(report)
-                if rule_id == "LX0609-013"
+                if requires_complete_pathology_result
                 else None
             )
-            if rule_id == "LX0609-013" and complete_pathology_report_row is None:
+            if (
+                requires_complete_pathology_result
+                and complete_pathology_report_row is None
+            ):
                 emit_outcome(
                     rule_id,
                     "data_gap",

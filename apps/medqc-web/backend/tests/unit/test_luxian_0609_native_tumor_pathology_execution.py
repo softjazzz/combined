@@ -212,13 +212,16 @@ def _material_session(
     empty_targets: bool = False,
     surgery_rows: tuple[dict, ...] | None = None,
     daily_course_rows: tuple[dict, ...] | None = None,
+    pathology_report_rows: tuple[dict, ...] | None = None,
 ):
     rows_by_source = {
         "pathology_exam_master": (
             {"specimen_name": "手术标本", "record_content": "病理送检申请资料。"},
         ),
         "pathology_exam_report": (
-            ()
+            pathology_report_rows
+            if pathology_report_rows is not None
+            else ()
             if truncated_master
             else (
                 {
@@ -602,7 +605,13 @@ async def test_typed_019_optional_llm_matches_raw_state_calls_tokens_and_prompt(
 async def test_typed_019_complete_empty_surgery_keeps_present_daily_for_review():
     rows_by_source = {
         "pathology_exam_master": ({"specimen_name": "手术标本"},),
-        "pathology_exam_report": ({"specimen_name": "手术标本"},),
+        "pathology_exam_report": (
+            {
+                "specimen_name": "手术标本",
+                "diagnosis": "病理诊断资料。",
+                "report_datetime": "2026-04-26 10:00:00",
+            },
+        ),
         "surgery_record": (),
         "daily_course_record": (
             {"record_content": "病程记录未说明取材情况。SAFE_PRIVATE_TARGET"},
@@ -676,7 +685,13 @@ async def test_typed_019_complete_empty_surgery_keeps_present_daily_for_review()
 async def test_typed_019_strong_surgery_sampling_overrides_complete_empty_daily():
     rows_by_source = {
         "pathology_exam_master": ({"specimen_name": "手术标本"},),
-        "pathology_exam_report": ({"specimen_name": "手术标本"},),
+        "pathology_exam_report": (
+            {
+                "specimen_name": "手术标本",
+                "diagnosis": "病理诊断资料。",
+                "report_datetime": "2026-04-26 10:00:00",
+            },
+        ),
         "surgery_record": ({"surgery_process": "术中切取标本并送病理检查。"},),
         "daily_course_record": (),
     }
@@ -730,7 +745,13 @@ async def test_typed_019_strong_surgery_sampling_overrides_complete_empty_daily(
 async def test_typed_019_complete_empty_targets_are_programmatic_defect():
     rows_by_source = {
         "pathology_exam_master": ({"specimen_name": "手术标本"},),
-        "pathology_exam_report": ({"specimen_name": "手术标本"},),
+        "pathology_exam_report": (
+            {
+                "specimen_name": "手术标本",
+                "diagnosis": "病理诊断资料。",
+                "report_datetime": "2026-04-26 10:00:00",
+            },
+        ),
         "surgery_record": (),
         "daily_course_record": (),
     }
@@ -816,7 +837,12 @@ async def test_typed_019_preserves_pathology_source_four_states(
             rows = (
                 []
                 if mode == "empty"
-                else [{"record_content": "病理送检资料。"}]
+                else [
+                    {
+                        "diagnosis": "病理诊断资料。",
+                        "report_datetime": "2026-04-26 10:00:00",
+                    }
+                ]
             )
         elif source_key == "surgery_record":
             rows = [{"surgery_process": "术中切取标本并送病理检查。"}]
@@ -881,7 +907,12 @@ async def test_typed_019_target_query_error_is_technical_and_never_calls_model(
         if source_key == "surgery_record":
             raise SourceEvidenceQueryError("private target query detail")
         rows = (
-            [{"record_content": "病理送检资料。"}]
+            [
+                {
+                    "diagnosis": "病理诊断资料。",
+                    "report_datetime": "2026-04-26 10:00:00",
+                }
+            ]
             if source_key in {"pathology_exam_master", "pathology_exam_report"}
             else []
         )
@@ -2266,6 +2297,49 @@ async def test_013_requires_final_result_and_report_time_before_model(
     )
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_019_missing_final_result_is_data_gap_with_report_fact_and_ref():
+    report_row = {
+        "document_id": "pathology-report-gap",
+        "diagnosis": "",
+        "record_content": "",
+        "report_datetime": "2026-04-26 10:00:00",
+    }
+    session = _material_session(pathology_report_rows=(report_row,))
+    client = _Client([])
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-019",),
+        wrapper_rules=[_wrapper("LX0609-019")],
+        evidence_payload=_payload(),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-019",),
+    )
+
+    decision = result.decisions[0]
+    report_ref = session.materials.document_rows(
+        "pathology_exam_report", snapshot=session.snapshot
+    )[0][0]
+    assert reduce_luxian_0609_rule_decision(decision).final_state.value == "data_gap"
+    assert decision.reason_code == "required_field_missing"
+    assert decision.fact_refs == (report_ref,)
+    assert dict(result.customer_display_facts)["LX0609-019"] == {
+        "verification_kind": "pathology_report_field_gap",
+        "report_gaps": [
+            {"final_diagnosis_state": "missing", "report_time_state": "valid"}
+        ],
+    }
+    assert result.llm_call_count == 0
+    assert result.prompt_tokens == result.completion_tokens == result.total_tokens == 0
     assert client.prompts == []
 
 
