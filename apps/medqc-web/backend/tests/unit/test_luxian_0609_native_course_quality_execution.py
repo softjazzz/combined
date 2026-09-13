@@ -7181,6 +7181,7 @@ def test_018_prompt_freezes_localizing_and_nonspecific_boundaries() -> None:
     assert "单独心悸对冠心病" in prompt
     assert "单独咳嗽对肺占位" in prompt
     assert "关系字段不得判supports" in prompt
+    assert "不得自行补成颈背部" in prompt
     assert "直接写出与第一诊断相同" in prompt
     assert "右侧大脑半球病变与左侧肢体无力" in prompt
     assert "最多80个汉字" in prompt
