@@ -2162,7 +2162,7 @@ async def test_068_real_conditional_clause_is_not_promoted_to_approval() -> None
 
 
 @pytest.mark.asyncio
-async def test_068_semantic_undated_approval_keeps_time_missing_semantics() -> None:
+async def test_068_deterministic_undated_approval_keeps_time_missing_semantics() -> None:
     text = "主任医师查房后认为恢复良好，予以出院。"
     client = _DischargeApprovalClient(_approval_item("doc_01", quote=text))
     result, reduced = await _evaluate(
@@ -2185,7 +2185,7 @@ async def test_068_semantic_undated_approval_keeps_time_missing_semantics() -> N
     assert reduced.reason_code == "authoritative_time_missing"
     facts = dict(result.customer_display_facts)["LX0609-068"]
     assert facts["missing_time_count"] == 1
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -2243,7 +2243,7 @@ async def test_068_dated_semantics_take_priority_over_undated_fixed_approval(
         assert reduced[0].final_state is CustomerFinalState.DATA_GAP
         assert reduced[0].reason_code == "authoritative_time_missing"
         assert dict(result.customer_display_facts)["LX0609-068"]["missing_time_count"] == 1
-    assert result.llm_call_count == (0 if dated_opinion == "approved" else 1)
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

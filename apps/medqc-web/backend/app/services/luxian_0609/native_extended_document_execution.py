@@ -3842,7 +3842,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         daily_error or senior_error,
                     )
                     approval_resolution_blocked = True
-                elif not present:
+                elif not present and not undated_approvals and llm_client is not None:
                     semantic_candidates = tuple(
                         (source_key, row, _row_time(row), text)
                         for source_key, rows in (

@@ -13,7 +13,16 @@ from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_060
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
 
 
-def _run(rule, *, valid=False, approval=True):
+class _CountingLLMClient:
+    def __init__(self):
+        self.calls = []
+
+    async def generate(self, prompt, **kwargs):
+        self.calls.append((prompt, kwargs))
+        raise AssertionError("确定性未定时意见不应触发语义回退")
+
+
+def _run(rule, *, valid=False, approval=True, llm_client=None):
     rows = {
         "inpat_registration": [{"patient_status": "出院"}],
         "discharge_record": [{"document_id": "discharge", "discharge_time": "2026-02-09 08:00:00"}],
@@ -40,6 +49,7 @@ def _run(rule, *, valid=False, approval=True):
     result = asyncio.run(execute_luxian_0609_native_extended_document_rules(
         rule_ids=(rule,), decision_rule_ids=(rule,),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        llm_client=llm_client,
     ))
     return session, result
 
@@ -57,6 +67,7 @@ def test_missing_time_preserves_window_and_selected_document(rule, kind):
     assert facts["missing_time_count"] == 1
     assert "approval_present" not in facts
     assert result.decisions[0].reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == 0
     assert len(result.decisions[0].fact_refs) == 1
     selected = [row["document_id"] for ref, row in session.materials.document_rows(
         "senior_course_record", snapshot=session.snapshot,
@@ -90,4 +101,14 @@ def test_valid_window_evidence_is_not_blocked_by_undated_document(rule):
 def test_068_without_approval_keeps_original_missing_semantics():
     _, result = _run("LX0609-068", approval=False)
     assert result.decisions[0].reason_code == "source_empty"
+    assert result.llm_call_count == 0
     assert dict(result.customer_display_facts)["LX0609-068"]["approval_present"] is False
+
+
+def test_068_deterministic_undated_approval_skips_semantic_fallback():
+    client = _CountingLLMClient()
+    _, result = _run("LX0609-068", llm_client=client)
+
+    assert result.decisions[0].reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == 0
+    assert client.calls == []
