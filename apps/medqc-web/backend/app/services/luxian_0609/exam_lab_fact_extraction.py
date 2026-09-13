@@ -10,11 +10,15 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import hashlib
 import json
+import logging
 import re
 from typing import Any, Callable, Mapping, Sequence
 
 from .evidence_material import build_material_document_refs
 from .source_evidence_reader import canonical_source_evidence
+
+
+logger = logging.getLogger(__name__)
 
 
 SCHEMA_VERSION = "lx0609-exam-lab-text-facts-v3"
@@ -1701,8 +1705,16 @@ def parse_exam_lab_fact_response_isolated(
         ):
             raise ExamLabFactParseError("evidence_ref")
 
-        # 011/012/014/015 的病程引用必须落在该事件的 Python 白名单内；
-        # 010 的既有多事件共享病程语义仍由公开解析器单独处理。
+        # 011/012/014/015 的病程引用必须落在该事件的 Python 白名单内；010 的既有
+        # 多事件共享病程语义仍由公开解析器单独处理。
+        #
+        # 越界**不得**在这里整批 fail-closed：实测（真实病例 C12 三轮，全部模型回答）
+        # 模型把事件 2 的病程位置写成只属于事件 1 的位置，此处 raise 会把同批两条
+        # 规则一起打成 `technical_error`（不可交付状态），且单次重试后模型重复同样
+        # 写法，重试无法恢复。多事件投影下公开解析器已按事件把越界引用降级为
+        # `unknown`（→ 资料缺口，可交付），与本文件既有策略一致；因此这里只登记
+        # 诊断，让归属明确的越界走逐事件降级，而不是升级成整批执行失败。
+        # 单事件投影行为不变：公开解析器仍会 raise，进而整批失败。
         if rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
             allowed_event_course = set(_course_refs_for_rule_event(
                 projection,
@@ -1713,8 +1725,16 @@ def parse_exam_lab_fact_response_isolated(
                 course_refs_in_position_order[position - 1]
                 for position in course_positions
             }
-            if not referenced.issubset(allowed_event_course):
-                raise ExamLabFactParseError("evidence_ref")
+            out_of_scope = sorted(referenced - allowed_event_course)
+            if out_of_scope:
+                logger.warning(
+                    "exam_lab_course_citation_out_of_scope rule_id=%s event_position=%s "
+                    "out_of_scope=%s allowed=%s",
+                    rule_id,
+                    event_position,
+                    out_of_scope,
+                    sorted(allowed_event_course),
+                )
 
     if covered != expected_pairs:
         raise ExamLabFactParseError("scope")
