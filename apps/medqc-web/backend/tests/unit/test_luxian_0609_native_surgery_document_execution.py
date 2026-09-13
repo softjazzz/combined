@@ -884,27 +884,42 @@ def _typed_037_session(
     *,
     preanesthesia_content: str,
     anesthesia_method: str | None = "全身麻醉",
+    anesthesia_record_content: str = "",
     mr_surgery_mode: str = "empty",
+    visit_mode: str = "available",
 ):
     rows_by_source = {
         "anesthesia_record": (
-            ({"anesthesia_method": anesthesia_method},)
+            (
+                {
+                    "anesthesia_method": anesthesia_method,
+                    "record_content": anesthesia_record_content,
+                },
+            )
             if anesthesia_method is not None
-            else ({},)
+            else ({"record_content": anesthesia_record_content},)
         ),
         "preane_surveil_record": (
-            {
-                "record_time": "2026-07-30 08:00:00",
-                "record_content": preanesthesia_content,
-                "anesthetist_sign": "麻醉医师陈某",
-            },
+            ()
+            if visit_mode == "empty"
+            else (
+                {
+                    "record_time": "2026-07-30 08:00:00",
+                    "record_content": preanesthesia_content,
+                    "anesthetist_sign": "麻醉医师陈某",
+                },
+            )
         ),
         "postane_surveil_record": (
-            {
-                "record_time": "2026-07-31 08:00:00",
-                "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
-                "anesthetist_sign": "麻醉医师陈某",
-            },
+            ()
+            if visit_mode == "empty"
+            else (
+                {
+                    "record_time": "2026-07-31 08:00:00",
+                    "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+                    "anesthetist_sign": "麻醉医师陈某",
+                },
+            )
         ),
     }
 
@@ -928,6 +943,48 @@ def _typed_037_session(
         created_at="2026-07-17T06:00:00+08:00",
         row_reader=reader,
     )
+
+
+@pytest.mark.parametrize(
+    ("record_content", "expected_status", "expected_reason"),
+    (
+        (
+            "麻醉记录：麻醉方式：静吸复合全麻 ASA 分级：II级",
+            "not_applicable",
+            "anesthesia_visit_absent",
+        ),
+        (
+            "麻醉记录：麻醉方式：局部麻醉 ASA 分级：I级",
+            "not_applicable",
+            "local_anesthesia_exception",
+        ),
+        (
+            "麻醉方式：静吸复合全麻；术中变更，麻醉方式：局部麻醉。",
+            "data_gap",
+            "anesthesia_method_unavailable",
+        ),
+    ),
+)
+def test_typed_037_reads_only_unambiguous_labeled_anesthesia_method(
+    record_content: str,
+    expected_status: str,
+    expected_reason: str,
+):
+    session = _typed_037_session(
+        preanesthesia_content="",
+        anesthesia_method=None,
+        anesthesia_record_content=record_content,
+        visit_mode="empty",
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-037",
+        snapshot=session.snapshot,
+        materials=session.materials,
+    )
+
+    assert outcome.status == expected_status
+    assert outcome.reason_code == expected_reason
 
 
 @pytest.mark.asyncio

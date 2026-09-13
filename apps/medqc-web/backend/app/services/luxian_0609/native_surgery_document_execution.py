@@ -105,6 +105,9 @@ _EMERGENCY_FACT_TYPES = frozenset(
 )
 _PRESENT_STATES = frozenset({"present", "performed", "confirmed", "available"})
 _LOCAL_ANESTHESIA_VALUES = frozenset({"局麻", "局部麻醉", "表面麻醉", "局部浸润麻醉", "局部浸润"})
+_ANESTHESIA_METHOD_LABEL_PATTERN = re.compile(
+    r"麻醉方式\s*[：:]\s*([^\s，,；;。]{1,32})"
+)
 
 _CONSENT_SOURCES = ("anesthesia_consent", "anesthesia_consent_form", "consent_form")
 _PREANE_SOURCES = ("preane_surveil_record", "preanesthesia_visit")
@@ -560,11 +563,23 @@ def _typed_anesthesia_trigger(
             anesthesia_record_rows = materials.rows("anesthesia_record")
         except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
             anesthesia_record_rows = ()
-        anesthesia_record_methods = {
-            _clean(row.get("anesthesia_method") or row.get("method"))
-            for row in anesthesia_record_rows
-            if _clean(row.get("anesthesia_method") or row.get("method"))
-        }
+        anesthesia_record_methods: set[str] = set()
+        for row in anesthesia_record_rows:
+            structured_method = _clean(
+                row.get("anesthesia_method") or row.get("method")
+            )
+            if structured_method:
+                anesthesia_record_methods.add(structured_method)
+                continue
+            labeled_methods = {
+                _clean(value)
+                for value in _ANESTHESIA_METHOD_LABEL_PATTERN.findall(
+                    _clean(row.get("record_content"))
+                )
+                if _clean(value) not in {"无", "未填", "未知", "-"}
+            }
+            if len(labeled_methods) == 1:
+                anesthesia_record_methods.update(labeled_methods)
         if len(anesthesia_record_methods) == 1:
             candidates.append(
                 (
