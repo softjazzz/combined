@@ -15,6 +15,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from .evidence_material import build_material_document_refs
 from .source_evidence_reader import canonical_source_evidence
+from .imaging_report_scope import is_guidance_only_imaging_rows
 
 
 SCHEMA_VERSION = "lx0609-exam-lab-text-facts-v3"
@@ -105,6 +106,8 @@ class ExamLabSingleEvent:
     # 用于多事件病程复用校验的最小事件身份文本（不作为对外证据）。
     identity_text: str = ""
     result_text_available: bool = False
+    # 仅含 CT 引导操作标签，不代表影像阴性；010仍可适用。
+    guidance_only: bool = False
 
     def __repr__(self) -> str:
         return (
@@ -735,6 +738,14 @@ def build_exam_lab_text_projection(
             readable_text=bool(material),
             result_text_available=result_text_available,
             identity_text=identity_text,
+            guidance_only=(
+                family == "exam"
+                and is_guidance_only_imaging_rows(rows)
+                and is_guidance_only_imaging_rows(tuple(
+                    row for row, ref in pairs
+                    if non_course_entries[ref][1] == "exam_item_report"
+                ))
+            ),
         )
 
     def build_events(family: str) -> tuple[ExamLabSingleEvent, ...]:
@@ -1147,6 +1158,11 @@ def build_exam_lab_fact_prompt(
                     if ref in course_position_by_ref
                 ],
                 "target_confirmed": event.target_confirmed,
+                **(
+                    {"guidance_only": True}
+                    if event.guidance_only and rule_id in {"LX0609-011", "LX0609-012"}
+                    else {}
+                ),
             }
             for position, event in enumerate(events, start=1)
         ]
@@ -1244,7 +1260,14 @@ def build_exam_lab_fact_prompt(
         },
         **({"event_position": 1} if multi_event_schema else {}),
     )
-    return f"""你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。
+    guidance_instruction = (
+        "目录中guidance_only=true表示原资料明确仅为CT引导操作标签，不是诊断结果。"
+        "对此事件的011/012输出not_applicable+absent、空病程引用；"
+        "011的positive_state为not_relevant，012为unknown（不是阴性）。其他事件仍按通常规则判定。\n"
+        if any(item.get("guidance_only") for items in rule_event_catalog.values() for item in items)
+        else ""
+    )
+    return f"""{guidance_instruction}你是泸县0609检查检验事实抽取器。只做语义分类和文书关联，不计算时间、不直接下质控结论。
 本次必须恰好覆盖这些规则ID，不得遗漏、重复、增加或改名：{json.dumps(selected, ensure_ascii=False)}。
 010=CT/MRI检查前原因；011=CT/MRI报告后记录结果；012=检出异常病灶或异常征象的CT/MRI结果分析；014=培养报告后记录结果；015=阳性菌/药敏分析处置。
 CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适用。送检、培养中、待报告、污染可能、无生长不得标阳性。015依据已报告的阳性菌评价分析、临床意义或处理，不以药敏报告齐全为前提；已明确检出菌名但药敏待出，仍应评价对已有阳性结果的分析。培养报告同一事件的细菌结果/菌种鉴定栏中已填写明确菌名，即已有阳性菌结果；其他备选菌栏、备注或培养总栏为空，不得将这个已填写菌名的结果降为unknown或negative。具体抗菌药物是否符合药敏不在015判定范围内。
@@ -1430,7 +1453,19 @@ def parse_exam_lab_fact_response(
             event_position=event_position,
         ))
         event_refs = set(event.document_refs) if event is not None else set()
-        if rule_id not in {"LX0609-012", "LX0609-015"}:
+        if (
+            rule_id in {"LX0609-011", "LX0609-012"}
+            and event is not None
+            and event.guidance_only
+        ):
+            # 项目角色先于模型语义：操作标签不能被改成诊断阳性/阴性。
+            # 提示词明确要求空引用；不能把模型错挂的病程静默删除后算成功。
+            if course_positions:
+                raise ExamLabFactParseError("value")
+            applicability, semantic, positive, normalized_course = (
+                "not_applicable", "absent", "not_relevant", (),
+            )
+        elif rule_id not in {"LX0609-012", "LX0609-015"}:
             # 已确认事件由 Python 锁定适用性；泛候选则保留模型的
             # not_applicable/unknown，避免把“未标明类型”伪造成阳性事件。
             if event is not None and event.target_confirmed:

@@ -1157,6 +1157,12 @@ def _single_text_fact_outcome(
         for item in selected_evidence_refs
         if item in safe_refs
     )
+    if (
+        rule_id in {"LX0609-011", "LX0609-012"}
+        and event is not None
+        and event.guidance_only
+    ):
+        return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
     if fact.applicability == "not_applicable":
         return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
     if fact.applicability != "applicable":
@@ -1876,6 +1882,15 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 "not_applicable",
                                 "exam_lab_target_event_absent",
                             )
+                        typed_processed.add(rule_id)
+                    elif rule_id in {"LX0609-011", "LX0609-012"} and all(
+                        event.guidance_only for event in events
+                    ):
+                        emit_typed(
+                            rule_id,
+                            "not_applicable",
+                            "exam_lab_target_event_absent",
+                        )
                         typed_processed.add(rule_id)
                     elif all(event.target_explicitly_absent for event in events):
                         emit_typed(
