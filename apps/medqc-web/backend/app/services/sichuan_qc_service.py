@@ -1641,6 +1641,9 @@ class SichuanQCService:
         luxian_input_profile = orchestrated.get("luxian_0609_input_profile")
         if isinstance(luxian_input_profile, dict) and luxian_input_profile:
             result["luxian_0609_input_profile"] = luxian_input_profile
+        model_execution_stats = orchestrated.get("model_execution_stats")
+        if isinstance(model_execution_stats, dict) and model_execution_stats:
+            result["model_execution_stats"] = dict(model_execution_stats)
         return result
 
     async def _evaluate_rules_with_engine(

@@ -73,6 +73,12 @@ from .qc_workspace.canonical_result_store import (
     validated_customer_explanation as _validated_customer_explanation,
 )
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
+from .qc_workspace.execution_failure import (
+    validate_failed_task_items,
+    _normalize_luxian_model_execution_stats,
+    _build_luxian_model_execution_summary,
+    _merge_luxian_model_execution_stats,
+)
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
@@ -941,6 +947,18 @@ def project_customer_safe_batch_job(
             if item.get("status") == "non_compliant"
         ][:6],
     }
+    if raw_summary.get("execution_status") in {"completed", "partial_failed", "failed"}:
+        safe_summary["execution_status"] = raw_summary["execution_status"]
+        for count_key in ("completed_rule_count", "failed_rule_count"):
+            safe_summary[count_key] = max(0, _to_int(raw_summary.get(count_key)))
+        safe_summary["failed_rule_ids"] = sorted({
+            _safe_text(rule_id).upper()
+            for rule_id in (raw_summary.get("failed_rule_ids") or [])
+            if re.fullmatch(r"LX0609-\d{3}", _safe_text(rule_id).upper())
+        })
+    model_counts = _normalize_luxian_model_execution_stats(raw_summary.get("model_execution_stats"))
+    if model_counts is not None:
+        safe_summary["model_execution_stats"] = _build_luxian_model_execution_summary(model_counts)
     raw_profile = (
         raw_summary.get("performance_profile")
         if isinstance(raw_summary.get("performance_profile"), dict)
@@ -1059,10 +1077,19 @@ def project_customer_safe_batch_job(
             )["record_ref"],
             "status": "technical_error",
             "reason_code": "record_execution_failed",
+            "rule_id": _safe_text(item.get("rule_id")).upper()
+            if re.fullmatch(r"LX0609-\d{3}", _safe_text(item.get("rule_id")).upper()) else "",
         }
         for item in list(job.get("failed_records") or [])
         if isinstance(item, dict)
     ]
+    if safe_summary.get("execution_status") in {"partial_failed", "failed"}:
+        failed_refs = {failure["record_ref"] for failure in failed_records}
+        safe_summary["compliant_records"] = len({
+            _safe_text(item.get("record_ref"))
+            for item in items
+            if item.get("status") == "compliant" and item.get("record_ref") not in failed_refs
+        })
     item_record_refs = {
         _safe_text(item.get("record_ref"))
         for item in items
@@ -2232,6 +2259,22 @@ class CustomQCWorkspaceService:
         )
         if parent_performance_profile:
             parent_summary["performance_profile"] = parent_performance_profile
+        child_summaries = [child.get("summary") or {} for child in child_jobs]
+        if any("execution_status" in summary for summary in child_summaries):
+            completed_rules = sum(_to_int(summary.get("completed_rule_count")) for summary in child_summaries)
+            failed_rules = sum(_to_int(summary.get("failed_rule_count")) for summary in child_summaries)
+            parent_summary.update(completed_rule_count=completed_rules, failed_rule_count=failed_rules)
+            if aggregate_status in {"failed", "completed"}:
+                parent_summary["execution_status"] = (
+                    "partial_failed" if completed_rules else "failed"
+                ) if aggregate_status == "failed" else "completed"
+            model_counts = None
+            for child_summary in child_summaries:
+                model_counts = _merge_luxian_model_execution_stats(
+                    model_counts, _normalize_luxian_model_execution_stats(child_summary.get("model_execution_stats"))
+                )
+            if model_counts is not None:
+                parent_summary["model_execution_stats"] = _build_luxian_model_execution_summary(model_counts)
         return {
             **parent_job,
             "status": aggregate_status,
@@ -4199,6 +4242,9 @@ class CustomQCWorkspaceService:
                 return
             parent_job_id = _safe_text(row.get("parent_job_id"))
             now = _now_utc()
+            execution_failed = summary.get("execution_status") in {"partial_failed", "failed"}
+            if execution_failed:
+                validate_failed_task_items(summary, items, failed_records)
             merged_summary = {
                 **(summary or {}),
                 "progress": {
@@ -4207,7 +4253,7 @@ class CustomQCWorkspaceService:
                         if isinstance(summary.get("progress"), dict)
                         else {}
                     ),
-                    "step_key": "completed",
+                    "step_key": "failed" if execution_failed else "completed",
                     "processed_records": int((summary or {}).get("total_records") or 0),
                     "total_records": int((summary or {}).get("total_records") or 0),
                 },
@@ -4217,7 +4263,7 @@ class CustomQCWorkspaceService:
                 update(self._batch_job_table)
                 .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
                 .values(
-                    status="completed",
+                    status="failed" if execution_failed else "completed",
                     summary_json=_safe_json_dumps(merged_summary),
                     items_json=_safe_json_dumps(items),
                     failed_records_json=_safe_json_dumps(failed_records),
@@ -4232,7 +4278,7 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
-            diagnostic_receipts = self._write_record_result_envelopes(
+            diagnostic_receipts = () if execution_failed else self._write_record_result_envelopes(
                 session,
                 job_row=dict(row),
                 items=items,

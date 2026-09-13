@@ -33,6 +33,38 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('batchJobPresentation', () => {
+  it('部分执行失败保留有效结果并明确未完成项数', () => {
+    const job = buildJob({ status: 'failed' })
+    job.summary = {
+      ...job.summary!,
+      execution_status: 'partial_failed',
+      completed_rule_count: 1,
+      failed_rule_count: 1,
+      status_breakdown: { compliant: 1 },
+    }
+    const model = buildBatchJobPresentation(job)
+    expect(model.isRunning).toBe(false)
+    expect(model.statusLabel).toBe('部分执行失败')
+    expect(model.phaseText).toBe('1 项质控执行未完成，已完成的 1 条结果仍可查看。')
+    expect(model.overviewText).toBe(model.phaseText)
+    expect(model.resultCount).toBe(1)
+    expect(model.phaseText).not.toContain('无问题')
+  })
+
+  it('全部执行失败不承诺存在临床结果', () => {
+    const job = buildJob({ status: 'failed' })
+    job.summary = {
+      ...job.summary!,
+      execution_status: 'failed',
+      completed_rule_count: 0,
+      failed_rule_count: 2,
+    }
+    const model = buildBatchJobPresentation(job)
+    expect(model.isRunning).toBe(false)
+    expect(model.phaseText).toBe('2 项质控执行未完成，本次未形成可交付的判定。')
+    expect(model.overviewText).toBe(model.phaseText)
+  })
+
   it('归一对象型状态分布、规则范围、病历和结果进度', () => {
     const model = buildBatchJobPresentation(
       buildJob({

@@ -335,8 +335,8 @@ class ExamLabFactParsePartition:
     """共享事实响应按规则隔离后的结果。
 
     ``facts`` 只包含通过严格事实解析的规则；``rule_failures`` 只记录能够由
-    ``rule_id`` 与事件身份唯一归属、且属于单项字段/枚举的解析失败。顶层响应、
-    规则/事件范围和证据引用错误不会进入该容器，而是继续抛出
+    ``rule_id`` 与事件身份唯一归属的字段、引用或未形成确定事实的失败。顶层响应、
+    规则/事件身份和全局引用形状错误不会进入该容器，而是继续抛出
     :class:`ExamLabFactParseError`，由调用方整批闭合。
     """
 
@@ -1613,11 +1613,11 @@ def parse_exam_lab_fact_response_isolated(
     projection: ExamLabTextProjection,
     _strict_parser: Callable[..., tuple[ExamLabEventFact, ...]] | None = None,
 ) -> ExamLabFactParsePartition:
-    """按 ``rule_id`` 隔离单项 value 错误，同时保留共享提取。
+    """按 ``rule_id`` 隔离可归属的模型失败，同时保留共享提取。
 
     这不是放宽公开严格解析器的入口。先校验整个响应的规则/事件身份和引用
-    范围，再把每个请求规则交给原有严格解析器；因此只有能唯一归属某条规则
-    的字段形状或枚举错误才会进入 ``rule_failures``。调用方可以仅重试这些
+    范围，再把每个请求规则交给原有严格解析器；能唯一归属某条规则的跨事件
+    引用也登记为失败，不交给旧入口改写成资料缺口。调用方可以仅重试这些
     规则，而不会把已通过的规则重新送入模型。
     """
 
@@ -1655,6 +1655,7 @@ def parse_exam_lab_fact_response_isolated(
         rule_id: [] for rule_id in expected
     }
     covered: set[tuple[str, int]] = set()
+    rule_failures: dict[str, str] = {}
     allowed_course = set(projection.course_times)
     course_refs_in_position_order = tuple(sorted(projection.course_times))
 
@@ -1714,22 +1715,23 @@ def parse_exam_lab_fact_response_isolated(
                 for position in course_positions
             }
             if not referenced.issubset(allowed_event_course):
-                raise ExamLabFactParseError("evidence_ref")
+                rule_failures[rule_id] = "evidence_ref"
 
     if covered != expected_pairs:
         raise ExamLabFactParseError("scope")
 
     strict_parser = _strict_parser or parse_exam_lab_fact_response
     facts: list[ExamLabEventFact] = []
-    rule_failures: dict[str, str] = {}
     schema_version = payload["schema_version"]
     for rule_id in expected:
+        if rule_id in rule_failures:
+            continue
         rule_payload = {
             "schema_version": schema_version,
             "facts": rows_by_rule[rule_id],
         }
         try:
-            facts.extend(strict_parser(
+            parsed = strict_parser(
                 response={
                     "content": json.dumps(
                         rule_payload,
@@ -1739,7 +1741,26 @@ def parse_exam_lab_fact_response_isolated(
                 },
                 selected_rule_ids=(rule_id,),
                 projection=projection,
-            ))
+            )
+            if (
+                rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
+                and not projection.course_time_incomplete
+                and not projection.course_projection_truncated
+                and any(
+                    (fact.applicability == "unknown" or fact.semantic_state == "unknown")
+                    and (event := events_for_family(
+                        projection, "exam" if rule_id in EXAM_RULE_IDS else "culture"
+                    )[fact.event_position - 1]).target_confirmed
+                    and event.result_text_available
+                    and event.report_time is not None
+                    for fact in parsed
+                )
+            ):
+                # 源时间/正文缺口由执行器先行判定。合法输出仍未形成确定事实，
+                # 属模型未完成判定，不能借旧 unknown 映射伪装为 required_field_missing。
+                rule_failures[rule_id] = "semantic_unknown"
+            else:
+                facts.extend(parsed)
         except ExamLabFactParseError as exc:
             if exc.failure_kind != "value":
                 raise

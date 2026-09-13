@@ -13,10 +13,104 @@ from .native_execution import build_luxian_0609_native_result
 
 _RULE_ID_PATTERN = re.compile(r"^LX0609-\d{3}$")
 _EXECUTOR_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+_MODEL_EXECUTION_STATS_KEYS = (
+    "requested_rule_count",
+    "first_success_rule_count",
+    "retried_rule_count",
+    "recovered_rule_count",
+    "failed_rule_count",
+    "first_answer_success_rate",
+    "recovery_success_rate",
+    "model_failure_rate",
+)
+_MODEL_EXECUTION_STATS_KEY_SET = frozenset(_MODEL_EXECUTION_STATS_KEYS)
+_MODEL_EXECUTION_STATS_COUNT_KEYS = frozenset(
+    {
+        "requested_rule_count",
+        "first_success_rule_count",
+        "retried_rule_count",
+        "recovered_rule_count",
+        "failed_rule_count",
+    }
+)
+_MODEL_EXECUTION_STATS_RATE_FIELDS = {
+    "first_answer_success_rate": (
+        "first_success_rule_count",
+        "requested_rule_count",
+    ),
+    "recovery_success_rate": (
+        "recovered_rule_count",
+        "retried_rule_count",
+    ),
+    "model_failure_rate": (
+        "failed_rule_count",
+        "requested_rule_count",
+    ),
+}
 
 
 def _is_non_negative_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_rate(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(float(value))
+        and 0.0 <= float(value) <= 1.0
+    )
+
+
+def _normalize_model_execution_stats(
+    value: Mapping[str, int | float | None] | None,
+) -> dict[str, int | float | None] | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise TypeError("model execution stats must be a mapping")
+    if not value:
+        return None
+    if set(value) != _MODEL_EXECUTION_STATS_KEY_SET:
+        raise ValueError("invalid model execution stats")
+
+    stats = {key: value[key] for key in _MODEL_EXECUTION_STATS_KEYS}
+    if any(
+        not _is_non_negative_int(stats[key])
+        for key in _MODEL_EXECUTION_STATS_COUNT_KEYS
+    ):
+        raise ValueError("invalid model execution stats")
+    requested = stats["requested_rule_count"]
+    first_success = stats["first_success_rule_count"]
+    retried = stats["retried_rule_count"]
+    recovered = stats["recovered_rule_count"]
+    failed = stats["failed_rule_count"]
+    if (
+        first_success + retried > requested
+        or recovered > retried
+        or first_success + recovered + failed != requested
+    ):
+        raise ValueError("invalid model execution stats")
+
+    # retried 仅统计实际进入恢复的首答失败规则；模型调用异常可能没有重试，
+    # 因此 first_success + retried 不要求恰好等于 requested。
+    for rate_key, (numerator_key, denominator_key) in _MODEL_EXECUTION_STATS_RATE_FIELDS.items():
+        rate = stats[rate_key]
+        denominator = stats[denominator_key]
+        if denominator == 0:
+            if rate is not None:
+                raise ValueError("invalid model execution stats")
+        elif (
+            not _is_rate(rate)
+            or not math.isclose(
+                float(rate),
+                stats[numerator_key] / denominator,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
+        ):
+            raise ValueError("invalid model execution stats")
+    return stats
 
 
 @dataclass(frozen=True)
@@ -30,6 +124,7 @@ class FamilyUsageAttribution:
     total_tokens: int
     covered_customer_rule_ids: tuple[str, ...]
     latency_ms: float
+    model_execution_stats: Mapping[str, int | float | None] | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -71,9 +166,14 @@ class FamilyUsageAttribution:
             or self.latency_ms < 0
         ):
             raise ValueError("invalid latency_ms")
+        object.__setattr__(
+            self,
+            "model_execution_stats",
+            _normalize_model_execution_stats(self.model_execution_stats),
+        )
 
     def to_safe_dict(self) -> dict[str, Any]:
-        return {
+        safe = {
             "executor_key": self.executor_key,
             "llm_call_count": self.llm_call_count,
             "prompt_tokens": self.prompt_tokens,
@@ -82,6 +182,12 @@ class FamilyUsageAttribution:
             "covered_customer_rule_ids": list(self.covered_customer_rule_ids),
             "latency_ms": round(float(self.latency_ms), 3),
         }
+        if self.model_execution_stats is not None:
+            safe["model_execution_stats"] = {
+                key: self.model_execution_stats[key]
+                for key in _MODEL_EXECUTION_STATS_KEYS
+            }
+        return safe
 
 
 def build_family_usage_attribution(
@@ -93,6 +199,7 @@ def build_family_usage_attribution(
     completion_tokens: int,
     total_tokens: int,
     api_time: float,
+    model_execution_stats: Mapping[str, int | float | None] | None = None,
 ) -> FamilyUsageAttribution:
     if (
         isinstance(api_time, bool)
@@ -109,6 +216,7 @@ def build_family_usage_attribution(
         total_tokens=total_tokens,
         covered_customer_rule_ids=covered_customer_rule_ids,
         latency_ms=float(api_time) * 1000.0,
+        model_execution_stats=model_execution_stats,
     )
 
 
@@ -226,6 +334,7 @@ def build_family_technical_envelope(
             completion_tokens=source_envelope.completion_tokens,
             total_tokens=source_envelope.total_tokens,
             api_time=source_envelope.api_time,
+            model_execution_stats=source_usage.model_execution_stats,
         )
         if source_envelope is not None and source_usage is not None
         else None

@@ -250,7 +250,9 @@ function resolveLiveExecutionPhase(job: SichuanBatchJob): BatchJobExecutionPhase
   if (String(streamState.kind || '').trim() !== 'native_executor_phase') return null
   const executorKey = String(streamState.executor_key || '').trim()
   const executorLabel = EXECUTOR_LABELS[executorKey] || '质控规则组'
-  const event = String(streamState.event || '').trim().toLowerCase()
+  const event = String(streamState.event || '')
+    .trim()
+    .toLowerCase()
   const completedBatches = numeric(streamState.completed_batches)
   const totalBatches = numeric(streamState.total_batches)
   const countText = totalBatches > 0 ? `（${completedBatches} / ${totalBatches}）` : ''
@@ -362,11 +364,20 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
         ? Math.min(100, Math.round((completedRecordCount / recordCount) * 100))
         : streamRuleCount > 0 && streamRuleIndex > 0
           ? Math.min(100, Math.round((streamRuleIndex / streamRuleCount) * 100))
-        : expectedResultCount > 0 && resultCount > 0
-          ? Math.min(100, Math.round((resultCount / expectedResultCount) * 100))
-          : 0
+          : expectedResultCount > 0 && resultCount > 0
+            ? Math.min(100, Math.round((resultCount / expectedResultCount) * 100))
+            : 0
 
-  const statusLabel = getBatchJobStatusText(job.status)
+  const partialFailure =
+    normalizedStatus === 'failed' && summary.execution_status === 'partial_failed'
+  const failedRuleCount = numeric(summary.failed_rule_count)
+  const executionFailureText =
+    normalizedStatus === 'failed' && failedRuleCount > 0
+      ? partialFailure
+        ? `${failedRuleCount} 项质控执行未完成，已完成的 ${numeric(summary.completed_rule_count)} 条结果仍可查看。`
+        : `${failedRuleCount} 项质控执行未完成，本次未形成可交付的判定。`
+      : ''
+  const statusLabel = partialFailure ? '部分执行失败' : getBatchJobStatusText(job.status)
   const statusClass = getBatchJobStatusClass(job.status)
   const ruleSetText = String(
     job.rule_set_name || summary.rule_set_name || job.rule_name || '质控任务',
@@ -398,7 +409,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
 
   let phaseText = '任务状态待返回。'
   if (normalizedStatus === 'queued') phaseText = '等待后台领取任务，请勿重复发起。'
-  else if (normalizedStatus === 'failed') phaseText = job.error_message || '本次任务执行失败。'
+  else if (normalizedStatus === 'failed')
+    phaseText = executionFailureText || job.error_message || '本次任务执行失败。'
   else if (normalizedStatus === 'canceled') phaseText = '本次任务已取消，已返回结果仍可查看。'
   else if (normalizedStatus === 'completed') phaseText = '任务已完成，可查看结果或导出明细。'
   else if (normalizedStatus === 'running' && resultCount > 0) {
@@ -409,7 +421,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
 
   const attentionChips = statusChips.filter((chip) => ATTENTION_STATUSES.has(chip.key))
   let overviewText = '暂无结果摘要'
-  if (normalizedStatus === 'failed') overviewText = job.error_message || '任务失败'
+  if (normalizedStatus === 'failed')
+    overviewText = executionFailureText || job.error_message || '任务失败'
   else if (isRunning) {
     overviewText =
       progressPercent > 0 ? `任务执行中，已完成 ${progressPercent}%` : '任务执行中，等待结果回写'

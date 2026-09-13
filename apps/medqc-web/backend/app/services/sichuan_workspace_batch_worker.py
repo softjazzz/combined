@@ -72,7 +72,18 @@ from .luxian_0609.phase_scope import (
 from .sichuan_qc_service import RuleSourceGuardError, SichuanQCService
 
 
+from .qc_workspace.execution_failure import (
+    _build_luxian_execution_failure_record,
+    _build_luxian_model_execution_summary,
+    _extract_luxian_model_execution_stats,
+    _is_luxian_execution_failure,
+    _merge_luxian_model_execution_stats,
+    _normalize_luxian_model_execution_stats,
+)
+
 logger = logging.getLogger(__name__)
+
+
 def _ordered_luxian_0609_customer_rule_ids(
     requested_rule_ids: List[str] | tuple[str, ...],
 ) -> tuple[str, ...]:
@@ -1418,6 +1429,7 @@ async def run_sichuan_workspace_batch_job(
         total_single_rule_retries = 0
         total_context_tokens_estimate = 0
         total_refined_rule_count = 0
+        model_execution_stats_total: Optional[Dict[str, int]] = None
         refine_summary_total: Dict[str, Any] = {
             "enabled": enable_selective_refine,
             "candidate_count": 0,
@@ -1624,7 +1636,7 @@ async def run_sichuan_workspace_batch_job(
                 not_applicable_record_ids=_record_ids_for_item_status("not_applicable"),
             )
             result_status_counts = _build_item_status_counts(all_items)
-            return {
+            patch: Dict[str, Any] = {
                 "rule_set_key": rule_set_key,
                 "rule_set_name": rule_set_name,
                 "rule_set_version": rule_set_version,
@@ -1657,6 +1669,12 @@ async def run_sichuan_workspace_batch_job(
                 },
                 "cache_breakdown": {"hit": cache_hit, "miss": cache_miss},
             }
+            model_execution_summary = _build_luxian_model_execution_summary(
+                model_execution_stats_total
+            )
+            if model_execution_summary is not None:
+                patch["model_execution_stats"] = model_execution_summary
+            return patch
 
         def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
             if should_postprocess_job:
@@ -2006,6 +2024,7 @@ async def run_sichuan_workspace_batch_job(
                 record_refine_summary: Dict[str, Any] = {}
                 record_luxian_0609_input_profile: Dict[str, Any] = {}
                 record_luxian_0609_shadow_evaluations: Dict[str, Any] = {}
+                record_model_execution_stats: Optional[Dict[str, int]] = None
                 bundle_scene = ""
                 bundle_payload: Optional[Dict[str, Any]] = None
                 attempted_bundle_scenes: List[str] = []
@@ -2021,6 +2040,7 @@ async def run_sichuan_workspace_batch_job(
                     nonlocal record_first_result_latency
                     nonlocal record_first_result_source
                     nonlocal record_pack_metrics
+                    nonlocal record_model_execution_stats
 
                     if not (institute_id and patient_id and visit_id and active_rule_ids):
                         return False
@@ -2051,6 +2071,10 @@ async def run_sichuan_workspace_batch_job(
                         if not per_rule_items:
                             raise ValueError(f"规则级 visit 评估未返回结果: {single_rule_id}")
                         aggregated_items.extend(per_rule_items)
+                        record_model_execution_stats = _merge_luxian_model_execution_stats(
+                            record_model_execution_stats,
+                            _extract_luxian_model_execution_stats(single_result),
+                        )
                         token_usage = dict(single_result.get("token_usage") or {})
                         aggregated_tokens += int(token_usage.get("total_tokens") or 0)
                         aggregated_api_time += float(single_result.get("api_time") or 0.0)
@@ -2250,6 +2274,7 @@ async def run_sichuan_workspace_batch_job(
                     record_cot_summary = dict(result.get("cot_summary") or {})
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
+                    record_model_execution_stats = _extract_luxian_model_execution_stats(result)
                     record_luxian_0609_shadow_evaluations = dict(
                         result.get("luxian_0609_shadow_evaluations") or {}
                     )
@@ -2346,6 +2371,7 @@ async def run_sichuan_workspace_batch_job(
                         record_luxian_0609_input_profile = dict(
                             single_result.get("luxian_0609_input_profile") or {}
                         )
+                        record_model_execution_stats = _extract_luxian_model_execution_stats(single_result)
                     except Exception as bundle_exc:
                         if prefer_rule_level_visit_eval and len(active_rule_ids) == 1:
                             try:
@@ -2413,6 +2439,7 @@ async def run_sichuan_workspace_batch_job(
                     record_cot_summary = dict(result.get("cot_summary") or {})
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
+                    record_model_execution_stats = _extract_luxian_model_execution_stats(result)
                     record_luxian_0609_shadow_evaluations = dict(
                         result.get("luxian_0609_shadow_evaluations") or {}
                     )
@@ -2545,7 +2572,13 @@ async def run_sichuan_workspace_batch_job(
                             record=record,
                         )
 
-                    status = str(eval_item.get("status") or "").strip().lower()
+                    raw_status = str(
+                        eval_item.get("status")
+                        or eval_item.get("result_status")
+                        or eval_item.get("display_status")
+                        or ""
+                    ).strip().lower()
+                    status = raw_status
                     if status not in {
                         "compliant",
                         "non_compliant",
@@ -2628,6 +2661,30 @@ async def run_sichuan_workspace_batch_job(
                     metadata["source_execution_results"] = diagnostic_trace.get("source_execution_results") or []
                     metadata["trigger_decision"] = diagnostic_trace.get("trigger_decision") or {}
                     metadata["postprocess_reason"] = diagnostic_trace.get("postprocess_reason") or ""
+
+                    if use_luxian_customer_results and _is_luxian_execution_failure(
+                        raw_status=raw_status,
+                        eval_item=eval_item,
+                        metadata=metadata,
+                    ):
+                        if not failed_by_rule[rule_id]:
+                            failed_by_rule[rule_id].append(
+                                _build_luxian_execution_failure_record(
+                                    rule_job_id=rule_job_id,
+                                    rule_id=normalized_rule_id,
+                                    rule_code=rule_code,
+                                    rule_name=rule_name,
+                                    record_id=record_id,
+                                    record_key=record_key,
+                                    institute_id=institute_id,
+                                    patient_id=patient_id,
+                                    visit_id=visit_id,
+                                    raw_status=raw_status,
+                                    eval_item=eval_item,
+                                    metadata=metadata,
+                                )
+                            )
+                        continue
 
                     issue_item = {
                         "rule_job_id": rule_job_id,
@@ -2894,6 +2951,7 @@ async def run_sichuan_workspace_batch_job(
                     "cot_summary": record_cot_summary,
                     "refine_summary": record_refine_summary,
                     "luxian_0609_shadow_evaluations": record_luxian_0609_shadow_evaluations,
+                    "model_execution_stats": record_model_execution_stats,
                 }
             except QCJobCancelled:
                 raise
@@ -2944,6 +3002,7 @@ async def run_sichuan_workspace_batch_job(
                     "cot_summary": {},
                     "refine_summary": {},
                     "luxian_0609_shadow_evaluations": {},
+                    "model_execution_stats": None,
                 }
 
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -2988,6 +3047,7 @@ async def run_sichuan_workspace_batch_job(
             nonlocal total_single_rule_retries
             nonlocal total_context_tokens_estimate
             nonlocal total_refined_rule_count
+            nonlocal model_execution_stats_total
 
             completed_records_state["count"] = max(
                 int(completed_records_state["count"]), processed_records_count
@@ -3013,6 +3073,12 @@ async def run_sichuan_workspace_batch_job(
             executor_native += int(record_result.get("executor_native") or 0)
             cache_hit += int(record_result.get("cache_hit") or 0)
             cache_miss += int(record_result.get("cache_miss") or 0)
+            model_execution_stats_total = _merge_luxian_model_execution_stats(
+                model_execution_stats_total,
+                _normalize_luxian_model_execution_stats(
+                    record_result.get("model_execution_stats")
+                ),
+            )
 
             record_first_result_latency = float(record_result.get("first_result_latency") or 0.0)
             if record_first_result_latency > 0 and first_result_latency is None:
@@ -3223,7 +3289,13 @@ async def run_sichuan_workspace_batch_job(
             final=True,
         )
 
-        if use_luxian_customer_results and failed_record_ids and all_failed_records:
+        if (
+            use_luxian_customer_results and failed_record_ids and all_failed_records
+            and any(
+                failure.get("error_phase") not in {"result_status", "result_missing"}
+                for failure in all_failed_records
+            )
+        ):
             first_failure_error = str(
                 all_failed_records[0].get("error") or ""
             ).strip()
@@ -3424,6 +3496,22 @@ async def run_sichuan_workspace_batch_job(
             },
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        if use_luxian_customer_results:
+            summary.update({
+                "execution_status": (
+                    "partial_failed" if all_items else "failed"
+                ) if all_failed_records else "completed",
+                "completed_rule_count": len(all_items),
+                "failed_rule_count": len(all_failed_records),
+                "failed_rule_ids": sorted({
+                    str(item.get("rule_id") or "").strip().upper()
+                    for item in all_failed_records
+                    if item.get("rule_id")
+                }),
+            })
+        model_execution_summary = _build_luxian_model_execution_summary(model_execution_stats_total)
+        if model_execution_summary is not None:
+            summary["model_execution_stats"] = model_execution_summary
         workspace.update_batch_job_progress(
             job_id=job_id,
             step_key="aggregate",

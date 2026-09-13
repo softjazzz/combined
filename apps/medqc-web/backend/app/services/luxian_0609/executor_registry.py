@@ -333,6 +333,7 @@ def _to_envelope(
     completion_tokens = getattr(raw, "completion_tokens", 0)
     total_tokens = getattr(raw, "total_tokens", 0)
     api_time = getattr(raw, "api_time", 0.0)
+    model_execution_stats = getattr(raw, "model_execution_stats", None)
     llm_call_count = 0 if llm_call_count is None else llm_call_count
     prompt_tokens = 0 if prompt_tokens is None else prompt_tokens
     completion_tokens = 0 if completion_tokens is None else completion_tokens
@@ -357,6 +358,7 @@ def _to_envelope(
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             api_time=api_time,
+            model_execution_stats=model_execution_stats,
         ),
     )
 

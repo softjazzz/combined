@@ -565,7 +565,11 @@ class _WorkspaceStub:
         items: List[Dict[str, Any]],
         failed_records: List[Dict[str, Any]],
     ) -> None:
-        self.job["status"] = "completed"
+        # 持久化层的真实失败/部分失败分支另由 SQLite 合同测试覆盖。
+        self.job["status"] = (
+            "failed" if summary.get("execution_status") in {"partial_failed", "failed"}
+            else "completed"
+        )
         self.summary = dict(summary)
         self.items = list(items)
         self.failed_records = list(failed_records)
@@ -4332,3 +4336,381 @@ async def test_workspace_batch_long_text_fallback_preserves_native_source_coordi
         )
         for call in service.evaluate_document_args
     } == {("i", "p", "visit-001", None), ("i", "p", "visit-002", None)}
+
+
+@pytest.mark.asyncio
+async def test_formal_customer_sample_model_failure_is_partial_and_keeps_only_valid_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _WorkspaceStub()
+    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["filters"] = {
+        "record_refs": [
+            {
+                "institute_id": "HOSP-001",
+                "patient_id": "PAT-visit-001",
+                "visit_id": "visit-001",
+            }
+        ],
+        "rule_ids": ["LX0609-011", "LX0609-012"],
+        "selected_rule_ids": ["LX0609-011", "LX0609-012"],
+        "scoped_customer_rule_ids": ["LX0609-011", "LX0609-012"],
+        "record_rule_map": {
+            "visit-001": ["LX0609-011", "LX0609-012"],
+        },
+        "sample_pool_id": "pool-model-failure-001",
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    original_update_progress = workspace.update_batch_job_progress
+
+    def _update_incremental_progress(**kwargs: Any) -> None:
+        items = kwargs.pop("items", None)
+        failed_records = kwargs.pop("failed_records", None)
+        original_update_progress(**kwargs)
+        if items is not None:
+            workspace.items = list(items)
+        if failed_records is not None:
+            workspace.failed_records = list(failed_records)
+
+    workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
+    service = _ServiceStub()
+
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": "LX0609-011",
+                    "status": "compliant",
+                    "result_status": "compliant",
+                    "display_status": "compliant",
+                    "is_compliant": True,
+                    "metadata": {"executor_type": "program"},
+                },
+                {
+                    "rule_id": "LX0609-012",
+                    "status": "technical_error",
+                    "result_status": "technical_error",
+                    "display_status": "technical_error",
+                    "is_compliant": None,
+                    "reason_code": "model_invalid_output",
+                    "metadata": {
+                        "executor_type": "program",
+                        "technical_error_internal": True,
+                    },
+                },
+            ],
+            "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+            "model_execution_stats": {
+                "requested_rule_count": 2,
+                "first_success_rule_count": 1,
+                "retried_rule_count": 1,
+                "recovered_rule_count": 0,
+                "failed_rule_count": 1,
+                "first_answer_success_rate": 0.5,
+                "recovery_success_rate": 0.0,
+                "model_failure_rate": 0.5,
+            },
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(
+        batch_worker,
+        "load_luxian_0609_rules",
+        lambda: [get_luxian_0609_rule("LX0609-011"), get_luxian_0609_rule("LX0609-012")],
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "failed"
+    assert workspace.summary is not None
+    assert workspace.summary["execution_status"] == "partial_failed"
+    assert workspace.summary["failed_rule_count"] == 1
+    assert workspace.summary["completed_rule_count"] == 1
+    assert workspace.summary["failed_rule_ids"] == ["LX0609-012"]
+    assert workspace.summary["model_execution_stats"]["requested_rule_count"] == 2
+    assert workspace.summary["model_execution_stats"]["model_failure_rate"] == 0.5
+    assert [item["rule_id"] for item in workspace.items] == ["LX0609-011"]
+    assert [item["rule_id"] for item in workspace.failed_records] == ["LX0609-012"]
+
+
+def _configure_formal_customer_sample_batch_fixture(
+    workspace: _WorkspaceStub,
+    *,
+    rule_ids: List[str],
+    record_ids: List[str],
+) -> None:
+    workspace.job["record_ids"] = list(record_ids)
+    record_refs = [
+        {
+            "institute_id": "HOSP-001",
+            "patient_id": f"PAT-{record_id}",
+            "visit_id": record_id,
+        }
+        for record_id in record_ids
+    ]
+    workspace.job["filters"] = {
+        "record_refs": record_refs,
+        "rule_ids": list(rule_ids),
+        "selected_rule_ids": list(rule_ids),
+        "scoped_customer_rule_ids": list(rule_ids),
+        "record_rule_map": {record_id: list(rule_ids) for record_id in record_ids},
+        "sample_pool_id": "pool-model-failure-coverage",
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+
+
+def _customer_batch_eval_item(
+    rule_id: str,
+    status: str,
+    *,
+    reason_code: str = "",
+) -> Dict[str, Any]:
+    normalized_status = str(status).strip().lower()
+    metadata: Dict[str, Any] = {"executor_type": "program"}
+    if normalized_status == "technical_error":
+        metadata["technical_error_internal"] = True
+    return {
+        "rule_id": rule_id,
+        "status": normalized_status,
+        "result_status": normalized_status,
+        "display_status": normalized_status,
+        "is_compliant": True if normalized_status == "compliant" else None,
+        "reason_code": reason_code,
+        "metadata": metadata,
+    }
+
+
+async def _run_formal_customer_sample_batch_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    rule_ids: List[str],
+    record_ids: List[str],
+    eval_items_by_record: Dict[str, List[Dict[str, Any]]],
+    model_stats_by_record: Optional[Dict[str, Dict[str, int]]] = None,
+) -> _WorkspaceStub:
+    workspace = _WorkspaceStub()
+    _configure_formal_customer_sample_batch_fixture(
+        workspace,
+        rule_ids=rule_ids,
+        record_ids=record_ids,
+    )
+    original_update_progress = workspace.update_batch_job_progress
+
+    def _update_incremental_progress(**kwargs: Any) -> None:
+        items = kwargs.pop("items", None)
+        failed_records = kwargs.pop("failed_records", None)
+        original_update_progress(**kwargs)
+        if items is not None:
+            workspace.items = list(items)
+        if failed_records is not None:
+            workspace.failed_records = list(failed_records)
+
+    workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
+    service = _ServiceStub()
+
+    async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
+        visit_id = str(kwargs["bundle"]["visit_id"])
+        return {
+            "evaluation_results": [dict(item) for item in eval_items_by_record[visit_id]],
+            "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+            **(
+                {"model_execution_stats": dict(model_stats_by_record[visit_id])}
+                if model_stats_by_record and visit_id in model_stats_by_record
+                else {}
+            ),
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(
+        batch_worker,
+        "load_luxian_0609_rules",
+        lambda: [get_luxian_0609_rule(rule_id) for rule_id in rule_ids],
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    return workspace
+
+
+@pytest.mark.asyncio
+async def test_formal_customer_sample_all_model_rules_failed_has_no_items_and_failed_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rule_ids = ["LX0609-011", "LX0609-012"]
+    workspace = await _run_formal_customer_sample_batch_fixture(
+        monkeypatch,
+        rule_ids=rule_ids,
+        record_ids=["visit-001"],
+        eval_items_by_record={
+            "visit-001": [
+                _customer_batch_eval_item(rule_id, "technical_error", reason_code="model_invalid_output")
+                for rule_id in rule_ids
+            ],
+        },
+        model_stats_by_record={
+            "visit-001": {
+                "requested_rule_count": 2,
+                "first_success_rule_count": 0,
+                "retried_rule_count": 2,
+                "recovered_rule_count": 0,
+                "failed_rule_count": 2,
+            }
+        },
+    )
+
+    assert workspace.job["status"] == "failed"
+    assert workspace.items == []
+    assert len(workspace.failed_records) == 2
+    assert workspace.summary is not None
+    assert workspace.summary["execution_status"] == "failed"
+    assert workspace.summary["completed_rule_count"] == 0
+    assert workspace.summary["failed_rule_count"] == 2
+    assert workspace.summary["failed_rule_ids"] == rule_ids
+    assert workspace.summary["model_execution_stats"] == {
+        "scope": "exam_lab",
+        "requested_rule_count": 2,
+        "first_success_rule_count": 0,
+        "retried_rule_count": 2,
+        "recovered_rule_count": 0,
+        "failed_rule_count": 2,
+        "first_answer_success_rate": 0.0,
+        "recovery_success_rate": 0.0,
+        "model_failure_rate": 1.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_formal_customer_sample_true_data_gap_is_completed_without_execution_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rule_id = "LX0609-011"
+    workspace = await _run_formal_customer_sample_batch_fixture(
+        monkeypatch,
+        rule_ids=[rule_id],
+        record_ids=["visit-001"],
+        eval_items_by_record={
+            "visit-001": [
+                {
+                    **_customer_batch_eval_item(
+                        rule_id,
+                        "data_gap",
+                        reason_code="required_field_missing",
+                    ),
+                    "missing_sources": ["exam_report"],
+                    "missing_fields": ["result_text"],
+                }
+            ],
+        },
+    )
+
+    assert workspace.job["status"] == "completed"
+    assert workspace.failed_records == []
+    assert workspace.items and workspace.items[0]["status"] == "data_gap"
+    assert workspace.summary is not None
+    assert workspace.summary["execution_status"] == "completed"
+    assert workspace.summary["failed_count"] == 0
+    assert workspace.summary["failed_record_count"] == 0
+    assert workspace.summary["failed_rule_count"] == 0
+    assert workspace.summary["failed_rule_ids"] == []
+    assert workspace.summary["data_quality_gap_records"] == 1
+    assert workspace.summary["record_status_breakdown"]["data_gap"] == 1
+
+
+@pytest.mark.asyncio
+async def test_formal_customer_sample_model_stats_sum_two_records_and_failed_record_is_not_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rule_ids = ["LX0609-011", "LX0609-012"]
+    workspace = await _run_formal_customer_sample_batch_fixture(
+        monkeypatch,
+        rule_ids=rule_ids,
+        record_ids=["visit-001", "visit-002"],
+        eval_items_by_record={
+            "visit-001": [
+                _customer_batch_eval_item("LX0609-011", "compliant"),
+                _customer_batch_eval_item(
+                    "LX0609-012",
+                    "data_gap",
+                    reason_code="required_field_missing",
+                ),
+            ],
+            "visit-002": [
+                _customer_batch_eval_item(
+                    rule_id,
+                    "technical_error",
+                    reason_code="model_invalid_output",
+                )
+                for rule_id in rule_ids
+            ],
+        },
+        model_stats_by_record={
+            "visit-001": {
+                "requested_rule_count": 1,
+                "first_success_rule_count": 1,
+                "retried_rule_count": 0,
+                "recovered_rule_count": 0,
+                "failed_rule_count": 0,
+            },
+            "visit-002": {
+                "requested_rule_count": 2,
+                "first_success_rule_count": 0,
+                "retried_rule_count": 2,
+                "recovered_rule_count": 0,
+                "failed_rule_count": 2,
+            },
+        },
+    )
+
+    assert workspace.job["status"] == "failed"
+    assert workspace.summary is not None
+    assert workspace.summary["execution_status"] == "partial_failed"
+    assert workspace.summary["success_count"] == 1
+    assert workspace.summary["failed_record_count"] == 1
+    assert workspace.summary["failed_rule_count"] == 2
+    assert workspace.summary["completed_rule_count"] == 2
+    assert workspace.summary["model_execution_stats"] == {
+        "scope": "exam_lab",
+        "requested_rule_count": 3,
+        "first_success_rule_count": 1,
+        "retried_rule_count": 2,
+        "recovered_rule_count": 0,
+        "failed_rule_count": 2,
+        "first_answer_success_rate": 1 / 3,
+        "recovery_success_rate": 0.0,
+        "model_failure_rate": 2 / 3,
+    }
+    assert {
+        rule_result["rule_code"]: {
+            "total_records": rule_result["total_records"],
+            "success_count": rule_result["success_count"],
+            "failed_count": rule_result["failed_count"],
+            "item_count": len(rule_result["items"]),
+            "failed_record_count": len(rule_result["failed_records"]),
+        }
+        for rule_result in workspace.summary["rule_results"]
+    } == {
+        rule_id: {
+            "total_records": 2,
+            "success_count": 1,
+            "failed_count": 1,
+            "item_count": 1,
+            "failed_record_count": 1,
+        }
+        for rule_id in rule_ids
+    }
+    assert len(workspace.items) == 2

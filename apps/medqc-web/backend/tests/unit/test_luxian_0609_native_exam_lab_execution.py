@@ -544,7 +544,7 @@ async def test_typed_strict_schema_client_receives_schema_on_batch_retry(monkeyp
     )
 
     assert result.llm_call_count == 2
-    assert result.parse_failure_kinds == ("not_json",)
+    assert result.parse_failure_kinds == ("not_json", "semantic_unknown")
     assert len(client.response_formats) == 2
     for response_format in client.response_formats:
         assert response_format["type"] == "json_schema"
@@ -3376,9 +3376,9 @@ async def test_lx0609_015_same_culture_action_remains_compliant(monkeypatch):
             "unknown",
             "unknown",
             "unknown",
-            "data_gap",
-            "required_field_missing",
-            1,
+            "technical_error",
+            "model_invalid_output",
+            2,
         ),
     ),
 )
@@ -3419,18 +3419,15 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
             },
         ),
     )
-    client = _Client(
-        [
-            _fact_response(
-                ("LX0609-012",),
-                applicability=model_applicability,
-                semantic_state=model_semantic,
-                positive_state=model_positive,
-            )
-        ]
-        if expected_llm_calls
-        else []
-    )
+    client = _Client([
+        _fact_response(
+            ("LX0609-012",),
+            applicability=model_applicability,
+            semantic_state=model_semantic,
+            positive_state=model_positive,
+        )
+        for _ in range(expected_llm_calls)
+    ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-012",),
@@ -3451,7 +3448,10 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
     assert [item.final_state.value for item in reduced] == [expected_state]
     assert reduced[0].reason_code == expected_reason
     assert result.llm_call_count == expected_llm_calls
-    assert all(item.fact_refs for item in result.decisions)
+    if expected_state == "technical_error":
+        assert all(not item.fact_refs for item in result.decisions)
+    else:
+        assert all(item.fact_refs for item in result.decisions)
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-012"}],
         execution_results=list(result.results),
@@ -3534,10 +3534,10 @@ async def test_lx0609_012_not_mature_window_stays_not_applicable_through_canonic
 
 
 @pytest.mark.asyncio
-async def test_lx0609_012_complete_ambiguous_semantics_is_contract_data_gap(
+async def test_lx0609_012_complete_ambiguous_semantics_is_model_failure(
     monkeypatch,
 ):
-    """012 的语义不确定必须收敛为契约允许的 data_gap，而不是 uncertain。"""
+    """资料完整时模型语义不确定必须闭合为技术失败，不能伪装成资料缺口。"""
 
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -3561,20 +3561,17 @@ async def test_lx0609_012_complete_ambiguous_semantics_is_contract_data_gap(
             },
         ),
     )
+    unknown_response = _fact_response(
+        ("LX0609-012",),
+        applicability="applicable",
+        semantic_state="unknown",
+        positive_state="positive",
+    )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-012",),
         wrapper_rules=[_wrapper("LX0609-012")],
         evidence_payload=None,
-        llm_client=_Client(
-            [
-                _fact_response(
-                    ("LX0609-012",),
-                    applicability="applicable",
-                    semantic_state="unknown",
-                    positive_state="positive",
-                )
-            ]
-        ),
+        llm_client=_Client([unknown_response, unknown_response]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         decision_rule_ids=("LX0609-012",),
@@ -3596,14 +3593,14 @@ async def test_lx0609_012_complete_ambiguous_semantics_is_contract_data_gap(
         },
     )
 
-    assert result.decisions[0].applicability.value == "unknown"
-    assert result.decisions[0].evidence_state.value == "data_gap"
-    assert result.decisions[0].reason_code == "required_field_missing"
-    assert reduced[0].final_state.value == "data_gap"
-    assert reduced[0].reason_code == "required_field_missing"
-    assert canonical[0]["status"] == "data_gap"
-    assert canonical[0]["reason_code"] == "required_field_missing"
-    assert canonical[0]["status"] != "uncertain"
+    assert result.llm_call_count == 2
+    assert result.decisions[0].applicability.value == "error"
+    assert result.decisions[0].evidence_state.value == "technical_error"
+    assert result.decisions[0].reason_code == "model_invalid_output"
+    assert reduced[0].final_state.value == "technical_error"
+    assert reduced[0].reason_code == "model_invalid_output"
+    assert canonical[0]["status"] == "technical_error"
+    assert canonical[0]["reason_code"] == "model_invalid_output"
 
 
 def _ambiguous_exam_projection() -> ExamLabTextProjection:
@@ -3699,10 +3696,10 @@ def test_contract_status_conformance_is_scoped_to_lx0609_012():
 
 
 @pytest.mark.asyncio
-async def test_lx0609_012_delivered_status_and_reason_code_are_contract_allowed(
+async def test_lx0609_012_model_failure_is_not_delivered_as_contract_status(
     monkeypatch,
 ):
-    """契约自证：012 语义不确定交付的 status 与 reason_code 都必须在允许集合内。"""
+    """模型失败保持内部 technical_error，不能把执行失败塞进 012 交付集合。"""
 
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -3726,20 +3723,17 @@ async def test_lx0609_012_delivered_status_and_reason_code_are_contract_allowed(
             },
         ),
     )
+    unknown_response = _fact_response(
+        ("LX0609-012",),
+        applicability="unknown",
+        semantic_state="unknown",
+        positive_state="unknown",
+    )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-012",),
         wrapper_rules=[_wrapper("LX0609-012")],
         evidence_payload=None,
-        llm_client=_Client(
-            [
-                _fact_response(
-                    ("LX0609-012",),
-                    applicability="unknown",
-                    semantic_state="unknown",
-                    positive_state="unknown",
-                )
-            ]
-        ),
+        llm_client=_Client([unknown_response, unknown_response]),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         decision_rule_ids=("LX0609-012",),
@@ -3761,17 +3755,17 @@ async def test_lx0609_012_delivered_status_and_reason_code_are_contract_allowed(
         },
     )[0]
 
-    # 契约状态集合（docs/0602/luxian_0609_formal_rule_catalog.csv 的 012 目录行折算为
-    # 运行时状态）与运行时原因码表逐条对照：status 与 reason_code 都必须合法。
-    assert canonical["status"] in exam_lab._LX0609_012_ALLOWED_FINAL_STATES
-    assert canonical["status"] != "uncertain"
-    assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "required_field_missing"
+    # 012 的契约交付集合不含 technical_error；执行失败只能停留在内部失败状态，
+    # 并使用 technical_error 对应的运行时原因码。
+    assert result.llm_call_count == 2
+    assert result.decisions[0].applicability.value == "error"
+    assert result.decisions[0].evidence_state.value == "technical_error"
+    assert result.decisions[0].reason_code == "model_invalid_output"
+    assert canonical["status"] == "technical_error"
+    assert canonical["status"] not in exam_lab._LX0609_012_ALLOWED_FINAL_STATES
+    assert canonical["reason_code"] == "model_invalid_output"
     assert canonical["reason_code"] in ALLOWED_REASON_CODES_BY_FINAL_STATE[
-        canonical["status"]
-    ]
-    assert canonical["reason_code"] not in ALLOWED_REASON_CODES_BY_FINAL_STATE[
-        "evaluation_unknown"
+        "technical_error"
     ]
 
 
@@ -4942,10 +4936,10 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
 
 
 @pytest.mark.asyncio
-async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
+async def test_012_mixed_positive_and_unknown_events_stop_at_model_failure(
     monkeypatch,
 ):
-    """明确违规优先；资料完整但语义不明的事件收敛为契约内 data_gap。"""
+    """完整资料中的语义不确定事件使整条规则的模型判定失败。"""
 
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -4969,7 +4963,7 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
         },),
         evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
     )
-    client = _Client([{
+    unknown_response = {
         "schema_version": "lx0609-exam-lab-text-facts-v4",
         "facts": [
             {
@@ -4989,7 +4983,8 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
                 "course_doc_positions": [],
             },
         ],
-    }])
+    }
+    client = _Client([unknown_response, unknown_response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-012",),
@@ -5007,17 +5002,12 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
         evidence_materials=materials,
     )
 
-    assert reduced[0].final_state.value == "non_compliant"
-    display = dict(result.customer_display_facts)["LX0609-012"]
-    assert [item["event_status"] for item in display["event_results"]] == [
-        "data_gap",
-        "non_compliant",
-    ]
-    assert all(
-        item["event_status"] != "evaluation_unknown"
-        for item in display["event_results"]
-    )
-    assert display["event_results"][0]["positive_state"] == "unknown"
+    assert result.llm_call_count == 2
+    assert result.decisions[0].applicability.value == "error"
+    assert result.decisions[0].evidence_state.value == "technical_error"
+    assert result.decisions[0].reason_code == "model_invalid_output"
+    assert reduced[0].final_state.value == "technical_error"
+    assert reduced[0].reason_code == "model_invalid_output"
 
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=[{"rule_id": "LX0609-012"}],
@@ -5029,17 +5019,9 @@ async def test_012_mixed_positive_and_unknown_events_reach_customer_aggregation(
             "evidence_materials": materials,
         },
     )
-    assert canonical[0]["status"] == "non_compliant"
-    assert canonical[0]["customer_display_facts"]["failure_kind"] == (
-        "exam_lab_requirement_not_documented"
-    )
-    assert canonical[0]["customer_display_facts"]["event_results"][0] == {
-        "event_position": 1,
-        "event_status": "data_gap",
-        "report_time": "2026-04-01 12:00:00",
-        "positive_state": "unknown",
-        "response_record_count": 0,
-    }
+    assert canonical[0]["status"] == "technical_error"
+    assert canonical[0]["reason_code"] == "model_invalid_output"
+    assert "event_results" not in canonical[0].get("customer_display_facts", {})
 
 
 @pytest.mark.asyncio

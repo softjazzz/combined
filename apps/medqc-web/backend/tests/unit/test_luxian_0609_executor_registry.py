@@ -31,6 +31,12 @@ from app.services.luxian_0609.executor_registry import (
     resolve_legacy_executor_material_source_keys,
     _to_envelope,
 )
+from app.services.luxian_0609.customer_rule_package import LUXIAN_0609_RULE_SET_KEY
+from app.services.luxian_0609.execution import (
+    Luxian0609ExecutionContext,
+    _build_execution_usage_attribution,
+    attach_luxian_0609_execution_metadata,
+)
 from app.services.luxian_0609.native_execution import build_luxian_0609_native_result
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
 from app.services.luxian_0609.source_manifest import QueryStatus
@@ -198,6 +204,213 @@ def test_adapter_preserves_model_call_when_provider_usage_is_missing() -> None:
         "covered_customer_rule_ids": ["LX0609-010"],
         "latency_ms": 300.0,
     }
+
+
+def test_adapter_transmits_safe_model_execution_stats() -> None:
+    stats = {
+        "requested_rule_count": 4,
+        "first_success_rule_count": 2,
+        "retried_rule_count": 2,
+        "recovered_rule_count": 1,
+        "failed_rule_count": 1,
+        "first_answer_success_rate": 0.5,
+        "recovery_success_rate": 0.5,
+        "model_failure_rate": 0.25,
+    }
+    envelope = _to_envelope(
+        SimpleNamespace(
+            results=(_result("LX0609-010"),),
+            planned_rule_ids=("LX0609-010",),
+            decisions=(),
+            llm_call_count=2,
+            prompt_tokens=120,
+            completion_tokens=20,
+            total_tokens=140,
+            api_time=0.25,
+            model_execution_stats=stats,
+        ),
+        selected_rule_ids=("LX0609-010",),
+        executor_key="exam_lab",
+    )
+
+    assert envelope.usage_attribution.model_execution_stats == stats
+    assert envelope.usage_attribution.to_safe_dict()["model_execution_stats"] == stats
+
+
+def test_compatibility_usage_fallback_transmits_model_execution_stats() -> None:
+    stats = {
+        "requested_rule_count": 1,
+        "first_success_rule_count": 0,
+        "retried_rule_count": 1,
+        "recovered_rule_count": 0,
+        "failed_rule_count": 1,
+        "first_answer_success_rate": 0.0,
+        "recovery_success_rate": 0.0,
+        "model_failure_rate": 1.0,
+    }
+    usage = _build_execution_usage_attribution(
+        executor_key="exam_lab",
+        rule_ids=("LX0609-010",),
+        execution=SimpleNamespace(
+            llm_call_count=2,
+            prompt_tokens=120,
+            completion_tokens=20,
+            total_tokens=140,
+            api_time=0.25,
+            model_execution_stats=stats,
+        ),
+    )
+
+    assert usage.model_execution_stats == stats
+    assert usage.to_safe_dict()["model_execution_stats"] == stats
+
+
+def test_model_execution_stats_rejects_unsafe_keys_and_invalid_counts() -> None:
+    base = {
+        "requested_rule_count": 1,
+        "first_success_rule_count": 1,
+        "retried_rule_count": 0,
+        "recovered_rule_count": 0,
+        "failed_rule_count": 0,
+        "first_answer_success_rate": 1.0,
+        "recovery_success_rate": None,
+        "model_failure_rate": 0.0,
+    }
+    unsafe = {**base, "prompt": "patient text"}
+    invalid_count = {**base, "failed_rule_count": -1}
+    invalid_rate = {
+        **base,
+        "requested_rule_count": 2,
+        "first_success_rule_count": 1,
+        "failed_rule_count": 1,
+        "first_answer_success_rate": 0.5,
+        "model_failure_rate": 0.0,
+    }
+
+    for stats in (unsafe, invalid_count, invalid_rate):
+        with pytest.raises((TypeError, ValueError), match="model execution stats"):
+            _to_envelope(
+                SimpleNamespace(
+                    results=(_result("LX0609-010"),),
+                    planned_rule_ids=("LX0609-010",),
+                    llm_call_count=1,
+                    prompt_tokens=1,
+                    completion_tokens=1,
+                    total_tokens=2,
+                    api_time=0.1,
+                    model_execution_stats=stats,
+                ),
+                selected_rule_ids=("LX0609-010",),
+                executor_key="exam_lab",
+            )
+
+
+def test_model_execution_stats_uses_none_for_zero_denominators() -> None:
+    stats = {
+        "requested_rule_count": 0,
+        "first_success_rule_count": 0,
+        "retried_rule_count": 0,
+        "recovered_rule_count": 0,
+        "failed_rule_count": 0,
+        "first_answer_success_rate": None,
+        "recovery_success_rate": None,
+        "model_failure_rate": None,
+    }
+    envelope = _to_envelope(
+        SimpleNamespace(
+            results=(_result("LX0609-010"),),
+            planned_rule_ids=("LX0609-010",),
+            llm_call_count=0,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            api_time=0.0,
+            model_execution_stats=stats,
+        ),
+        selected_rule_ids=("LX0609-010",),
+        executor_key="exam_lab",
+    )
+
+    assert envelope.usage_attribution.to_safe_dict()["model_execution_stats"] == stats
+
+
+def test_model_execution_stats_allows_model_failure_without_retry() -> None:
+    stats = {
+        "requested_rule_count": 1,
+        "first_success_rule_count": 0,
+        "retried_rule_count": 0,
+        "recovered_rule_count": 0,
+        "failed_rule_count": 1,
+        "first_answer_success_rate": 0.0,
+        "recovery_success_rate": None,
+        "model_failure_rate": 1.0,
+    }
+    envelope = _to_envelope(
+        SimpleNamespace(
+            results=(_result("LX0609-010"),),
+            planned_rule_ids=("LX0609-010",),
+            llm_call_count=1,
+            prompt_tokens=1,
+            completion_tokens=1,
+            total_tokens=2,
+            api_time=0.1,
+            model_execution_stats=stats,
+        ),
+        selected_rule_ids=("LX0609-010",),
+        executor_key="exam_lab",
+    )
+
+    assert envelope.usage_attribution.to_safe_dict()["model_execution_stats"] == stats
+
+
+def test_execution_metadata_attaches_exam_lab_stats_without_mutating_results() -> None:
+    stats = {
+        "requested_rule_count": 1,
+        "first_success_rule_count": 1,
+        "retried_rule_count": 0,
+        "recovered_rule_count": 0,
+        "failed_rule_count": 0,
+        "first_answer_success_rate": 1.0,
+        "recovery_success_rate": None,
+        "model_failure_rate": 0.0,
+    }
+    usage = _build_execution_usage_attribution(
+        executor_key="exam_lab",
+        rule_ids=("LX0609-010",),
+        execution=SimpleNamespace(
+            llm_call_count=1,
+            prompt_tokens=1,
+            completion_tokens=1,
+            total_tokens=2,
+            api_time=0.1,
+            model_execution_stats=stats,
+        ),
+    )
+    results = [{"rule_id": "LX0609-010", "status": "compliant"}]
+    orchestrated = {"results": results}
+
+    attach_luxian_0609_execution_metadata(
+        orchestrated=orchestrated,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        context=Luxian0609ExecutionContext(
+            enabled=True,
+            prepared_rule_count=1,
+            executable_rule_count=1,
+            native_usage_attributions=(usage,),
+            native_results=results,
+        ),
+    )
+
+    assert orchestrated["model_execution_stats"] == stats
+    from app.services.sichuan_qc_service import SichuanQCService
+
+    service = SichuanQCService.__new__(SichuanQCService)
+    service.client = SimpleNamespace(model="synthetic")
+    response = service._build_document_evaluation_result(
+        document_id="synthetic", document_type="病程记录", rules=[], orchestrated=orchestrated,
+    )
+    assert response["model_execution_stats"] == stats
+    assert orchestrated["results"] == results
 
 
 def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> None:

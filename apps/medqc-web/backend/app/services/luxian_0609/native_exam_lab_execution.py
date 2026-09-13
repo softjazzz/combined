@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
 import json
 import logging
@@ -283,6 +283,7 @@ class NativeExamLabExecutionResult:
     api_time: float = 0.0
     # 仅保留受控枚举，不保存 Prompt、模型正文或病历内容。
     parse_failure_kinds: tuple[str, ...] = ()
+    model_execution_stats: Mapping[str, int | float | None] = dataclass_field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1641,6 +1642,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     parse_failure_kinds: list[str] = []
+    model_rule_count = first_success_count = retried_rule_count = recovered_rule_count = 0
     # 仅在当前一次 Evidence Session 已读取的行内查找显式 document_id；不回读 DB。
     display_rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]] = {}
 
@@ -2053,6 +2055,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     emit_typed(rule_id, status, reason)
                     typed_processed.add(rule_id)
             elif eligible_rule_ids:
+                model_rule_count += len(eligible_rule_ids)
                 llm_call_count += 1
                 try:
                     response = await _generate_exam_lab_fact_response(
@@ -2084,6 +2087,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         )
                         text_facts = partition.facts
                         isolated_rule_failures = dict(partition.rule_failures)
+                        first_success_count += len(eligible_rule_ids) - len(isolated_rule_failures)
                         if isolated_rule_failures:
                             # 首轮共享提取只记一次受控失败类别；重试仅携带
                             # 失败规则，其余已通过事实继续留在 text_facts。
@@ -2102,6 +2106,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 for rule_id in eligible_rule_ids
                                 if rule_id in isolated_rule_failures
                             )
+                            retried_rule_count += len(retry_rule_ids)
                             llm_call_count += 1
                             try:
                                 retry_response = await _generate_exam_lab_fact_response(
@@ -2128,6 +2133,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 isolated_rule_failures.update(
                                     retry_partition.rule_failures
                                 )
+                                recovered_rule_count += len(retry_rule_ids) - len(retry_partition.rule_failures)
                             except Exception as retry_exc:  # noqa: BLE001
                                 # 重试响应的顶层/范围错误仍闭合失败规则；首轮
                                 # 已通过的其它规则保留，不把异常扩散回它们。
@@ -2142,6 +2148,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         # 非受控 ValueError，仍按原合同让整批进入一次重试。
                         failure_kind = getattr(exc, "failure_kind", "value")
                         parse_failure_kinds.append(failure_kind)
+                        retried_rule_count += len(eligible_rule_ids)
                         logger.warning(
                             "exam_lab_fact_parse_failed parse_failure_kind=%s",
                             failure_kind,
@@ -2162,11 +2169,16 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             completion_tokens += retry_completion
                             total_tokens += retry_total
                             api_time += retry_elapsed
-                            text_facts = parse_exam_lab_fact_response(
+                            retry_partition = parse_exam_lab_fact_response_isolated(
                                 response=retry_response,
                                 selected_rule_ids=eligible_rule_ids,
                                 projection=projection,
+                                _strict_parser=parse_exam_lab_fact_response,
                             )
+                            text_facts = retry_partition.facts
+                            isolated_rule_failures = dict(retry_partition.rule_failures)
+                            parse_failure_kinds.extend(isolated_rule_failures.values())
+                            recovered_rule_count += len(eligible_rule_ids) - len(isolated_rule_failures)
                         except Exception:  # noqa: BLE001
                             logger.warning("exam_lab_fact_retry_failed")
                             text_facts = None
@@ -2289,4 +2301,17 @@ async def execute_luxian_0609_native_exam_lab_rules(
         total_tokens=total_tokens,
         api_time=api_time,
         parse_failure_kinds=tuple(dict.fromkeys(parse_failure_kinds)),
+        model_execution_stats={
+            "requested_rule_count": model_rule_count,
+            "first_success_rule_count": first_success_count,
+            "retried_rule_count": retried_rule_count,
+            "recovered_rule_count": recovered_rule_count,
+            "failed_rule_count": model_rule_count - first_success_count - recovered_rule_count,
+            "first_answer_success_rate": first_success_count / model_rule_count if model_rule_count else None,
+            "recovery_success_rate": recovered_rule_count / retried_rule_count if retried_rule_count else None,
+            "model_failure_rate": (
+                (model_rule_count - first_success_count - recovered_rule_count) / model_rule_count
+                if model_rule_count else None
+            ),
+        },
     )

@@ -153,6 +153,9 @@ export interface SichuanBatchJobSummary {
   success_count: number
   failed_count: number
   failed_record_count?: number
+  execution_status?: 'completed' | 'partial_failed' | 'failed'
+  completed_rule_count?: number
+  failed_rule_count?: number
   issue_records: number
   uncertain_records?: number
   compliant_records: number

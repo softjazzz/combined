@@ -154,6 +154,7 @@ def _build_execution_usage_attribution(
     completion_tokens = getattr(execution, "completion_tokens", 0)
     total_tokens = getattr(execution, "total_tokens", 0)
     api_time = getattr(execution, "api_time", 0.0)
+    model_execution_stats = getattr(execution, "model_execution_stats", None)
     return build_family_usage_attribution(
         executor_key=executor_key,
         covered_customer_rule_ids=rule_ids,
@@ -162,6 +163,7 @@ def _build_execution_usage_attribution(
         completion_tokens=0 if completion_tokens is None else completion_tokens,
         total_tokens=0 if total_tokens is None else total_tokens,
         api_time=0.0 if api_time is None else api_time,
+        model_execution_stats=model_execution_stats,
     )
 
 
@@ -996,6 +998,16 @@ def attach_luxian_0609_execution_metadata(
         orchestrated["luxian_0609_025_shadow"] = dict(
             context.implant_information_shadow
         )
+    for attribution in context.native_usage_attributions:
+        if (
+            isinstance(attribution, FamilyUsageAttribution)
+            and attribution.executor_key == EXAM_LAB_EXECUTOR_KEY
+            and attribution.model_execution_stats is not None
+        ):
+            orchestrated["model_execution_stats"] = dict(
+                attribution.model_execution_stats
+            )
+            break
 
 
 def aggregate_luxian_0609_orchestrated_results(
