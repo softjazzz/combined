@@ -30,6 +30,7 @@ from .source_evidence_reader import (
 )
 from .surgery_event_association import count_associated_performed_surgery_events
 from .surgery_applicability import resolve_surgery_applicability
+from .surgery_procedure_catalog import normalize_surgery_level
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
     resolve_luxian_0609_decision_support_source_keys,
@@ -628,6 +629,10 @@ _PERSON_ROLE_PATTERN = re.compile(
 _PERSON_ROLE_SUFFIX_PATTERN = re.compile(
     r"[（(]\s*(?:术者|主刀|主持人|记录人|医师|医生|主任|副主任)\s*[)）]$"
 )
+_PERSON_TITLE_SUFFIX_PATTERN = re.compile(
+    r"(?:[（(]\s*)?(?:副主任医师|主任医师|主治医师|住院医师|执业医师|"
+    r"副主任医生|主任医生|主治医生|住院医生|医师|医生)(?:\s*[)）])?$"
+)
 _NON_PERSON_VALUES = frozenset(
     {"有", "无", "是", "否", "已签名", "签名", "已参加", "参加", "未知", "暂无"}
 )
@@ -664,6 +669,7 @@ def _person_names(value: Any) -> set[str]:
     for raw_name in _PERSON_SPLIT_PATTERN.split(text):
         name = _PERSON_ROLE_PATTERN.sub("", raw_name).strip(" :：()（）[]【】")
         name = _PERSON_ROLE_SUFFIX_PATTERN.sub("", name).strip()
+        name = _PERSON_TITLE_SUFFIX_PATTERN.sub("", name).strip(" :：()（）[]【】")
         if name and name not in _NON_PERSON_VALUES:
             names.add(name)
     return names
@@ -675,17 +681,38 @@ def _surgery_and_discussion_people(
     if materials is None:
         return None
     try:
-        surgery_rows = (
-            *materials.rows("surgery_record"),
-            *materials.rows("mr_surgery"),
-        )
+        formal_rows = tuple(materials.rows("surgery_record"))
+        mr_rows = tuple(materials.rows("mr_surgery"))
         discussion_rows = materials.rows("presurg_discussion")
     except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
         return None
 
-    surgeons: set[str] = set()
-    for row in surgery_rows:
-        surgeons.update(_person_names(row.get("surgeon")))
+    formal_names_by_row = tuple(
+        _person_names(row.get("surgeon")) for row in formal_rows
+    )
+    if formal_names_by_row and any(formal_names_by_row):
+        if any(not names for names in formal_names_by_row):
+            return None
+        surgeons = set().union(*formal_names_by_row)
+    else:
+        levelled_rows = [
+            (normalize_surgery_level(row.get("surgical_level")), row)
+            for row in mr_rows
+        ]
+        recognised_levels = [rank for rank, _row in levelled_rows if rank]
+        if recognised_levels:
+            highest = max(recognised_levels)
+            selected_rows = [
+                row for rank, row in levelled_rows if rank == highest
+            ]
+        else:
+            selected_rows = list(mr_rows)
+        names_by_row = tuple(
+            _person_names(row.get("surgeon")) for row in selected_rows
+        )
+        if any(not names for names in names_by_row):
+            return None
+        surgeons = set().union(*names_by_row) if names_by_row else set()
 
     participants: set[str] = set()
     for row in discussion_rows:

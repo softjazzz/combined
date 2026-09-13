@@ -1770,6 +1770,78 @@ def test_typed_039_unknown_emergency_with_unmatched_surgeon_is_data_gap(monkeypa
     assert outcome.customer_display_facts is None
 
 
+def test_typed_039_prefers_formal_surgeon_over_auxiliary_mr_rows(monkeypatch):
+    _patch_typed_039_unknown_emergency(monkeypatch)
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials(
+            {
+                "surgery_record": ({"surgeon": "梁应开"},),
+                "mr_surgery": (
+                    {"surgeon": "梁应开", "surgical_level": "四级"},
+                    {"surgeon": "胃镜操作人员", "surgical_level": "一级"},
+                    {"surgeon": "辅助操作人员", "surgical_level": None},
+                ),
+                "presurg_discussion": (
+                    {"discuss_staff": "梁应开副主任医师"},
+                ),
+            }
+        ),
+    )
+
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "surgeon_participation_confirmed"
+
+
+def test_typed_039_fallback_mr_uses_highest_level_only(monkeypatch):
+    _patch_typed_039_unknown_emergency(monkeypatch)
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials(
+            {
+                "surgery_record": (),
+                "mr_surgery": (
+                    {"surgeon": "梁应开", "surgical_level": "四级"},
+                    {"surgeon": "胃镜操作人员", "surgical_level": "一级"},
+                    {"surgeon": "辅助操作人员", "surgical_level": None},
+                ),
+                "presurg_discussion": (
+                    {"discuss_staff": "梁应开副主任医师"},
+                ),
+            }
+        ),
+    )
+
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "surgeon_participation_confirmed"
+
+
+def test_typed_039_fallback_mr_requires_all_surgeons_at_highest_level(monkeypatch):
+    _patch_typed_039_unknown_emergency(monkeypatch)
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials(
+            {
+                "surgery_record": (),
+                "mr_surgery": (
+                    {"surgeon": "梁应开", "surgical_level": "四级"},
+                    {"surgeon": "张北南", "surgical_level": "四级"},
+                    {"surgeon": "胃镜操作人员", "surgical_level": "一级"},
+                ),
+                "presurg_discussion": (
+                    {"discuss_staff": "梁应开副主任医师"},
+                ),
+            }
+        ),
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
+
+
 def test_typed_039_is_compliant_when_surgeon_is_in_discussion_staff(monkeypatch):
     _patch_typed_039_present_sources(monkeypatch)
     materials = _RowsOnlyMaterials(
