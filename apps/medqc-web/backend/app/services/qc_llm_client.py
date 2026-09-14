@@ -160,6 +160,8 @@ class SichuanQCLLMClient:
         max_completion_tokens: int | None = None,
         allow_length_retry: bool = True,
         response_format: Mapping[str, Any] | None = None,
+        enable_thinking: bool | None = None,
+        thinking_budget: int | None = None,
     ) -> Dict[str, Any]:
         if max_completion_tokens is not None and (
             isinstance(max_completion_tokens, bool)
@@ -207,6 +209,12 @@ class SichuanQCLLMClient:
         max_tokens = self._resolve_max_tokens(prompt)
         if max_completion_tokens is not None:
             max_tokens = min(max_tokens, max_completion_tokens)
+        resolved_enable_thinking = (
+            self.enable_thinking if enable_thinking is None else enable_thinking
+        )
+        resolved_thinking_budget = (
+            self.thinking_budget if thinking_budget is None else thinking_budget
+        )
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -215,7 +223,12 @@ class SichuanQCLLMClient:
             "max_tokens": max_tokens,
             "stream": False,
         }
-        payload.update(self._build_provider_specific_payload())
+        payload.update(
+            self._build_provider_specific_payload(
+                enable_thinking=resolved_enable_thinking,
+                thinking_budget=resolved_thinking_budget,
+            )
+        )
         if response_format_payload is not None:
             payload["response_format"] = deepcopy(response_format_payload)
 
@@ -418,9 +431,20 @@ class SichuanQCLLMClient:
         endpoint = str(self.api_endpoint or "").strip().lower().rstrip("/")
         return endpoint.startswith(self.DEEPSEEK_BASE_URL_PREFIX)
 
-    def _build_provider_specific_payload(self) -> Dict[str, Any]:
+    def _build_provider_specific_payload(
+        self,
+        *,
+        enable_thinking: bool | None = None,
+        thinking_budget: int | None = None,
+    ) -> Dict[str, Any]:
+        resolved_enable_thinking = (
+            self.enable_thinking if enable_thinking is None else enable_thinking
+        )
+        resolved_thinking_budget = (
+            self.thinking_budget if thinking_budget is None else thinking_budget
+        )
         if self._is_deepseek_provider():
-            if self.model == "deepseek-reasoner" or self.enable_thinking:
+            if self.model == "deepseek-reasoner" or resolved_enable_thinking:
                 extra: Dict[str, Any] = {"thinking": {"type": "enabled"}}
                 if self.reasoning_effort in {"high", "max"}:
                     extra["reasoning_effort"] = self.reasoning_effort
@@ -434,15 +458,15 @@ class SichuanQCLLMClient:
                 in {"dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"}
             )
         ):
-            extra: Dict[str, Any] = {"enable_thinking": self.enable_thinking}
-            if self.enable_thinking and self.thinking_budget is not None:
+            extra: Dict[str, Any] = {"enable_thinking": resolved_enable_thinking}
+            if resolved_enable_thinking and resolved_thinking_budget is not None:
                 if (
-                    isinstance(self.thinking_budget, bool)
-                    or not isinstance(self.thinking_budget, int)
-                    or self.thinking_budget <= 0
+                    isinstance(resolved_thinking_budget, bool)
+                    or not isinstance(resolved_thinking_budget, int)
+                    or resolved_thinking_budget <= 0
                 ):
                     raise ValueError("thinking_budget must be a positive integer")
-                extra["thinking_budget"] = self.thinking_budget
+                extra["thinking_budget"] = resolved_thinking_budget
             return extra
         return {"enable_thinking": False}
 

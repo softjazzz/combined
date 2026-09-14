@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -206,3 +207,138 @@ async def test_reload_config_updates_and_clears_thinking_budget(
     assert client.thinking_budget == 1024
     assert await LLMConfigLoader.reload_config_for_service(service) is True
     assert client.thinking_budget is None
+
+
+@pytest.mark.asyncio
+async def test_generate_can_disable_thinking_for_one_request_without_sending_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def fake_safe_post_json(**kwargs: Any) -> dict[str, Any]:
+        sent.append(dict(kwargs["payload"]))
+        return _response()
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config=_client_config(thinking_budget=256, include_budget=True),
+        observability_recorder=LLMObservabilityRecorder(
+            store=NullLLMCallEventStore()
+        ),
+    )
+
+    await client.generate(
+        "request override",
+        enable_thinking=False,
+        thinking_budget=1024,
+        allow_length_retry=False,
+    )
+
+    assert sent[0]["enable_thinking"] is False
+    assert "thinking_budget" not in sent[0]
+    assert client.enable_thinking is True
+    assert client.thinking_budget == 256
+
+
+@pytest.mark.asyncio
+async def test_generate_thinking_overrides_are_isolated_between_concurrent_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[dict[str, Any]] = []
+    both_requests_started = asyncio.Event()
+    request_count = 0
+
+    async def fake_safe_post_json(**kwargs: Any) -> dict[str, Any]:
+        nonlocal request_count
+        sent.append(dict(kwargs["payload"]))
+        request_count += 1
+        if request_count == 2:
+            both_requests_started.set()
+        await both_requests_started.wait()
+        return _response()
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config=_client_config(thinking_budget=256, include_budget=True),
+        observability_recorder=LLMObservabilityRecorder(
+            store=NullLLMCallEventStore()
+        ),
+    )
+
+    await asyncio.gather(
+        client.generate(
+            "thinking on",
+            enable_thinking=True,
+            allow_length_retry=False,
+        ),
+        client.generate(
+            "thinking off",
+            enable_thinking=False,
+            allow_length_retry=False,
+        ),
+    )
+
+    payload_by_prompt = {
+        payload["messages"][0]["content"]: payload for payload in sent
+    }
+    assert payload_by_prompt["thinking on"]["enable_thinking"] is True
+    assert payload_by_prompt["thinking on"]["thinking_budget"] == 256
+    assert payload_by_prompt["thinking off"]["enable_thinking"] is False
+    assert "thinking_budget" not in payload_by_prompt["thinking off"]
+    assert client.enable_thinking is True
+    assert client.thinking_budget == 256
+
+
+@pytest.mark.asyncio
+async def test_generate_can_override_thinking_budget_without_mutating_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def fake_safe_post_json(**kwargs: Any) -> dict[str, Any]:
+        sent.append(dict(kwargs["payload"]))
+        return _response()
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config=_client_config(thinking_budget=256, include_budget=True),
+        observability_recorder=LLMObservabilityRecorder(
+            store=NullLLMCallEventStore()
+        ),
+    )
+
+    await client.generate(
+        "budget override",
+        enable_thinking=True,
+        thinking_budget=1024,
+        allow_length_retry=False,
+    )
+
+    assert sent[0]["enable_thinking"] is True
+    assert sent[0]["thinking_budget"] == 1024
+    assert client.enable_thinking is True
+    assert client.thinking_budget == 256
+
+
+@pytest.mark.asyncio
+async def test_generate_without_thinking_overrides_keeps_configured_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def fake_safe_post_json(**kwargs: Any) -> dict[str, Any]:
+        sent.append(dict(kwargs["payload"]))
+        return _response()
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config=_client_config(thinking_budget=256, include_budget=True),
+        observability_recorder=LLMObservabilityRecorder(
+            store=NullLLMCallEventStore()
+        ),
+    )
+
+    await client.generate("configured budget", allow_length_retry=False)
+
+    assert sent[0]["enable_thinking"] is True
+    assert sent[0]["thinking_budget"] == 256
