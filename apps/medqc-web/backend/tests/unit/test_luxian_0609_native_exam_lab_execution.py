@@ -377,9 +377,11 @@ class _Client:
     def __init__(self, outputs: list[object]) -> None:
         self.outputs = list(outputs)
         self.prompts: list[str] = []
+        self.call_options: list[dict] = []
 
-    async def generate(self, prompt: str) -> dict:
+    async def generate(self, prompt: str, **kwargs) -> dict:
         self.prompts.append(prompt)
+        self.call_options.append(dict(kwargs))
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
             raise output
@@ -399,9 +401,9 @@ class _StrictSchemaClient(_Client):
     def supports_strict_json_schema(self) -> bool:
         return True
 
-    async def generate(self, prompt: str, *, response_format: dict) -> dict:
+    async def generate(self, prompt: str, *, response_format: dict, **kwargs) -> dict:
         self.response_formats.append(response_format)
-        return await super().generate(prompt)
+        return await super().generate(prompt, **kwargs)
 
 
 def _fact_response(

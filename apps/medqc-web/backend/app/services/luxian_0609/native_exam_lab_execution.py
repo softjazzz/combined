@@ -257,7 +257,12 @@ _CONTROLLED_MESSAGES = {
 
 
 class ExamLabLLMClient(Protocol):
-    async def generate(self, prompt: str) -> dict[str, Any]: ...
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        enable_thinking: bool | None = None,
+    ) -> dict[str, Any]: ...
 
 
 class _StrictJsonSchemaExamLabClient(Protocol):
@@ -268,6 +273,7 @@ class _StrictJsonSchemaExamLabClient(Protocol):
         prompt: str,
         *,
         response_format: Mapping[str, Any],
+        enable_thinking: bool | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -1097,6 +1103,7 @@ async def _generate_exam_lab_fact_response(
     llm_client: ExamLabLLMClient,
     selected_rule_ids: Sequence[str],
     projection: ExamLabTextProjection,
+    enable_thinking: bool | None = None,
 ) -> dict[str, Any]:
     """执行一次 typed 事实抽取；Schema 能力必须由客户端显式声明。"""
 
@@ -1105,8 +1112,22 @@ async def _generate_exam_lab_fact_response(
         projection=projection,
     )
     if not _supports_strict_json_schema(llm_client):
+        if enable_thinking is not None:
+            return await llm_client.generate(
+                prompt,
+                enable_thinking=enable_thinking,
+            )
         return await llm_client.generate(prompt)
     strict_client = cast(_StrictJsonSchemaExamLabClient, llm_client)
+    if enable_thinking is not None:
+        return await strict_client.generate(
+            prompt,
+            response_format=build_exam_lab_fact_response_format(
+                selected_rule_ids=selected_rule_ids,
+                projection=projection,
+            ),
+            enable_thinking=enable_thinking,
+        )
     return await strict_client.generate(
         prompt,
         response_format=build_exam_lab_fact_response_format(
@@ -2141,6 +2162,14 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                                 llm_client=llm_client,
                                                 selected_rule_ids=selected,
                                                 projection=event_projection,
+                                                enable_thinking=(
+                                                    False
+                                                    if rule_id in {
+                                                        "LX0609-011",
+                                                        "LX0609-014",
+                                                    }
+                                                    else None
+                                                ),
                                             )
                                         ),
                                         strict_parser=parse_exam_lab_fact_response,

@@ -131,6 +131,27 @@ async def test_cross_event_citation_recovers_with_event_isolated_context(monkeyp
     assert "EVENT_DOC=E01-01" not in client.prompts[2]
     assert "ONLY_EVENT_TWO" not in client.prompts[1]
     assert "ONLY_EVENT_ONE" not in client.prompts[2]
+    assert client.call_options == [
+        {},
+        {"enable_thinking": False},
+        {"enable_thinking": False},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_complex_assessment_event_recovery_keeps_configured_thinking(monkeypatch):
+    bad = _answer()
+    bad["facts"][3]["course_doc_positions"] = [1]
+
+    result, rows, client = await _execute(
+        monkeypatch,
+        [bad, _single_event_answer("LX0609-012"), _single_event_answer("LX0609-012")],
+    )
+
+    assert result.llm_call_count == 3
+    assert rows["LX0609-011"]["status"] == "compliant"
+    assert rows["LX0609-012"]["status"] == "compliant"
+    assert client.call_options == [{}, {}, {}]
 
 
 @pytest.mark.asyncio

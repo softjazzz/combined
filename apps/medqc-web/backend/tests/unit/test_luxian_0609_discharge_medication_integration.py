@@ -5,6 +5,7 @@ import json
 import pytest
 
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+from app.services.luxian_0609.extended_document.discharge_medication_extraction import SCHEMA_VERSION
 from app.services.luxian_0609.native_extended_document_execution import execute_luxian_0609_native_extended_document_rules
 from tests.unit.test_luxian_0609_native_extended_document_execution import _session, _canonical_extended_result
 
@@ -14,13 +15,13 @@ TEXT = "出院后口服合成药甲，每次5毫克，每日一次，连续7天�
 
 def _payload(*, missing_route=False, uncertain=False):
     return {
-        "schema_version": "lx0609_discharge_medications_v1",
+        "schema_version": SCHEMA_VERSION,
         "state": "uncertain" if uncertain else "medications_present",
         "items": [] if uncertain else [{
             "drug_name": {"state": "present", "quote": "合成药甲"},
             "dose": {"state": "present", "quote": "每次5毫克"},
             "route": {"state": "missing" if missing_route else "present", "quote": None if missing_route else "口服"},
-            "duration": {"state": "present", "quote": "连续7天"},
+            "medication_time": {"state": "present", "quote": "连续7天"},
         }],
     }
 
@@ -73,6 +74,7 @@ async def test_free_text_medication_preserves_final_decision_and_usage(missing_r
     assert len(client.calls) == result.llm_call_count == 1
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (100, 40, 140)
     assert client.calls[0][1]["allow_length_retry"] is False
+    assert client.calls[0][1]["enable_thinking"] is False
 
 
 @pytest.mark.asyncio

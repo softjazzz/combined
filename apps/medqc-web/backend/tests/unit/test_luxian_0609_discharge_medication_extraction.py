@@ -68,7 +68,11 @@ async def test_prompt_defines_count_units_and_bedtime_count_as_explicit_dose():
     assert "片、粒、袋、支等计数单位也属于dose" in prompt
     assert "睡前1片" in prompt and "明确一次用量" in prompt
     assert "不要求必须有mg/g" in prompt
-    assert kwargs == {"max_completion_tokens": 4096, "allow_length_retry": False}
+    assert kwargs == {
+        "max_completion_tokens": 4096,
+        "allow_length_retry": False,
+        "enable_thinking": False,
+    }
 
 
 @pytest.mark.asyncio
@@ -216,7 +220,11 @@ async def test_extract_exact_quotes_with_one_bounded_call_and_no_patient_id():
     assert result.api_time == 0.2
     prompt, kwargs = client.calls[0]
     assert "张测试" not in prompt and "ZY123456" not in prompt
-    assert kwargs == {"max_completion_tokens": 4096, "allow_length_retry": False}
+    assert kwargs == {
+        "max_completion_tokens": 4096,
+        "allow_length_retry": False,
+        "enable_thinking": False,
+    }
     assert SCHEMA_VERSION == "lx0609_discharge_medications_v2"
     assert "medication_time" in prompt
     assert "报medication_time缺失" in prompt

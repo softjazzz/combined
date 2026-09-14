@@ -26,7 +26,14 @@ _INTERNAL_FIELD_BY_WIRE_FIELD = {
 
 
 class MedicationLLMClient(Protocol):
-    async def generate(self, prompt: str, *, max_completion_tokens: int, allow_length_retry: bool) -> dict[str, Any]: ...
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        max_completion_tokens: int,
+        allow_length_retry: bool,
+        enable_thinking: bool,
+    ) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -138,7 +145,12 @@ async def extract_discharge_medications(text: str, llm_client: MedicationLLMClie
         return Extraction("technical_error", "model_transport_error")
     started = perf_counter()
     try:
-        response = await llm_client.generate(_prompt(safe_text), max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False)
+        response = await llm_client.generate(
+            _prompt(safe_text),
+            max_completion_tokens=MAX_COMPLETION_TOKENS,
+            allow_length_retry=False,
+            enable_thinking=False,
+        )
     except Exception as error:
         is_timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
         return Extraction("technical_error", "model_timeout" if is_timeout else "model_transport_error", llm_call_count=1, api_time=perf_counter() - started)
