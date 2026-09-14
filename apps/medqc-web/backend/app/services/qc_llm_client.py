@@ -77,12 +77,14 @@ class SichuanQCLLMClient:
             )
 
             logger.info(
-                "SichuanQCLLMClient custom init: model=%s source=%s temperature=%s top_p=%s max_tokens=%s",
+                "SichuanQCLLMClient custom init: model=%s source=%s temperature=%s top_p=%s max_tokens=%s enable_thinking=%s thinking_budget=%s",
                 self.model,
                 self.config_source,
                 self.temperature,
                 self.top_p,
                 self.max_tokens,
+                self.enable_thinking,
+                self.thinking_budget,
             )
         else:
             s = get_settings()
@@ -127,16 +129,18 @@ class SichuanQCLLMClient:
             self.temperature = 0.2
             self.top_p = 0.9
             self.max_tokens = self.DEFAULT_MAX_TOKENS
-            self.enable_thinking = False
-            self.thinking_budget = None
+            self.enable_thinking = s.LLM_ENABLE_THINKING
+            self.thinking_budget = s.LLM_THINKING_BUDGET
             self.reasoning_effort = ""
 
             logger.info(
-                "SichuanQCLLMClient env init: source=%s endpoint_set=%s api_key_set=%s model=%s allow_mock=%s",
+                "SichuanQCLLMClient env init: source=%s endpoint_set=%s api_key_set=%s model=%s enable_thinking=%s thinking_budget=%s allow_mock=%s",
                 s.llm_env_source() if hasattr(s, "llm_env_source") else "unknown",
                 bool(self.api_endpoint),
                 bool(self.api_key),
                 self.model,
+                self.enable_thinking,
+                self.thinking_budget,
                 self.allow_mock_when_unconfigured,
             )
 

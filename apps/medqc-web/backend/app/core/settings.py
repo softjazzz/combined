@@ -201,13 +201,15 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLM_API_KEY", "SICHUAN_API_KEY"),
     )
     LLM_MODEL: str = Field(
-        default="qwen3.7-flash",
+        default="qwen3.8-flash",
         validation_alias=AliasChoices("LLM_MODEL", "SICHUAN_MODEL"),
     )
     LLM_ADJUDICATOR_MODEL: Optional[str] = Field(
-        default="qwen3.7-flash",
+        default="qwen3.8-flash",
         validation_alias=AliasChoices("LLM_ADJUDICATOR_MODEL", "SICHUAN_ADJUDICATOR_MODEL"),
     )
+    LLM_ENABLE_THINKING: bool = False
+    LLM_THINKING_BUDGET: Optional[int] = Field(default=None, ge=1)
     LLM_TIMEOUT_SECONDS: int = Field(
         default=120,
         validation_alias=AliasChoices("LLM_TIMEOUT_SECONDS", "SICHUAN_TIMEOUT_SECONDS"),
@@ -308,6 +310,8 @@ class Settings(BaseSettings):
             "endpoint_set": bool(self.LLM_API_ENDPOINT),
             "api_key_set": bool(self.LLM_API_KEY),
             "model": self.LLM_MODEL,
+            "enable_thinking": self.LLM_ENABLE_THINKING,
+            "thinking_budget": self.LLM_THINKING_BUDGET,
             "timeout_seconds": self.LLM_TIMEOUT_SECONDS,
             "allow_mock_when_unconfigured": self.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED,
         }

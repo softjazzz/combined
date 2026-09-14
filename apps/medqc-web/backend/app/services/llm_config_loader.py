@@ -56,7 +56,7 @@ def build_provider_runtime_config(
     settings = get_settings()
     enabled = get_enabled_provider_codes()
     code = (provider_code or get_default_provider_code()).strip().lower()
-    params = custom_parameters or {}
+    params = dict(custom_parameters or {})
 
     if code not in enabled:
         fallback = get_default_provider_code()
@@ -353,7 +353,19 @@ class LLMConfigLoader:
     @staticmethod
     def _load_from_env() -> Dict[str, Any]:
         """从 .env 文件加载默认配置。"""
-        runtime = build_provider_runtime_config(get_default_provider_code())
+        settings = get_settings()
+        custom_parameters: Dict[str, Any] = {
+            "enable_thinking": settings.LLM_ENABLE_THINKING,
+        }
+        if (
+            settings.LLM_ENABLE_THINKING
+            and settings.LLM_THINKING_BUDGET is not None
+        ):
+            custom_parameters["thinking_budget"] = settings.LLM_THINKING_BUDGET
+        runtime = build_provider_runtime_config(
+            get_default_provider_code(),
+            custom_parameters=custom_parameters,
+        )
         runtime.update(
             {
                 "source": "env",

@@ -361,6 +361,7 @@ class SichuanQCService:
                         "top_p": self.client.top_p,
                         "max_tokens": self.client.max_tokens,
                         "enable_thinking": self.client.enable_thinking,
+                        "thinking_budget": self.client.thinking_budget,
                         "reasoning_effort": self.client.reasoning_effort,
                     },
                 }
@@ -539,6 +540,7 @@ class SichuanQCService:
                     "top_p": self.client.top_p,
                     "max_tokens": self.client.max_tokens,
                     "enable_thinking": self.client.enable_thinking,
+                    "thinking_budget": self.client.thinking_budget,
                     "reasoning_effort": self.client.reasoning_effort,
                 },
             }

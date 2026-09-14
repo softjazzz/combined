@@ -108,8 +108,10 @@ def _default_test_settings(**overrides):
     values = {
         "JWT_SECRET": "test-secret",
         "LLM_API_ENDPOINT": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "LLM_MODEL": "qwen3.7-flash",
-        "LLM_ADJUDICATOR_MODEL": "qwen3.7-flash",
+        "LLM_MODEL": "qwen3.8-flash",
+        "LLM_ADJUDICATOR_MODEL": "qwen3.8-flash",
+        "LLM_ENABLE_THINKING": True,
+        "LLM_THINKING_BUDGET": 256,
         "LLM_DEFAULT_PROVIDER": "alibaba",
         "LLM_VISIBLE_PROVIDERS": [],
         "_env_file": None,
@@ -186,7 +188,7 @@ def test_build_provider_runtime_config_should_use_env_model_for_siliconflow(monk
     assert config["model"] == "Qwen/Qwen3.5-35B-A3B"
 
 
-def test_build_provider_runtime_config_should_default_formal_qc_to_aliyun_qwen37_flash(monkeypatch):
+def test_build_provider_runtime_config_should_default_formal_qc_to_aliyun_qwen38_flash(monkeypatch):
     monkeypatch.setattr(
         llm_config_loader,
         "get_settings",
@@ -201,8 +203,23 @@ def test_build_provider_runtime_config_should_default_formal_qc_to_aliyun_qwen37
 
     assert config["provider_code"] == "alibaba"
     assert config["api_endpoint"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    assert config["model"] == "qwen3.7-flash"
+    assert config["model"] == "qwen3.8-flash"
     assert config["model"] != "deepseek-v4-flash"
+
+
+def test_load_from_env_should_enable_qwen38_with_small_thinking_budget(monkeypatch):
+    monkeypatch.setattr(
+        llm_config_loader,
+        "get_settings",
+        lambda: _default_test_settings(),
+    )
+
+    config = llm_config_loader.LLMConfigLoader._load_from_env()
+
+    assert config["source"] == "env"
+    assert config["model"] == "qwen3.8-flash"
+    assert config["custom_parameters"]["enable_thinking"] is True
+    assert config["custom_parameters"]["thinking_budget"] == 256
 
 
 def test_production_default_provider_should_use_alibaba(monkeypatch):
@@ -253,27 +270,25 @@ def test_build_adjudicator_runtime_config_should_fallback_to_first_pass_model(mo
     )
     config = llm_config_loader.build_adjudicator_runtime_config(base)
 
-    assert config["model"] == "qwen3.7-flash"
+    assert config["model"] == "qwen3.8-flash"
     assert config["adjudicator_model_source"] == "fallback_first_pass_model"
 
 
-def test_default_adjudicator_model_should_use_qwen37_flash(monkeypatch):
+def test_default_adjudicator_model_should_use_qwen38_flash(monkeypatch):
     monkeypatch.setattr(
         llm_config_loader,
         "get_settings",
         lambda: _default_test_settings(),
     )
 
-    base = llm_config_loader.build_provider_runtime_config(
-        provider_code="",
-        model_code=None,
-        custom_parameters={},
-    )
+    base = llm_config_loader.LLMConfigLoader._load_from_env()
     config = llm_config_loader.build_adjudicator_runtime_config(base)
 
     assert base["provider_code"] == "alibaba"
-    assert base["model"] == "qwen3.7-flash"
+    assert base["model"] == "qwen3.8-flash"
     assert config["provider_code"] == "alibaba"
-    assert config["model"] == "qwen3.7-flash"
-    assert config["first_pass_model"] == "qwen3.7-flash"
+    assert config["model"] == "qwen3.8-flash"
+    assert config["first_pass_model"] == "qwen3.8-flash"
+    assert config["custom_parameters"]["enable_thinking"] is True
+    assert config["custom_parameters"]["thinking_budget"] == 256
     assert config["adjudicator_model_source"] == "env_adjudicator_model"

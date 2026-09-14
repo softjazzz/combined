@@ -86,6 +86,13 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
 
 def _resolve_model(model_code: str) -> Dict[str, Any]:
     code = (model_code or "").lower()
+    if code in ("qwen3.8-flash",):
+        return {
+            "id": "qwen3.8-flash",
+            "model_code": "qwen3.8-flash",
+            "model_name": "Qwen3.8 Flash",
+            "description": "Qwen3.8 Flash 模型",
+        }
     if code in ("qwen3.7-flash",):
         return {
             "id": "qwen3.7-flash",

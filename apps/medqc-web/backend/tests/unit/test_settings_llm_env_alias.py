@@ -16,6 +16,8 @@ LLM_ENV_KEYS = [
     "LLM_API_KEY",
     "LLM_MODEL",
     "LLM_ADJUDICATOR_MODEL",
+    "LLM_ENABLE_THINKING",
+    "LLM_THINKING_BUDGET",
     "LLM_DEFAULT_PROVIDER",
     "LLM_TIMEOUT_SECONDS",
     "LLM_HTTP_MAX_CONCURRENCY",
@@ -144,6 +146,8 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "llm-key")
     monkeypatch.setenv("LLM_MODEL", "qwen-turbo")
     monkeypatch.setenv("LLM_ADJUDICATOR_MODEL", "qwen-plus")
+    monkeypatch.setenv("LLM_ENABLE_THINKING", "true")
+    monkeypatch.setenv("LLM_THINKING_BUDGET", "256")
     monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "30")
 
     settings = Settings(_env_file=None)
@@ -152,8 +156,14 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     assert settings.LLM_API_KEY == "llm-key"
     assert settings.LLM_MODEL == "qwen-turbo"
     assert settings.LLM_ADJUDICATOR_MODEL == "qwen-plus"
+    assert settings.LLM_ENABLE_THINKING is True
+    assert settings.LLM_THINKING_BUDGET == 256
     assert settings.LLM_TIMEOUT_SECONDS == 30
     assert settings.llm_env_source() == "LLM_*"
+    diagnostics = settings.llm_diagnostics()
+    assert diagnostics["model"] == "qwen-turbo"
+    assert diagnostics["enable_thinking"] is True
+    assert diagnostics["thinking_budget"] == 256
 
 
 def test_llm_http_max_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
@@ -182,8 +192,10 @@ def test_formal_qc_default_llm_model_should_use_current_aliyun_model(monkeypatch
 
     assert str(settings.LLM_API_ENDPOINT).rstrip("/") == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     assert settings.LLM_DEFAULT_PROVIDER == "alibaba"
-    assert settings.LLM_MODEL == "qwen3.7-flash"
-    assert settings.LLM_ADJUDICATOR_MODEL == "qwen3.7-flash"
+    assert settings.LLM_MODEL == "qwen3.8-flash"
+    assert settings.LLM_ADJUDICATOR_MODEL == "qwen3.8-flash"
+    assert settings.LLM_ENABLE_THINKING is False
+    assert settings.LLM_THINKING_BUDGET is None
     assert settings.LLM_MODEL != "deepseek-v4-flash"
 
 

@@ -102,6 +102,48 @@ async def test_generate_sends_qwen_thinking_budget_at_http_boundary(
 
 
 @pytest.mark.asyncio
+async def test_env_production_config_sends_qwen38_with_small_thinking_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def fake_safe_post_json(**kwargs: Any) -> dict[str, Any]:
+        sent.append(dict(kwargs["payload"]))
+        return _response()
+
+    settings = type(
+        "ProductionSettings",
+        (),
+        {
+            "LLM_DEFAULT_PROVIDER": "alibaba",
+            "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "LLM_API_ENDPOINT": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "DASHSCOPE_API_KEY": "sk-test",
+            "LLM_API_KEY": "sk-test",
+            "LLM_MODEL": "qwen3.8-flash",
+            "LLM_TIMEOUT_SECONDS": 120,
+            "LLM_ALLOW_MOCK_WHEN_UNCONFIGURED": False,
+            "LLM_ENABLE_THINKING": True,
+            "LLM_THINKING_BUDGET": 256,
+            "llm_env_source": staticmethod(lambda: "LLM_*"),
+        },
+    )()
+    monkeypatch.setattr(qc_llm_client_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+
+    client = SichuanQCLLMClient(
+        observability_recorder=LLMObservabilityRecorder(
+            store=NullLLMCallEventStore()
+        )
+    )
+    await client.generate("production payload seam", allow_length_retry=False)
+
+    assert sent[0]["model"] == "qwen3.8-flash"
+    assert sent[0]["enable_thinking"] is True
+    assert sent[0]["thinking_budget"] == 256
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("invalid_budget", [True, False, 0, -1, 1.5, "512"])
 async def test_generate_rejects_invalid_thinking_budget_before_http(
     monkeypatch: pytest.MonkeyPatch,
