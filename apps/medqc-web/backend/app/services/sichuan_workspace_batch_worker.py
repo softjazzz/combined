@@ -83,6 +83,7 @@ from .qc_workspace.execution_failure import (
 from .qc_workspace.failed_rule_retry import (
     FAILED_RULE_RETRY_FILTER_KEY,
     FAILED_RULE_RETRY_SCHEMA_VERSION,
+    build_failed_rule_auto_retry_plan,
     merge_failed_rule_retry_results,
     merge_failed_rule_retry_rule_results,
 )
@@ -3666,6 +3667,12 @@ async def run_sichuan_workspace_batch_job(
         model_execution_summary = _build_luxian_model_execution_summary(model_execution_stats_total)
         if model_execution_summary is not None:
             summary["model_execution_stats"] = model_execution_summary
+        automatic_retry_plan = build_failed_rule_auto_retry_plan(
+            summary=summary,
+            failures=all_failed_records,
+            retry_scope=failed_rule_retry_scope,
+        )
+        summary["automatic_failed_rule_retry"] = automatic_retry_plan
         if is_failed_rule_retry:
             original_rule_count = int(
                 retry_base_summary.get("rule_count")
@@ -3722,6 +3729,44 @@ async def run_sichuan_workspace_batch_job(
                 summary=summary,
                 items=all_items,
                 failed_records=all_failed_records,
+            )
+        if automatic_retry_plan.get("should_retry") is True:
+            created_by = str(current.get("created_by") or "").strip()
+            retry_method = getattr(workspace, "retry_batch_job", None)
+            if not created_by or not callable(retry_method):
+                logger.error(
+                    "部分失败任务无法自动补跑: job_id=%s created_by_present=%s retry_method_present=%s",
+                    job_id,
+                    bool(created_by),
+                    callable(retry_method),
+                )
+                return
+            retried_job = retry_method(
+                job_id=job_id,
+                created_by=created_by,
+                automatic=True,
+            )
+            if not retried_job or str(retried_job.get("status") or "") != "queued":
+                logger.error("部分失败任务自动补跑入队失败: job_id=%s", job_id)
+                return
+            delay_seconds = max(
+                0.0,
+                float(automatic_retry_plan.get("delay_seconds") or 0.0),
+            )
+            logger.warning(
+                "部分失败任务自动补跑: job_id=%s attempt=%s/%s failed_items=%s delay_seconds=%.1f",
+                job_id,
+                automatic_retry_plan.get("next_attempt"),
+                automatic_retry_plan.get("max_attempts"),
+                len(all_failed_records),
+                delay_seconds,
+            )
+            if delay_seconds:
+                await asyncio.sleep(delay_seconds)
+            await run_sichuan_workspace_batch_job(
+                job_id,
+                workspace=workspace,
+                qc_service_provider=qc_service_provider,
             )
     except QCJobCancelled:
         logger.info("四川规则批量任务 %s 已取消，后台执行已停止", job_id)

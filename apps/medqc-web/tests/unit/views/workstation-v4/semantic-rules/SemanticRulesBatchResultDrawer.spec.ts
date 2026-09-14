@@ -462,6 +462,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     expect(wrapper.text()).toContain('部分执行失败')
     expect(wrapper.text()).toContain('已保留并可查看 1297 项有效结果')
+    expect(wrapper.text()).toContain('系统将自动重试下列失败项')
     expect(wrapper.text()).toContain('LX0609-012')
     expect(wrapper.text()).toContain('病例-失败-1')
     expect(wrapper.text()).toContain('模型输出失败，未形成质控结论')

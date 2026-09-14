@@ -2145,7 +2145,7 @@ export function useSemanticRulesBatchResultDrawerController(
         return {
           tone: 'failed',
           title: '任务部分执行失败，有效结果已保留',
-          description: `已保留 ${completedCount} 项有效结果，另有 ${failedCount} 项模型执行失败。可以继续查看有效结果，并只重试失败项。`,
+          description: `已保留 ${completedCount} 项有效结果，另有 ${failedCount} 项模型执行失败。系统会自动只重试失败项，有效结果可继续查看。`,
           meta,
           pulse: false,
         }

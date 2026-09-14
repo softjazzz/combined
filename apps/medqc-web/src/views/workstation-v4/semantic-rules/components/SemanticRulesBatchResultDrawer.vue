@@ -84,7 +84,7 @@
                 {{ partialFailureSummary.failedCount }} 项模型执行失败未形成临床结论。
               </p>
             </div>
-            <span>重试时仅执行下列失败项</span>
+            <span>系统将自动重试下列失败项</span>
           </div>
           <div class="partial-failure-list">
             <div

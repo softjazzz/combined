@@ -4013,7 +4013,13 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def retry_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+    def retry_batch_job(
+        self,
+        *,
+        job_id: str,
+        created_by: str,
+        automatic: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
             row = session.execute(
@@ -4024,6 +4030,7 @@ class CustomQCWorkspaceService:
             if not row:
                 return None
             current = _row_to_batch_job(dict(row))
+            parent_job_id = _safe_text(current.get("parent_job_id"))
             rule_count = int(current.get("rule_count") or 1)
             total_records = int(current.get("total_records") or 0)
             now = _now_utc()
@@ -4042,6 +4049,7 @@ class CustomQCWorkspaceService:
                         {
                             **current_summary,
                             "retry_status": "queued",
+                            "retry_trigger": "automatic" if automatic else "manual",
                             "retry_attempt": retry_scope["attempt"],
                             "retry_pending_count": retry_scope["pending_count"],
                             "progress": {
@@ -4125,6 +4133,7 @@ class CustomQCWorkspaceService:
                     )
                 )
             session.commit()
+            self.refresh_parent_batch_job(parent_job_id=parent_job_id)
             return self.get_batch_job(job_id=job_id, created_by=created_by)
         finally:
             session.close()

@@ -18,6 +18,7 @@ from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.sichuan_qc_service import SichuanQCService
 from app.services.llm_observability import current_llm_observation_context
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
+from app.services.qc_workspace.failed_rule_retry import build_failed_rule_retry_scope
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.luxian_0609 import runtime_shadow_input_provider
 from app.services.sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
@@ -573,6 +574,13 @@ class _WorkspaceStub:
         self.summary = dict(summary)
         self.items = list(items)
         self.failed_records = list(failed_records)
+        self.job.update(
+            {
+                "summary": dict(summary),
+                "items": list(items),
+                "failed_records": list(failed_records),
+            }
+        )
 
     def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
         self.job["status"] = "failed"
@@ -4339,10 +4347,13 @@ async def test_workspace_batch_long_text_fallback_preserves_native_source_coordi
 
 
 @pytest.mark.asyncio
-async def test_formal_customer_sample_model_failure_is_partial_and_keeps_only_valid_items(
+@pytest.mark.parametrize("recover_on_call", [2, None], ids=["recovers", "exhausted"])
+async def test_formal_customer_sample_model_failure_automatically_retries_failed_rule(
     monkeypatch: pytest.MonkeyPatch,
+    recover_on_call: int | None,
 ) -> None:
     workspace = _WorkspaceStub()
+    workspace.job["created_by"] = "tester"
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
         "record_refs": [
@@ -4374,11 +4385,63 @@ async def test_formal_customer_sample_model_failure_is_partial_and_keeps_only_va
             workspace.failed_records = list(failed_records)
 
     workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
-    service = _ServiceStub()
+    retry_calls: list[dict[str, Any]] = []
 
-    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
-        return {
-            "evaluation_results": [
+    def _retry_batch_job(
+        *,
+        job_id: str,
+        created_by: str,
+        automatic: bool = False,
+    ) -> Dict[str, Any] | None:
+        assert job_id == workspace.job["id"]
+        assert created_by == "tester"
+        scope_result = build_failed_rule_retry_scope(workspace.job)
+        assert scope_result is not None
+        retry_scope, normalized_failures = scope_result
+        workspace.job["filters"] = {
+            **dict(workspace.job["filters"]),
+            "failed_rule_retry": retry_scope,
+        }
+        workspace.job["failed_records"] = normalized_failures
+        workspace.job["status"] = "queued"
+        retry_calls.append({"automatic": automatic, "scope": retry_scope})
+        return dict(workspace.job)
+
+    workspace.retry_batch_job = _retry_batch_job  # type: ignore[attr-defined]
+    service = _ServiceStub()
+    model_calls: list[tuple[str, ...]] = []
+
+    async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
+        active_rule_ids = tuple(kwargs["rule_ids"])
+        model_calls.append(active_rule_ids)
+        if recover_on_call is not None and len(model_calls) >= recover_on_call:
+            return {
+                "evaluation_results": [
+                    {
+                        "rule_id": "LX0609-012",
+                        "status": "compliant",
+                        "result_status": "compliant",
+                        "display_status": "compliant",
+                        "is_compliant": True,
+                        "metadata": {"executor_type": "program"},
+                    }
+                ],
+                "token_usage": {
+                    "total_tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                },
+                "model_execution_stats": {
+                    "requested_rule_count": 1,
+                    "first_success_rule_count": 1,
+                    "retried_rule_count": 0,
+                    "recovered_rule_count": 0,
+                    "failed_rule_count": 0,
+                },
+            }
+        evaluation_results = []
+        if "LX0609-011" in active_rule_ids:
+            evaluation_results.append(
                 {
                     "rule_id": "LX0609-011",
                     "status": "compliant",
@@ -4386,7 +4449,9 @@ async def test_formal_customer_sample_model_failure_is_partial_and_keeps_only_va
                     "display_status": "compliant",
                     "is_compliant": True,
                     "metadata": {"executor_type": "program"},
-                },
+                }
+            )
+        evaluation_results.append(
                 {
                     "rule_id": "LX0609-012",
                     "status": "technical_error",
@@ -4398,18 +4463,19 @@ async def test_formal_customer_sample_model_failure_is_partial_and_keeps_only_va
                         "executor_type": "program",
                         "technical_error_internal": True,
                     },
-                },
-            ],
+                }
+        )
+        requested_count = len(active_rule_ids)
+        first_success_count = 1 if "LX0609-011" in active_rule_ids else 0
+        return {
+            "evaluation_results": evaluation_results,
             "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
             "model_execution_stats": {
-                "requested_rule_count": 2,
-                "first_success_rule_count": 1,
+                "requested_rule_count": requested_count,
+                "first_success_rule_count": first_success_count,
                 "retried_rule_count": 1,
                 "recovered_rule_count": 0,
                 "failed_rule_count": 1,
-                "first_answer_success_rate": 0.5,
-                "recovery_success_rate": 0.0,
-                "model_failure_rate": 0.5,
             },
         }
 
@@ -4421,6 +4487,10 @@ async def test_formal_customer_sample_model_failure_is_partial_and_keeps_only_va
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    async def _skip_retry_delay(_: float) -> None:
+        return None
+
+    monkeypatch.setattr(batch_worker.asyncio, "sleep", _skip_retry_delay)
     monkeypatch.setattr(
         batch_worker,
         "load_luxian_0609_rules",
@@ -4429,16 +4499,31 @@ async def test_formal_customer_sample_model_failure_is_partial_and_keeps_only_va
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert workspace.job["status"] == "failed"
     assert workspace.summary is not None
-    assert workspace.summary["execution_status"] == "partial_failed"
-    assert workspace.summary["failed_rule_count"] == 1
-    assert workspace.summary["completed_rule_count"] == 1
-    assert workspace.summary["failed_rule_ids"] == ["LX0609-012"]
-    assert workspace.summary["model_execution_stats"]["requested_rule_count"] == 2
-    assert workspace.summary["model_execution_stats"]["model_failure_rate"] == 0.5
-    assert [item["rule_id"] for item in workspace.items] == ["LX0609-011"]
-    assert [item["rule_id"] for item in workspace.failed_records] == ["LX0609-012"]
+    if recover_on_call is not None:
+        assert workspace.job["status"] == "completed"
+        assert workspace.summary["execution_status"] == "completed"
+        assert workspace.summary["failed_rule_count"] == 0
+        assert workspace.summary["completed_rule_count"] == 2
+        assert workspace.summary["failed_rule_ids"] == []
+        assert workspace.summary["retry_recovered_count"] == 1
+        assert model_calls == [("LX0609-011", "LX0609-012"), ("LX0609-012",)]
+        assert len(retry_calls) == 1
+        assert [item["rule_id"] for item in workspace.items] == [
+            "LX0609-011",
+            "LX0609-012",
+        ]
+        assert workspace.failed_records == []
+    else:
+        assert workspace.job["status"] == "failed"
+        assert workspace.summary["execution_status"] == "partial_failed"
+        assert workspace.summary["automatic_failed_rule_retry"]["status"] == "exhausted"
+        assert len(model_calls) == 4
+        assert len(retry_calls) == 3
+        assert [item["rule_id"] for item in workspace.items] == ["LX0609-011"]
+        assert [item["rule_id"] for item in workspace.failed_records] == ["LX0609-012"]
+    assert all(call["automatic"] is True for call in retry_calls)
+    assert all(call["scope"]["pending_count"] == 1 for call in retry_calls)
 
 
 def _configure_formal_customer_sample_batch_fixture(

@@ -143,7 +143,11 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         failed_records=failures,
     )
 
-    retried = service.retry_batch_job(job_id="partial-job", created_by="tester")
+    retried = service.retry_batch_job(
+        job_id="partial-job",
+        created_by="tester",
+        automatic=True,
+    )
 
     assert retried is not None
     assert retried["status"] == "queued"
@@ -159,6 +163,7 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
     assert retry_scope["pending_count"] == 1
     assert retried["summary"]["execution_status"] == "partial_failed"
     assert retried["summary"]["retry_status"] == "queued"
+    assert retried["summary"]["retry_trigger"] == "automatic"
     safe = workspace.project_customer_safe_batch_job(
         retried,
         hmac_key="synthetic-test-key",

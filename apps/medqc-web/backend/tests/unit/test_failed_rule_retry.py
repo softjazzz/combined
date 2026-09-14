@@ -4,6 +4,7 @@ import pytest
 
 from app.services.case_identity import CaseRef
 from app.services.qc_workspace.failed_rule_retry import (
+    build_failed_rule_auto_retry_plan,
     build_failed_rule_retry_scope,
     merge_failed_rule_retry_results,
 )
@@ -83,6 +84,31 @@ def test_scope_rejects_ambiguous_legacy_visit_identity() -> None:
         build_failed_rule_retry_scope(job)
 
 
+def test_scope_supports_all_model_results_failed() -> None:
+    job = {
+        "status": "failed",
+        "summary": {"execution_status": "failed"},
+        "items": [],
+        "failed_records": [_row("LX0609-012")],
+        "filters": {
+            "record_refs": [
+                {
+                    "institute_id": "hospital-1",
+                    "patient_id": "patient-1",
+                    "visit_id": "visit-1",
+                }
+            ]
+        },
+    }
+
+    result = build_failed_rule_retry_scope(job)
+
+    assert result is not None
+    scope, _ = result
+    assert scope["pending_count"] == 1
+    assert scope["rule_ids"] == ["LX0609-012"]
+
+
 def test_merge_replaces_only_pending_failure_and_preserves_valid_result() -> None:
     valid = _row("LX0609-011", status="compliant")
     pending = _row("LX0609-012")
@@ -123,3 +149,41 @@ def test_merge_keeps_valid_results_when_retry_still_fails() -> None:
 
     assert items == [valid]
     assert failures == [retry_failure]
+
+
+def test_auto_retry_plan_retries_contract_failures_until_limit() -> None:
+    failure = {**_row("LX0609-012"), "error_phase": "result_status"}
+
+    first = build_failed_rule_auto_retry_plan(
+        summary={"execution_status": "partial_failed"},
+        failures=[failure],
+    )
+    last = build_failed_rule_auto_retry_plan(
+        summary={"execution_status": "partial_failed"},
+        failures=[failure],
+        retry_scope={"attempt": 3},
+    )
+
+    assert first == {
+        "max_attempts": 3,
+        "completed_attempts": 0,
+        "remaining_failure_count": 1,
+        "status": "queued",
+        "should_retry": True,
+        "next_attempt": 1,
+        "delay_seconds": 0.0,
+    }
+    assert last["status"] == "exhausted"
+    assert last["should_retry"] is False
+
+
+def test_auto_retry_plan_does_not_repeat_non_model_failure() -> None:
+    failure = {**_row("LX0609-012"), "error_phase": "record_load"}
+
+    plan = build_failed_rule_auto_retry_plan(
+        summary={"execution_status": "partial_failed"},
+        failures=[failure],
+    )
+
+    assert plan["status"] == "not_retryable"
+    assert plan["should_retry"] is False

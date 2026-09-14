@@ -10,6 +10,48 @@ from ..case_identity import CaseRef
 
 FAILED_RULE_RETRY_FILTER_KEY = "failed_rule_retry"
 FAILED_RULE_RETRY_SCHEMA_VERSION = "failed-rule-retry-v1"
+FAILED_RULE_AUTO_RETRY_MAX_ATTEMPTS = 3
+_FAILED_RULE_AUTO_RETRY_DELAYS_SECONDS = (0.0, 1.0, 3.0)
+_FAILED_RULE_AUTO_RETRY_PHASES = frozenset({"result_status", "result_missing"})
+
+
+def build_failed_rule_auto_retry_plan(
+    *,
+    summary: Mapping[str, Any],
+    failures: Sequence[Mapping[str, Any]],
+    retry_scope: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """决定是否自动补跑模型输出失败，不把永久错误变成无限调用。"""
+
+    current_attempt = max(0, int((retry_scope or {}).get("attempt") or 0))
+    base = {
+        "max_attempts": FAILED_RULE_AUTO_RETRY_MAX_ATTEMPTS,
+        "completed_attempts": current_attempt,
+        "remaining_failure_count": len(failures),
+    }
+    if not failures:
+        return {**base, "status": "completed", "should_retry": False}
+    if str(summary.get("execution_status") or "").strip().lower() not in {
+        "partial_failed",
+        "failed",
+    }:
+        return {**base, "status": "not_applicable", "should_retry": False}
+    if any(
+        str(failure.get("error_phase") or "").strip().lower()
+        not in _FAILED_RULE_AUTO_RETRY_PHASES
+        for failure in failures
+    ):
+        return {**base, "status": "not_retryable", "should_retry": False}
+    if current_attempt >= FAILED_RULE_AUTO_RETRY_MAX_ATTEMPTS:
+        return {**base, "status": "exhausted", "should_retry": False}
+
+    return {
+        **base,
+        "status": "queued",
+        "should_retry": True,
+        "next_attempt": current_attempt + 1,
+        "delay_seconds": _FAILED_RULE_AUTO_RETRY_DELAYS_SECONDS[current_attempt],
+    }
 
 
 def _rule_id(value: Mapping[str, Any]) -> str:
@@ -35,9 +77,9 @@ def build_failed_rule_retry_scope(job: Mapping[str, Any]) -> tuple[dict[str, Any
     summary = job.get("summary") if isinstance(job.get("summary"), Mapping) else {}
     if (
         str(job.get("status") or "").strip().lower() != "failed"
-        or str(summary.get("execution_status") or "").strip().lower() != "partial_failed"
+        or str(summary.get("execution_status") or "").strip().lower()
+        not in {"partial_failed", "failed"}
         or str(job.get("job_kind") or "leaf").strip().lower() == "parent"
-        or not list(job.get("items") or [])
         or not list(job.get("failed_records") or [])
     ):
         return None
