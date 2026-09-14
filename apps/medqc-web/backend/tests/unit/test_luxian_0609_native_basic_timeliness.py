@@ -20,6 +20,7 @@ from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
 from app.services.luxian_0609.decision_reducer import CustomerFinalState
+from app.services.luxian_0609.decision_model import EvidenceState, QcDirection
 from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
@@ -2072,12 +2073,19 @@ async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body
         async def generate(self, prompt: str) -> dict:
             self.prompts.append(prompt)
             return {
-                "content": (
-                    '{"schema_version":"lx0609-006-round-role-v1",'
-                    '"documents":[{"position":1,"role":"senior",'
-                    '"physician_name":"彭中","physician_title":"主任医师",'
-                    '"evidence_quote":"今日彭中主任医师联合神经疾病"}]}'
-                ),
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"schema_version":"lx0609-006-round-role-v1",'
+                                '"documents":[{"position":1,"role":"senior",'
+                                '"physician_name":"彭中","physician_title":"主任医师",'
+                                '"evidence_quote":"今日彭中主任医师联合神经疾病"}]}'
+                            )
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
                 "usage": {
                     "prompt_tokens": 40,
                     "completion_tokens": 12,
@@ -2142,7 +2150,11 @@ async def test_006_uses_one_bounded_semantic_call_for_upper_physician_round_body
 @pytest.mark.asyncio
 async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
     class _LLM:
+        def __init__(self) -> None:
+            self.call_count = 0
+
         async def generate(self, _prompt: str) -> dict:
+            self.call_count += 1
             return {
                 "content": (
                     '{"schema_version":"lx0609-006-round-role-v1",'
@@ -2174,13 +2186,14 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
         evaluation_as_of_date="2026-07-20",
     )
 
+    llm = _LLM()
     execution = await execute_luxian_0609_native_basic_timeliness(
         rule_ids=selected,
         decision_rule_ids=selected,
         evidence_payload=None,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        llm_client=_LLM(),
+        llm_client=llm,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
@@ -2189,15 +2202,146 @@ async def test_006_rejects_semantic_role_when_quote_is_not_in_same_document():
         evidence_materials=session.materials,
     )
 
-    assert execution.llm_call_count == 1
-    assert execution.total_tokens == 40
-    assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
-    assert reduced[0].reason_code == "semantic_output_unknown"
+    assert llm.call_count == 2
+    assert execution.llm_call_count == 2
+    assert execution.total_tokens == 80
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_parse_error"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_006_unavailable_llm_does_not_report_unaccounted_call():
+async def test_006_recovers_once_from_invalid_payload_and_keeps_usage():
+    class _LLM:
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        async def generate(self, _prompt: str) -> dict:
+            self.call_count += 1
+            if self.call_count == 1:
+                return {
+                    "choices": [{"message": {"content": "not-json"}}],
+                    "usage": {"prompt_tokens": 20, "completion_tokens": 2},
+                }
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"schema_version":"lx0609-006-round-role-v1",'
+                                '"documents":[{"position":1,"role":"senior",'
+                                '"physician_name":"彭中","physician_title":"主任医师",'
+                                '"evidence_quote":"今日彭中主任医师联合神经疾病"}]}'
+                            )
+                        }
+                    }
+                ],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 8},
+            }
+
+    selected = ("LX0609-006",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-upper-round-ref",
+                    "document_title": "上级医师查房记录",
+                    "record_time": "2026-07-16 10:30:02",
+                    "record_content": "今日彭中主任医师联合神经疾病相关专业医师查房。",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
+    )
+    llm = _LLM()
+
+    execution = await execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        llm_client=llm,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert llm.call_count == 2
+    assert execution.llm_call_count == 2
+    assert execution.prompt_tokens == 40
+    assert execution.completion_tokens == 10
+    assert execution.total_tokens == 50
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_006_transport_failure_is_counted_and_never_becomes_clinical_result():
+    class _LLM:
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        async def generate(self, _prompt: str) -> dict:
+            self.call_count += 1
+            raise TimeoutError("model timeout")
+
+    selected = ("LX0609-006",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-upper-round-ref",
+                    "document_title": "上级医师查房记录",
+                    "record_time": "2026-07-16 10:30:02",
+                    "record_content": "今日彭中主任医师联合神经疾病相关专业医师查房。",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
+    )
+    llm = _LLM()
+
+    execution = await execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        llm_client=llm,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert llm.call_count == 1
+    assert execution.llm_call_count == 1
+    assert execution.total_tokens == 0
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "model_transport_error"
+
+
+@pytest.mark.unit
+def test_006_unavailable_llm_is_explicit_technical_failure_without_fake_call():
     selected = ("LX0609-006",)
     session = _typed_basic_session(
         {
@@ -2219,7 +2363,7 @@ async def test_006_unavailable_llm_does_not_report_unaccounted_call():
         evaluation_as_of_date="2026-07-20",
     )
 
-    execution = await execute_luxian_0609_native_basic_timeliness(
+    execution = execute_luxian_0609_native_basic_timeliness(
         rule_ids=selected,
         decision_rule_ids=selected,
         evidence_payload=None,
@@ -2232,7 +2376,138 @@ async def test_006_unavailable_llm_does_not_report_unaccounted_call():
     assert execution.prompt_tokens == 0
     assert execution.completion_tokens == 0
     assert execution.total_tokens == 0
-    assert execution.decisions[0].reason_code == "semantic_output_unknown"
+    assert execution.decisions[0].evidence_state is EvidenceState.TECHNICAL_ERROR
+    assert execution.decisions[0].reason_code == "model_transport_error"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_006_valid_unclear_role_is_specific_data_gap_not_execution_failure():
+    class _LLM:
+        async def generate(self, _prompt: str) -> dict:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"schema_version":"lx0609-006-round-role-v1",'
+                                '"documents":[{"position":1,"role":"unclear",'
+                                '"physician_name":null,"physician_title":null,'
+                                '"evidence_quote":null}]}'
+                            )
+                        }
+                    }
+                ],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 8},
+            }
+
+    selected = ("LX0609-006",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "generic-upper-round-ref",
+                    "document_title": "上级医师查房记录",
+                    "record_time": "2026-07-16 10:30:02",
+                    "record_content": "今日上级医师查房，患者病情稳定。",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
+    )
+
+    execution = await execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        llm_client=_LLM(),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert execution.llm_call_count == 1
+    assert execution.total_tokens == 28
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_006_strict_schema_call_disables_thinking_for_role_extraction():
+    class _LLM:
+        def __init__(self) -> None:
+            self.kwargs: dict | None = None
+
+        def supports_strict_json_schema(self) -> bool:
+            return True
+
+        async def generate(self, _prompt: str, **kwargs) -> dict:
+            self.kwargs = kwargs
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"schema_version":"lx0609-006-round-role-v1",'
+                                '"documents":[{"position":1,"role":"senior",'
+                                '"physician_name":"彭中","physician_title":"主任医师",'
+                                '"evidence_quote":"今日彭中主任医师联合神经疾病"}]}'
+                            )
+                        }
+                    }
+                ],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 8},
+            }
+
+    selected = ("LX0609-006",)
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-upper-round-ref",
+                    "document_title": "上级医师查房记录",
+                    "record_time": "2026-07-16 10:30:02",
+                    "record_content": "今日彭中主任医师联合神经疾病相关专业医师查房。",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+        evaluation_as_of_date="2026-07-20",
+    )
+    llm = _LLM()
+
+    execution = await execute_luxian_0609_native_basic_timeliness(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        llm_client=llm,
+    )
+
+    assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
+    assert llm.kwargs is not None
+    assert llm.kwargs["enable_thinking"] is False
+    assert llm.kwargs["allow_length_retry"] is False
+    assert llm.kwargs["max_completion_tokens"] == 2048
+    assert llm.kwargs["response_format"]["type"] == "json_schema"
 
 
 @pytest.mark.unit

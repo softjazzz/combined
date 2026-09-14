@@ -1773,6 +1773,27 @@ def test_renderer_explains_data_gap_as_system_evidence_condition(
     assert "请补充或同步所需数据" not in result["suggestion"]
 
 
+def test_006_required_field_gap_names_the_unverifiable_physician_title():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-006",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="required_field_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="basic-timeliness-authoritative-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "data_gap"
+    assert "查房医师职称" in result["findings"]
+    assert "查房医师职称" in result["evidence"]
+
+
 def test_029_missing_surgery_time_explains_confirmed_trigger_and_linkage_gap():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(

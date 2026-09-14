@@ -151,7 +151,7 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
 
 
 class BasicTimelinessLLMClient(Protocol):
-    async def generate(self, prompt: str) -> dict[str, Any]: ...
+    async def generate(self, prompt: str, **kwargs: Any) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -243,8 +243,75 @@ def _semantic_round_prompt(
 
 
 def _response_text(response: Mapping[str, Any]) -> str:
-    raw = response.get("content") or response.get("text") or ""
+    raw = response.get("content") or response.get("text")
+    if not raw:
+        choices = response.get("choices")
+        if (
+            isinstance(choices, Sequence)
+            and not isinstance(choices, (str, bytes))
+            and choices
+        ):
+            first = choices[0]
+            if isinstance(first, Mapping):
+                message = first.get("message")
+                if isinstance(message, Mapping):
+                    raw = message.get("content")
+    raw = raw or ""
     return raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
+
+
+def _semantic_round_response_format(candidate_count: int) -> dict[str, Any]:
+    """为支持方提供严格结构；事件身份和原文引用仍由本地校验器复核。"""
+
+    nullable_string = {"type": ["string", "null"]}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "lx0609_006_round_role",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "schema_version": {
+                        "type": "string",
+                        "const": _ROUND_ROLE_SCHEMA_VERSION,
+                    },
+                    "documents": {
+                        "type": "array",
+                        "minItems": candidate_count,
+                        "maxItems": candidate_count,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "position": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": candidate_count,
+                                },
+                                "role": {
+                                    "type": "string",
+                                    "enum": ["senior", "attending_or_above", "unclear"],
+                                },
+                                "physician_name": nullable_string,
+                                "physician_title": nullable_string,
+                                "evidence_quote": nullable_string,
+                            },
+                            "required": [
+                                "position",
+                                "role",
+                                "physician_name",
+                                "physician_title",
+                                "evidence_quote",
+                            ],
+                        },
+                    },
+                },
+                "required": ["schema_version", "documents"],
+            },
+        },
+    }
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -253,7 +320,9 @@ def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
     prompt = int(usage.get("prompt_tokens") or 0)
     completion = int(usage.get("completion_tokens") or 0)
     total = int(usage.get("total_tokens") or prompt + completion)
-    elapsed = float(response.get("response_time") or 0.0)
+    elapsed = float(
+        response.get("response_time") or response.get("_api_time") or 0.0
+    )
     return prompt, completion, total, elapsed
 
 
@@ -1733,15 +1802,9 @@ def _typed_basic_decisions(
                 ),
             )
         elif semantic_round_unknown:
-            decisions.append(
-                make(
-                    rule_id,
-                    evidence_state=EvidenceState.CONFLICT,
-                    qc_direction=QcDirection.UNKNOWN,
-                    reason_code="semantic_output_unknown",
-                    confidence=None,
-                )
-            )
+            # 模型已成功确认正文没有可核验的姓名+职称事实，属于来源字段不足；
+            # 调用或解析失败在外层另行收敛为 technical_error，不能混用本分支。
+            decisions.append(gap(rule_id, "required_field_missing"))
         elif ambiguous_round:
             decisions.append(gap(rule_id, "required_field_missing"))
         else:
@@ -2006,6 +2069,44 @@ def _with_semantic_usage(
     )
 
 
+def _with_006_semantic_failure(
+    result: NativeExecutionResult,
+    *,
+    reason_code: str,
+    llm_call_count: int,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    api_time: float,
+) -> NativeBasicTimelinessExecutionResult:
+    """只把 006 的模型基础设施失败改成技术失败，保留同批其他规则。"""
+
+    failed = replace(
+        result,
+        decisions=tuple(
+            replace(
+                decision,
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code=reason_code,
+                confidence=None,
+            )
+            if decision.rule_id == "LX0609-006"
+            else decision
+            for decision in result.decisions
+        ),
+    )
+    return _with_semantic_usage(
+        failed,
+        llm_call_count=llm_call_count,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+    )
+
+
 def execute_luxian_0609_native_basic_timeliness(
     *,
     rule_ids: Sequence[str],
@@ -2081,33 +2182,108 @@ def execute_luxian_0609_native_basic_timeliness(
         )
     ):
         return baseline
-    if (
-        llm_client is None
-        or not with_body
-        or len(with_body) > _MAX_SEMANTIC_ROUND_CANDIDATES
-    ):
+    if not with_body:
         return baseline
+    if llm_client is None or not callable(getattr(llm_client, "generate", None)):
+        return _with_006_semantic_failure(
+            baseline,
+            reason_code="model_transport_error",
+            llm_call_count=0,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            api_time=0.0,
+        )
+    if len(with_body) > _MAX_SEMANTIC_ROUND_CANDIDATES:
+        scoped_gap = replace(
+            baseline,
+            decisions=tuple(
+                replace(
+                    decision,
+                    applicability=ApplicabilityState.APPLICABLE,
+                    evidence_state=EvidenceState.DATA_GAP,
+                    qc_direction=QcDirection.UNKNOWN,
+                    reason_code="candidate_scope_incomplete",
+                    confidence=None,
+                )
+                if decision.rule_id == "LX0609-006"
+                else decision
+                for decision in baseline.decisions
+            ),
+        )
+        return scoped_gap
 
     async def resolve_semantic_rounds() -> NativeBasicTimelinessExecutionResult:
         started = time.perf_counter()
         prompt_tokens = completion_tokens = total_tokens = 0
         api_time = 0.0
+        call_count = 0
+        prompt = _semantic_round_prompt(with_body)
+        supports_strict_schema = getattr(
+            llm_client, "supports_strict_json_schema", None
+        )
         try:
-            response = await llm_client.generate(_semantic_round_prompt(with_body))
-            prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
-            roles, unresolved = _parse_semantic_round_roles(response, with_body)
+            strict_schema_enabled = bool(
+                supports_strict_schema()
+                if callable(supports_strict_schema)
+                else False
+            )
         except Exception:
-            return _with_semantic_usage(
+            strict_schema_enabled = False
+        generate_kwargs: dict[str, Any] = {}
+        if strict_schema_enabled:
+            generate_kwargs = {
+                "response_format": _semantic_round_response_format(len(with_body)),
+                "enable_thinking": False,
+                "max_completion_tokens": 2048,
+                "allow_length_retry": False,
+            }
+
+        roles: dict[int, CourseRoundRole] | None = None
+        unresolved = frozenset()
+        for attempt_index in range(2):
+            call_count += 1
+            try:
+                response = await llm_client.generate(prompt, **generate_kwargs)
+            except Exception:
+                return _with_006_semantic_failure(
+                    baseline,
+                    reason_code="model_transport_error",
+                    llm_call_count=call_count,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    api_time=max(api_time, time.perf_counter() - started),
+                )
+            next_prompt, next_completion, next_total, next_api_time = _usage(response)
+            prompt_tokens += next_prompt
+            completion_tokens += next_completion
+            total_tokens += next_total
+            api_time += next_api_time
+            try:
+                roles, unresolved = _parse_semantic_round_roles(response, with_body)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                if attempt_index == 0:
+                    continue
+                return _with_006_semantic_failure(
+                    baseline,
+                    reason_code="model_parse_error",
+                    llm_call_count=call_count,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    api_time=max(api_time, time.perf_counter() - started),
+                )
+            break
+        if roles is None:
+            return _with_006_semantic_failure(
                 baseline,
-                llm_call_count=(
-                    1
-                    if (prompt_tokens or completion_tokens or total_tokens)
-                    else 0
-                ),
+                reason_code="model_parse_error",
+                llm_call_count=call_count,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,
-                api_time=api_time or (time.perf_counter() - started),
+                api_time=max(api_time, time.perf_counter() - started),
             )
         resolved = _execute_luxian_0609_native_basic_timeliness(
             rule_ids=rule_ids,
@@ -2125,6 +2301,7 @@ def execute_luxian_0609_native_basic_timeliness(
         )
         return _with_semantic_usage(
             resolved,
+            llm_call_count=call_count,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
