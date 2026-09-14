@@ -427,6 +427,46 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(props.exportBatchJobReport).toHaveBeenCalledWith('html')
   })
 
+  it('部分失败任务应保留有效结果并单独展示失败规则', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'failed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.items = [
+      {
+        rule_id: 'LX0609-011',
+        rule_code: 'LX0609-011',
+        record_id: 'record-safe-1',
+        visit_id: 'visit-safe-1',
+        status: 'compliant',
+        is_compliant: true,
+      },
+    ]
+    props.batchJobDetail.failed_records = [
+      {
+        rule_id: 'LX0609-012',
+        record_ref: '病例-失败-1',
+        status: 'technical_error',
+        reason_code: 'record_execution_failed',
+      },
+    ]
+    if (props.batchJobDetail.summary) {
+      props.batchJobDetail.summary.execution_status = 'partial_failed'
+      props.batchJobDetail.summary.completed_rule_count = 1297
+      props.batchJobDetail.summary.failed_rule_count = 3
+    }
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: { stubs: drawerStubs },
+    })
+
+    expect(wrapper.text()).toContain('部分执行失败')
+    expect(wrapper.text()).toContain('已保留并可查看 1297 项有效结果')
+    expect(wrapper.text()).toContain('LX0609-012')
+    expect(wrapper.text()).toContain('病例-失败-1')
+    expect(wrapper.text()).toContain('模型输出失败，未形成质控结论')
+  })
+
   it('泸县0609任务应展示复核建议并允许手动触发复核', async () => {
     const props = buildProps()
     props.batchJobDetail.status = 'completed'

@@ -252,7 +252,11 @@ export function useSichuanBatchJobs() {
       await loadBatchJobs()
       await fetchBatchJobDetail(jobId, { includeDebugSnapshot: true })
       startBatchJobPolling(jobId)
-      message.success('批量任务已重新入队')
+      message.success(
+        response.data.summary?.execution_status === 'partial_failed'
+          ? '失败项已重新入队，已有有效结果将继续保留'
+          : '批量任务已重新入队',
+      )
     } catch (error: any) {
       message.error(error?.message || '重试批量任务失败')
     } finally {

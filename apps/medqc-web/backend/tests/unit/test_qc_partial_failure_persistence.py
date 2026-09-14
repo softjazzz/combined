@@ -2,12 +2,14 @@
 
 import json
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 
 from app.services import custom_qc_workspace_service as workspace
+from app.routers import qc_sichuan
 
 
 @pytest.fixture
@@ -22,10 +24,16 @@ def storage(monkeypatch):
     monkeypatch.setattr(workspace, "_session", factory)
     with engine.begin() as connection:
         connection.execute(table.insert().values(
-            id="partial-job", draft_id="test-draft", created_by="tester", status="running", rule_code="LX0609",
+            id="partial-job", draft_id="sichuan-rule-library", created_by="tester", status="running", rule_code="LX0609",
             created_at=datetime(2026, 9, 14), updated_at=datetime(2026, 9, 14),
             rule_name="测试", scope="final", total_records=1,
-            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-011", "LX0609-012"]}),
+            filters_json=json.dumps({
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_ids": ["LX0609-011", "LX0609-012"],
+                "record_refs": [
+                    {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
+                ],
+            }),
         ))
     def no_canonical(*args, **kwargs):
         pytest.fail("执行失败不得调用完整 Canonical 写入")
@@ -122,3 +130,71 @@ def test_partial_failure_is_not_a_bypass_for_invalid_delivery(storage, invalid):
         service.complete_batch_job(job_id="partial-job", summary=summary, items=items, failed_records=failures)
     with engine.connect() as connection:
         assert connection.execute(sa.select(table.c.status)).scalar_one() == "running"
+
+
+def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule(storage):
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    summary["rule_count"] = 2
+    service.complete_batch_job(
+        job_id="partial-job",
+        summary=summary,
+        items=items,
+        failed_records=failures,
+    )
+
+    retried = service.retry_batch_job(job_id="partial-job", created_by="tester")
+
+    assert retried is not None
+    assert retried["status"] == "queued"
+    assert len(retried["items"]) == 1
+    assert retried["items"][0]["rule_id"] == "LX0609-011"
+    assert retried["items"][0]["status"] == "compliant"
+    assert retried["failed_records"][0]["rule_id"] == "LX0609-012"
+    retry_scope = retried["filters"]["failed_rule_retry"]
+    assert retry_scope["rule_ids"] == ["LX0609-012"]
+    assert retry_scope["record_refs"] == [
+        {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
+    ]
+    assert retry_scope["pending_count"] == 1
+    assert retried["summary"]["execution_status"] == "partial_failed"
+    assert retried["summary"]["retry_status"] == "queued"
+    safe = workspace.project_customer_safe_batch_job(
+        retried,
+        hmac_key="synthetic-test-key",
+    )
+    assert len(safe["items"]) == 1
+    assert safe["items"][0]["rule_id"] == "LX0609-011"
+    assert safe["failed_records"][0]["rule_id"] == "LX0609-012"
+    with engine.connect() as connection:
+        row = dict(connection.execute(sa.select(table)).mappings().one())
+    assert json.loads(row["items_json"]) == items
+    assert json.loads(row["failed_records_json"])[0]["record_key"] == '["test-i","test-p","test-v"]'
+
+
+@pytest.mark.asyncio
+async def test_retry_route_returns_customer_safe_partial_result(storage, monkeypatch):
+    service, _, _ = storage
+    summary, items, failures = _payload()
+    service.complete_batch_job(
+        job_id="partial-job",
+        summary=summary,
+        items=items,
+        failed_records=failures,
+    )
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args, **kwargs: None)
+
+    response = await qc_sichuan.retry_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),
+        job_id="partial-job",
+        current_user={"id": "tester"},
+    )
+
+    payload = response["data"]
+    assert payload["summary"]["execution_status"] == "partial_failed"
+    assert payload["items"][0]["rule_id"] == "LX0609-011"
+    assert payload["failed_records"][0]["rule_id"] == "LX0609-012"
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert "test-p" not in serialized
+    assert "test-v" not in serialized

@@ -435,15 +435,20 @@ export interface SichuanBatchIssueItem {
 
 export interface SichuanBatchFailedItem {
   rule_job_id?: string
+  rule_id?: string
   record_id?: string
+  record_ref?: string
   visit_id?: string
   patient_name?: string
   department?: string
+  status?: string
+  reason_code?: string
+  failure_status?: string
   trace_id?: string
   rule_version?: string
   prompt_version?: string
   error_phase?: string
-  error: string
+  error?: string
 }
 
 export interface SichuanBatchJobRuleResult {

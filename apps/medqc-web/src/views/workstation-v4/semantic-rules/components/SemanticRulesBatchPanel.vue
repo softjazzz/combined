@@ -99,7 +99,11 @@
         </template>
         <template v-else-if="column.key === 'status'">
           <a-tag :class="getBatchJobStatusTagClass(record.status)">
-            {{ getBatchJobStatusText(record.status) }}
+            {{
+              record.status === 'failed' && record.summary?.execution_status === 'partial_failed'
+                ? '部分执行失败'
+                : getBatchJobStatusText(record.status)
+            }}
           </a-tag>
         </template>
         <template v-else-if="column.key === 'execution'">
@@ -140,7 +144,11 @@
               :loading="retryingBatchJobId === record.id"
               @click="emit('retryBatchJob', record.id)"
             >
-              重试
+              {{
+                record.status === 'failed' && record.summary?.execution_status === 'partial_failed'
+                  ? '重试失败项'
+                  : '重试'
+              }}
             </a-button>
           </div>
         </template>

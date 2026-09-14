@@ -80,6 +80,65 @@
   flex: 0 0 auto;
 }
 
+.partial-failure-panel {
+  padding: 16px 18px;
+  border: 1px solid #fed7aa;
+  border-radius: 16px;
+  background: #fffaf5;
+}
+
+.partial-failure-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #9a3412;
+}
+
+.partial-failure-head strong {
+  font-size: 16px;
+}
+
+.partial-failure-head p {
+  margin: 4px 0 0;
+  color: #7c2d12;
+}
+
+.partial-failure-head > span {
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #ffedd5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.partial-failure-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.partial-failure-item {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.6fr) minmax(180px, 1fr) minmax(220px, 1.4fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #ffedd5;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+}
+
+.partial-failure-item strong {
+  color: #c2410c;
+}
+
+.partial-failure-item em {
+  color: #9a3412;
+  font-style: normal;
+}
+
 .status-hero {
   display: flex;
   align-items: stretch;

@@ -79,6 +79,10 @@ from .qc_workspace.execution_failure import (
     _build_luxian_model_execution_summary,
     _merge_luxian_model_execution_stats,
 )
+from .qc_workspace.failed_rule_retry import (
+    FAILED_RULE_RETRY_FILTER_KEY,
+    build_failed_rule_retry_scope,
+)
 from .sample_validation_rule_sets import LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
 from .bundles.emr_view import load_bundle_documents
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
@@ -4023,34 +4027,71 @@ class CustomQCWorkspaceService:
             rule_count = int(current.get("rule_count") or 1)
             total_records = int(current.get("total_records") or 0)
             now = _now_utc()
-            reset_values = dict(
-                status="queued",
-                summary_json=_safe_json_dumps(
-                    {
-                        "rule_count": max(1, rule_count),
-                        "progress": {
-                            "step_key": "queued",
-                            "rule_index": 0,
+            retry_scope_result = build_failed_rule_retry_scope(current)
+            if retry_scope_result is not None:
+                retry_scope, normalized_failures = retry_scope_result
+                current_filters = dict(current.get("filters") or {})
+                current_filters[FAILED_RULE_RETRY_FILTER_KEY] = retry_scope
+                current_summary = dict(current.get("summary") or {})
+                retry_rule_count = len(retry_scope["rule_ids"])
+                retry_record_count = len(retry_scope["record_refs"])
+                reset_values = dict(
+                    status="queued",
+                    filters_json=_safe_json_dumps(current_filters),
+                    summary_json=_safe_json_dumps(
+                        {
+                            **current_summary,
+                            "retry_status": "queued",
+                            "retry_attempt": retry_scope["attempt"],
+                            "retry_pending_count": retry_scope["pending_count"],
+                            "progress": {
+                                "step_key": "queued",
+                                "rule_index": 0,
+                                "rule_count": retry_rule_count,
+                                "processed_records": 0,
+                                "total_records": retry_record_count,
+                            },
+                            "updated_at": now.isoformat(),
+                        }
+                    ),
+                    failed_records_json=_safe_json_dumps(normalized_failures),
+                    error_message=None,
+                    started_at=None,
+                    finished_at=None,
+                    updated_at=now,
+                )
+            else:
+                current_filters = dict(current.get("filters") or {})
+                current_filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
+                reset_values = dict(
+                    status="queued",
+                    filters_json=_safe_json_dumps(current_filters),
+                    summary_json=_safe_json_dumps(
+                        {
                             "rule_count": max(1, rule_count),
-                            "processed_records": 0,
-                            "total_records": total_records,
-                        },
-                        "updated_at": now.isoformat(),
-                    }
-                ),
-                items_json=None,
-                failed_records_json=None,
-                error_message=None,
-                started_at=None,
-                finished_at=None,
-                updated_at=now,
-                success_count=0,
-                failed_count=0,
-                issue_records=0,
-                compliant_records=0,
-                total_tokens=0,
-                total_processing_time=0.0,
-            )
+                            "progress": {
+                                "step_key": "queued",
+                                "rule_index": 0,
+                                "rule_count": max(1, rule_count),
+                                "processed_records": 0,
+                                "total_records": total_records,
+                            },
+                            "updated_at": now.isoformat(),
+                        }
+                    ),
+                    items_json=None,
+                    failed_records_json=None,
+                    error_message=None,
+                    started_at=None,
+                    finished_at=None,
+                    updated_at=now,
+                    success_count=0,
+                    failed_count=0,
+                    issue_records=0,
+                    compliant_records=0,
+                    total_tokens=0,
+                    total_processing_time=0.0,
+                )
             session.execute(
                 update(self._batch_job_table)
                 .where(
@@ -4075,7 +4116,13 @@ class CustomQCWorkspaceService:
                             self._batch_job_table.c.created_by == created_by,
                         )
                     )
-                    .values(**reset_values)
+                    .values(
+                        **{
+                            key: value
+                            for key, value in reset_values.items()
+                            if key != "filters_json"
+                        }
+                    )
                 )
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by)

@@ -80,6 +80,12 @@ from .qc_workspace.execution_failure import (
     _merge_luxian_model_execution_stats,
     _normalize_luxian_model_execution_stats,
 )
+from .qc_workspace.failed_rule_retry import (
+    FAILED_RULE_RETRY_FILTER_KEY,
+    FAILED_RULE_RETRY_SCHEMA_VERSION,
+    merge_failed_rule_retry_results,
+    merge_failed_rule_retry_rule_results,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1254,6 +1260,22 @@ async def run_sichuan_workspace_batch_job(
         qc_service = await qc_service_provider()
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
+        failed_rule_retry_scope = (
+            dict(filters.get(FAILED_RULE_RETRY_FILTER_KEY) or {})
+            if isinstance(filters.get(FAILED_RULE_RETRY_FILTER_KEY), dict)
+            else {}
+        )
+        is_failed_rule_retry = (
+            failed_rule_retry_scope.get("schema_version")
+            == FAILED_RULE_RETRY_SCHEMA_VERSION
+        )
+        retry_base_items = list(current.get("items") or []) if is_failed_rule_retry else []
+        retry_base_failures = (
+            list(current.get("failed_records") or []) if is_failed_rule_retry else []
+        )
+        retry_base_summary = (
+            dict(current.get("summary") or {}) if is_failed_rule_retry else {}
+        )
         record_evaluation_snapshot_by_id = {
             str(item.get("record_key") or item.get("record_id") or "").strip(): dict(item)
             for item in list(filters.get("record_evaluation_snapshot") or [])
@@ -1262,7 +1284,11 @@ async def run_sichuan_workspace_batch_job(
         }
         requested_rule_ids = [
             str(item).strip().upper()
-            for item in (filters.get("rule_ids") or [])
+            for item in (
+                failed_rule_retry_scope.get("rule_ids")
+                if is_failed_rule_retry
+                else filters.get("rule_ids")
+            ) or []
             if str(item).strip()
         ]
         gate_only_customer_rule_ids_for_validation = [
@@ -1359,7 +1385,11 @@ async def run_sichuan_workspace_batch_job(
                 block_batch=True,
             )
 
-        persisted_record_refs = filters.get("record_refs")
+        persisted_record_refs = (
+            failed_rule_retry_scope.get("record_refs")
+            if is_failed_rule_retry
+            else filters.get("record_refs")
+        )
         has_persisted_record_refs = isinstance(persisted_record_refs, list) and bool(
             persisted_record_refs
         )
@@ -1493,7 +1523,12 @@ async def run_sichuan_workspace_batch_job(
         )
         scoped_customer_rule_ids = {
             str(rule_id or "").strip().upper()
-            for rule_id in list(filters.get("scoped_customer_rule_ids") or [])
+            for rule_id in list(
+                failed_rule_retry_scope.get("rule_ids")
+                if is_failed_rule_retry
+                else filters.get("scoped_customer_rule_ids")
+                or []
+            )
             if str(rule_id or "").strip()
         }
         gate_only_customer_rule_ids = {
@@ -1544,7 +1579,12 @@ async def run_sichuan_workspace_batch_job(
                     "executor_native": 0,
                 }
             total_rules = max(1, len(output_rule_ids))
-        record_rule_map_raw = dict(filters.get("record_rule_map") or {})
+        record_rule_map_raw = dict(
+            failed_rule_retry_scope.get("record_rule_map")
+            if is_failed_rule_retry
+            else filters.get("record_rule_map")
+            or {}
+        )
         record_rule_map: Dict[str, List[str]] = {}
         for raw_record_id, raw_rule_ids in record_rule_map_raw.items():
             normalized_record_id = str(raw_record_id or "").strip()
@@ -1994,7 +2034,13 @@ async def run_sichuan_workspace_batch_job(
                 for rule_id in active_rule_ids
                 if isinstance(rule_states[rule_id].get("rule"), dict)
             ]
-            result_rule_ids = output_rule_ids if use_luxian_customer_results else active_rule_ids
+            result_rule_ids = (
+                active_rule_ids
+                if use_luxian_customer_results and is_failed_rule_retry
+                else output_rule_ids
+                if use_luxian_customer_results
+                else active_rule_ids
+            )
             result_rule_states = output_rule_states if use_luxian_customer_results else rule_states
             items_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in result_rule_ids}
             failed_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in result_rule_ids}
@@ -2518,7 +2564,10 @@ async def run_sichuan_workspace_batch_job(
                                     "rule_code": rule_code,
                                     "rule_name": rule_name,
                                     "record_id": record_id,
-                                    "visit_id": str(record.get("visit_id") or ""),
+                                    "record_key": record_key,
+                                    "institute_id": institute_id,
+                                    "patient_id": patient_id,
+                                    "visit_id": visit_id,
                                     "patient_name": str(record.get("patient_name") or ""),
                                     "department": str(record.get("department") or ""),
                                     "error_phase": "result_missing",
@@ -3155,6 +3204,15 @@ async def run_sichuan_workspace_batch_job(
             summary_patch = _build_progress_patch(processed_records_count)
             update_kwargs: Dict[str, Any] = {}
             if enable_incremental_results:
+                progress_items = list(all_items)
+                progress_failures = list(all_failed_records)
+                if is_failed_rule_retry:
+                    progress_items, progress_failures = merge_failed_rule_retry_results(
+                        base_items=retry_base_items,
+                        base_failures=retry_base_failures,
+                        retry_items=all_items,
+                        retry_failures=all_failed_records,
+                    )
                 summary_patch = {
                     **summary_patch,
                     "rule_results": _build_rule_results_snapshot(
@@ -3164,9 +3222,27 @@ async def run_sichuan_workspace_batch_job(
                     "stream_state": _build_stream_state(record_result, processed_records_count),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
+                if is_failed_rule_retry:
+                    summary_patch["rule_results"] = merge_failed_rule_retry_rule_results(
+                        base_rule_results=list(
+                            retry_base_summary.get("rule_results") or []
+                        ),
+                        retry_rule_results=list(summary_patch["rule_results"]),
+                        merged_items=progress_items,
+                        merged_failures=progress_failures,
+                        total_records=int(
+                            retry_base_summary.get("total_records")
+                            or current.get("total_records")
+                            or total_records
+                        ),
+                    )
+                    summary_patch["stream_state"] = {
+                        **dict(summary_patch.get("stream_state") or {}),
+                        "partial_item_count": len(progress_items),
+                    }
                 update_kwargs = {
-                    "items": list(all_items),
-                    "failed_records": list(all_failed_records),
+                    "items": progress_items,
+                    "failed_records": progress_failures,
                 }
 
             workspace.update_batch_job_progress(
@@ -3193,13 +3269,33 @@ async def run_sichuan_workspace_batch_job(
                     "latest_record_id": "",
                     "latest_visit_id": "",
                     "latest_result_count": 0,
-                    "partial_item_count": 0,
+                    "partial_item_count": len(retry_base_items)
+                    if is_failed_rule_retry
+                    else 0,
                     "partial_rule_result_count": len(output_rule_ids),
                     "started_at": job_started_at.isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
+            if is_failed_rule_retry:
+                initial_progress_patch["rule_results"] = (
+                    merge_failed_rule_retry_rule_results(
+                        base_rule_results=list(
+                            retry_base_summary.get("rule_results") or []
+                        ),
+                        retry_rule_results=list(
+                            initial_progress_patch["rule_results"]
+                        ),
+                        merged_items=retry_base_items,
+                        merged_failures=retry_base_failures,
+                        total_records=int(
+                            retry_base_summary.get("total_records")
+                            or current.get("total_records")
+                            or total_records
+                        ),
+                    )
+                )
 
         workspace.update_batch_job_progress(
             job_id=job_id,
@@ -3288,6 +3384,64 @@ async def run_sichuan_workspace_batch_job(
             processed_records_count=total_records,
             final=True,
         )
+        if is_failed_rule_retry:
+            all_items, all_failed_records = merge_failed_rule_retry_results(
+                base_items=retry_base_items,
+                base_failures=retry_base_failures,
+                retry_items=all_items,
+                retry_failures=all_failed_records,
+            )
+            total_records = int(
+                retry_base_summary.get("total_records")
+                or current.get("total_records")
+                or total_records
+            )
+            rule_results = merge_failed_rule_retry_rule_results(
+                base_rule_results=list(retry_base_summary.get("rule_results") or []),
+                retry_rule_results=rule_results,
+                merged_items=all_items,
+                merged_failures=all_failed_records,
+                total_records=total_records,
+            )
+            issue_record_ids = {
+                str(item.get("record_key") or item.get("record_id") or "").strip()
+                for item in all_items
+                if str(item.get("status") or "").strip().lower()
+                in {"non_compliant", "ai_suggested_non_compliant"}
+                and str(item.get("record_key") or item.get("record_id") or "").strip()
+            }
+            uncertain_record_ids = {
+                str(item.get("record_key") or item.get("record_id") or "").strip()
+                for item in all_items
+                if str(item.get("status") or "").strip().lower() == "uncertain"
+                and str(item.get("record_key") or item.get("record_id") or "").strip()
+            }
+            failed_record_ids = {
+                str(item.get("record_key") or item.get("record_id") or "").strip()
+                for item in all_failed_records
+                if str(item.get("record_key") or item.get("record_id") or "").strip()
+            }
+            total_tokens += int(retry_base_summary.get("total_tokens") or 0)
+            total_prompt_tokens += int(retry_base_summary.get("total_prompt_tokens") or 0)
+            total_completion_tokens += int(retry_base_summary.get("total_completion_tokens") or 0)
+            total_processing_time += float(
+                retry_base_summary.get("total_processing_time") or 0.0
+            )
+            base_executor_breakdown = dict(
+                retry_base_summary.get("executor_breakdown") or {}
+            )
+            executor_program += int(base_executor_breakdown.get("program") or 0)
+            executor_llm += int(base_executor_breakdown.get("llm") or 0)
+            executor_native += int(base_executor_breakdown.get("native") or 0)
+            base_cache_breakdown = dict(retry_base_summary.get("cache_breakdown") or {})
+            cache_hit += int(base_cache_breakdown.get("hit") or 0)
+            cache_miss += int(base_cache_breakdown.get("miss") or 0)
+            model_execution_stats_total = _merge_luxian_model_execution_stats(
+                _normalize_luxian_model_execution_stats(
+                    retry_base_summary.get("model_execution_stats")
+                ),
+                model_execution_stats_total,
+            )
 
         if (
             use_luxian_customer_results and failed_record_ids and all_failed_records
@@ -3512,6 +3666,46 @@ async def run_sichuan_workspace_batch_job(
         model_execution_summary = _build_luxian_model_execution_summary(model_execution_stats_total)
         if model_execution_summary is not None:
             summary["model_execution_stats"] = model_execution_summary
+        if is_failed_rule_retry:
+            original_rule_count = int(
+                retry_base_summary.get("rule_count")
+                or len(retry_base_summary.get("rule_results") or [])
+                or len(rule_results)
+            )
+            summary.update(
+                {
+                    "rule_count": original_rule_count,
+                    "execution_rule_count": int(
+                        retry_base_summary.get("execution_rule_count")
+                        or original_rule_count
+                    ),
+                    "processed_rule_count": original_rule_count,
+                    "rule_results": rule_results,
+                    "retry_status": "completed"
+                    if not all_failed_records
+                    else "partial_failed",
+                    "retry_attempt": int(failed_rule_retry_scope.get("attempt") or 1),
+                    "retry_pending_count": int(
+                        failed_rule_retry_scope.get("pending_count") or 0
+                    ),
+                    "retry_remaining_count": len(all_failed_records),
+                    "retry_recovered_count": max(
+                        0,
+                        int(failed_rule_retry_scope.get("pending_count") or 0)
+                        - len(all_failed_records),
+                    ),
+                    "last_retry_performance_profile": performance_profile,
+                    "performance_profile": retry_base_summary.get("performance_profile")
+                    or performance_profile,
+                    "stream_state": {
+                        **dict(summary.get("stream_state") or {}),
+                        "processed_records": total_records,
+                        "total_records": total_records,
+                        "partial_item_count": len(all_items),
+                        "partial_rule_result_count": original_rule_count,
+                    },
+                }
+            )
         workspace.update_batch_job_progress(
             job_id=job_id,
             step_key="aggregate",

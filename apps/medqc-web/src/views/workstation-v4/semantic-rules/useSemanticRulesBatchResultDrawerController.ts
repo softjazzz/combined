@@ -2132,6 +2132,24 @@ export function useSemanticRulesBatchResultDrawerController(
       }
     }
     if (status === 'failed') {
+      const executionStatus = String(detail.summary?.execution_status || '')
+        .trim()
+        .toLowerCase()
+      if (executionStatus === 'partial_failed') {
+        const completedCount = Number(
+          detail.summary?.completed_rule_count || detail.items?.length || 0,
+        )
+        const failedCount = Number(
+          detail.summary?.failed_rule_count || detail.failed_records?.length || 0,
+        )
+        return {
+          tone: 'failed',
+          title: '任务部分执行失败，有效结果已保留',
+          description: `已保留 ${completedCount} 项有效结果，另有 ${failedCount} 项模型执行失败。可以继续查看有效结果，并只重试失败项。`,
+          meta,
+          pulse: false,
+        }
+      }
       return {
         tone: 'failed',
         title: '任务执行失败，需要人工处理',
@@ -2148,6 +2166,28 @@ export function useSemanticRulesBatchResultDrawerController(
       pulse: false,
     }
   })
+
+  const partialFailureItems = computed(() => {
+    const detail = props.batchJobDetail
+    if (
+      String(detail?.status || '').trim().toLowerCase() !== 'failed' ||
+      String(detail?.summary?.execution_status || '').trim().toLowerCase() !== 'partial_failed'
+    ) {
+      return []
+    }
+    return Array.isArray(detail?.failed_records) ? detail.failed_records : []
+  })
+
+  const partialFailureSummary = computed(() => ({
+    completedCount: Number(
+      props.batchJobDetail?.summary?.completed_rule_count ||
+        props.batchJobDetail?.items?.length ||
+        0,
+    ),
+    failedCount: Number(
+      props.batchJobDetail?.summary?.failed_rule_count || partialFailureItems.value.length || 0,
+    ),
+  }))
 
   const primarySummaryCards = computed(() => {
     const summary = props.batchJobDetail?.summary
@@ -3000,6 +3040,8 @@ export function useSemanticRulesBatchResultDrawerController(
     noIssueEvidenceTotalCount,
     openIssueDeepReview,
     openIssueTrace,
+    partialFailureItems,
+    partialFailureSummary,
     progressSummary,
     QCRecordCompareWorkbench,
     recordCompareCoordinates,

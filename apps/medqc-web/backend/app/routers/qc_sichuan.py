@@ -2476,7 +2476,7 @@ async def retry_workspace_batch_job(
             job_id,
         )
     return success_response(
-        data=job,
+        data=_workspace_batch_response_item(job),
         message="批量任务已重新入队",
         trace_id=get_trace_id(request),
     )

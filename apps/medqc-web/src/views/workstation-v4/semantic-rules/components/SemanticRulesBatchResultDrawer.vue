@@ -72,6 +72,33 @@
       <div class="drawer-body">
         <BatchResultOverview :model="resultReviewOverviewModel" />
 
+        <section
+          v-if="partialFailureItems.length"
+          class="partial-failure-panel"
+        >
+          <div class="partial-failure-head">
+            <div>
+              <strong>部分执行失败</strong>
+              <p>
+                已保留并可查看 {{ partialFailureSummary.completedCount }} 项有效结果；
+                {{ partialFailureSummary.failedCount }} 项模型执行失败未形成临床结论。
+              </p>
+            </div>
+            <span>重试时仅执行下列失败项</span>
+          </div>
+          <div class="partial-failure-list">
+            <div
+              v-for="(failure, index) in partialFailureItems"
+              :key="`${failure.record_ref || failure.record_id || index}-${failure.rule_id || index}`"
+              class="partial-failure-item"
+            >
+              <strong>{{ failure.rule_id || '未知规则' }}</strong>
+              <span>{{ failure.record_ref || failure.visit_id || failure.record_id || '未知病历' }}</span>
+              <em>模型输出失败，未形成质控结论</em>
+            </div>
+          </div>
+        </section>
+
         <div
           v-if="batchJobDetail && statusHero && !showResultReviewOverview && !isLuxian0609BatchJob"
           class="status-hero"
@@ -2376,6 +2403,8 @@ const {
   noIssueEvidenceTotalCount,
   openIssueDeepReview,
   openIssueTrace,
+  partialFailureItems,
+  partialFailureSummary,
   progressSummary,
   QCRecordCompareWorkbench,
   recordCompareCoordinates,

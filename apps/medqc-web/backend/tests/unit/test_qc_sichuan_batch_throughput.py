@@ -4714,3 +4714,154 @@ async def test_formal_customer_sample_model_stats_sum_two_records_and_failed_rec
         for rule_id in rule_ids
     }
     assert len(workspace.items) == 2
+
+
+@pytest.mark.asyncio
+async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_completed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _WorkspaceStub()
+    all_rule_ids = ["LX0609-011", "LX0609-012", "LX0609-040"]
+    _configure_formal_customer_sample_batch_fixture(
+        workspace,
+        rule_ids=all_rule_ids,
+        record_ids=["visit-001", "visit-002"],
+    )
+    original_update_progress = workspace.update_batch_job_progress
+    persisted_item_counts: list[int] = []
+
+    def _update_incremental_progress(**kwargs: Any) -> None:
+        items = kwargs.pop("items", None)
+        failed_records = kwargs.pop("failed_records", None)
+        original_update_progress(**kwargs)
+        if items is not None:
+            workspace.items = list(items)
+            persisted_item_counts.append(len(workspace.items))
+        if failed_records is not None:
+            workspace.failed_records = list(failed_records)
+
+    workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
+    refs = list(workspace.job["filters"]["record_refs"])
+    retry_scope = {
+        "schema_version": "failed-rule-retry-v1",
+        "attempt": 1,
+        "record_refs": refs,
+        "rule_ids": ["LX0609-012", "LX0609-040"],
+        "record_rule_map": {
+            CaseRef.from_mapping(refs[0]).as_key(): ["LX0609-012"],
+            CaseRef.from_mapping(refs[1]).as_key(): ["LX0609-040"],
+        },
+        "pending_count": 2,
+    }
+    workspace.job["filters"]["failed_rule_retry"] = retry_scope
+
+    def _item(visit_id: str, rule_id: str, status: str = "compliant") -> Dict[str, Any]:
+        ref = next(ref for ref in refs if ref["visit_id"] == visit_id)
+        return {
+            **ref,
+            "record_id": visit_id,
+            "record_key": CaseRef.from_mapping(ref).as_key(),
+            "rule_id": rule_id,
+            "rule_code": rule_id,
+            "rule_name": rule_id,
+            "status": status,
+            "result_status": status,
+            "display_status": status,
+            "is_compliant": status == "compliant",
+            "schema_version": "lx0609-customer-result-v2",
+            "rule_version": "2026-06-09",
+            "reason_code": "verified",
+            "findings": "已形成合法结果",
+        }
+
+    base_items = [
+        _item("visit-001", "LX0609-011"),
+        _item("visit-001", "LX0609-040"),
+        _item("visit-002", "LX0609-011"),
+        _item("visit-002", "LX0609-012"),
+    ]
+    base_failures = [
+        {**_item("visit-001", "LX0609-012"), "error_phase": "result_status"},
+        {**_item("visit-002", "LX0609-040"), "error_phase": "result_status"},
+    ]
+    base_rule_results = [
+        {
+            "rule_code": rule_id,
+            "rule_name": rule_id,
+            "status": "failed" if rule_id in {"LX0609-012", "LX0609-040"} else "completed",
+        }
+        for rule_id in all_rule_ids
+    ]
+    workspace.job.update(
+        {
+            "items": base_items,
+            "failed_records": base_failures,
+            "summary": {
+                "execution_status": "partial_failed",
+                "total_records": 2,
+                "rule_count": 3,
+                "execution_rule_count": 3,
+                "completed_rule_count": 4,
+                "failed_rule_count": 2,
+                "rule_results": base_rule_results,
+                "model_execution_stats": {
+                    "scope": "exam_lab",
+                    "requested_rule_count": 2,
+                    "first_success_rule_count": 1,
+                    "retried_rule_count": 1,
+                    "recovered_rule_count": 0,
+                    "failed_rule_count": 1,
+                },
+            },
+            "total_records": 2,
+        }
+    )
+    workspace.items = list(base_items)
+    workspace.failed_records = list(base_failures)
+    service = _ServiceStub()
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
+        visit_id = str(kwargs["bundle"]["visit_id"])
+        active_rule_ids = tuple(kwargs["rule_ids"])
+        calls.append((visit_id, active_rule_ids))
+        return {
+            "evaluation_results": [
+                _customer_batch_eval_item(rule_id, "compliant")
+                for rule_id in active_rule_ids
+            ],
+            "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(
+        batch_worker,
+        "load_luxian_0609_rules",
+        lambda: [get_luxian_0609_rule(rule_id) for rule_id in all_rule_ids],
+    )
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    await batch_worker.run_sichuan_workspace_batch_job(
+        workspace.job["id"],
+        workspace=workspace,
+        qc_service_provider=_get_qc_service,
+    )
+
+    assert calls == [
+        ("visit-001", ("LX0609-012",)),
+        ("visit-002", ("LX0609-040",)),
+    ]
+    assert persisted_item_counts
+    assert min(persisted_item_counts) >= len(base_items)
+    assert workspace.job["status"] == "completed"
+    assert len(workspace.items) == 6
+    assert workspace.failed_records == []
+    assert workspace.summary is not None
+    assert workspace.summary["execution_status"] == "completed"
+    assert workspace.summary["rule_count"] == 3
+    assert workspace.summary["retry_recovered_count"] == 2
+    assert workspace.summary["retry_remaining_count"] == 0
+    assert workspace.summary["model_execution_stats"]["requested_rule_count"] == 2

@@ -74,12 +74,22 @@ describe('SemanticRulesBatchPanel', () => {
     const wrapper = mount(SemanticRulesBatchPanel, {
       props: {
         loading: false,
-        batchJobs: [createJob('running', 'job-running'), createJob('completed', 'job-completed')],
-        total: 2,
+        batchJobs: [
+          createJob('running', 'job-running'),
+          createJob('completed', 'job-completed'),
+          {
+            ...createJob('failed', 'job-partial'),
+            summary: {
+              ...createJob('failed', 'job-partial').summary,
+              execution_status: 'partial_failed',
+            },
+          },
+        ],
+        total: 3,
         pagination: {
           current: 1,
           pageSize: 5,
-          total: 2,
+          total: 3,
         },
         query: {
           keyword: '',
@@ -114,17 +124,22 @@ describe('SemanticRulesBatchPanel', () => {
     })
 
     const buttonTexts = wrapper.findAll('button').map((node) => node.text())
+    expect(buttonTexts).toContain('重试失败项')
+    expect(wrapper.text()).toContain('部分执行失败')
     expect(buttonTexts).toContain('停止')
     expect(buttonTexts).toContain('重试')
 
     const buttons = wrapper.findAll('button')
     const stopButton = buttons.find((node) => node.text() === '停止')
     const retryButton = buttons.find((node) => node.text() === '重试')
+    const retryFailedButton = buttons.find((node) => node.text() === '重试失败项')
 
     await stopButton?.trigger('click')
     await retryButton?.trigger('click')
+    await retryFailedButton?.trigger('click')
 
     expect(wrapper.emitted('cancelBatchJob')?.[0]).toEqual(['job-running'])
     expect(wrapper.emitted('retryBatchJob')?.[0]).toEqual(['job-completed'])
+    expect(wrapper.emitted('retryBatchJob')?.[1]).toEqual(['job-partial'])
   })
 })
