@@ -80,6 +80,8 @@ _MAX_EPISODE_OPINION_CHARS = 1200
 _MAX_RECOMMENDATIONS_PER_EPISODE = 12
 _MAX_TOTAL_RECOMMENDATIONS = 96
 _MAX_RECOMMENDATION_CHARS = 240
+_COURSE_OVERLAP_NGRAM_CHARS = 4
+_MAX_COURSE_OVERLAP_HINTS = 4
 # 病程是 4.20.4 的主执行证据。完整 Snapshot 中真实病程常超过 12 份，
 # 单份上级查房记录也常超过 1000 字；不能因为展示/提示词投影上限把整类
 # 权威病程误判为不完整。提示词在第二阶段按引用去重，硬上限仅防御异常巨行。
@@ -207,6 +209,18 @@ _PLANNED_ONLY_TRACE_PATTERN = re.compile(
     r"[^。；\n]{0,20}(?:执行|行|予以|给予|完善|复查|实施|治疗|检查|检验|手术|操作|随访|处理)"
     r"|建议[^。；\n]{0,20}"
     r"(?:行|予以|给予|完善|复查|实施|治疗|检查|检验|手术|操作|随访|处理)"
+)
+_EXECUTION_TRACE_BOUNDARY_PROMPT = (
+    "‘遵会诊意见 + 明确具体动作’属于specific_trace；只有未写任何具体动作的裸句"
+    "‘遵会诊意见执行’才属于generic_trace。"
+    "execution_record_state只评价所选病程写法是否具体，不评价整条建议是否全部落实；"
+    "所选trace写明任一具体动作时必须判specific_trace，未落实部分只在"
+    "recommendation_coverage_state中判partial，不得据此降为generic_trace。"
+    "例如病程写‘今遵会诊意见完善相关检查，并复查肾功、电解质’，已经包含具体动作，"
+    "必须判specific_trace。病程写‘继续中药内服，方选消风散加减’同样是具体治疗动作，"
+    "不能因使用‘继续’二字判成no_trace。"
+    "‘余治疗方案同前’‘继续当前治疗’不得自动关联到本次新会诊建议；"
+    "同一病程未明确写出该建议对应动作时按no_trace判断。"
 )
 _EMBEDDED_DECISION_COMMUNICATION_PATTERN = re.compile(
     r"(?:(?:已|经).{0,8})?(?:与)?(?:患者(?:家属)?|家属).{0,8}(?:沟通|告知|说明)"
@@ -818,6 +832,17 @@ def _payload(response: Mapping[str, Any]) -> Mapping[str, Any]:
         if language.strip().lower() != "json" or not separator:
             raise _SemanticInvalid()
     return _decode_object(fenced)
+
+
+def _stage_two_payload(response: Mapping[str, Any]) -> Mapping[str, Any]:
+    """把成功响应中的非对象载荷归为可重试的二阶段形状错误。"""
+
+    try:
+        return _payload(response)
+    except _SemanticInvalid as error:
+        if error.kind is _SemanticInvalidKind.OTHER:
+            raise _SemanticInvalid(_SemanticInvalidKind.RESPONSE_SHAPE) from error
+        raise
 
 
 def _read_rows(
@@ -2568,6 +2593,46 @@ def _prompt_alias_by_ref(
     }
 
 
+def _course_overlap_candidate_refs(
+    *,
+    recommendation: _Recommendation,
+    related_refs: Sequence[str],
+    candidates_by_ref: Mapping[str, _CandidateDocument],
+) -> tuple[str, ...]:
+    """给模型提供病程词面召回提示，不据此生成任何执行事实。"""
+
+    fragments = (
+        _TEXT_NORMALIZE_PATTERN.sub("", recommendation.normalized_action),
+        _TEXT_NORMALIZE_PATTERN.sub("", recommendation.source_quote),
+    )
+    ngrams = {
+        fragment[index:index + _COURSE_OVERLAP_NGRAM_CHARS]
+        for fragment in fragments
+        for index in range(
+            max(0, len(fragment) - _COURSE_OVERLAP_NGRAM_CHARS + 1)
+        )
+    }
+    if not ngrams:
+        return ()
+    scored: list[tuple[int, int, str]] = []
+    for order, reference in enumerate(related_refs):
+        candidate = candidates_by_ref.get(reference)
+        if (
+            candidate is None
+            or candidate.source_key not in _COURSE_EXECUTION_SOURCE_KEYS
+        ):
+            continue
+        normalized_text = _TEXT_NORMALIZE_PATTERN.sub("", candidate.text)
+        score = sum(ngram in normalized_text for ngram in ngrams)
+        if score:
+            scored.append((-score, order, reference))
+    scored.sort()
+    return tuple(
+        reference
+        for _, _, reference in scored[:_MAX_COURSE_OVERLAP_HINTS]
+    )
+
+
 def _execution_prompt(
     *,
     completed: Sequence[_CompletedRecommendation],
@@ -2589,6 +2654,7 @@ def _execution_prompt(
     # 检查、检验和手术可作为同次执行的结构化佐证。不能因为存在病程候选就
     # 把这些已选来源从二阶段事实输入中静默丢失。
     prompt_candidates = tuple(candidates)
+    candidates_by_ref = {candidate.ref: candidate for candidate in candidates}
     for item in completed:
         related_refs: list[str] = []
         eligible_sources = _ACTION_TYPE_SOURCE_KEYS.get(
@@ -2633,6 +2699,13 @@ def _execution_prompt(
             "source_quote": item.recommendation.source_quote,
             "opinion_date": item.opinion_time.value.isoformat(),
             "allowed_candidate_refs": list(related_refs),
+            "course_overlap_candidate_refs": list(
+                _course_overlap_candidate_refs(
+                    recommendation=item.recommendation,
+                    related_refs=related_refs,
+                    candidates_by_ref=candidates_by_ref,
+                )
+            ),
         })
     # 别名在本次实际渲染的候选上稠密编号；解析侧用同一函数重算，保证提示
     # 与解析共用一套编号。
@@ -2640,6 +2713,10 @@ def _execution_prompt(
     for entry in entries:
         entry["allowed_candidate_refs"] = [
             alias_by_ref[reference] for reference in entry["allowed_candidate_refs"]
+        ]
+        entry["course_overlap_candidate_refs"] = [
+            alias_by_ref[reference]
+            for reference in entry["course_overlap_candidate_refs"]
         ]
     payload = json.dumps({
         "recommendations": entries,
@@ -2659,6 +2736,7 @@ def _execution_prompt(
             "execution_record_state只能是specific_trace/generic_trace/copied_opinion/no_trace/unknown："
             "specific_trace=明确写出按会诊意见采取的具体措施；generic_trace=仅写遵会诊意见执行或已按建议处理；"
             "copied_opinion=照抄意见但没有归纳执行情况；no_trace=未见该建议的执行记录痕迹；unknown=无法判断。"
+            + _EXECUTION_TRACE_BOUNDARY_PROMPT +
             "病程明确记载已经给予、已行、已实施的具体治疗、检查、固定、制动或监测措施，可判specific_trace；"
             "属于specific_trace时必须能由所引病程原文直接核实具体执行动作。"
             "病程明确写出已安排并完成检查、已给予治疗或已实施固定/冰敷等动作，绝不是generic_trace。"
@@ -2666,6 +2744,7 @@ def _execution_prompt(
             "可以分别判定已有执行痕迹；不得把跨类别措施合并推断。"
             "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
             "trace_refs只能逐字复制本条recommendation的allowed_candidate_refs中的病程ref；"
+            "course_overlap_candidate_refs只用于提醒优先核对可能相关的病程，不能单独证明存在执行痕迹；"
             "不得从全局candidate_documents或其他建议复制，也不得按source与序号合成ref。"
             "allowed_candidate_refs为空时必须返回execution_record_state=unknown、trace_refs=[]。"
             "不得引用会诊申请或会诊意见的ref。specific_trace/generic_trace/copied_opinion必须返回至少一个trace_refs；"
@@ -2687,6 +2766,7 @@ def _execution_prompt(
         "generic_trace=仅写遵会诊意见执行/已按建议处理等笼统表述；"
         "copied_opinion=照抄会诊意见、没有归纳执行情况；"
         "no_trace=未见请会诊执行记录痕迹；unknown=无法判断。"
+        + _EXECUTION_TRACE_BOUNDARY_PROMPT +
         "病程明确写出予以、给予、已行或已实施某项具体治疗、检查、固定、制动或监测措施，"
         "属于specific_trace；不得仅因没有重复会诊原句或没有结构化医嘱而降为generic_trace或unknown。"
         "第二步可辅助判断结构化医嘱/操作候选是否与该建议存在动作对应关系，"
@@ -2708,6 +2788,7 @@ def _execution_prompt(
         "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
         "confidence只能为high/medium/low。"
         "trace_refs和structured_action_refs只能逐字复制本条recommendation的allowed_candidate_refs中的ref；"
+        "course_overlap_candidate_refs只用于提醒优先核对可能相关的病程，不能单独证明存在执行痕迹；"
         "不得从全局candidate_documents或其他建议复制，也不得按source与序号合成ref；绝不得引用会诊申请或会诊意见的ref。"
         "specific_trace/generic_trace/copied_opinion必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
         "allowed_candidate_refs为空时必须返回execution_record_state=unknown、execution_state=unknown、"
@@ -2830,6 +2911,33 @@ def _unknown_execution_assessment(recommendation_ref: str) -> _ExecutionAssessme
         "unknown",
         (),
         (),
+    )
+
+
+def _settle_recommendations_without_course_candidates(
+    assessments: Sequence[_ExecutionAssessment],
+    *,
+    recommendation_refs: frozenset[str],
+) -> tuple[_ExecutionAssessment, ...]:
+    """来源完整且建议后无病程候选时，确定性收敛病程痕迹缺失。
+
+    结构化动作的语义关系仍保留模型原答；这里只确定 4.20.4 要求的病程执行
+    记录不存在，避免同一病例中较早建议有候选时把较晚建议错误留成 unknown。
+    """
+
+    return tuple(
+        replace(
+            item,
+            execution_record_state="no_trace",
+            trace_refs=(),
+            context_only_refs=(),
+            recommendation_coverage_state="no_trace",
+            coverage_confidence="high",
+            uncovered_source_quotes=(),
+        )
+        if item.recommendation_ref in recommendation_refs
+        else item
+        for item in assessments
     )
 
 
@@ -2974,6 +3082,21 @@ def _parse_executions(
         if duplicated_course_refs:
             structured_refs = [
                 ref for ref in structured_refs if ref not in duplicated_course_refs
+            ]
+        # structured_action_refs 只是辅助关系。模型已经给出合法病程主证据时，
+        # 若又把另一份病程误放进辅助字段，安全丢弃该错位引用；不能让辅助字段
+        # 作废已通过白名单、时序与来源校验的 trace。没有合法 trace 的错位引用
+        # 仍由下方 fail-closed，不能据此生成临床正向结论。
+        if (
+            trace_refs
+            and execution_record_state in _RECORDED_TRACE_LEVELS
+        ):
+            structured_refs = [
+                ref
+                for ref in structured_refs
+                if ref in candidate_by_ref
+                and candidate_by_ref[ref].source_key
+                in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS
             ]
         if trace_refs and not structured_refs and state in {
             "linked_specific",
@@ -4206,6 +4329,19 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     candidate_by_ref = {
                         item.ref: item for item in projection.candidates
                     }
+                    recommendation_refs_without_course_candidates = frozenset(
+                        recommendation_ref
+                        for recommendation_ref, refs in allowed_refs.items()
+                        if not _COURSE_EXECUTION_SOURCE_KEYS.intersection(
+                            projection.source_incomplete_keys
+                        )
+                        and not any(
+                            ref in candidate_by_ref
+                            and candidate_by_ref[ref].source_key
+                            in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                            for ref in refs
+                        )
+                    )
                     copied_opinion_refs = _standard_copied_opinion_refs(
                         completed=completed_recommendations,
                         candidates=projection.candidates,
@@ -4264,11 +4400,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             completion_tokens += next_completion
                             total_tokens += next_total
                             api_time += response_time or (time.perf_counter() - started)
-                            stage_two_payload = _payload(response)
                             try:
                                 try:
                                     execution_assessments = _parse_executions(
-                                        stage_two_payload,
+                                        _stage_two_payload(response),
                                         completed=completed_recommendations,
                                         allowed_refs=allowed_refs,
                                         candidates=projection.candidates,
@@ -4317,7 +4452,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                         - semantic_retry_started
                                     )
                                     execution_assessments = _parse_executions(
-                                        _payload(semantic_retry_response),
+                                        _stage_two_payload(semantic_retry_response),
                                         completed=completed_recommendations,
                                         allowed_refs=allowed_refs,
                                         candidates=projection.candidates,
@@ -4374,7 +4509,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                         try:
                                             completed_missing_assessments = (
                                                 _parse_executions(
-                                                    _payload(missing_response),
+                                                    _stage_two_payload(missing_response),
                                                     completed=missing_completed,
                                                     allowed_refs=missing_allowed_refs,
                                                     candidates=projection.candidates,
@@ -4411,6 +4546,14 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     ]
                                     for item in completed_recommendations
                                 )
+                            execution_assessments = (
+                                _settle_recommendations_without_course_candidates(
+                                    execution_assessments,
+                                    recommendation_refs=(
+                                        recommendation_refs_without_course_candidates
+                                    ),
+                                )
+                            )
                             conflict_refs = {
                                 item.recommendation_ref
                                 for item in execution_assessments
@@ -4434,6 +4577,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 if item.confidence != "high"
                                 and item.recommendation_ref
                                 not in exhausted_missing_refs
+                                and item.recommendation_ref
+                                not in recommendation_refs_without_course_candidates
                             }
                             if low_confidence_refs and not retry_attempted:
                                 # 只对首轮明确标为中/低信心的建议做一次
@@ -4467,7 +4612,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                         time.perf_counter() - recheck_started
                                     )
                                     rechecked = _parse_executions(
-                                        _payload(recheck_response),
+                                        _stage_two_payload(recheck_response),
                                         completed=recheck_completed,
                                         allowed_refs=recheck_allowed_refs,
                                         candidates=projection.candidates,

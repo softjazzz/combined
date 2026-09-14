@@ -6689,6 +6689,7 @@ async def test_020_023_semantic_contract_failure_keeps_typed_decision_technical_
     client = _PlannedStageClient(
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
         "not-json",
+        "not-json",
     )
 
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -7990,6 +7991,236 @@ async def test_structured_exam_with_course_respects_recommendation_time_scope(
         assert [
             item["source_type"] for item in evidence["execution_evidence"]
         ] == ["exam_item_report"]
+
+
+@pytest.mark.asyncio
+async def test_later_recommendation_without_post_consultation_course_is_deterministic_no_trace(
+    monkeypatch,
+):
+    """前一会诊有后续病程，不能让后一会诊因候选为空落成 uncertain。"""
+
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows(
+        "第一次会诊意见：建议复查血常规。",
+        "第二次会诊意见：建议继续中药治疗。",
+        hour_start=1,
+        action_suffix=False,
+    )
+    source_rows["senior_course_record"] = _rows(
+        "已按第一次会诊意见复查血常规。",
+        hour_start=2,
+        action_suffix=False,
+    )
+    session = _window_session(rows_by_source=source_rows)
+    client = _SequentialClient(
+        _payload(episodes=[
+            _episode(
+                "consultation_record-1",
+                ["consultation_record-1"],
+                recommendations=[{
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "action_type": "test",
+                    "source_quote": "复查血常规",
+                }],
+            ),
+            _episode(
+                "consultation_record-2",
+                ["consultation_record-2"],
+                recommendations=[{
+                    "recommendation_ref": "consultation_record-2#r1",
+                    "action_type": "medication",
+                    "source_quote": "继续中药治疗",
+                }],
+            ),
+        ]),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["senior_course_record-1"],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "confidence": "high",
+                "recommendation_coverage_state": "complete",
+                "coverage_confidence": "high",
+                "uncovered_source_quotes": [],
+            },
+            {
+                "recommendation_ref": "consultation_record-2#r1",
+                "execution_record_state": "unknown",
+                "trace_refs": [],
+                "execution_state": "unknown",
+                "structured_action_refs": [],
+                "confidence": "low",
+                "recommendation_coverage_state": "unknown",
+                "coverage_confidence": "low",
+                "uncovered_source_quotes": [],
+            },
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "compliant",
+    ]
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
+    display = dict(result.customer_display_facts)["LX0609-020"]
+    assert [
+        item["execution_state"] for item in display["recommendation_results"]
+    ] == ["specific", "missing"]
+
+
+def test_execution_prompt_distinguishes_specific_action_from_bare_generic_trace():
+    completed = (_coverage_completed_recommendation(),)
+    candidate = _coverage_candidate()
+
+    prompt, _ = episode._execution_prompt(
+        completed=completed,
+        candidates=(candidate,),
+    )
+
+    assert "遵会诊意见 + 明确具体动作" in prompt
+    assert "未落实部分只在recommendation_coverage_state中判partial" in prompt
+    assert "余治疗方案同前" in prompt
+    assert "不得自动关联到本次新会诊建议" in prompt
+
+
+def test_execution_prompt_marks_lexically_related_course_as_review_hint():
+    completed = (
+        _coverage_completed_recommendation(
+            source_quote="建议中药疏风清热、除湿止痒，方选消风散加减",
+        ),
+    )
+    candidate = episode._CandidateDocument(
+        "senior_course_record-1",
+        "senior_course_record",
+        episode._ObservedTime(datetime(2026, 7, 21, 9), True),
+        "继续中药内服以疏风清热、除湿止痒为主，方选消风散加减。",
+        "course-document-1",
+    )
+
+    prompt, _ = episode._execution_prompt(
+        completed=completed,
+        candidates=(candidate,),
+    )
+
+    payload = json.loads(prompt.split("输入：", 1)[1])
+    assert payload["recommendations"][0]["course_overlap_candidate_refs"] == ["c1"]
+    assert "只用于提醒优先核对" in prompt
+    assert "不能单独证明存在执行痕迹" in prompt
+
+
+@pytest.mark.asyncio
+async def test_stage_two_top_level_array_retries_once(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows(
+            "会诊意见：建议复查血常规。",
+            action_suffix=False,
+        ),
+        "daily_course_record": _rows(
+            "已按会诊意见复查血常规。",
+            hour_start=2,
+            action_suffix=False,
+        ),
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "inpat_nondrug_order": [],
+        "exam_master": [],
+        "exam_item_report": [],
+        "labtest_master": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(
+            episodes=[
+                _episode("consultation_record-1", ["consultation_record-1"])
+            ]
+        ),
+        [],
+        {
+            "executions": [
+                {
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "execution_record_state": "specific_trace",
+                    "trace_refs": ["daily_course_record-1"],
+                    "confidence": "high",
+                }
+            ]
+        },
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 3
+
+
+def test_valid_course_trace_survives_misplaced_auxiliary_course_reference():
+    completed = (_coverage_completed_recommendation(),)
+    candidates = (
+        _coverage_candidate("daily_course_record-1"),
+        episode._CandidateDocument(
+            "daily_course_record-2",
+            "daily_course_record",
+            episode._ObservedTime(datetime(2026, 7, 21, 9), True),
+            "另一份病程候选",
+            "course-document-2",
+        ),
+    )
+    _, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+
+    parsed = episode._parse_executions(
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "linked_specific",
+            # 结构化动作是辅助维度；模型误把另一份病程放在该字段时，
+            # 不应作废已经通过白名单校验的病程主证据。
+            "structured_action_refs": ["daily_course_record-2"],
+            "execution_quotes": ["病程记录已复查血常规"],
+            "confidence": "high",
+            "recommendation_coverage_state": "complete",
+            "coverage_confidence": "high",
+            "uncovered_source_quotes": [],
+        }),
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=candidates,
+    )
+
+    assert parsed[0].execution_record_state == "specific_trace"
+    assert parsed[0].trace_refs == ("daily_course_record-1",)
+    assert parsed[0].execution_state == "absent"
+    assert parsed[0].execution_refs == ()
 
 
 @pytest.mark.asyncio
