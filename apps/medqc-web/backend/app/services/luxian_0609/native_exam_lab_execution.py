@@ -17,6 +17,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
 from .exam_lab_fact_extraction import (
     ExamLabFactParseError,
     ExamLabEventFact,
@@ -2113,7 +2114,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 failure_kind,
                             )
                             logger.warning(
-                                "exam_lab_fact_parse_failed parse_failure_kind=%s; retrying once",
+                                "exam_lab_fact_parse_failed parse_failure_kind=%s; starting controlled recovery",
                                 failure_kind,
                             )
                             retry_rule_ids = tuple(
@@ -2122,42 +2123,85 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 if rule_id in isolated_rule_failures
                             )
                             retried_rule_count += len(retry_rule_ids)
-                            llm_call_count += 1
-                            try:
-                                retry_response = await _generate_exam_lab_fact_response(
-                                    llm_client=llm_client,
-                                    selected_rule_ids=retry_rule_ids,
-                                    projection=projection,
-                                )
-                                retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
-                                prompt_tokens += retry_prompt
-                                completion_tokens += retry_completion
-                                total_tokens += retry_total
-                                api_time += retry_elapsed
-                                retry_partition = parse_exam_lab_fact_response_isolated(
-                                    response=retry_response,
-                                    selected_rule_ids=retry_rule_ids,
-                                    projection=projection,
-                                    _strict_parser=parse_exam_lab_fact_response,
-                                )
-                                text_facts = tuple(
-                                    (*text_facts, *retry_partition.facts)
-                                )
+                            use_event_recovery = all(
+                                isolated_rule_failures[rule_id] == "evidence_ref"
+                                and len(events_for_family(
+                                    projection,
+                                    "exam" if rule_id in EXAM_RULE_IDS else "culture",
+                                )) > 1
+                                for rule_id in retry_rule_ids
+                            )
+                            if use_event_recovery:
                                 for rule_id in retry_rule_ids:
-                                    isolated_rule_failures.pop(rule_id, None)
-                                isolated_rule_failures.update(
-                                    retry_partition.rule_failures
-                                )
-                                recovered_rule_count += len(retry_rule_ids) - len(retry_partition.rule_failures)
-                            except Exception as retry_exc:  # noqa: BLE001
-                                # 重试响应的顶层/范围错误仍闭合失败规则；首轮
-                                # 已通过的其它规则保留，不把异常扩散回它们。
-                                logger.warning("exam_lab_fact_retry_failed")
-                                for rule_id in retry_rule_ids:
-                                    isolated_rule_failures.setdefault(
-                                        rule_id,
-                                        getattr(retry_exc, "failure_kind", "value"),
+                                    recovery = await recover_exam_lab_rule_by_event(
+                                        rule_id=rule_id,
+                                        projection=projection,
+                                        generate_response=lambda selected, event_projection: (
+                                            _generate_exam_lab_fact_response(
+                                                llm_client=llm_client,
+                                                selected_rule_ids=selected,
+                                                projection=event_projection,
+                                            )
+                                        ),
+                                        strict_parser=parse_exam_lab_fact_response,
                                     )
+                                    llm_call_count += recovery.call_count
+                                    for recovery_response in recovery.responses:
+                                        retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(
+                                            recovery_response
+                                        )
+                                        prompt_tokens += retry_prompt
+                                        completion_tokens += retry_completion
+                                        total_tokens += retry_total
+                                        api_time += retry_elapsed
+                                    if recovery.failure_kind is None:
+                                        text_facts = tuple((*text_facts, *recovery.facts))
+                                        isolated_rule_failures.pop(rule_id, None)
+                                        recovered_rule_count += 1
+                                    else:
+                                        isolated_rule_failures[rule_id] = recovery.failure_kind
+                                        logger.warning(
+                                            "exam_lab_fact_event_recovery_failed rule_id=%s failure_kind=%s",
+                                            rule_id,
+                                            recovery.failure_kind,
+                                        )
+                            else:
+                                llm_call_count += 1
+                                try:
+                                    retry_response = await _generate_exam_lab_fact_response(
+                                        llm_client=llm_client,
+                                        selected_rule_ids=retry_rule_ids,
+                                        projection=projection,
+                                    )
+                                    retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
+                                    prompt_tokens += retry_prompt
+                                    completion_tokens += retry_completion
+                                    total_tokens += retry_total
+                                    api_time += retry_elapsed
+                                    retry_partition = parse_exam_lab_fact_response_isolated(
+                                        response=retry_response,
+                                        selected_rule_ids=retry_rule_ids,
+                                        projection=projection,
+                                        _strict_parser=parse_exam_lab_fact_response,
+                                    )
+                                    text_facts = tuple(
+                                        (*text_facts, *retry_partition.facts)
+                                    )
+                                    for rule_id in retry_rule_ids:
+                                        isolated_rule_failures.pop(rule_id, None)
+                                    isolated_rule_failures.update(
+                                        retry_partition.rule_failures
+                                    )
+                                    recovered_rule_count += len(retry_rule_ids) - len(retry_partition.rule_failures)
+                                except Exception as retry_exc:  # noqa: BLE001
+                                    # 重试响应的顶层/范围错误仍闭合失败规则；首轮
+                                    # 已通过的其它规则保留，不把异常扩散回它们。
+                                    logger.warning("exam_lab_fact_retry_failed")
+                                    for rule_id in retry_rule_ids:
+                                        isolated_rule_failures.setdefault(
+                                            rule_id,
+                                            getattr(retry_exc, "failure_kind", "value"),
+                                        )
                     except (ExamLabFactParseError, ValueError) as exc:
                         # 顶层 JSON/schema、规则/事件身份、引用范围错误，以及
                         # 非受控 ValueError，仍按原合同让整批进入一次重试。
