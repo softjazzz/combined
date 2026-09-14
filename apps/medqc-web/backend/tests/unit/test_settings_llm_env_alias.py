@@ -167,11 +167,11 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     assert diagnostics["thinking_budget"] == 256
 
 
-def test_llm_http_max_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
+def test_llm_http_max_concurrency_defaults_to_eight_and_is_bounded(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
-    assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 4
+    assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 8
 
     monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "16")
     assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 16
