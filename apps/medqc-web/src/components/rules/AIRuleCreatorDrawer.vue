@@ -484,7 +484,7 @@ const handleSelectExample = (example: { content: string; params: Partial<RulePar
   margin-top: 16px;
   font-size: 15px;
   font-weight: 500;
-  color: #1890ff;
+  color: #2b6cf6;
   animation: fadePulse 1.5s ease-in-out infinite;
 }
 

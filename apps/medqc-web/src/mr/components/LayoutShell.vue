@@ -315,7 +315,7 @@ onUnmounted(() => {
 }
 
 .layout-resizer:hover {
-  background: #1890ff;
+  background: #2b6cf6;
 }
 
 .layout-toolbar {

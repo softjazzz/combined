@@ -52,7 +52,7 @@
             v-model="state.pgConnectionForm.remote_host"
             type="text"
             :disabled="isReadonly"
-            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#2b6cf6] focus:ring-[3px] focus:ring-[#2b6cf6]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
           >
         </div>
 
@@ -64,7 +64,7 @@
             :min="1"
             :max="65535"
             :disabled="isReadonly"
-            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#2b6cf6] focus:ring-[3px] focus:ring-[#2b6cf6]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
           >
         </div>
 
@@ -74,7 +74,7 @@
             v-model="state.pgConnectionForm.remote_database"
             type="text"
             :disabled="isReadonly"
-            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#2b6cf6] focus:ring-[3px] focus:ring-[#2b6cf6]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
           >
         </div>
 
@@ -84,7 +84,7 @@
             v-model="state.pgConnectionForm.remote_username"
             type="text"
             :disabled="isReadonly"
-            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#2b6cf6] focus:ring-[3px] focus:ring-[#2b6cf6]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
           >
         </div>
 
@@ -94,7 +94,7 @@
             v-model="state.pgConnectionForm.remote_password"
             type="password"
             :disabled="isReadonly"
-            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#2b6cf6] focus:ring-[3px] focus:ring-[#2b6cf6]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
           >
           <div class="text-[11px] text-slate-400 mt-1">
             当前密码状态：{{ state.pgConnectionForm.remote_password_set ? '已设置' : '未设置' }}
@@ -107,7 +107,7 @@
             :class="
               isReadonly || state.isSavingPgConnection
                 ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100'
-                : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'
+                : 'bg-gradient-to-r from-[#2b6cf6] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'
             "
             :disabled="isReadonly || state.isSavingPgConnection"
             @click="handleSavePg"

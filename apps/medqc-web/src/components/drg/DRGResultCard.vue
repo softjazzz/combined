@@ -6,7 +6,7 @@
     >
       <template #title>
         <span class="card-title">
-          <ThunderboltOutlined style="color: #1890ff; margin-right: 8px" />
+          <ThunderboltOutlined style="color: #2b6cf6; margin-right: 8px" />
           分组结果
         </span>
       </template>
@@ -215,7 +215,7 @@ const getRiskText = (level: RiskLevel) => {
       }
       
       &.drg-box .code { color: #52c41a; }
-      &.adrg-box .code { color: #1890ff; }
+      &.adrg-box .code { color: #2b6cf6; }
     }
   }
 

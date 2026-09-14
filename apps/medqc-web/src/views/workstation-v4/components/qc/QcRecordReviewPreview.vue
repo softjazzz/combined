@@ -1,14 +1,30 @@
 <template>
-  <aside class="qc-review-preview" aria-label="复核预览" data-testid="qc-review-preview">
+  <aside
+    class="qc-review-preview"
+    aria-label="复核预览"
+    data-testid="qc-review-preview"
+  >
     <header class="preview-heading">
       <ClipboardCheck :size="18" />
       <h2>复核预览</h2>
     </header>
-    <div v-if="!row" class="preview-state">请选择左侧病历，查看最近一次质控结果</div>
+    <div
+      v-if="!row"
+      class="preview-state"
+    >
+      请选择左侧病历，查看最近一次质控结果
+    </div>
     <template v-else>
-      <section class="patient-context" aria-label="当前患者">
+      <section
+        class="patient-context"
+        aria-label="当前患者"
+      >
         <h3>
-          <img class="patient-avatar" :src="patientAvatarSrc(row)" alt="" />{{
+          <img
+            class="patient-avatar"
+            :src="patientAvatarSrc(row)"
+            alt=""
+          >{{
             row.patientName || '患者信息待接入'
           }}
         </h3>
@@ -33,28 +49,67 @@
           </div>
         </dl>
       </section>
-      <div v-if="loading" class="preview-state" role="status">正在读取质控结果…</div>
-      <div v-else-if="loadError" class="preview-state" role="alert">
+      <div
+        v-if="loading"
+        class="preview-state"
+        role="status"
+      >
+        正在读取质控结果…
+      </div>
+      <div
+        v-else-if="loadError"
+        class="preview-state"
+        role="alert"
+      >
         <p>{{ loadError }}</p>
-        <button type="button" class="text-button" @click="loadResult">
+        <button
+          type="button"
+          class="text-button"
+          @click="loadResult"
+        >
           <RotateCcw :size="14" />重试
         </button>
       </div>
-      <div v-else-if="!ready" class="preview-state">暂无已保存质控结果，请先运行质控</div>
+      <div
+        v-else-if="!ready"
+        class="preview-state"
+      >
+        暂无已保存质控结果，请先运行质控
+      </div>
       <template v-else>
         <div class="status-tabs">
           <span>问题预览</span>
           <div class="status-select">
-            <select v-model="activeTab" aria-label="质控状态筛选" title="点击切换质控状态">
-              <option v-for="tab in tabs" :key="tab.key" :value="tab.key" :data-tab="tab.key">
+            <select
+              v-model="activeTab"
+              aria-label="质控状态筛选"
+              title="点击切换质控状态"
+            >
+              <option
+                v-for="tab in tabs"
+                :key="tab.key"
+                :value="tab.key"
+                :data-tab="tab.key"
+              >
                 {{ tab.label }} · {{ tab.count }}
               </option>
             </select>
-            <span class="status-select-arrow" aria-hidden="true" />
+            <span
+              class="status-select-arrow"
+              aria-hidden="true"
+            />
           </div>
         </div>
-        <div class="preview-results" aria-live="polite">
-          <p v-if="!filteredItems.length" class="preview-state">该状态暂无质控项</p>
+        <div
+          class="preview-results"
+          aria-live="polite"
+        >
+          <p
+            v-if="!filteredItems.length"
+            class="preview-state"
+          >
+            该状态暂无质控项
+          </p>
           <article
             v-for="item in filteredItems.slice(0, 3)"
             :key="item.key"
@@ -63,20 +118,32 @@
           >
             <div class="item-heading">
               <div class="item-meta">
-                <span v-if="item.source_document" class="item-source"
-                  >{{ item.source_document }}<span aria-hidden="true"> · </span></span
-                >
-                <span class="status-label" :data-tone="item.tone">{{ item.displayStatus }}</span>
+                <span
+                  v-if="item.source_document"
+                  class="item-source"
+                >{{ item.source_document }}<span aria-hidden="true"> · </span></span>
+                <span
+                  class="status-label"
+                  :data-tone="item.tone"
+                >{{ item.displayStatus }}</span>
               </div>
               <h3 :title="item.rule_name || item.rule_id">
                 {{ displayRuleTitle(item) }}
               </h3>
             </div>
-            <p class="section-label">判定说明</p>
-            <p class="item-summary" :class="{ 'is-expanded': expandedItems.includes(item.key) }">
+            <p class="section-label">
+              判定说明
+            </p>
+            <p
+              class="item-summary"
+              :class="{ 'is-expanded': expandedItems.includes(item.key) }"
+            >
               {{ item.conclusionText || '暂无结论说明' }}
             </p>
-            <p v-if="documentLabels(item)" class="document-label">
+            <p
+              v-if="documentLabels(item)"
+              class="document-label"
+            >
               <FileText :size="14" />{{ documentLabels(item) }}
             </p>
             <button
@@ -87,14 +154,33 @@
             >
               {{ expandedItems.includes(item.key) ? '收起说明' : '查看完整说明' }}
             </button>
-            <div v-if="expandedItems.includes(item.key)" class="explanation-extra">
-              <p v-if="item.detail && item.detail !== item.conclusionText" class="full-text">
+            <div
+              v-if="expandedItems.includes(item.key)"
+              class="explanation-extra"
+            >
+              <p
+                v-if="item.detail && item.detail !== item.conclusionText"
+                class="full-text"
+              >
                 {{ item.detail }}
               </p>
-              <p v-if="item.actual" class="full-text">实际情况：{{ item.actual }}</p>
-              <p v-if="item.standard" class="full-text">质控标准：{{ item.standard }}</p>
+              <p
+                v-if="item.actual"
+                class="full-text"
+              >
+                实际情况：{{ item.actual }}
+              </p>
+              <p
+                v-if="item.standard"
+                class="full-text"
+              >
+                质控标准：{{ item.standard }}
+              </p>
             </div>
-            <details v-if="item.suggestion" class="suggestion-details">
+            <details
+              v-if="item.suggestion"
+              class="suggestion-details"
+            >
               <summary>处理建议<span class="suggestion-hint">点击查看</span></summary>
               <div class="suggestion-content">
                 <p
@@ -106,24 +192,35 @@
                 </p>
               </div>
             </details>
-            <button type="button" class="text-button" @click="openFull">
+            <button
+              type="button"
+              class="text-button"
+              @click="openFull"
+            >
               查看原文与结果<ArrowUpRight :size="14" />
             </button>
           </article>
         </div>
         <footer class="preview-footer">
-          <span
-            >共 {{ viewItems.length }} 项 · 当前分组 {{ filteredItems.length }} 项<span
-              v-if="filteredItems.length > 3"
-              >，预览前 3 项</span
-            ></span
+          <span>共 {{ viewItems.length }} 项 · 当前分组 {{ filteredItems.length }} 项<span
+            v-if="filteredItems.length > 3"
+          >，预览前 3 项</span></span>
+          <button
+            type="button"
+            class="full-result-button"
+            @click="openFull"
           >
-          <button type="button" class="full-result-button" @click="openFull">
             <span class="full-result-label">
-              <FileText :size="17" aria-hidden="true" />
+              <FileText
+                :size="17"
+                aria-hidden="true"
+              />
               查看完整质控结果
             </span>
-            <ArrowRight :size="16" aria-hidden="true" />
+            <ArrowRight
+              :size="16"
+              aria-hidden="true"
+            />
           </button>
         </footer>
       </template>
@@ -391,7 +488,7 @@ button {
   background: #edf5ff;
 }
 .status-tabs select:focus-visible {
-  outline: 2px solid #0066cc;
+  outline: 2px solid #2b6cf6;
   outline-offset: 2px;
 }
 .status-tabs > span {
@@ -479,7 +576,7 @@ button {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
 }
 .suggestion-details {
@@ -522,7 +619,7 @@ button {
 summary {
   cursor: pointer;
   font-size: 12px;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 .full-text {
   white-space: pre-wrap;
@@ -534,7 +631,7 @@ summary {
   gap: 4px;
   margin-top: 10px;
   padding: 0;
-  color: #0066cc;
+  color: #2b6cf6;
   border: 0;
   background: transparent;
   font-size: 13px;
@@ -585,7 +682,7 @@ summary {
 }
 button:focus-visible,
 summary:focus-visible {
-  outline: 2px solid #0066cc;
+  outline: 2px solid #2b6cf6;
   outline-offset: 3px;
 }
 </style>

@@ -395,7 +395,7 @@ watch(() => props.visible, (newValue) => {
         .card-icon {
           margin-right: 8px;
           font-size: 18px;
-          color: #1890ff;
+          color: #2b6cf6;
         }
       }
     }
@@ -432,7 +432,7 @@ watch(() => props.visible, (newValue) => {
           gap: 4px;
 
           .section-icon {
-            color: #1890ff;
+            color: #2b6cf6;
           }
         }
 
@@ -481,7 +481,7 @@ watch(() => props.visible, (newValue) => {
         .confidence-value {
           font-size: 18px;
           font-weight: 700;
-          color: #1890ff;
+          color: #2b6cf6;
         }
       }
 
@@ -503,7 +503,7 @@ watch(() => props.visible, (newValue) => {
         margin-bottom: 12px;
 
         .section-icon {
-          color: #1890ff;
+          color: #2b6cf6;
           font-size: 16px;
         }
       }
@@ -569,8 +569,8 @@ watch(() => props.visible, (newValue) => {
           background: #fafafa;
 
           &:hover {
-            border-color: #1890ff;
-            color: #1890ff;
+            border-color: #2b6cf6;
+            color: #2b6cf6;
           }
         }
 
@@ -612,13 +612,13 @@ watch(() => props.visible, (newValue) => {
         transition: all 0.3s ease;
 
         &:hover {
-          border-color: #1890ff;
+          border-color: #2b6cf6;
         }
       }
 
       &.ant-select-focused .ant-select-selector {
-        border-color: #1890ff;
-        box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+        border-color: #2b6cf6;
+        box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
       }
     }
 
@@ -629,12 +629,12 @@ watch(() => props.visible, (newValue) => {
       transition: all 0.3s ease;
 
       &:hover {
-        border-color: #1890ff;
+        border-color: #2b6cf6;
       }
 
       &:focus {
-        border-color: #1890ff;
-        box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+        border-color: #2b6cf6;
+        box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
       }
     }
 
@@ -649,7 +649,7 @@ watch(() => props.visible, (newValue) => {
 // Modal 覆盖样式
 :deep(.ant-modal) {
   .ant-modal-header {
-    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    background: linear-gradient(135deg, #2b6cf6 0%, #096dd9 100%);
     border-bottom: none;
     padding: 18px 24px;
 
@@ -682,19 +682,19 @@ watch(() => props.visible, (newValue) => {
         border: 1.5px solid #d9d9d9;
 
         &:hover {
-          border-color: #1890ff;
-          color: #1890ff;
+          border-color: #2b6cf6;
+          color: #2b6cf6;
         }
       }
 
       &.ant-btn-primary {
-        background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+        background: linear-gradient(135deg, #2b6cf6 0%, #096dd9 100%);
         border: none;
-        box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3);
+        box-shadow: 0 2px 8px rgba(43, 108, 246, 0.3);
 
         &:hover {
-          background: linear-gradient(135deg, #40a9ff 0%, #1890ff 100%);
-          box-shadow: 0 4px 12px rgba(24, 144, 255, 0.4);
+          background: linear-gradient(135deg, #40a9ff 0%, #2b6cf6 100%);
+          box-shadow: 0 4px 12px rgba(43, 108, 246, 0.4);
         }
       }
     }

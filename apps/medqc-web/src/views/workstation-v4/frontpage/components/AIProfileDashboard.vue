@@ -223,7 +223,7 @@
                         ? '#ef4444'
                         : marker.severity === 'moderate'
                           ? '#eab308'
-                          : '#0066cc'
+                          : '#2b6cf6'
                     "
                     stroke-width="2"
                     stroke-dasharray="5,5"
@@ -360,7 +360,7 @@
                     class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-200 flex items-center gap-1"
                     :class="
                       sortOrder === 'asc'
-                        ? 'bg-white dark:bg-slate-700 text-[#0066cc] dark:text-blue-400 shadow-sm'
+                        ? 'bg-white dark:bg-slate-700 text-[#2b6cf6] dark:text-blue-400 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                     "
                     @click="sortOrder = 'asc'"
@@ -371,7 +371,7 @@
                     class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-200 flex items-center gap-1"
                     :class="
                       sortOrder === 'desc'
-                        ? 'bg-white dark:bg-slate-700 text-[#0066cc] dark:text-blue-400 shadow-sm'
+                        ? 'bg-white dark:bg-slate-700 text-[#2b6cf6] dark:text-blue-400 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                     "
                     @click="sortOrder = 'desc'"
@@ -612,7 +612,7 @@
                               <div class="mb-1">
                                 <span class="text-slate-400">问题:</span> {{ item.description }}
                               </div>
-                              <div class="text-[#0066cc] dark:text-blue-400">
+                              <div class="text-[#2b6cf6] dark:text-blue-400">
                                 <span class="text-slate-400"> 建议:</span> {{ item.suggestion }}
                               </div>
                             </div>
@@ -1181,19 +1181,19 @@ onUnmounted(() => {
 
 .ai-profile-dashboard :deep(.text-blue-500),
 .ai-profile-dashboard :deep(.text-blue-400),
-.ai-profile-dashboard :deep(.text-\[\#0066cc\]) {
-  color: #0066cc !important;
+.ai-profile-dashboard :deep(.text-\[\#2b6cf6\]) {
+  color: #2b6cf6 !important;
 }
 
 .ai-profile-dashboard :deep(.bg-blue-500),
 .ai-profile-dashboard :deep(.hover\:bg-blue-600:hover) {
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
 }
 
 .ai-profile-dashboard :deep(.from-blue-400),
-.ai-profile-dashboard :deep(.from-\[\#0066cc\]) {
-  --tw-gradient-from: #0066cc var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgba(0, 102, 204, 0) var(--tw-gradient-to-position) !important;
+.ai-profile-dashboard :deep(.from-\[\#2b6cf6\]) {
+  --tw-gradient-from: #2b6cf6 var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(43, 108, 246, 0) var(--tw-gradient-to-position) !important;
 }
 
 .ai-profile-dashboard :deep(.to-indigo-500),
@@ -1224,6 +1224,6 @@ onUnmounted(() => {
 
 .ai-profile-dashboard button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
 }
 </style>

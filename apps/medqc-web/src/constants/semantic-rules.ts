@@ -12,7 +12,7 @@ export const SEMANTIC_RULE_CATEGORIES = {
   "completeness": {
     "name": "完整性",
     "description": "检查医疗文档内容的完整性",
-    "color": "#1890ff"
+    "color": "#2b6cf6"
   },
   "consistency": {
     "name": "一致性",

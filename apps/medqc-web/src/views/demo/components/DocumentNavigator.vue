@@ -287,7 +287,7 @@ function formatTime(timeStr: string): string {
     .icon {
       width: 18px;
       height: 18px;
-      color: #1890ff;
+      color: #2b6cf6;
     }
   }
 
@@ -338,7 +338,7 @@ function formatTime(timeStr: string): string {
       background-color: #e6f7ff;
 
       &::after {
-        border-right-color: #1890ff;
+        border-right-color: #2b6cf6;
       }
     }
   }

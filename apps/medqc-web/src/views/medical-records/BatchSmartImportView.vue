@@ -621,7 +621,7 @@ addLog('批量智能导入系统已就绪', 'info')
   font-size: 28px;
   font-weight: 600;
   color: #262626;
-  background: linear-gradient(135deg, #1890ff, #52c41a);
+  background: linear-gradient(135deg, #2b6cf6, #52c41a);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -663,7 +663,7 @@ addLog('批量智能导入系统已就绪', 'info')
 .stat-value {
   font-size: 24px;
   font-weight: 600;
-  color: #1890ff;
+  color: #2b6cf6;
   margin-bottom: 4px;
 }
 
@@ -695,7 +695,7 @@ addLog('批量智能导入系统已就绪', 'info')
 
 .log-info {
   background: #f0f8ff;
-  border-left-color: #1890ff;
+  border-left-color: #2b6cf6;
 }
 
 .log-success {
@@ -745,7 +745,7 @@ addLog('批量智能导入系统已就绪', 'info')
 }
 
 .file-icon {
-  color: #1890ff;
+  color: #2b6cf6;
   font-size: 16px;
 }
 

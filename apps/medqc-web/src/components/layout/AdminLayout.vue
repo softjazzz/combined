@@ -396,7 +396,7 @@ watch(route, () => {
 
 :deep(.ant-menu-item-selected) {
   background-color: #eff6ff !important;
-  color: #1890ff !important;
+  color: #2b6cf6 !important;
 }
 
 :deep(.ant-menu-item-selected::after) {

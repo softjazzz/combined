@@ -944,7 +944,7 @@ const syncProgressStrokeColor = computed(() => {
   const status = String(syncProgress.value.status || state.pgSyncState?.last_sync_status || '')
   if (status === 'failed') return '#ef4444'
   if (status === 'partial') return '#f59e0b'
-  return '#0066cc'
+  return '#2b6cf6'
 })
 const syncProgressEtaText = computed(() => {
   const eta = Number(syncProgress.value.eta_seconds)
@@ -1267,11 +1267,11 @@ onUnmounted(() => {
 }
 
 .system-config-tabs :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .system-config-tabs :deep(.ant-tabs-ink-bar) {
-  background: #0066cc;
+  background: #2b6cf6;
 }
 
 .system-config-tab-shell {
@@ -1369,8 +1369,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.1);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.1);
+  color: #2b6cf6;
   font-size: 13px;
   font-weight: 800;
 }
@@ -1433,13 +1433,13 @@ onUnmounted(() => {
 
 .sync-scene-card:hover:not(:disabled) {
   transform: translateY(-2px);
-  border-color: rgba(0, 102, 204, 0.22);
+  border-color: rgba(43, 108, 246, 0.22);
 }
 
 .sync-scene-card.is-active {
-  border-color: rgba(0, 102, 204, 0.42);
+  border-color: rgba(43, 108, 246, 0.42);
   background: rgba(234, 242, 255, 0.82);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.06);
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.06);
 }
 
 .sync-scene-card:disabled {
@@ -1454,7 +1454,7 @@ onUnmounted(() => {
 }
 
 .sync-scene-card.is-active strong {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .sync-scene-card span {
@@ -1488,9 +1488,9 @@ onUnmounted(() => {
   min-height: 40px;
   justify-content: center;
   padding: 10px 14px;
-  border: 1px solid rgba(22, 119, 255, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   border-radius: 10px;
-  background: rgba(22, 119, 255, 0.04);
+  background: rgba(43, 108, 246, 0.04);
 }
 
 .sync-current-time strong {
@@ -1524,7 +1524,7 @@ onUnmounted(() => {
 }
 
 .sync-result-metric--primary {
-  border-color: rgba(0, 102, 204, 0.16);
+  border-color: rgba(43, 108, 246, 0.16);
   background: rgba(234, 242, 255, 0.62);
 }
 
@@ -1553,7 +1553,7 @@ onUnmounted(() => {
 }
 
 .sync-result-metric--primary strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 26px;
   line-height: 30px;
 }
@@ -1644,7 +1644,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 14px;
-  border-color: rgba(0, 102, 204, 0.18);
+  border-color: rgba(43, 108, 246, 0.18);
   border-radius: 18px;
   background: rgba(234, 242, 255, 0.78);
   padding: 16px 18px;
@@ -1658,14 +1658,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 14px;
-  background: #0066cc;
+  background: #2b6cf6;
   color: #fff;
   font-size: 13px;
   font-weight: 800;
 }
 
 .system-config-safe-banner strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 15px;
 }
 
@@ -1699,8 +1699,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.1);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.1);
+  color: #2b6cf6;
   font-weight: 800;
 }
 
@@ -1720,7 +1720,7 @@ onUnmounted(() => {
 }
 
 .system-config-safety-card--ready {
-  border-color: rgba(0, 102, 204, 0.16);
+  border-color: rgba(43, 108, 246, 0.16);
 }
 
 .system-config-safety-card--warn {
@@ -1798,13 +1798,13 @@ onUnmounted(() => {
 .system-config-safe-note {
   margin-top: 16px;
   border-radius: 14px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   background: rgba(234, 242, 255, 0.7);
   padding: 13px;
 }
 
 .system-config-safe-note strong {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .system-config-safe-note p {
@@ -1873,8 +1873,8 @@ onUnmounted(() => {
 }
 
 .system-config-check-row--ready > span {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .system-config-check-row--warn > span {
@@ -1890,7 +1890,7 @@ onUnmounted(() => {
 .system-config-scope-form {
   margin-top: 16px;
   border-radius: 14px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   background: rgba(250, 252, 255, 0.9);
   padding: 14px;
 }
@@ -1992,7 +1992,7 @@ onUnmounted(() => {
 }
 
 .system-config-preflight-table .is-pass {
-  color: #0066cc;
+  color: #2b6cf6;
   font-weight: 700;
 }
 
@@ -2010,7 +2010,7 @@ onUnmounted(() => {
 .system-config-sync-progress {
   margin-top: 16px;
   border-radius: 14px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   background: rgba(250, 252, 255, 0.86);
   padding: 14px;
 }
@@ -2092,7 +2092,7 @@ onUnmounted(() => {
 
 .system-config-progress-meta span {
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
+  background: rgba(43, 108, 246, 0.08);
   color: rgba(0, 70, 140, 0.82);
   font-size: 12px;
   font-weight: 600;
@@ -2144,7 +2144,7 @@ onUnmounted(() => {
 }
 
 .system-config-risk-item--info {
-  border-color: rgba(0, 102, 204, 0.14);
+  border-color: rgba(43, 108, 246, 0.14);
   background: rgba(234, 242, 255, 0.66);
 }
 
@@ -2263,11 +2263,11 @@ onUnmounted(() => {
 .system-config-confirm-check input {
   width: 14px;
   height: 14px;
-  accent-color: #0066cc;
+  accent-color: #2b6cf6;
 }
 
 .system-config-confirm-check:not(.is-disabled):hover {
-  border-color: rgba(0, 102, 204, 0.24);
+  border-color: rgba(43, 108, 246, 0.24);
   background: rgba(234, 242, 255, 0.72);
 }
 
@@ -2339,7 +2339,7 @@ onUnmounted(() => {
 }
 
 .sync-config-page :deep(.wv4-analysis-kpi-card--brand .wv4-analysis-kpi-card__value) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .system-config-overview-hint {
@@ -2356,16 +2356,16 @@ onUnmounted(() => {
 }
 
 .wv4-overview-btn--ghost {
-  border-color: rgba(0, 102, 204, 0.16);
-  color: #0066cc;
-  background: rgba(0, 102, 204, 0.06);
+  border-color: rgba(43, 108, 246, 0.16);
+  color: #2b6cf6;
+  background: rgba(43, 108, 246, 0.06);
 }
 
 .wv4-overview-btn--primary {
-  background: #0066cc;
-  border-color: #0066cc;
+  background: #2b6cf6;
+  border-color: #2b6cf6;
   color: #ffffff;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
 }
 
 .wv4-overview-btn--primary:not(:disabled):not(.ant-btn-disabled):hover,
@@ -2398,9 +2398,9 @@ onUnmounted(() => {
 }
 
 .wv4-status-chip--brand {
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.06);
-  color: #0066cc;
+  border-color: rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.06);
+  color: #2b6cf6;
 }
 
 .wv4-status-chip--green,
@@ -2521,7 +2521,7 @@ onUnmounted(() => {
 }
 
 .system-config-state-row strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 13px;
   font-weight: 700;
 }
@@ -2600,25 +2600,25 @@ onUnmounted(() => {
   color: rgba(29, 29, 31, 0.38) !important;
 }
 
-.sync-config-page :deep(.bg-\[\#0066cc\]),
+.sync-config-page :deep(.bg-\[\#2b6cf6\]),
 .sync-config-page :deep(.hover\:bg-\[\#0057b8\]:hover) {
-  background-color: #0066cc !important;
+  background-color: #2b6cf6 !important;
 }
 
-.sync-config-page :deep(.focus\:border-\[\#0066cc\]:focus) {
-  border-color: rgba(0, 102, 204, 0.38) !important;
+.sync-config-page :deep(.focus\:border-\[\#2b6cf6\]:focus) {
+  border-color: rgba(43, 108, 246, 0.38) !important;
 }
 
-.sync-config-page :deep(.focus\:ring-\[\#0066cc\]\/10:focus) {
-  --tw-ring-color: rgba(0, 102, 204, 0.1) !important;
+.sync-config-page :deep(.focus\:ring-\[\#2b6cf6\]\/10:focus) {
+  --tw-ring-color: rgba(43, 108, 246, 0.1) !important;
 }
 
 .sync-config-page :deep(.hover\:bg-blue-50\/30:hover) {
-  background-color: rgba(0, 102, 204, 0.045) !important;
+  background-color: rgba(43, 108, 246, 0.045) !important;
 }
 
 .sync-config-page :deep(.shadow-\[0_4px_12px_rgba\(37\,99\,235\,0\.22\)\]) {
-  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16) !important;
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.16) !important;
 }
 
 .sync-config-page :deep(.font-mono) {

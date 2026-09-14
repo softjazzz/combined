@@ -312,9 +312,9 @@ const actions = [
   align-items: center;
   border-radius: 999px;
   padding: 6px 10px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.07);
-  color: #0066cc;
+  border: 1px solid rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.07);
+  color: #2b6cf6;
   font-size: 11px;
   font-weight: 600;
 }
@@ -368,7 +368,7 @@ const actions = [
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: #0066cc;
+  background: #2b6cf6;
 }
 .control-row p,
 .action-top p,
@@ -387,9 +387,9 @@ const actions = [
   border-radius: 999px;
   padding: 0 10px;
   white-space: nowrap;
-  border: 1px solid rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.07);
-  color: #0066cc;
+  border: 1px solid rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.07);
+  color: #2b6cf6;
   font-size: 11px;
   font-weight: 600;
 }
@@ -428,7 +428,7 @@ const actions = [
   transition: background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 .rules-table tbody tr:hover {
-  background: rgba(0, 102, 204, 0.045);
+  background: rgba(43, 108, 246, 0.045);
 }
 .rule-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -450,9 +450,9 @@ const actions = [
   color: rgba(29, 29, 31, 0.6);
 }
 .pill-strong {
-  border: 1px solid rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.07);
-  color: #0066cc;
+  border: 1px solid rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.07);
+  color: #2b6cf6;
 }
 .action-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));

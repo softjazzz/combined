@@ -479,21 +479,21 @@ const documentPanels = computed(() => [
 
 :deep(.detail-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn),
 :deep(.ant-btn-link) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 :deep(.detail-tabs .ant-tabs-ink-bar) {
-  background: #0066cc;
+  background: #2b6cf6;
 }
 
 :deep(.ant-btn-primary) {
-  border-color: #0066cc !important;
-  background: #0066cc !important;
+  border-color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
 }
 
 :deep(.ant-tag-blue) {
-  color: #0066cc;
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.08);
+  color: #2b6cf6;
+  border-color: rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.08);
 }
 </style>

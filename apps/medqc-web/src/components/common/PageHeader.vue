@@ -353,7 +353,7 @@ const handleTabChange = (key: string) => {
 
 .title-icon {
   font-size: 1.2em;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .page-subtitle {
@@ -384,7 +384,7 @@ const handleTabChange = (key: string) => {
 }
 
 :deep(.ant-breadcrumb-link:hover) {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 /* 标签页 */
@@ -440,7 +440,7 @@ const handleTabChange = (key: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(24, 144, 255, 0.1);
+  background: rgba(43, 108, 246, 0.1);
   border-radius: 50%;
   flex-shrink: 0;
 }

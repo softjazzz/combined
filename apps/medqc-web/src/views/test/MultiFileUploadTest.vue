@@ -366,7 +366,7 @@ addDebugLog('多文件上传测试页面已加载')
 }
 
 .file-icon {
-  color: #1890ff;
+  color: #2b6cf6;
   font-size: 16px;
 }
 

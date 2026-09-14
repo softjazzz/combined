@@ -326,7 +326,7 @@ const headerStats = computed(() => [
     label: '总记录数',
     value: records.value.length,
     icon: FileTextOutlined,
-    color: '#1890ff',
+    color: '#2b6cf6',
   },
   {
     key: 'pending',

@@ -820,7 +820,7 @@ const handleClose = () => {
       &:hover {
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
         transform: translateY(-2px);
-        border-color: #1890ff !important;
+        border-color: #2b6cf6 !important;
       }
 
       :deep(.ant-card-head) {
@@ -893,7 +893,7 @@ const handleClose = () => {
 
       &--info {
         background: #e6f7ff;
-        color: #1890ff;
+        color: #2b6cf6;
       }
 
       &__icon {
@@ -993,7 +993,7 @@ const handleClose = () => {
 
               &__icon {
                 margin-right: 6px;
-                color: #1890ff;
+                color: #2b6cf6;
               }
             }
 
@@ -1011,7 +1011,7 @@ const handleClose = () => {
                   line-height: 1.6;
 
                   .point-index {
-                    color: #1890ff;
+                    color: #2b6cf6;
                     font-weight: 500;
                     margin-right: 6px;
                   }
@@ -1169,7 +1169,7 @@ const handleClose = () => {
 
               :deep(.anticon) {
                 margin-right: 6px;
-                color: #1890ff;
+                color: #2b6cf6;
               }
             }
 
@@ -1209,7 +1209,7 @@ const handleClose = () => {
                         width: 20px;
                         height: 20px;
                         border-radius: 50%;
-                        background: #1890ff;
+                        background: #2b6cf6;
                         color: white;
                         font-size: 12px;
                         font-weight: 600;

@@ -404,14 +404,14 @@ function riskLevelLabel(level?: string): string {
 }
 
 .view-switch :deep(.bg-white) {
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.07) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.07) !important;
+  color: #2b6cf6 !important;
 }
 
 .sync-banner {
-  border-left: 3px solid #0066cc;
-  background: rgba(0, 102, 204, 0.06);
+  border-left: 3px solid #2b6cf6;
+  background: rgba(43, 108, 246, 0.06);
 }
 
 .preflight-block {

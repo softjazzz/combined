@@ -380,7 +380,7 @@ const overviewCards = computed<DashboardCard[]>(() => [
     value: overview.value.totalRecords.toLocaleString(),
     change: parseTrendChange(overview.value.weeklyTrend),
     icon: 'FileTextOutlined',
-    color: '#1890ff'
+    color: '#2b6cf6'
   },
   {
     title: '待分析',

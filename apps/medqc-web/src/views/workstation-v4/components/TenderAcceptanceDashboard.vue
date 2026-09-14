@@ -184,7 +184,7 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 
 .eyebrow {
   margin: 0 0 8px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.06em;
@@ -206,9 +206,9 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 
 .summary-card {
   min-width: 180px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   border-radius: 14px;
-  background: rgba(0, 102, 204, 0.07);
+  background: rgba(43, 108, 246, 0.07);
   padding: 18px;
 }
 
@@ -222,7 +222,7 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 
 .summary-card strong {
   display: block;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 34px;
   font-weight: 700;
   line-height: 42px;
@@ -272,8 +272,8 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 }
 
 .status-partial {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .clause-card h2 {
@@ -293,7 +293,7 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 .entry-link {
   display: inline-flex;
   margin-top: 16px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 13px;
   font-weight: 650;
   text-decoration: none;

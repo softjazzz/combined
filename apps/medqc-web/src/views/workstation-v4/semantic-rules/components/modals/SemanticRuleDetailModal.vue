@@ -310,7 +310,7 @@ function formatPolicySource(value: string): string {
 .detail-kicker {
   display: block;
   margin-bottom: 5px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -329,10 +329,10 @@ function formatPolicySource(value: string): string {
   align-items: center;
   flex: none;
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.18);
-  background: rgba(0, 102, 204, 0.08);
+  border: 1px solid rgba(43, 108, 246, 0.18);
+  background: rgba(43, 108, 246, 0.08);
   padding: 5px 10px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 700;
 }
@@ -395,9 +395,9 @@ function formatPolicySource(value: string): string {
   align-items: center;
   height: 22px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.18);
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  border: 1px solid rgba(43, 108, 246, 0.18);
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   padding: 0 8px;
   font-size: 12px;
   font-weight: 600;
@@ -449,9 +449,9 @@ function formatPolicySource(value: string): string {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.06);
+  background: rgba(43, 108, 246, 0.06);
   padding: 3px 8px;
   color: rgba(29, 29, 31, 0.68);
   font-size: 12px;
@@ -478,9 +478,9 @@ function formatPolicySource(value: string): string {
 }
 
 .rule-chip.primary {
-  border-color: rgba(0, 102, 204, 0.18);
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  border-color: rgba(43, 108, 246, 0.18);
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .mapping-empty {
@@ -550,9 +550,9 @@ function formatPolicySource(value: string): string {
 }
 
 .detail-primary-btn {
-  background: #0066cc;
-  border-color: #0066cc;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.16);
+  background: #2b6cf6;
+  border-color: #2b6cf6;
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.16);
 }
 
 .detail-secondary-btn {

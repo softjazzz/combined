@@ -46,8 +46,8 @@ const onUpdate = (value: string) => {
 
     &:focus {
       background-color: #ffffff;
-      border-color: #1890ff;
-      box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+      border-color: #2b6cf6;
+      box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
     }
   }
 }

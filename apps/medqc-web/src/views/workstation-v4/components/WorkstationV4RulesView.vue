@@ -100,7 +100,7 @@ const rulesSubTabDesc = computed(() => {
 }
 
 .wv4-analysis-overview__eyebrow {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -143,10 +143,10 @@ const rulesSubTabDesc = computed(() => {
 }
 
 .rules-sub-back-btn:hover {
-  border-color: rgba(0, 102, 204, 0.28);
+  border-color: rgba(43, 108, 246, 0.28);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  color: #0066cc;
+  color: #2b6cf6;
   transform: translateY(-1px);
 }
 

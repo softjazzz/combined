@@ -205,7 +205,7 @@ const getBarWidth = (value: number, list: any[]) => {
 }
 .rank-bar {
   height: 100%;
-  background: linear-gradient(90deg, #1677ff, #4096ff);
+  background: linear-gradient(90deg, #2b6cf6, #4096ff);
   border-radius: 3px;
   transition: width 0.6s ease;
 }

@@ -231,9 +231,9 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__segment--active {
-  border-color: rgba(0, 102, 204, 0.18);
-  background: rgba(0, 102, 204, 0.1);
-  color: var(--workstation-primary, #0066cc);
+  border-color: rgba(43, 108, 246, 0.18);
+  background: rgba(43, 108, 246, 0.1);
+  color: var(--workstation-primary, #2b6cf6);
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -267,10 +267,10 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__card:first-child {
-  border-color: rgba(0, 102, 204, 0.26);
+  border-color: rgba(43, 108, 246, 0.26);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.98),
-    0 10px 24px rgba(0, 102, 204, 0.08);
+    0 10px 24px rgba(43, 108, 246, 0.08);
 }
 
 .priority-lane__card--stack {
@@ -286,7 +286,7 @@ function riskBadgeClass(riskType: string) {
   justify-content: center;
   border-radius: 999px;
   background: #eaf2ff;
-  color: var(--workstation-primary, #0066cc);
+  color: var(--workstation-primary, #2b6cf6);
   font-size: 14px;
 }
 
@@ -386,9 +386,9 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__action--primary {
   border: 0 !important;
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
   color: #fff !important;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18) !important;
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18) !important;
 }
 
 .priority-lane__card:hover .priority-lane__action--primary,
@@ -396,7 +396,7 @@ function riskBadgeClass(riskType: string) {
   background: #0057b8 !important;
   border-color: transparent !important;
   color: #fff !important;
-  box-shadow: 0 8px 18px rgba(0, 102, 204, 0.22) !important;
+  box-shadow: 0 8px 18px rgba(43, 108, 246, 0.22) !important;
 }
 
 .priority-lane__action--secondary {

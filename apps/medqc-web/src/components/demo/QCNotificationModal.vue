@@ -180,7 +180,7 @@
                   title="改进建议"
                   :value="notification.qcResult.suggestions?.length || 0"
                   suffix="条"
-                  :value-style="{ color: '#1890ff', fontSize: '20px' }"
+                  :value-style="{ color: '#2b6cf6', fontSize: '20px' }"
                 />
                 <div class="stat-description">
                   优化建议
@@ -310,7 +310,7 @@
                     <a-list-item class="suggestion-item">
                       <a-list-item-meta>
                         <template #avatar>
-                          <a-avatar :style="{ backgroundColor: '#1890ff' }">
+                          <a-avatar :style="{ backgroundColor: '#2b6cf6' }">
                             <BulbOutlined />
                           </a-avatar>
                         </template>
@@ -838,8 +838,8 @@ const handlePrint = () => {
           transition: all 0.3s;
 
           &:hover {
-            border-color: #1890ff;
-            box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+            border-color: #2b6cf6;
+            box-shadow: 0 2px 8px rgba(43, 108, 246, 0.1);
           }
 
           .issue-description {

@@ -44,12 +44,12 @@
 }
 .workstation-layout--review .sidebar-container :deep(.ant-menu-item-selected) {
   background: #e2efff !important;
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 .workstation-layout--review .sidebar-container :deep(.ant-menu-item-icon),
 .workstation-layout--review .sidebar-container :deep(.sidebar-icon) {
   color: #6d7e92 !important;
 }
 .workstation-layout--review .sidebar-container :deep(.ant-menu-item-selected .sidebar-icon) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }

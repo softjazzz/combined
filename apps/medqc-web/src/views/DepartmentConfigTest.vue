@@ -103,7 +103,7 @@
               <a-statistic
                 title="测试总数"
                 :value="testSummary.totalTests"
-                :value-style="{ color: '#1890ff' }"
+                :value-style="{ color: '#2b6cf6' }"
               />
             </a-col>
             <a-col :span="6">
@@ -552,7 +552,7 @@ onMounted(() => {
 }
 
 .log-entry.info {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .log-entry.success {

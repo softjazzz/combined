@@ -956,7 +956,7 @@
                     <a-statistic
                       title="总规则数"
                       :value="qcProgress[docType]?.total || 0"
-                      :value-style="{ color: '#1890ff' }"
+                      :value-style="{ color: '#2b6cf6' }"
                     />
                   </a-col>
                   <a-col :span="6">

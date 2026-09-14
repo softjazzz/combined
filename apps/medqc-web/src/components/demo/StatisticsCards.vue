@@ -462,7 +462,7 @@ const scoreRatingClass = computed(() => {
 const complianceRateColor = computed(() => {
   const rate = props.complianceRate || 0
   if (rate >= 95) return '#52c41a'  // 绿色
-  if (rate >= 85) return '#1890ff'  // 蓝色
+  if (rate >= 85) return '#2b6cf6'  // 蓝色
   if (rate >= 75) return '#faad14'  // 橙色
   if (rate >= 60) return '#ff7a45'  // 深橙色
   return '#f5222d'  // 红色
@@ -631,7 +631,7 @@ onUnmounted(() => {
 }
 
 .rating-good {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .rating-medium {

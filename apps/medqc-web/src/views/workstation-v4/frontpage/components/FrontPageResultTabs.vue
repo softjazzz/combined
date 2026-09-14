@@ -8,7 +8,7 @@
       :class="[
         'flex-1 py-2.5 text-sm font-medium rounded-xl transition-all text-center',
         activeTab === tab.key
-          ? 'bg-[#0066cc] text-white shadow-[0_5px_14px_rgba(0,102,204,0.18)]'
+          ? 'bg-[#2b6cf6] text-white shadow-[0_5px_14px_rgba(43,108,246,0.18)]'
           : 'text-[rgba(29,29,31,0.6)] hover:bg-black/[0.04]',
       ]"
       @click="$emit('update:activeTab', tab.key)"
@@ -19,7 +19,7 @@
     <div class="w-px bg-black/[0.08] my-2 mx-1" />
 
     <button
-      class="px-3 text-[rgba(29,29,31,0.38)] hover:text-[#0066cc] hover:bg-[rgba(0,102,204,0.06)] rounded-xl transition-all flex items-center justify-center"
+      class="px-3 text-[rgba(29,29,31,0.38)] hover:text-[#2b6cf6] hover:bg-[rgba(43,108,246,0.06)] rounded-xl transition-all flex items-center justify-center"
       :title="isExpanded ? '恢复分栏' : '展开工作台'"
       @click="$emit('toggleExpand')"
     >

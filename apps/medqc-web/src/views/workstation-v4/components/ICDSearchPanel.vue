@@ -514,7 +514,7 @@ onMounted(() => {
 
 .icd-workstation :deep(.text-\[\#0057b8\]),
 .icd-workstation :deep(.text-blue-500) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 .icd-workstation :deep(.border-slate-200),
@@ -531,7 +531,7 @@ onMounted(() => {
 
 .icd-workstation :deep(.bg-blue-50),
 .icd-workstation :deep(.bg-blue-50\/80) {
-  background-color: rgba(0, 102, 204, 0.08) !important;
+  background-color: rgba(43, 108, 246, 0.08) !important;
 }
 
 .icd-workstation :deep(.font-semibold) {
@@ -550,11 +550,11 @@ onMounted(() => {
 }
 
 .icd-result-row.is-selected {
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.08);
+  border-color: rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.08);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    0 3px 10px rgba(0, 102, 204, 0.08);
+    0 3px 10px rgba(43, 108, 246, 0.08);
 }
 
 .icd-tree-modern :deep(.ant-tree-switcher) {
@@ -578,8 +578,8 @@ onMounted(() => {
 
 .icd-tree-modern :deep(.ant-tree-node-selected .ant-tree-node-content-wrapper),
 .icd-tree-modern :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
-  background: rgba(0, 102, 204, 0.08) !important;
-  color: #0066cc !important;
+  background: rgba(43, 108, 246, 0.08) !important;
+  color: #2b6cf6 !important;
 }
 
 .icd-tree-modern :deep(.ant-tree-treenode) {

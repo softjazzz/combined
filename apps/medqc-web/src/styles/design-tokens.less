@@ -12,13 +12,15 @@
 // ============================================
 
 // 主色系 (Primary Colors) - 医疗蓝
-@color-primary: #0B64D4;           // 医疗蓝 - 主要操作、链接
-@color-primary-hover: #1E88FF;     // 主色悬停态（Primary Light）
-@color-primary-active: #084C9E;    // 主色激活态（Primary Dark）
-@color-primary-light: #1E88FF;     // 主色浅色
-@color-primary-lighter: #E6F4FF;   // 主色极浅背景（Primary Subtle）
-@color-primary-dark: #084C9E;      // 主色深色文字
-@color-primary-subtle: #E6F4FF;    // 选中状态背景、提示条背景
+// 与 src/styles/index.css 的 --primary-color、tailwind.config.js 的 primary、
+// App.vue 的 antd token.colorPrimary 同源同值。
+@color-primary: #2B6CF6;           // 医疗蓝 - 主要操作、链接
+@color-primary-hover: #5B8CF8;     // 主色悬停态（Primary Light）
+@color-primary-active: #1F55C9;    // 主色激活态（Primary Dark）
+@color-primary-light: #5B8CF8;     // 主色浅色
+@color-primary-lighter: #EAF1FE;   // 主色极浅背景（Primary Subtle）
+@color-primary-dark: #1F55C9;      // 主色深色文字
+@color-primary-subtle: #EAF1FE;    // 选中状态背景、提示条背景
 
 // 辅助色系 (Semantic Colors)
 @color-success: #52C41A;           // 成功 - 绿色
@@ -39,7 +41,7 @@
 @color-info: #2C8EAA;              // 信息 - 蓝色
 @color-info-light: #E6F7FF;        // 信息浅色背景
 @color-info-lighter: #F0F9FF;      // 信息极浅背景
-@color-info-dark: #1677FF;         // 信息深色文字
+@color-info-dark: #2b6cf6;         // 信息深色文字
 
 // 中性色系 (Neutral Colors)
 // 文字颜色
@@ -68,8 +70,8 @@
 
 // 表格专用颜色
 @color-table-header-bg: #f9fafb;   // 表头背景
-@color-table-row-hover: #E6F4FF;   // 表格行悬停（Primary Subtle）
-@color-table-row-selected: #E6F4FF; // 表格行选中（Primary Subtle）
+@color-table-row-hover: #EAF1FE;   // 表格行悬停（Primary Subtle）
+@color-table-row-selected: #EAF1FE; // 表格行选中（Primary Subtle）
 @color-table-row-striped: #f9fafb; // 表格斑马纹（偶数行）
 
 // ============================================

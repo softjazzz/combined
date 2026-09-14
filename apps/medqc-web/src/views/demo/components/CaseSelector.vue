@@ -404,7 +404,7 @@ function getComplexityColor(complexity: CaseComplexity): string {
       .icon {
         width: 18px;
         height: 18px;
-        color: #1890ff;
+        color: #2b6cf6;
       }
     }
   }
@@ -464,12 +464,12 @@ function getComplexityColor(complexity: CaseComplexity): string {
       transition: all 0.2s;
 
       &:hover {
-        border-color: #1890ff;
-        box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+        border-color: #2b6cf6;
+        box-shadow: 0 2px 8px rgba(43, 108, 246, 0.1);
       }
 
       &.active {
-        border-color: #1890ff;
+        border-color: #2b6cf6;
         background: #e6f7ff;
       }
 

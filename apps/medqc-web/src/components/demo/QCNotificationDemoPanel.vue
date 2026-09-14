@@ -165,7 +165,7 @@
             <a-statistic
               title="今日"
               :value="todayCount"
-              :value-style="{ color: '#1890ff' }"
+              :value-style="{ color: '#2b6cf6' }"
             />
           </a-col>
         </a-row>
@@ -308,7 +308,7 @@
                         title="建议"
                         :value="notification.qcResult.suggestions?.length || 0"
                         suffix="条"
-                        :value-style="{ color: '#1890ff', fontSize: '14px' }"
+                        :value-style="{ color: '#2b6cf6', fontSize: '14px' }"
                       />
                     </a-col>
                   </a-row>
@@ -806,19 +806,19 @@ onUnmounted(() => {
 
           &:hover {
             border-color: var(--primary-color);
-            box-shadow: 0 6px 18px rgba(24, 144, 255, 0.15);
+            box-shadow: 0 6px 18px rgba(43, 108, 246, 0.15);
             transform: translateY(-2px);
           }
 
           &.unread {
-            border-left: 4px solid #1890ff;
+            border-left: 4px solid #2b6cf6;
             background: linear-gradient(135deg, #f0f6ff 0%, #f5fbff 100%);
           }
 
           &.active {
-            border-color: #1890ff;
+            border-color: #2b6cf6;
             background: #e6f7ff;
-            box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+            box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.2);
           }
 
           &.critical {

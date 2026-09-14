@@ -260,7 +260,7 @@ const getVerificationColor = (status: string) => {
     case 'executed_only':
       return '#ff4d4f'
     default:
-      return '#1890ff'
+      return '#2b6cf6'
   }
 }
 
@@ -319,7 +319,7 @@ const getDiscrepancyTitle = (disc: Discrepancy) => {
   color: #666;
 }
 .source-tag {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 .sub-events {
   margin-top: 8px;

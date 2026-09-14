@@ -840,7 +840,7 @@ onMounted(async () => {
 
   .title-icon {
     font-size: 18px;
-    color: #1890ff;
+    color: #2b6cf6;
   }
 }
 
@@ -900,8 +900,8 @@ onMounted(async () => {
       transition: all 0.2s;
 
       &:hover:not(.disabled) {
-        border-color: #1890ff;
-        box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+        border-color: #2b6cf6;
+        box-shadow: 0 2px 8px rgba(43, 108, 246, 0.1);
       }
 
       &.selected {
@@ -921,7 +921,7 @@ onMounted(async () => {
 
         .rule-id {
           font-size: 12px;
-          color: #1890ff;
+          color: #2b6cf6;
           font-weight: 600;
           margin-bottom: 4px;
         }
@@ -1190,7 +1190,7 @@ onMounted(async () => {
 
               .result-rule-id {
                 font-size: 12px;
-                color: #1890ff;
+                color: #2b6cf6;
                 font-weight: 600;
                 margin-bottom: 2px;
               }

@@ -794,7 +794,7 @@ const callLLMParseAPI = async (file: File): Promise<LLMParsedResult> => {
 }
 
 .file-icon {
-  color: #1890ff;
+  color: #2b6cf6;
   font-size: 16px;
 }
 
@@ -882,7 +882,7 @@ const callLLMParseAPI = async (file: File): Promise<LLMParsedResult> => {
 
 /* 进度条样式优化 */
 .overall-progress :deep(.ant-progress-bg) {
-  background: linear-gradient(90deg, #1890ff, #52c41a);
+  background: linear-gradient(90deg, #2b6cf6, #52c41a);
 }
 
 .file-progress :deep(.ant-progress-bg) {

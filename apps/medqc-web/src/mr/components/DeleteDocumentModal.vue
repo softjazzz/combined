@@ -213,11 +213,11 @@ const handleCancel = () => {
 }
 
 .delete-type-group :deep(.ant-radio-wrapper:hover) {
-  border-color: #1890ff;
+  border-color: #2b6cf6;
 }
 
 .delete-type-group :deep(.ant-radio-wrapper-checked) {
-  border-color: #1890ff;
+  border-color: #2b6cf6;
   background: #f6ffed;
 }
 

@@ -249,7 +249,7 @@ const scoreRating = computed(() => {
 const scoreColor = computed(() => {
   const score = performanceScore.value
   if (score >= 90) return '#52c41a'
-  if (score >= 80) return '#1890ff'
+  if (score >= 80) return '#2b6cf6'
   if (score >= 70) return '#faad14'
   return '#f5222d'
 })
@@ -277,7 +277,7 @@ const getStepProgress = (duration: number): number => {
 // 获取步骤颜色
 const getStepColor = (duration: number): string => {
   if (duration < 1000) return '#52c41a'
-  if (duration < 3000) return '#1890ff'
+  if (duration < 3000) return '#2b6cf6'
   if (duration < 5000) return '#faad14'
   return '#f5222d'
 }

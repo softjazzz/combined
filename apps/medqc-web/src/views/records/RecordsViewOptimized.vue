@@ -830,7 +830,7 @@ onMounted(() => {
 .stat-value {
   font-size: 24px;
   font-weight: 600;
-  color: #1890ff;
+  color: #2b6cf6;
   margin-bottom: 4px;
 }
 
@@ -876,7 +876,7 @@ onMounted(() => {
 }
 
 .record-item:hover {
-  background: rgba(24, 144, 255, 0.05);
+  background: rgba(43, 108, 246, 0.05);
 }
 
 .record-item:last-child {
@@ -884,8 +884,8 @@ onMounted(() => {
 }
 
 .record-selected {
-  background: rgba(24, 144, 255, 0.1);
-  border-left: 4px solid #1890ff;
+  background: rgba(43, 108, 246, 0.1);
+  border-left: 4px solid #2b6cf6;
 }
 
 .record-checkbox {

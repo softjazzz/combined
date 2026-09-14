@@ -79,9 +79,9 @@
         class="flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-dashed border-slate-200/80 bg-white/86 px-6 py-12 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_2px_12px_rgba(0,0,0,0.055)]"
       >
         <div
-          class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-100/80 bg-blue-50/80 shadow-[0_4px_12px_rgba(0,102,204,0.12),inset_0_1px_0_rgba(255,255,255,0.8)]"
+          class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-100/80 bg-blue-50/80 shadow-[0_4px_12px_rgba(43,108,246,0.12),inset_0_1px_0_rgba(255,255,255,0.8)]"
         >
-          <FileSearchOutlined class="text-[28px] text-[#0066cc]" />
+          <FileSearchOutlined class="text-[28px] text-[#2b6cf6]" />
         </div>
         <div class="text-[18px] font-semibold text-slate-900">
           暂无病案首页数据
@@ -330,16 +330,16 @@ function settlementDraftLabel(report?: Record<string, any> | null) {
 }
 
 .frontpage-apple-workspace :deep(.text-\[\#0057b8\]),
-.frontpage-apple-workspace :deep(.text-\[\#0066cc\]),
+.frontpage-apple-workspace :deep(.text-\[\#2b6cf6\]),
 .frontpage-apple-workspace :deep(.text-blue-500) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 .frontpage-apple-workspace :deep(.bg-blue-50),
 .frontpage-apple-workspace :deep(.bg-blue-50\/70),
 .frontpage-apple-workspace :deep(.bg-blue-50\/80),
 .frontpage-apple-workspace :deep(.bg-blue-50\/85) {
-  background: rgba(0, 102, 204, 0.08) !important;
+  background: rgba(43, 108, 246, 0.08) !important;
 }
 
 .frontpage-apple-workspace :deep(.border-blue-100),
@@ -352,10 +352,10 @@ function settlementDraftLabel(report?: Record<string, any> | null) {
 }
 
 .frontpage-apple-workspace :deep(.ant-btn-primary) {
-  border-color: #0066cc !important;
-  background: #0066cc !important;
+  border-color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
   color: #fff !important;
-  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16) !important;
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.16) !important;
 }
 
 .frontpage-apple-workspace :deep(.ant-btn:not(.ant-btn-primary)) {

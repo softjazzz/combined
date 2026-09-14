@@ -153,11 +153,11 @@
 
           <div class="pt-2">
             <button
-              class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(0,102,204,0.16)] flex items-center justify-center gap-2"
+              class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(43,108,246,0.16)] flex items-center justify-center gap-2"
               :class="
                 isReadonly || state.isSavingPgConnection
                   ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100'
-                  : 'bg-[#0066cc] hover:bg-[#0057b8] hover:shadow-[0_4px_12px_rgba(0,102,204,0.18)] active:scale-[0.98]'
+                  : 'bg-[#2b6cf6] hover:bg-[#0057b8] hover:shadow-[0_4px_12px_rgba(43,108,246,0.18)] active:scale-[0.98]'
               "
               :disabled="isReadonly || state.isSavingPgConnection"
               @click="handleSavePg"
@@ -1274,8 +1274,8 @@ const handleRunPreflight = async () => {
 }
 
 .studio-input:focus {
-  border-color: rgba(0, 102, 204, 0.38);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+  border-color: rgba(43, 108, 246, 0.38);
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
 }
 
 .studio-input:disabled {

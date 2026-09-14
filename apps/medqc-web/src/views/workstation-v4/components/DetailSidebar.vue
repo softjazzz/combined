@@ -19,7 +19,7 @@
           <SyncOutlined
             v-if="documentsLoading"
             spin
-            class="text-[12px] text-[#0066cc]"
+            class="text-[12px] text-[#2b6cf6]"
           />
         </div>
 
@@ -118,7 +118,7 @@
                           hasDocContent(resolveDocByNode(node))
                             ? isActiveNode(node)
                               ? 'detail-doc-icon--active'
-                              : 'bg-white text-slate-400 group-hover:bg-blue-50 group-hover:text-[#0066cc]'
+                              : 'bg-white text-slate-400 group-hover:bg-blue-50 group-hover:text-[#2b6cf6]'
                             : 'bg-slate-100 text-slate-300'
                         "
                       >
@@ -173,7 +173,7 @@
                       hasDocContent(resolveDocByNode(node))
                         ? isActiveNode(node)
                           ? 'detail-doc-icon--active'
-                          : 'bg-white text-slate-400 group-hover:bg-blue-50 group-hover:text-[#0066cc]'
+                          : 'bg-white text-slate-400 group-hover:bg-blue-50 group-hover:text-[#2b6cf6]'
                         : 'bg-slate-100 text-slate-300'
                     "
                   >
@@ -235,7 +235,7 @@
                     doc.has_content
                       ? isActive(doc)
                         ? 'detail-doc-icon--active'
-                        : 'bg-slate-100 text-[#0066cc] group-hover:bg-blue-50'
+                        : 'bg-slate-100 text-[#2b6cf6] group-hover:bg-blue-50'
                       : 'bg-slate-100 text-slate-300'
                   "
                 >
@@ -245,7 +245,7 @@
                   :class="
                     hasDocContent(doc)
                       ? isActive(doc)
-                        ? 'truncate text-[12px] font-bold text-[#0066cc]'
+                        ? 'truncate text-[12px] font-bold text-[#2b6cf6]'
                         : 'truncate text-[12px] font-semibold text-slate-700'
                       : 'truncate text-[12px]'
                   "
@@ -259,7 +259,7 @@
                 class="ml-2 flex shrink-0 items-center gap-1.5"
               >
                 <span class="text-[10px] font-semibold text-slate-400">{{ doc.length }}字</span>
-                <EyeOutlined class="text-[11px] text-slate-300 group-hover:text-[#0066cc]" />
+                <EyeOutlined class="text-[11px] text-slate-300 group-hover:text-[#2b6cf6]" />
               </span>
               <span
                 v-else
@@ -567,8 +567,8 @@ function toggleGroup(groupKey: string) {
   color: rgba(29, 29, 31, 0.28) !important;
 }
 
-.detail-apple-sidebar .text-\[\#0066cc\] {
-  color: #0066cc !important;
+.detail-apple-sidebar .text-\[\#2b6cf6\] {
+  color: #2b6cf6 !important;
 }
 
 .detail-apple-sidebar .border-slate-200\/70,
@@ -585,7 +585,7 @@ function toggleGroup(groupKey: string) {
 
 .detail-apple-sidebar .bg-slate-100,
 .detail-apple-sidebar .bg-blue-50 {
-  background: rgba(0, 102, 204, 0.07) !important;
+  background: rgba(43, 108, 246, 0.07) !important;
 }
 
 .detail-apple-sidebar button:hover {
@@ -595,12 +595,12 @@ function toggleGroup(groupKey: string) {
 }
 
 .detail-apple-sidebar .detail-doc-entry--active {
-  border-color: rgba(0, 102, 204, 0.18) !important;
-  background: rgba(0, 102, 204, 0.07) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.18) !important;
+  background: rgba(43, 108, 246, 0.07) !important;
+  color: #2b6cf6 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    0 2px 10px rgba(0, 102, 204, 0.08) !important;
+    0 2px 10px rgba(43, 108, 246, 0.08) !important;
 }
 
 .detail-apple-sidebar .detail-doc-entry--idle,
@@ -617,8 +617,8 @@ function toggleGroup(groupKey: string) {
 }
 
 .detail-apple-sidebar .detail-doc-icon--active {
-  background: rgba(0, 102, 204, 0.08) !important;
-  color: #0066cc !important;
+  background: rgba(43, 108, 246, 0.08) !important;
+  color: #2b6cf6 !important;
 }
 
 .detail-apple-sidebar .detail-doc-icon--idle {
@@ -628,7 +628,7 @@ function toggleGroup(groupKey: string) {
 
 .detail-apple-sidebar .detail-doc-indicator--active,
 .detail-apple-sidebar .detail-doc-indicator--idle:hover {
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
 }
 
 .detail-apple-sidebar button:hover .text-slate-400,
@@ -641,7 +641,7 @@ function toggleGroup(groupKey: string) {
 .detail-apple-sidebar button[class*='shadow-'] {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    0 2px 10px rgba(0, 102, 204, 0.08) !important;
+    0 2px 10px rgba(43, 108, 246, 0.08) !important;
 }
 
 .detail-apple-sidebar .border-l {

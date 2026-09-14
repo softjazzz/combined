@@ -1187,12 +1187,12 @@ onMounted(() => {
 }
 
 .defect-tabs :deep(.ant-tabs-tab-active) {
-  color: #1890ff;
+  color: #2b6cf6;
   font-weight: 600;
 }
 
 .defect-tabs :deep(.ant-tabs-ink-bar) {
-  background: #1890ff;
+  background: #2b6cf6;
 }
 
 /* 快速筛选标签样式 */
@@ -1216,15 +1216,15 @@ onMounted(() => {
 
 /* 激活状态的快速筛选标签 */
 .defect-filter-section :deep(.ant-tag-blue) {
-  background: #1890ff;
+  background: #2b6cf6;
   color: #ffffff;
-  border-color: #1890ff;
+  border-color: #2b6cf6;
 }
 
 /* 悬停状态的快速筛选标签 */
 .defect-filter-section :deep(.ant-tag:not(.ant-tag-blue):hover) {
   background: #e6f7ff;
-  color: #1890ff;
+  color: #2b6cf6;
   border-color: #91d5ff;
 }
 
@@ -1255,15 +1255,15 @@ onMounted(() => {
 
 /* 激活状态 */
 .quick-filter-tag.ant-tag-blue {
-  background: #1890ff !important;
+  background: #2b6cf6 !important;
   color: #ffffff !important;
-  border-color: #1890ff !important;
+  border-color: #2b6cf6 !important;
 }
 
 /* 悬停状态 */
 .quick-filter-tag:not(.ant-tag-blue):hover {
   background: #e6f7ff !important;
-  color: #1890ff !important;
+  color: #2b6cf6 !important;
   border-color: #91d5ff !important;
 }
 
@@ -1295,15 +1295,15 @@ onMounted(() => {
 
 /* 激活状态 */
 .quick-filter-tag-compact.ant-tag-blue {
-  background: #1890ff !important;
+  background: #2b6cf6 !important;
   color: #ffffff !important;
-  border-color: #1890ff !important;
+  border-color: #2b6cf6 !important;
 }
 
 /* 悬停状态 */
 .quick-filter-tag-compact:not(.ant-tag-blue):hover {
   background: #e6f7ff !important;
-  color: #1890ff !important;
+  color: #2b6cf6 !important;
   border-color: #91d5ff !important;
 }
 
@@ -1329,12 +1329,12 @@ onMounted(() => {
 }
 
 .filter-checkbox :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-  background-color: #1890ff;
-  border-color: #1890ff;
+  background-color: #2b6cf6;
+  border-color: #2b6cf6;
 }
 
 .filter-checkbox :deep(.ant-checkbox-wrapper:hover .ant-checkbox-inner) {
-  border-color: #1890ff;
+  border-color: #2b6cf6;
 }
 
 /* 筛选操作按钮样式 */
@@ -1347,9 +1347,9 @@ onMounted(() => {
 }
 
 .filter-action-btn.ant-btn-primary {
-  background: #1890ff !important;
-  border-color: #1890ff !important;
-  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.15) !important;
+  background: #2b6cf6 !important;
+  border-color: #2b6cf6 !important;
+  box-shadow: 0 2px 4px rgba(43, 108, 246, 0.15) !important;
 }
 
 .filter-action-btn.ant-btn-primary:hover {
@@ -1364,8 +1364,8 @@ onMounted(() => {
 }
 
 .filter-action-btn:not(.ant-btn-primary):hover {
-  border-color: #1890ff !important;
-  color: #1890ff !important;
+  border-color: #2b6cf6 !important;
+  color: #2b6cf6 !important;
 }
 
 /* 新建筛选弹窗样式 */
@@ -1389,14 +1389,14 @@ onMounted(() => {
 }
 
 .filter-section {
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid #2b6cf6;
   padding-left: 16px;
 }
 
 .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1890ff;
+  color: #2b6cf6;
   margin: 0 0 16px 0;
 }
 
@@ -1506,8 +1506,8 @@ onMounted(() => {
   padding: 0 24px;
   height: 32px;
   font-size: 13px;
-  background: #1890ff;
-  border-color: #1890ff;
+  background: #2b6cf6;
+  border-color: #2b6cf6;
 }
 
 /* 操作按钮区域 */

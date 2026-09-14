@@ -399,7 +399,7 @@ function handleViewFullFrontpage() {
  */
 function getComplianceColor(rate: number): string {
   if (rate >= 90) return '#52c41a'
-  if (rate >= 80) return '#1890ff'
+  if (rate >= 80) return '#2b6cf6'
   if (rate >= 70) return '#faad14'
   return '#f5222d'
 }
@@ -477,7 +477,7 @@ function getComplianceColor(rate: number): string {
         }
 
         &:hover {
-          color: #1890ff;
+          color: #2b6cf6;
           background: rgba(255, 255, 255, 0.5);
         }
 
@@ -589,7 +589,7 @@ function getComplianceColor(rate: number): string {
               box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 
               &.grade-A { background: linear-gradient(135deg, #52c41a, #95de64); }
-              &.grade-B { background: linear-gradient(135deg, #1890ff, #69c0ff); }
+              &.grade-B { background: linear-gradient(135deg, #2b6cf6, #69c0ff); }
               &.grade-C { background: linear-gradient(135deg, #faad14, #ffc53d); }
               &.grade-D, &.grade-F { background: linear-gradient(135deg, #f5222d, #ff7875); }
             }

@@ -6,7 +6,7 @@
     >
       <div class="flex items-center gap-4">
         <h1 class="text-[20px] leading-[28px] font-bold text-[#1d1d1f] flex items-center gap-2">
-          <ClusterOutlined class="text-[#0066cc]" />
+          <ClusterOutlined class="text-[#2b6cf6]" />
           病案首页工作台
         </h1>
         <div class="h-4 w-[1px] bg-black/[0.08]" />
@@ -109,7 +109,7 @@
             <template #rightExtra>
               <a-button
                 type="primary"
-                class="bg-[#0066cc] hover:bg-[#0059b3] border-[#0066cc] shadow-sm shadow-[#0066cc]/20 flex items-center mb-2"
+                class="bg-[#2b6cf6] hover:bg-[#0059b3] border-[#2b6cf6] shadow-sm shadow-[#2b6cf6]/20 flex items-center mb-2"
               >
                 <SyncOutlined /> 刷新队列
               </a-button>
@@ -148,7 +148,7 @@
                 :class="{
                   'bg-red-50 text-red-500 border-red-100': record.severity === 'critical',
                   'bg-orange-50 text-orange-500 border-orange-100': record.severity === 'urgent',
-                  'bg-[#eaf2ff] text-[#0066cc] border-[#cfe2ff]': record.severity === 'normal',
+                  'bg-[#eaf2ff] text-[#2b6cf6] border-[#cfe2ff]': record.severity === 'normal',
                 }"
               >
                 {{
@@ -220,7 +220,7 @@
               </span>
               <span
                 v-else-if="record.status === 'processing'"
-                class="inline-flex items-center gap-1.5 text-[#0066cc] bg-[#eff6ff] border border-[#dbeafe] px-2 py-0.5 rounded text-[10px] font-bold"
+                class="inline-flex items-center gap-1.5 text-[#2b6cf6] bg-[#eff6ff] border border-[#dbeafe] px-2 py-0.5 rounded text-[10px] font-bold"
               >
                 <SyncOutlined spin /> 正在提取
               </span>
@@ -360,7 +360,7 @@
                 class="pb-3 text-sm font-bold border-b-[3px] transition-all relative px-2"
                 :class="[
                   activeTab === tab.key
-                    ? 'border-blue-600 text-[#0066cc] dark:text-blue-400 dark:border-blue-500'
+                    ? 'border-blue-600 text-[#2b6cf6] dark:text-blue-400 dark:border-blue-500'
                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300',
                 ]"
                 @click="activeTab = tab.key"
@@ -847,7 +847,7 @@ const handleCodeChange = (field: string, value: string) => {
 .global-search-input .ant-input:hover,
 .global-filter-select:hover .ant-select-selector,
 .global-filter-select-focused .ant-select-selector {
-  border-color: #0066cc !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  border-color: #2b6cf6 !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 </style>

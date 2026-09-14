@@ -246,7 +246,7 @@ const gradeColor = computed(() => {
   const grade = props.result.evaluation_summary.overall_grade
   const colorMap: Record<string, string> = {
     'A': '#52c41a',  // 绿色
-    'B': '#1890ff',  // 蓝色
+    'B': '#2b6cf6',  // 蓝色
     'C': '#faad14',  // 橙色
     'D': '#ff7a45',  // 深橙色
     'E': '#f5222d'   // 红色
@@ -283,7 +283,7 @@ const gradeDescription = computed(() => {
 const complianceRateColor = computed(() => {
   const rate = props.result.evaluation_summary.compliance_rate
   if (rate >= 95) return '#52c41a'  // 绿色
-  if (rate >= 85) return '#1890ff'  // 蓝色
+  if (rate >= 85) return '#2b6cf6'  // 蓝色
   if (rate >= 75) return '#faad14'  // 橙色
   if (rate >= 60) return '#ff7a45'  // 深橙色
   return '#f5222d'  // 红色

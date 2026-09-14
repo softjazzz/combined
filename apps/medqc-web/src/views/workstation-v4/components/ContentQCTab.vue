@@ -2551,7 +2551,7 @@ watch(
 .summary-value,
 .empty-icon,
 .empty-result-icon {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 .header-title,
@@ -2577,13 +2577,13 @@ watch(
 .progress-bar-fill,
 .timeline-dot--done,
 .timeline-dot--active {
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
 }
 
 .progress-avatar {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(0, 102, 204, 0.16) !important;
+    0 5px 14px rgba(43, 108, 246, 0.16) !important;
 }
 
 .timeline-pending,
@@ -2601,9 +2601,9 @@ watch(
 .result-tag--pass,
 .empty-icon-wrap,
 .summary-card__progress {
-  border-color: rgba(0, 102, 204, 0.16) !important;
-  background: rgba(0, 102, 204, 0.08) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.16) !important;
+  background: rgba(43, 108, 246, 0.08) !important;
+  color: #2b6cf6 !important;
 }
 
 .content-qc-tab__empty {

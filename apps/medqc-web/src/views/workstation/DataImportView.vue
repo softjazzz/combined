@@ -86,7 +86,7 @@
               description="标准化病历数据模板，包含必填字段说明"
             >
               <template #avatar>
-                <DownloadOutlined style="font-size: 20px; color: #1677ff" />
+                <DownloadOutlined style="font-size: 20px; color: #2b6cf6" />
               </template>
             </a-card-meta>
           </a-card>

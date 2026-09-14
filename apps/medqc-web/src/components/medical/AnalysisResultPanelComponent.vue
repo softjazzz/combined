@@ -271,7 +271,7 @@
               </template>
               <a-list-item-meta>
                 <template #avatar>
-                  <a-avatar style="background-color: #1890ff">
+                  <a-avatar style="background-color: #2b6cf6">
                     <template #icon>
                       <BulbOutlined />
                     </template>
@@ -844,7 +844,7 @@ const getIssueSeverityText = (severity: string): string => {
 
 const getSourceColor = (source: string): string => {
   const colorMap: Record<string, string> = {
-    ai: '#1890ff',
+    ai: '#2b6cf6',
     rules: '#52c41a',
     hybrid: '#722ed1',
   }

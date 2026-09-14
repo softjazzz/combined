@@ -1823,7 +1823,7 @@ const updateCharts = async () => {
           type: 'bar',
           data: counts,
           yAxisIndex: 0,
-          itemStyle: { color: '#0066cc' },
+          itemStyle: { color: '#2b6cf6' },
         },
         {
           name: 'CMI',
@@ -1859,7 +1859,7 @@ const updateCharts = async () => {
           name: '病例数',
           type: 'bar',
           data: caseCounts,
-          itemStyle: { color: '#0066cc' },
+          itemStyle: { color: '#2b6cf6' },
         },
         {
           name: '平均CMI',
@@ -2350,8 +2350,8 @@ onUnmounted(() => {
 
 .tone-blue .kpi-icon,
 .tone-blue.insight-row .insight-icon {
-  color: #0066cc;
-  background: rgba(0, 102, 204, 0.08);
+  color: #2b6cf6;
+  background: rgba(43, 108, 246, 0.08);
 }
 
 .tone-green .kpi-icon {
@@ -2458,7 +2458,7 @@ onUnmounted(() => {
 }
 
 .metric-tabs button.active {
-  color: #0066cc;
+  color: #2b6cf6;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
 }
@@ -2599,7 +2599,7 @@ onUnmounted(() => {
   display: block;
   max-width: 100%;
   height: 5px;
-  background: linear-gradient(90deg, #0066cc, #93c5fd);
+  background: linear-gradient(90deg, #2b6cf6, #93c5fd);
   border-radius: 999px;
 }
 
@@ -2637,7 +2637,7 @@ onUnmounted(() => {
 }
 
 .dot-blue {
-  background: #0066cc;
+  background: #2b6cf6;
 }
 
 .dot-green {
@@ -2680,8 +2680,8 @@ onUnmounted(() => {
   --workstation-text: #1d1d1f;
   --workstation-muted: rgba(29, 29, 31, 0.6);
   --workstation-subtle: rgba(29, 29, 31, 0.38);
-  --workstation-primary: #0066cc;
-  --workstation-primary-soft: rgba(0, 102, 204, 0.1);
+  --workstation-primary: #2b6cf6;
+  --workstation-primary-soft: rgba(43, 108, 246, 0.1);
 
   background: var(--workstation-canvas);
   color: var(--workstation-text);
@@ -2758,7 +2758,7 @@ onUnmounted(() => {
 }
 
 .back-icon-button:hover {
-  border-color: rgba(0, 102, 204, 0.22);
+  border-color: rgba(43, 108, 246, 0.22);
   background: var(--workstation-primary-soft);
   color: var(--workstation-primary);
 }
@@ -2771,11 +2771,11 @@ onUnmounted(() => {
 }
 
 .metric-tabs button.active {
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.1);
 }
 
 .rank-name i {
-  background: linear-gradient(90deg, var(--workstation-primary), rgba(0, 102, 204, 0.28));
+  background: linear-gradient(90deg, var(--workstation-primary), rgba(43, 108, 246, 0.28));
 }
 
 .dot-blue {

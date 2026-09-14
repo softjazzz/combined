@@ -5,7 +5,7 @@
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="flex min-w-0 items-start gap-3">
         <div
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#0066cc] shadow-[0_5px_14px_rgba(0,102,204,0.16)]"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#2b6cf6] shadow-[0_5px_14px_rgba(43,108,246,0.16)]"
         >
           <CheckCircleOutlined class="text-base text-white" />
         </div>
@@ -280,7 +280,7 @@ function moduleStatusClass(module: ModuleCard) {
 }
 
 function moduleIconClass(module: ModuleCard) {
-  if (module.entry?.preview?.length) return 'bg-[#0066cc] text-white'
+  if (module.entry?.preview?.length) return 'bg-[#2b6cf6] text-white'
   if (module.status === 'active') return 'bg-cyan-500 text-white'
   return 'bg-slate-100 text-slate-400'
 }
@@ -323,20 +323,20 @@ function scrollToModule(key: string) {
 .frontpage-fields-panel .bg-blue-50,
 .frontpage-fields-panel .bg-blue-50\/70,
 .frontpage-fields-panel .bg-blue-50\/85 {
-  background: rgba(0, 102, 204, 0.08) !important;
+  background: rgba(43, 108, 246, 0.08) !important;
 }
 
 .frontpage-fields-panel .text-\[\#0057b8\],
-.frontpage-fields-panel .text-\[\#0066cc\],
+.frontpage-fields-panel .text-\[\#2b6cf6\],
 .frontpage-fields-panel .text-blue-500 {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 :deep(.ant-btn-primary) {
-  border-color: #0066cc !important;
-  background: #0066cc !important;
+  border-color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
   color: #fff !important;
-  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16) !important;
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.16) !important;
 }
 
 :deep(.ant-btn:not(.ant-btn-primary)) {

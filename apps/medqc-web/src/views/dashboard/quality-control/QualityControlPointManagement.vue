@@ -467,7 +467,7 @@ onMounted(() => {
           font-weight: 500;
 
           &.ant-tabs-tab-active {
-            color: #1890ff;
+            color: #2b6cf6;
           }
         }
       }
@@ -511,8 +511,8 @@ onMounted(() => {
         color: #666666;
 
         &:hover {
-          border-color: #1890ff;
-          color: #1890ff;
+          border-color: #2b6cf6;
+          color: #2b6cf6;
         }
       }
 
@@ -521,8 +521,8 @@ onMounted(() => {
         padding: 0 16px;
         font-size: 14px;
         border-radius: 6px;
-        background: #1890ff;
-        border-color: #1890ff;
+        background: #2b6cf6;
+        border-color: #2b6cf6;
       }
     }
 

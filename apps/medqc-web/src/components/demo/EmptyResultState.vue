@@ -177,7 +177,7 @@ defineEmits<{
 }
 
 .tip-icon.info {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 </style>
 

@@ -105,11 +105,11 @@ function onTabChange(tab: string) {
   background: #ffffff;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    0 2px 8px rgba(0, 102, 204, 0.08);
+    0 2px 8px rgba(43, 108, 246, 0.08);
 }
 
 :deep(.frontpage-workspace-panel__tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn) {
-  color: #0066cc;
+  color: #2b6cf6;
   font-weight: 650;
 }
 

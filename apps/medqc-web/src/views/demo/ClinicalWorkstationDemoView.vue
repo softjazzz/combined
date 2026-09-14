@@ -43,7 +43,7 @@
         <div class="user-profile">
           <a-avatar
             size="small"
-            style="background-color: #1890ff"
+            style="background-color: #2b6cf6"
           >
             李
           </a-avatar>
@@ -186,7 +186,7 @@ onMounted(() => {
         .logo-icon {
           width: 26px;
           height: 26px;
-          color: #1890ff;
+          color: #2b6cf6;
         }
         
         .brand-info {
@@ -231,7 +231,7 @@ onMounted(() => {
           &.active {
             color: #fff;
             font-weight: 500;
-            background: #1890ff;
+            background: #2b6cf6;
           }
         }
       }

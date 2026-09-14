@@ -351,7 +351,7 @@ export function getDocumentTypeColor(type: DocumentType): string {
     case DocumentCategory.ADMISSION_RECORD:
       return '#52c41a' // 绿色
     case DocumentCategory.PROGRESS_NOTE:
-      return '#1890ff' // 蓝色
+      return '#2b6cf6' // 蓝色
     case DocumentCategory.OPERATION_RECORD:
       return '#fa8c16' // 橙色
     case DocumentCategory.DISCHARGE_RECORD:

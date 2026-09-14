@@ -220,7 +220,7 @@ onMounted(() => {
 }
 .feedback-demo-eyebrow {
   margin: 0 0 4px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 650;
 }
@@ -237,10 +237,10 @@ onMounted(() => {
 .feedback-demo-refresh {
   min-height: 34px;
   padding: 0 13px;
-  border: 1px solid rgba(0, 102, 204, 0.2);
+  border: 1px solid rgba(43, 108, 246, 0.2);
   border-radius: 8px;
   background: #fff;
-  color: #0066cc;
+  color: #2b6cf6;
   cursor: pointer;
   font-size: 13px;
   font-weight: 650;
@@ -273,7 +273,7 @@ onMounted(() => {
   font-weight: 600;
 }
 .feedback-demo-metrics strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 28px;
   line-height: 32px;
 }
@@ -326,7 +326,7 @@ onMounted(() => {
   vertical-align: top;
 }
 .feedback-demo-table-wrap tr:hover td {
-  background: rgba(0, 102, 204, 0.025);
+  background: rgba(43, 108, 246, 0.025);
 }
 .feedback-demo-table-wrap code {
   color: #174f83;

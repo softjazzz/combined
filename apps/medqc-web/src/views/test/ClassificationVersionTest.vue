@@ -546,7 +546,7 @@ const testVersionSwitch = async () => {
 
 .log-info {
   background: #e6f7ff;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .log-success {

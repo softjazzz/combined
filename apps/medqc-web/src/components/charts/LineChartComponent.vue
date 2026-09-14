@@ -171,7 +171,7 @@ const chartOption = computed(() => {
         },
         axisLine: {
           lineStyle: {
-            color: '#1890ff'
+            color: '#2b6cf6'
           }
         },
         splitLine: {
@@ -208,10 +208,10 @@ const chartOption = computed(() => {
         smooth: true,
         lineStyle: {
           width: 3,
-          color: '#1890ff'
+          color: '#2b6cf6'
         },
         itemStyle: {
-          color: '#1890ff'
+          color: '#2b6cf6'
         },
         areaStyle: {
           color: {
@@ -221,8 +221,8 @@ const chartOption = computed(() => {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(24, 144, 255, 0.3)' },
-              { offset: 1, color: 'rgba(24, 144, 255, 0.1)' }
+              { offset: 0, color: 'rgba(43, 108, 246, 0.3)' },
+              { offset: 1, color: 'rgba(43, 108, 246, 0.1)' }
             ]
           }
         }

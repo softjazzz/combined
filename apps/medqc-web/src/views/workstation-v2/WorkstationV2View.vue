@@ -10,7 +10,7 @@
           v-if="!sidebarCollapsed"
           class="sidebar-title"
         >
-          <ThunderboltOutlined style="color: #1677ff" />
+          <ThunderboltOutlined style="color: #2b6cf6" />
           <span>AI 质控工作站</span>
         </div>
         <a-button
@@ -171,7 +171,7 @@
                 v-else-if="activeTab === 'qc'"
                 class="tab-placeholder"
               >
-                <SafetyCertificateOutlined style="font-size: 48px; color: #1677ff" />
+                <SafetyCertificateOutlined style="font-size: 48px; color: #2b6cf6" />
                 <h3>首页质控</h3>
                 <p>形式质控（M2）+ 内涵质控（M3-A）</p>
                 <p class="hint">
@@ -277,7 +277,7 @@
           flex-direction: column;
         "
       >
-        <BellOutlined style="font-size: 48px; color: #1677ff" />
+        <BellOutlined style="font-size: 48px; color: #2b6cf6" />
         <h3>质控消息概览</h3>
         <p>M5：每日问题汇总 + 科室分布</p>
       </div>
@@ -641,7 +641,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .resize-handle:hover {
-  background: #1677ff;
+  background: #2b6cf6;
 }
 
 /* ==================== 底部测试用例栏 ==================== */

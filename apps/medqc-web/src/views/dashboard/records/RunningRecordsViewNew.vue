@@ -8,7 +8,7 @@
       >
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
-            <ThunderboltOutlined class="text-[#0066cc]" />
+            <ThunderboltOutlined class="text-[#2b6cf6]" />
             <span class="text-sm font-medium text-slate-700">{{
               taskProgress.task_name || '质控任务执行中'
             }}</span>
@@ -20,7 +20,7 @@
         <a-progress
           :percent="Math.round(taskProgress.progress_pct || 0)"
           :status="taskProgress.progress_pct >= 100 ? 'success' : 'active'"
-          :stroke-color="{ from: '#0066cc', to: '#10b981' }"
+          :stroke-color="{ from: '#2b6cf6', to: '#10b981' }"
         />
         <div
           v-if="taskProgress.progress_pct >= 100"
@@ -195,7 +195,7 @@
 
           <a-button
             type="text"
-            class="text-slate-500 hover:text-[#0066cc] !flex items-center gap-1"
+            class="text-slate-500 hover:text-[#2b6cf6] !flex items-center gap-1"
             @click="showFilterModal = true"
           >
             <FilterOutlined /> 筛选
@@ -223,7 +223,7 @@
                 class="px-3 py-1 rounded-md text-xs font-medium transition-all"
                 :class="
                   currentView === 'records'
-                    ? 'bg-white text-[#0066cc] shadow-sm'
+                    ? 'bg-white text-[#2b6cf6] shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
                 "
                 @click="currentView = 'records'"
@@ -234,7 +234,7 @@
                 class="px-3 py-1 rounded-md text-xs font-medium transition-all"
                 :class="
                   currentView === 'defects'
-                    ? 'bg-white text-[#0066cc] shadow-sm'
+                    ? 'bg-white text-[#2b6cf6] shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
                 "
                 @click="currentView = 'defects'"
@@ -245,7 +245,7 @@
                 class="px-3 py-1 rounded-md text-xs font-medium transition-all"
                 :class="
                   currentView === 'remediation'
-                    ? 'bg-white text-[#0066cc] shadow-sm'
+                    ? 'bg-white text-[#2b6cf6] shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
                 "
                 @click="currentView = 'remediation'"
@@ -255,7 +255,7 @@
             </div>
 
             <a-button
-              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#0066cc]"
+              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#2b6cf6]"
               @click="openCustomQCExperience()"
             >
               自定义质控点
@@ -283,7 +283,7 @@
             class="rounded-full border px-3 py-1 text-xs transition"
             :class="
               activeStatusFilter === 'all'
-                ? 'border-[rgba(0,102,204,0.18)] bg-[rgba(0,102,204,0.08)] text-[#0066cc]'
+                ? 'border-[rgba(43,108,246,0.18)] bg-[rgba(43,108,246,0.08)] text-[#2b6cf6]'
                 : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
             "
             @click="applyStatusFilter('all')"
@@ -305,7 +305,7 @@
             class="rounded-full border px-3 py-1 text-xs transition"
             :class="
               activeStatusFilter === 'reviewing'
-                ? 'border-[rgba(0,102,204,0.18)] bg-[rgba(0,102,204,0.08)] text-[#0066cc]'
+                ? 'border-[rgba(43,108,246,0.18)] bg-[rgba(43,108,246,0.08)] text-[#2b6cf6]'
                 : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
             "
             @click="applyStatusFilter('reviewing')"
@@ -342,14 +342,14 @@
                 >
                 <div
                   v-else
-                  class="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(0,102,204,0.14)] bg-[rgba(0,102,204,0.08)] text-[#0066cc]"
+                  class="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(43,108,246,0.14)] bg-[rgba(43,108,246,0.08)] text-[#2b6cf6]"
                 >
                   <FileTextOutlined />
                 </div>
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
                     <span
-                      class="cursor-pointer truncate text-sm font-semibold text-slate-800 transition-colors hover:text-[#0066cc]"
+                      class="cursor-pointer truncate text-sm font-semibold text-slate-800 transition-colors hover:text-[#2b6cf6]"
                       @click="handleViewDetail(record)"
                     >{{ getPrimaryRecordTitle(record) }}</span>
                     <a-tag
@@ -388,7 +388,7 @@
                 :class="{
                   'bg-amber-50 text-amber-600 border-amber-100':
                     getStatusField(record) === 'pending' || getStatusField(record) === 'assigned',
-                  'bg-[rgba(0,102,204,0.08)] text-[#0066cc] border-[rgba(0,102,204,0.14)]':
+                  'bg-[rgba(43,108,246,0.08)] text-[#2b6cf6] border-[rgba(43,108,246,0.14)]':
                     getStatusField(record) === 'in_progress' ||
                     getStatusField(record) === 'reviewing',
                   'bg-emerald-50 text-emerald-600 border-emerald-100':
@@ -403,7 +403,7 @@
                   :class="{
                     'bg-amber-500':
                       getStatusField(record) === 'pending' || getStatusField(record) === 'assigned',
-                    'bg-[#0066cc]':
+                    'bg-[#2b6cf6]':
                       getStatusField(record) === 'in_progress' ||
                       getStatusField(record) === 'reviewing',
                     'bg-emerald-500':
@@ -436,7 +436,7 @@
                 </a-button>
                 <a-button
                   size="small"
-                  class="!h-7 !rounded-full !border-[rgba(0,102,204,0.2)] !text-[#0066cc] !px-2.5 !text-xs"
+                  class="!h-7 !rounded-full !border-[rgba(43,108,246,0.2)] !text-[#2b6cf6] !px-2.5 !text-xs"
                   :disabled="!getRecordIdForJump(record)"
                   @click="jumpToWorkstation(record, 'generate_frontpage')"
                 >
@@ -481,7 +481,7 @@
               <div class="flex items-center gap-1">
                 <a-tooltip title="查看详情">
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-[#0066cc] transition-all"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-[#2b6cf6] transition-all"
                     @click="handleViewDetail(record)"
                   >
                     <EyeOutlined />
@@ -547,7 +547,7 @@
           class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
           <span class="text-sm font-semibold">已选择
-            <span class="mx-1 font-bold text-[#0066cc]">{{ selectedRowKeys.length }}</span> 项</span>
+            <span class="mx-1 font-bold text-[#2b6cf6]">{{ selectedRowKeys.length }}</span> 项</span>
           <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button
@@ -570,7 +570,7 @@
             </button>
 
             <button
-              class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-[rgba(0,102,204,0.22)] hover:text-[#0066cc]"
+              class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-[rgba(43,108,246,0.22)] hover:text-[#2b6cf6]"
               @click="handleExportDefects"
             >
               <FilePdfOutlined /> 导出
@@ -1190,7 +1190,7 @@ const getAuditStatusText = (status: string) => {
 
 const getScoreColor = (score: number) => {
   if (score >= 90) return '#10b981'
-  if (score >= 80) return '#0066cc'
+  if (score >= 80) return '#2b6cf6'
   if (score >= 60) return '#f59e0b'
   return '#f43f5e'
 }
@@ -1298,9 +1298,9 @@ onUnmounted(() => {
 .apple-primary-button,
 .apple-primary-action {
   border: 0 !important;
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.18) !important;
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.18) !important;
 }
 
 .apple-primary-button:hover,
@@ -1315,8 +1315,8 @@ onUnmounted(() => {
 }
 
 .apple-secondary-button:hover {
-  border-color: rgba(0, 102, 204, 0.24) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.24) !important;
+  color: #2b6cf6 !important;
 }
 
 .apple-input {
@@ -1357,8 +1357,8 @@ onUnmounted(() => {
 }
 
 .queue-kpi-icon-primary {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .queue-kpi-label {
@@ -1391,11 +1391,11 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
+  background: rgba(43, 108, 246, 0.08);
   object-fit: cover;
-  box-shadow: 0 8px 18px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 8px 18px rgba(43, 108, 246, 0.1);
 }
 
 /* 胶囊选择器样式覆盖 */
@@ -1410,9 +1410,9 @@ onUnmounted(() => {
 }
 
 :deep(.custom-select:hover .ant-select-selector) {
-  border-color: rgba(0, 102, 204, 0.32) !important;
+  border-color: rgba(43, 108, 246, 0.32) !important;
   background-color: #ffffff !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 
 :deep(.custom-select .ant-select-selection-placeholder) {
@@ -1447,23 +1447,23 @@ onUnmounted(() => {
 }
 
 :deep(.ant-btn-primary) {
-  border-color: #0066cc !important;
-  background: #0066cc !important;
+  border-color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
 }
 
 :deep(.ant-input:hover),
 :deep(.ant-input:focus) {
-  border-color: rgba(0, 102, 204, 0.32) !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  border-color: rgba(43, 108, 246, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 
 :deep(.ant-pagination-item-active) {
-  border-color: #0066cc;
+  border-color: #2b6cf6;
 }
 
 :deep(.ant-pagination-item-active a),
 :deep(.ant-btn-link) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 /* 分页样式微调 */

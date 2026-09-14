@@ -42,7 +42,7 @@
               title="改进建议" 
               :value="result.suggestions.length" 
               suffix="条"
-              :value-style="{ color: '#1890ff', fontSize: '28px' }"
+              :value-style="{ color: '#2b6cf6', fontSize: '28px' }"
             />
           </a-col>
         </a-row>
@@ -234,7 +234,7 @@
         class="suggestions-section"
       >
         <h3>
-          <BulbOutlined style="color: #1890ff; margin-right: 8px" />
+          <BulbOutlined style="color: #2b6cf6; margin-right: 8px" />
           改进建议 ({{ structuredSuggestions.length }})
         </h3>
         <a-list
@@ -393,7 +393,7 @@ const getGradeColor = (grade: string) => {
     'C': '#fa8c16',
     'D': '#f5222d'
   }
-  return colors[grade] || '#1890ff'
+  return colors[grade] || '#2b6cf6'
 }
 
 const getSeverityColor = (severity: string) => {
@@ -511,7 +511,7 @@ const handleExport = () => {
             margin-top: 8px;
             padding: 12px;
             background: #fafafa;
-            border-left: 3px solid #1890ff;
+            border-left: 3px solid #2b6cf6;
             border-radius: 4px;
 
             blockquote {
@@ -527,7 +527,7 @@ const handleExport = () => {
 
         &.suggestion-row {
           .suggestion-text {
-            color: #1890ff;
+            color: #2b6cf6;
             font-weight: 500;
           }
         }

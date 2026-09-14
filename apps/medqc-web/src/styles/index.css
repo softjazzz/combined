@@ -5,11 +5,15 @@
 @tailwind utilities;
 
 /* 自定义CSS变量 */
+/* 品牌主色的唯一来源：与 tailwind.config.js 的 primary、App.vue 的 antd
+   ConfigProvider token.colorPrimary 保持同一取值。改主色时三处一起改。
+   light/dark/subtle 是配套的悬停/激活/浅底取值，供手写 CSS 使用；
+   antd 组件自身由 token.colorPrimary 推导，不读这些变量。 */
 :root {
-  --primary-color: #0b64d4;
-  --primary-color-light: #1e88ff;
-  --primary-color-dark: #084c9e;
-  --primary-color-subtle: #e6f4ff;
+  --primary-color: #2b6cf6;
+  --primary-color-light: #5b8cf8;
+  --primary-color-dark: #1f55c9;
+  --primary-color-subtle: #eaf1fe;
   --success-color: #52c41a;
   --warning-color: #faad14;
   --error-color: #f5222d;
@@ -21,7 +25,7 @@
   --background-page: #f5f7fb;
   --background-light: #fafbff;
   --card-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
-  --shadow-light: 0 4px 12px rgba(14, 110, 209, 0.08);
+  --shadow-light: 0 4px 12px rgba(43, 108, 246, 0.08);
   --shadow-medium: 0 8px 24px rgba(15, 23, 42, 0.1);
 }
 
@@ -102,7 +106,7 @@
   }
 
   .btn-medical:focus-visible {
-    outline: 2px solid #1890ff;
+    outline: 2px solid #2b6cf6;
     outline-offset: 2px;
   }
 
@@ -112,12 +116,12 @@
   }
 
   .btn-medical-primary {
-    background-color: #1890ff;
+    background-color: #2b6cf6;
     color: #ffffff;
   }
 
   .btn-medical-primary:hover {
-    background-color: #1677ff;
+    background-color: #2b6cf6;
     color: #ffffff; /* 确保悬停时文字也保持白色 */
   }
 
@@ -267,8 +271,8 @@
   }
 
   .form-input:focus {
-    border-color: #1890ff;
-    box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.1);
+    border-color: #2b6cf6;
+    box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.1);
   }
 
   .form-error {

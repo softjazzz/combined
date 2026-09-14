@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="qc-alert-wrapper">
     <!-- 浮动触发按钮 -->
     <div
@@ -105,7 +105,7 @@
               :count="getTabCount(tab.key)"
               :number-style="{
                 backgroundColor: activeTab === tab.key ? '#fff' : '#ff4d4f',
-                color: activeTab === tab.key ? '#0066cc' : '#fff',
+                color: activeTab === tab.key ? '#2b6cf6' : '#fff',
                 fontSize: '10px',
                 minWidth: '16px',
                 height: '16px',
@@ -409,7 +409,7 @@ const severityColor = (sev: string) =>
   ({
     error: '#ff4d4f',
     warning: '#faad14',
-    info: '#0066cc',
+    info: '#2b6cf6',
   })[sev] || '#999'
 
 const severityTagColor = (sev: string) =>
@@ -748,7 +748,7 @@ watch(
   width: 52px;
   height: 52px;
   border-radius: 18px;
-  background: linear-gradient(135deg, #0ea5e9 0%, #0066cc 100%);
+  background: linear-gradient(135deg, #0ea5e9 0%, #2b6cf6 100%);
   color: #fff;
   display: flex;
   align-items: center;

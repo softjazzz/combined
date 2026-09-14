@@ -185,7 +185,7 @@ watch(
 }
 
 .editable-copy-order-type-switch button.is-active::before {
-  border: 5px solid #0066cc;
+  border: 5px solid #2b6cf6;
 }
 
 .editable-copy-order-table-wrap {
@@ -288,7 +288,7 @@ watch(
 
 .editable-copy-order-table tbody tr:hover,
 .editable-copy-order-table tbody tr.is-active {
-  background: rgba(0, 102, 204, 0.07);
+  background: rgba(43, 108, 246, 0.07);
 }
 
 .editable-copy-order-empty {

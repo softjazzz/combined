@@ -1291,7 +1291,7 @@ onMounted(async () => {
     .selection-count {
       font-size: 14px;
       font-weight: 600;
-      color: #1890ff;
+      color: #2b6cf6;
     }
   }
 
@@ -1311,8 +1311,8 @@ onMounted(async () => {
       transition: all 0.2s;
 
       &:hover:not(.disabled) {
-        border-color: #1890ff;
-        box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+        border-color: #2b6cf6;
+        box-shadow: 0 2px 8px rgba(43, 108, 246, 0.1);
       }
 
       &.selected {
@@ -1339,7 +1339,7 @@ onMounted(async () => {
           .rule-id-compact {
             font-size: 12px;
             font-weight: 600;
-            color: #1890ff;
+            color: #2b6cf6;
           }
         }
 
@@ -1726,7 +1726,7 @@ onMounted(async () => {
 
           .detail-rule-id {
             font-size: 12px;
-            color: #1890ff;
+            color: #2b6cf6;
             font-weight: 600;
             margin-bottom: 4px;
           }
@@ -1816,14 +1816,14 @@ onMounted(async () => {
       transition: all 0.3s;
 
       &:hover {
-        border-color: #1890ff;
-        box-shadow: 0 4px 12px rgba(24, 144, 255, 0.1);
+        border-color: #2b6cf6;
+        box-shadow: 0 4px 12px rgba(43, 108, 246, 0.1);
         transform: translateY(-2px);
       }
 
       .export-icon {
         font-size: 48px;
-        color: #1890ff;
+        color: #2b6cf6;
         margin-bottom: 12px;
       }
 

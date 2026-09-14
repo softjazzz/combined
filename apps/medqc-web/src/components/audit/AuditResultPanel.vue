@@ -599,7 +599,7 @@ onMounted(() => {
 .score-value {
   font-size: 24px;
   font-weight: bold;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .score-level {
@@ -661,7 +661,7 @@ onMounted(() => {
 }
 
 .result-score {
-  color: #1890ff;
+  color: #2b6cf6;
   font-weight: bold;
 }
 

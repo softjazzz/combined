@@ -343,8 +343,8 @@ const handleNextStep = async () => {
       }
 
       :deep(.ant-steps-item-process .ant-steps-item-icon) {
-        background: #1890ff;
-        border-color: #1890ff;
+        background: #2b6cf6;
+        border-color: #2b6cf6;
       }
     }
 
@@ -354,8 +354,8 @@ const handleNextStep = async () => {
       right: 48px;
 
       .next-btn {
-        background: #1890ff;
-        border-color: #1890ff;
+        background: #2b6cf6;
+        border-color: #2b6cf6;
         font-size: 14px;
         height: 36px;
         padding: 0 24px;
@@ -420,8 +420,8 @@ const handleNextStep = async () => {
         &:focus,
         &.ant-input-focused,
         &.ant-select-focused .ant-select-selector {
-          border-color: #1890ff;
-          box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+          border-color: #2b6cf6;
+          box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.2);
         }
       }
 

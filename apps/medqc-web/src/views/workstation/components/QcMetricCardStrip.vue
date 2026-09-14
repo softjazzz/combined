@@ -89,8 +89,8 @@ defineProps<{
   height: 36px;
   flex: 0 0 36px;
   border-radius: 10px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .qc-metric-card-strip__value {
@@ -114,12 +114,12 @@ defineProps<{
 }
 
 .qc-metric-card-strip__card.is-brand .qc-metric-card-strip__value {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .qc-metric-card-strip__card.is-brand .qc-metric-card-strip__icon {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .qc-metric-card-strip__card.is-warning .qc-metric-card-strip__value {

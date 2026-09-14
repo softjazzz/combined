@@ -203,8 +203,8 @@ function selectCodeType(value: string) {
   align-items: center;
   gap: 8px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
-  background: rgba(0, 102, 204, 0.07);
+  border: 1px solid rgba(43, 108, 246, 0.14);
+  background: rgba(43, 108, 246, 0.07);
   padding: 7px 11px;
   color: rgba(29, 29, 31, 0.62);
   font-size: 12px;
@@ -213,7 +213,7 @@ function selectCodeType(value: string) {
 }
 
 .metric-pill strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-weight: 700;
 }
 
@@ -221,11 +221,11 @@ function selectCodeType(value: string) {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #0066cc;
+  background: #2b6cf6;
 }
 
 .metric-dot-light {
-  background: rgba(0, 102, 204, 0.45);
+  background: rgba(43, 108, 246, 0.45);
 }
 
 .search-shell {
@@ -263,9 +263,9 @@ function selectCodeType(value: string) {
 }
 
 .search-input:focus {
-  border-color: rgba(0, 102, 204, 0.42);
+  border-color: rgba(43, 108, 246, 0.42);
   box-shadow:
-    0 0 0 3px rgba(0, 102, 204, 0.08),
+    0 0 0 3px rgba(43, 108, 246, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -317,10 +317,10 @@ function selectCodeType(value: string) {
 
 .seg-btn-active {
   background: rgba(255, 255, 255, 0.96);
-  color: #0066cc;
+  color: #2b6cf6;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 2px 7px rgba(0, 102, 204, 0.08);
+    0 2px 7px rgba(43, 108, 246, 0.08);
 }
 
 .help-pill {

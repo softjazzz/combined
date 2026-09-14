@@ -1109,7 +1109,7 @@ onMounted(() => {
   --text: #1d1d1f;
   --text-muted: rgba(29, 29, 31, 0.6);
   --text-subtle: rgba(29, 29, 31, 0.38);
-  --accent: #0066cc;
+  --accent: #2b6cf6;
   --accent-soft: #eaf2ff;
   --ok: #15803d;
   --bad: #dc2626;
@@ -1167,7 +1167,7 @@ onMounted(() => {
 .eyebrow {
   display: block;
   margin-bottom: 3px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 11px;
   line-height: 16px;
   font-weight: 780;
@@ -1213,10 +1213,10 @@ onMounted(() => {
 }
 
 .btn-primary {
-  border-color: #0066cc;
-  background: #0066cc;
+  border-color: #2b6cf6;
+  background: #2b6cf6;
   color: #fff;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16);
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.16);
 }
 
 .readonly-badge,
@@ -1260,7 +1260,7 @@ onMounted(() => {
 
 .segmented-item.active {
   background: #eaf2ff;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .segmented-item:disabled {
@@ -1270,7 +1270,7 @@ onMounted(() => {
 
 .segmented-item.active:disabled {
   background: #dbeafe;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .segmented--compact .segmented-item {
@@ -1361,7 +1361,7 @@ onMounted(() => {
 }
 
 .current-case strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 14px;
   line-height: 1.1;
   font-weight: 790;
@@ -1423,7 +1423,7 @@ onMounted(() => {
 }
 
 .metric-inline--active strong {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .analysis-layout {
@@ -1621,7 +1621,7 @@ onMounted(() => {
 .safety-note span {
   width: fit-content;
   border-radius: 999px;
-  background: #0066cc;
+  background: #2b6cf6;
   color: #fff;
   padding: 3px 9px;
   font-size: 12px;
@@ -1880,7 +1880,7 @@ onMounted(() => {
 }
 
 .simulation-version__head strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 14px;
   font-weight: 700;
 }
@@ -2001,7 +2001,7 @@ onMounted(() => {
 .correction-panel__head em {
   border-radius: 999px;
   background: #eaf2ff;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-style: normal;
   font-weight: 700;
@@ -2225,8 +2225,8 @@ onMounted(() => {
   --text: #1d1d1f;
   --text-muted: rgba(29, 29, 31, 0.6);
   --text-subtle: rgba(29, 29, 31, 0.38);
-  --accent: #0066cc;
-  --accent-soft: rgba(0, 102, 204, 0.08);
+  --accent: #2b6cf6;
+  --accent-soft: rgba(43, 108, 246, 0.08);
   --ok: #10b981;
   --bad: #ff453a;
   background: var(--bg);
@@ -2340,7 +2340,7 @@ onMounted(() => {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.16);
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.16);
 }
 
 .readonly-badge {
@@ -2365,7 +2365,7 @@ onMounted(() => {
 .correction-panel__head em,
 .correction-candidates span,
 .tag-item {
-  border-color: rgba(0, 102, 204, 0.18);
+  border-color: rgba(43, 108, 246, 0.18);
   background: var(--accent-soft);
 }
 
@@ -2433,7 +2433,7 @@ onMounted(() => {
 }
 
 .case-pill.active {
-  border-color: rgba(0, 102, 204, 0.26);
+  border-color: rgba(43, 108, 246, 0.26);
   background: var(--accent-soft);
   box-shadow: none;
 }
@@ -2464,7 +2464,7 @@ onMounted(() => {
 }
 
 .metric-inline--active {
-  background: rgba(0, 102, 204, 0.06);
+  background: rgba(43, 108, 246, 0.06);
 }
 
 .metric-inline strong {
@@ -2512,8 +2512,8 @@ onMounted(() => {
 }
 
 .medical-text-editor:focus {
-  border-color: rgba(0, 102, 204, 0.32);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+  border-color: rgba(43, 108, 246, 0.32);
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
 }
 
 .medical-text {

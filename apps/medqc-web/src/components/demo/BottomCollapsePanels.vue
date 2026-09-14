@@ -47,7 +47,7 @@
             <span class="panel-title">演示日志</span>
             <a-badge
               :count="demoStore.demoLogs.length"
-              :number-style="{ backgroundColor: '#1890ff' }"
+              :number-style="{ backgroundColor: '#2b6cf6' }"
               :offset="[10, 0]"
             />
           </div>
@@ -212,7 +212,7 @@ const handleEnablePerformanceMonitor = () => {
 
       .panel-icon {
         font-size: 18px;
-        color: #1890ff;
+        color: #2b6cf6;
       }
 
       .panel-title {

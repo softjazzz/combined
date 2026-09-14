@@ -497,7 +497,7 @@
                   <a-statistic
                     title="识别文书数量"
                     :value="extractedData.documents ? extractedData.documents.length : 0"
-                    :value-style="{ color: '#1890ff' }"
+                    :value-style="{ color: '#2b6cf6' }"
                   >
                     <template #prefix>
                       <FileTextOutlined />
@@ -1818,9 +1818,9 @@ const handleCancel = () => {
 }
 
 .enhanced-text-input:focus {
-  border-color: #1890ff !important;
+  border-color: #2b6cf6 !important;
   background-color: #ffffff !important;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+  box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.2) !important;
 }
 
 .enhanced-text-input::placeholder {
@@ -1907,7 +1907,7 @@ const handleCancel = () => {
   }
 
   .enhanced-text-input:focus {
-    border-color: #1890ff !important;
+    border-color: #2b6cf6 !important;
     background-color: #262626 !important;
   }
 
@@ -2134,7 +2134,7 @@ const handleCancel = () => {
 }
 
 :deep(.ant-breadcrumb a) {
-  color: #1890ff !important;
+  color: #2b6cf6 !important;
   text-decoration: none !important;
 }
 

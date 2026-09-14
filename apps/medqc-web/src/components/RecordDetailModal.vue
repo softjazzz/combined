@@ -499,7 +499,7 @@ watch(() => props.visible, (newVal) => {
 .score-value {
   font-size: 18px;
   font-weight: bold;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .section-content {

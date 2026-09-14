@@ -1438,7 +1438,7 @@ watch(() => props.recordId, () => {
 }
 
 .qc-score-good {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .qc-score-fair {
@@ -1566,8 +1566,8 @@ watch(() => props.recordId, () => {
 }
 
 .rule-card:hover {
-  border-color: #1890ff;
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+  border-color: #2b6cf6;
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.15);
 }
 
 .rule-header {

@@ -396,7 +396,7 @@ const qualityCheck = async () => {
 .stat-number {
   font-size: 20px;
   font-weight: bold;
-  color: #1890ff;
+  color: #2b6cf6;
   margin-bottom: 4px;
 }
 
@@ -432,7 +432,7 @@ const qualityCheck = async () => {
 
 .category-count {
   font-size: 13px;
-  color: #1890ff;
+  color: #2b6cf6;
   font-weight: 500;
 }
 
@@ -445,7 +445,7 @@ const qualityCheck = async () => {
 
 .category-progress {
   height: 100%;
-  background: linear-gradient(90deg, #1890ff, #40a9ff);
+  background: linear-gradient(90deg, #2b6cf6, #40a9ff);
   transition: width 0.3s ease;
 }
 

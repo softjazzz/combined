@@ -181,7 +181,7 @@
   background: currentColor;
 }
 .record-pool-refined :deep(.batch-table-panel__hospitalization-status--inpatient) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 .record-pool-refined :deep(.batch-table-panel__hospitalization-status--discharged) {
   color: #707b8b;
@@ -216,13 +216,13 @@
   padding-inline: 16px;
 }
 .record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-selected) {
-  color: #0066cc;
+  color: #2b6cf6;
   box-shadow: 0 1px 3px rgb(30 64 110 / 8%);
 }
 .record-pool-refined .wv4-filter-actions__button.ant-btn-primary {
   background: #f4f8ff !important;
   border-color: #cddff7 !important;
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 .record-pool-refined .workbench-dept-filter__count {
   background: transparent;
@@ -250,7 +250,7 @@
   color: #647184;
 }
 .record-pool-refined :deep(.batch-table-panel__summary-pill--selected) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 .record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
   padding-block: 13px;
@@ -310,7 +310,7 @@
   font-weight: 400 !important;
 }
 .record-pool-refined :deep(.batch-table-panel__detail-button:hover) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
   background: #edf5ff !important;
 }
 .record-pool-refined :deep(.ant-table-tbody > tr > td) {
@@ -318,7 +318,7 @@
 }
 .record-pool-refined :deep(.ant-btn:focus-visible),
 .record-pool-refined :deep(.ant-checkbox-input:focus-visible + .ant-checkbox-inner) {
-  outline: 2px solid #0066cc;
+  outline: 2px solid #2b6cf6;
   outline-offset: 3px;
 }
 

@@ -148,7 +148,7 @@ addLog('批量文件处理测试页面已加载', 'info')
 
 .log-info {
   background: #f0f8ff;
-  border-left-color: #1890ff;
+  border-left-color: #2b6cf6;
 }
 
 .log-success {

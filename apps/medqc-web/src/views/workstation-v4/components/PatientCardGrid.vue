@@ -132,8 +132,8 @@ function statusTone(status?: string) {
 
 function stayTone(days?: number) {
   if (!days || days <= 7) return 'text-slate-500'
-  if (days <= 14) return 'text-[#0066cc]'
-  return 'text-[#0066cc]'
+  if (days <= 14) return 'text-[#2b6cf6]'
+  return 'text-[#2b6cf6]'
 }
 
 function stayLabel(days?: number) {
@@ -217,13 +217,13 @@ function formatDateRange(admissionDate?: string, dischargeDate?: string) {
   font-weight: 600 !important;
 }
 
-.patient-card-grid :deep(.text-\[\#0066cc\]),
+.patient-card-grid :deep(.text-\[\#2b6cf6\]),
 .patient-card-grid :deep(.text-\[\#0057b8\]) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 .patient-card-grid :deep(.bg-blue-50) {
-  background-color: rgba(0, 102, 204, 0.08) !important;
+  background-color: rgba(43, 108, 246, 0.08) !important;
 }
 
 .patient-card-grid :deep(.bg-slate-100) {

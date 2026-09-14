@@ -393,7 +393,7 @@ watch(selectedMode, () => {
 
 .ant-upload-drag-icon {
   font-size: 48px;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 </style>
 

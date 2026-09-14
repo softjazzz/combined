@@ -233,7 +233,7 @@ const toggleUserStatus = (user: any) => {
 }
 
 const getUserAvatarColor = (email: string) => {
-  const palette = ['#0B64D4', '#2C8EAA', '#52C41A', '#FAAD14', '#13C2C2']
+  const palette = ['#2b6cf6', '#2C8EAA', '#52C41A', '#FAAD14', '#13C2C2']
   return palette[email.charCodeAt(0) % palette.length]
 }
 

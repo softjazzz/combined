@@ -616,7 +616,7 @@ const getConfidenceColor = (confidence: number) => {
 }
 
 const getTypeColor = (type: string) => {
-  const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2']
+  const colors = ['#2b6cf6', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2']
   const hash = type ? type.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : 0
   return colors[hash % colors.length]
 }

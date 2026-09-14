@@ -7,10 +7,24 @@ import 'dayjs/locale/zh-cn'
 // 认证初始化由路由守卫处理，不需要在这里调用
 // 这样可以避免在访问demo页面等不需要认证的页面时触发403错误
 dayjs.locale('zh-cn')
+
+// antd 主题：品牌主色只在这里、tailwind.config.js 的 primary 和
+// src/styles/index.css 的 --primary-color 三处声明，取值必须一致。
+// 只收敛主色，不改变圆角/字号/间距等既有视觉参数。
+const BRAND_PRIMARY = '#2b6cf6'
+const brandTheme = {
+  token: {
+    colorPrimary: BRAND_PRIMARY,
+    colorLink: BRAND_PRIMARY,
+  },
+}
 </script>
 
 <template>
-  <ConfigProvider :locale="zhCN">
+  <ConfigProvider
+    :locale="zhCN"
+    :theme="brandTheme"
+  >
     <div id="app">
       <router-view />
     </div>

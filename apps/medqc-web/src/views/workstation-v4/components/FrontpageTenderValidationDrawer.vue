@@ -998,9 +998,9 @@ function openFormattedPreview() {
 }
 
 .frontpage-validation-body :deep(.ant-btn-primary) {
-  background: #0066cc !important;
-  border-color: #0066cc !important;
-  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.18);
+  background: #2b6cf6 !important;
+  border-color: #2b6cf6 !important;
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.18);
 }
 
 .frontpage-validation-body pre {
@@ -1031,10 +1031,10 @@ function openFormattedPreview() {
 
 :global(.frontpage-formatted-preview-modal .ant-tabs-tab-active .ant-tabs-tab-btn),
 :global(.frontpage-formatted-preview-modal .ant-tabs-tab:hover) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 :global(.frontpage-formatted-preview-modal .ant-tabs-ink-bar) {
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
 }
 </style>

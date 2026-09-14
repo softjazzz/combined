@@ -698,9 +698,9 @@ const callTokenChartOption = computed(() => ({
       smooth: true,
       symbolSize: 5,
       data: (overview.value?.trends || []).map((point) => point.logical_calls),
-      lineStyle: { color: '#0066cc', width: 2 },
-      itemStyle: { color: '#0066cc' },
-      areaStyle: { color: 'rgba(0,102,204,.08)' },
+      lineStyle: { color: '#2b6cf6', width: 2 },
+      itemStyle: { color: '#2b6cf6' },
+      areaStyle: { color: 'rgba(43,108,246,.08)' },
     },
     {
       name: 'HTTP 尝试',
@@ -765,7 +765,7 @@ const latencyConcurrencyChartOption = computed(() => ({
       yAxisIndex: 1,
       barMaxWidth: 22,
       data: (overview.value?.trends || []).map((point) => point.peak_concurrency),
-      itemStyle: { color: 'rgba(0,102,204,.48)', borderRadius: [4, 4, 0, 0] },
+      itemStyle: { color: 'rgba(43,108,246,.48)', borderRadius: [4, 4, 0, 0] },
     },
   ],
 }))
@@ -1099,7 +1099,7 @@ onMounted(() => {
 .llm-observability__eyebrow {
   display: block;
   margin-bottom: 5px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 650;
 }
@@ -1195,7 +1195,7 @@ onMounted(() => {
   width: 32px;
   height: 3px;
   border-radius: 0 0 4px 4px;
-  background: #0066cc;
+  background: #2b6cf6;
   content: '';
 }
 
@@ -1223,9 +1223,9 @@ onMounted(() => {
   gap: 18px;
   padding: 15px 18px;
   margin-bottom: 8px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 14px;
-  background: linear-gradient(90deg, rgba(0, 102, 204, 0.075), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(90deg, rgba(43, 108, 246, 0.075), rgba(255, 255, 255, 0.92));
 }
 
 .llm-observability__billing-total span,
@@ -1259,7 +1259,7 @@ onMounted(() => {
 
 .llm-observability__billing-rates {
   padding-left: 18px;
-  border-left: 1px solid rgba(0, 102, 204, 0.12);
+  border-left: 1px solid rgba(43, 108, 246, 0.12);
 }
 
 .llm-observability__billing-rates em {
@@ -1457,8 +1457,8 @@ onMounted(() => {
 }
 
 .llm-observability__status.is-running {
-  background: rgba(0, 102, 204, 0.1);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.1);
+  color: #2b6cf6;
 }
 
 .llm-observability__status.is-error {
@@ -1470,7 +1470,7 @@ onMounted(() => {
   padding: 0;
   border: 0;
   background: none;
-  color: #0066cc;
+  color: #2b6cf6;
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -1496,11 +1496,11 @@ onMounted(() => {
 }
 
 .llm-observability__state--empty svg {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .llm-observability__state--loading svg {
-  color: #0066cc;
+  color: #2b6cf6;
   animation: llm-observability-pulse 1.1s ease-in-out infinite alternate;
 }
 
@@ -1523,14 +1523,14 @@ onMounted(() => {
   padding: 11px 13px;
   margin-bottom: 12px;
   border-radius: 10px;
-  background: rgba(0, 102, 204, 0.06);
+  background: rgba(43, 108, 246, 0.06);
   color: rgba(29, 29, 31, 0.64);
   font-size: 12px;
 }
 
 .llm-observability__drawer-intro svg {
   flex: 0 0 auto;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .llm-observability__attempt-list {
@@ -1631,7 +1631,7 @@ onMounted(() => {
     grid-column: 1 / -1;
     padding-top: 10px;
     padding-left: 0;
-    border-top: 1px solid rgba(0, 102, 204, 0.12);
+    border-top: 1px solid rgba(43, 108, 246, 0.12);
     border-left: 0;
   }
 }
@@ -1692,8 +1692,8 @@ onMounted(() => {
 }
 
 .llm-observability-popup .ant-select-item-option-selected {
-  background: rgba(0, 102, 204, 0.08) !important;
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08) !important;
+  color: #2b6cf6;
   font-weight: 650;
 }
 </style>

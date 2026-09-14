@@ -819,8 +819,8 @@ onMounted(async () => {
 
         &.selected {
           background-color: #e6f4ff;
-          border-color: #1890ff;
-          box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.12);
+          border-color: #2b6cf6;
+          box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.12);
         }
 
         .patient-name {

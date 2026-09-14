@@ -279,7 +279,7 @@ const checkAPI = async () => {
 }
 
 .header h1 {
-  color: #1890ff;
+  color: #2b6cf6;
   margin-bottom: 8px;
   font-size: 28px;
 }
@@ -312,7 +312,7 @@ const checkAPI = async () => {
 
 .card-title__icon {
   font-size: 18px;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .card-title__icon-success {
@@ -387,7 +387,7 @@ const checkAPI = async () => {
 
 .icon-list-item__icon {
   font-size: 16px;
-  color: #1890ff;
+  color: #2b6cf6;
   margin-top: 2px;
 }
 

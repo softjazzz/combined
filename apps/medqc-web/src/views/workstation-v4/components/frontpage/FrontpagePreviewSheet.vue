@@ -38,10 +38,10 @@ defineProps<{
 
 .frontpage-preview-sheet__notice {
   margin-bottom: 12px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.86);
-  color: #0066cc;
+  color: #2b6cf6;
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;

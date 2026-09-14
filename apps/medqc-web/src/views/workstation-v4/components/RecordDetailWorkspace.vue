@@ -8,10 +8,10 @@
         class="absolute right-4 top-0 flex items-center gap-1 rounded-b-md border-x border-b px-2 py-0.5 text-[10px] font-bold opacity-75"
         :class="
           selectedRecord.status === 'completed'
-            ? 'bg-blue-50 text-[#0066cc] border-blue-100/50'
+            ? 'bg-blue-50 text-[#2b6cf6] border-blue-100/50'
             : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning'
               ? 'bg-slate-50 text-slate-500 border-slate-200/70'
-              : 'bg-blue-50 text-[#0066cc] border-blue-100/50'
+              : 'bg-blue-50 text-[#2b6cf6] border-blue-100/50'
         "
       >
         <CheckCircleOutlined v-if="selectedRecord.status === 'completed'" />
@@ -106,7 +106,7 @@
                   {{ section.title }}
                 </h3>
               </span>
-              <span class="text-[11px] font-semibold text-[#0066cc]">
+              <span class="text-[11px] font-semibold text-[#2b6cf6]">
                 {{ isSectionExpanded(idx) ? '收起' : '展开' }}
               </span>
             </button>
@@ -279,10 +279,10 @@ const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRVie
   color: rgba(29, 29, 31, 0.34) !important;
 }
 
-.record-detail-workspace .text-\[\#0066cc\],
+.record-detail-workspace .text-\[\#2b6cf6\],
 .record-detail-workspace .text-blue-400,
 .record-detail-workspace .text-\[\#0057b8\] {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 .record-detail-workspace .bg-blue-50,
@@ -324,8 +324,8 @@ const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRVie
 }
 
 .record-detail-workspace :deep(.ant-btn:hover) {
-  border-color: rgba(0, 102, 204, 0.2) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.2) !important;
+  color: #2b6cf6 !important;
 }
 
 .medical-record-document__content {

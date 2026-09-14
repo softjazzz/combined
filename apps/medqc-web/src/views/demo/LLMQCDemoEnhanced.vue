@@ -710,7 +710,7 @@ const getStepColor = (stepKey: string) => {
 const getProgressColor = () => {
   if (demoStore.error) return '#ff4d4f'
   if (demoStore.currentStep === 'run' && demoStore.analysisResult) return '#52c41a'
-  return '#1890ff'
+  return '#2b6cf6'
 }
 
 // 条件引导提示计算属性（加入文书选择）
@@ -1291,7 +1291,7 @@ onMounted(async () => {
         .demo-title {
           font-size: 28px;
           font-weight: 600;
-          color: #1890ff;
+          color: #2b6cf6;
           margin: 0 0 8px 0;
           display: flex;
           align-items: center;
@@ -1329,7 +1329,7 @@ onMounted(async () => {
 
           &.active {
             opacity: 1;
-            color: #1890ff;
+            color: #2b6cf6;
           }
 
           &.completed {

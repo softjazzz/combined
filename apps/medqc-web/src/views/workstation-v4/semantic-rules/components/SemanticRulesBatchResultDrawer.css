@@ -33,7 +33,7 @@
 
 .drawer-back-button {
   flex: 0 0 auto;
-  border-color: rgba(0, 102, 204, 0.2);
+  border-color: rgba(43, 108, 246, 0.2);
   color: #005bb5;
   font-weight: 650;
 }
@@ -182,7 +182,7 @@
 
 .status-hero-live span {
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   background: rgba(255, 255, 255, 0.82);
   color: #1d4ed8;
   padding: 3px 9px;
@@ -214,7 +214,7 @@
   height: 100%;
   min-width: 8px;
   border-radius: inherit;
-  background: linear-gradient(90deg, #60a5fa, #0066cc);
+  background: linear-gradient(90deg, #60a5fa, #2b6cf6);
   transition: width 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -569,7 +569,7 @@
 
 .single-issue-hero-main span {
   display: block;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 750;
   line-height: 18px;
@@ -627,7 +627,7 @@
 
 .issue-record-switcher {
   margin: 10px 0 12px;
-  border: 1px solid rgba(0, 102, 204, 0.12);
+  border: 1px solid rgba(43, 108, 246, 0.12);
   border-radius: 14px;
   background: rgba(248, 250, 252, 0.82);
   padding: 12px;
@@ -701,9 +701,9 @@
 }
 
 .issue-record-tab--active {
-  border-color: rgba(0, 102, 204, 0.34);
-  background: rgba(0, 102, 204, 0.08);
-  box-shadow: 0 6px 16px rgba(0, 102, 204, 0.08);
+  border-color: rgba(43, 108, 246, 0.34);
+  background: rgba(43, 108, 246, 0.08);
+  box-shadow: 0 6px 16px rgba(43, 108, 246, 0.08);
 }
 
 .issue-record-tab--all {
@@ -869,9 +869,9 @@
 }
 
 .issue-review-nav-item--active {
-  border-color: rgba(0, 102, 204, 0.42);
+  border-color: rgba(43, 108, 246, 0.42);
   background: rgba(239, 246, 255, 0.98);
-  box-shadow: 0 8px 20px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 8px 20px rgba(43, 108, 246, 0.1);
 }
 
 .issue-review-nav-item--danger {
@@ -1022,7 +1022,7 @@
   max-width: 100%;
   margin: 0 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   background: rgba(239, 246, 255, 0.9);
   color: #1d4ed8;
   padding: 6px 10px;
@@ -1040,8 +1040,8 @@
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #0066cc;
-  box-shadow: 0 0 0 0 rgba(0, 102, 204, 0.38);
+  background: #2b6cf6;
+  box-shadow: 0 0 0 0 rgba(43, 108, 246, 0.38);
   animation: statusPulse 1.8s infinite;
   flex: none;
 }
@@ -1052,7 +1052,7 @@
   min-height: 188px;
   margin-bottom: 12px;
   border-radius: 16px;
-  border: 1px dashed rgba(0, 102, 204, 0.2);
+  border: 1px dashed rgba(43, 108, 246, 0.2);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.86)), #fff;
   display: flex;
   flex-direction: column;
@@ -1064,7 +1064,7 @@
 .stream-waiting-scan {
   position: absolute;
   inset: 0;
-  background: linear-gradient(110deg, transparent 20%, rgba(0, 102, 204, 0.08), transparent 56%);
+  background: linear-gradient(110deg, transparent 20%, rgba(43, 108, 246, 0.08), transparent 56%);
   animation: streamScan 2s infinite;
 }
 
@@ -1405,7 +1405,7 @@
 
 .issue-review-reading-step.is-active {
   background: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(43, 108, 246, 0.14);
 }
 
 .issue-review-reading-step span {
@@ -1416,15 +1416,15 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 800;
 }
 
 .issue-review-reading-step.is-active span {
-  background: rgba(0, 102, 204, 0.1);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.1);
+  color: #2b6cf6;
 }
 
 .issue-review-reading-step strong {
@@ -1457,11 +1457,11 @@
   gap: 12px;
   align-items: center;
   margin: 0 22px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(239, 246, 255, 0.72), rgba(255, 255, 255, 0.94));
   padding: 14px 16px;
-  box-shadow: 0 6px 20px rgba(0, 102, 204, 0.055);
+  box-shadow: 0 6px 20px rgba(43, 108, 246, 0.055);
 }
 
 .issue-patient-avatar {
@@ -1471,12 +1471,12 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.18);
+  border: 1px solid rgba(43, 108, 246, 0.18);
   background: #ffffff;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 17px;
   font-weight: 800;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.08);
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.08);
 }
 
 .issue-patient-context-main {
@@ -1587,8 +1587,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   font-size: 11px;
   font-weight: 850;
 }
@@ -1722,8 +1722,8 @@
 }
 
 .structured-evidence-card-head strong {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .structured-evidence-card-head span {
@@ -1733,7 +1733,7 @@
 
 .structured-evidence-card blockquote {
   margin: 0;
-  border-left: 3px solid rgba(0, 102, 204, 0.16);
+  border-left: 3px solid rgba(43, 108, 246, 0.16);
   padding-left: 10px;
   color: #1d1d1f;
   font-size: 13px;
@@ -1844,8 +1844,8 @@
 .issue-rule-code {
   flex-shrink: 0;
   border-radius: 8px;
-  background: rgba(0, 102, 204, 0.09);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.09);
+  color: #2b6cf6;
   padding: 2px 8px;
   font-size: 12px;
   font-weight: 750;
@@ -1984,7 +1984,7 @@
 }
 
 .issue-evidence-fact--time {
-  border-color: rgba(0, 102, 204, 0.14);
+  border-color: rgba(43, 108, 246, 0.14);
   background: rgba(239, 246, 255, 0.64);
 }
 
@@ -2021,7 +2021,7 @@
 
 .copy-evidence-legacy-note {
   grid-column: 1 / -1;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   border-radius: 12px;
   background: rgba(239, 246, 255, 0.72);
   padding: 8px 10px;
@@ -2047,7 +2047,7 @@
 
 .copy-evidence-column--gap {
   grid-column: 1 / -1;
-  border-color: rgba(0, 102, 204, 0.16);
+  border-color: rgba(43, 108, 246, 0.16);
   background: rgba(239, 246, 255, 0.72);
 }
 
@@ -2118,9 +2118,9 @@
 .evidence-chain-strip span,
 .evidence-chain-tag {
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.18);
-  background: rgba(0, 102, 204, 0.06);
-  color: #0066cc;
+  border: 1px solid rgba(43, 108, 246, 0.18);
+  background: rgba(43, 108, 246, 0.06);
+  color: #2b6cf6;
   padding: 2px 8px;
   font-size: 11px;
   line-height: 1.5;
@@ -2130,7 +2130,7 @@
 .evidence-chain-panel,
 .deep-review-chain {
   border-radius: 16px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.86));
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
   padding: 12px 14px;
@@ -2793,17 +2793,17 @@
 }
 
 .result-review-header :deep(.ant-btn-primary) {
-  border-color: #0066cc;
+  border-color: #2b6cf6;
   border-radius: 8px;
-  background: #0066cc;
-  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16);
+  background: #2b6cf6;
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.16);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
 }
 
 .result-review-header .drawer-back-button {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .issue-detail-title-row strong,
@@ -2876,8 +2876,8 @@
 }
 
 .issue-review-nav-item--active {
-  border-color: rgba(0, 102, 204, 0.28);
-  background: rgba(0, 102, 204, 0.08);
+  border-color: rgba(43, 108, 246, 0.28);
+  background: rgba(43, 108, 246, 0.08);
   box-shadow: none;
 }
 
@@ -2933,9 +2933,9 @@
 }
 
 .issue-rule-code {
-  border-color: rgba(0, 102, 204, 0.12);
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  border-color: rgba(43, 108, 246, 0.12);
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .issue-detail-section,
@@ -2947,14 +2947,14 @@
 }
 
 .issue-patient-context-card {
-  border-color: rgba(0, 102, 204, 0.14);
+  border-color: rgba(43, 108, 246, 0.14);
   background: linear-gradient(135deg, rgba(239, 246, 255, 0.72), rgba(255, 255, 255, 0.94));
 }
 
 .issue-patient-avatar {
-  border-color: rgba(0, 102, 204, 0.14);
+  border-color: rgba(43, 108, 246, 0.14);
   background: #ffffff;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .issue-detail-section--conclusion {
@@ -2993,8 +2993,8 @@
 }
 
 .suggestion-panel {
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.045);
+  border-color: rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.045);
 }
 
 .issue-result-kind--danger,
@@ -3039,8 +3039,8 @@
 }
 
 .issue-review-nav-item--active {
-  border-color: rgba(0, 102, 204, 0.28);
-  background: rgba(0, 102, 204, 0.055);
+  border-color: rgba(43, 108, 246, 0.28);
+  background: rgba(43, 108, 246, 0.055);
 }
 
 .issue-detail-panel.issue-conclusion-card--danger,
@@ -3121,8 +3121,8 @@
 }
 
 .issue-review-reading-step.is-active {
-  background: rgba(0, 102, 204, 0.045);
-  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.12);
+  background: rgba(43, 108, 246, 0.045);
+  box-shadow: inset 0 0 0 1px rgba(43, 108, 246, 0.12);
 }
 
 .copy-evidence-legacy-note,
@@ -3184,8 +3184,8 @@
 }
 
 .issue-review-nav-item--active {
-  border-color: rgba(0, 102, 204, 0.2);
-  background: rgba(0, 102, 204, 0.055);
+  border-color: rgba(43, 108, 246, 0.2);
+  background: rgba(43, 108, 246, 0.055);
   box-shadow: none;
 }
 
@@ -3265,7 +3265,7 @@
 
 .issue-review-reading-step.is-active {
   background: rgba(255, 255, 255, 0.76);
-  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(43, 108, 246, 0.1);
 }
 
 .issue-patient-context-card {
@@ -3275,8 +3275,8 @@
 }
 
 .issue-patient-avatar {
-  border: 1px solid rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.06);
+  border: 1px solid rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.06);
   box-shadow: none;
 }
 

@@ -439,11 +439,11 @@ function buildCustomRow(record: SemanticRuleItem) {
   gap: 6px;
   height: 36px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   background: linear-gradient(180deg, rgba(241, 248, 255, 0.96), rgba(230, 243, 255, 0.88));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 1px 1px rgba(0, 102, 204, 0.04);
+    0 1px 1px rgba(43, 108, 246, 0.04);
   padding: 0 12px;
   white-space: nowrap;
 }
@@ -452,13 +452,13 @@ function buildCustomRow(record: SemanticRuleItem) {
   font-family: var(--semantic-font-display);
   font-size: 13px;
   line-height: 1;
-  color: #0066cc;
+  color: #2b6cf6;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .table-shell-label {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 600;
 }
@@ -481,11 +481,11 @@ function buildCustomRow(record: SemanticRuleItem) {
 }
 
 .table-primary-btn {
-  background: #0066cc;
-  border-color: #0066cc;
+  background: #2b6cf6;
+  border-color: #2b6cf6;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 4px 10px rgba(0, 102, 204, 0.16);
+    0 4px 10px rgba(43, 108, 246, 0.16);
 }
 
 .table-secondary-btn {
@@ -507,10 +507,10 @@ function buildCustomRow(record: SemanticRuleItem) {
 }
 
 .table-shell-meta:hover {
-  border-color: rgba(0, 102, 204, 0.22);
+  border-color: rgba(43, 108, 246, 0.22);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.94),
-    0 2px 5px rgba(0, 102, 204, 0.07);
+    0 2px 5px rgba(43, 108, 246, 0.07);
 }
 
 .table-secondary-btn:hover {
@@ -528,7 +528,7 @@ function buildCustomRow(record: SemanticRuleItem) {
   border-color: #0057b8;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 12px rgba(0, 102, 204, 0.18);
+    0 5px 12px rgba(43, 108, 246, 0.18);
 }
 
 :deep(.rule-set-select .ant-select-selector) {
@@ -662,7 +662,7 @@ function buildCustomRow(record: SemanticRuleItem) {
 }
 
 .rule-main-title:hover {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .rule-inline-actions {
@@ -732,8 +732,8 @@ function buildCustomRow(record: SemanticRuleItem) {
   font-size: 12px;
   font-weight: 600;
   background: transparent;
-  border-color: rgba(0, 102, 204, 0.4);
-  color: #0066cc;
+  border-color: rgba(43, 108, 246, 0.4);
+  color: #2b6cf6;
   box-shadow: none;
 }
 
@@ -906,8 +906,8 @@ function buildCustomRow(record: SemanticRuleItem) {
 
 .semantic-rule-select-dropdown
   .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   font-weight: 600;
 }
 

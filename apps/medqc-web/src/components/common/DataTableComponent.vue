@@ -590,7 +590,7 @@ defineExpose({
 
 .batch-info {
   font-size: 14px;
-  color: #1890ff;
+  color: #2b6cf6;
   font-weight: 500;
 }
 
@@ -624,7 +624,7 @@ defineExpose({
 
 .filter-count {
   display: inline-block;
-  background: #1890ff;
+  background: #2b6cf6;
   color: white;
   border-radius: 50%;
   width: 18px;

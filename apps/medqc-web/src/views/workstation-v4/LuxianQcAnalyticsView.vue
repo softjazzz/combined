@@ -732,7 +732,7 @@ onMounted(() => {
 
 .analytics-eyebrow,
 .panel-heading p {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -761,7 +761,7 @@ onMounted(() => {
   background: #eaf4ff;
   border: 1px solid #cce5ff;
   border-radius: 999px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 700;
   line-height: 22px;
@@ -913,7 +913,7 @@ onMounted(() => {
 }
 
 .analytics-kpi.is-brand::before {
-  background: #0066cc;
+  background: #2b6cf6;
 }
 
 .analytics-kpi.is-danger::before {
@@ -942,7 +942,7 @@ onMounted(() => {
 }
 
 .analytics-kpi.is-brand strong {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .analytics-kpi.is-danger strong {
@@ -1101,7 +1101,7 @@ onMounted(() => {
 }
 
 .rhythm-bar i {
-  background: #0066cc;
+  background: #2b6cf6;
   border-radius: 6px 6px 2px 2px;
   display: block;
   max-width: 28px;
@@ -1168,7 +1168,7 @@ onMounted(() => {
 }
 
 .department-row:hover {
-  background: rgba(0, 102, 204, 0.045);
+  background: rgba(43, 108, 246, 0.045);
 }
 
 .department-rank {
@@ -1277,11 +1277,11 @@ onMounted(() => {
 }
 
 .rule-list button:hover {
-  background: rgba(0, 102, 204, 0.045);
+  background: rgba(43, 108, 246, 0.045);
 }
 
 .rule-rank {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 13px;
   font-weight: 700;
   text-align: center;

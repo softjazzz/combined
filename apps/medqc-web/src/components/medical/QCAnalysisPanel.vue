@@ -327,14 +327,14 @@ const issueColumns: TableColumnsType = [
 // 计算属性和方法
 const getScoreColor = (score: number) => {
   if (score >= 90) return '#52c41a'
-  if (score >= 80) return '#1890ff'
+  if (score >= 80) return '#2b6cf6'
   if (score >= 70) return '#faad14'
   return '#f5222d'
 }
 
 const getGradeColor = (grade: string) => {
   if (grade === '甲级') return '#52c41a'
-  if (grade === '乙级') return '#1890ff'
+  if (grade === '乙级') return '#2b6cf6'
   return '#f5222d'
 }
 

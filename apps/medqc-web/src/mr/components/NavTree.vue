@@ -272,7 +272,7 @@ const findNodeByKey = (nodes: TreeNode[], key: string): TreeNode | null => {
 
 :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
   background: #e6f7ff;
-  border-color: #1890ff;
+  border-color: #2b6cf6;
 }
 
 :deep(.ant-tree-treenode) {

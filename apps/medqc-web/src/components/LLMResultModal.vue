@@ -758,7 +758,7 @@ const goToImport = () => {
   color: #333;
   margin-bottom: 16px;
   padding-bottom: 8px;
-  border-bottom: 2px solid #1890ff;
+  border-bottom: 2px solid #2b6cf6;
 }
 
 .content-body {
@@ -822,7 +822,7 @@ const goToImport = () => {
 }
 
 .custom-tree :deep(.ant-tree-treenode) .category-node .category-icon {
-  color: #1890ff;
+  color: #2b6cf6;
   font-size: 16px;
 }
 
@@ -843,7 +843,7 @@ const goToImport = () => {
 }
 
 .custom-tree :deep(.ant-tree-switcher) {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .tree-node {

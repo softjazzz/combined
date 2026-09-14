@@ -394,7 +394,7 @@ const handleSelectExample = (example: { content: string; params: Partial<RulePar
       transition: all 0.2s;
 
       &:hover {
-        color: #1890ff;
+        color: #2b6cf6;
       }
     }
 
@@ -415,7 +415,7 @@ const handleSelectExample = (example: { content: string; params: Partial<RulePar
 
       .title-icon {
         font-size: 22px;
-        color: #1890ff;
+        color: #2b6cf6;
       }
     }
   }
@@ -480,8 +480,8 @@ const handleSelectExample = (example: { content: string; params: Partial<RulePar
         }
 
         &.ant-select-focused .ant-select-selector {
-          border-color: #1890ff;
-          box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+          border-color: #2b6cf6;
+          box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
         }
       }
 
@@ -497,8 +497,8 @@ const handleSelectExample = (example: { content: string; params: Partial<RulePar
         }
 
         &:focus {
-          border-color: #1890ff;
-          box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+          border-color: #2b6cf6;
+          box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
         }
       }
 
@@ -508,11 +508,11 @@ const handleSelectExample = (example: { content: string; params: Partial<RulePar
         font-size: 15px;
         font-weight: 500;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+        box-shadow: 0 2px 4px rgba(43, 108, 246, 0.2);
 
         &:hover:not(:disabled) {
           transform: translateY(-1px);
-          box-shadow: 0 4px 8px rgba(24, 144, 255, 0.3);
+          box-shadow: 0 4px 8px rgba(43, 108, 246, 0.3);
         }
       }
 
@@ -537,7 +537,7 @@ const handleSelectExample = (example: { content: string; params: Partial<RulePar
           margin-top: 20px;
           font-size: 16px;
           font-weight: 500;
-          color: #1890ff;
+          color: #2b6cf6;
           animation: fadePulse 1.5s ease-in-out infinite;
         }
       }

@@ -35,9 +35,9 @@ const getNotificationColor = (type: string) => {
     'success': '#52c41a',
     'error': '#ff4d4f',
     'warning': '#faad14',
-    'info': '#1890ff'
+    'info': '#2b6cf6'
   }
-  return colorMap[type as keyof typeof colorMap] || '#1890ff'
+  return colorMap[type as keyof typeof colorMap] || '#2b6cf6'
 }
 
 // 处理通知点击

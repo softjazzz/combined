@@ -102,7 +102,7 @@
       <!-- 字段映射表格 -->
       <div class="mapping-section">
         <h3 class="section-title">
-          <SwapOutlined class="text-[#0066cc]" />
+          <SwapOutlined class="text-[#2b6cf6]" />
           字段映射
           <span class="mapped-count">
             {{ mappedCount }} / {{ Object.keys(localMappings).length }} 已映射

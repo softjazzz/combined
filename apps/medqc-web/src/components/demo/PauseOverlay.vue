@@ -298,7 +298,7 @@ onUnmounted(() => {
   margin-bottom: 16px;
   font-size: 18px;
   font-weight: 500;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .step-icon {

@@ -26,7 +26,7 @@
           <a-statistic
             title="总反馈数"
             :value="stats.total_feedbacks"
-            :value-style="{ color: '#1890ff' }"
+            :value-style="{ color: '#2b6cf6' }"
           >
             <template #prefix>
               <MessageOutlined />
@@ -778,15 +778,15 @@ onMounted(() => {
   gap: 8px;
   font-size: 16px;
   font-weight: 600;
-  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  background: linear-gradient(135deg, #2b6cf6 0%, #096dd9 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 
   .modal-icon {
     font-size: 18px;
-    color: #1890ff;
-    -webkit-text-fill-color: #1890ff;
+    color: #2b6cf6;
+    -webkit-text-fill-color: #2b6cf6;
   }
 }
 
@@ -807,7 +807,7 @@ onMounted(() => {
 
     :deep(.ant-card-head) {
       background: linear-gradient(135deg, #f0f5ff 0%, #e6f4ff 100%);
-      border-bottom: 2px solid #1890ff;
+      border-bottom: 2px solid #2b6cf6;
       padding: 12px 20px;
       border-radius: 8px 8px 0 0;
     }
@@ -829,7 +829,7 @@ onMounted(() => {
     gap: 8px;
     font-size: 15px;
     font-weight: 600;
-    color: #1890ff;
+    color: #2b6cf6;
 
     .card-icon {
       font-size: 16px;

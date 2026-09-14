@@ -217,7 +217,7 @@ const restoreOriginal = () => {
 .rule-preview-card {
   height: 100%;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -228,7 +228,7 @@ const restoreOriginal = () => {
     border-bottom: 1px solid #91d5ff;
     font-size: 16px;
     font-weight: 600;
-    background: linear-gradient(135deg, #1890ff 0%, #69c0ff 50%, #e6f7ff 100%);
+    background: linear-gradient(135deg, #2b6cf6 0%, #69c0ff 50%, #e6f7ff 100%);
     position: relative;
     color: #fff;
   }
@@ -260,8 +260,8 @@ const restoreOriginal = () => {
     }
 
     &:focus {
-      border-color: #1890ff;
-      box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+      border-color: #2b6cf6;
+      box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
     }
 
     &:disabled {
@@ -285,8 +285,8 @@ const restoreOriginal = () => {
       }
 
       &:focus {
-        border-color: #1890ff;
-        box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+        border-color: #2b6cf6;
+        box-shadow: 0 0 0 2px rgba(43, 108, 246, 0.1);
       }
     }
   }
@@ -344,12 +344,12 @@ const restoreOriginal = () => {
         transition: all 0.3s;
 
         &:hover {
-          color: #1890ff;
+          color: #2b6cf6;
         }
 
         &.ant-tabs-tab-active {
           .ant-tabs-tab-btn {
-            color: #1890ff;
+            color: #2b6cf6;
             font-weight: 600;
           }
         }
@@ -387,11 +387,11 @@ const restoreOriginal = () => {
     }
 
     :deep(.ant-btn-primary) {
-      box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+      box-shadow: 0 2px 4px rgba(43, 108, 246, 0.2);
 
       &:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(24, 144, 255, 0.3);
+        box-shadow: 0 4px 8px rgba(43, 108, 246, 0.3);
       }
     }
   }

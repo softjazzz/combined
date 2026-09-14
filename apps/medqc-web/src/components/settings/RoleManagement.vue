@@ -84,7 +84,7 @@ const roles = ref([
     name: '质控管理员',
     description: '负责质控规则管理和质控流程监督',
     icon: SafetyOutlined,
-    color: '#0B64D4',
+    color: '#2b6cf6',
     bgColor: 'rgba(11, 100, 212, 0.1)',
     userCount: 5,
     permissionCount: 18

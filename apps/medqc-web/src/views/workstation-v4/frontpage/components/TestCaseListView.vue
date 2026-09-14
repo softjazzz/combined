@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="flex items-center gap-3 mb-6">
       <button
-        class="text-[rgba(29,29,31,0.45)] hover:text-[#0066cc]"
+        class="text-[rgba(29,29,31,0.45)] hover:text-[#2b6cf6]"
         @click="$emit('back')"
       >
         <ArrowLeftOutlined class="text-lg" />
@@ -24,7 +24,7 @@
             病历列表
           </h3>
           <button
-            class="px-3 py-1.5 bg-[#0066cc] text-white text-xs rounded-lg hover:bg-[#0057b8] transition-colors flex items-center gap-1.5 shadow-[0_5px_14px_rgba(0,102,204,0.18)]"
+            class="px-3 py-1.5 bg-[#2b6cf6] text-white text-xs rounded-lg hover:bg-[#0057b8] transition-colors flex items-center gap-1.5 shadow-[0_5px_14px_rgba(43,108,246,0.18)]"
             @click="showCreateModal = true"
           >
             <PlusOutlined />
@@ -39,16 +39,16 @@
             :class="[
               'p-4 border-b border-black/[0.06] cursor-pointer transition-colors',
               selectedIndex === index
-                ? 'bg-[rgba(0,102,204,0.08)] border-l-4 border-l-[#0066cc]'
+                ? 'bg-[rgba(43,108,246,0.08)] border-l-4 border-l-[#2b6cf6]'
                 : 'hover:bg-black/[0.025]',
             ]"
             @click="selectedIndex = index"
           >
             <div class="flex items-start gap-3">
               <div
-                class="w-10 h-10 rounded-lg bg-[rgba(0,102,204,0.08)] border border-[rgba(0,102,204,0.12)] flex items-center justify-center flex-shrink-0"
+                class="w-10 h-10 rounded-lg bg-[rgba(43,108,246,0.08)] border border-[rgba(43,108,246,0.12)] flex items-center justify-center flex-shrink-0"
               >
-                <FileTextOutlined class="text-[#0066cc]" />
+                <FileTextOutlined class="text-[#2b6cf6]" />
               </div>
               <div class="flex-1 min-w-0">
                 <div class="font-medium text-[#1d1d1f] mb-1">
@@ -76,7 +76,7 @@
             <FileTextOutlined class="text-4xl mb-3" />
             <p>暂无测试病历</p>
             <button
-              class="mt-3 text-[#0066cc] hover:text-[#0057b8] text-sm"
+              class="mt-3 text-[#2b6cf6] hover:text-[#0057b8] text-sm"
               @click="showCreateModal = true"
             >
               点击创建第一个
@@ -106,7 +106,7 @@
           </div>
           <div class="flex gap-2">
             <button
-              class="px-4 py-2 bg-[#0066cc] text-white rounded-lg hover:bg-[#0057b8] transition-colors text-sm flex items-center gap-2 shadow-[0_5px_14px_rgba(0,102,204,0.18)]"
+              class="px-4 py-2 bg-[#2b6cf6] text-white rounded-lg hover:bg-[#0057b8] transition-colors text-sm flex items-center gap-2 shadow-[0_5px_14px_rgba(43,108,246,0.18)]"
               @click="loadCase"
             >
               <UploadOutlined />

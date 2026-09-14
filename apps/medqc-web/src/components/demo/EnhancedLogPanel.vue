@@ -373,7 +373,7 @@ watch(() => props.logs.length, async () => {
 
 .header-icon {
   font-size: 18px;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .header-title {
@@ -410,7 +410,7 @@ watch(() => props.logs.length, async () => {
   }
 
   &.log-info {
-    border-left-color: #1890ff;
+    border-left-color: #2b6cf6;
   }
 
   &.log-warning {
@@ -439,7 +439,7 @@ watch(() => props.logs.length, async () => {
   font-size: 16px;
 
   &.level-info {
-    color: #1890ff;
+    color: #2b6cf6;
   }
 
   &.level-warning {

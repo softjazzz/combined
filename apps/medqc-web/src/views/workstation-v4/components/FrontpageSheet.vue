@@ -1437,7 +1437,7 @@ function closeDiagnosisEvidence() {
   width: 40%;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #0066cc 0%, #38bdf8 100%);
+  background: linear-gradient(90deg, #2b6cf6 0%, #38bdf8 100%);
   animation: fpPendingSlide 1.4s ease-in-out infinite;
 }
 
@@ -1557,7 +1557,7 @@ u.fill {
   align-items: center;
   padding: 1px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.22);
+  border: 1px solid rgba(43, 108, 246, 0.22);
   background: #eff6ff;
   color: #0057b8;
   font-size: 11px;
@@ -1572,7 +1572,7 @@ u.fill {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid rgba(0, 102, 204, 0.22);
+  border: 1px solid rgba(43, 108, 246, 0.22);
   border-radius: 999px;
   background: #eff6ff;
   color: #0057b8;
@@ -1715,7 +1715,7 @@ u.fill {
 
 .fp-evidence-btn-tag {
   font-size: 12px;
-  color: #0066cc;
+  color: #2b6cf6;
   border: 1px solid #93c5fd;
   border-radius: 999px;
   padding: 1px 7px;
@@ -2112,9 +2112,9 @@ u.fill {
 .fp-inline-evidence,
 .fp-evidence-btn-tag,
 .evidence-recommend-label {
-  border-color: rgba(0, 102, 204, 0.18);
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  border-color: rgba(43, 108, 246, 0.18);
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .fp-pending__title,

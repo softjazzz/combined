@@ -9,7 +9,7 @@
       >
         <div class="flex items-start gap-2.5">
           <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#0066cc] to-blue-700 shadow-[0_8px_16px_rgba(37,99,235,0.16)]"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#2b6cf6] to-blue-700 shadow-[0_8px_16px_rgba(37,99,235,0.16)]"
           >
             <ThunderboltOutlined class="text-base text-white" />
           </div>
@@ -41,7 +41,7 @@
           </div>
           <div class="h-2 overflow-hidden rounded-full bg-slate-100/90">
             <div
-              class="h-full rounded-full bg-gradient-to-r from-[#0066cc] via-blue-600 to-blue-400 transition-all duration-500"
+              class="h-full rounded-full bg-gradient-to-r from-[#2b6cf6] via-blue-600 to-blue-400 transition-all duration-500"
               :style="{ width: `${progressPercent}%` }"
             />
           </div>
@@ -88,7 +88,7 @@
                 >{{ (module.entry.timestamp / 1000).toFixed(1) }}s</span>
                 <span
                   v-if="module.status === 'active'"
-                  class="rounded-full border border-blue-100/80 bg-blue-50/70 px-2 py-0.5 text-[10px] font-semibold text-[#0066cc]"
+                  class="rounded-full border border-blue-100/80 bg-blue-50/70 px-2 py-0.5 text-[10px] font-semibold text-[#2b6cf6]"
                 >提取中</span>
                 <span
                   v-else-if="module.status === 'done'"
@@ -428,12 +428,12 @@ function moduleTitleClass(status: ModuleStatus) {
     0 6px 22px rgba(0, 0, 0, 0.075) !important;
 }
 
-.frontpage-workspace-panel .from-\[\#0066cc\],
+.frontpage-workspace-panel .from-\[\#2b6cf6\],
 .frontpage-workspace-panel .via-blue-600,
 .frontpage-workspace-panel .to-blue-400,
 .frontpage-workspace-panel .to-blue-700,
 .frontpage-workspace-panel .bg-blue-500\/95 {
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
 }
 
 .frontpage-workspace-panel .bg-gradient-to-br,
@@ -478,8 +478,8 @@ function moduleTitleClass(status: ModuleStatus) {
 }
 
 .frontpage-workspace-panel .text-\[\#0057b8\],
-.frontpage-workspace-panel .text-\[\#0066cc\] {
-  color: #0066cc !important;
+.frontpage-workspace-panel .text-\[\#2b6cf6\] {
+  color: #2b6cf6 !important;
 }
 
 .frontpage-workspace-panel .font-bold {

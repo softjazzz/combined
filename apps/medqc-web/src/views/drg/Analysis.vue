@@ -100,7 +100,7 @@
               suffix="例"
             >
               <template #prefix>
-                <FileTextOutlined style="color: #1890ff" />
+                <FileTextOutlined style="color: #2b6cf6" />
               </template>
             </a-statistic>
           </a-card>
@@ -616,7 +616,7 @@ const updateCostCompositionChart = (data: { name: string; value: number }[]) => 
       {
         data: data.map((i) => i.value),
         type: 'bar',
-        itemStyle: { color: '#1890ff', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: '#2b6cf6', borderRadius: [4, 4, 0, 0] },
         label: { show: true, position: 'top', formatter: '{c}%' },
       },
     ],

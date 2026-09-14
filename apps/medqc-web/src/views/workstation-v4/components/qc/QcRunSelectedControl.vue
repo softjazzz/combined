@@ -333,7 +333,7 @@ onUnmounted(() => {
   gap: 7px;
   max-width: min(520px, 100%);
   padding: 8px 12px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 9px;
   color: #28567d;
   background: #f1f7fc;
@@ -363,7 +363,7 @@ button {
   padding: 0 14px;
   border-radius: 8px;
   color: #fff;
-  background: #0066cc;
+  background: #2b6cf6;
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 3px 10px rgb(0 102 204 / 18%);

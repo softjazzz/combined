@@ -193,8 +193,8 @@ const textClass = computed(() => [
 
 /* 颜色变量 */
 .loading-primary {
-  --primary-color: #1890ff;
-  --primary-light: rgba(24, 144, 255, 0.3);
+  --primary-color: #2b6cf6;
+  --primary-light: rgba(43, 108, 246, 0.3);
 }
 
 .loading-secondary {

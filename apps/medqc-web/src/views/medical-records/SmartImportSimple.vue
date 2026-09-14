@@ -266,7 +266,7 @@
                 v-if="parseResult.isMerged"
                 title="显示所有文档的合并内容"
               >
-                <InfoCircleOutlined style="margin-left: 8px; color: #1890ff;" />
+                <InfoCircleOutlined style="margin-left: 8px; color: #2b6cf6;" />
               </a-tooltip>
             </h4>
             <a-textarea
@@ -1179,7 +1179,7 @@ const preciseLLMParse = async () => {
 }
 
 .file-icon {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .file-details {
@@ -1217,7 +1217,7 @@ const preciseLLMParse = async () => {
 
 .document-header h5 {
   margin: 0;
-  color: #1890ff;
+  color: #2b6cf6;
   font-weight: 500;
 }
 
@@ -1235,11 +1235,11 @@ const preciseLLMParse = async () => {
   padding: 12px;
   background: #f6f8fa;
   border-radius: 4px;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid #2b6cf6;
 }
 
 .source-files h5 {
   margin: 0 0 8px 0;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 </style>

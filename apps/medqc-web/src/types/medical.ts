@@ -65,7 +65,7 @@ export const DOCUMENT_CATEGORY_CONFIG = {
   [DocumentCategory.PROGRESS_NOTE]: {
     label: '病程记录',
     description: '住院期间的病情变化、治疗过程、医嘱执行等动态记录',
-    color: '#1890ff',
+    color: '#2b6cf6',
     icon: 'FileTextOutlined',
     sortOrder: 2
   },

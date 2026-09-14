@@ -240,7 +240,7 @@ const getEventTypeColor = (eventType: string) => {
     UPDATE: '#faad14',
     DELETE: '#ff4d4f',
   }
-  return colorMap[eventType as keyof typeof colorMap] || '#1890ff'
+  return colorMap[eventType as keyof typeof colorMap] || '#2b6cf6'
 }
 
 // 获取事件类型文本

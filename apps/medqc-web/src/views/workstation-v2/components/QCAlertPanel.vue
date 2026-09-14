@@ -103,7 +103,7 @@
             <a-badge
               v-if="getTabCount(tab.key) > 0"
               :count="getTabCount(tab.key)"
-              :number-style="{ backgroundColor: activeTab === tab.key ? '#fff' : '#ff4d4f', color: activeTab === tab.key ? '#1677ff' : '#fff', fontSize: '10px', minWidth: '16px', height: '16px', lineHeight: '16px' }"
+              :number-style="{ backgroundColor: activeTab === tab.key ? '#fff' : '#ff4d4f', color: activeTab === tab.key ? '#2b6cf6' : '#fff', fontSize: '10px', minWidth: '16px', height: '16px', lineHeight: '16px' }"
               class="tab-badge"
             />
           </div>
@@ -376,7 +376,7 @@ const severityCount = (sev: string) =>
 
 // ==================== 辅助方法 ====================
 const severityColor = (sev: string) => ({
-  error: '#ff4d4f', warning: '#faad14', info: '#1677ff'
+  error: '#ff4d4f', warning: '#faad14', info: '#2b6cf6'
 }[sev] || '#999')
 
 const severityTagColor = (sev: string) => ({

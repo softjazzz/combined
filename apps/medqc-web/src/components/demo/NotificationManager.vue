@@ -31,7 +31,7 @@
               警告
             </a-select-option>
             <a-select-option value="info">
-              <InfoCircleOutlined style="color: #1890ff" />
+              <InfoCircleOutlined style="color: #2b6cf6" />
               信息
             </a-select-option>
           </a-select>
@@ -137,7 +137,7 @@
           <a-statistic
             title="未读通知"
             :value="demoStore.unreadNotificationsCount"
-            :value-style="{ color: '#1890ff', fontSize: '20px' }"
+            :value-style="{ color: '#2b6cf6', fontSize: '20px' }"
           >
             <template #prefix>
               <BellOutlined />
@@ -335,10 +335,10 @@ const getTypeColor = (type: string) => {
   const colors = {
     error: '#ff4d4f',
     warning: '#faad14',
-    info: '#1890ff',
+    info: '#2b6cf6',
     success: '#52c41a'
   }
-  return colors[type as keyof typeof colors] || '#1890ff'
+  return colors[type as keyof typeof colors] || '#2b6cf6'
 }
 
 const getTypeIcon = (type: string) => {

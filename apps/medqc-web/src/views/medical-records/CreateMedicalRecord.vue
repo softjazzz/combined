@@ -862,7 +862,7 @@ const handleCancel = () => {
 }
 
 ::deep(.ant-breadcrumb a) {
-  color: #1890ff !important;
+  color: #2b6cf6 !important;
   text-decoration: none !important;
 }
 
@@ -980,7 +980,7 @@ const handleCancel = () => {
 }
 
 .file-icon {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .node-label {
@@ -1013,7 +1013,7 @@ const handleCancel = () => {
 
 :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
   background-color: #e6f7ff !important;
-  border: 1px solid #1890ff;
+  border: 1px solid #2b6cf6;
 }
 
 :deep(.ant-tree-treenode) {

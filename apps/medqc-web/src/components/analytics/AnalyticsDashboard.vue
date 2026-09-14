@@ -677,7 +677,7 @@ const loadCoreMetrics = async () => {
       unit: '份',
       change: 12.5,
       trend: 'up',
-      color: '#1890ff',
+      color: '#2b6cf6',
       icon: 'FileTextOutlined',
     },
     {

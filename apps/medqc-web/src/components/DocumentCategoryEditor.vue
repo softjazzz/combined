@@ -833,7 +833,7 @@ const getDocumentQCSuggestions = (documentId: string) => {
 const getQCScoreColor = (score?: number) => {
   if (typeof score !== 'number') return '#f5222d'
   if (score >= 90) return '#52c41a'
-  if (score >= 80) return '#1890ff'
+  if (score >= 80) return '#2b6cf6'
   if (score >= 70) return '#faad14'
   if (score >= 60) return '#fa8c16'
   return '#f5222d'
@@ -1048,7 +1048,7 @@ watch(() => props.recordId, () => {
 
 .qc-panel-title {
   font-weight: 500;
-  color: #1890ff;
+  color: #2b6cf6;
   display: flex;
   align-items: center;
   gap: 4px;

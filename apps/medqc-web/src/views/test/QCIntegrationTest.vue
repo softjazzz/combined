@@ -285,7 +285,7 @@ const getQCStatusText = (status) => {
 
 const getQCScoreColor = (score) => {
   if (score >= 90) return '#52c41a'
-  if (score >= 80) return '#1890ff'
+  if (score >= 80) return '#2b6cf6'
   if (score >= 70) return '#faad14'
   if (score >= 60) return '#fa8c16'
   return '#f5222d'
@@ -457,7 +457,7 @@ onMounted(() => {
 }
 
 .test-section h3 {
-  color: #1890ff;
+  color: #2b6cf6;
   margin-bottom: 16px;
 }
 

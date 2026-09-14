@@ -175,7 +175,7 @@ onMounted(() => {
 }
 
 h1 {
-  color: #1890ff;
+  color: #2b6cf6;
   margin-bottom: 20px;
 }
 

@@ -2090,12 +2090,12 @@ const showBatchImportView = () => {
 }
 
 .file-card:hover {
-  border-color: #1890ff;
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+  border-color: #2b6cf6;
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.2);
 }
 
 .file-card.active {
-  border-color: #1890ff;
+  border-color: #2b6cf6;
   background: #ffffff;
 }
 
@@ -2389,15 +2389,15 @@ pre {
 }
 
 .file-card:hover {
-  border-color: #1890ff;
-  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
+  border-color: #2b6cf6;
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.15);
   transform: translateY(-2px);
 }
 
 .file-card.active {
-  border-color: #1890ff;
+  border-color: #2b6cf6;
   background-color: #ffffff;
-  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.2);
 }
 
 .file-title {
@@ -2498,7 +2498,7 @@ pre {
 }
 
 .file-icon {
-  color: #1890ff;
+  color: #2b6cf6;
   font-size: 16px;
 }
 
@@ -2628,7 +2628,7 @@ pre {
 .preview-content-card {
   border: 1px solid #d6e4ff;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.1);
 }
 
 .parse-stats {

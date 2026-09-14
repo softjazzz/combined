@@ -163,10 +163,10 @@
 
       <div
         v-if="selectedRowKeys.length"
-        class="px-6 py-2 bg-[rgba(0,102,204,0.06)] border-b border-[rgba(0,102,204,0.12)] text-sm text-slate-700 flex items-center justify-between"
+        class="px-6 py-2 bg-[rgba(43,108,246,0.06)] border-b border-[rgba(43,108,246,0.12)] text-sm text-slate-700 flex items-center justify-between"
       >
         <span>已选择
-          <span class="font-semibold text-[#0066cc]">{{ selectedRowKeys.length }}</span>
+          <span class="font-semibold text-[#2b6cf6]">{{ selectedRowKeys.length }}</span>
           条门急诊病历</span>
         <a-button
           type="link"
@@ -192,7 +192,7 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'recordNumber'">
               <a
-                class="font-mono font-semibold text-slate-700 hover:text-[#0066cc]"
+                class="font-mono font-semibold text-slate-700 hover:text-[#2b6cf6]"
                 @click="openDetail(record as AdminRecordItem)"
               >
                 {{ record.record_id || record.id }}
@@ -670,7 +670,7 @@ onMounted(() => {
 }
 
 .apple-primary {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .apple-warning {
@@ -714,26 +714,26 @@ onMounted(() => {
 }
 
 .apple-icon-button:hover {
-  border-color: rgba(0, 102, 204, 0.24) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.24) !important;
+  color: #2b6cf6 !important;
 }
 
 :deep(.ant-btn-primary) {
-  border-color: #0066cc !important;
-  background: #0066cc !important;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.18) !important;
+  border-color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.18) !important;
 }
 
 :deep(.ant-btn-link) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 :deep(.ant-input:hover),
 :deep(.ant-input:focus),
 :deep(.ant-picker:hover),
 :deep(.ant-picker-focused) {
-  border-color: rgba(0, 102, 204, 0.32) !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  border-color: rgba(43, 108, 246, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 
 :deep(.custom-select .ant-select-selector) {
@@ -749,8 +749,8 @@ onMounted(() => {
 }
 
 :deep(.custom-select:hover .ant-select-selector) {
-  border-color: rgba(0, 102, 204, 0.32) !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  border-color: rgba(43, 108, 246, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 
 :deep(.modern-table .ant-table-thead > tr > th) {
@@ -773,16 +773,16 @@ onMounted(() => {
 }
 
 :deep(.ant-tag-blue) {
-  color: #0066cc;
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.08);
+  color: #2b6cf6;
+  border-color: rgba(43, 108, 246, 0.16);
+  background: rgba(43, 108, 246, 0.08);
 }
 
 :deep(.ant-pagination-item-active) {
-  border-color: #0066cc;
+  border-color: #2b6cf6;
 }
 
 :deep(.ant-pagination-item-active a) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 </style>

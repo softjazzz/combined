@@ -17,7 +17,7 @@
             </a-tag>
             <a-tag
               color="blue"
-              class="!mr-0 !text-[11px] !leading-[20px] !border-[#0066cc]/15 !bg-[#eaf2ff] !text-[#0066cc]"
+              class="!mr-0 !text-[11px] !leading-[20px] !border-[#2b6cf6]/15 !bg-[#eaf2ff] !text-[#2b6cf6]"
             >
               {{ workflowLabel(item.workflow_type) }}
             </a-tag>
@@ -106,8 +106,8 @@
         </article>
       </div>
 
-      <div class="mt-4 rounded-xl border border-[#0066cc]/15 bg-[#eaf2ff]/70 p-3.5">
-        <div class="flex items-center gap-2 text-[12px] font-semibold text-[#0066cc]">
+      <div class="mt-4 rounded-xl border border-[#2b6cf6]/15 bg-[#eaf2ff]/70 p-3.5">
+        <div class="flex items-center gap-2 text-[12px] font-semibold text-[#2b6cf6]">
           <span>处理建议</span>
         </div>
         <div class="mt-2 text-[13px] leading-relaxed text-[#1d1d1f]/75">
@@ -120,14 +120,14 @@
       <div class="mt-5 flex flex-wrap gap-3">
         <a-button
           type="primary"
-          class="!h-10 !rounded-lg !border-0 !bg-[#0066cc] !px-6 !font-semibold !text-white hover:!bg-[#005bb8] shadow-sm"
+          class="!h-10 !rounded-lg !border-0 !bg-[#2b6cf6] !px-6 !font-semibold !text-white hover:!bg-[#005bb8] shadow-sm"
           :disabled="!item.record_id"
           @click="emit('open', item)"
         >
           立即处理
         </a-button>
         <a-button
-          class="!h-10 !rounded-lg !border-black/10 !bg-white !px-5 !font-semibold !text-black/60 hover:!text-[#0066cc] hover:!border-[#0066cc]/35 shadow-sm"
+          class="!h-10 !rounded-lg !border-black/10 !bg-white !px-5 !font-semibold !text-black/60 hover:!text-[#2b6cf6] hover:!border-[#2b6cf6]/35 shadow-sm"
           @click="emit('openWorklist', item)"
         >
           查看病历池

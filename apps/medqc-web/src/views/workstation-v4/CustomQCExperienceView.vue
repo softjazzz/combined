@@ -1049,11 +1049,11 @@ onMounted(async () => {
 }
 
 .custom-qc-primary-btn {
-  background: #0066cc;
-  border-color: #0066cc;
+  background: #2b6cf6;
+  border-color: #2b6cf6;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(0, 102, 204, 0.18);
+    0 5px 14px rgba(43, 108, 246, 0.18);
 }
 
 .custom-qc-secondary-btn {
@@ -1113,7 +1113,7 @@ onMounted(async () => {
 :deep(.custom-qc-surface .ant-select-selector:hover),
 :deep(.custom-qc-surface .ant-picker:hover),
 :deep(.custom-qc-surface .ant-input-number:hover) {
-  border-color: rgba(0, 102, 204, 0.28) !important;
+  border-color: rgba(43, 108, 246, 0.28) !important;
 }
 
 :deep(.custom-qc-surface .ant-input:focus),
@@ -1121,15 +1121,15 @@ onMounted(async () => {
 :deep(.custom-qc-surface .ant-select-focused .ant-select-selector),
 :deep(.custom-qc-surface .ant-picker-focused),
 :deep(.custom-qc-surface .ant-input-number-focused) {
-  border-color: rgba(0, 102, 204, 0.5) !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  border-color: rgba(43, 108, 246, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 
 :deep(.custom-qc-surface .ant-btn-primary) {
-  background: #0066cc;
-  border-color: #0066cc;
+  background: #2b6cf6;
+  border-color: #2b6cf6;
   border-radius: 10px;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16);
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.16);
 }
 
 :deep(.custom-qc-surface .ant-alert) {
@@ -1225,8 +1225,8 @@ onMounted(async () => {
 .custom-qc-page :deep(.ant-tag) {
   border-color: rgba(0, 0, 0, 0.08);
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 600;
 }

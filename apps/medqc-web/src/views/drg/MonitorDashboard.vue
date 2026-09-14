@@ -46,7 +46,7 @@
               suffix="条"
             >
               <template #prefix>
-                <BulbOutlined style="color: #1890ff" />
+                <BulbOutlined style="color: #2b6cf6" />
               </template>
             </a-statistic>
           </a-card>
@@ -197,7 +197,7 @@ const cmiChartOption = ref({
       type: 'line',
       smooth: true,
       data: [1.02, 1.05, 1.03, 1.08, 1.12, 1.1, 1.15],
-      itemStyle: { color: '#1890ff' },
+      itemStyle: { color: '#2b6cf6' },
       areaStyle: { color: '#e6f7ff' },
     },
   ],

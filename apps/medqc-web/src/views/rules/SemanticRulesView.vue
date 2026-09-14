@@ -96,7 +96,7 @@
             <a-statistic
               title="总执行次数"
               :value="engineStats?.total_executions || 0"
-              :value-style="{ color: '#1890ff' }"
+              :value-style="{ color: '#2b6cf6' }"
             />
           </a-col>
           <a-col :span="8">
@@ -220,7 +220,7 @@ const systemFeatures = [
     icon: 'BranchesOutlined',
     title: '语义理解',
     description: '基于大模型的深度语义分析，理解医疗文档的复杂含义',
-    color: '#1890ff'
+    color: '#2b6cf6'
   },
   {
     icon: 'ExperimentOutlined',

@@ -145,7 +145,7 @@ const navigate = (path: string, query?: Record<string, any>) => {
   gap: 8px;
   margin: 0;
 }
-.title-icon { color: #1677ff; }
+.title-icon { color: #2b6cf6; }
 
 .board-grid {
   display: grid;

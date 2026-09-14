@@ -33,7 +33,7 @@
               title="质控准确性"
               :value="100"
               suffix="%"
-              :value-style="{ color: '#1890ff' }"
+              :value-style="{ color: '#2b6cf6' }"
             />
             <div class="stat-desc">
               甲级病历评估
@@ -537,7 +537,7 @@
                       <a-statistic
                         title="Token使用"
                         :value="evaluationResult.performance_metrics.token_usage"
-                        :value-style="{ color: '#1890ff' }"
+                        :value-style="{ color: '#2b6cf6' }"
                       />
                     </a-card>
                   </a-col>
@@ -847,7 +847,7 @@
                     </span>
                   </a-descriptions-item>
                   <a-descriptions-item label="预估日节省">
-                    <span style="color: #1890ff; font-weight: bold">
+                    <span style="color: #2b6cf6; font-weight: bold">
                       ¥{{
                         systemStats.optimization_achievements.estimated_daily_savings.toFixed(4)
                       }}
@@ -1290,7 +1290,7 @@ onMounted(() => {
 .page-title {
   font-size: 28px;
   font-weight: bold;
-  color: #1890ff;
+  color: #2b6cf6;
   margin-bottom: 8px;
 }
 
@@ -1373,7 +1373,7 @@ onMounted(() => {
 .metric-value {
   font-size: 18px;
   font-weight: bold;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .metric-value.success {

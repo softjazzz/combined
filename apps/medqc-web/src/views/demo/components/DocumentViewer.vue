@@ -303,7 +303,7 @@ function getRuleSetLabel(ruleSet: QCRuleSet): string {
         font-size: 14px;
 
         .icon {
-          color: #1890ff;
+          color: #2b6cf6;
           margin-right: 8px;
         }
         .current-doc {

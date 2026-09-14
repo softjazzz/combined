@@ -169,7 +169,7 @@ const handleDetail = () => {
     .rule-code {
       font-size: 16px;
       font-weight: 600;
-      color: #1890ff;
+      color: #2b6cf6;
     }
 
     .defect-level-tag {

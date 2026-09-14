@@ -35,7 +35,7 @@
           :class="{
             'bg-red-500': item.severity === 'error' || item.severity === 'high',
             'bg-amber-500': item.severity === 'warning',
-            'bg-[#0066cc]': item.severity === 'info',
+            'bg-[#2b6cf6]': item.severity === 'info',
           }"
         />
         <div class="flex justify-between items-start mb-2 pl-3">
@@ -152,9 +152,9 @@ const handleOpenUpdate = (value: boolean) => {
 }
 
 :global(.coding-optimization-drawer .ant-btn-primary) {
-  border-color: #0066cc;
-  background: #0066cc;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16);
+  border-color: #2b6cf6;
+  background: #2b6cf6;
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.16);
 }
 
 .coding-suggestion-card {

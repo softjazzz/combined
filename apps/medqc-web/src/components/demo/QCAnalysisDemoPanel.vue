@@ -82,7 +82,7 @@
               title="改进建议" 
               :value="analysisResult.suggestions.length" 
               suffix="条"
-              :value-style="{ color: '#1890ff', fontSize: '20px' }"
+              :value-style="{ color: '#2b6cf6', fontSize: '20px' }"
             />
           </a-col>
         </a-row>
@@ -213,7 +213,7 @@ const getGradeColor = (grade: string) => {
     'C': '#fa8c16',
     'D': '#f5222d'
   }
-  return colors[grade] || '#1890ff'
+  return colors[grade] || '#2b6cf6'
 }
 
 const handleStartAnalysis = () => {

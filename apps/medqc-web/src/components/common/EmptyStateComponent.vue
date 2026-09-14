@@ -168,7 +168,7 @@ const defaultConfig = {
     title: '系统维护中',
     description: '系统正在维护，请稍后再试',
     icon: SettingOutlined,
-    iconColor: '#1890ff'
+    iconColor: '#2b6cf6'
   },
   custom: {
     title: '自定义状态',

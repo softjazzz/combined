@@ -1263,7 +1263,7 @@ onMounted(() => {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: #1677ff;
+    background: #2b6cf6;
     color: #fff;
     display: flex;
     align-items: center;
@@ -1383,7 +1383,7 @@ onMounted(() => {
         display: block;
         width: 3px;
         height: 14px;
-        background: #1890ff;
+        background: #2b6cf6;
         margin-right: 8px;
         border-radius: 2px;
       }

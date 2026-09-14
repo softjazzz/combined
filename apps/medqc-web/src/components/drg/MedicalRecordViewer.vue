@@ -206,7 +206,7 @@ watch(() => props.admissionId, () => {
       margin-bottom: 8px;
       font-size: 16px;
       font-weight: bold;
-      color: #1890ff;
+      color: #2b6cf6;
       border-bottom: 1px solid #e8e8e8;
       padding-bottom: 4px;
     }

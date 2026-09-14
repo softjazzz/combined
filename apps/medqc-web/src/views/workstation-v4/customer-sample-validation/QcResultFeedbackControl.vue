@@ -360,9 +360,9 @@ watch(
 .feedback-action:hover:not(:disabled),
 .feedback-edit-button:hover:not(:disabled),
 .feedback-cancel:hover:not(:disabled) {
-  border-color: rgba(0, 102, 204, 0.25);
-  background: rgba(0, 102, 204, 0.05);
-  color: #0066cc;
+  border-color: rgba(43, 108, 246, 0.25);
+  background: rgba(43, 108, 246, 0.05);
+  color: #2b6cf6;
 }
 
 .feedback-action.is-correct {
@@ -397,7 +397,7 @@ watch(
 }
 
 .feedback-submitted-copy strong {
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
 }
 
@@ -413,7 +413,7 @@ watch(
   flex: none;
   border: 1px solid rgba(0, 0, 0, 0.09);
   background: transparent;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .feedback-form {
@@ -422,7 +422,7 @@ watch(
   margin-top: 10px;
   padding: 11px;
   border-radius: 9px;
-  background: rgba(0, 102, 204, 0.035);
+  background: rgba(43, 108, 246, 0.035);
 }
 
 .feedback-form-title {
@@ -475,8 +475,8 @@ watch(
 
 .feedback-field select:focus,
 .feedback-field textarea:focus {
-  border-color: rgba(0, 102, 204, 0.32);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+  border-color: rgba(43, 108, 246, 0.32);
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
 }
 
 .feedback-form-actions {
@@ -484,10 +484,10 @@ watch(
 }
 
 .feedback-submit {
-  border: 1px solid #0066cc;
-  background: #0066cc;
+  border: 1px solid #2b6cf6;
+  background: #2b6cf6;
   color: #fff;
-  box-shadow: 0 2px 6px rgba(0, 102, 204, 0.18);
+  box-shadow: 0 2px 6px rgba(43, 108, 246, 0.18);
 }
 
 .feedback-submit:hover:not(:disabled) {

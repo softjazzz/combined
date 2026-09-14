@@ -35,7 +35,7 @@
             title="学习记录"
             :value="stats.totalRecords"
             suffix="条"
-            :value-style="{ color: '#1890ff' }"
+            :value-style="{ color: '#2b6cf6' }"
           />
           <div class="mt-2">
             <a-progress

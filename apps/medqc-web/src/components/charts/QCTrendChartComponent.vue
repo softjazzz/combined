@@ -135,7 +135,7 @@
                     class="bar count-bar"
                     :style="{ 
                       height: (item.count / maxCount * 100) + '%',
-                      backgroundColor: '#1890ff'
+                      backgroundColor: '#2b6cf6'
                     }"
                     :title="`${item.date}: ${item.count}个病案`"
                   />
@@ -184,7 +184,7 @@
               <polyline
                 v-if="selectedMetric === 'all' || selectedMetric === 'count'"
                 :points="getLinePoints('count')"
-                stroke="#1890ff"
+                stroke="#2b6cf6"
                 stroke-width="2"
                 fill="none"
               />
@@ -330,7 +330,7 @@ const legendItems = computed(() => {
   if (!latest) return []
   
   return [
-    { name: '病案数量', value: `${latest.count}`, color: '#1890ff' },
+    { name: '病案数量', value: `${latest.count}`, color: '#2b6cf6' },
     { name: '平均评分', value: `${latest.score}分`, color: '#52c41a' },
     { name: '通过率', value: `${latest.pass_rate}%`, color: '#faad14' }
   ]

@@ -128,7 +128,7 @@ const formatDate = (dateStr: string) => {
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #1890ff;
+        color: #2b6cf6;
         font-size: 18px;
         flex-shrink: 0;
       }
@@ -194,7 +194,7 @@ const formatDate = (dateStr: string) => {
         }
         
         .total-value {
-          color: #1890ff;
+          color: #2b6cf6;
           font-weight: 700;
           font-size: 16px;
           font-family: 'Din Alternate', -apple-system, BlinkMacSystemFont, sans-serif;

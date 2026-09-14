@@ -564,7 +564,7 @@
           <a-spin size="large">
             <template #indicator>
               <LoadingOutlined
-                style="font-size: 48px; color: #1890ff"
+                style="font-size: 48px; color: #2b6cf6"
                 spin
               />
             </template>
@@ -1147,7 +1147,7 @@
             <a-spin size="large">
               <template #indicator>
                 <LoadingOutlined
-                  style="font-size: 48px; color: #1890ff"
+                  style="font-size: 48px; color: #2b6cf6"
                   spin
                 />
               </template>
@@ -4013,7 +4013,7 @@ const getModeTagColor = (mode: string) => {
       color: #333;
 
       .filter-hint {
-        color: #1890ff;
+        color: #2b6cf6;
         font-weight: 500;
       }
     }
@@ -4359,7 +4359,7 @@ const getModeTagColor = (mode: string) => {
       .result-rule-id {
         font-size: 14px;
         font-weight: 600;
-        color: #1890ff;
+        color: #2b6cf6;
       }
 
       .result-rule-name {
@@ -5101,7 +5101,7 @@ const getModeTagColor = (mode: string) => {
 
         .confidence-value {
           font-weight: 700;
-          color: #1890ff;
+          color: #2b6cf6;
         }
       }
     }
@@ -5657,7 +5657,7 @@ const getModeTagColor = (mode: string) => {
       margin-top: 24px;
       font-size: 18px;
       font-weight: 600;
-      color: #1890ff;
+      color: #2b6cf6;
     }
 
     .loading-tip {
@@ -6119,12 +6119,12 @@ const getModeTagColor = (mode: string) => {
 
     .progress-line {
       position: absolute;
-      background: #1890ff;
+      background: #2b6cf6;
       opacity: 0.9;
       box-shadow:
-        0 0 10px rgba(24, 144, 255, 0.8),
-        0 0 20px rgba(24, 144, 255, 0.5),
-        0 0 30px rgba(24, 144, 255, 0.3);
+        0 0 10px rgba(43, 108, 246, 0.8),
+        0 0 20px rgba(43, 108, 246, 0.5),
+        0 0 30px rgba(43, 108, 246, 0.3);
     }
 
     .progress-glow {
@@ -6133,7 +6133,7 @@ const getModeTagColor = (mode: string) => {
       left: -2px;
       right: -2px;
       bottom: -2px;
-      background: rgba(24, 144, 255, 0.05);
+      background: rgba(43, 108, 246, 0.05);
       border-radius: 8px;
       animation: pulse-glow 2s ease-in-out infinite;
     }
@@ -6202,7 +6202,7 @@ const getModeTagColor = (mode: string) => {
     margin-top: 24px;
     font-size: 18px;
     font-weight: 600;
-    color: #1890ff;
+    color: #2b6cf6;
   }
 
   .analyzing-tip {

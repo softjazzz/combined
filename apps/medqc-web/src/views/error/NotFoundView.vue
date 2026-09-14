@@ -138,7 +138,7 @@ const goBack = () => {
 }
 
 .nav-card:hover {
-  border-color: #1890ff;
+  border-color: #2b6cf6;
   transform: translateY(-2px);
 }
 

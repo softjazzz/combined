@@ -406,9 +406,9 @@ const handleExecute = async () => {
 }
 
 .sync-overview :deep(.ant-btn-primary) {
-  background: #0066cc;
-  border-color: #0066cc;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+  background: #2b6cf6;
+  border-color: #2b6cf6;
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
 }
 
 .sync-overview :deep(.ant-select-selector) {

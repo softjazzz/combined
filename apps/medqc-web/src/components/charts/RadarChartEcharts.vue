@@ -84,7 +84,7 @@ const chartOption = computed(() => {
       formatter: (params: RadarTooltipParams) => {
         const name = params.name || ''
         const value = Array.isArray(params.value) ? params.value : []
-        const color = '#1890ff'
+        const color = '#2b6cf6'
         let content = `<div style="font-weight: bold; margin-bottom: 8px;">${name}</div>`
         
         value.forEach((val: number, index: number) => {
@@ -153,14 +153,14 @@ const chartOption = computed(() => {
         name: item.name,
         value: item.value,
         itemStyle: {
-          color: item.color || '#1890ff'
+          color: item.color || '#2b6cf6'
         },
         lineStyle: {
-          color: item.color || '#1890ff',
+          color: item.color || '#2b6cf6',
           width: 2
         },
         areaStyle: {
-          color: item.color || '#1890ff',
+          color: item.color || '#2b6cf6',
           opacity: 0.1
         }
       }))

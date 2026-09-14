@@ -177,7 +177,7 @@
         <template #actions>
           <ProTableToolbar>
             <a-button
-              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#0066cc]"
+              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#2b6cf6]"
               @click="openCustomQCExperience()"
             >
               自定义质控点
@@ -202,7 +202,7 @@
             </a-tooltip>
 
             <a-button
-              class="!flex !h-9 items-center gap-1 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#0066cc]"
+              class="!flex !h-9 items-center gap-1 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#2b6cf6]"
               @click="handleExport"
             >
               <DownloadOutlined /> 导出
@@ -210,7 +210,7 @@
 
             <a-tooltip title="刷新数据">
               <a-button
-                class="flex !h-9 !w-9 items-center justify-center !rounded-lg !border-slate-200 !p-0 text-slate-500 hover:text-[#0066cc]"
+                class="flex !h-9 !w-9 items-center justify-center !rounded-lg !border-slate-200 !p-0 text-slate-500 hover:text-[#2b6cf6]"
                 @click="handleRefresh"
               >
                 <ReloadOutlined :spin="loading" />
@@ -260,7 +260,7 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'recordNumber'">
               <div
-                class="font-mono font-semibold text-slate-700 text-sm group-hover:text-[#0066cc] transition-colors cursor-pointer"
+                class="font-mono font-semibold text-slate-700 text-sm group-hover:text-[#2b6cf6] transition-colors cursor-pointer"
                 @click="handleView(record as AdminRecordItem)"
               >
                 {{ record.record_id }}
@@ -349,7 +349,7 @@
                 </a-button>
                 <a-button
                   size="small"
-                  class="!h-7 !rounded-full !border-[rgba(0,102,204,0.2)] !text-[#0066cc] !px-2.5 !text-xs"
+                  class="!h-7 !rounded-full !border-[rgba(43,108,246,0.2)] !text-[#2b6cf6] !px-2.5 !text-xs"
                   :disabled="!getRecordIdForJump(record)"
                   @click="jumpToWorkstation(record, 'generate_frontpage')"
                 >
@@ -394,7 +394,7 @@
               <div class="flex items-center gap-1">
                 <a-tooltip title="查看详情">
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-[#0066cc] transition-all"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-[#2b6cf6] transition-all"
                     @click="handleView(record as AdminRecordItem)"
                   >
                     <EyeOutlined />
@@ -402,7 +402,7 @@
                 </a-tooltip>
                 <a-tooltip title="质控报告">
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-[rgba(0,102,204,0.08)] hover:text-[#0066cc] transition-all"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-[rgba(43,108,246,0.08)] hover:text-[#2b6cf6] transition-all"
                     @click="handleQCReport(record as AdminRecordItem)"
                   >
                     <FileSearchOutlined />
@@ -433,7 +433,7 @@
           class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
           <span class="text-sm font-semibold">已选择
-            <span class="mx-1 font-bold text-[#0066cc]">{{ selectedRowKeys.length }}</span> 项</span>
+            <span class="mx-1 font-bold text-[#2b6cf6]">{{ selectedRowKeys.length }}</span> 项</span>
           <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button
@@ -506,7 +506,7 @@
           show-icon
           message="流程：选择规则集 → 确认病历范围 → 创建任务"
         />
-        <div class="rounded-2xl border border-[rgba(0,102,204,0.14)] bg-[rgba(0,102,204,0.06)] p-3">
+        <div class="rounded-2xl border border-[rgba(43,108,246,0.14)] bg-[rgba(43,108,246,0.06)] p-3">
           <div class="mb-2 text-sm font-semibold text-slate-800">
             规则集选择
           </div>
@@ -1156,7 +1156,7 @@ const getQCStatusText = (status: string) => {
 
 const getScoreColor = (score: number) => {
   if (score >= 90) return '#10b981' // emerald-500
-  if (score >= 80) return '#0066cc'
+  if (score >= 80) return '#2b6cf6'
   if (score >= 60) return '#f59e0b' // amber-500
   return '#f43f5e' // rose-500
 }
@@ -1701,9 +1701,9 @@ onBeforeUnmount(() => {
 .apple-primary-button,
 .apple-primary-action {
   border: 0 !important;
-  background: #0066cc !important;
+  background: #2b6cf6 !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.18) !important;
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.18) !important;
 }
 
 .apple-primary-button:hover,
@@ -1718,8 +1718,8 @@ onBeforeUnmount(() => {
 }
 
 .apple-secondary-button:hover {
-  border-color: rgba(0, 102, 204, 0.24) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.24) !important;
+  color: #2b6cf6 !important;
 }
 
 .apple-input,
@@ -1762,8 +1762,8 @@ onBeforeUnmount(() => {
 }
 
 .queue-kpi-icon-primary {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .queue-kpi-label {
@@ -1796,11 +1796,11 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
+  background: rgba(43, 108, 246, 0.08);
   object-fit: cover;
-  box-shadow: 0 8px 18px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 8px 18px rgba(43, 108, 246, 0.1);
 }
 
 /* 自定义下拉框样式 */
@@ -1814,8 +1814,8 @@ onBeforeUnmount(() => {
 }
 
 :deep(.custom-select:hover .ant-select-selector) {
-  border-color: rgba(0, 102, 204, 0.32) !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  border-color: rgba(43, 108, 246, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 
 :deep(.custom-select .ant-select-selection-placeholder) {
@@ -1860,28 +1860,28 @@ onBeforeUnmount(() => {
 }
 
 :deep(.ant-pagination-item-active) {
-  border-color: #0066cc;
+  border-color: #2b6cf6;
 }
 
 :deep(.ant-pagination-item-active a) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 :deep(.ant-btn-primary) {
-  border-color: #0066cc !important;
-  background: #0066cc !important;
+  border-color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
 }
 
 :deep(.ant-input:hover),
 :deep(.ant-input:focus),
 :deep(.ant-picker:hover),
 :deep(.ant-picker-focused) {
-  border-color: rgba(0, 102, 204, 0.32) !important;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+  border-color: rgba(43, 108, 246, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08) !important;
 }
 
 :deep(.ant-btn-link) {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 /* 底部批量操作栏动画 */

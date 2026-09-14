@@ -495,11 +495,11 @@ onMounted(() => {
 }
 
 .upload-back-btn:hover {
-  color: #0066cc;
-  border-color: rgba(0, 102, 204, 0.2);
+  color: #2b6cf6;
+  border-color: rgba(43, 108, 246, 0.2);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 3px 10px rgba(0, 102, 204, 0.08);
+    0 3px 10px rgba(43, 108, 246, 0.08);
 }
 
 .upload-back-icon {
@@ -511,7 +511,7 @@ onMounted(() => {
 .upload-eyebrow {
   display: block;
   margin-bottom: 5px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -548,10 +548,10 @@ onMounted(() => {
   align-items: center;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid rgba(0, 102, 204, 0.12);
+  border: 1px solid rgba(43, 108, 246, 0.12);
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.06);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.06);
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 600;
 }
@@ -591,10 +591,10 @@ onMounted(() => {
   justify-content: center;
   width: 100%;
   min-height: 420px;
-  border: 1.5px dashed rgba(0, 102, 204, 0.24);
+  border: 1.5px dashed rgba(43, 108, 246, 0.24);
   border-radius: 18px;
   background:
-    radial-gradient(circle at top, rgba(0, 102, 204, 0.07), transparent 34%),
+    radial-gradient(circle at top, rgba(43, 108, 246, 0.07), transparent 34%),
     rgba(250, 252, 255, 0.7);
   cursor: pointer;
   transition:
@@ -606,13 +606,13 @@ onMounted(() => {
 
 .upload-dropzone:hover,
 .upload-dropzone--dragging {
-  border-color: rgba(0, 102, 204, 0.42);
+  border-color: rgba(43, 108, 246, 0.42);
   background:
-    radial-gradient(circle at top, rgba(0, 102, 204, 0.1), transparent 38%),
+    radial-gradient(circle at top, rgba(43, 108, 246, 0.1), transparent 38%),
     rgba(247, 251, 255, 0.88);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 8px 28px rgba(0, 102, 204, 0.08);
+    0 8px 28px rgba(43, 108, 246, 0.08);
   transform: translateY(-1px);
 }
 
@@ -631,13 +631,13 @@ onMounted(() => {
   width: 76px;
   height: 76px;
   margin-bottom: 18px;
-  border: 1px solid rgba(0, 102, 204, 0.16);
+  border: 1px solid rgba(43, 108, 246, 0.16);
   border-radius: 18px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 4px 14px rgba(0, 102, 204, 0.08);
+    0 4px 14px rgba(43, 108, 246, 0.08);
 }
 
 .upload-icon-orb--success {
@@ -724,12 +724,12 @@ onMounted(() => {
 }
 
 .upload-primary-btn {
-  border: 1px solid #0066cc;
-  background: #0066cc;
+  border: 1px solid #2b6cf6;
+  background: #2b6cf6;
   color: #fff;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 14px rgba(0, 102, 204, 0.18);
+    0 5px 14px rgba(43, 108, 246, 0.18);
 }
 
 .upload-primary-btn:hover {
@@ -788,10 +788,10 @@ onMounted(() => {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 9px;
-  background: rgba(0, 102, 204, 0.06);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.06);
+  color: #2b6cf6;
 }
 
 .upload-refresh-icon {
@@ -839,8 +839,8 @@ onMounted(() => {
 }
 
 .upload-history-item--selected {
-  background: rgba(0, 102, 204, 0.08);
-  box-shadow: inset 3px 0 0 #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  box-shadow: inset 3px 0 0 #2b6cf6;
 }
 
 .upload-history-item-top {
@@ -864,7 +864,7 @@ onMounted(() => {
 
 .upload-history-item-top em {
   flex: none;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-style: normal;
   font-weight: 650;
@@ -939,9 +939,9 @@ onMounted(() => {
 }
 
 .upload-complete-primary {
-  background: #0066cc;
-  border-color: #0066cc;
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+  background: #2b6cf6;
+  border-color: #2b6cf6;
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.18);
 }
 
 .upload-spin {

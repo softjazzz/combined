@@ -125,7 +125,7 @@ const progressStatus = computed(() => {
 const progressColor = computed(() => {
   if (props.error) return '#ff4d4f'
   if (props.currentStep === 'run' && props.analysisResult) return '#52c41a'
-  return '#1890ff'
+  return '#2b6cf6'
 })
 
 // 条件引导提示
@@ -166,7 +166,7 @@ const readinessAlert = computed<{ type: AlertProps['type']; message: string } | 
     align-items: center;
     gap: 8px;
     font-weight: 500;
-    color: #1890ff;
+    color: #2b6cf6;
   }
 
   .step-icon {
@@ -175,7 +175,7 @@ const readinessAlert = computed<{ type: AlertProps['type']; message: string } | 
 
   .progress-percentage {
     font-weight: 600;
-    color: #1890ff;
+    color: #2b6cf6;
   }
 }
 </style>

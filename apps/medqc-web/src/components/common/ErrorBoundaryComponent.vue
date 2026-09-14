@@ -470,7 +470,7 @@ defineExpose({
 }
 
 .error-low {
-  border-left: 4px solid #1890ff;
+  border-left: 4px solid #2b6cf6;
 }
 
 .error-icon {
@@ -491,7 +491,7 @@ defineExpose({
 }
 
 .error-low .error-icon {
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .error-info {
@@ -566,7 +566,7 @@ defineExpose({
 }
 
 .contact-text a {
-  color: #1890ff;
+  color: #2b6cf6;
   text-decoration: none;
 }
 

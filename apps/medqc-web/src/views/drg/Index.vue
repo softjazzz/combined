@@ -219,7 +219,7 @@ const allModules = [
     title: '编码辅助',
     description: 'ICD 智能编码推荐与规则校验',
     icon: EditOutlined,
-    color: '#1890ff',
+    color: '#2b6cf6',
     iconBg: '#e6f7ff',
     gradient: 'linear-gradient(135deg, #e6f7ff 0%, #ffffff 100%)',
     path: '/dashboard/drg/coding',
@@ -359,7 +359,7 @@ onMounted(() => {
   .welcome-section {
     position: relative;
     padding: 32px 40px;
-    background: linear-gradient(120deg, #1890ff 0%, #0050b3 100%);
+    background: linear-gradient(120deg, #2b6cf6 0%, #0050b3 100%);
     color: #fff;
     border-radius: 0 0 24px 24px; // 底部圆角
     margin-bottom: -40px; // 让内容卡片浮上来
@@ -467,7 +467,7 @@ onMounted(() => {
       border-color: transparent;
 
       .card-action {
-        color: #1890ff;
+        color: #2b6cf6;
         transform: translateX(5px);
       }
     }
@@ -577,7 +577,7 @@ onMounted(() => {
       }
       &.info {
         background: #e6f7ff;
-        color: #1890ff;
+        color: #2b6cf6;
       }
       &.warning {
         background: #fffbe6;

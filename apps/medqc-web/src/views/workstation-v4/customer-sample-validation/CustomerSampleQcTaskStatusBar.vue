@@ -314,7 +314,7 @@ onBeforeUnmount(stopLiveResultRotation)
 
 <style scoped>
 .qc-task-status {
-  border: 1px solid rgba(0, 102, 204, 0.18);
+  border: 1px solid rgba(43, 108, 246, 0.18);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
@@ -377,8 +377,8 @@ onBeforeUnmount(stopLiveResultRotation)
   height: 9px;
   flex: none;
   border-radius: 50%;
-  background: #0066cc;
-  box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.1);
+  background: #2b6cf6;
+  box-shadow: 0 0 0 5px rgba(43, 108, 246, 0.1);
 }
 
 .is-running .qc-task-status__indicator {
@@ -436,8 +436,8 @@ onBeforeUnmount(stopLiveResultRotation)
 
 .qc-task-status__badge {
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 600;
   line-height: 22px;
@@ -465,7 +465,7 @@ onBeforeUnmount(stopLiveResultRotation)
   margin: 14px 0 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(43, 108, 246, 0.1);
 }
 
 .qc-task-status__progress-detail {
@@ -491,7 +491,7 @@ onBeforeUnmount(stopLiveResultRotation)
   margin: 10px 0 0;
   padding: 7px 10px;
   overflow: hidden;
-  border: 1px solid rgba(0, 102, 204, 0.12);
+  border: 1px solid rgba(43, 108, 246, 0.12);
   border-radius: 8px;
   background: #f6faff;
 }
@@ -558,8 +558,8 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__live-result-status.is-review {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 .qc-task-status__live-result-status.is-success {
@@ -603,7 +603,7 @@ onBeforeUnmount(stopLiveResultRotation)
   height: 100%;
   overflow: hidden;
   border-radius: inherit;
-  background: linear-gradient(90deg, #0066cc 0%, #1684e8 68%, #55adf7 100%);
+  background: linear-gradient(90deg, #2b6cf6 0%, #1684e8 68%, #55adf7 100%);
   transition: width 280ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
@@ -625,8 +625,8 @@ onBeforeUnmount(stopLiveResultRotation)
 
 .qc-task-status__progress.is-indeterminate i {
   width: 24% !important;
-  background: linear-gradient(90deg, rgba(0, 102, 204, 0.28), #0066cc 50%, #45a4f2);
-  box-shadow: 0 0 8px rgba(0, 102, 204, 0.3);
+  background: linear-gradient(90deg, rgba(43, 108, 246, 0.28), #2b6cf6 50%, #45a4f2);
+  box-shadow: 0 0 8px rgba(43, 108, 246, 0.3);
   animation: qc-task-progress-indeterminate 1.4s cubic-bezier(0.45, 0, 0.25, 1) infinite;
 }
 
@@ -653,11 +653,11 @@ onBeforeUnmount(stopLiveResultRotation)
 @keyframes qc-task-indicator-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.08);
+    box-shadow: 0 0 0 5px rgba(43, 108, 246, 0.08);
   }
 
   50% {
-    box-shadow: 0 0 0 8px rgba(0, 102, 204, 0.16);
+    box-shadow: 0 0 0 8px rgba(43, 108, 246, 0.16);
   }
 }
 
@@ -708,8 +708,8 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__chips .is-review {
-  background: rgba(0, 102, 204, 0.07);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.07);
+  color: #2b6cf6;
 }
 
 .qc-task-status__chips .is-success {

@@ -72,7 +72,7 @@ interface ReportsTrendPayload {
   }>
 }
 
-const CHART_COLORS = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96']
+const CHART_COLORS = ['#2b6cf6', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96']
 
 async function requestOrThrow<T = unknown>(
   config: Parameters<typeof ApiService.requestRaw>[0],

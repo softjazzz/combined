@@ -7,7 +7,7 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <!-- DRG Code -->
       <div
-        class="drg-primary-card bg-gradient-to-br from-[#0066cc] to-[#0057b8] rounded-xl p-5 text-white flex flex-col justify-between relative overflow-hidden group"
+        class="drg-primary-card bg-gradient-to-br from-[#2b6cf6] to-[#0057b8] rounded-xl p-5 text-white flex flex-col justify-between relative overflow-hidden group"
       >
         <div
           class="absolute right-0 top-0 opacity-10 transform translate-x-1/3 -translate-y-1/3 transition-transform group-hover:scale-110 duration-500"
@@ -196,7 +196,7 @@
     <!-- Actions -->
     <div class="flex justify-center pt-4">
       <button
-        class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#0066cc] px-6 py-2 rounded-xl text-sm font-medium transition-all shadow-sm flex items-center gap-2 group"
+        class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#2b6cf6] px-6 py-2 rounded-xl text-sm font-medium transition-all shadow-sm flex items-center gap-2 group"
         @click="$emit('openOptimization')"
       >
         <ThunderboltOutlined class="group-hover:text-amber-500 transition-colors" />
@@ -223,7 +223,7 @@
     </p>
     <button
       :disabled="!hasFrontpage"
-      class="bg-[#0066cc] hover:bg-[#0057b8] disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all shadow-[0_5px_14px_rgba(0,102,204,0.18)] flex items-center gap-2"
+      class="bg-[#2b6cf6] hover:bg-[#0057b8] disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all shadow-[0_5px_14px_rgba(43,108,246,0.18)] flex items-center gap-2"
       @click="$emit('group')"
     >
       <CalculatorOutlined />
@@ -292,7 +292,7 @@ defineEmits<{
 }
 
 .drg-primary-card {
-  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16);
+  box-shadow: 0 5px 14px rgba(43, 108, 246, 0.16);
 }
 
 .drg-glass-card,
@@ -321,6 +321,6 @@ defineEmits<{
 }
 
 .drg-grouping-tab :deep(.text-blue-500) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 </style>

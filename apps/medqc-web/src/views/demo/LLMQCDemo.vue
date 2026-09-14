@@ -454,7 +454,7 @@ onMounted(() => {
 
 .demo-header h1 {
   margin: 0 0 8px 0;
-  color: #1890ff;
+  color: #2b6cf6;
   font-size: 28px;
 }
 
@@ -534,7 +534,7 @@ onMounted(() => {
 :deep(.ant-statistic-content) {
   font-size: 20px;
   font-weight: 600;
-  color: #1890ff;
+  color: #2b6cf6;
 }
 
 .demo-tabs {

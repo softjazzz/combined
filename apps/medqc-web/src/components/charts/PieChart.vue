@@ -61,7 +61,7 @@ const props = defineProps({
 })
 
 const chartOption = computed(() => {
-  const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96']
+  const colors = ['#2b6cf6', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96']
   
   const seriesData = props.data.map((item, index) => ({
     name: item.name,

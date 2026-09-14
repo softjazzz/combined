@@ -6,12 +6,12 @@
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2.5">
           <div
-            class="flex h-6 w-6 items-center justify-center rounded-md bg-[#eaf2ff] text-[#0066cc] shadow-sm"
+            class="flex h-6 w-6 items-center justify-center rounded-md bg-[#eaf2ff] text-[#2b6cf6] shadow-sm"
           >
             <CheckSquareFilled class="text-[12px]" />
           </div>
           <div>
-            <div class="text-[11px] font-semibold text-[#0066cc]">
+            <div class="text-[11px] font-semibold text-[#2b6cf6]">
               我的紧急队列
             </div>
             <h3 class="text-[16px] font-semibold text-[#1d1d1f]">
@@ -42,7 +42,7 @@
           <div class="text-[11px] text-slate-400">
             进行中
           </div>
-          <div class="mt-1 text-[18px] font-bold text-[#0066cc] font-mono">
+          <div class="mt-1 text-[18px] font-bold text-[#2b6cf6] font-mono">
             {{ summary.in_progress_total || 0 }}
           </div>
         </div>
@@ -89,7 +89,7 @@
                   {{ formatDateTime(item.due_at) }}
                 </div>
                 <div
-                  class="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-x-2 group-hover:translate-x-0 text-[#0066cc]"
+                  class="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-x-2 group-hover:translate-x-0 text-[#2b6cf6]"
                 >
                   <ArrowRightOutlined class="text-[12px]" />
                 </div>
@@ -183,11 +183,11 @@ function priorityStripeClass(priority?: string) {
   if (priority === 'critical') return 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.08)]'
   if (priority === 'high') return 'bg-orange-400'
   if (priority === 'medium') return 'bg-amber-300'
-  return 'bg-[#0066cc]'
+  return 'bg-[#2b6cf6]'
 }
 
 function taskStatusClass(status?: string) {
-  if (status === 'in_progress') return 'bg-[#eaf2ff] text-[#0066cc]'
+  if (status === 'in_progress') return 'bg-[#eaf2ff] text-[#2b6cf6]'
   if (status === 'overdue') return 'bg-red-50 text-red-600'
   return 'bg-amber-50 text-amber-600'
 }

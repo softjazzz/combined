@@ -200,14 +200,14 @@ watch(
 }
 
 .rules-tab.active {
-  background: #0066cc;
-  box-shadow: 0 2px 10px rgba(0, 102, 204, 0.28);
+  background: #2b6cf6;
+  box-shadow: 0 2px 10px rgba(43, 108, 246, 0.28);
   color: #ffffff;
 }
 
 .rules-tab strong {
   align-items: center;
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(43, 108, 246, 0.1);
   border-radius: 999px;
   display: inline-flex;
   height: 18px;

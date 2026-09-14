@@ -123,7 +123,7 @@
             title="低"
             :value="severityCount.low"
             suffix="项"
-            :value-style="{ color: '#1890ff' }"
+            :value-style="{ color: '#2b6cf6' }"
           >
             <template #prefix>
               <InfoCircleOutlined />
@@ -280,7 +280,7 @@ const handleViewDetail = (violation: Violation) => {
 
         .section-icon {
           margin-right: 8px;
-          color: #1890ff;
+          color: #2b6cf6;
         }
       }
 
