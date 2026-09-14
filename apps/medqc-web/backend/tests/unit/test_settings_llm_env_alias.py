@@ -39,6 +39,7 @@ LLM_ENV_KEYS = [
     "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED",
     "LUXIAN_0609_NATIVE_MDT_040_ENABLED",
     "LUXIAN_0609_NATIVE_EXTENDED_DOCUMENT_ENABLED",
+    "LUXIAN_0609_FAMILY_MAX_CONCURRENCY",
     "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED",
     "LUXIAN_0609_PREPRODUCTION_API_ENABLED",
 ]
@@ -180,6 +181,27 @@ def test_llm_http_max_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
         Settings(_env_file=None)
 
     monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "17")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_luxian_family_concurrency_defaults_to_two_and_is_bounded(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+
+    assert Settings(_env_file=None).LUXIAN_0609_FAMILY_MAX_CONCURRENCY == 2
+
+    monkeypatch.setenv("LUXIAN_0609_FAMILY_MAX_CONCURRENCY", "1")
+    assert Settings(_env_file=None).LUXIAN_0609_FAMILY_MAX_CONCURRENCY == 1
+
+    monkeypatch.setenv("LUXIAN_0609_FAMILY_MAX_CONCURRENCY", "4")
+    assert Settings(_env_file=None).LUXIAN_0609_FAMILY_MAX_CONCURRENCY == 4
+
+    monkeypatch.setenv("LUXIAN_0609_FAMILY_MAX_CONCURRENCY", "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+    monkeypatch.setenv("LUXIAN_0609_FAMILY_MAX_CONCURRENCY", "5")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 

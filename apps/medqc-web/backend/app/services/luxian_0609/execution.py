@@ -464,7 +464,9 @@ async def prepare_luxian_0609_execution(
                     for rule_id in rule_ids
                 ),
                 default_deadline_seconds=300.0,
-                max_concurrency=1,
+                max_concurrency=int(
+                    getattr(settings, "LUXIAN_0609_FAMILY_MAX_CONCURRENCY", 2)
+                ),
                 trace_sink=trace_sink,
             )
         except Exception:

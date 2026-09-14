@@ -168,7 +168,8 @@ async def test_formal_preparation_reuses_session_and_capture_failure_is_fail_ope
             settings=SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
                                      LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
                                      LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
-                                     LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True),
+                                     LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+                                     LUXIAN_0609_FAMILY_MAX_CONCURRENCY=2),
             selected_customer_rule_ids=selected, evaluation_as_of_date="2026-07-05",
         )
     baseline_rules, baseline = await run()
@@ -181,5 +182,6 @@ async def test_formal_preparation_reuses_session_and_capture_failure_is_fail_ope
     assert builder.call_count == 3  # 每次质控一次已有读取，导出旁路没有第二次取材。
     assert engine.execute.await_count == 3
     assert all(call.kwargs["snapshot"] is session.snapshot for call in engine.execute.await_args_list)
+    assert all(call.kwargs["max_concurrency"] == 2 for call in engine.execute.await_args_list)
     assert baseline_rules == enabled_rules == failed_rules
     assert baseline.native_results == enabled.native_results == failed.native_results

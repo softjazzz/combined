@@ -166,6 +166,9 @@ class Settings(BaseSettings):
     LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = True
     # 正式客户主链默认使用统一执行信封；关闭总开关时正式任务失败关闭。
     LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = True
+    # 同一病历内互不依赖的规则族有限并发；模型 HTTP 请求仍受全进程
+    # LLM_HTTP_MAX_CONCURRENCY 统一约束，避免与病历级并发相乘后失控。
+    LUXIAN_0609_FAMILY_MAX_CONCURRENCY: int = Field(default=2, ge=1, le=4)
     # LX0609 RuleDecision 主链总开关；关闭后正式任务失败关闭。
     LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED: bool = True
     # 以下规则族默认进入正式 Typed Decision 主链；每个开关仍可独立回滚。
