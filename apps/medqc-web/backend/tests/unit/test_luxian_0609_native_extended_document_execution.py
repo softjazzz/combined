@@ -6544,6 +6544,75 @@ async def test_055_falls_back_to_prescribed_time_when_planned_start_missing() ->
 
 
 @pytest.mark.asyncio
+async def test_055_excludes_skin_test_order_from_treatment_event_windows() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": (
+                {
+                    "order_id": "SKIN-TEST-1",
+                    "generic_name": "青霉素",
+                    "drug_apply_method": "皮试",
+                    "planned_start_datetime": "2026-06-01 08:00:00",
+                },
+                {
+                    "order_id": "TREATMENT-1",
+                    "generic_name": "美罗培南",
+                    "drug_apply_method": "静脉滴注",
+                    "planned_start_datetime": "2026-06-01 10:00:00",
+                },
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-06-03 10:00:00",
+                "record_content": "美罗培南疗效评价：抗感染治疗有效，体温下降。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_within_threshold"
+    facts = dict(result.customer_display_facts)["LX0609-055"]
+    assert facts["antimicrobials"] == ["美罗培南"]
+    assert facts["event_windows"] == [{
+        "antimicrobial": "美罗培南",
+        "event_state": "mature",
+        "start_time": "2026-06-01 10:00:00",
+        "window_start_time": "2026-06-03 10:00:00",
+        "window_end_time": "2026-06-04 10:00:00",
+        "evaluation_date": "2099-01-01",
+    }]
+
+
+@pytest.mark.asyncio
+async def test_055_skin_test_only_does_not_trigger_treatment_evaluation() -> None:
+    snapshot, _materials, result, reduced_items = await _evaluate_selected(
+        ("LX0609-055",),
+        {
+            "inpat_drug_order": ({
+                "order_id": "SKIN-TEST-1",
+                "generic_name": "青霉素",
+                "drug_apply_method": "皮试",
+                "planned_start_datetime": "2026-06-01 08:00:00",
+            },),
+            "daily_course_record": (),
+        },
+    )
+
+    reduced = reduced_items[0]
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert "LX0609-055" not in dict(result.customer_display_facts)
+    order_source_ref = next(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key == "inpat_drug_order"
+    )
+    # 负向结论只绑定来源完整性快照，不把已排除的皮试行投影成客户文书证据。
+    assert result.decisions[0].fact_refs == (order_source_ref,)
+    assert reduced.fact_refs == (order_source_ref,)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("evaluation_time", "expected_reason"),
     [

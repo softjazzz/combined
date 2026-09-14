@@ -946,6 +946,17 @@ def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[st
     return tuple(row for row in rows if _antimicrobial_names_in(row))
 
 
+def _055_treatment_orders(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    """055 只为实际抗菌治疗建窗；皮试医嘱不是治疗起点。"""
+
+    return tuple(
+        row for row in rows
+        if _clean(row.get("drug_apply_method")) != "皮试"
+    )
+
+
 def _parse_lx0609_058_datetime(value: Any) -> datetime | None:
     """Parse LX058 timestamps while preserving offsets in hospital local time.
 
@@ -2171,6 +2182,11 @@ async def execute_luxian_0609_native_extended_document_rules(
             "LX0609-057", "LX0609-058", "LX0609-059",
         }:
             antimicrobial_orders = _antimicrobial_orders(drug_order_rows)
+            rule_antimicrobial_orders = (
+                _055_treatment_orders(antimicrobial_orders)
+                if rule_id == "LX0609-055"
+                else antimicrobial_orders
+            )
             course_rows = (*daily_rows, *senior_rows)
             selected_antimicrobial_evidence_rows: list[Mapping[str, Any]] = []
             source_error = drug_order_error or (
@@ -2279,12 +2295,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "unmatched_antimicrobials": list(mentioned_action_names),
                             "association_ambiguous": True,
                         }))
-            elif not antimicrobial_orders:
+            elif not rule_antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif rule_id == "LX0609-055":
                 order_events = tuple(
                     (row, name, _antimicrobial_start_datetime(row))
-                    for row in antimicrobial_orders
+                    for row in rule_antimicrobial_orders
                     for name in _antimicrobial_names_in(row)
                 )
                 # 即使评价窗尚未成熟，开始医嘱仍是这项否定结论实际消费的
