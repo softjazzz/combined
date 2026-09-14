@@ -82,9 +82,9 @@ if ($InstallActivationOnly) {
 Write-Host "Starting backend on port $Port"
 Write-Host "Log dir: $logDir"
 if ($Reload) {
-    Write-Host "Reload mode: ON (Windows 下仅建议在确实需要热重载时启用)"
+    Write-Host "Reload mode: ON (use on Windows only when hot reload is required)"
 } else {
-    Write-Host "Reload mode: OFF (默认关闭，避免 uvicorn --reload 在 Windows 上卡死)"
+    Write-Host "Reload mode: OFF (default on Windows to avoid uvicorn reload hangs)"
 }
 
 Set-Location $backendRoot
@@ -115,17 +115,30 @@ if ($Reload) {
     )
 }
 
-# 每次启动独立留档；同时保留控制台输出，方便现场与事后排查。
-$logPath = Join-Path $logDir ("backend-{0}-{1}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"), $PID)
+# 每次启动独立留档；使用 .NET API 构造并校验路径，避免客户机环境下
+# Tee-Object 收到空 FilePath 后在应用启动前退出。
+$logFileName = "backend-{0}-{1}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"), $PID
+$logPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($logDir, $logFileName))
+if ([string]::IsNullOrWhiteSpace($logPath)) {
+    throw "Backend log path is empty."
+}
 Write-Host "Backend log: $logPath"
 $savedErrorActionPreference = $ErrorActionPreference
 $backendExitCode = 1
+$utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+$logWriter = New-Object System.IO.StreamWriter($logPath, $false, $utf8WithoutBom)
+$logWriter.AutoFlush = $true
 try {
     # Windows PowerShell 会把原生 stderr 包装成错误记录；不能因此中断日志管道。
     $ErrorActionPreference = "Continue"
-    & python @uvicornArgs 2>&1 | Tee-Object -FilePath $logPath
+    & python @uvicornArgs 2>&1 | ForEach-Object {
+        $renderedLine = [string]$_
+        Write-Output $renderedLine
+        $logWriter.WriteLine($renderedLine)
+    }
     $backendExitCode = $LASTEXITCODE
 } finally {
+    $logWriter.Dispose()
     $ErrorActionPreference = $savedErrorActionPreference
 }
 exit $backendExitCode

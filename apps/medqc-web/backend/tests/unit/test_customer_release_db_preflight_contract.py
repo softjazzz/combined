@@ -236,11 +236,11 @@ def test_customer_launcher_saves_stdout_stderr_and_preserves_exit_code(tmp_path:
     assert result.returncode == 7, result.stderr
     logs = list((tmp_path / "logs").glob("backend-*.log"))
     assert len(logs) == 1
-    # Windows PowerShell 的 Tee-Object 使用 UTF-16，中文与异常堆栈均可保留。
-    content = logs[0].read_text(encoding="utf-16")
+    content = logs[0].read_text(encoding="utf-8")
     assert "backend-started" in content
     assert "backend-failed" in content
     assert b"backend-started" in result.stdout
+    assert f"Backend log: {logs[0]}".encode() in result.stdout
 
 
 def test_public_key_is_trackable_and_issuer_secret_directory_is_ignored() -> None:
