@@ -152,14 +152,27 @@ describe('DataSyncConfigPage visit progress', () => {
     }
   })
 
-  it('展示病历池可见口径的病历级进度', () => {
+  it('重新打开页面时不把上一次同步结果当作本次进度', async () => {
     const wrapper = mountPage()
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('可进入病历池')
     expect(wrapper.text()).toContain('资料类别进度')
-    expect(wrapper.text()).toContain('3 / 20 份')
-    expect(wrapper.text()).toContain('有 2 份病历明细已同步但病历池暂不可见')
-    expect(wrapper.find('.wv4-status-chip--warning').exists()).toBe(true)
+    expect(wrapper.text()).toContain('0 / 20 份')
+    expect(wrapper.text()).not.toContain('3 / 20 份')
+    expect(wrapper.text()).not.toContain('有 2 份病历明细已同步但病历池暂不可见')
+    expect(wrapper.find('.wv4-status-chip--warning').exists()).toBe(false)
+  })
+
+  it('未重新检查范围时本次同步计数全部从零开始', async () => {
+    mockState.preflightResult = null
+
+    const wrapper = mountPage()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('本次候选')
+    expect(wrapper.text()).toContain('0 / 0 份')
+    expect(wrapper.text()).not.toContain('3 / 20 份')
   })
 
   it('高级账号将表名和行数收纳在默认折叠的同步详情中', () => {

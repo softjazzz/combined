@@ -3,10 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useDataSync } from '@/views/workstation-v4/composables/useDataSync'
 
 let mockUserRoles: string[] = []
-const { mockGetSyncPolicy, mockPreflight, mockUpdatePgConfig, mockUpdateSyncPolicy } = vi.hoisted(
+const {
+  mockGetSyncPolicy,
+  mockPreflight,
+  mockTriggerSync,
+  mockUpdatePgConfig,
+  mockUpdateSyncPolicy,
+} = vi.hoisted(
   () => ({
     mockGetSyncPolicy: vi.fn(),
     mockPreflight: vi.fn(),
+    mockTriggerSync: vi.fn(),
     mockUpdatePgConfig: vi.fn(),
     mockUpdateSyncPolicy: vi.fn(),
   }),
@@ -20,6 +27,7 @@ vi.mock('@/api/sync', async (importOriginal) => {
       ...actual.syncApi,
       getSyncPolicy: mockGetSyncPolicy,
       preflight: mockPreflight,
+      triggerSync: mockTriggerSync,
       updatePgConfig: mockUpdatePgConfig,
       updateSyncPolicy: mockUpdateSyncPolicy,
     },
@@ -39,6 +47,7 @@ describe('useDataSync 系统配置权限', () => {
     mockUserRoles = []
     mockGetSyncPolicy.mockReset()
     mockPreflight.mockReset()
+    mockTriggerSync.mockReset()
     mockUpdatePgConfig.mockReset()
     mockUpdateSyncPolicy.mockReset()
     useDataSync().resetState()
@@ -84,6 +93,57 @@ describe('useDataSync 系统配置权限', () => {
         target_departments: ['重症医学科(ICU)'],
       }),
     )
+  })
+
+  it('下发新同步任务时先清零上一次进度', async () => {
+    mockUserRoles = ['admin']
+    let resolveTrigger: ((value: Record<string, unknown>) => void) | undefined
+    mockTriggerSync.mockImplementation(
+      () =>
+        new Promise<Record<string, unknown>>((resolve) => {
+          resolveTrigger = resolve
+        }),
+    )
+    const { state, executeSync } = useDataSync()
+    state.preflightResult = {
+      source: 'pg',
+      tier: 'all',
+      executable: true,
+      blockers: [],
+      warnings: [],
+      estimated_impact: 840,
+      risk_level: 'low',
+    }
+    state.pgSyncState = {
+      is_running: false,
+      last_sync_status: 'success',
+      total_records_synced: 12345,
+      progress: {
+        status: 'success',
+        stage: 'completed',
+        eligible_visit_count: 800,
+        rows_upserted_total: 12345,
+        visit_progress: { total: 800, completed: 800 },
+      },
+    }
+
+    const pending = executeSync('pg')
+
+    expect(state.pgSyncState).toMatchObject({
+      is_running: true,
+      last_sync_status: 'running',
+      total_records_synced: 0,
+      progress: {
+        status: 'running',
+        stage: 'initializing',
+        eligible_visit_count: 840,
+        rows_upserted_total: 0,
+        visit_progress: { total: 840, completed: 0, remaining: 840 },
+      },
+    })
+
+    resolveTrigger?.({ success: false, status: 'rejected', error: '测试任务未启动' })
+    await pending
   })
 
   it('全院同步预检显式发送全院范围而不是省略科室参数', async () => {

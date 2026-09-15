@@ -443,6 +443,7 @@ const activeTab = ref('dataSync')
 const syncInitialized = ref(false)
 const detailWorkbenchOpen = ref(false)
 const syncScopeConfirmed = ref(false)
+const currentPageSyncStarted = ref(false)
 const route = useRoute()
 const authStore = useAuthStore()
 
@@ -821,6 +822,7 @@ const executionChecklist = computed(() => {
 })
 
 const syncProgress = computed<Record<string, unknown>>(() => {
+  if (!state.isSyncing && !currentPageSyncStarted.value) return {}
   const raw = state.pgSyncState?.progress
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
 })
@@ -850,7 +852,7 @@ const syncProgressStageLabelMap: Record<string, string> = {
 }
 
 const syncProgressStatusText = computed(() => {
-  const status = String(syncProgress.value.status || state.pgSyncState?.last_sync_status || 'never')
+  const status = String(syncProgress.value.status || (state.isSyncing ? 'running' : 'never'))
   if (status === 'success') return '已完成'
   if (status === 'partial') return '部分完成'
   if (status === 'failed') return '失败'
@@ -859,7 +861,7 @@ const syncProgressStatusText = computed(() => {
 })
 
 const syncProgressStatusClass = computed(() => {
-  const status = String(syncProgress.value.status || state.pgSyncState?.last_sync_status || '')
+  const status = String(syncProgress.value.status || (state.isSyncing ? 'running' : ''))
   if (status === 'failed') return 'wv4-status-chip--danger'
   if (status === 'partial') return 'wv4-status-chip--warning'
   if (status === 'success') return 'wv4-status-chip--success'
@@ -883,9 +885,7 @@ const syncBundleProgressVisible = computed(
     String(syncProgress.value.stage || '') === 'bundle_refresh',
 )
 const syncProgressRowsPulled = computed(() => Number(syncProgress.value.rows_pulled_total || 0))
-const syncProgressRowsUpserted = computed(() =>
-  Number(syncProgress.value.rows_upserted_total || state.pgSyncState?.total_records_synced || 0),
-)
+const syncProgressRowsUpserted = computed(() => Number(syncProgress.value.rows_upserted_total || 0))
 const syncProgressCandidateCount = computed(() => {
   const fromProgress = Number(syncProgress.value.eligible_visit_count || 0)
   if (fromProgress > 0) return fromProgress
@@ -941,7 +941,7 @@ const syncProgressPercent = computed(() => {
   return syncProgressRowsUpserted.value > 0 ? 100 : 0
 })
 const syncProgressStrokeColor = computed(() => {
-  const status = String(syncProgress.value.status || state.pgSyncState?.last_sync_status || '')
+  const status = String(syncProgress.value.status || (state.isSyncing ? 'running' : ''))
   if (status === 'failed') return '#ef4444'
   if (status === 'partial') return '#f59e0b'
   return '#2b6cf6'
@@ -957,12 +957,7 @@ const syncProgressStageText = computed(() => {
   const label = syncProgressStageLabelMap[stage] || (state.isSyncing ? '正在同步数据' : '等待执行')
   return label
 })
-const showSyncProgress = computed(
-  () =>
-    state.isSyncing ||
-    Boolean(syncProgress.value.stage) ||
-    ['success', 'partial', 'failed'].includes(String(state.pgSyncState?.last_sync_status || '')),
-)
+const showSyncProgress = true
 
 const preflightSourceRows = computed<SyncTableValidationItem[]>(() => {
   const result = state.preflightResult
@@ -1034,6 +1029,7 @@ const riskAdviceItems = computed(() => {
 async function ensureSyncInitialized() {
   if (syncInitialized.value) return
   await initialize()
+  if (state.isSyncing) currentPageSyncStarted.value = true
   syncInitialized.value = true
 }
 
@@ -1135,6 +1131,7 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
   if (!ok) return
 
   const result = await executeSync('pg')
+  currentPageSyncStarted.value = Boolean(result.success || result.status === 'partial')
   if (result.success) {
     if (result.status === 'timeout_polling') {
       message.warning(result.message || '同步请求仍可能在后端执行，已转入状态轮询')

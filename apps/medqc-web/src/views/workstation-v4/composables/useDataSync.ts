@@ -755,7 +755,33 @@ async function runPreflight(source: SyncSource = 'pg') {
 }
 
 async function executeSync(source: SyncSource = 'pg') {
+  const candidateCount = Math.max(
+    0,
+    Number(globalSyncState.preflightResult?.estimated_impact || 0),
+  )
   globalSyncState.isSyncing = true
+  globalSyncState.pgSyncState = {
+    ...globalSyncState.pgSyncState,
+    is_running: true,
+    last_sync_status: 'running',
+    total_records_synced: 0,
+    progress: {
+      status: 'running',
+      stage: 'initializing',
+      tables_total: 0,
+      tables_done: 0,
+      rows_pulled_total: 0,
+      rows_upserted_total: 0,
+      eligible_visit_count: candidateCount,
+      visit_progress: {
+        total: candidateCount,
+        completed: 0,
+        remaining: candidateCount,
+        missing_mr: 0,
+        detail_only: 0,
+      },
+    },
+  }
   pushLog('info', '同步任务已提交，正在轮询执行进度')
   startPolling()
   try {
