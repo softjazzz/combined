@@ -527,3 +527,13 @@
 .record-pool-refined :deep(.ant-pagination-item-active a) {
   color: #007aff;
 }
+
+/* 科室、住院状态及两列日期使用相同的正文规格。 */
+.record-pool-refined :deep(.batch-table-panel__department),
+.record-pool-refined :deep(.batch-table-panel__hospitalization-status),
+.record-pool-refined :deep(.batch-table-panel__standalone-date) {
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 22px;
+}
