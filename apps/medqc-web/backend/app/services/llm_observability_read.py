@@ -45,6 +45,7 @@ _SAFE_EVENT_COLUMNS = (
     "safe_error_kind",
     "usage_state",
     "input_tokens",
+    "cached_input_tokens",
     "output_tokens",
     "total_tokens",
     "latency_ms",
@@ -64,6 +65,7 @@ _DETAIL_EVENT_COLUMNS = (
     "safe_error_kind",
     "usage_state",
     "input_tokens",
+    "cached_input_tokens",
     "output_tokens",
     "total_tokens",
     "latency_ms",
@@ -246,6 +248,15 @@ def _unknown_usage_count(rows: list[dict[str, Any]]) -> int:
     )
 
 
+def _unknown_cache_usage_count(rows: list[dict[str, Any]]) -> int:
+    return sum(
+        1
+        for row in rows
+        if str(row.get("usage_state") or "").strip().lower() == "known"
+        and row.get("cached_input_tokens") is None
+    )
+
+
 def _attempt_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     logical_calls = _logical_call_count(rows)
     attempts = len(rows)
@@ -260,6 +271,7 @@ def _attempt_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "logical_calls": logical_calls,
         "http_attempts": attempts,
         "input_tokens": _sum_known(rows, "input_tokens"),
+        "cached_input_tokens": _sum_known(rows, "cached_input_tokens"),
         "output_tokens": _sum_known(rows, "output_tokens"),
         "total_tokens": _sum_known(rows, "total_tokens"),
         "avg_latency_ms": _average(latencies),
@@ -271,6 +283,7 @@ def _attempt_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "successful_attempts": success_count,
         "failed_attempts": failed_count,
         "unknown_usage_attempts": _unknown_usage_count(rows),
+        "unknown_cache_usage_attempts": _unknown_cache_usage_count(rows),
     }
 
 
@@ -458,6 +471,7 @@ class LLMObservabilityReadService:
             "record_count": kpis["record_count"],
             "unbound_record_attempts": kpis["unbound_record_attempts"],
             "input_tokens": kpis["input_tokens"],
+            "cached_input_tokens": kpis["cached_input_tokens"],
             "output_tokens": kpis["output_tokens"],
             "total_tokens": kpis["total_tokens"],
             "avg_latency_ms": kpis["avg_latency_ms"],
@@ -467,6 +481,7 @@ class LLMObservabilityReadService:
             "successful_attempts": kpis["successful_attempts"],
             "failed_attempts": kpis["failed_attempts"],
             "unknown_usage_attempts": kpis["unknown_usage_attempts"],
+            "unknown_cache_usage_attempts": kpis["unknown_cache_usage_attempts"],
         }
         records = _record_items(rows)
         offset = (page - 1) * page_size

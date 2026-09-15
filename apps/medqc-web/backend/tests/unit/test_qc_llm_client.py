@@ -72,6 +72,7 @@ def test_extract_usage_breakdown_should_read_prompt_and_completion_tokens():
             "prompt_tokens": 123,
             "completion_tokens": 45,
             "total_tokens": 168,
+            "prompt_tokens_details": {"cached_tokens": 64},
         }
     }
     usage = SichuanQCLLMClient._extract_usage_breakdown(result)
@@ -79,6 +80,7 @@ def test_extract_usage_breakdown_should_read_prompt_and_completion_tokens():
         "prompt_tokens": 123,
         "completion_tokens": 45,
         "input_tokens": 123,
+        "cached_input_tokens": 64,
         "output_tokens": 45,
         "total_tokens": 168,
     }

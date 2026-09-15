@@ -67,12 +67,15 @@ def _event(**overrides) -> dict:
         "safe_error_kind": None,
         "usage_state": "known",
         "input_tokens": 10,
+        "cached_input_tokens": 4,
         "output_tokens": 5,
         "total_tokens": 15,
         "latency_ms": 100,
         "worker_id": "worker-a",
     }
     row.update(overrides)
+    if row["usage_state"] != "known" and "cached_input_tokens" not in overrides:
+        row["cached_input_tokens"] = None
     return row
 
 
@@ -134,6 +137,7 @@ def test_overview_counts_logical_calls_attempts_unknown_usage_and_peak_concurren
         "record_count": 2,
         "unbound_record_attempts": 0,
         "input_tokens": 10,
+        "cached_input_tokens": 4,
         "output_tokens": 5,
         "total_tokens": 15,
         "avg_latency_ms": 200.0,
@@ -143,6 +147,7 @@ def test_overview_counts_logical_calls_attempts_unknown_usage_and_peak_concurren
         "successful_attempts": 2,
         "failed_attempts": 1,
         "unknown_usage_attempts": 2,
+        "unknown_cache_usage_attempts": 0,
     }
 
 
@@ -266,9 +271,24 @@ def test_overview_keeps_token_totals_null_when_provider_reports_no_usage():
     assert response.status_code == 200
     kpis = response.json()["data"]["kpis"]
     assert kpis["input_tokens"] is None
+    assert kpis["cached_input_tokens"] is None
     assert kpis["output_tokens"] is None
     assert kpis["total_tokens"] is None
     assert kpis["unknown_usage_attempts"] == 1
+
+
+def test_overview_marks_legacy_usage_without_cache_breakdown_as_incomplete():
+    rows = [_event(cached_input_tokens=None)]
+
+    with _client(rows) as client:
+        response = client.get("/api/v1/system/llm-observability/overview")
+
+    assert response.status_code == 200
+    kpis = response.json()["data"]["kpis"]
+    assert kpis["input_tokens"] == 10
+    assert kpis["cached_input_tokens"] is None
+    assert kpis["unknown_usage_attempts"] == 0
+    assert kpis["unknown_cache_usage_attempts"] == 1
 
 
 def test_empty_overview_reports_zero_volume_without_faking_unknown_usage():
@@ -281,6 +301,7 @@ def test_empty_overview_reports_zero_volume_without_faking_unknown_usage():
     assert kpis["http_attempts"] == 0
     assert kpis["record_count"] == 0
     assert kpis["input_tokens"] == 0
+    assert kpis["cached_input_tokens"] == 0
     assert kpis["output_tokens"] == 0
     assert kpis["total_tokens"] == 0
     assert kpis["unknown_usage_attempts"] == 0
@@ -334,6 +355,7 @@ def test_record_calls_are_paginated_and_only_return_safe_attempt_fields():
         "safe_error_kind",
         "usage_state",
         "input_tokens",
+        "cached_input_tokens",
         "output_tokens",
         "total_tokens",
         "latency_ms",
@@ -341,6 +363,7 @@ def test_record_calls_are_paginated_and_only_return_safe_attempt_fields():
         "finished_at",
     }
     assert item["input_tokens"] is None
+    assert item["cached_input_tokens"] is None
     assert item["output_tokens"] is None
     assert item["total_tokens"] is None
     serialized = str(data)

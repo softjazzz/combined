@@ -33,6 +33,7 @@ const overview: LlmObservabilityOverview = {
     record_count: 2,
     unbound_record_attempts: 3,
     input_tokens: 1200,
+    cached_input_tokens: 400,
     output_tokens: 300,
     total_tokens: 1500,
     avg_latency_ms: 1200,
@@ -42,6 +43,7 @@ const overview: LlmObservabilityOverview = {
     successful_attempts: 8,
     failed_attempts: 1,
     unknown_usage_attempts: 0,
+    unknown_cache_usage_attempts: 0,
   },
   trends: [
     {
@@ -49,23 +51,29 @@ const overview: LlmObservabilityOverview = {
       logical_calls: 8,
       http_attempts: 9,
       input_tokens: 1200,
+      cached_input_tokens: 400,
       output_tokens: 300,
       total_tokens: 1500,
       p95_latency_ms: 1800,
       peak_concurrency: 3,
       unknown_usage_attempts: 0,
+      unknown_cache_usage_attempts: 0,
     },
   ],
   models: [
     {
-      provider_code: 'openai-compatible',
-      model: 'medical-model',
+      provider_code: 'alibaba',
+      model: 'qwen3.8-flash',
       model_role: 'qc_fact_extractor',
       logical_calls: 8,
       http_attempts: 9,
+      input_tokens: 1200,
+      cached_input_tokens: 400,
+      output_tokens: 300,
       total_tokens: 1500,
       avg_latency_ms: 1200,
       unknown_usage_attempts: 0,
+      unknown_cache_usage_attempts: 0,
     },
   ],
   safe_errors: [{ safe_error_kind: 'timeout', count: 1 }],
@@ -76,10 +84,12 @@ const overview: LlmObservabilityOverview = {
         logical_calls: 8,
         http_attempts: 9,
         input_tokens: 1200,
+        cached_input_tokens: 400,
         output_tokens: 300,
         total_tokens: 1500,
         p95_latency_ms: 1800,
         unknown_usage_attempts: 0,
+        unknown_cache_usage_attempts: 0,
         last_called_at: '2026-08-10T10:00:00Z',
         status: 'partial_failure',
       },
@@ -99,13 +109,14 @@ const calls: LlmRecordCallAttempts = {
       business_scene: 'luxian_0609_qc',
       root_job_id: 'job-1',
       executor_key: 'LX0609-025',
-      provider_code: 'openai-compatible',
-      model: 'medical-model',
+      provider_code: 'alibaba',
+      model: 'qwen3.8-flash',
       model_role: 'quality_control',
       status: 'success',
       safe_error_kind: null,
       usage_state: 'known',
       input_tokens: 1200,
+      cached_input_tokens: 400,
       output_tokens: 300,
       total_tokens: 1500,
       latency_ms: 1200,
@@ -118,13 +129,14 @@ const calls: LlmRecordCallAttempts = {
       business_scene: 'luxian_0609_qc',
       root_job_id: 'job-1',
       executor_key: 'LX0609-044',
-      provider_code: 'openai-compatible',
-      model: 'medical-model',
+      provider_code: 'alibaba',
+      model: 'qwen3.8-flash',
       model_role: 'quality_control',
       status: 'timeout',
       safe_error_kind: 'timeout',
       usage_state: 'unknown',
       input_tokens: null,
+      cached_input_tokens: null,
       output_tokens: null,
       total_tokens: null,
       latency_ms: 30000,
@@ -178,10 +190,11 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).toContain('P95 响应')
     expect(wrapper.text()).toContain('峰值并发')
     expect(wrapper.text()).toContain('Token 计费估算')
-    expect(wrapper.text()).toContain('¥0.000480')
-    expect(wrapper.text()).toContain('输入 ¥0.20 / 百万 Token')
-    expect(wrapper.text()).toContain('输出 ¥0.80 / 百万 Token')
-    expect(wrapper.text()).toContain('按当前单价估算，不等同实际账单')
+    expect(wrapper.text()).toContain('¥0.001490')
+    expect(wrapper.text()).toContain('未缓存输入 ¥0.80 / 百万 Token')
+    expect(wrapper.text()).toContain('缓存命中输入 ¥0.10 / 百万 Token')
+    expect(wrapper.text()).toContain('输出 ¥2.70 / 百万 Token')
+    expect(wrapper.text()).toContain('qwen3.8-flash · 华北 2（北京）官方原价估算')
     expect(wrapper.text()).toContain('不含独立部署的 SQLBot')
     expect(wrapper.findAll('.v-chart-stub')).toHaveLength(2)
     expect(wrapper.findAll('.v-chart-stub')[0].text()).toBe('["08-10"]')
@@ -254,13 +267,13 @@ describe('LlmPerformanceObservabilityPanel', () => {
 
     const providerFilter = wrapper.get('[data-testid="provider-filter"]')
     expect(providerFilter.text()).toContain('deepseek')
-    expect(providerFilter.text()).toContain('openai-compatible')
+    expect(providerFilter.text()).toContain('alibaba')
 
     await providerFilter.trigger('click')
     await flushPromises()
 
     expect(providerFilter.text()).toContain('deepseek')
-    expect(providerFilter.text()).toContain('openai-compatible')
+    expect(providerFilter.text()).toContain('alibaba')
   })
 
   it('快速连续筛选时只接受最后一次请求结果', async () => {
@@ -374,7 +387,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).toContain('用量已上报')
     expect(wrapper.text()).toContain('用量未上报')
     expect(wrapper.text()).toContain('本次费用')
-    expect(wrapper.text()).toContain('¥0.000480')
+    expect(wrapper.text()).toContain('¥0.001490')
     expect(wrapper.text()).toContain('费用未知')
     expect(wrapper.text()).toContain('未知')
     expect(wrapper.text()).not.toContain('job-1')
@@ -390,6 +403,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
         http_attempts: 0,
         record_count: 0,
         input_tokens: 0,
+        cached_input_tokens: 0,
         output_tokens: 0,
         total_tokens: 0,
       },
@@ -412,11 +426,13 @@ describe('LlmPerformanceObservabilityPanel', () => {
       kpis: {
         ...overview.kpis,
         input_tokens: null,
+        cached_input_tokens: null,
         output_tokens: null,
         total_tokens: null,
         avg_latency_ms: null,
         p95_latency_ms: null,
         unknown_usage_attempts: 9,
+        unknown_cache_usage_attempts: 0,
       },
     })
 
@@ -461,6 +477,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
       kpis: {
         ...overview.kpis,
         input_tokens: 79_409,
+        cached_input_tokens: 20_000,
         output_tokens: 7_595,
         total_tokens: 86_925,
       },
@@ -469,9 +486,46 @@ describe('LlmPerformanceObservabilityPanel', () => {
     const wrapper = mountPanel()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('¥0.021958')
-    expect(wrapper.text()).toContain('输入费用 ¥0.015882')
-    expect(wrapper.text()).toContain('输出费用 ¥0.006076')
+    expect(wrapper.text()).toContain('¥0.070034')
+    expect(wrapper.text()).toContain('未缓存输入 ¥0.047527')
+    expect(wrapper.text()).toContain('缓存命中输入 ¥0.002000')
+    expect(wrapper.text()).toContain('输出费用 ¥0.020507')
+  })
+
+  it('迁移前调用缺少缓存明细时不伪造折扣费用', async () => {
+    vi.mocked(getLlmObservabilityOverview).mockResolvedValue({
+      ...overview,
+      kpis: {
+        ...overview.kpis,
+        cached_input_tokens: null,
+        unknown_cache_usage_attempts: 3,
+      },
+    })
+
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('费用待核实')
+    expect(wrapper.text()).toContain('3 次历史调用无缓存明细，无法准确折算')
+  })
+
+  it('混合其他模型时要求筛选 qwen3.8-flash 后再估算', async () => {
+    vi.mocked(getLlmObservabilityOverview).mockResolvedValue({
+      ...overview,
+      models: [
+        ...overview.models,
+        {
+          ...overview.models[0],
+          model: 'qwen3.7-flash',
+        },
+      ],
+    })
+
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('费用待核实')
+    expect(wrapper.text()).toContain('当前范围含非 qwen3.8-flash 调用，请先筛选模型再估算')
   })
 
   it('将观测事实中的安全错误类别翻译为客户可读文案', async () => {

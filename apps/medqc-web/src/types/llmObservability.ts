@@ -10,6 +10,7 @@ export interface LlmObservabilityKpis {
   record_count: number
   unbound_record_attempts: number
   input_tokens: number | null
+  cached_input_tokens: number | null
   output_tokens: number | null
   total_tokens: number | null
   avg_latency_ms: number | null
@@ -19,6 +20,7 @@ export interface LlmObservabilityKpis {
   successful_attempts: number
   failed_attempts: number
   unknown_usage_attempts: number
+  unknown_cache_usage_attempts: number
 }
 
 export interface LlmObservabilityScope {
@@ -31,11 +33,13 @@ export interface LlmObservabilityTrendPoint {
   logical_calls: number
   http_attempts: number
   input_tokens: number | null
+  cached_input_tokens: number | null
   output_tokens: number | null
   total_tokens: number | null
   p95_latency_ms: number | null
   peak_concurrency: number
   unknown_usage_attempts: number
+  unknown_cache_usage_attempts: number
 }
 
 export interface LlmObservabilityModelSummary {
@@ -44,9 +48,13 @@ export interface LlmObservabilityModelSummary {
   model_role: string
   logical_calls: number
   http_attempts: number
+  input_tokens: number | null
+  cached_input_tokens: number | null
+  output_tokens: number | null
   total_tokens: number | null
   avg_latency_ms: number | null
   unknown_usage_attempts: number
+  unknown_cache_usage_attempts: number
 }
 
 export interface LlmObservabilitySafeError {
@@ -59,10 +67,12 @@ export interface LlmObservabilityRecordSummary {
   logical_calls: number
   http_attempts: number
   input_tokens: number | null
+  cached_input_tokens: number | null
   output_tokens: number | null
   total_tokens: number | null
   p95_latency_ms: number | null
   unknown_usage_attempts: number
+  unknown_cache_usage_attempts: number
   last_called_at: string | null
   status: string
 }
@@ -97,6 +107,7 @@ export interface LlmCallAttempt {
   safe_error_kind: string | null
   usage_state: 'known' | 'unknown'
   input_tokens: number | null
+  cached_input_tokens: number | null
   output_tokens: number | null
   total_tokens: number | null
   latency_ms: number | null

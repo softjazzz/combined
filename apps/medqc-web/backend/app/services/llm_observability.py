@@ -115,6 +115,7 @@ class PostgresLLMCallEventStore:
                         safe_error_kind = :safe_error_kind,
                         usage_state = :usage_state,
                         input_tokens = :input_tokens,
+                        cached_input_tokens = :cached_input_tokens,
                         output_tokens = :output_tokens,
                         total_tokens = :total_tokens,
                         latency_ms = :latency_ms
@@ -232,6 +233,11 @@ class LLMObservabilityRecorder:
             "safe_error_kind": safe_error_kind,
             "usage_state": usage_state,
             "input_tokens": int(usage["input_tokens"]) if usage is not None else None,
+            "cached_input_tokens": (
+                int(usage["cached_input_tokens"])
+                if usage is not None and usage.get("cached_input_tokens") is not None
+                else None
+            ),
             "output_tokens": int(usage["output_tokens"]) if usage is not None else None,
             "total_tokens": int(usage["total_tokens"]) if usage is not None else None,
             "latency_ms": max(0, round((time.perf_counter() - started_timestamp) * 1000)),
@@ -324,6 +330,11 @@ class LLMObservabilityRecorder:
             "safe_error_kind": safe_error_kind,
             "usage_state": usage_state,
             "input_tokens": int(usage["input_tokens"]) if usage is not None else None,
+            "cached_input_tokens": (
+                int(usage["cached_input_tokens"])
+                if usage is not None and usage.get("cached_input_tokens") is not None
+                else None
+            ),
             "output_tokens": int(usage["output_tokens"]) if usage is not None else None,
             "total_tokens": int(usage["total_tokens"]) if usage is not None else None,
             "latency_ms": max(
@@ -526,8 +537,32 @@ def observed_usage(result: Mapping[str, Any]) -> Optional[dict[str, int]]:
         if "total_tokens" in usage
         else usage.get("total", input_tokens + output_tokens)
     )
+    prompt_details = usage.get("prompt_tokens_details")
+    cached_input_tokens = 0
+    if isinstance(prompt_details, Mapping) and "cached_tokens" in prompt_details:
+        cached_value = prompt_details["cached_tokens"]
+        if (
+            isinstance(cached_value, bool)
+            or not isinstance(cached_value, int)
+            or cached_value < 0
+        ):
+            return None
+        cached_input_tokens = int(cached_value)
+    elif "cached_tokens" in usage:
+        cached_value = usage["cached_tokens"]
+        if (
+            isinstance(cached_value, bool)
+            or not isinstance(cached_value, int)
+            or cached_value < 0
+        ):
+            return None
+        cached_input_tokens = int(cached_value)
+
+    if cached_input_tokens is not None and cached_input_tokens > input_tokens:
+        return None
     return {
         "input_tokens": input_tokens,
+        "cached_input_tokens": cached_input_tokens,
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
     }

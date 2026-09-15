@@ -35,6 +35,7 @@ async def test_generate_persists_one_safe_http_attempt_with_real_usage(monkeypat
                 "prompt_tokens": 120,
                 "completion_tokens": 30,
                 "total_tokens": 150,
+                "prompt_tokens_details": {"cached_tokens": 80},
             },
         }
 
@@ -81,6 +82,7 @@ async def test_generate_persists_one_safe_http_attempt_with_real_usage(monkeypat
     assert finished["status"] == "success"
     assert finished["usage_state"] == "known"
     assert finished["input_tokens"] == 120
+    assert finished["cached_input_tokens"] == 80
     assert finished["output_tokens"] == 30
     assert finished["total_tokens"] == 150
     assert finished["latency_ms"] >= 0
@@ -91,11 +93,21 @@ async def test_generate_counts_length_retry_as_two_attempts_and_sums_all_tokens(
     responses = [
         {
             "choices": [{"message": {"content": "partial"}, "finish_reason": "length"}],
-            "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 10,
+                "total_tokens": 110,
+                "prompt_tokens_details": {"cached_tokens": 40},
+            },
         },
         {
             "choices": [{"message": {"content": "complete"}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 120, "completion_tokens": 20, "total_tokens": 140},
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 20,
+                "total_tokens": 140,
+                "prompt_tokens_details": {"cached_tokens": 60},
+            },
         },
     ]
 
@@ -124,6 +136,7 @@ async def test_generate_counts_length_retry_as_two_attempts_and_sums_all_tokens(
         "prompt_tokens": 220,
         "completion_tokens": 30,
         "input_tokens": 220,
+        "cached_input_tokens": 100,
         "output_tokens": 30,
         "total_tokens": 250,
     }
@@ -159,6 +172,7 @@ async def test_generate_keeps_unknown_usage_null_on_transport_failure(monkeypatc
     assert finished["safe_error_kind"] == "timeout"
     assert finished["usage_state"] == "unknown"
     assert finished["input_tokens"] is None
+    assert finished["cached_input_tokens"] is None
     assert finished["output_tokens"] is None
     assert finished["total_tokens"] is None
     assert "SECRET medical payload" not in str(store.started + store.finished)

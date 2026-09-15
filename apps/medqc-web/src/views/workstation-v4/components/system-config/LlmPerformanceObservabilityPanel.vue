@@ -140,13 +140,15 @@
             <em>{{ billingSummary.completenessLabel }}</em>
           </div>
           <div class="llm-observability__billing-breakdown">
-            <span>输入费用 <strong>{{ billingSummary.inputLabel }}</strong></span>
+            <span>未缓存输入 <strong>{{ billingSummary.uncachedInputLabel }}</strong></span>
+            <span>缓存命中输入 <strong>{{ billingSummary.cachedInputLabel }}</strong></span>
             <span>输出费用 <strong>{{ billingSummary.outputLabel }}</strong></span>
           </div>
           <div class="llm-observability__billing-rates">
-            <span>输入 ¥0.20 / 百万 Token</span>
-            <span>输出 ¥0.80 / 百万 Token</span>
-            <em>按当前单价估算，不等同实际账单</em>
+            <span>未缓存输入 ¥0.80 / 百万 Token</span>
+            <span>缓存命中输入 ¥0.10 / 百万 Token</span>
+            <span>输出 ¥2.70 / 百万 Token</span>
+            <em>qwen3.8-flash · 华北 2（北京）官方原价估算</em>
           </div>
         </section>
 
@@ -158,6 +160,7 @@
           <span>成功尝试 {{ formatInteger(overview.kpis.successful_attempts) }}</span>
           <span>失败尝试 {{ formatInteger(overview.kpis.failed_attempts) }}</span>
           <span>重试 {{ formatInteger(overview.kpis.retry_attempts) }}</span>
+          <span>缓存命中 {{ formatNullableInteger(overview.kpis.cached_input_tokens) }} Token</span>
           <span>Token 未上报 {{ formatInteger(overview.kpis.unknown_usage_attempts) }}</span>
         </section>
 
@@ -328,8 +331,10 @@
                     {{
                       recordCostLabel(
                         record.input_tokens,
+                        record.cached_input_tokens,
                         record.output_tokens,
                         record.unknown_usage_attempts,
+                        record.unknown_cache_usage_attempts,
                       )
                     }}
                   </td>
@@ -437,6 +442,10 @@
                 <dd>{{ formatNullableInteger(attempt.input_tokens) }}</dd>
               </div>
               <div>
+                <dt>缓存命中 Token</dt>
+                <dd>{{ formatNullableInteger(attempt.cached_input_tokens) }}</dd>
+              </div>
+              <div>
                 <dt>输出 Token</dt>
                 <dd>{{ formatNullableInteger(attempt.output_tokens) }}</dd>
               </div>
@@ -449,8 +458,10 @@
                 <dd>
                   {{
                     attemptCostLabel(
+                      attempt.model,
                       attempt.usage_state,
                       attempt.input_tokens,
+                      attempt.cached_input_tokens,
                       attempt.output_tokens,
                     )
                   }}
@@ -512,8 +523,10 @@ use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, Canv
 
 type RangeKey = '24h' | '7d' | '30d'
 
-const INPUT_PRICE_PER_MILLION_CNY = 0.2
-const OUTPUT_PRICE_PER_MILLION_CNY = 0.8
+const BILLING_MODEL = 'qwen3.8-flash'
+const INPUT_PRICE_PER_MILLION_CNY = 0.8
+const CACHED_INPUT_PRICE_PER_MILLION_CNY = 0.1
+const OUTPUT_PRICE_PER_MILLION_CNY = 2.7
 
 const rangeKey = ref<RangeKey>('7d')
 const providerCode = ref('')
@@ -558,24 +571,47 @@ const sceneOptions = [
 
 const hasObservedCalls = computed(() => Number(overview.value?.kpis.http_attempts || 0) > 0)
 const hasTrendData = computed(() => Boolean(overview.value?.trends.length))
+const canEstimateQwen38Billing = computed(() => {
+  const observedModels = new Set(
+    (overview.value?.models || [])
+      .filter((item) => Number(item.http_attempts || 0) > 0)
+      .map((item) => item.model),
+  )
+  return observedModels.size === 1 && observedModels.has(BILLING_MODEL)
+})
 
 const billingSummary = computed(() => {
   const kpis = overview.value?.kpis
   const unknownAttempts = Number(kpis?.unknown_usage_attempts || 0)
-  const inputCost = calculateTokenCost(kpis?.input_tokens ?? null, INPUT_PRICE_PER_MILLION_CNY)
+  const unknownCacheAttempts = Number(kpis?.unknown_cache_usage_attempts || 0)
+  const cachedInputTokens = kpis?.cached_input_tokens ?? null
+  const uncachedInputTokens = subtractCachedTokens(kpis?.input_tokens ?? null, cachedInputTokens)
+  const uncachedInputCost = calculateTokenCost(uncachedInputTokens, INPUT_PRICE_PER_MILLION_CNY)
+  const cachedInputCost = calculateTokenCost(cachedInputTokens, CACHED_INPUT_PRICE_PER_MILLION_CNY)
   const outputCost = calculateTokenCost(kpis?.output_tokens ?? null, OUTPUT_PRICE_PER_MILLION_CNY)
-  const totalCost = inputCost === null || outputCost === null ? null : inputCost + outputCost
+  const totalCost =
+    canEstimateQwen38Billing.value &&
+    unknownCacheAttempts === 0 &&
+    uncachedInputCost !== null &&
+    cachedInputCost !== null &&
+    outputCost !== null
+      ? uncachedInputCost + cachedInputCost + outputCost
+      : null
 
   return {
-    inputLabel: formatCostCny(inputCost),
-    outputLabel: formatCostCny(outputCost),
+    uncachedInputLabel: formatCostCny(canEstimateQwen38Billing.value ? uncachedInputCost : null),
+    cachedInputLabel: formatCostCny(canEstimateQwen38Billing.value ? cachedInputCost : null),
+    outputLabel: formatCostCny(canEstimateQwen38Billing.value ? outputCost : null),
     totalLabel: totalCost === null ? '费用待核实' : formatCostCny(totalCost),
-    completenessLabel:
-      totalCost === null
-        ? '输入或输出 Token 未完整上报，无法估算费用'
-        : unknownAttempts > 0
-          ? `已上报费用 · ${formatInteger(unknownAttempts)} 次用量未上报，非完整账单`
-          : '全部已上报用量 · 估算费用',
+    completenessLabel: !canEstimateQwen38Billing.value
+      ? '当前范围含非 qwen3.8-flash 调用，请先筛选模型再估算'
+      : unknownCacheAttempts > 0
+        ? `${formatInteger(unknownCacheAttempts)} 次历史调用无缓存明细，无法准确折算`
+        : totalCost === null
+          ? '输入或输出 Token 未完整上报，无法估算费用'
+          : unknownAttempts > 0
+            ? `已上报费用 · ${formatInteger(unknownAttempts)} 次用量未上报，非完整账单`
+            : '全部已上报用量 · 估算费用',
   }
 })
 
@@ -891,7 +927,7 @@ function formatInteger(value: number): string {
 }
 
 function formatNullableInteger(value: number | null): string {
-  return value === null ? '未知' : Number(value).toLocaleString('zh-CN')
+  return value == null ? '未知' : Number(value).toLocaleString('zh-CN')
 }
 
 function calculateTokenCost(tokens: number | null, pricePerMillion: number): number | null {
@@ -899,13 +935,29 @@ function calculateTokenCost(tokens: number | null, pricePerMillion: number): num
   return (tokens / 1_000_000) * pricePerMillion
 }
 
+function subtractCachedTokens(
+  inputTokens: number | null,
+  cachedTokens: number | null,
+): number | null {
+  if (inputTokens === null || cachedTokens === null) return null
+  if (cachedTokens < 0 || cachedTokens > inputTokens) return null
+  return inputTokens - cachedTokens
+}
+
 function calculateCombinedCost(
   inputTokens: number | null,
+  cachedInputTokens: number | null,
   outputTokens: number | null,
 ): number | null {
-  const inputCost = calculateTokenCost(inputTokens, INPUT_PRICE_PER_MILLION_CNY)
+  const uncachedInputCost = calculateTokenCost(
+    subtractCachedTokens(inputTokens, cachedInputTokens),
+    INPUT_PRICE_PER_MILLION_CNY,
+  )
+  const cachedInputCost = calculateTokenCost(cachedInputTokens, CACHED_INPUT_PRICE_PER_MILLION_CNY)
   const outputCost = calculateTokenCost(outputTokens, OUTPUT_PRICE_PER_MILLION_CNY)
-  return inputCost === null || outputCost === null ? null : inputCost + outputCost
+  return uncachedInputCost === null || cachedInputCost === null || outputCost === null
+    ? null
+    : uncachedInputCost + cachedInputCost + outputCost
 }
 
 function formatCostCny(value: number | null): string {
@@ -914,21 +966,28 @@ function formatCostCny(value: number | null): string {
 
 function recordCostLabel(
   inputTokens: number | null,
+  cachedInputTokens: number | null,
   outputTokens: number | null,
   unknownUsageAttempts: number,
+  unknownCacheUsageAttempts: number,
 ): string {
-  const cost = calculateCombinedCost(inputTokens, outputTokens)
+  if (!canEstimateQwen38Billing.value) return '请筛选 qwen3.8-flash'
+  if (unknownCacheUsageAttempts > 0) return '缓存明细未知'
+  const cost = calculateCombinedCost(inputTokens, cachedInputTokens, outputTokens)
   if (cost === null) return '费用未知'
   return unknownUsageAttempts > 0 ? `已上报 ${formatCostCny(cost)}` : formatCostCny(cost)
 }
 
 function attemptCostLabel(
+  model: string,
   usageState: 'known' | 'unknown',
   inputTokens: number | null,
+  cachedInputTokens: number | null,
   outputTokens: number | null,
 ): string {
+  if (model !== BILLING_MODEL) return '当前模型未配置单价'
   if (usageState !== 'known') return '费用未知'
-  const cost = calculateCombinedCost(inputTokens, outputTokens)
+  const cost = calculateCombinedCost(inputTokens, cachedInputTokens, outputTokens)
   return cost === null ? '费用未知' : formatCostCny(cost)
 }
 

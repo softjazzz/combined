@@ -379,12 +379,16 @@ class SichuanQCLLMClient:
         attempt_usages: list[dict[str, int]],
     ) -> Dict[str, int]:
         input_tokens = sum(item["input_tokens"] for item in attempt_usages)
+        cached_input_tokens = sum(
+            int(item.get("cached_input_tokens") or 0) for item in attempt_usages
+        )
         output_tokens = sum(item["output_tokens"] for item in attempt_usages)
         total_tokens = sum(item["total_tokens"] for item in attempt_usages)
         return {
             "prompt_tokens": input_tokens,
             "completion_tokens": output_tokens,
             "input_tokens": input_tokens,
+            "cached_input_tokens": cached_input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
         }
@@ -536,10 +540,15 @@ class SichuanQCLLMClient:
             or (prompt_tokens + completion_tokens)
             or 0
         )
+        prompt_details = usage.get("prompt_tokens_details") or {}
+        cached_input_tokens = int(
+            prompt_details.get("cached_tokens") or usage.get("cached_tokens") or 0
+        )
         return {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "input_tokens": prompt_tokens,
+            "cached_input_tokens": cached_input_tokens,
             "output_tokens": completion_tokens,
             "total_tokens": total_tokens,
         }
