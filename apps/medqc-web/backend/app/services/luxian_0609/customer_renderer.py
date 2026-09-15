@@ -3495,6 +3495,15 @@ def render_luxian_0609_customer_result(
             decision.rule_id,
             (findings, evidence, suggestion),
         )
+        if (
+            decision.rule_id == "LX0609-030"
+            and isinstance(safe_customer_display_facts, Mapping)
+            and safe_customer_display_facts.get("surgery_trigger_kind")
+            == "surgery_order"
+            and safe_customer_display_facts.get("surgery_order_confirmed") is True
+        ):
+            findings = "已开立手术医嘱，但未找到对应手术记录"
+            evidence = "已核对本次住院的手术医嘱与手术记录资料，当前仅确认手术医嘱触发。"
         if decision.rule_id == "LX0609-018":
             findings = _lx018_criterion_finding(decision.criterion_results) or findings
             evidence = "已分别核对主诉字数及主诉与入院第一诊断的诊断指向。"

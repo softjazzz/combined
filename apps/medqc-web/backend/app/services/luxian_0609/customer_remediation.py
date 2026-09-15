@@ -301,6 +301,18 @@ def build_customer_remediation_suggestion(
         if action is None:
             return ""
         target, required, recommendation = action
+        if (
+            normalized_rule_id == "LX0609-030"
+            and isinstance(facts, Mapping)
+            and facts.get("surgery_trigger_kind") == "surgery_order"
+            and facts.get("surgery_order_confirmed") is True
+        ):
+            target = "已开立手术医嘱对应的手术记录"
+            required = "手术是否实际实施的核对结果；已实施时补齐对应手术记录"
+            recommendation = (
+                "请先核对该手术医嘱是否实际执行；如已实施，请补充对应手术记录，"
+                "如未实施，请按实际情况维护医嘱执行状态，不得补写未发生的手术。"
+            )
         personalized = _personalized_action(
             rule_id=normalized_rule_id,
             facts=facts,

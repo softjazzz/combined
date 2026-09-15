@@ -22,11 +22,13 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_record",
+                "surgery_trigger_kind": "performed_surgery",
                 "performed_surgery_confirmed": True,
             },
             {
                 "verification_kind": "surgery_document_present",
                 "target_document": "surgery_record",
+                "surgery_trigger_kind": "performed_surgery",
                 "performed_surgery_confirmed": True,
             },
         ),
@@ -48,12 +50,14 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
-                "performed_surgery_confirmed": True,
+                "surgery_trigger_kind": "surgery_order",
+                "surgery_order_confirmed": True,
             },
             {
                 "failure_kind": "surgery_document_missing",
                 "target_document": "surgery_record",
-                "performed_surgery_confirmed": True,
+                "surgery_trigger_kind": "surgery_order",
+                "surgery_order_confirmed": True,
             },
         ),
         (
@@ -61,11 +65,13 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_record",
+                "surgery_trigger_kind": "performed_surgery",
                 "performed_surgery_confirmed": True,
             },
             {
                 "failure_kind": "surgery_document_blank",
                 "target_document": "surgery_record",
+                "surgery_trigger_kind": "performed_surgery",
                 "performed_surgery_confirmed": True,
             },
         ),
@@ -103,6 +109,19 @@ from app.services.luxian_0609.surgery_presence_result_mapping import (
                 "performed_surgery_confirmed": True,
             },
             None,
+        ),
+        (
+            "LX0609-030",
+            {
+                "verification_kind": "surgery_document_present",
+                "target_document": "surgery_record",
+                "performed_surgery_confirmed": True,
+            },
+            {
+                "verification_kind": "surgery_document_present",
+                "target_document": "surgery_record",
+                "performed_surgery_confirmed": True,
+            },
         ),
         (
             "LX0609-032",
@@ -142,6 +161,7 @@ def test_surgery_presence_mapping_whitelists_private_fields_without_leaking_them
     raw = {
         "verification_kind": "surgery_document_present",
         "target_document": "surgery_record",
+        "surgery_trigger_kind": "performed_surgery",
         "performed_surgery_confirmed": True,
         "source_document_id": "PRIVATE-SURGERY-030",
         "source_document_refs": ["PRIVATE-REF"],
@@ -155,6 +175,7 @@ def test_surgery_presence_mapping_whitelists_private_fields_without_leaking_them
     assert safe == {
         "verification_kind": "surgery_document_present",
         "target_document": "surgery_record",
+        "surgery_trigger_kind": "performed_surgery",
         "performed_surgery_confirmed": True,
     }
     assert "PRIVATE" not in repr(safe)

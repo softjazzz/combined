@@ -22,6 +22,44 @@ def is_surgery_presence_customer_rule(rule_id: str) -> bool:
     return str(rule_id or "").strip().upper() in SURGERY_PRESENCE_DOCUMENT_TARGETS
 
 
+def _safe_030_trigger_facts(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """校验 030 的互斥触发来源，并只保留对应确认事实。
+
+    旧 native/聚合入口的合法实施手术合同没有 ``surgery_trigger_kind``；
+    仅在没有任何 order 字段时保留该旧 performed 形状。当前 native 主链
+    始终写入显式 trigger kind，因此 order-only facts 不会走这个兼容分支。
+    """
+
+    trigger_kind = raw.get("surgery_trigger_kind")
+    if (
+        "surgery_trigger_kind" not in raw
+        and "surgery_order_confirmed" not in raw
+        and raw.get("performed_surgery_confirmed") is True
+    ):
+        return {"performed_surgery_confirmed": True}
+    if trigger_kind == "surgery_order":
+        if (
+            raw.get("surgery_order_confirmed") is not True
+            or "performed_surgery_confirmed" in raw
+        ):
+            return None
+        return {
+            "surgery_trigger_kind": "surgery_order",
+            "surgery_order_confirmed": True,
+        }
+    if trigger_kind == "performed_surgery":
+        if (
+            raw.get("performed_surgery_confirmed") is not True
+            or "surgery_order_confirmed" in raw
+        ):
+            return None
+        return {
+            "surgery_trigger_kind": "performed_surgery",
+            "performed_surgery_confirmed": True,
+        }
+    return None
+
+
 def safe_surgery_presence_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
@@ -38,25 +76,34 @@ def safe_surgery_presence_customer_display_facts(
     ):
         return None
     target_document = SURGERY_PRESENCE_DOCUMENT_TARGETS[normalized_rule_id]
+    trigger_facts = (
+        _safe_030_trigger_facts(raw)
+        if normalized_rule_id == "LX0609-030"
+        else (
+            {"performed_surgery_confirmed": True}
+            if raw.get("performed_surgery_confirmed") is True
+            else None
+        )
+    )
+    if trigger_facts is None:
+        return None
     if (
         raw.get("verification_kind") == "surgery_document_present"
         and raw.get("target_document") == target_document
-        and raw.get("performed_surgery_confirmed") is True
     ):
         return {
             "verification_kind": "surgery_document_present",
             "target_document": target_document,
-            "performed_surgery_confirmed": True,
+            **trigger_facts,
         }
     failure_kind = raw.get("failure_kind")
     if (
         failure_kind not in {"surgery_document_missing", "surgery_document_blank"}
         or raw.get("target_document") != target_document
-        or raw.get("performed_surgery_confirmed") is not True
     ):
         return None
     return {
         "failure_kind": failure_kind,
         "target_document": target_document,
-        "performed_surgery_confirmed": True,
+        **trigger_facts,
     }

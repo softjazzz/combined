@@ -178,6 +178,56 @@ def test_non_compliant_consultation_advice_does_not_mix_data_gap_instructions() 
     assert "不得直接写成已完成" not in suggestion
 
 
+def test_030_order_only_advice_requires_execution_check_before_record_remediation() -> None:
+    suggestion = build_customer_remediation_suggestion(
+        rule_id="LX0609-030",
+        status="non_compliant",
+        reason_code="required_document_missing",
+        facts={
+            "failure_kind": "surgery_document_missing",
+            "target_document": "surgery_record",
+            "surgery_trigger_kind": "surgery_order",
+            "surgery_order_confirmed": True,
+        },
+    )
+
+    assert "请先核对该手术医嘱是否实际执行" in suggestion
+    assert "如已实施，请补充对应手术记录" in suggestion
+    assert "不得补写未发生的手术" in suggestion
+    assert "每台已实施手术" not in suggestion
+
+
+def test_030_order_only_renderer_does_not_claim_surgery_was_performed() -> None:
+    facts = {
+        "failure_kind": "surgery_document_missing",
+        "target_document": "surgery_record",
+        "surgery_trigger_kind": "surgery_order",
+        "surgery_order_confirmed": True,
+    }
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-030",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="required_document_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-surgery-presence-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(
+        decision=decision,
+        safe_customer_display_facts=facts,
+    )
+
+    assert result["findings"] == "已开立手术医嘱，但未找到对应手术记录"
+    assert "当前仅确认手术医嘱触发" in result["evidence"]
+    assert "请先核对该手术医嘱是否实际执行" in result["suggestion"]
+    assert "每台已实施手术" not in result["suggestion"]
+
+
 def test_controlled_missing_fields_are_named_without_echoing_raw_content() -> None:
     suggestion = build_customer_remediation_suggestion(
         rule_id="LX0609-062",

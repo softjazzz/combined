@@ -144,6 +144,103 @@ def test_native_030_order_without_surgery_record_is_non_compliant_with_order_ref
     assert result.decisions[0].fact_refs == (expected_order_ref,)
     assert reduced[0].final_state.value == "non_compliant"
     assert reduced[0].reason_code == "required_document_missing"
+    assert result.customer_display_facts == (
+        (
+            "LX0609-030",
+            {
+                "failure_kind": "surgery_document_missing",
+                "target_document": "surgery_record",
+                "surgery_trigger_kind": "surgery_order",
+                "surgery_order_confirmed": True,
+            },
+        ),
+    )
+
+
+def test_native_030_performed_surgery_uses_performed_trigger_fact():
+    snapshot, materials = _typed_session(
+        surgery_record_rows=(
+            {
+                "document_id": "performed-surgery-030",
+                "surgery_begin_time": "2026-07-17 08:00:00+08:00",
+            },
+        ),
+    )
+
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=("LX0609-030",),
+        visit_id="safe-visit",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        source_schema=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-030",),
+    )
+
+    assert result.customer_display_facts == (
+        (
+            "LX0609-030",
+            {
+                "verification_kind": "surgery_document_present",
+                "target_document": "surgery_record",
+                "surgery_trigger_kind": "performed_surgery",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+    )
+
+
+def test_native_030_1889002_order_only_does_not_claim_mr_surgery_as_performed():
+    snapshot, materials = _typed_session(
+        visit_id="1889002",
+        inpat_nondrug_order_rows=(
+            {
+                "order_id": "1889002-order-1",
+                "order_type": "手术",
+                "order_name": "胸腔闭式引流术",
+                "order_status": "新开",
+            },
+        ),
+        mr_surgery_rows=(
+            {
+                "document_id": "1889002-mr-surgery-1",
+                "surgery_code": "34.0401",
+                "surgery_name": "胸腔闭式引流术",
+                "surgery_begin_datetime": datetime(2026, 7, 17, 8, 0),
+            },
+        ),
+    )
+
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=("LX0609-030",),
+        visit_id="1889002",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        source_schema=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-030",),
+    )
+
+    expected_order_ref = materials.document_rows(
+        "inpat_nondrug_order", snapshot=snapshot
+    )[0][0]
+    assert result.results == ()
+    assert len(result.decisions) == 1
+    assert result.decisions[0].fact_refs == (expected_order_ref,)
+    assert result.decisions[0].reason_code == "required_document_missing"
+    assert result.customer_display_facts == (
+        (
+            "LX0609-030",
+            {
+                "failure_kind": "surgery_document_missing",
+                "target_document": "surgery_record",
+                "surgery_trigger_kind": "surgery_order",
+                "surgery_order_confirmed": True,
+            },
+        ),
+    )
 
 
 def test_native_030_uncertain_order_is_deliverable_data_gap():
@@ -243,14 +340,6 @@ def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeyp
     assert all(item["metadata"]["executor_type"] == "program" for item in result.results)
     assert all(item["metadata"]["total_tokens"] == 0 for item in result.results)
     assert result.customer_display_facts == (
-        (
-            "LX0609-030",
-            {
-                "verification_kind": "surgery_document_present",
-                "target_document": "surgery_record",
-                "performed_surgery_confirmed": True,
-            },
-        ),
         (
             "LX0609-032",
             {
@@ -567,16 +656,7 @@ def test_native_032_unmatched_time_shell_keeps_association_gap_and_document_refs
         for reference, _ in materials.document_rows(source_key, snapshot=snapshot)
     }
     assert set(result.decisions[1].fact_refs) == expected_refs
-    assert result.customer_display_facts == (
-        (
-            "LX0609-030",
-            {
-                "verification_kind": "surgery_document_present",
-                "target_document": "surgery_record",
-                "performed_surgery_confirmed": True,
-            },
-        ),
-    )
+    assert result.customer_display_facts == ()
 
 
 @pytest.mark.parametrize(

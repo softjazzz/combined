@@ -460,6 +460,53 @@ def _selected_surgery_presence_fact_refs(
     return selected
 
 
+def _surgery_presence_display_trigger_facts(
+    *, rule_id: str, provided: Any
+) -> dict[str, Any]:
+    """把 provider 已确认的 030 触发来源投影为客户 facts。"""
+
+    if rule_id != "LX0609-030":
+        # 032 的展示事实合同沿用既有手术实施判定；本次修复只收紧 030。
+        return {"performed_surgery_confirmed": True}
+
+    extraction_inputs = getattr(provided, "extraction_inputs", ())
+    if not isinstance(extraction_inputs, (tuple, list)):
+        return {}
+    order_confirmed = False
+    for extraction_input in extraction_inputs:
+        fact_type = getattr(extraction_input, "fact_type", None)
+        source_key = getattr(extraction_input, "source_key", None)
+        signals = getattr(extraction_input, "positive_signals", ())
+        if (
+            fact_type == "current_visit_surgery_confirmed"
+            and source_key
+            in {"surgery_application", "surgery_record", "mr_surgery"}
+            and any(
+                getattr(signal, "event_status", None) == "performed"
+                for signal in signals
+            )
+        ):
+            return {
+                "surgery_trigger_kind": "performed_surgery",
+                "performed_surgery_confirmed": True,
+            }
+        if (
+            fact_type == "current_visit_surgery_order_confirmed"
+            and source_key == "inpat_nondrug_order"
+            and any(
+                getattr(signal, "event_status", None) in {"ordered", "performed"}
+                for signal in signals
+            )
+        ):
+            order_confirmed = True
+    if order_confirmed:
+        return {
+            "surgery_trigger_kind": "surgery_order",
+            "surgery_order_confirmed": True,
+        }
+    return {}
+
+
 def execute_luxian_0609_native_rules(
     *,
     rule_ids: Sequence[str],
@@ -674,6 +721,14 @@ def execute_luxian_0609_native_rules(
         target_document = target_documents.get(rule_id)
         if target_document is None:
             continue
+        trigger_facts = _surgery_presence_display_trigger_facts(
+            rule_id=rule_id,
+            provided=provided,
+        )
+        if rule_id == "LX0609-030" and not trigger_facts:
+            # 030 的判定结果没有可观察的已组装触发信号时，不能凭状态猜测
+            # “已实施手术”；状态与原因码仍由上游执行器原样保留。
+            continue
         effective_state = final_state_by_rule_id.get(rule_id, result.final_state.value)
         if effective_state == "compliant":
             # 030/032 都是纯存在性判定。合规时也保存已核对的通过事实，避免客户侧
@@ -685,7 +740,7 @@ def execute_luxian_0609_native_rules(
                     {
                         "verification_kind": "surgery_document_present",
                         "target_document": target_document,
-                        "performed_surgery_confirmed": True,
+                        **trigger_facts,
                     },
                 )
             )
@@ -702,7 +757,7 @@ def execute_luxian_0609_native_rules(
                         else "surgery_document_missing"
                     ),
                     "target_document": target_document,
-                    "performed_surgery_confirmed": True,
+                    **trigger_facts,
                 },
             )
         )
