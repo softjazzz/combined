@@ -886,8 +886,14 @@ def _typed_037_session(
     anesthesia_method: str | None = "全身麻醉",
     anesthesia_record_content: str = "",
     mr_surgery_mode: str = "empty",
-    visit_mode: str = "available",
+    visit_mode: str | None = None,
+    pre_visit_mode: str = "available",
+    post_visit_mode: str = "available",
 ):
+    if visit_mode is not None:
+        pre_visit_mode = visit_mode
+        post_visit_mode = visit_mode
+
     rows_by_source = {
         "anesthesia_record": (
             (
@@ -899,34 +905,44 @@ def _typed_037_session(
             if anesthesia_method is not None
             else ({"record_content": anesthesia_record_content},)
         ),
-        "preane_surveil_record": (
-            ()
-            if visit_mode == "empty"
-            else (
-                {
-                    "record_time": "2026-07-30 08:00:00",
-                    "record_content": preanesthesia_content,
-                    "anesthetist_sign": "麻醉医师陈某",
-                },
-            )
-        ),
-        "postane_surveil_record": (
-            ()
-            if visit_mode == "empty"
-            else (
-                {
-                    "record_time": "2026-07-31 08:00:00",
-                    "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
-                    "anesthetist_sign": "麻醉医师陈某",
-                },
-            )
-        ),
+    }
+
+    visit_rows = {
+        "preane_surveil_record": {
+            "record_time": "2026-07-30 08:00:00",
+            "record_content": preanesthesia_content,
+            "anesthetist_sign": "麻醉医师陈某",
+        },
+        "postane_surveil_record": {
+            "record_time": "2026-07-31 08:00:00",
+            "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+            "anesthetist_sign": "麻醉医师陈某",
+        },
+    }
+    visit_modes = {
+        "preane_surveil_record": pre_visit_mode,
+        "postane_surveil_record": post_visit_mode,
     }
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == "mr_surgery" and mr_surgery_mode == "error":
             raise SourceEvidenceQueryError()
+        if source_key == "mr_surgery" and mr_surgery_mode == "unavailable":
+            raise SourceEvidenceUnavailable()
+        if source_key in visit_modes:
+            mode = visit_modes[source_key]
+            if mode == "error":
+                raise SourceEvidenceQueryError()
+            if mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            rows = () if mode == "empty" else (visit_rows[source_key],)
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=rows,
+                truncated=mode == "truncated",
+                limit_rows=50,
+            )
         return SnapshotSourceRows.create(
             source_key=source_key,
             rows=rows_by_source.get(source_key, ()),
@@ -950,8 +966,8 @@ def _typed_037_session(
     (
         (
             "麻醉记录：麻醉方式：静吸复合全麻 ASA 分级：II级",
-            "not_applicable",
-            "anesthesia_visit_absent",
+            "non_compliant",
+            "anesthesia_visit_missing",
         ),
         (
             "麻醉记录：麻醉方式：局部麻醉 ASA 分级：I级",
@@ -1155,14 +1171,7 @@ def test_typed_anesthesia_missing_documents_emit_controlled_customer_facts(
 
 @pytest.mark.parametrize(
     ("rule_id", "empty_sources", "reason_code"),
-    [
-        ("LX0609-035", {"consent_form"}, "anesthesia_consent_absent"),
-        (
-            "LX0609-037",
-            {"preane_surveil_record", "postane_surveil_record"},
-            "anesthesia_visit_absent",
-        ),
-    ],
+    [("LX0609-035", {"consent_form"}, "anesthesia_consent_absent")],
 )
 def test_typed_detail_rules_are_not_applicable_when_parent_document_is_absent(
     monkeypatch,
@@ -1195,15 +1204,100 @@ def test_typed_detail_rules_are_not_applicable_when_parent_document_is_absent(
 
     assert outcome.status == "not_applicable"
     assert outcome.reason_code == reason_code
-    if rule_id == "LX0609-037":
-        assert outcome.customer_display_facts == {
-            "failure_kind": "anesthesia_visit_missing",
-            "performed_anesthesia_confirmed": True,
-            "missing_visit_sources": [
-                "preane_surveil_record",
-                "postane_surveil_record",
-            ],
-        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("pre_visit_mode", "post_visit_mode"),
+    (
+        ("empty", "empty"),
+        ("empty", "available"),
+        ("available", "empty"),
+    ),
+)
+async def test_typed_037_missing_visit_is_non_compliant(
+    pre_visit_mode: str,
+    post_visit_mode: str,
+):
+    session = _typed_037_session(
+        preanesthesia_content="ASA II级，已完成气道评估，已核对禁食禁饮，麻醉史无，已完成麻醉风险告知。",
+        pre_visit_mode=pre_visit_mode,
+        post_visit_mode=post_visit_mode,
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-037",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-037",),
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-037",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "non_compliant"
+    assert result.decisions[0].reason_code == "required_document_missing"
+    assert dict(result.customer_display_facts)["LX0609-037"] == {
+        "failure_kind": "anesthesia_visit_missing",
+        "performed_anesthesia_confirmed": True,
+        "missing_visit_sources": [
+            source_key
+            for source_key, mode in (
+                ("preane_surveil_record", pre_visit_mode),
+                ("postane_surveil_record", post_visit_mode),
+            )
+            if mode == "empty"
+        ],
+    }
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("visit_source_mode", "expected_state", "expected_reason"),
+    (
+        ("unavailable", "data_gap", "source_unavailable"),
+        ("truncated", "data_gap", "source_unavailable"),
+        ("error", "technical_error", "source_query_error"),
+    ),
+)
+async def test_typed_037_visit_source_failure_is_not_a_clinical_defect(
+    visit_source_mode: str,
+    expected_state: str,
+    expected_reason: str,
+):
+    session = _typed_037_session(
+        preanesthesia_content="ASA II级，已完成气道评估，已核对禁食禁饮，麻醉史无，已完成麻醉风险告知。",
+        pre_visit_mode=visit_source_mode,
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-037",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-037",),
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-037",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == expected_state
+    assert result.decisions[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
 
 
 def test_typed_037_incomplete_visits_report_exact_missing_fields(monkeypatch):
@@ -2562,7 +2656,7 @@ async def test_typed_039_rescue_source_query_error_is_technical_error():
 
 
 @pytest.mark.asyncio
-async def test_missing_visits_are_owned_by_036_and_037_is_not_applicable():
+async def test_missing_visits_are_defects_for_037_even_when_036_is_selected():
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
         rule_ids=("LX0609-036", "LX0609-037"),
         wrapper_rules=[_wrapper("LX0609-036"), _wrapper("LX0609-037")],
@@ -2576,9 +2670,9 @@ async def test_missing_visits_are_owned_by_036_and_037_is_not_applicable():
 
     assert [item["status"] for item in result.results] == [
         "data_gap",
-        "not_applicable",
+        "non_compliant",
     ]
-    assert result.results[1]["metadata"]["reason_code"] == "anesthesia_visit_absent"
+    assert result.results[1]["metadata"]["reason_code"] == "anesthesia_visit_missing"
     assert result.llm_call_count == 0
 
 

@@ -1378,10 +1378,13 @@ def _typed_terminal_outcome(
                 source_keys=(anesthesia_trigger_source,),
             )
             if rule_id == "LX0609-037":
+                # 037 同时核对术前、术后访视的完整性。来源查询已经完成、且
+                # 已确认实施非局部麻醉时，任一访视缺失就是本规则的明确缺陷；
+                # 036 的存在性检查不能把 037 的缺失改写成“不适用”。
                 return _SurgeryDocumentOutcome(
                     rule_id,
-                    "not_applicable",
-                    "anesthesia_visit_absent",
+                    "non_compliant",
+                    "anesthesia_visit_missing",
                     "program",
                     facts,
                 )
@@ -2188,9 +2191,9 @@ def _terminal_result(
         ):
             return _result(
                 rule_id,
-                "not_applicable" if rule_id == "LX0609-037" else "data_gap",
+                "non_compliant" if rule_id == "LX0609-037" else "data_gap",
                 (
-                    "anesthesia_visit_absent"
+                    "anesthesia_visit_missing"
                     if rule_id == "LX0609-037"
                     else "anesthesia_visit_source_unproven"
                 ),
