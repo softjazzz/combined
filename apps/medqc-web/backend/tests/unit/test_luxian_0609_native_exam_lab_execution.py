@@ -2636,6 +2636,133 @@ async def test_010_reused_exam_id_across_orders_stays_data_gap(monkeypatch):
     assert client.prompts == []
 
 
+def test_010_composite_exam_id_links_one_master_to_explicit_component_orders():
+    """客户源表以 ``^`` 枚举合并检查医嘱时，应按显式组件完成关联。"""
+
+    rows_by_source = {
+        "inpat_nondrug_order.exam_lab_order": (
+            {
+                "order_id": "VISIT||1",
+                "order_name": "MRI腰椎平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 08:00:00",
+            },
+            {
+                "order_id": "VISIT||2",
+                "order_name": "MRI胸椎平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 08:00:00",
+            },
+        ),
+        "exam_master": (
+            {
+                "exam_id": "VISIT||2^VISIT||1",
+                "order_id": "VISIT||1+VISIT||1",
+                "performed_dept": "核磁共振室",
+                "report_time": "2026-07-07 10:00:00",
+            },
+        ),
+        "exam_item_report": (
+            {
+                "exam_id": "VISIT||2^VISIT||1",
+                "record_content": "腰椎及胸椎MRI检查结果。",
+            },
+        ),
+    }
+
+    assert exam_lab._order_exam_structure_outcome(rows_by_source) is None
+    assert exam_lab._order_exam_association_summary(rows_by_source) == {
+        "order_count": 2,
+        "exam_master_count": 1,
+        "uniquely_linked_order_count": 2,
+        "unmatched_or_ambiguous_order_count": 0,
+        "association_issue_kind": "association_cardinality_mismatch",
+    }
+
+
+def test_010_composite_exam_id_with_unknown_component_stays_data_gap():
+    """复合检查只要有一个组件不属于本次就诊医嘱，就不能猜测关联。"""
+
+    outcome = exam_lab._order_exam_structure_outcome(
+        {
+            "inpat_nondrug_order.exam_lab_order": (
+                {
+                    "order_id": "VISIT||1",
+                    "order_name": "MRI腰椎平扫",
+                    "order_status": "新开",
+                    "prescribed_datetime": "2026-07-07 08:00:00",
+                },
+            ),
+            "exam_master": (
+                {
+                    "exam_id": "VISIT||1^OTHER-VISIT||2",
+                    "order_id": "VISIT||1+VISIT||1",
+                    "performed_dept": "核磁共振室",
+                    "report_time": "2026-07-07 10:00:00",
+                },
+            ),
+            "exam_item_report": (
+                {"exam_id": "VISIT||1^OTHER-VISIT||2"},
+            ),
+        }
+    )
+
+    assert outcome is not None
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_010_composite_exam_id_reaches_authoritative_exam_time_gate(monkeypatch):
+    """复合键已完整关联后，缺实际检查时间应报告时间缺口而非关联失败。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "VISIT||2^VISIT||1",
+                "order_id": "VISIT||1+VISIT||1",
+                "performed_dept": "核磁共振室",
+                "report_time": "2026-07-07 10:00:00",
+            },
+        ),
+        exam_report_rows=(
+            {
+                "exam_id": "VISIT||2^VISIT||1",
+                "record_content": "腰椎及胸椎MRI检查结果。",
+                "report_time": "2026-07-07 10:00:00",
+            },
+        ),
+        order_rows=(
+            {
+                "order_id": "VISIT||1",
+                "order_name": "MRI腰椎平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 08:00:00",
+            },
+            {
+                "order_id": "VISIT||2",
+                "order_name": "MRI胸椎平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 08:00:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-07-07 08:30:00",
+                "record_content": "因腰背痛完善胸椎及腰椎MRI明确骨折情况。",
+            },
+        ),
+    )
+
+    assert decision.final_state.value == "data_gap"
+    assert decision.reason_code == "authoritative_time_missing"
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "authoritative_time_missing"
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
 @pytest.mark.asyncio
 async def test_010_pending_order_does_not_poison_executed_exam(monkeypatch):
     """O1 已完成而 O2 只有待执行医嘱时，只核对 O1。"""

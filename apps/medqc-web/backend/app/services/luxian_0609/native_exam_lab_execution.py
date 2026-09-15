@@ -42,6 +42,7 @@ from .exam_lab_window import (
     _evaluation_window_gap_reason,
     resolve_evaluation_window_state,
 )
+from .exam_order_linkage import resolve_exam_master_order_ids
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
@@ -585,9 +586,10 @@ def _order_exam_structure_outcome(
 ) -> _ExamLabOutcome | None:
     """只校验010的结构化医嘱、检查与报告合同，语义交给受控LLM。
 
-    ``order_id`` 与 ``exam_id`` 是唯一允许的关联键。结构完整时返回 ``None``，
-    让后续事实投影按权威检查时间截取病程；关联不完整时失败关闭，模型不得
-    猜测事件归属或权威时间。
+    ``order_id`` 与 ``exam_id`` 是唯一允许的关联键。客户源表的合并检查由
+    ``exam_id`` 显式枚举多个医嘱号；结构完整时返回 ``None``，让后续事实投影
+    按权威检查时间截取病程。关联不完整时失败关闭，模型不得猜测事件归属或
+    权威时间。
     """
 
     orders = _effective_target_orders(rows_by_source, fact_kind="exam")
@@ -670,13 +672,17 @@ def _order_exam_structure_outcome(
 
     exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
     for exam in exam_rows:
-        order_id = _clean(exam.get("order_id"))
         exam_id = _clean(exam.get("exam_id"))
-        if not order_id or not exam_id or order_id not in orders_by_id:
+        linked_order_ids = resolve_exam_master_order_ids(
+            exam,
+            known_order_ids=tuple(orders_by_id),
+        )
+        if not exam_id or not linked_order_ids:
             return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
-        exams_by_order.setdefault(order_id, []).append(exam)
-    # exam_id 是检查主表的报告级唯一键；同一检查被不同医嘱复用时，
-    # 不能把一份报告当作多个事件的证据。
+        for order_id in linked_order_ids:
+            exams_by_order.setdefault(order_id, []).append(exam)
+    # exam_id 是检查主表的报告级唯一键。同一合并检查可显式枚举多个医嘱，
+    # 但同一个医嘱仍不能被多条检查主记录重复占用。
     exam_ids = [_clean(exam.get("exam_id")) for exam in exam_rows]
     if len(exam_ids) != len(set(exam_ids)):
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
@@ -684,7 +690,7 @@ def _order_exam_structure_outcome(
     if any(len(exams) != 1 for exams in exams_by_order.values()):
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
 
-    executed = tuple(exams[0] for exams in exams_by_order.values())
+    executed = tuple(exam_rows)
 
     for exam in executed:
         exam_id = _clean(exam.get("exam_id"))
@@ -713,13 +719,20 @@ def _order_exam_association_summary(
         and _is_exam_master_target(row)
     )
     order_ids = tuple(_clean(row.get("order_id")) for _time, row in orders)
-    exam_order_ids = tuple(_clean(row.get("order_id")) for row in exam_rows)
     exam_ids = tuple(_clean(row.get("exam_id")) for row in exam_rows)
     order_id_counts = Counter(order_ids)
     exam_id_counts = Counter(exam_ids)
     exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
-    for row, order_id in zip(exam_rows, exam_order_ids):
-        if order_id:
+    invalid_exam_link = False
+    known_order_ids = tuple(value for value in order_ids if value)
+    for row in exam_rows:
+        linked_order_ids = resolve_exam_master_order_ids(
+            row,
+            known_order_ids=known_order_ids,
+        )
+        if not linked_order_ids:
+            invalid_exam_link = True
+        for order_id in linked_order_ids:
             exams_by_order.setdefault(order_id, []).append(row)
 
     uniquely_linked = 0
@@ -736,12 +749,11 @@ def _order_exam_association_summary(
     issues: set[str] = set()
     if (
         any(not value for value in order_ids)
-        or any(not value for value in exam_order_ids)
+        or any(not _clean(row.get("order_id")) for row in exam_rows)
         or any(not value for value in exam_ids)
     ):
         issues.add("invalid_business_key")
-    known_order_ids = {value for value in order_ids if value}
-    if any(value and value not in known_order_ids for value in exam_order_ids):
+    if invalid_exam_link:
         issues.add("exam_master_without_order")
     if any(count > 1 for value, count in order_id_counts.items() if value) or any(
         len(values) > 1 for values in exams_by_order.values()
