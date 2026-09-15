@@ -73,11 +73,12 @@
 }
 
 .record-pool-refined .workbench-controls__search-input {
-  grid-column: 3 / 6;
+  grid-column: 3 / -1;
   grid-row: 1;
   width: 100%;
-  max-width: none;
+  max-width: 520px;
   min-width: 0;
+  justify-self: end;
 }
 
 .record-pool-refined .workbench-dept-filter {
@@ -116,7 +117,7 @@
   width: 0;
 }
 .record-pool-refined .wv4-filter-actions {
-  grid-column: 5;
+  grid-column: -2 / -1;
   grid-row: 2;
   margin: 0;
 }
@@ -420,4 +421,54 @@
 }
 .record-pool-refined .wv4-filter-actions__button.ant-btn-primary:hover {
   background: #467ff7 !important;
+}
+
+/* 未显示在院排序时移除预留列，避免日期与查询操作之间出现空洞。 */
+@media (min-width: 701px) and (max-width: 1400px) {
+  .record-pool-refined
+    .workbench-filter-toolbar:not(:has(.wv4-record-pool-filter__inpatient-sort))
+    .wv4-filter-actions {
+    grid-column: 2;
+    grid-row: 3;
+  }
+}
+@media (min-width: 1401px) {
+  .record-pool-refined
+    .wv4-record-pool-hero
+    .workbench-filter-toolbar:not(:has(.wv4-record-pool-filter__inpatient-sort)) {
+    grid-template-columns: minmax(210px, 1fr) minmax(230px, 1fr) minmax(340px, 1.4fr) auto;
+  }
+}
+.workstation-shell .record-pool-refined .wv4-record-pool-hero :deep(.ant-input-affix-wrapper),
+.workstation-shell .record-pool-refined .wv4-record-pool-hero :deep(.ant-select-selector),
+.workstation-shell .record-pool-refined .wv4-record-pool-hero :deep(.ant-picker),
+.workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-hosp-filter,
+.workstation-shell
+  .record-pool-refined
+  .wv4-record-pool-hero
+  .wv4-record-pool-filter__sync-shortcut,
+.workstation-shell .record-pool-refined .wv4-record-pool-hero .wv4-filter-actions__button {
+  height: 36px !important;
+  min-height: 36px !important;
+}
+.record-pool-refined .wv4-record-pool-hero :deep(.ant-select-single .ant-select-selection-item),
+.record-pool-refined
+  .wv4-record-pool-hero
+  :deep(.ant-select-single .ant-select-selection-placeholder) {
+  line-height: 34px !important;
+}
+.record-pool-refined .wv4-record-pool-hero :deep(.ant-select-single) {
+  height: 36px;
+}
+.record-pool-refined .workbench-hosp-filter {
+  gap: 10px;
+}
+.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
+  min-width: 76px;
+  padding-inline: 12px;
+}
+.record-pool-refined .wv4-record-pool-filter__summary {
+  color: #7a8698;
+  font-size: 12px;
+  margin-top: 12px;
 }
