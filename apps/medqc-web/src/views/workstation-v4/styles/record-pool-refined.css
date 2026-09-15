@@ -47,8 +47,10 @@
 
 .record-pool-refined .wv4-record-pool-hero .workbench-filter-toolbar {
   display: grid;
-  grid-template-columns: minmax(185px, 1fr) minmax(240px, 1.15fr) minmax(355px, 1.6fr) auto;
-  gap: 14px 18px;
+  grid-template-columns:
+    minmax(210px, 1fr) minmax(210px, 1fr) minmax(330px, 1.45fr) minmax(150px, 0.68fr)
+    auto;
+  gap: 14px 16px;
   align-items: center;
 }
 
@@ -71,7 +73,7 @@
 }
 
 .record-pool-refined .workbench-controls__search-input {
-  grid-column: 3 / 5;
+  grid-column: 3 / 6;
   grid-row: 1;
   width: 100%;
   max-width: none;
@@ -114,12 +116,13 @@
   width: 0;
 }
 .record-pool-refined .wv4-filter-actions {
-  grid-column: 4;
+  grid-column: 5;
   grid-row: 2;
   margin: 0;
 }
 .record-pool-refined .wv4-record-pool-filter__inpatient-sort {
-  grid-column: 1 / 3;
+  grid-column: 4;
+  grid-row: 2;
   width: 100%;
 }
 
@@ -352,9 +355,13 @@
     grid-column: 1;
     grid-row: 3;
   }
-  .record-pool-refined .wv4-filter-actions {
+  .record-pool-refined .wv4-record-pool-filter__inpatient-sort {
     grid-column: 2;
     grid-row: 3;
+  }
+  .record-pool-refined .wv4-filter-actions {
+    grid-column: 1 / 3;
+    grid-row: 4;
     justify-content: flex-end;
   }
 }
