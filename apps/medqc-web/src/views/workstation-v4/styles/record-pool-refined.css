@@ -258,7 +258,9 @@
 }
 .record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
   padding-block: 13px;
-  font-size: 13px !important;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
   color: #556275 !important;
   background: #f3f6fb !important;
 }
