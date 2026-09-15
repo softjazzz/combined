@@ -29,16 +29,6 @@
                   当前阶段：参考首页生成
                 </div>
               </div>
-              <a-button
-                v-if="!isStageQueueMode"
-                :type="syncScope === 'today_inpatient' ? 'primary' : 'default'"
-                :loading="hospitalizationStatusVerifying"
-                :disabled="hospitalizationStatusVerifying"
-                class="wv4-record-pool-filter__sync-shortcut"
-                @click="emit('toggleTodayInpatient')"
-              >
-                {{ syncScope === 'today_inpatient' ? '当日在院 · 已核验' : '核验当日在院' }}
-              </a-button>
               <div v-if="isFrontpageGenerateStage" class="wv4-analysis-overview__actions">
                 <a-button
                   size="small"
@@ -107,6 +97,15 @@
                     class="workbench-hosp-segmented"
                     @update:value="emit('selectHospFilter', normalizeHospFilterValue($event))"
                   />
+                  <a-button
+                    :type="syncScope === 'today_inpatient' ? 'primary' : 'default'"
+                    :loading="hospitalizationStatusVerifying"
+                    :disabled="hospitalizationStatusVerifying"
+                    class="wv4-record-pool-filter__sync-shortcut"
+                    @click="emit('toggleTodayInpatient')"
+                  >
+                    {{ syncScope === 'today_inpatient' ? '当日在院 · 已核验' : '核验当日在院' }}
+                  </a-button>
                 </div>
 
                 <a-select

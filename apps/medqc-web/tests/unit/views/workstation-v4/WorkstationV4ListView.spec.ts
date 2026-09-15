@@ -260,10 +260,13 @@ describe('WorkstationV4ListView filters', () => {
     expect(surface.find('.wv4-record-pool-filter__notice').exists()).toBe(false)
     expect(surface.find('.wv4-record-pool-filter__summary').text()).toContain('当前筛选')
     expect(
+      surface.find('.workbench-hosp-filter .wv4-record-pool-filter__sync-shortcut').exists(),
+    ).toBe(true)
+    expect(
       surface
         .find('.wv4-analysis-overview__header .wv4-record-pool-filter__sync-shortcut')
         .exists(),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('uses the compact record-pool table instead of quality-result columns', () => {
