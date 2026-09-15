@@ -6,6 +6,7 @@ from app.services.luxian_0609.canonical_result_finalizer import (
 from app.services.luxian_0609.surgery_document_result_mapping import (
     is_surgery_document_public_fact_ref_evidence_rule,
     safe_surgery_document_customer_display_facts,
+    surgery_document_customer_fact_status_is_valid,
 )
 
 
@@ -62,3 +63,38 @@ def test_status_fact_contract_failure_is_isolated_as_technical_error() -> None:
     assert finalized["status"] == "technical_error"
     assert finalized["reason_code"] == "model_invalid_output"
     assert "findings" not in finalized
+
+
+def test_037_missing_anesthesia_visit_is_a_deliverable_defect() -> None:
+    raw_facts = {
+        "failure_kind": "anesthesia_visit_missing",
+        "performed_anesthesia_confirmed": True,
+        "missing_visit_sources": ["postane_surveil_record"],
+    }
+    safe_facts = safe_surgery_document_customer_display_facts(
+        rule_id="LX0609-037", raw=raw_facts
+    )
+
+    assert surgery_document_customer_fact_status_is_valid(
+        rule_id="LX0609-037",
+        status="non_compliant",
+        safe_facts=safe_facts,
+    )
+    assert not surgery_document_customer_fact_status_is_valid(
+        rule_id="LX0609-037",
+        status="not_applicable",
+        safe_facts=safe_facts,
+    )
+
+    finalized, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result={
+            "rule_id": "LX0609-037",
+            "status": "non_compliant",
+            "reason_code": "required_document_missing",
+        },
+        raw_facts=raw_facts,
+    )
+
+    assert handled is True
+    assert finalized["status"] == "non_compliant"
+    assert finalized["reason_code"] == "required_document_missing"

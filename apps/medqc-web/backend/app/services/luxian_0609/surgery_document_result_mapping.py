@@ -323,9 +323,7 @@ def surgery_document_customer_fact_status_is_valid(
         "anesthesia_visits_present": "compliant",
         "anesthesia_visits_complete": "compliant",
         "anesthesia_visit_incomplete": "non_compliant",
-        "anesthesia_visit_missing": (
-            "not_applicable" if str(rule_id).upper() == "LX0609-037" else "non_compliant"
-        ),
+        "anesthesia_visit_missing": "non_compliant",
         "anesthesia_record_present": "compliant",
         "anesthesia_record_missing": "non_compliant",
         "preop_discussion_surgeon_participation_confirmed": "compliant",
