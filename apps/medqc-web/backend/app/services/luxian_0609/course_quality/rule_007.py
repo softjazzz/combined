@@ -31,6 +31,11 @@ from .shared import authoritative_course_time, row_text
 RULE_007_RECORD_SOURCES = ("daily_course_record", "senior_course_record")
 _RULE_007_ADMISSION_SOURCE = "inpat_registration"
 _MAX_INTERVAL = timedelta(hours=72)
+_DAILY_ROUND_CONTENT_PREFIX = re.compile(
+    r"^查房内容\s*[：:]+\s*(?P<content>.+)$"
+)
+_NON_PERFORMED_ROUND_PREFIXES = ("未进行", "未完成", "取消", "未查房", "计划", "暂缓")
+_NON_CURRENT_ROUND_PREFIXES = ("昨日查房", "明日查房")
 
 
 def _missing_time_capacity_exceeded(
@@ -74,6 +79,22 @@ def _admission_for_007(materials):
     return anchor, selected if anchor.state is AdmissionAnchorState.EXACT else admission
 
 
+def _daily_round_content_is_substantive(content: str) -> bool:
+    """确认查房前缀后的正文确实记录了本次查房，而非空壳或未执行说明。"""
+
+    normalized = content.lstrip("：:，, ").strip()
+    if normalized.startswith("今日查房"):
+        nested = re.match(r"^今日查房\s*[：:,，]\s*(.+)$", normalized)
+        if nested is None:
+            return False
+        normalized = nested.group(1).lstrip("：:，, ").strip()
+    if normalized.startswith(_NON_CURRENT_ROUND_PREFIXES):
+        return False
+    return bool(re.search(r"[\u4e00-\u9fff]", normalized)) and not normalized.startswith(
+        _NON_PERFORMED_ROUND_PREFIXES
+    )
+
+
 def _is_round_record(row: Mapping[str, Any], *, source_key: str) -> bool:
     """排除明确标成其他用途的病程；标题缺失时保留来源表既有语义。"""
 
@@ -84,14 +105,15 @@ def _is_round_record(row: Mapping[str, Any], *, source_key: str) -> bool:
     if not title:
         return True
     if source_key == "daily_course_record" and title == "日常病程记录":
-        # 只识别当前查房模板，不从计划、历史引用或其他用途文书推断查房。
+        # 日常病程的固定“查房内容”前缀后可能直接进入术后天数/病情，
+        # 不能只要求出现“今日查房”，否则会漏掉有权威时间的明确查房记录。
         body = str(row.get("record_content") or row.get("content") or "").strip()
         current = re.match(r"^(?:查房内容\s*[：:]+\s*)?今日查房\s*[：:,，]\s*(.+)", body)
         if current:
-            content = current.group(1).strip()
-            return bool(re.search(r"[\u4e00-\u9fff]", content)) and not content.startswith(
-                ("未进行", "未完成", "取消")
-            )
+            return _daily_round_content_is_substantive(current.group(1))
+        prefixed = _DAILY_ROUND_CONTENT_PREFIX.match(body)
+        if prefixed:
+            return _daily_round_content_is_substantive(prefixed.group("content"))
     role = classify_course_round_role(row, source_key=source_key)
     return "查房" in title and role is not CourseRoundRole.NONE
 
