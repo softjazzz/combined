@@ -1,7 +1,7 @@
 /* 病历池专属视觉层：不改变共用队列与任务的布局。 */
 .record-pool-refined {
-  background: #fbfcfe;
-  color: #263449;
+  background: #f5f5f7;
+  color: #1d1d1f;
   font-family: 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
 }
 
@@ -12,9 +12,9 @@
 .record-pool-refined .wv4-record-pool-hero {
   padding: 0 0 20px;
   border: 0;
-  border-bottom: 1px solid #e8edf5;
-  border-radius: 0;
-  background: transparent;
+  border-bottom: 1px solid #e5e5ea;
+  border-radius: 12px;
+  background: transparent !important;
   box-shadow: none !important;
 }
 
@@ -26,7 +26,7 @@
 }
 
 .record-pool-refined .wv4-analysis-overview__title {
-  color: #1e293b;
+  color: #1d1d1f;
   font-size: 24px;
   line-height: 1.3;
   letter-spacing: -0.6px;
@@ -67,7 +67,7 @@
 
 .record-pool-refined .workbench-hosp-filter__label {
   display: inline;
-  color: #58677b;
+  color: #6e6e73;
   font-size: 13px;
   font-weight: 400;
 }
@@ -106,7 +106,7 @@
   flex-shrink: 0;
   font-size: 13px;
   font-weight: 400;
-  color: #58677b;
+  color: #6e6e73;
   white-space: nowrap;
 }
 .record-pool-refined .record-pool-date-field .workbench-date-row__range,
@@ -142,7 +142,7 @@
   margin-top: 16px;
   clip: auto;
   white-space: normal;
-  color: #657184;
+  color: #6e6e73;
   font-size: 13px;
   padding: 0;
   border: 0;
@@ -185,7 +185,7 @@
   background: currentColor;
 }
 .record-pool-refined :deep(.batch-table-panel__hospitalization-status--inpatient) {
-  color: #2b6cf6;
+  color: #007aff;
 }
 .record-pool-refined :deep(.batch-table-panel__hospitalization-status--discharged) {
   color: #707b8b;
@@ -195,7 +195,7 @@
 .record-pool-refined :deep(.ant-select-selector),
 .record-pool-refined :deep(.ant-picker) {
   background: #fff !important;
-  border-color: #dfe6ef !important;
+  border-color: #dedee3 !important;
   box-shadow: none !important;
   border-radius: 8px !important;
 }
@@ -220,12 +220,12 @@
   padding-inline: 16px;
 }
 .record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-selected) {
-  color: #2b6cf6;
-  box-shadow: 0 1px 3px rgb(30 64 110 / 8%);
+  color: #007aff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
 }
 .record-pool-refined .wv4-filter-actions__button.ant-btn-primary {
-  background: #2b6cf6 !important;
-  border-color: #2b6cf6 !important;
+  background: #007aff !important;
+  border-color: #007aff !important;
   color: #fff !important;
 }
 .record-pool-refined .workbench-dept-filter__count {
@@ -254,15 +254,15 @@
   color: #647184;
 }
 .record-pool-refined :deep(.batch-table-panel__summary-pill--selected) {
-  color: #2b6cf6;
+  color: #007aff;
 }
 .record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
   padding-block: 13px;
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
   font-size: 14px !important;
   font-weight: 400 !important;
-  color: #556275 !important;
-  background: #f3f6fb !important;
+  color: #6e6e73 !important;
+  background: #f8f8fa !important;
 }
 .record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th::before) {
   display: none;
@@ -293,7 +293,7 @@
 .record-pool-refined :deep(.batch-table-panel__patient-name) {
   font-size: 15px;
   font-weight: 500;
-  color: #24334a;
+  color: #1d1d1f;
 }
 .record-pool-refined :deep(.batch-table-panel__visit-label) {
   display: none;
@@ -316,7 +316,7 @@
   font-weight: 400 !important;
 }
 .record-pool-refined :deep(.batch-table-panel__detail-button:hover) {
-  color: #2b6cf6 !important;
+  color: #007aff !important;
   background: #edf5ff !important;
 }
 .record-pool-refined :deep(.ant-table-tbody > tr > td) {
@@ -324,7 +324,7 @@
 }
 .record-pool-refined :deep(.ant-btn:focus-visible),
 .record-pool-refined :deep(.ant-checkbox-input:focus-visible + .ant-checkbox-inner) {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #007aff;
   outline-offset: 3px;
 }
 
@@ -339,8 +339,8 @@
   border-radius: 10px;
   background: #fff;
   box-shadow:
-    0 0 0 1px #e8edf5,
-    0 3px 12px rgb(35 60 95 / 3%);
+    0 0 0 1px #e5e5ea,
+    0 4px 16px rgb(0 0 0 / 4%);
 }
 
 @media (max-width: 1400px) {
@@ -398,7 +398,7 @@
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
-  color: #58677b;
+  color: #6e6e73;
 }
 .record-pool-refined .workbench-filter-toolbar :deep(.ant-select),
 .record-pool-refined .workbench-filter-toolbar :deep(.ant-picker),
@@ -413,39 +413,39 @@
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
 }
 .record-pool-refined .workbench-hosp-segmented {
-  background: #edf2f8;
+  background: #e9e9ee;
   border-radius: 8px;
 }
 .record-pool-refined :deep(.workbench-dept-select__name) {
-  color: #34445b;
+  color: #3a3a3c;
   font-weight: 400 !important;
 }
 .record-pool-refined :deep(.ant-input-affix-wrapper:hover),
 .record-pool-refined :deep(.ant-select-selector:hover),
 .record-pool-refined :deep(.ant-picker:hover) {
-  border-color: #91b4fa !important;
+  border-color: #a1a1aa !important;
 }
 .record-pool-refined :deep(.ant-input-affix-wrapper-focused),
 .record-pool-refined :deep(.ant-select-focused .ant-select-selector),
 .record-pool-refined :deep(.ant-picker-focused) {
-  border-color: #2b6cf6 !important;
-  box-shadow: 0 0 0 2px rgb(43 108 246 / 10%) !important;
+  border-color: #007aff !important;
+  box-shadow: 0 0 0 2px rgb(0 122 255 / 14%) !important;
 }
 .record-pool-refined :deep(.ant-table-tbody > tr > td) {
-  border-bottom-color: #edf1f6;
+  border-bottom-color: #efeff2;
 }
 .record-pool-refined :deep(.ant-table-tbody > tr:hover > td),
 .record-pool-refined :deep(.ant-table-tbody > tr > td.ant-table-cell-row-hover) {
-  background: #f5f8fe !important;
+  background: #f5f5f7 !important;
 }
 .record-pool-refined :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: #edf4ff !important;
+  background: #eaf3ff !important;
 }
 .record-pool-refined :deep(.batch-table-panel__detail-button) {
-  color: #2b6cf6 !important;
+  color: #007aff !important;
 }
 .record-pool-refined .wv4-filter-actions__button.ant-btn-primary:hover {
-  background: #467ff7 !important;
+  background: #006ee6 !important;
 }
 
 /* 未显示在院排序时移除预留列，避免日期与查询操作之间出现空洞。 */
@@ -493,7 +493,37 @@
   padding-inline: 12px;
 }
 .record-pool-refined .wv4-record-pool-filter__summary {
-  color: #7a8698;
+  color: #86868b;
   font-size: 12px;
   margin-top: 12px;
+}
+
+/* 苹果风视觉：保持字体、控件尺寸和网格，统一表面与交互色。 */
+.record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-selected) {
+  background: #fff;
+  color: #1d1d1f;
+}
+.record-pool-refined :deep(.ant-btn-default) {
+  background: #fff;
+  border-color: #dedee3;
+  color: #3a3a3c;
+}
+.record-pool-refined :deep(.ant-btn-primary:not(:disabled)) {
+  background: #007aff !important;
+  border-color: #007aff !important;
+  color: #fff !important;
+}
+.record-pool-refined :deep(.ant-btn-primary:not(:disabled):hover) {
+  background: #006ee6 !important;
+  border-color: #006ee6 !important;
+}
+.record-pool-refined :deep(.ant-checkbox-checked .ant-checkbox-inner) {
+  background-color: #007aff;
+  border-color: #007aff;
+}
+.record-pool-refined :deep(.ant-pagination-item-active) {
+  border-color: #007aff;
+}
+.record-pool-refined :deep(.ant-pagination-item-active a) {
+  color: #007aff;
 }
