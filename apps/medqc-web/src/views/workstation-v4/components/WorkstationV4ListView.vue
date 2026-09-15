@@ -80,7 +80,7 @@
                   aria-labelledby="record-pool-date-label"
                 >
                   <span id="record-pool-date-label" class="record-pool-field-label"
-                    >入出院日期</span
+                    >{{ formatWorkstationDateFieldLabel(dateField) }}</span
                   >
                   <a-range-picker
                     :value="dateRange || undefined"
@@ -340,7 +340,10 @@ import type {
   WorkstationDateField,
   WorkstationDateRange,
 } from '../composables/usePatientRecords'
-import { filterDepartmentOption } from '../utils/workstationFilterPresentation'
+import {
+  filterDepartmentOption,
+  formatWorkstationDateFieldLabel,
+} from '../utils/workstationFilterPresentation'
 
 interface StageMetaLike {
   pageTitle?: string

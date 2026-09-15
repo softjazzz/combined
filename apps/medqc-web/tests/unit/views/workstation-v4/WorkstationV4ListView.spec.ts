@@ -426,10 +426,14 @@ describe('WorkstationV4ListView filters', () => {
   })
 
   it('offers a dedicated lightweight verification shortcut for patients still hospitalized today', async () => {
-    const wrapper = mountListView()
+    const wrapper = mountListView({
+      syncScope: 'today_inpatient',
+      dateField: 'admission',
+    })
     const shortcut = wrapper.find('.wv4-record-pool-filter__sync-shortcut')
 
-    expect(shortcut.text()).toContain('核验当日在院')
+    expect(shortcut.text()).toContain('当日在院 · 已核验')
+    expect(wrapper.find('#record-pool-date-label').text()).toBe('入院日期')
     await shortcut.trigger('click')
     expect(wrapper.emitted('toggleTodayInpatient')).toHaveLength(1)
   })

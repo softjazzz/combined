@@ -2423,6 +2423,7 @@ function handleClearFilters() {
 
 function handleHospFilter(value: 'all' | 'inpatient' | 'discharged') {
   syncScope.value = 'all'
+  dateField.value = 'visit'
   selectHospFilter(value)
 }
 
@@ -2433,6 +2434,7 @@ async function toggleTodaySyncedInpatient() {
   if (!enabled) {
     syncScope.value = 'all'
     hospFilter.value = 'all'
+    dateField.value = 'visit'
     selectedWorkbenchKeys.value = []
     currentPage.value = 1
     await fetchData(1)
@@ -2448,6 +2450,7 @@ async function toggleTodaySyncedInpatient() {
     }>('/api/medical-records/workstation/hospitalization-status/verify')
     syncScope.value = 'today_inpatient'
     hospFilter.value = 'inpatient'
+    dateField.value = 'admission'
     message.success(
       `已核验 ${data.total} 份：在院 ${data.inpatient}，已出院 ${data.discharged}，待确认 ${data.unknown}`,
     )
