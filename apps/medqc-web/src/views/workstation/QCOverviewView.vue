@@ -782,9 +782,11 @@ watch(
 
 <style scoped>
 @import '../workstation-v4/styles/workstation-v4-view.css';
+@import '../../styles/source-han-sans-sc.css';
 
 .qc-home-shell {
-  background: #f5f5f7;
+  background: linear-gradient(120deg, #e8eff8 0%, #f5f5f7 48%, #edf0f6 100%);
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
   color: #1d1d1f;
   font-size: 14px;
   line-height: 1.6;
@@ -802,20 +804,22 @@ watch(
 .qc-home-empty,
 .qc-home-loading {
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.88);
+  border-radius: 12px;
+  background: #fff;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.035);
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
 }
 .qc-home-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(20px) saturate(125%);
+  backdrop-filter: blur(20px) saturate(125%);
+  box-shadow: 0 4px 18px rgba(38, 58, 86, 0.04);
 }
 .qc-home-header__subtitle {
   margin: 6px 0 0;
@@ -830,7 +834,7 @@ watch(
   padding: 0 14px;
   border: 0;
   border-radius: 8px;
-  background: #2b6cf6;
+  background: #007aff;
   color: #fff;
   font: inherit;
   font-size: 13px;
@@ -840,14 +844,14 @@ watch(
   background: #005bb8;
 }
 .qc-home-start:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #007aff;
   outline-offset: 3px;
 }
 .qc-home-department,
 .qc-home-refresh {
   min-height: 32px;
   border: 1px solid #e3eaf2;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 3px 9px;
   background: #f8fafd;
   color: #46576a;
@@ -862,11 +866,11 @@ watch(
   overflow-wrap: anywhere;
 }
 .qc-home-refresh {
-  color: #2b6cf6;
+  color: #007aff;
 }
 .qc-home-department:focus-visible,
 .qc-home-refresh:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #007aff;
   outline-offset: 2px;
 }
 .qc-home-overview {
@@ -929,7 +933,7 @@ watch(
 .qc-home-header h1,
 .qc-home-panel h2 {
   margin: 0;
-  font-weight: 700;
+  font-weight: 600;
 }
 .qc-home-header h1 {
   font-size: 24px;
@@ -948,8 +952,8 @@ watch(
   gap: 9px;
   padding: 12px 16px;
   color: rgba(29, 29, 31, 0.72);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 400;
 }
 .qc-home-scope i {
   width: 3px;
@@ -958,7 +962,7 @@ watch(
   background: rgba(29, 29, 31, 0.28);
 }
 .qc-home-scope__label {
-  color: #2b6cf6;
+  color: #007aff;
 }
 .qc-home-scope__rule-set {
   color: #1d1d1f;
@@ -988,7 +992,7 @@ watch(
 }
 .qc-home-panel {
   padding: 20px 22px;
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: none;
 }
 .qc-home-side-stack {
@@ -1021,16 +1025,16 @@ watch(
   padding: 0 2px;
   border: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #007aff;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .qc-home-panel-link:hover {
   color: #004f9e;
 }
 .qc-home-panel-link:focus-visible {
-  outline: 2px solid rgba(43, 108, 246, 0.42);
+  outline: 2px solid rgba(0, 122, 255, 0.42);
   outline-offset: 2px;
 }
 .qc-home-panel h2 {
@@ -1084,7 +1088,7 @@ watch(
   margin-top: 1px;
   color: #1d1d1f;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 20px;
 }
 .qc-home-health-list small {
@@ -1099,16 +1103,16 @@ watch(
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 10px;
-  background: rgba(43, 108, 246, 0.075);
-  color: #2b6cf6;
+  border-radius: 12px;
+  background: rgba(0, 122, 255, 0.075);
+  color: #007aff;
 }
 .qc-home-health-list__icon.is-danger {
   background: rgba(239, 68, 68, 0.08);
   color: #dc2626;
 }
 .qc-home-health-list__icon.is-success {
-  background: rgba(43, 108, 246, 0.06);
+  background: rgba(0, 122, 255, 0.06);
   color: #66819e;
 }
 .qc-home-health-list .is-danger {
@@ -1158,16 +1162,16 @@ watch(
   transition: 160ms ease;
 }
 .qc-home-defect-analysis__control button:hover {
-  color: #2b6cf6;
+  color: #007aff;
 }
 .qc-home-defect-analysis__control button.is-active {
   background: #fff;
-  color: #2b6cf6;
-  font-weight: 650;
+  color: #007aff;
+  font-weight: 600;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 .qc-home-defect-analysis__control button:focus-visible {
-  outline: 2px solid rgba(43, 108, 246, 0.32);
+  outline: 2px solid rgba(0, 122, 255, 0.32);
   outline-offset: 1px;
 }
 .qc-home-defect-analysis__list {
@@ -1199,14 +1203,14 @@ button.qc-home-defect-analysis__row {
 }
 button.qc-home-defect-analysis__row:hover,
 .qc-home-defect-analysis__row.is-active {
-  background: rgba(43, 108, 246, 0.045);
+  background: rgba(0, 122, 255, 0.045);
 }
 button.qc-home-defect-analysis__row:hover {
-  transform: translateX(2px);
+  transform: none;
 }
 button.qc-home-defect-analysis__row:focus-visible {
   border-radius: 8px;
-  outline: 2px solid rgba(43, 108, 246, 0.35);
+  outline: 2px solid rgba(0, 122, 255, 0.35);
   outline-offset: -2px;
 }
 .qc-home-defect-analysis__meta {
@@ -1239,19 +1243,19 @@ button.qc-home-defect-analysis__row:focus-visible {
   height: 10px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(43, 108, 246, 0.075);
+  background: rgba(0, 122, 255, 0.075);
 }
 .qc-home-defect-analysis__track i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #2b6cf6;
+  background: #007aff;
   transition: width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 .qc-home-defect-analysis__metric strong {
-  color: #2b6cf6;
+  color: #007aff;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: right;
 }
 .qc-home-defect-analysis__counts {
@@ -1264,13 +1268,13 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 .qc-home-defect-analysis__counts strong {
   color: #c2413a;
-  font-weight: 650;
+  font-weight: 600;
 }
 .qc-home-defect-analysis__counts span {
   color: #a16207;
 }
 .qc-home-defect-analysis__row > svg {
-  color: rgba(43, 108, 246, 0.54);
+  color: rgba(0, 122, 255, 0.54);
 }
 .qc-home-defect-analysis__note {
   margin: 8px 6px 0;
@@ -1384,7 +1388,7 @@ button.qc-home-defect-analysis__row:focus-visible {
   color: rgba(29, 29, 31, 0.72);
 }
 .qc-home-loading :deep(.ant-spin-dot-item) {
-  background-color: #2b6cf6;
+  background-color: #007aff;
 }
 .qc-home-loading strong,
 .qc-home-loading span {
@@ -1393,7 +1397,7 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-loading strong {
   color: #1d1d1f;
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 22px;
 }
 .qc-home-loading span {
@@ -1492,7 +1496,7 @@ button.qc-home-defect-analysis__row:focus-visible {
   border-right: 1px solid #e8edf3;
   border-radius: 0;
   background: transparent;
-  color: #2b6cf6;
+  color: #007aff;
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -1523,7 +1527,7 @@ button.qc-home-defect-analysis__row:focus-visible {
   border-right: 0;
 }
 .qc-home-shortcuts button:focus-visible {
-  outline: 2px solid #2b6cf6;
+  outline: 2px solid #007aff;
   outline-offset: 3px;
 }
 .qc-home-panel--health .qc-home-health-list {
@@ -1543,5 +1547,21 @@ button.qc-home-defect-analysis__row:focus-visible {
   .qc-home-panel--health .qc-home-health-list {
     grid-template-columns: 1fr;
   }
+}
+
+.qc-home-shell button,
+.qc-home-shell select {
+  font-family: inherit;
+}
+.qc-home-start,
+.qc-home-defect-analysis__control {
+  font-size: 14px;
+  font-weight: 400;
+}
+:global(.ant-layout:has(.qc-home-shell) > .header) {
+  background: rgba(255, 255, 255, 0.65) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(125%);
+  backdrop-filter: blur(20px) saturate(125%) !important;
+  box-shadow: none !important;
 }
 </style>
