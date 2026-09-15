@@ -137,6 +137,22 @@ async def test_group_route_applies_to_each_medication_without_cross_section_spre
 
 
 @pytest.mark.asyncio
+async def test_prompt_forbids_stitching_noncontiguous_medication_quotes():
+    text = (
+        "出院带药一周：合成糖浆甲每天3次每次10ml；"
+        "合成胶囊乙每天3次每次10ml。"
+    )
+    client = Client()
+
+    await extract_discharge_medications(text, client)
+
+    prompt, _kwargs = client.calls[0]
+    assert "单个、连续的最短片段" in prompt
+    assert "禁止把相隔的文字删除后拼接成新句" in prompt
+    assert "每项只引用该药附近对应的原文片段" in prompt
+
+
+@pytest.mark.asyncio
 async def test_known_medications_without_route_are_missing_not_uncertain():
     text = (
         "出院带药一周：合成糖浆甲每天3次每次10ml；"
