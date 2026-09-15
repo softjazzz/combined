@@ -387,6 +387,29 @@
 }
 
 /* 蓝白视觉试点：只调整外观，保留已有网格、尺寸与间距。 */
+.workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-filter-toolbar {
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
+}
+.workstation-shell .record-pool-refined .wv4-record-pool-hero .record-pool-field-label,
+.workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-hosp-filter__label {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: #58677b;
+}
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-select),
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-picker),
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-input-affix-wrapper),
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-segmented),
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-btn) {
+  font-family: inherit;
+}
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selector),
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selection-item),
+.record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selection-placeholder) {
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
+}
 .record-pool-refined .workbench-hosp-segmented {
   background: #edf2f8;
   border-radius: 8px;
