@@ -531,6 +531,121 @@ def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(m
     assert selector_calls <= 4
 
 
+@pytest.mark.parametrize("task_status", ["running", "failed", "canceled"])
+def test_completed_record_envelope_from_incomplete_task_is_ready(monkeypatch, task_status):
+    """整批未完整完成时，已写入 Envelope 的病历仍可独立展示。"""
+
+    identity = ("inst-1", "patient-1", "visit-1")
+    job = {
+        "id": "job-partial",
+        "status": task_status,
+        "created_at": "2026-09-15T08:00:00",
+        "finished_at": None,
+        "filters_json": json.dumps({
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+        }),
+        "record_ids_json": json.dumps([identity[2]]),
+        "summary_json": "{}",
+    }
+    envelope = {
+        "root_job_id": job["id"],
+        "job_id": job["id"],
+        "institute_id": identity[0],
+        "patient_id": identity[1],
+        "visit_id": identity[2],
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "updated_at": "2026-09-15T08:05:00",
+        "envelope_json": json.dumps({
+            "schema_version": "lx0609-record-result-envelope-v1",
+            "delivery_mode": "canonical_straight_through",
+            "items": [{
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            }],
+        }),
+    }
+    session = _ReadSession([[job], [envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[{
+            "institute_id": identity[0],
+            "patient_id": identity[1],
+            "visit_id": identity[2],
+        }],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[identity]["status"] == "ready"
+    assert result[identity]["completed_at"] == "2026-09-15T08:05:00"
+
+
+def test_running_retry_without_envelope_does_not_hide_previous_completed_result(monkeypatch):
+    identity = ("inst-1", "patient-1", "visit-1")
+    filters_json = json.dumps({
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+    })
+    completed_job = {
+        "id": "job-completed",
+        "status": "completed",
+        "created_at": "2026-09-14T08:00:00",
+        "finished_at": "2026-09-14T08:05:00",
+        "filters_json": filters_json,
+        "record_ids_json": json.dumps([identity[2]]),
+        "summary_json": "{}",
+    }
+    retrying_job = {
+        "id": "job-retrying",
+        "status": "running",
+        "created_at": "2026-09-15T08:00:00",
+        "finished_at": None,
+        "filters_json": filters_json,
+        "record_ids_json": json.dumps([identity[2]]),
+        "summary_json": "{}",
+    }
+    envelope = {
+        "root_job_id": completed_job["id"],
+        "job_id": completed_job["id"],
+        "institute_id": identity[0],
+        "patient_id": identity[1],
+        "visit_id": identity[2],
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "updated_at": completed_job["finished_at"],
+        "envelope_json": json.dumps({
+            "schema_version": "lx0609-record-result-envelope-v1",
+            "delivery_mode": "canonical_straight_through",
+            "items": [{
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            }],
+        }),
+    }
+    session = _ReadSession([[completed_job, retrying_job], [envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[{
+            "institute_id": identity[0],
+            "patient_id": identity[1],
+            "visit_id": identity[2],
+        }],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[identity]["status"] == "ready"
+    assert result[identity]["completed_at"] == completed_job["finished_at"]
+
+
 def test_completed_projection_rejects_removed_rule_from_current_catalog(monkeypatch):
     """病历池摘要也不能把旧规则目录项混入当前代次。"""
 

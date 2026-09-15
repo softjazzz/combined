@@ -72,6 +72,7 @@ from .qc_workspace.canonical_result_store import (
     keyed_ref as _keyed_ref,
     validated_customer_explanation as _validated_customer_explanation,
 )
+from .qc_workspace.partial_record_delivery import select_complete_record_items
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
 from .qc_workspace.execution_failure import (
     validate_failed_task_items,
@@ -3342,7 +3343,9 @@ class CustomQCWorkspaceService:
         session = (session_factory or _session)()
         try:
             base_job_predicate = and_(
-                self._batch_job_table.c.status == "completed",
+                self._batch_job_table.c.status.in_(
+                    ("completed", "failed", "running", "queued", "canceled")
+                ),
                 or_(
                     self._batch_job_table.c.parent_job_id.is_(None),
                     self._batch_job_table.c.parent_job_id == "",
@@ -3458,7 +3461,10 @@ class CustomQCWorkspaceService:
                 ):
                     continue
                 for visit_id in set(_safe_text(value) for value in job["record_ids"]):
-                    if visit_id in requested_visit_ids:
+                    if (
+                        visit_id in requested_visit_ids
+                        and _safe_text(job.get("status")).lower() == "completed"
+                    ):
                         current_jobs_by_visit.setdefault(visit_id, []).append(job)
             if not jobs_by_id:
                 return {identity: {"status": "not_run"} for identity in identities}
@@ -3507,11 +3513,27 @@ class CustomQCWorkspaceService:
             for identity in identities:
                 _, _, visit_id = identity
                 exact_envelopes = envelopes_by_identity.get(identity, {})
-                ready_candidates = [
-                    jobs_by_id[job_id]
-                    for job_id in exact_envelopes
-                    if job_id in jobs_by_id
-                ]
+                ready_candidates: list[Dict[str, Any]] = []
+                for job_id, record_envelopes in exact_envelopes.items():
+                    if job_id not in jobs_by_id:
+                        continue
+                    candidate = dict(jobs_by_id[job_id])
+                    if _safe_text(candidate.get("status")).lower() != "completed":
+                        # Canonical Envelope 的存在只代表这一份病历已经完整交付。
+                        # 选择器仍坚持 completed 合同，因此在本次单病历选择范围内
+                        # 将任务投影为完成，并用 Envelope 写入时间作为完成时间。
+                        delivered_at = [
+                            envelope.get("updated_at")
+                            for envelope in record_envelopes
+                            if envelope.get("updated_at") is not None
+                        ]
+                        candidate["status"] = "completed"
+                        if delivered_at:
+                            candidate["finished_at"] = max(
+                                delivered_at,
+                                key=lambda value: str(value),
+                            )
+                    ready_candidates.append(candidate)
                 ready_selection = select_latest_authoritative_record_result_job(
                     ready_candidates,
                     record_id=visit_id,
@@ -4373,11 +4395,33 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
-            diagnostic_receipts = () if execution_failed else self._write_record_result_envelopes(
-                session,
-                job_row=dict(row),
-                items=items,
-                now=now,
+            envelope_items: Sequence[Dict[str, Any]] = items if not execution_failed else ()
+            envelope_record_refs: Optional[Sequence[CaseRef]] = None
+            if execution_failed:
+                filters = _safe_json_loads(row.get("filters_json"), {})
+                filters = filters if isinstance(filters, dict) else {}
+                if _safe_text(filters.get("rule_set_key")) == LUXIAN_0609_RULE_SET_KEY:
+                    scoped_rule_ids = list(filters.get("scoped_customer_rule_ids") or [])
+                    expected_rule_ids = [
+                        *(scoped_rule_ids or list(filters.get("rule_ids") or [])),
+                        *list(filters.get("gate_only_customer_rule_ids") or []),
+                        *list(filters.get("paused_customer_rule_ids") or []),
+                    ]
+                    envelope_items, envelope_record_refs = select_complete_record_items(
+                        items=items,
+                        failures=failed_records,
+                        expected_rule_ids=expected_rule_ids,
+                    )
+            diagnostic_receipts = (
+                self._write_record_result_envelopes(
+                    session,
+                    job_row=dict(row),
+                    items=envelope_items,
+                    now=now,
+                    expected_record_refs=envelope_record_refs,
+                )
+                if envelope_items
+                else ()
             )
             session.commit()
             if getattr(completion_update, "rowcount", None) == 1:
@@ -4402,12 +4446,22 @@ class CustomQCWorkspaceService:
         job_row: Dict[str, Any],
         items: Sequence[Dict[str, Any]],
         now: datetime,
+        expected_record_refs: Optional[Sequence[CaseRef]] = None,
     ) -> tuple[tuple[CaseRef, str], ...]:
         # 一次保存使用同一份配置，下一次操作仍读取最新密钥。
         projection_key = customer_safe_projection_key()
+        envelope_job_row = job_row
+        if expected_record_refs is not None:
+            filters = _safe_json_loads(job_row.get("filters_json"), {})
+            filters = dict(filters) if isinstance(filters, dict) else {}
+            filters["record_refs"] = [record_ref.as_dict() for record_ref in expected_record_refs]
+            envelope_job_row = {
+                **job_row,
+                "filters_json": _safe_json_dumps(filters),
+            }
         return CanonicalResultStore(self._record_result_envelope_table).replace_for_job(
             session,
-            job_row=job_row,
+            job_row=envelope_job_row,
             items=items,
             now=now,
             projector=partial(self._envelope_item_from_rule_result, hmac_key=projection_key),
