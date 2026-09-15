@@ -5402,7 +5402,7 @@ def test_017_template_shell_only_pair_is_compliant_without_llm():
     )
 
     assert result["status"] == "compliant"
-    assert result["metadata"]["reason_code"] == "copy_similarity_within_threshold"
+    assert result["metadata"]["reason_code"] == "copy_template_shell_only"
     assert result["metadata"]["maximum_similarity"] == 1.0
     assert result["metadata"]["template_shell_only"] is True
 
@@ -5610,7 +5610,7 @@ async def test_017_semantic_review_invalid_response_fails_closed(
 @pytest.mark.parametrize(
     ("verdict", "expected_status", "expected_reason"),
     [
-        ("template_only", "compliant", "copy_similarity_within_threshold"),
+        ("template_only", "compliant", "copy_semantic_review_passed"),
         ("uncertain", "uncertain", "semantic_low_confidence"),
     ],
 )
@@ -6301,21 +6301,53 @@ def test_017_twenty_records_screen_all_pairs_but_precisely_compare_only_twenty()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("similarity", "expected_state", "expected_reason", "expected_failure_kind"),
+    (
+        "similarity",
+        "verdict",
+        "expected_state",
+        "expected_reason",
+        "expected_failure_kind",
+    ),
     [
-        (0.6999, CustomerFinalState.COMPLIANT, "requirement_within_threshold", "copy_similarity_within_threshold"),
-        (0.7000, CustomerFinalState.NON_COMPLIANT, "threshold_exceeded", "copy_similarity_threshold_exceeded"),
-        (0.7001, CustomerFinalState.NON_COMPLIANT, "threshold_exceeded", "copy_similarity_threshold_exceeded"),
+        (
+            0.6999,
+            None,
+            CustomerFinalState.COMPLIANT,
+            "requirement_within_threshold",
+            "copy_similarity_within_threshold",
+        ),
+        (
+            0.7000,
+            "substantial_copy",
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+            "copy_similarity_threshold_exceeded",
+        ),
+        (
+            0.7001,
+            "substantial_copy",
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+            "copy_similarity_threshold_exceeded",
+        ),
+        (
+            0.7001,
+            "template_only",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+            "copy_semantic_review_passed",
+        ),
     ],
 )
-async def test_typed_017_similarity_threshold_is_inclusive_without_model(
+async def test_typed_017_similarity_threshold_and_semantic_pass(
     monkeypatch,
     similarity,
+    verdict,
     expected_state,
     expected_reason,
     expected_failure_kind,
 ):
-    """017 的 70% 边界必须经公开 Native 入口成为受控终态。"""
+    """017 的 70% 边界和高相似语义通过必须经公开 Native 入口成为受控终态。"""
 
     class _FixedSimilarityMatcher:
         def __init__(self, _isjunk, left, right, *, autojunk=False):
@@ -6357,11 +6389,7 @@ async def test_typed_017_similarity_threshold_is_inclusive_without_model(
         created_at="2026-07-17T12:00:00+08:00",
         row_reader=read,
     )
-    client = (
-        _CopyReviewClient("substantial_copy")
-        if similarity >= 0.7
-        else _UnexpectedLLMClient()
-    )
+    client = _CopyReviewClient(verdict) if verdict else _UnexpectedLLMClient()
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
         decision_rule_ids=("LX0609-017",),
@@ -6396,7 +6424,7 @@ async def test_typed_017_similarity_threshold_is_inclusive_without_model(
         ],
         "copy_match_pairs": [],
     }
-    if similarity >= 0.7:
+    if verdict == "substantial_copy":
         expected_facts["copy_match_pairs"] = [
             {
                 "source_types": ["daily_course_record", "daily_course_record"],
@@ -6410,9 +6438,12 @@ async def test_typed_017_similarity_threshold_is_inclusive_without_model(
     actual_facts = dict(result.customer_display_facts)["LX0609-017"]
     fingerprints = actual_facts.pop("copy_match_document_fingerprints", None)
     assert actual_facts == expected_facts
-    if similarity >= 0.7:
-        assert fingerprints and len(fingerprints) == 1
-        assert len(fingerprints[0]) == 2
+    if verdict:
+        if verdict == "substantial_copy":
+            assert fingerprints and len(fingerprints) == 1
+            assert len(fingerprints[0]) == 2
+        else:
+            assert fingerprints is None
         assert result.llm_call_count == 1
         assert result.total_tokens == 48
     else:

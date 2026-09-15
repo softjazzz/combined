@@ -311,25 +311,42 @@
                 </div>
               </section>
 
-              <LuxianRuleScopePanel
+              <details
                 v-if="isLuxian0609Mode"
                 id="customer-sample-luxian-scope"
                 data-customer-guide="lx0609-scope"
+                class="customer-sample-scope-disclosure"
                 :class="customerSampleGuideTargetClass('lx0609-scope')"
-                :families="luxianRuleFamilies"
-                :selected-rule-ids="selectedLuxianCustomerRuleIds"
-                :expanded-family-keys="expandedLuxianRuleFamilyKeys"
-                :helper-text="luxianScopeHelperText"
-                :mode-text="luxianScopeModeText"
-                :all-rule-ids="allLuxianRuleIds"
-                :selected-family-count="selectedLuxianFamilyCount"
-                :all-rules-selected="isAllLuxianRulesSelected"
-                @select-all="toggleAllLuxianRuleFamilies"
-                @clear="clearLuxianRuleScope"
-                @toggle-family="selectLuxianRuleFamily"
-                @toggle-expanded="toggleLuxianRuleFamilyExpanded"
-                @toggle-rule="toggleLuxianRule"
-              />
+                :open="
+                  customerSampleGuideOpen &&
+                  currentCustomerSampleGuideStep?.target === 'lx0609-scope'
+                    ? true
+                    : undefined
+                "
+              >
+                <summary class="customer-sample-scope-summary">
+                  <span class="customer-sample-scope-summary__title">质控点范围</span>
+                  <span class="customer-sample-scope-summary__value">{{
+                    luxianScopeModeText
+                  }}</span>
+                  <span class="customer-sample-scope-summary__action">调整范围</span>
+                </summary>
+                <LuxianRuleScopePanel
+                  :families="luxianRuleFamilies"
+                  :selected-rule-ids="selectedLuxianCustomerRuleIds"
+                  :expanded-family-keys="expandedLuxianRuleFamilyKeys"
+                  :helper-text="luxianScopeHelperText"
+                  :mode-text="luxianScopeModeText"
+                  :all-rule-ids="allLuxianRuleIds"
+                  :selected-family-count="selectedLuxianFamilyCount"
+                  :all-rules-selected="isAllLuxianRulesSelected"
+                  @select-all="toggleAllLuxianRuleFamilies"
+                  @clear="clearLuxianRuleScope"
+                  @toggle-family="selectLuxianRuleFamily"
+                  @toggle-expanded="toggleLuxianRuleFamilyExpanded"
+                  @toggle-rule="toggleLuxianRule"
+                />
+              </details>
             </section>
 
             <section class="customer-sample-diagnostic-panel">

@@ -1,9 +1,6 @@
 <template>
   <div class="qc-rules-demo-panel">
-    <a-card
-      title="质控规则演示"
-      class="rules-panel"
-    >
+    <a-card title="质控规则演示" class="rules-panel">
       <template #extra>
         <a-tooltip title="规则配置">
           <SettingOutlined />
@@ -21,20 +18,13 @@
           style="margin-bottom: 16px"
         >
           <template #description>
-            <a-space
-              :size="8"
-              wrap
-            >
+            <a-space :size="8" wrap>
               <a-tag color="blue">
                 <FileProtectOutlined />
                 四川省标准（2023版）
               </a-tag>
-              <a-tag color="green">
-                权威规则
-              </a-tag>
-              <a-tag color="purple">
-                LLM优化
-              </a-tag>
+              <a-tag color="green"> 权威规则 </a-tag>
+              <a-tag color="purple"> LLM优化 </a-tag>
             </a-space>
             <div style="margin-top: 8px; font-size: 13px">
               基于《四川省住院病历质量评定标准（2023年版）》，包含完整的质控规则库
@@ -52,24 +42,13 @@
         <div class="rules-summary">
           <a-row :gutter="16">
             <a-col :span="12">
-              <a-statistic
-                title="已选规则数量"
-                :value="selectedRules.length"
-                suffix="条"
-              />
+              <a-statistic title="已选规则数量" :value="selectedRules.length" suffix="条" />
             </a-col>
             <a-col :span="12">
-              <a-statistic
-                title="规则覆盖度"
-                :value="selectionCoverage"
-                suffix="%"
-              />
+              <a-statistic title="规则覆盖度" :value="selectionCoverage" suffix="%" />
             </a-col>
           </a-row>
-          <a-typography-text
-            type="secondary"
-            class="summary-tip"
-          >
+          <a-typography-text type="secondary" class="summary-tip">
             建议勾选至少 3 条规则以保障规则覆盖范围。
           </a-typography-text>
         </div>
@@ -83,11 +62,7 @@
             >
               全选当前列表
             </a-checkbox>
-            <a-button
-              size="small"
-              :disabled="selectedRules.length === 0"
-              @click="clearAllRules"
-            >
+            <a-button size="small" :disabled="selectedRules.length === 0" @click="clearAllRules">
               清空选择
             </a-button>
           </a-space>
@@ -107,10 +82,7 @@
           />
         </div>
 
-        <div
-          class="rules-filter"
-          style="margin-bottom: 16px"
-        >
+        <div class="rules-filter" style="margin-bottom: 16px">
           <a-row :gutter="8">
             <a-col :span="8">
               <a-select
@@ -120,15 +92,9 @@
                 size="small"
                 style="width: 100%"
               >
-                <a-select-option value="completeness">
-                  完整性
-                </a-select-option>
-                <a-select-option value="consistency">
-                  一致性
-                </a-select-option>
-                <a-select-option value="rationality">
-                  合理性
-                </a-select-option>
+                <a-select-option value="completeness"> 完整性 </a-select-option>
+                <a-select-option value="consistency"> 一致性 </a-select-option>
+                <a-select-option value="rationality"> 合理性 </a-select-option>
               </a-select>
             </a-col>
             <a-col :span="8">
@@ -139,15 +105,9 @@
                 size="small"
                 style="width: 100%"
               >
-                <a-select-option value="high">
-                  严重
-                </a-select-option>
-                <a-select-option value="medium">
-                  重要
-                </a-select-option>
-                <a-select-option value="low">
-                  轻微
-                </a-select-option>
+                <a-select-option value="high"> 严重 </a-select-option>
+                <a-select-option value="medium"> 重要 </a-select-option>
+                <a-select-option value="low"> 轻微 </a-select-option>
               </a-select>
             </a-col>
             <a-col :span="8">
@@ -158,12 +118,8 @@
                 size="small"
                 style="width: 100%"
               >
-                <a-select-option value="active">
-                  启用
-                </a-select-option>
-                <a-select-option value="inactive">
-                  禁用
-                </a-select-option>
+                <a-select-option value="active"> 启用 </a-select-option>
+                <a-select-option value="inactive"> 禁用 </a-select-option>
               </a-select>
             </a-col>
           </a-row>
@@ -192,37 +148,19 @@
             </a-list-item>
           </template>
         </a-list>
-        <a-empty
-          v-else
-          description="暂无匹配的规则"
-        />
+        <a-empty v-else description="暂无匹配的规则" />
       </div>
 
       <!-- 测试病历信息 -->
       <div class="record-section">
         <h4>测试病历</h4>
-        <div
-          v-if="!testRecord"
-          class="empty-record"
-        >
+        <div v-if="!testRecord" class="empty-record">
           <a-empty description="暂无选择的测试病历">
-            <a-button
-              type="dashed"
-              @click="selectTestRecord"
-            >
-              选择测试病历
-            </a-button>
+            <a-button type="dashed" @click="selectTestRecord"> 选择测试病历 </a-button>
           </a-empty>
         </div>
-        <div
-          v-else
-          class="record-info"
-        >
-          <a-descriptions
-            :column="2"
-            size="small"
-            bordered
-          >
+        <div v-else class="record-info">
+          <a-descriptions :column="2" size="small" bordered>
             <a-descriptions-item label="病历号">
               {{ testRecord.id }}
             </a-descriptions-item>
@@ -235,10 +173,7 @@
             <a-descriptions-item label="入院日期">
               {{ testRecord.admission_date || testRecord.admissionDate }}
             </a-descriptions-item>
-            <a-descriptions-item
-              label="病历类型"
-              :span="2"
-            >
+            <a-descriptions-item label="病历类型" :span="2">
               {{ testRecord.record_type || testRecord.type }}
             </a-descriptions-item>
           </a-descriptions>
@@ -257,12 +192,7 @@
           >
             开始质控分析
           </a-button>
-          <a-button
-            :icon="h(SettingOutlined)"
-            @click="handleConfigRules"
-          >
-            配置规则
-          </a-button>
+          <a-button :icon="h(SettingOutlined)" @click="handleConfigRules"> 配置规则 </a-button>
         </a-space>
       </div>
     </a-card>
@@ -756,7 +686,7 @@ watch(filteredRules, () => {
         }
 
         :deep(.rule-row.rule-selected) {
-          background: rgba(24, 144, 255, 0.08);
+          background: rgba(43, 108, 246, 0.08);
         }
 
         :deep(.rule-row.rule-disabled) {
@@ -764,7 +694,7 @@ watch(filteredRules, () => {
         }
 
         :deep(.rule-row:hover) {
-          background: rgba(24, 144, 255, 0.04);
+          background: rgba(43, 108, 246, 0.04);
         }
 
         :deep(.ant-list-item-meta) {

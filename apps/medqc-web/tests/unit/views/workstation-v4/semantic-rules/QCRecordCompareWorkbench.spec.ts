@@ -608,8 +608,9 @@ describe('QCRecordCompareWorkbench', () => {
 
     const documentItem = wrapper.find('.record-document-item')
     expect(documentItem.text()).toContain('上级医师查房记录')
-    expect(documentItem.text()).toContain('记录时间')
-    expect(documentItem.text()).toContain('2026-03-01 09:20:28')
+    expect(documentItem.text()).not.toContain('记录时间')
+    expect(documentItem.text()).toContain('03月01日')
+    expect(documentItem.find('small').attributes('title')).toContain('2026-03-01 09:20:28')
     expect(wrapper.text()).not.toContain('senior_course_record')
   })
 
@@ -659,9 +660,12 @@ describe('QCRecordCompareWorkbench', () => {
     expect(directory.text()).toContain('文书目录')
     expect(directory.text()).toContain('3 / 3')
     expect(directory.find('.record-document-groups.is-tree').exists()).toBe(true)
-    expect(directory.text()).toContain('2026-06-01 09:00:00')
-    expect(directory.text()).toContain('8字')
-    expect(directory.text()).toContain('源文书')
+    expect(directory.text()).toContain('06月01日')
+    expect(directory.find('.record-document-item small').attributes('title')).toContain(
+      '2026-06-01 09:00:00',
+    )
+    expect(directory.text()).not.toContain('8字')
+    expect(directory.text()).not.toContain('源文书')
 
     await directory.find('[data-testid="record-document-filter-content"]').trigger('click')
     expect(directory.text()).toContain('2 / 3')

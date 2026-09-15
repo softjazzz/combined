@@ -273,7 +273,7 @@
             <a-breadcrumb-item>
               <router-link
                 to="/workstation-v4"
-                class="flex items-center gap-2 text-slate-700 hover:text-[#0066cc] transition-colors px-2 py-1 rounded-md hover:bg-slate-50"
+                class="flex items-center gap-2 text-slate-700 hover:text-[#2b6cf6] transition-colors px-2 py-1 rounded-md hover:bg-slate-50"
               >
                 <HomeOutlined class="text-base" />
                 <span class="font-semibold text-sm">工作台</span>
@@ -297,13 +297,13 @@
               <div class="w-72 p-2">
                 <div class="flex justify-between items-center mb-2 px-2">
                   <span class="font-bold text-slate-700">通知中心</span>
-                  <span class="text-xs text-[#0066cc] cursor-pointer">全部已读</span>
+                  <span class="text-xs text-[#2b6cf6] cursor-pointer">全部已读</span>
                 </div>
                 <div class="space-y-1">
                   <div
                     class="p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors flex gap-3 items-start"
                   >
-                    <div class="w-2 h-2 rounded-full bg-[#0066cc] mt-1.5 shrink-0" />
+                    <div class="w-2 h-2 rounded-full bg-[#2b6cf6] mt-1.5 shrink-0" />
                     <div>
                       <div class="text-sm text-slate-700 font-medium">系统升级通知</div>
                       <div class="text-xs text-slate-400 mt-0.5">系统将于今晚进行维护升级...</div>
@@ -334,7 +334,7 @@
             >
               <a-avatar
                 :size="36"
-                class="mr-2 bg-[#0066cc] text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
+                class="mr-2 bg-[#2b6cf6] text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
               >
                 <template #icon>
                   <UserOutlined />
@@ -342,7 +342,7 @@
               </a-avatar>
               <div class="flex flex-col mr-1 hidden sm:flex shrink-0">
                 <span
-                  class="text-sm font-bold text-slate-700 leading-tight group-hover:text-[#0066cc] transition-colors whitespace-nowrap"
+                  class="text-sm font-bold text-slate-700 leading-tight group-hover:text-[#2b6cf6] transition-colors whitespace-nowrap"
                   >{{ roleLabel }}</span
                 >
                 <span
@@ -607,6 +607,7 @@ watch(
 </script>
 
 <style scoped>
+@import '../../styles/source-han-sans-sc.css';
 .logo-container {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   padding: 12px 12px 10px;
@@ -641,10 +642,10 @@ watch(
 
 .brand-card:hover {
   background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(0, 102, 204, 0.18);
+  border-color: rgba(43, 108, 246, 0.18);
   box-shadow:
     0 2px 12px rgba(0, 0, 0, 0.08),
-    0 14px 30px rgba(0, 102, 204, 0.09);
+    0 14px 30px rgba(43, 108, 246, 0.09);
   transform: translateY(-1px);
 }
 
@@ -662,7 +663,7 @@ watch(
   border-radius: 15px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.46),
-    0 8px 18px rgba(0, 102, 204, 0.22);
+    0 8px 18px rgba(43, 108, 246, 0.22);
   display: inline-flex;
   flex: 0 0 auto;
   height: 42px;
@@ -720,7 +721,7 @@ watch(
 }
 
 .brand-subtitle i {
-  background: rgba(0, 102, 204, 0.32);
+  background: rgba(43, 108, 246, 0.32);
   border-radius: 999px;
   display: inline-block;
   height: 3px;
@@ -806,10 +807,10 @@ watch(
 .sidebar-container :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title) {
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  background: rgba(0, 102, 204, 0.1) !important;
+  background: rgba(43, 108, 246, 0.1) !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
   font-weight: 700;
   position: relative;
 }
@@ -819,7 +820,7 @@ watch(
   :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-title-content),
 .sidebar-container :deep(.ant-menu-item-selected .ant-menu-item-icon),
 .sidebar-container :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 .sidebar-container :deep(.ant-menu-item-selected::before),
@@ -830,7 +831,7 @@ watch(
   left: 0;
   width: 4px;
   height: 64%;
-  background-color: #0066cc;
+  background-color: #2b6cf6;
   border-radius: 4px;
   box-shadow: none;
 }
@@ -880,9 +881,9 @@ watch(
 
 /* 子菜单项选中 */
 .sidebar-container :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
-  background: rgba(0, 102, 204, 0.1) !important;
+  background: rgba(43, 108, 246, 0.1) !important;
   border-color: transparent !important;
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
   font-weight: 700;
   box-shadow: none;
   position: relative;
@@ -894,7 +895,7 @@ watch(
   ),
 .sidebar-container
   :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected .ant-menu-item-icon) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 .sidebar-container
@@ -905,7 +906,7 @@ watch(
   left: -4px;
   width: 3px;
   height: 60%;
-  background-color: #0066cc;
+  background-color: #2b6cf6;
   border-radius: 4px;
   box-shadow: none;
 }
@@ -916,7 +917,7 @@ watch(
 }
 
 .sidebar-container :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
-  background: rgba(0, 102, 204, 0.07) !important;
+  background: rgba(43, 108, 246, 0.07) !important;
   border-color: transparent !important;
 }
 
@@ -925,7 +926,7 @@ watch(
   color: #64748b !important;
 }
 .sidebar-container :deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow) {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 
 /* 图标样式 */
@@ -993,17 +994,17 @@ watch(
 
 .workstation-layout--overview :deep(.ant-menu-item:hover),
 .workstation-layout--overview :deep(.ant-menu-submenu-title:hover) {
-  background: rgba(0, 102, 204, 0.07) !important;
+  background: rgba(43, 108, 246, 0.07) !important;
   color: #0057b8 !important;
 }
 
 .workstation-layout--overview :deep(.ant-menu-item-selected) {
-  background: rgba(0, 102, 204, 0.1) !important;
-  color: #0066cc !important;
+  background: rgba(43, 108, 246, 0.1) !important;
+  color: #2b6cf6 !important;
 }
 
 .workstation-layout--overview :deep(.ant-menu-sub.ant-menu-inline) {
-  border-left-color: rgba(0, 102, 204, 0.16);
+  border-left-color: rgba(43, 108, 246, 0.16);
   background: rgba(248, 250, 252, 0.72) !important;
 }
 
@@ -1013,8 +1014,8 @@ watch(
 
 .workstation-layout--overview
   :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
-  background: rgba(0, 102, 204, 0.1) !important;
-  color: #0066cc !important;
+  background: rgba(43, 108, 246, 0.1) !important;
+  color: #2b6cf6 !important;
 }
 
 .workstation-layout--overview :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
@@ -1028,7 +1029,7 @@ watch(
 /* Apple light workstation shell */
 .workstation-layout--apple {
   min-height: 100vh;
-  background: #f5f5f7;
+  background: linear-gradient(155deg, #cbdcf1 0%, #e3e8f0 32%, #f5f5f7 65%, #dbe5f1 100%);
   color: #1d1d1f;
 }
 
@@ -1053,9 +1054,7 @@ watch(
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
-  font-family:
-    'Source Han Sans SC', 'SF Pro Text', 'SF Pro Display', 'San Francisco', 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
   box-shadow: none !important;
 }
 
@@ -1079,14 +1078,14 @@ watch(
   border: 1px solid transparent !important;
   border-radius: 10px !important;
   color: rgba(29, 29, 31, 0.72) !important;
-  font-weight: 560;
+  font-weight: 400;
   box-shadow: none !important;
 }
 
 .workstation-layout--apple .sidebar-container :deep(.ant-menu-title-content) {
   color: currentColor;
-  font-size: 15px;
-  font-weight: 560;
+  font-size: 14px;
+  font-weight: 400;
 }
 
 .workstation-layout--apple .sidebar-container :deep(.ant-menu-item:hover),
@@ -1102,10 +1101,10 @@ watch(
 .workstation-layout--apple
   .sidebar-container
   :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title) {
-  background: rgba(0, 102, 204, 0.1) !important;
+  background: rgba(0, 122, 255, 0.1) !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  color: #0066cc !important;
+  color: #007aff !important;
   font-weight: 500;
 }
 
@@ -1119,7 +1118,7 @@ watch(
 .workstation-layout--apple
   .sidebar-container
   :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon) {
-  color: #0066cc !important;
+  color: #007aff !important;
 }
 
 .workstation-layout--apple .sidebar-container :deep(.ant-menu-item-selected::before),
@@ -1130,7 +1129,7 @@ watch(
   left: 0;
   width: 3px;
   height: 18px;
-  background: #0066cc;
+  background: #007aff;
   border-radius: 0 2px 2px 0;
   box-shadow: none;
   transform: translateY(-50%);
@@ -1139,12 +1138,10 @@ watch(
 .workstation-layout--apple .sidebar-container :deep(.ant-menu-sub.ant-menu-inline) {
   margin: 2px 0 10px 16px !important;
   padding: 5px 5px 5px 6px !important;
-  border: 1px solid rgba(0, 0, 0, 0.045) !important;
+  border: 0 !important;
   border-radius: 12px !important;
-  background: rgba(255, 255, 255, 0.58) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.62),
-    0 1px 2px rgba(0, 0, 0, 0.025) !important;
+  background: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none !important;
 }
 
 .workstation-layout--apple
@@ -1155,14 +1152,14 @@ watch(
   margin: 1px 0 !important;
   padding-left: 14px !important;
   border-radius: 8px !important;
-  color: rgba(29, 29, 31, 0.48) !important;
+  color: rgba(29, 29, 31, 0.7) !important;
 }
 
 .workstation-layout--apple
   .sidebar-container
   :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .ant-menu-title-content) {
   font-size: 14px;
-  font-weight: 520;
+  font-weight: 400;
 }
 
 .workstation-layout--apple
@@ -1184,10 +1181,10 @@ watch(
 .workstation-layout--apple
   .sidebar-container
   :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
-  background: rgba(0, 102, 204, 0.1) !important;
+  background: rgba(0, 122, 255, 0.1) !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  color: #0066cc !important;
+  color: #007aff !important;
   font-weight: 500;
 }
 
@@ -1202,7 +1199,7 @@ watch(
 .workstation-layout--apple
   .sidebar-container
   :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected .sidebar-icon) {
-  color: #0066cc !important;
+  color: #007aff !important;
 }
 
 .workstation-layout--apple
@@ -1211,17 +1208,17 @@ watch(
   left: 0;
   width: 3px;
   height: 18px;
-  background: #0066cc;
+  background: #007aff;
   box-shadow: none;
 }
 
 .workstation-layout--apple
   .sidebar-container
   :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
-  background: rgba(0, 102, 204, 0.07) !important;
+  background: rgba(0, 122, 255, 0.07) !important;
   border-color: transparent !important;
   color: #1d1d1f !important;
-  font-weight: 620;
+  font-weight: 500;
 }
 
 .workstation-layout--apple
@@ -1240,7 +1237,7 @@ watch(
 .workstation-layout--apple
   .sidebar-container
   :deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow) {
-  color: #0066cc !important;
+  color: #007aff !important;
 }
 
 .workstation-layout--apple .custom-scrollbar::-webkit-scrollbar-thumb {
@@ -1266,9 +1263,20 @@ watch(
 }
 /* 工作台共用侧栏材质，切换业务路由仅改变选中项。 */
 .workstation-layout--apple .sidebar-container {
-  background: #eef5ff !important;
-  box-shadow: none !important;
-  border-right: 1px solid #dfe8f5 !important;
+  background: rgba(255, 255, 255, 0.38) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  backdrop-filter: blur(28px) saturate(140%);
+  margin: 0 12px 12px 12px;
+  height: calc(100vh - 12px);
+  position: sticky;
+  top: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  border-right-color: rgba(112, 137, 168, 0.24) !important;
+  box-shadow:
+    0 12px 32px rgba(39, 62, 94, 0.12),
+    0 2px 6px rgba(39, 62, 94, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
 .workstation-layout--apple .brand-card {
@@ -1285,5 +1293,80 @@ watch(
 .workstation-layout--apple .sidebar-container :deep(.ant-menu),
 .workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-trigger) {
   background: transparent !important;
+}
+
+.workstation-layout--apple .brand-title {
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+}
+.workstation-layout--apple .brand-subtitle {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  color: #86868b;
+}
+.workstation-layout--apple .brand-card:hover {
+  transform: none;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-trigger) {
+  position: absolute;
+  bottom: 0;
+  width: 100% !important;
+}
+
+/* 折叠控制独占底部 48px，菜单在剩余空间内滚动。 */
+.workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-children) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 48px;
+  box-sizing: border-box;
+}
+.workstation-layout--apple .sidebar-container .logo-container {
+  flex-shrink: 0;
+}
+.workstation-layout--apple .sidebar-container .custom-scrollbar {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.workstation-layout--apple .sidebar-container .custom-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-trigger) {
+  height: 48px;
+  line-height: 48px;
+  background: rgba(255, 255, 255, 0.7) !important;
+  z-index: 1;
+}
+
+/* 顶部导航沿用工作区冷灰蓝玻璃材质。 */
+.workstation-layout--apple .header {
+  background: rgba(231, 239, 249, 0.72) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(135%) !important;
+  backdrop-filter: blur(24px) saturate(135%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
+}
+
+/* 工作台共用画布：与运行病历质控一致，内容卡片维持各自表面。 */
+.workstation-layout--apple {
+  --medqc-workspace-canvas: linear-gradient(125deg, #dce8f6 0%, #f1f3f7 48%, #e4eaf3 100%);
+}
+.workstation-layout--apple :deep(.ant-layout-content),
+.workstation-layout--apple :deep(.workstation-route-view),
+.workstation-layout--apple :deep(.workstation-route-view > *) {
+  background: var(--medqc-workspace-canvas) !important;
+}
+.workstation-layout--apple :deep(.record-pool-refined),
+.workstation-layout--apple :deep(.qc-home-shell),
+.workstation-layout--apple :deep(.running-qc-refined) {
+  background: var(--medqc-workspace-canvas) !important;
 }
 </style>

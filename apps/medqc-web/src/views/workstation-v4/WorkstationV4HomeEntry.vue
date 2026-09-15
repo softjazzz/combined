@@ -1,8 +1,5 @@
 <template>
-  <div
-    v-if="showHome"
-    class="wv4-home-entry"
-  >
+  <div v-if="showHome" class="wv4-home-entry">
     <QCOverviewView />
     <button
       type="button"
@@ -12,10 +9,7 @@
     >
       <span class="wv4-home-entry__agent-icon"> AI </span>
       <span class="wv4-home-entry__agent-text">智能助手</span>
-      <span
-        class="wv4-home-entry__agent-status"
-        aria-hidden="true"
-      />
+      <span class="wv4-home-entry__agent-status" aria-hidden="true" />
     </button>
     <QCAgentChatDrawer
       v-model:open="qcAgentOpen"
@@ -69,14 +63,14 @@ const showHome = computed(() => !hasLaunchQuery.value)
   min-width: 132px;
   height: 44px;
   overflow: hidden;
-  border: 1px solid rgba(0, 102, 204, 0.24);
+  border: 1px solid rgba(43, 108, 246, 0.24);
   border-radius: 12px;
-  background: rgba(0, 102, 204, 0.92);
+  background: rgba(43, 108, 246, 0.92);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 8px 22px rgba(0, 102, 204, 0.22);
+    0 8px 22px rgba(43, 108, 246, 0.22);
   color: #ffffff;
   font-size: 13px;
   font-weight: 650;
@@ -126,16 +120,16 @@ const showHome = computed(() => !hasLaunchQuery.value)
 
 .wv4-home-entry__agent-button:hover,
 .wv4-home-entry__agent-button:focus-visible {
-  border-color: rgba(0, 102, 204, 0.32);
+  border-color: rgba(43, 108, 246, 0.32);
   background: #0057b8;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 10px 26px rgba(0, 102, 204, 0.26);
+    0 10px 26px rgba(43, 108, 246, 0.26);
   transform: translateY(-2px);
 }
 
 .wv4-home-entry__agent-button:focus-visible {
-  outline: 2px solid rgba(0, 102, 204, 0.24);
+  outline: 2px solid rgba(43, 108, 246, 0.24);
   outline-offset: 3px;
 }
 </style>

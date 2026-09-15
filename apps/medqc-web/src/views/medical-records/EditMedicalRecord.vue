@@ -814,7 +814,7 @@ const handleCancel = () => {
 }
 
 :deep(.ant-breadcrumb a) {
-  color: #1890ff !important;
+  color: #2b6cf6 !important;
   text-decoration: none !important;
 }
 

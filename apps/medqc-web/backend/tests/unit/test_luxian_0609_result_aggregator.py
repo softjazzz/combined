@@ -6817,7 +6817,7 @@ def test_017_native_compliant_semantic_template_override_allows_high_similarity_
     facts = _017_fingerprint_facts()
     facts.update(
         {
-            "failure_kind": "copy_similarity_within_threshold",
+            "failure_kind": "copy_semantic_review_passed",
             "copy_similarity": 0.9714,
         }
     )
@@ -6835,6 +6835,7 @@ def test_017_native_compliant_semantic_template_override_allows_high_similarity_
     [
         ("compliant", "copy_similarity_threshold_exceeded", 0.7),
         ("non_compliant", "copy_similarity_within_threshold", 0.6999),
+        ("compliant", "copy_similarity_within_threshold", 0.9714),
         ("data_gap", "copy_similarity_threshold_exceeded", 0.7),
     ],
 )

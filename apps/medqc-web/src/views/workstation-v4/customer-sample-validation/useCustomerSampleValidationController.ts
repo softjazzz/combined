@@ -894,8 +894,8 @@ export function useCustomerSampleValidationController() {
           whiteSpace: 'nowrap',
           ...(hospitalizationBadge.status === 'active'
             ? {
-                borderColor: 'rgba(0, 102, 204, 0.14)',
-                background: 'rgba(0, 102, 204, 0.075)',
+                borderColor: 'rgba(43, 108, 246, 0.14)',
+                background: 'rgba(43, 108, 246, 0.075)',
                 color: '#0057b8',
               }
             : hospitalizationBadge.status === 'discharged'
@@ -2407,11 +2407,7 @@ export function useCustomerSampleValidationController() {
         return
       }
       currentQcTask.value = result.data
-      if (
-        isBatchJobRunning(result.data) &&
-        !batchResultOpen.value &&
-        !luxianAggregateOpen.value
-      ) {
+      if (isBatchJobRunning(result.data) && !batchResultOpen.value && !luxianAggregateOpen.value) {
         startCurrentQcTaskPolling(normalizedJobId)
       }
     } finally {

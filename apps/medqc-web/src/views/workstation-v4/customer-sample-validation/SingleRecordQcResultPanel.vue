@@ -3,7 +3,9 @@
     <header class="result-toolbar" data-testid="single-record-result-toolbar">
       <div class="toolbar-top">
         <div class="toolbar-summary">
-          <strong>质控结果</strong>
+          <strong class="result-section-title"
+            ><ClipboardCheck :size="18" aria-hidden="true" />质控结果</strong
+          >
           <span data-testid="single-record-result-summary">{{ resultExecutionSummary }}</span>
         </div>
       </div>
@@ -25,7 +27,7 @@
             :data-testid="`single-record-result-tab-${tab.key}`"
             @click="activeTab = tab.key"
           >
-            <span>{{ tab.label }}</span>
+            <ListFilter :size="14" aria-hidden="true" /><span>{{ tab.label }}</span>
             <b>{{ tab.count }}</b>
           </button>
         </div>
@@ -46,7 +48,7 @@
             :data-testid="`single-record-report-tab-${tab.key}`"
             @click="activeReportTab = tab.key"
           >
-            <span>{{ tab.label }}</span>
+            <ListFilter :size="14" aria-hidden="true" /><span>{{ tab.label }}</span>
             <b>{{ tab.count }}</b>
           </button>
         </div>
@@ -376,7 +378,9 @@
                 data-testid="single-record-evidence-disclosure"
               >
                 <summary>
-                  <span>关键证据</span>
+                  <span class="result-section-title"
+                    ><FileSearch :size="16" aria-hidden="true" />关键证据</span
+                  >
                   <small v-if="displayEvidence(item).length">
                     {{ displayEvidence(item).length }} 份，可定位原文
                   </small>
@@ -408,7 +412,6 @@
                       <span v-else-if="evidence.field_path" class="evidence-path">{{
                         evidence.field_path
                       }}</span>
-                      <span v-else class="evidence-path">点击定位原文核对</span>
                     </span>
                     <span class="evidence-action">
                       定位原文
@@ -437,7 +440,9 @@
             class="detail-disclosure suggestion-disclosure"
           >
             <summary>
-              <span>处理建议</span>
+              <span class="result-section-title"
+                ><Lightbulb :size="16" aria-hidden="true" />处理建议</span
+              >
               <small>点击查看</small>
             </summary>
             <div class="suggestion-footer">
@@ -450,7 +455,11 @@
             class="detail-disclosure feedback-disclosure"
             data-testid="single-record-feedback-disclosure"
           >
-            <summary>反馈此结果</summary>
+            <summary>
+              <span class="result-section-title"
+                ><MessageSquare :size="16" aria-hidden="true" />反馈此结果</span
+              >
+            </summary>
             <QcResultFeedbackControl
               :feedback="feedbackByRule[item.rule_id]"
               :loading="feedbackLoading"
@@ -501,7 +510,17 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
-import { ArrowRight, ChevronRight, ChevronUp, Copy } from 'lucide-vue-next'
+import {
+  ArrowRight,
+  ChevronRight,
+  ChevronUp,
+  Copy,
+  ClipboardCheck,
+  FileSearch,
+  Lightbulb,
+  MessageSquare,
+  ListFilter,
+} from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
 import QcResultFeedbackControl from './QcResultFeedbackControl.vue'
 import type {
@@ -1308,8 +1327,8 @@ watch(
 }
 
 .result-tab.is-active {
-  border-color: #0066cc;
-  background: #0066cc;
+  border-color: #2b6cf6;
+  background: #2b6cf6;
   color: #fff;
   box-shadow: none;
 }
@@ -1389,7 +1408,7 @@ watch(
 }
 
 .result-document-group-toggle:hover {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .result-document-group-toggle > span {
@@ -1436,7 +1455,7 @@ watch(
   left: 0;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #0066cc;
+  background: #2b6cf6;
   content: '';
   opacity: 0;
   transform: scaleY(0.35);
@@ -1453,7 +1472,7 @@ watch(
 }
 
 .result-row:hover {
-  border-color: rgba(0, 102, 204, 0.22);
+  border-color: rgba(43, 108, 246, 0.22);
   background: #fff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
@@ -1545,9 +1564,9 @@ watch(
 }
 
 .result-row-debug-copy:hover:not(:disabled) {
-  border-color: rgba(0, 102, 204, 0.28);
+  border-color: rgba(43, 108, 246, 0.28);
   background: #f5f9ff;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .result-row-debug-copy:disabled {
@@ -1604,8 +1623,8 @@ watch(
 }
 
 .result-row.is-expanded .toggle-mark {
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1721,7 +1740,7 @@ watch(
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   line-height: 18px;
   font-weight: 400;
@@ -1902,7 +1921,7 @@ watch(
 }
 
 .detail-disclosure summary:hover {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .detail-disclosure[open] summary {
@@ -2126,7 +2145,7 @@ watch(
   padding: 8px 9px;
   border: 1px solid rgba(0, 0, 0, 0.07);
   border-radius: 8px;
-  background: rgba(0, 102, 204, 0.025);
+  background: rgba(43, 108, 246, 0.025);
 }
 
 .copy-pair-head {
@@ -2156,7 +2175,7 @@ watch(
 
 .copy-pair-documents svg {
   flex: 0 0 auto;
-  color: rgba(0, 102, 204, 0.55);
+  color: rgba(43, 108, 246, 0.55);
 }
 
 .copy-pair-hint {
@@ -2168,7 +2187,7 @@ watch(
 
 .medical-analysis summary {
   cursor: pointer;
-  color: #0066cc;
+  color: #2b6cf6;
   list-style-position: inside;
 }
 
@@ -2200,7 +2219,7 @@ watch(
 }
 
 .evidence-link:hover {
-  background: rgba(0, 102, 204, 0.035);
+  background: rgba(43, 108, 246, 0.035);
 }
 
 .evidence-content {
@@ -2241,7 +2260,7 @@ watch(
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 11px;
   font-weight: 600;
   line-height: 17px;

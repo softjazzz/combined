@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <!-- 页面标题和操作按钮 -->
     <div class="page-header">
@@ -48,7 +48,7 @@
           <a-statistic
             title="总病历数"
             :value="stats.totalRecords"
-            :value-style="{ color: '#1890ff' }"
+            :value-style="{ color: '#2b6cf6' }"
           >
             <template #prefix>
               <FileTextOutlined />

@@ -28,10 +28,21 @@
           </span>
         </div>
         <div class="customer-record-result-title__context" :aria-label="recordContextAriaLabel">
+          <img
+            class="patient-context-avatar"
+            :src="contextAvatar"
+            :alt="`${focus?.patientName || '患者'}头像`"
+          />
           <span class="customer-record-result-title__context-label">当前病历</span>
           <span class="customer-record-result-title__context-details">
             <span class="customer-record-result-title__context-value">
-              {{ focus?.label || '病历原文与质控结果对照' }}
+              <span
+                v-for="(part, index) in (focus?.label || '病历原文与质控结果对照').split(' · ')"
+                :key="index"
+                class="patient-context-part"
+                :class="{ 'is-primary': index === 0 }"
+                >{{ part }}</span
+              >
             </span>
             <span v-if="hospitalizationTimeText" class="customer-record-result-title__context-time">
               {{ hospitalizationTimeText }}
@@ -41,20 +52,22 @@
             {{ qcTimeText }}
           </span>
         </div>
-        <QcDiagnosticExport
-          v-if="open && latestResult && focus"
-          :items="latestResult.items"
-          :context="debugContext"
-        />
-        <button
-          v-if="latestResult"
-          type="button"
-          class="customer-record-result-title__export"
-          :disabled="exporting"
-          @click="exportCurrentRecord"
-        >
-          {{ exporting ? '正在导出…' : '导出本病历 HTML' }}
-        </button>
+        <div class="customer-record-result-title__actions">
+          <QcDiagnosticExport
+            v-if="open && latestResult && focus"
+            :items="latestResult.items"
+            :context="debugContext"
+          />
+          <button
+            v-if="latestResult"
+            type="button"
+            class="customer-record-result-title__export"
+            :disabled="exporting"
+            @click="exportCurrentRecord"
+          >
+            {{ exporting ? '正在导出…' : '导出本病历 HTML' }}
+          </button>
+        </div>
       </div>
     </template>
 
@@ -103,6 +116,8 @@ export interface QCRecordResultFocus {
   patientId: string
   recordId: string
   recordRef?: string
+  patientSex?: string
+  patientAge?: number
   patientName?: string
   admissionTime?: string
   dischargeTime?: string
@@ -122,6 +137,19 @@ const emit = defineEmits<{
   (event: 'close'): void
 }>()
 
+import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
+import avatarGirl from '@/assets/avatar-icons/patient-icon-girl.png'
+import avatarMan from '@/assets/avatar-icons/patient-icon-man.png'
+import avatarWoman from '@/assets/avatar-icons/patient-icon-woman.png'
+import avatarElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
+import avatarElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
+const contextAvatar = computed(() => {
+  const female = /女|female|^f$/i.test(String(props.focus?.patientSex || '').trim())
+  const age = Number(props.focus?.patientAge || 0)
+  if (age > 0 && age < 14) return female ? avatarGirl : avatarBoy
+  if (age >= 55) return female ? avatarElderWoman : avatarElderMan
+  return female ? avatarWoman : avatarMan
+})
 const loading = ref(false)
 const exporting = ref(false)
 const loadError = ref('')
@@ -289,13 +317,14 @@ watch(
 </script>
 
 <style scoped>
+@import '../styles/qc-result-view-apple.css';
 .customer-record-result-drawer :deep(.ant-drawer-close) {
   display: grid;
   width: 38px;
   height: 38px;
   margin: 0 12px 0 0;
   place-items: center;
-  border: 1px solid rgba(0, 102, 204, 0.18);
+  border: 1px solid rgba(43, 108, 246, 0.18);
   border-radius: 11px;
   background: #f3f8ff;
   color: #31597f;
@@ -304,15 +333,15 @@ watch(
 }
 
 .customer-record-result-drawer :deep(.ant-drawer-close:focus-visible) {
-  outline: 3px solid rgba(0, 102, 204, 0.24);
+  outline: 3px solid rgba(43, 108, 246, 0.24);
   outline-offset: 2px;
 }
 
 .customer-record-result-drawer :deep(.ant-drawer-close:hover) {
-  border-color: rgba(0, 102, 204, 0.38);
+  border-color: rgba(43, 108, 246, 0.38);
   background: #e7f1ff;
   color: #005eb8;
-  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.14);
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.14);
   transform: translateY(-1px);
 }
 
@@ -342,10 +371,10 @@ watch(
   height: 34px;
   flex: 0 0 34px;
   place-items: center;
-  border: 1px solid rgba(0, 102, 204, 0.14);
+  border: 1px solid rgba(43, 108, 246, 0.14);
   border-radius: 10px;
   background: #edf5ff;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .customer-record-result-title__heading {
@@ -376,8 +405,8 @@ watch(
   align-items: center;
   gap: 10px;
   padding: 7px 12px 7px 10px;
-  border: 1px solid rgba(0, 102, 204, 0.12);
-  border-left: 3px solid #0066cc;
+  border: 1px solid rgba(43, 108, 246, 0.12);
+  border-left: 3px solid #2b6cf6;
   border-radius: 11px;
   background: #f5f9ff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -386,8 +415,8 @@ watch(
   flex: none;
   padding: 2px 7px;
   border-radius: 6px;
-  background: rgba(0, 102, 204, 0.11);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.11);
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 650;
   line-height: 20px;
@@ -412,7 +441,7 @@ watch(
 .customer-record-result-title__context-time {
   flex: none;
   padding-left: 10px;
-  border-left: 1px solid rgba(0, 102, 204, 0.14);
+  border-left: 1px solid rgba(43, 108, 246, 0.14);
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
   font-weight: 500;
@@ -429,19 +458,19 @@ watch(
 .customer-record-result-title__export {
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid rgba(0, 102, 204, 0.22);
+  border: 1px solid rgba(43, 108, 246, 0.22);
   border-radius: 10px;
   background: #f7fbff;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   transition: 180ms ease;
 }
 .customer-record-result-title__export:hover:not(:disabled) {
-  border-color: rgba(0, 102, 204, 0.38);
+  border-color: rgba(43, 108, 246, 0.38);
   background: #edf5ff;
-  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.1);
   transform: translateY(-1px);
 }
 .customer-record-result-title__export:disabled {

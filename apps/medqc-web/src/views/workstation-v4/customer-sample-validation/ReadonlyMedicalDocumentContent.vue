@@ -85,6 +85,7 @@ import type { EditableMedicalRecordDocument, EditableMedicalReportItem } from '.
 import {
   deduplicateMedicalDocumentSections,
   displayMedicalDocumentSectionText,
+  formatDiagnosisSection,
 } from './medicalDocumentDisplay'
 import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 import { buildMedicalReportMetadataRows } from '@/utils/medicalReportDisplay'
@@ -120,7 +121,7 @@ const sectionViews = computed<SectionView[]>(() =>
     .map((section, sourceIndex) => ({
       key: section.key || `section-${sourceIndex}`,
       label: resolveSafeMedicalSectionLabel(section.label, '未命名章节'),
-      text: displayMedicalDocumentSectionText(section),
+      text: formatDiagnosisSection(section.label, displayMedicalDocumentSectionText(section)),
       orderIndex: Number.isFinite(section.order_index)
         ? Number(section.order_index)
         : Number.MAX_SAFE_INTEGER,
@@ -238,7 +239,7 @@ const sectionViews = computed<SectionView[]>(() =>
 }
 
 .readonly-report-table tbody tr:hover {
-  background: rgba(0, 102, 204, 0.025);
+  background: rgba(43, 108, 246, 0.025);
 }
 
 .readonly-report-result-value {

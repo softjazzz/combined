@@ -16,6 +16,9 @@
                   {{ overviewEyebrow }}
                 </div>
                 <h3 id="workstation-list-overview-title" class="wv4-analysis-overview__title">
+                  <span v-if="!isStageQueueMode" class="record-pool-title-icon"
+                    ><FolderHeart :size="21" aria-hidden="true"
+                  /></span>
                   {{ overviewTitle }}
                 </h3>
                 <p v-if="isStageQueueMode" class="wv4-analysis-overview__subtitle">
@@ -70,7 +73,9 @@
                   aria-labelledby="record-pool-date-label"
                 >
                   <span id="record-pool-date-label" class="record-pool-field-label"
-                    >{{ formatWorkstationDateFieldLabel(dateField) }}</span
+                    ><CalendarDays :size="15" aria-hidden="true" />{{
+                      formatWorkstationDateFieldLabel(dateField)
+                    }}</span
                   >
                   <a-range-picker
                     :value="dateRange || undefined"
@@ -104,6 +109,12 @@
                     class="wv4-record-pool-filter__sync-shortcut"
                     @click="emit('toggleTodayInpatient')"
                   >
+                    <component
+                      :is="syncScope === 'today_inpatient' ? BadgeCheck : ShieldCheck"
+                      :size="15"
+                      aria-hidden="true"
+                      class="record-pool-verify-icon"
+                    />
                     {{ syncScope === 'today_inpatient' ? '当日在院 · 已核验' : '核验当日在院' }}
                   </a-button>
                 </div>
@@ -126,7 +137,7 @@
                     v-if="!isStageQueueMode"
                     id="record-pool-dept-label"
                     class="record-pool-field-label"
-                    >科室</span
+                    ><Building2 :size="15" aria-hidden="true" />科室</span
                   >
                   <a-select
                     :aria-labelledby="!isStageQueueMode ? 'record-pool-dept-label' : undefined"
@@ -163,7 +174,7 @@
 
                 <div v-if="!isStageQueueMode" class="workbench-doctor-filter">
                   <span id="record-pool-doctor-label" class="record-pool-field-label"
-                    >主管医师</span
+                    ><Stethoscope :size="15" aria-hidden="true" />主管医师</span
                   >
                   <a-select
                     aria-labelledby="record-pool-doctor-label"
@@ -318,6 +329,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import {
+  FolderHeart,
+  Building2,
+  Stethoscope,
+  CalendarDays,
+  ShieldCheck,
+  BadgeCheck,
+} from 'lucide-vue-next'
 import {
   CheckCircleOutlined,
   FileTextOutlined,

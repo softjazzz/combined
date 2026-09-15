@@ -565,6 +565,32 @@ def test_024_compliant_message_does_not_claim_dissection_when_reason_was_documen
     assert finding == "已核对目标恶性肿瘤手术记录，淋巴结处理情况或未处理原因已有记录。"
 
 
+def test_017_semantic_template_pass_explains_high_similarity_without_threshold_claim() -> None:
+    facts = {
+        "failure_kind": "copy_semantic_review_passed",
+        "copy_similarity": 0.7223,
+        "copy_similarity_threshold": 0.7,
+        "copy_document_sources": ["daily_course_record", "senior_course_record"],
+        "copy_document_record_times": [
+            "2026-06-01 09:00:00",
+            "2026-06-02 10:30:00",
+        ],
+    }
+
+    finding = compliant_customer_finding(
+        rule_id="LX0609-017",
+        safe_customer_display_facts=facts,
+    )
+
+    assert "超过候选阈值 70%" in finding
+    assert "经语义复核确认属于模板或必要重复" in finding
+    assert "未认定为实质复制" in finding
+    assert "相似度达到或超过 70% 的重复记录" not in finding
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-017", facts=facts
+    ) == finding
+
+
 @pytest.mark.parametrize(
     ("facts", "expected"),
     [

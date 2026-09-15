@@ -2935,7 +2935,7 @@ watch(
   gap: 10px 24px;
   padding: 14px 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(0, 102, 204, 0.025);
+  background: rgba(43, 108, 246, 0.025);
 }
 
 .review-report-meta__item {
@@ -3001,7 +3001,7 @@ watch(
 }
 
 .review-report-table tbody tr:hover {
-  background: rgba(0, 102, 204, 0.025);
+  background: rgba(43, 108, 246, 0.025);
 }
 
 .review-report-table__value {
@@ -3323,7 +3323,7 @@ watch(
   left: 0;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #0066cc;
+  background: #2b6cf6;
   content: '';
   opacity: 0;
   transform: scaleY(0.35);
@@ -3337,7 +3337,7 @@ watch(
   border-color: #60a5fa;
   background: #f8fbff;
   box-shadow:
-    0 4px 14px rgba(0, 102, 204, 0.12),
+    0 4px 14px rgba(43, 108, 246, 0.12),
     0 8px 24px rgba(15, 23, 42, 0.08);
   transform: translateY(-2px);
 }
@@ -3352,7 +3352,7 @@ watch(
   border-color: #3b82f6;
   background: #f5f9ff;
   box-shadow:
-    0 4px 14px rgba(0, 102, 204, 0.14),
+    0 4px 14px rgba(43, 108, 246, 0.14),
     0 8px 24px rgba(15, 23, 42, 0.08);
 }
 

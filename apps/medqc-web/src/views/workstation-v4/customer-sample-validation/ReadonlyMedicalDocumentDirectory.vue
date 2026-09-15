@@ -112,6 +112,7 @@
                   <small
                     class="readonly-medical-document-meta record-document-time"
                     :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
+                    :title="formatMedicalDocumentTime(resolveMedicalDocumentTime(document))"
                     >{{ formatDocumentMeta(document) }}</small
                   >
                 </button>
@@ -149,6 +150,7 @@
               <small
                 class="readonly-medical-document-meta record-document-time"
                 :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
+                :title="formatMedicalDocumentTime(resolveMedicalDocumentTime(document))"
               >
                 {{ formatDocumentMeta(document) }}
               </small>
@@ -343,9 +345,10 @@ watch(
 
 function formatDocumentMeta(document: EditableMedicalRecordDocument): string {
   const time = formatMedicalDocumentTime(resolveMedicalDocumentTime(document))
-  const length = String(document.content || '').trim().length
-  const state = medicalDocumentHasContent(document) ? '源文书' : '无正文'
-  return `记录时间 ${time} · ${length}字 · ${state}`
+  const match = time.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (!match) return time
+  const monthDay = `${match[2].padStart(2, '0')}月${match[3].padStart(2, '0')}日`
+  return Number(match[1]) === new Date().getFullYear() ? monthDay : `${match[1]}年${monthDay}`
 }
 
 function isOrderGroupSelected(items: EditableMedicalRecordDocument[]): boolean {
@@ -383,9 +386,9 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 
 .readonly-medical-document-directory-head span {
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
+  background: rgba(43, 108, 246, 0.08);
   padding: 2px 8px;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 700;
 }
@@ -405,8 +408,8 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 }
 
 .readonly-medical-document-search:focus {
-  border-color: rgba(0, 102, 204, 0.42);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+  border-color: rgba(43, 108, 246, 0.42);
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.08);
 }
 
 .readonly-medical-document-filter {
@@ -428,9 +431,9 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 }
 
 .readonly-medical-document-filter button.is-active {
-  border-color: rgba(0, 102, 204, 0.25);
-  background: rgba(0, 102, 204, 0.09);
-  color: #0066cc;
+  border-color: rgba(43, 108, 246, 0.25);
+  background: rgba(43, 108, 246, 0.09);
+  color: #2b6cf6;
 }
 
 .readonly-medical-document-groups {
@@ -446,7 +449,7 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 
 .readonly-medical-document-subgroup {
   margin-left: 10px;
-  border-left: 1px solid rgba(0, 102, 204, 0.12);
+  border-left: 1px solid rgba(43, 108, 246, 0.12);
   padding-left: 6px;
 }
 
@@ -480,7 +483,7 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 .readonly-medical-document-group-title i {
   width: 7px;
   height: 7px;
-  border: 2px solid rgba(0, 102, 204, 0.55);
+  border: 2px solid rgba(43, 108, 246, 0.55);
   border-radius: 999px;
   background: #fff;
 }
@@ -496,7 +499,7 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 }
 
 .readonly-medical-document-group-title:hover .readonly-medical-document-group-chevron {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .readonly-medical-document-group-title em {
@@ -523,7 +526,7 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
   bottom: -8px;
   left: -6px;
   width: 1px;
-  background: rgba(0, 102, 204, 0.16);
+  background: rgba(43, 108, 246, 0.16);
   content: '';
 }
 
@@ -533,7 +536,7 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
   left: -6px;
   width: 12px;
   height: 1px;
-  background: rgba(0, 102, 204, 0.2);
+  background: rgba(43, 108, 246, 0.2);
   content: '';
 }
 
@@ -542,8 +545,8 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 }
 
 .readonly-medical-document-item.is-active {
-  border-color: rgba(0, 102, 204, 0.22);
-  background: rgba(0, 102, 204, 0.09);
+  border-color: rgba(43, 108, 246, 0.22);
+  background: rgba(43, 108, 246, 0.09);
 }
 
 .readonly-medical-document-item.is-empty {
@@ -577,7 +580,7 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 
 .readonly-medical-document-item.is-active strong,
 .readonly-medical-document-item.is-active .readonly-medical-document-meta {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .readonly-medical-document-state {
@@ -594,7 +597,7 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
 .readonly-medical-document-state button {
   border: 0;
   background: transparent;
-  color: #0066cc;
+  color: #2b6cf6;
   cursor: pointer;
 }
 

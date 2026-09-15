@@ -1,8 +1,10 @@
+@import '../../../styles/source-han-sans-sc.css';
+
 /* 病历池专属视觉层：不改变共用队列与任务的布局。 */
 .record-pool-refined {
-  background: #f5f5f7;
+  background: linear-gradient(120deg, #e8eff8 0%, #f5f5f7 48%, #edf0f6 100%);
   color: #1d1d1f;
-  font-family: 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
 }
 
 .record-pool-refined > .custom-scrollbar {
@@ -10,12 +12,15 @@
 }
 
 .record-pool-refined .wv4-record-pool-hero {
-  padding: 0 0 20px;
-  border: 0;
-  border-bottom: 1px solid #e5e5ea;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
   border-radius: 12px;
-  background: transparent !important;
-  box-shadow: none !important;
+  background: rgba(255, 255, 255, 0.62) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(125%);
+  backdrop-filter: blur(20px) saturate(125%) !important;
+  box-shadow:
+    0 4px 18px rgba(38, 58, 86, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
 .record-pool-refined .wv4-analysis-overview__header {
@@ -153,9 +158,9 @@
 
 .record-pool-refined :deep(.batch-table-panel--record-pool) {
   border: 0;
-  border-radius: 0;
+  border-radius: 12px;
   box-shadow: none;
-  font-family: 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
 }
 
 .record-pool-refined :deep(.batch-table-panel__header) {
@@ -201,7 +206,7 @@
 }
 
 .record-pool-refined :deep(.ant-btn) {
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow: none !important;
 }
 
@@ -258,7 +263,7 @@
 }
 .record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
   padding-block: 13px;
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
   font-size: 14px !important;
   font-weight: 400 !important;
   color: #6e6e73 !important;
@@ -336,7 +341,7 @@
 
 .record-pool-refined .wv4-record-pool-main__list {
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   box-shadow:
     0 0 0 1px #e5e5ea,
@@ -390,7 +395,7 @@
 
 /* 蓝白视觉试点：只调整外观，保留已有网格、尺寸与间距。 */
 .workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-filter-toolbar {
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
 }
 .workstation-shell .record-pool-refined .wv4-record-pool-hero .record-pool-field-label,
 .workstation-shell .record-pool-refined .wv4-record-pool-hero .workbench-hosp-filter__label {
@@ -410,11 +415,13 @@
 .record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selector),
 .record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selection-item),
 .record-pool-refined .workbench-filter-toolbar :deep(.ant-select-selection-placeholder) {
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
 }
 .record-pool-refined .workbench-hosp-segmented {
-  background: #e9e9ee;
-  border-radius: 8px;
+  background: #e8e8ed;
+  border-radius: 9px;
+  padding: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 .record-pool-refined :deep(.workbench-dept-select__name) {
   color: #3a3a3c;
@@ -490,7 +497,9 @@
 }
 .record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
   min-width: 76px;
-  padding-inline: 12px;
+  padding-inline: 16px;
+  color: inherit;
+  font-weight: 500;
 }
 .record-pool-refined .wv4-record-pool-filter__summary {
   color: #86868b;
@@ -501,7 +510,9 @@
 /* 苹果风视觉：保持字体、控件尺寸和网格，统一表面与交互色。 */
 .record-pool-refined .workbench-hosp-segmented :deep(.ant-segmented-item-selected) {
   background: #fff;
-  color: #1d1d1f;
+  color: #007aff;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(26, 49, 78, 0.1);
 }
 .record-pool-refined :deep(.ant-btn-default) {
   background: #fff;
@@ -529,11 +540,134 @@
 }
 
 /* 科室、住院状态及两列日期使用相同的正文规格。 */
+.record-pool-refined :deep(.batch-table-panel--record-pool .batch-table-panel__detail-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px !important;
+  padding: 0 6px !important;
+  border-radius: 8px;
+  background: transparent !important;
+  color: #52708e !important;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+.record-pool-refined
+  :deep(.batch-table-panel--record-pool .batch-table-panel__detail-button:hover) {
+  background: transparent !important;
+  color: #007aff !important;
+}
+.record-pool-refined :deep(.batch-table-panel__detail-button > span) {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: 20px;
+}
+.record-pool-refined .wv4-analysis-overview__title,
+.record-pool-refined .record-pool-field-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.record-pool-title-icon {
+  display: inline-flex;
+  padding: 7px;
+  margin-right: 3px;
+  border-radius: 10px;
+  background: #e5f0ff;
+  color: #007aff;
+}
+.record-pool-refined .record-pool-field-label svg {
+  flex-shrink: 0;
+  color: #8195af;
+}
+.record-pool-verify-icon {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 5px;
+  color: #007aff;
+}
+.record-pool-refined :deep(.record-pool-list-icon) {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 6px;
+  color: #007aff;
+}
+.record-pool-refined :deep(.batch-table-panel__summary-pill) {
+  background: #edf4ff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: #3470ae;
+}
+.record-pool-refined :deep(.batch-table-panel__hospitalization-status) {
+  border-radius: 6px !important;
+  padding: 2px 8px;
+}
+.record-pool-refined :deep(.batch-table-panel__hospitalization-status--inpatient) {
+  background: #eaf3ff !important;
+}
+.record-pool-refined :deep(.batch-table-panel__hospitalization-status--discharged) {
+  background: #f1f2f5 !important;
+}
 .record-pool-refined :deep(.batch-table-panel__department),
 .record-pool-refined :deep(.batch-table-panel__hospitalization-status),
 .record-pool-refined :deep(.batch-table-panel__standalone-date) {
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif !important;
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif !important;
   font-size: 14px !important;
   font-weight: 400 !important;
   line-height: 22px;
+}
+
+/* 按用户指定，病历列表对齐运行质控结果列表的紧凑排版。 */
+.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table),
+.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table *) {
+  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif !important;
+}
+.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th) {
+  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif !important;
+  height: 44px;
+  padding: 10px;
+  background: #f8fafc;
+  color: #525e6e;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 20px;
+}
+.record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-tbody > tr > td) {
+  height: 68px;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 20px;
+  border-bottom: 1px solid #edf0f4;
+}
+.record-pool-refined :deep(.batch-table-panel__patient-name) {
+  color: #1d1d1f;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 20px;
+}
+.record-pool-refined :deep(.batch-table-panel__visit-id) {
+  color: #7a8390;
+  font-size: 12px !important;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.record-pool-refined :deep(.batch-table-panel__standalone-date) {
+  color: #727b87;
+  font-size: 13px !important;
+  font-variant-numeric: tabular-nums;
+}
+.record-pool-refined :deep(.ant-table-tbody > tr:hover > td),
+.record-pool-refined :deep(.ant-table-tbody > tr > td.ant-table-cell-row-hover) {
+  background: #f8fafc !important;
+}
+.record-pool-refined :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: #edf4fc !important;
+}
+
+.record-pool-refined :deep(.batch-table-panel__department),
+.record-pool-refined :deep(.batch-table-panel__hospitalization-status) {
+  font-size: 13px !important;
 }

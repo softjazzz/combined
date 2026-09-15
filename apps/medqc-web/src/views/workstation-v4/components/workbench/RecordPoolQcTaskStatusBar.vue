@@ -18,6 +18,7 @@
           <i v-if="isActive" class="record-pool-qc-status__live-dot" aria-hidden="true" />
           <strong>{{ statusTitle }}</strong>
           <span v-if="isActive">{{ currentJob.status === 'queued' ? '排队中' : '执行中' }}</span>
+          <em v-if="isActive && progressPercent !== null">{{ progressPercent }}<small>%</small></em>
         </div>
         <p v-if="isActive" class="record-pool-qc-status__phase">
           {{ stageText }}
@@ -36,16 +37,14 @@
         </div>
 
         <div class="record-pool-qc-status__metrics">
-          <strong
-            v-if="isActive && progressPercent !== null"
-            class="record-pool-qc-status__percent"
-          >
-            当前进度 {{ progressPercent }}%
-          </strong>
           <span v-if="ruleProgressText">{{ ruleProgressText }}</span>
           <span v-if="terminalSummary">{{ terminalSummary }}</span>
           <span class="record-pool-qc-status__record-count">{{ recordProgressText }}</span>
         </div>
+
+        <p v-if="isActive && progressPercent === 100" class="record-pool-qc-status__settling">
+          处理进度已达 100%，正在等待任务最终确认；完成汇总与保存后将更新任务状态。
+        </p>
 
         <details class="record-pool-qc-status__details">
           <summary>{{ isActive ? '查看执行详情' : '查看任务详情' }}</summary>
@@ -90,10 +89,7 @@
             </li>
           </ol>
 
-          <p
-            v-if="!isActive || stageText.startsWith('当前：')"
-            class="record-pool-qc-status__stage"
-          >
+          <p v-if="stageText.startsWith('当前：')" class="record-pool-qc-status__stage">
             {{ stageText }}
           </p>
         </details>
@@ -140,6 +136,7 @@ import {
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '../../semantic-rules/types'
+import { isBatchJobPollingActive } from '../../semantic-rules/utils/batchJobStatus'
 import {
   downloadBlob,
   normalizeBatchExportBlob,
@@ -158,7 +155,6 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-import { isBatchJobPollingActive } from '../../semantic-rules/utils/batchJobStatus'
   dismiss: []
   completed: []
 }>()
@@ -190,9 +186,7 @@ async function exportCurrentBatch() {
 }
 
 const isActive = computed(() => isBatchJobPollingActive(currentJob.value))
-const automaticRetrying = computed(
-  () => isActive.value && currentJob.value?.status === 'failed',
-)
+const automaticRetrying = computed(() => isActive.value && currentJob.value?.status === 'failed')
 
 function finiteCount(value: unknown): number | null {
   if (value === null || value === undefined || value === '' || typeof value === 'boolean')
@@ -300,6 +294,7 @@ const progressPercent = computed(() => {
 
 const statusTitle = computed(() => {
   const status = currentJob.value?.status
+  if (automaticRetrying.value) return '正在自动补跑失败项'
   if (status === 'queued') return '质控任务已进入队列'
   if (status === 'running') return '正在执行质控'
   if (status === 'completed') return '质控任务已完成'
@@ -318,7 +313,6 @@ const stepLabels: Record<string, string> = {
   failed: '执行未完成',
   canceled: '任务已停止',
 }
-  if (automaticRetrying.value) return '正在自动补跑失败项'
 
 type WorkflowStageState = 'complete' | 'active' | 'pending' | 'error'
 
@@ -393,6 +387,7 @@ const workflowStages = computed<WorkflowStageItem[]>(() => {
 
 const stageText = computed(() => {
   const status = currentJob.value?.status
+  if (automaticRetrying.value) return '部分规则输出无效，系统正在自动补跑，已有有效结果会继续保留。'
   if (status === 'queued') return '系统正在分配执行资源，开始后将自动更新病历和质控点进度。'
   if (status === 'completed') return '质控结果已生成，请前往运行病历质控或终末病历质控查看。'
   if (status === 'failed') return '部分或全部病历未完成质控，请稍后重新发起或联系管理员。'
@@ -411,11 +406,11 @@ const terminalSummary = computed(() => {
   if (currentJob.value?.status !== 'completed') return ''
   return `成功 ${successRecords.value} 份 · 失败 ${failedRecords.value} 份`
 })
-  if (automaticRetrying.value) return '部分规则输出无效，系统正在自动补跑，已有有效结果会继续保留。'
 
 const tone = computed(() => {
   const status = currentJob.value?.status
   if (status === 'completed') return 'success'
+  if (automaticRetrying.value) return 'active'
   if (status === 'failed' || status === 'canceled') return 'danger'
   return 'active'
 })
@@ -434,7 +429,6 @@ function schedulePoll(sequence: number) {
 
 async function refreshJob(sequence: number) {
   const jobId = String(currentJob.value?.id || '').trim()
-  if (automaticRetrying.value) return 'active'
   if (!jobId || sequence !== requestSequence || !isActive.value) return
   const result = await getSichuanWorkspaceBatchJob(jobId)
   if (sequence !== requestSequence) return
@@ -476,7 +470,7 @@ onBeforeUnmount(() => {
   gap: 20px;
   overflow: hidden;
   padding: 16px 20px;
-  border: 1px solid rgba(0, 102, 204, 0.13);
+  border: 1px solid rgba(43, 108, 246, 0.13);
   border-radius: 10px;
   background: #fff;
   box-shadow: none;
@@ -487,14 +481,14 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: #0066cc;
+  background: #2b6cf6;
   content: none;
 }
 
 /* 执行态沿用客户样本验证状态条的视觉层级，任务数据仍由原组件负责。 */
 .record-pool-qc-status.is-active {
   padding: 16px;
-  border-color: rgba(0, 102, 204, 0.18);
+  border-color: rgba(43, 108, 246, 0.18);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
@@ -505,8 +499,8 @@ onBeforeUnmount(() => {
   flex: none;
   margin: 0 5px;
   border-radius: 50%;
-  background: #0066cc;
-  box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.1);
+  background: #2b6cf6;
+  box-shadow: 0 0 0 5px rgba(43, 108, 246, 0.1);
 }
 .record-pool-qc-status__phase {
   margin: -4px 0 2px 28px;
@@ -522,7 +516,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status.is-active .record-pool-qc-status__progress {
   height: 8px;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(43, 108, 246, 0.1);
 }
 .record-pool-qc-status__percent {
   color: #175d9c;
@@ -574,7 +568,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__export:hover:not(:disabled) {
   border-color: #bbd2ec;
   background: #f5f8fc;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .record-pool-qc-status__export:disabled {
@@ -591,7 +585,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .record-pool-qc-status--success .record-pool-qc-status__indicator {
@@ -627,7 +621,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__progress > span {
   display: block;
   height: 100%;
-  background: #0066cc;
+  background: #2b6cf6;
   border-radius: inherit;
   transition: width 200ms ease;
 }
@@ -655,8 +649,8 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__heading span {
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   font-size: 12px;
   line-height: 18px;
   font-weight: 600;
@@ -740,13 +734,13 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__concurrency span.is-active {
-  border-color: rgba(0, 102, 204, 0.14);
-  background: rgba(0, 102, 204, 0.07);
+  border-color: rgba(43, 108, 246, 0.14);
+  background: rgba(43, 108, 246, 0.07);
   color: #0055aa;
 }
 
 .record-pool-qc-status__concurrency span.is-active strong {
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .record-pool-qc-status__concurrency span.is-complete {
@@ -823,14 +817,14 @@ onBeforeUnmount(() => {
   top: -11px;
   right: 12px;
   padding: 3px 8px;
-  border: 1px solid rgba(0, 102, 204, 0.2);
+  border: 1px solid rgba(43, 108, 246, 0.2);
   border-radius: 999px;
   background: #fff;
-  color: #0066cc;
+  color: #2b6cf6;
   font-size: 11px;
   line-height: 16px;
   font-weight: 700;
-  box-shadow: 0 3px 10px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 3px 10px rgba(43, 108, 246, 0.1);
 }
 
 .record-pool-qc-status__stages li.is-complete {
@@ -847,14 +841,14 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__stages li.is-active {
-  border-color: rgba(0, 102, 204, 0.42);
+  border-color: rgba(43, 108, 246, 0.42);
   background: transparent;
   color: #0055aa;
 }
 
 .record-pool-qc-status__stages li.is-active .record-pool-qc-status__stage-marker {
-  border-color: #0066cc;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+  border-color: #2b6cf6;
+  box-shadow: 0 0 0 3px rgba(43, 108, 246, 0.1);
 }
 
 .record-pool-qc-status__stages li.is-error {
@@ -921,6 +915,137 @@ onBeforeUnmount(() => {
   .record-pool-qc-status__stages {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+}
+/* 任务面板：以文字层次与细进度条呈现执行情况。 */
+.record-pool-qc-status,
+.record-pool-qc-status.is-active {
+  padding: 20px 24px;
+  border: 1px solid #e3e8f0;
+  border-radius: 16px;
+  background: #fafbfe;
+  box-shadow: none;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
+}
+.record-pool-qc-status__main {
+  flex: 1;
+  min-width: 0;
+}
+.record-pool-qc-status__content {
+  width: 100%;
+  min-width: 0;
+}
+.record-pool-qc-status__heading {
+  gap: 10px;
+}
+.record-pool-qc-status.is-active .record-pool-qc-status__heading strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.record-pool-qc-status__heading em {
+  font-size: 24px;
+  line-height: 30px;
+  color: #007aff;
+  letter-spacing: -0.5px;
+}
+.record-pool-qc-status__heading em small {
+  font-size: 13px;
+  margin-left: 3px;
+}
+.record-pool-qc-status__heading span {
+  background: #eaf3ff;
+  color: #3474b7;
+  font-weight: 400;
+}
+.record-pool-qc-status__live-dot {
+  width: 7px;
+  height: 7px;
+  margin: 0 3px;
+  background: #007aff;
+  box-shadow: 0 0 0 4px #e5efff;
+}
+.record-pool-qc-status__phase {
+  margin: 0;
+  color: #6e7684;
+  font-size: 13px;
+}
+.record-pool-qc-status.is-active .record-pool-qc-status__progress {
+  height: 5px;
+  margin: 6px 0;
+  background: #e6ebf3;
+  border-radius: 99px;
+}
+.record-pool-qc-status__progress > span {
+  background: #007aff;
+}
+.record-pool-qc-status__metrics {
+  gap: 8px 20px;
+  font-size: 13px;
+  color: #667085;
+}
+.record-pool-qc-status__record-count {
+  font-weight: 500;
+  color: #344054;
+}
+.record-pool-qc-status__details {
+  margin-top: 8px;
+}
+.record-pool-qc-status__details summary {
+  padding: 5px 0;
+  color: #55708f;
+  font-size: 12px;
+}
+.record-pool-qc-status__details summary:focus-visible {
+  outline: 2px solid #007aff;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.record-pool-qc-status__details[open] {
+  border-top-color: #e5e9f0;
+}
+.record-pool-qc-status__stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 10px 0;
+}
+.record-pool-qc-status__stage-copy strong {
+  font-size: 12px;
+  font-weight: 400;
+  white-space: normal;
+}
+.record-pool-qc-status__concurrency span {
+  border: 0;
+  border-radius: 6px;
+  font-weight: 400;
+}
+.record-pool-qc-status__settling {
+  margin: 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: #6e7684;
+}
+.record-pool-qc-status--danger {
+  background: #fffaf7;
+  border-color: #efdfd4;
+}
+.record-pool-qc-status--success {
+  background: #f6fbf8;
+  border-color: #deebe4;
+}
+.record-pool-qc-status__refresh-note {
+  line-height: 20px;
+}
+@media (max-width: 700px) {
+  .record-pool-qc-status,
+  .record-pool-qc-status.is-active {
+    padding: 16px;
+  }
+  .record-pool-qc-status__stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .record-pool-qc-status__record-count {
+    margin-left: 0;
   }
 }
 </style>

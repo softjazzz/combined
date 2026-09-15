@@ -19,10 +19,7 @@
     :class="['timeliness-timeline', `is-${variant}`]"
     data-testid="timeliness-timeline"
   >
-    <template
-      v-for="(row, index) in presentation.timeline"
-      :key="row.key"
-    >
+    <template v-for="(row, index) in presentation.timeline" :key="row.key">
       <span class="timeline-point">
         <small>{{ row.label }}</small>
         <strong>{{ row.value }}</strong>
@@ -32,10 +29,7 @@
         class="timeline-arrow"
         aria-hidden="true"
       >
-        <ArrowRight
-          :size="15"
-          :stroke-width="1.8"
-        />
+        <ArrowRight :size="15" :stroke-width="1.8" />
       </span>
     </template>
   </div>
@@ -138,7 +132,7 @@ const variant = computed(() => props.variant)
 .timeline-arrow {
   display: inline-flex;
   align-items: center;
-  color: rgba(0, 102, 204, 0.5);
+  color: rgba(43, 108, 246, 0.5);
 }
 
 .timeliness-metrics.is-compliant {

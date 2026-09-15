@@ -1,0 +1,751 @@
+@import '../../../styles/source-han-sans-sc.css';
+
+/* 完整结果抽屉的视觉边界，不改变证据内容、定位或状态含义。 */
+:global(.customer-record-result-drawer) {
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  color: #1d1d1f;
+}
+:global(.customer-record-result-drawer .ant-drawer-header) {
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(24px) saturate(140%);
+  border-bottom: 1px solid #e5eaf0;
+  padding: 16px 20px;
+}
+:global(.customer-record-result-drawer .ant-drawer-body) {
+  background: linear-gradient(125deg, #e2ebf6, #f5f5f7 55%, #eaf0f7);
+}
+:global(.customer-record-result-drawer .customer-record-result-title__heading strong) {
+  font-size: 20px;
+  font-weight: 600;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context) {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.65);
+  box-shadow: none;
+}
+:global(.customer-record-result-drawer .single-record-result-panel) {
+  background: #f3f6fa;
+  color: #303640;
+}
+:global(.customer-record-result-drawer .result-toolbar) {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid #e5eaf0;
+  padding: 14px 16px;
+}
+:global(.customer-record-result-drawer .result-tabs) {
+  background: #e8e8ed;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 3px;
+}
+:global(.customer-record-result-drawer .result-tab) {
+  border: 0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 400;
+}
+:global(.customer-record-result-drawer .result-tab.is-active) {
+  background: #fff;
+  color: #007aff;
+  box-shadow: 0 1px 3px rgba(30, 50, 80, 0.1);
+}
+:global(.customer-record-result-drawer .result-list) {
+  padding: 14px;
+  gap: 12px;
+}
+:global(.customer-record-result-drawer .result-row) {
+  background: #fff;
+  border: 1px solid rgba(99, 119, 145, 0.13);
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(39, 62, 94, 0.05);
+  overflow: hidden;
+}
+:global(.customer-record-result-drawer .rule-name) {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  color: #303640;
+}
+:global(.customer-record-result-drawer .rule-code),
+:global(.customer-record-result-drawer .result-source),
+:global(.customer-record-result-drawer .result-evidence-count) {
+  font-size: 12px;
+  font-weight: 400;
+  color: #7a8390;
+}
+:global(.customer-record-result-drawer .rule-conclusion),
+:global(.customer-record-result-drawer .summary-narrative) {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.75;
+  color: #465366;
+}
+:global(.customer-record-result-drawer .result-detail) {
+  background: #fff;
+  border-top: 1px solid #edf0f4;
+}
+:global(.customer-record-result-drawer .detail-block),
+:global(.customer-record-result-drawer .detail-disclosure) {
+  border-radius: 8px;
+  box-shadow: none;
+  border-color: #edf0f4;
+}
+:global(.customer-record-result-drawer .evidence-link) {
+  border-radius: 8px;
+  background: #f5f8fc;
+  font-size: 13px;
+  line-height: 22px;
+}
+:global(.customer-record-result-drawer button:focus-visible) {
+  outline: 2px solid rgba(0, 122, 255, 0.65);
+  outline-offset: 2px;
+}
+:global(.customer-record-result-drawer .empty-state) {
+  padding: 32px 20px;
+  color: #727b87;
+  font-size: 14px;
+}
+@media (max-width: 900px) {
+  :global(.customer-record-result-drawer .customer-record-result-title) {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  :global(.customer-record-result-drawer .detail-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :global(.customer-record-result-drawer .result-tabs) {
+    flex-wrap: wrap;
+  }
+}
+
+:global(.customer-record-result-drawer .result-section-title) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+:global(.customer-record-result-drawer .result-section-title svg) {
+  color: #6486ad;
+  flex-shrink: 0;
+}
+:global(.customer-record-result-drawer .toolbar-summary .result-section-title svg) {
+  color: #007aff;
+}
+:global(.customer-record-result-drawer .result-tab svg) {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+:global(.customer-record-result-drawer .result-tab b) {
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(0, 122, 255, 0.07);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+:global(.customer-record-result-drawer .result-document-group-header) {
+  background: #f2f6fc;
+  border-bottom: 1px solid #e7edf5;
+}
+:global(.customer-record-result-drawer .evidence-link:hover) {
+  background: #edf4ff;
+  border-color: #b9cde7;
+}
+
+/* 结果导航：固定网格与克制的选中层次。 */
+:global(.customer-record-result-drawer .result-toolbar) {
+  padding: 16px;
+}
+:global(.customer-record-result-drawer .toolbar-summary) {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 12px;
+}
+:global(.customer-record-result-drawer .toolbar-summary > span) {
+  font-size: 12px;
+  color: #86868b;
+}
+:global(.customer-record-result-drawer .result-tabs) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  background: #edf0f5;
+  border: 1px solid rgba(112, 130, 155, 0.08);
+  border-radius: 12px;
+}
+:global(.customer-record-result-drawer .result-tab) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  margin: 0;
+  border: 1px solid transparent !important;
+  border-radius: 8px;
+  background: transparent;
+  color: #657287;
+  box-shadow: none;
+  outline: none;
+  gap: 6px;
+}
+:global(.customer-record-result-drawer .result-tab > svg) {
+  display: none;
+}
+:global(.customer-record-result-drawer .result-tab > span) {
+  white-space: nowrap;
+  font-size: 13px;
+}
+:global(.customer-record-result-drawer .result-tab b) {
+  min-width: 22px;
+  padding: 1px 4px;
+  background: rgba(112, 130, 155, 0.08);
+  color: #7b8796;
+  border-radius: 5px;
+  text-align: center;
+  line-height: 18px;
+}
+:global(.customer-record-result-drawer .result-tab.is-active) {
+  background: #fff;
+  color: #007aff;
+  box-shadow: 0 1px 4px rgba(33, 53, 81, 0.1);
+}
+:global(.customer-record-result-drawer .result-tab.is-active b) {
+  color: #007aff;
+  background: #edf5ff;
+}
+:global(.customer-record-result-drawer .result-tab:focus-visible) {
+  outline: 2px solid rgba(0, 122, 255, 0.45);
+  outline-offset: 1px;
+}
+
+/* 强制统一按钮内文本与证据正文的字体，避免浏览器默认衬线回退。 */
+:global(.customer-record-result-drawer .single-record-result-panel),
+:global(.customer-record-result-drawer .single-record-result-panel *) {
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif !important;
+}
+:global(.customer-record-result-drawer .result-trigger),
+:global(.customer-record-result-drawer .result-row:not(.is-expanded) .result-trigger) {
+  padding: 16px 18px 12px;
+}
+:global(.customer-record-result-drawer .result-title-row) {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+:global(.customer-record-result-drawer .rule-name) {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 23px;
+  font-weight: 500;
+}
+:global(.customer-record-result-drawer .status-pill) {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+}
+:global(.customer-record-result-drawer .result-row-meta) {
+  margin-top: 6px;
+  color: #8792a2;
+  font-size: 12px;
+  gap: 8px;
+}
+:global(.customer-record-result-drawer .rule-conclusion) {
+  margin-top: 10px;
+  color: #5b6574;
+  font-size: 13px;
+  line-height: 23px;
+}
+:global(.customer-record-result-drawer .result-document-group-header) {
+  padding: 0;
+  background: #f6f8fb;
+  color: #526174;
+  font-weight: 500;
+}
+:global(.customer-record-result-drawer .result-card-actions) {
+  margin: 0 18px;
+  padding: 10px 0;
+  border-top: 1px solid #edf0f4;
+  gap: 14px;
+}
+:global(.customer-record-result-drawer .result-card-actions button) {
+  font-size: 12px;
+  font-weight: 400;
+  color: #637c99;
+}
+:global(.customer-record-result-drawer .result-detail) {
+  padding: 0 18px 16px;
+}
+
+:global(.customer-record-result-drawer .result-document-group-toggle) {
+  min-height: 36px;
+  padding: 7px 18px;
+  box-sizing: border-box;
+}
+
+:global(.customer-record-result-drawer .evidence-list) {
+  display: grid;
+  gap: 0;
+  border: 1px solid #e8edf3;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+:global(.customer-record-result-drawer .evidence-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #edf0f4;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+}
+:global(.customer-record-result-drawer .evidence-row:last-child) {
+  border-bottom: 0;
+}
+:global(.customer-record-result-drawer .evidence-content) {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+:global(.customer-record-result-drawer .evidence-content strong) {
+  font-size: 13px;
+  font-weight: 400;
+  color: #465366;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+}
+:global(.customer-record-result-drawer .evidence-action) {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #007aff;
+  white-space: nowrap;
+}
+:global(.customer-record-result-drawer .evidence-path) {
+  color: #8792a2;
+  font-size: 12px;
+  line-height: 18px;
+}
+:global(.customer-record-result-drawer .evidence-excerpt) {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 22px;
+}
+:global(.customer-record-result-drawer .evidence-disclosure > summary) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+:global(.customer-record-result-drawer .evidence-disclosure > summary small) {
+  color: #8792a2;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+:global(.customer-record-result-drawer .result-card-actions .text-expand-action),
+:global(.customer-record-result-drawer .result-card-actions .result-feedback-action) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #cbdcf1;
+  border-radius: 7px;
+  background: #f0f6ff;
+  color: #0069dc;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  text-decoration: none;
+  cursor: pointer;
+}
+:global(.customer-record-result-drawer .result-card-actions .text-expand-action:hover),
+:global(.customer-record-result-drawer .result-card-actions .result-feedback-action:hover) {
+  background: #e3efff;
+  border-color: #8fb7e8;
+  color: #0057b8;
+}
+:global(.customer-record-result-drawer .result-card-actions) {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 原文目录：以缩进和选中背景表达层级，去掉装饰树线。 */
+:global(.customer-record-result-drawer .readonly-medical-document-directory) {
+  background: #f5f7fa;
+  padding: 16px;
+  border-color: #e8edf3;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-directory *) {
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif !important;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-search) {
+  height: 36px;
+  border: 1px solid #e0e5ec;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-filter) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  background: #e8ecf2;
+  border-radius: 8px;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-filter button) {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #657287;
+  font-size: 13px;
+  font-weight: 400;
+  min-height: 30px;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-filter button.is-active) {
+  background: #fff;
+  color: #007aff;
+  box-shadow: 0 1px 3px rgba(33, 53, 81, 0.08);
+}
+:global(.customer-record-result-drawer .readonly-medical-document-group-title) {
+  padding: 10px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #526174;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-group-title i),
+:global(.customer-record-result-drawer .readonly-medical-document-item::before),
+:global(.customer-record-result-drawer .readonly-medical-document-item::after) {
+  display: none;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-subgroup) {
+  border-left: 0;
+  padding-left: 10px;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-item) {
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-item strong) {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 21px;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-item.is-active) {
+  background: #e8f1ff;
+  border-color: #d2e3fa;
+}
+:global(.customer-record-result-drawer .readonly-medical-document-meta) {
+  font-size: 11px;
+  color: #8792a2;
+}
+
+/* 玻璃仅用于导航和工具层，原文与判定正文保留实色。 */
+:global(.customer-record-result-drawer .readonly-medical-document-directory) {
+  background: rgba(236, 243, 252, 0.48);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 12px;
+  box-shadow:
+    0 6px 22px rgba(43, 65, 96, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+:global(.customer-record-result-drawer .result-toolbar) {
+  background: rgba(235, 243, 253, 0.55);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 3px 12px rgba(43, 65, 96, 0.04);
+}
+:global(.customer-record-result-drawer .readonly-medical-document-search) {
+  background: rgba(255, 255, 255, 0.72);
+}
+:global(.customer-record-result-drawer .readonly-medical-document-filter) {
+  background: rgba(213, 225, 241, 0.55);
+}
+
+/* 中央原文阅读层：工作区与纸面分离，不覆盖证据高亮。 */
+:global(.customer-record-result-drawer .record-content-scroll) {
+  background: #edf1f6;
+  padding: 20px;
+}
+:global(.customer-record-result-drawer .record-content-sections) {
+  background: #fff;
+  border: 1px solid #e4e9f0;
+  border-radius: 10px;
+  padding: 22px 24px;
+  box-shadow: 0 4px 16px rgba(39, 62, 94, 0.06);
+}
+:global(.customer-record-result-drawer .record-content-section-title) {
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #edf0f4;
+  color: #303640;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+:global(.customer-record-result-drawer .record-content-time) {
+  display: inline-flex;
+  gap: 6px;
+  color: #8792a2;
+  font-size: 12px;
+}
+:global(.customer-record-result-drawer .record-content-time b) {
+  color: #657287;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+:global(.customer-record-result-drawer .record-document-select select) {
+  min-height: 34px;
+  border: 1px solid #dfe5ed;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  :global(.customer-record-result-drawer .record-content-scroll) {
+    padding: 10px;
+  }
+  :global(.customer-record-result-drawer .record-content-sections) {
+    padding: 16px;
+  }
+}
+
+/* 抽屉顶栏：标题、患者上下文、操作三段排列。 */
+:global(.customer-record-result-drawer .customer-record-result-title) {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 16px;
+  min-width: 0;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__brand) {
+  flex: 0 0 auto;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__heading small) {
+  display: none;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__heading strong) {
+  font-size: 17px;
+  white-space: nowrap;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context) {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 4px 16px;
+  border: 0;
+  border-left: 1px solid #e1e7ee;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context-label) {
+  display: none;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context-value) {
+  color: #465366;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__qc-time) {
+  color: #8792a2;
+  font-size: 12px;
+  font-weight: 400;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__export) {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 34px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #526174;
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+@media (max-width: 1000px) {
+  :global(.customer-record-result-drawer .customer-record-result-title) {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+  :global(.customer-record-result-drawer .customer-record-result-title__context) {
+    flex-basis: 100%;
+    order: 2;
+    padding: 8px 0 0;
+    border-left: 0;
+    border-top: 1px solid #edf0f4;
+  }
+}
+
+:global(.customer-record-result-drawer .customer-record-result-title__actions) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__actions > *) {
+  flex: 0 0 auto;
+}
+
+:global(.customer-record-result-drawer .record-content-time),
+:global(.customer-record-result-drawer .record-content-time span),
+:global(.customer-record-result-drawer .record-content-time b) {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* 结果筛选：仅选中项使用纯蓝底白字。 */
+:global(.customer-record-result-drawer .result-tab) {
+  background: #fff !important;
+  background-image: none !important;
+  color: #657287 !important;
+  opacity: 1;
+  box-shadow: none;
+}
+:global(.customer-record-result-drawer .result-tab b) {
+  background: #edf0f5;
+  color: #7b8796;
+}
+:global(.customer-record-result-drawer .result-tab.is-active) {
+  background: #007aff !important;
+  color: #fff !important;
+  box-shadow: 0 2px 5px rgba(0, 122, 255, 0.14);
+}
+:global(.customer-record-result-drawer .result-tab.is-active b) {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+:global(.customer-record-result-drawer .customer-record-result-title__context) {
+  background: transparent !important;
+  border: 0 !important;
+  border-left: 1px solid #e3e8ef !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 4px 16px;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context-value) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-weight: 400 !important;
+}
+:global(.customer-record-result-drawer .patient-context-part) {
+  color: #727b87;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 22px;
+}
+:global(.customer-record-result-drawer .patient-context-part.is-primary) {
+  color: #303640;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+:global(.customer-record-result-drawer .customer-record-result-title__context) {
+  padding: 8px 14px !important;
+  border: 1px solid rgba(213, 223, 236, 0.65) !important;
+  border-radius: 10px !important;
+  background: rgba(246, 249, 253, 0.72) !important;
+}
+:global(.customer-record-result-drawer .customer-record-result-title__context-value) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 2px 14px;
+}
+:global(.customer-record-result-drawer .patient-context-part.is-primary) {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+:global(.customer-record-result-drawer .patient-context-part:nth-child(2)) {
+  color: #526174;
+  font-size: 13px;
+}
+:global(.customer-record-result-drawer .patient-context-part:nth-child(n + 3)) {
+  color: #8792a2;
+  font-size: 12px;
+}
+
+:global(.customer-record-result-drawer .patient-context-avatar) {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* 由抽屉实际剩余高度分配阅读区，去掉固定视口扣减留下的底部空白。 */
+:global(.customer-record-result-drawer .ant-drawer-body) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+:global(.customer-record-result-drawer .ant-drawer-body > .ant-spin-nested-loading),
+:global(
+  .customer-record-result-drawer .ant-drawer-body > .ant-spin-nested-loading > .ant-spin-container
+) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+:global(.customer-record-result-drawer .record-compare-shell) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+:global(.customer-record-result-drawer .record-compare-head) {
+  flex-shrink: 0;
+}
+:global(.customer-record-result-drawer .record-compare-grid) {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+:global(.customer-record-result-drawer .readonly-medical-document-meta) {
+  font-size: 12px;
+  color: #8792a2;
+}

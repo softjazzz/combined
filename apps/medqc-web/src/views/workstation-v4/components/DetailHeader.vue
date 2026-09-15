@@ -196,10 +196,10 @@ defineEmits<{
 }
 
 .detail-apple-header button:not(:disabled):hover {
-  border-color: rgba(0, 102, 204, 0.2) !important;
-  background: rgba(0, 102, 204, 0.06) !important;
-  color: #0066cc !important;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.08) !important;
+  border-color: rgba(43, 108, 246, 0.2) !important;
+  background: rgba(43, 108, 246, 0.06) !important;
+  color: #2b6cf6 !important;
+  box-shadow: 0 2px 8px rgba(43, 108, 246, 0.08) !important;
 }
 
 .detail-apple-header :deep(.ant-btn:not(.ant-btn-primary)) {
@@ -212,19 +212,19 @@ defineEmits<{
 }
 
 .detail-apple-header :deep(.ant-btn:not(.ant-btn-primary):hover) {
-  border-color: rgba(0, 102, 204, 0.2) !important;
-  color: #0066cc !important;
+  border-color: rgba(43, 108, 246, 0.2) !important;
+  color: #2b6cf6 !important;
 }
 
 .detail-apple-header :deep(.ant-btn-primary) {
-  border-color: #0066cc !important;
-  background: #0066cc !important;
+  border-color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
   color: #fff !important;
   font-size: 13px !important;
   font-weight: 650 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 4px 12px rgba(0, 102, 204, 0.16) !important;
+    0 4px 12px rgba(43, 108, 246, 0.16) !important;
 }
 
 .detail-apple-header :deep(.ant-btn-primary:hover) {
@@ -232,7 +232,7 @@ defineEmits<{
   background: #0057b8 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 6px 16px rgba(0, 102, 204, 0.2) !important;
+    0 6px 16px rgba(43, 108, 246, 0.2) !important;
 }
 
 .detail-apple-header :deep(.ant-btn-primary[disabled]),
@@ -272,15 +272,15 @@ defineEmits<{
 
 .detail-apple-header .bg-blue-50\/80,
 .detail-apple-header .bg-slate-50\/92 {
-  background: rgba(0, 102, 204, 0.07) !important;
+  background: rgba(43, 108, 246, 0.07) !important;
 }
 
 .detail-apple-header .border-blue-200\/80,
 .detail-apple-header .border-slate-200\/90 {
-  border-color: rgba(0, 102, 204, 0.16) !important;
+  border-color: rgba(43, 108, 246, 0.16) !important;
 }
 
 .detail-apple-header .text-\[\#0057b8\] {
-  color: #0066cc !important;
+  color: #2b6cf6 !important;
 }
 </style>

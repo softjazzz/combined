@@ -7,6 +7,12 @@
         <div class="batch-table-panel__toolbar-meta min-w-0">
           <div class="flex flex-wrap items-center gap-2.5">
             <div class="batch-table-panel__title">
+              <ListChecks
+                v-if="recordPoolMode"
+                :size="17"
+                aria-hidden="true"
+                class="record-pool-list-icon"
+              />
               {{ recordPoolMode ? '病历列表' : title }}
             </div>
             <span class="batch-table-panel__summary-pill"
@@ -208,9 +214,13 @@
             type="default"
             size="small"
             class="batch-table-panel__detail-button"
+            :aria-label="
+              recordPoolMode ? `查看${record.patientName || ''}病历详情` : rowActionLabel
+            "
             @click="emit('open-record', record.recordKey || record.id)"
           >
-            {{ rowActionLabel }}
+            <Eye v-if="recordPoolMode" :size="14" aria-hidden="true" />
+            {{ recordPoolMode ? '查看' : rowActionLabel }}
           </a-button>
         </template>
       </template>
@@ -220,6 +230,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Eye, ListChecks } from 'lucide-vue-next'
 import type { RecordLatestQcSummary, RecordSourceState } from '../../types'
 import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
@@ -464,7 +475,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 
 .batch-table-panel__task-status :deep(.record-pool-qc-status) {
   border-radius: 10px;
-  background: rgba(0, 102, 204, 0.045);
+  background: rgba(43, 108, 246, 0.045);
   box-shadow: none;
 }
 
@@ -530,7 +541,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 
 .batch-table-panel__action--primary {
   border: 0 !important;
-  background: var(--workstation-brand-500, #0066cc) !important;
+  background: var(--workstation-brand-500, #2b6cf6) !important;
   color: #fff !important;
   box-shadow: 0 12px 22px rgba(47, 111, 237, 0.18) !important;
 }
@@ -607,7 +618,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
   object-fit: cover;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.96),
-    0 2px 6px rgba(0, 102, 204, 0.08);
+    0 2px 6px rgba(43, 108, 246, 0.08);
 }
 
 .batch-table-panel__patient-meta {
@@ -669,7 +680,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 }
 
 .batch-table-panel__hospitalization-status--inpatient {
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(43, 108, 246, 0.1);
   color: var(--workstation-brand-600, #1e5ae0);
 }
 
@@ -848,7 +859,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel--record-pool .batch-table-panel__clear-selection {
   padding-inline: 2px;
   font-size: 12px;
-  color: var(--workstation-brand-500, #0066cc);
+  color: var(--workstation-brand-500, #2b6cf6);
 }
 
 .batch-table-panel--record-pool .batch-table-panel__patient-name {
@@ -865,7 +876,7 @@ const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stage
 .batch-table-panel--record-pool .batch-table-panel__detail-button {
   height: 30px !important;
   background: transparent !important;
-  color: var(--workstation-brand-500, #0066cc) !important;
+  color: var(--workstation-brand-500, #2b6cf6) !important;
   box-shadow: none !important;
   font-size: 13px !important;
   font-weight: 500 !important;

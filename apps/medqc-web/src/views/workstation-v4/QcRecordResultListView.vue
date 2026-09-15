@@ -1,5 +1,5 @@
 <template>
-  <main class="qc-record-result-list-view running-qc-refined">
+  <main class="qc-record-result-list-view running-qc-refined running-qc-apple">
     <section class="qc-record-result-list-view__header">
       <div>
         <h1>
@@ -8,7 +8,6 @@
             isInpatient ? '在院' : '已出院'
           }}</span>
         </h1>
-        <p class="review-workbench-subtitle">查看质控结果 · 复核病历问题</p>
       </div>
     </section>
 
@@ -712,6 +711,8 @@ function handleOpenResult(recordKey: string) {
     patientId: record.patientId as string,
     recordId: record.id || (record.visitId as string),
     patientName: record.name,
+    patientSex: record.sex,
+    patientAge: record.age,
     label: labelParts.join(' · '),
   }
   drawerOpen.value = true
@@ -798,8 +799,8 @@ function closeResultDrawer() {
   margin-top: 6px;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
+  background: rgba(43, 108, 246, 0.08);
+  color: #2b6cf6;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -835,7 +836,7 @@ function closeResultDrawer() {
 .qc-record-result-list-view__view-switch button.is-active {
   background: #fff;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
-  color: #0066cc;
+  color: #2b6cf6;
 }
 
 .qc-record-result-list-view__workbench {
@@ -876,15 +877,15 @@ function closeResultDrawer() {
   gap: 7px;
   min-height: 38px;
   padding: 0 15px;
-  border: 1px solid #0066cc;
+  border: 1px solid #2b6cf6;
   border-radius: 10px;
-  background: #0066cc;
+  background: #2b6cf6;
   color: #fff;
   font-size: 13px;
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 7px 16px rgba(0, 102, 204, 0.18);
+  box-shadow: 0 7px 16px rgba(43, 108, 246, 0.18);
 }
 
 .qc-record-result-list-view__export-options {
@@ -917,7 +918,7 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__export-options button:hover:not(:disabled),
 .qc-record-result-list-view__export-options button:focus-visible {
-  background: rgba(0, 102, 204, 0.07);
+  background: rgba(43, 108, 246, 0.07);
   outline: none;
 }
 
@@ -988,7 +989,7 @@ function closeResultDrawer() {
   border: 1px solid rgba(0, 0, 0, 0.09);
   border-radius: 8px;
   background: #fff;
-  color: #0066cc;
+  color: #2b6cf6;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -1002,7 +1003,7 @@ function closeResultDrawer() {
   border: 1px solid rgba(0, 0, 0, 0.09);
   border-radius: 8px;
   background: #fff;
-  color: #0066cc;
+  color: #2b6cf6;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -1011,14 +1012,14 @@ function closeResultDrawer() {
 }
 
 .qc-record-result-list-view__query-button {
-  border-color: #0066cc;
-  background: #0066cc;
+  border-color: #2b6cf6;
+  background: #2b6cf6;
   color: #fff;
 }
 
 .qc-record-result-list-view__refresh-button {
-  border-color: #0066cc;
-  background: #0066cc;
+  border-color: #2b6cf6;
+  background: #2b6cf6;
   color: #fff;
 }
 
@@ -1068,9 +1069,9 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__notice {
   padding: 12px 20px;
-  border-top: 1px solid rgba(0, 102, 204, 0.1);
-  background: rgba(0, 102, 204, 0.045);
-  color: #0066cc !important;
+  border-top: 1px solid rgba(43, 108, 246, 0.1);
+  background: rgba(43, 108, 246, 0.045);
+  color: #2b6cf6 !important;
   font-weight: 600;
 }
 
