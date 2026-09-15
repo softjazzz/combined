@@ -84,6 +84,10 @@ _TIME_PATTERN = re.compile(
 )
 _CUSTOMER_SOURCE_REF_PATTERN = re.compile(r"src_[0-9a-f]{24}")
 _SAFE_SOURCE_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_SHARED_PARENT_DOCUMENT_SOURCES = {
+    "admission_record_diagnosis": "admission_record",
+    "discharge_record_diagnosis": "discharge_record",
+}
 
 
 def _text(value: Any) -> str:
@@ -356,26 +360,46 @@ def project_selected_document_evidence(
             }
             coordinate_source = customer_source_type
             if not same_document_refs or selected_source_refs != same_document_refs:
-                # 出院诊断多行可共用真实父文书 ID；仅按明确外键定位同快照中
-                # 唯一的出院记录，保留原选中诊断事实，不把其他诊断算作证据。
-                if source_key != "discharge_record_diagnosis" or any(
+                # 入院/出院诊断多行可共用真实父文书 ID；仅按明确外键定位同快照中
+                # 唯一的父文书，保留原选中诊断事实，不把其他诊断算作证据。
+                parent_source = _SHARED_PARENT_DOCUMENT_SOURCES.get(source_key)
+                if parent_source is None or any(
                     _text(row.get("document_id")) != document_id
                     for reference, row in selected_document_rows if reference in selected_source_refs
                 ):
                     return []
                 try:
                     parents = [row for _reference, row in evidence_materials.document_rows(
-                        "discharge_record", snapshot=evidence_snapshot
+                        parent_source, snapshot=evidence_snapshot
                     ) if _text(row.get("document_id")) == document_id]
                 except (EvidenceMaterialUnavailable, TypeError, ValueError):
                     return []
                 if len(parents) != 1:
                     return []
-                coordinate_source = "discharge_record"
+                coordinate_source = parent_source
             coordinate = {
                 "source_type": coordinate_source,
                 "source_document_id": document_id,
             }
+            if source_key == "admission_record_diagnosis":
+                diagnosis_names = tuple(
+                    dict.fromkeys(
+                        _text(row.get("diagnosis_name"))
+                        for reference, row in selected_document_rows
+                        if reference in selected_source_refs
+                        and _text(row.get("diagnosis_name"))
+                    )
+                )
+                if diagnosis_names:
+                    excerpt = "；".join(diagnosis_names)
+                    coordinate.update(
+                        {
+                            "field_path": "admission_record_diagnosis.diagnosis_name",
+                            "evidence_excerpt": excerpt[:300]
+                            + ("…" if len(excerpt) > 300 else ""),
+                            "excerpt_kind": "字段级依据",
+                        }
+                    )
             resolved.update(selected_source_refs)
             located_by_ref.update(
                 {reference: coordinate for reference in selected_source_refs}

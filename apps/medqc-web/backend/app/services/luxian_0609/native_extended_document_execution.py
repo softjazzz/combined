@@ -4247,6 +4247,16 @@ async def execute_luxian_0609_native_extended_document_rules(
                             "admission_record_diagnosis",
                         )
                     else:
+                        declaration_rows = tuple(
+                            row
+                            for row in admission_diagnosis_rows
+                            if _clean(row.get("diagnosis_type"))
+                            in _ADMISSION_DIAGNOSIS_CHANGE_TYPES
+                            and _normalized_admission_diagnosis_name(
+                                row.get("diagnosis_name")
+                            )
+                            and _clean(row.get("document_id") or row.get("id"))
+                        )
                         structured_candidate_rows = _reason_and_basis_candidate_rows(
                             (
                                 ("daily_course_record", daily_rows),
@@ -4269,6 +4279,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                             snapshot=evidence_snapshot,
                             materials=evidence_materials,
                             consumed_rows=tuple(
+                                ("admission_record_diagnosis", row)
+                                for row in declaration_rows
+                            )
+                            + tuple(
                                 (source_key, row)
                                 for _time, _text, source_key, row in structured_candidate_rows
                             ),
@@ -4280,7 +4294,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 source_keys=(
                                     ()
                                     if structured_binding.document_refs
-                                    else ("diagnosis",)
+                                    else ("admission_record_diagnosis",)
                                 ),
                                 document_refs=structured_binding.document_refs,
                                 exact_document_refs=bool(

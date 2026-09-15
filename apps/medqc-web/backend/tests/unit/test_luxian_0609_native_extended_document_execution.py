@@ -9675,10 +9675,11 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
     """入院记录诊断显式声明补充诊断时，变更已发生，缺理由即确定问题。"""
 
     client = _DiagnosisChangeClient()
-    _, _, execution, reduced = await _evaluate_selected(
+    snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-074",),
         {
             "admission_record_diagnosis": ({
+                "document_id": "ADMISSION-DIAG-CHANGE-074",
                 "diagnosis_type": "补充诊断",
                 "diagnosis_name": "1.左膝半月板损伤；2.肺结节",
                 "diagnosis_no": None,
@@ -9704,6 +9705,14 @@ async def test_074_structured_change_declaration_without_reason_is_non_compliant
     # 结构化声明本身没有理由/依据标记的病程候选，不得触发受控抽取。
     assert execution.llm_call_count == 0
     assert client.calls == []
+    declaration_ref = next(
+        ref
+        for ref, row in materials.document_rows(
+            "admission_record_diagnosis", snapshot=snapshot
+        )
+        if row["document_id"] == "ADMISSION-DIAG-CHANGE-074"
+    )
+    assert execution.decisions[0].fact_refs == (declaration_ref,)
 
 
 @pytest.mark.asyncio

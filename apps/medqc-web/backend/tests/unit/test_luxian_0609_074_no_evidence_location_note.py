@@ -35,13 +35,25 @@ EMPTY_EVIDENCE_CONCLUSION = "共识别 1 次诊断修正或补充，修改理由
 
 
 def _declared_change_only_rows() -> dict:
-    """结构化声明成立、病程无理由/依据标记（5 条空证据病例的真实形态）。"""
+    """结构化声明成立、病程无理由/依据标记（客户样本的父子表形态）。"""
 
     return {
+        "admission_record": (
+            {
+                "document_id": "ADMISSION-074",
+                "record_content": "入院记录：初步诊断左膝半月板损伤，补充诊断肺结节。",
+            },
+        ),
         "admission_record_diagnosis": (
             {
+                "document_id": "ADMISSION-074",
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": "左膝半月板损伤",
+            },
+            {
+                "document_id": "ADMISSION-074",
                 "diagnosis_type": "补充诊断",
-                "diagnosis_name": "1.左膝半月板损伤；2.肺结节",
+                "diagnosis_name": "肺结节",
             },
         ),
         "daily_course_record": (
@@ -74,8 +86,21 @@ def _declared_change_with_marked_course_rows() -> dict:
     }
 
 
+def _declared_change_without_document_id_rows() -> dict:
+    """声明行无可公开文书坐标时，仍保留既有受控说明。"""
+
+    return {
+        "admission_record_diagnosis": (
+            {
+                "diagnosis_type": "补充诊断",
+                "diagnosis_name": "肺结节",
+            },
+        ),
+    }
+
+
 @pytest.mark.asyncio
-async def test_074_empty_evidence_non_compliant_gets_explanation_after_original_sentence() -> None:
+async def test_074_structured_declaration_projects_its_parent_admission_record() -> None:
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
         ("LX0609-074",), _declared_change_only_rows(), llm_client=client
@@ -95,12 +120,17 @@ async def test_074_empty_evidence_non_compliant_gets_explanation_after_original_
 
     assert final["status"] == "non_compliant"
     assert final["reason_code"] == "requirement_violated"
-    assert not final.get("customer_evidence")
-    # 原有结论句子逐字保留，只在其后追加固定说明。
+    assert final["customer_evidence"] == [
+        {
+            "source_type": "admission_record",
+            "source_document_id": "ADMISSION-074",
+            "field_path": "admission_record_diagnosis.diagnosis_name",
+            "evidence_excerpt": "肺结节",
+            "excerpt_kind": "字段级依据",
+        }
+    ]
     assert final["findings"] == EMPTY_EVIDENCE_CONCLUSION
-    assert final["customer_conclusion"] == (
-        EMPTY_EVIDENCE_CONCLUSION + LX0609_074_NO_EVIDENCE_LOCATION_NOTE
-    )
+    assert "customer_conclusion" not in final
     assert final["customer_display_facts"] == {
         "verification_kind": "diagnosis_change_documentation_check",
         "diagnosis_change_count": 1,
@@ -115,7 +145,9 @@ async def test_074_empty_evidence_explanation_reaches_customer_delivery_path() -
 
     client = _DiagnosisChangeClient()
     snapshot, materials, execution, reduced = await _evaluate_selected(
-        ("LX0609-074",), _declared_change_only_rows(), llm_client=client
+        ("LX0609-074",),
+        _declared_change_without_document_id_rows(),
+        llm_client=client,
     )
     final = _canonical_extended_result(
         rule_id="LX0609-074",
