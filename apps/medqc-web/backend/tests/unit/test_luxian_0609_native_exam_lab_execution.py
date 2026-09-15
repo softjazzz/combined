@@ -2712,6 +2712,103 @@ def test_010_composite_exam_id_with_unknown_component_stays_data_gap():
     assert outcome.reason_code == "association_failed"
 
 
+@pytest.mark.parametrize(
+    "order_name",
+    ("CT/介入医用干式胶片 14*17in", "DR医用干式胶片8*10"),
+)
+def test_010_pure_film_supply_order_does_not_trigger_exam_rules(order_name):
+    """纯胶片耗材不能因为名称含 CT/DR 而制造影像检查事件。"""
+
+    row = {
+        "order_id": "FILM-1",
+        "order_name": order_name,
+        "order_status": "新开",
+        "prescribed_datetime": "2026-07-07 08:00:00",
+        "document_id": "FILM-DOC-1",
+    }
+    rows_by_source = {exam_lab._ORDER_SOURCE_KEY: (row,)}
+
+    assert exam_lab._effective_target_orders(rows_by_source, fact_kind="exam") == ()
+    assert exam_lab._order_exam_structure_outcome(rows_by_source) is None
+    assert exam_lab._trigger_order_summaries(rows_by_source, fact_kind="exam") == []
+    assert not exam_lab._controlled_trigger_from_rows(
+        fact_kind="exam",
+        sources=(
+            exam_lab._TypedSource(
+                "present", (row,), exam_lab._ORDER_SOURCE_KEY
+            ),
+        ),
+    )
+    assert exam_lab._target_source_document_ids(
+        rows_by_source,
+        fact_kind="exam",
+        include_order_document=True,
+    ) == ()
+
+
+def test_010_real_mri_with_embedded_film_still_triggers_exam_rules():
+    """“含胶片”是实际 MRI 检查的一部分，不能按耗材排除。"""
+
+    row = {
+        "order_id": "MRI-1",
+        "order_name": "(含胶片)MRI弥散加权成像(DWI)",
+        "order_status": "新开",
+        "prescribed_datetime": "2026-07-07 08:00:00",
+        "document_id": "MRI-DOC-1",
+    }
+    rows_by_source = {exam_lab._ORDER_SOURCE_KEY: (row,)}
+
+    effective = exam_lab._effective_target_orders(rows_by_source, fact_kind="exam")
+    assert [item[1]["order_name"] for item in effective] == [row["order_name"]]
+    assert exam_lab._trigger_order_summaries(rows_by_source, fact_kind="exam") == [
+        {"order_name": row["order_name"], "order_time": "2026-07-07 08:00:00"}
+    ]
+    assert exam_lab._controlled_trigger_from_rows(
+        fact_kind="exam",
+        sources=(
+            exam_lab._TypedSource(
+                "present", (row,), exam_lab._ORDER_SOURCE_KEY
+            ),
+        ),
+    )
+    assert exam_lab._target_source_document_ids(
+        rows_by_source,
+        fact_kind="exam",
+        include_order_document=True,
+    ) == ("MRI-DOC-1",)
+
+
+def test_010_mixed_real_exam_and_film_supply_counts_only_real_exam_order():
+    """真实检查与胶片耗材并存时，触发列表只保留真实检查。"""
+
+    film = {
+        "order_id": "FILM-1",
+        "order_name": "CT/介入医用干式胶片 14*17in",
+        "order_status": "新开",
+        "prescribed_datetime": "2026-07-07 08:01:00",
+        "document_id": "FILM-DOC-1",
+    }
+    exam = {
+        "order_id": "CT-1",
+        "order_name": "胸部螺旋CT平扫",
+        "order_status": "新开",
+        "prescribed_datetime": "2026-07-07 08:00:00",
+        "document_id": "CT-DOC-1",
+    }
+    rows_by_source = {exam_lab._ORDER_SOURCE_KEY: (film, exam)}
+
+    effective = exam_lab._effective_target_orders(rows_by_source, fact_kind="exam")
+    assert [item[1]["order_id"] for item in effective] == ["CT-1"]
+    assert exam_lab._trigger_order_summaries(rows_by_source, fact_kind="exam") == [
+        {"order_name": "胸部螺旋CT平扫", "order_time": "2026-07-07 08:00:00"}
+    ]
+    assert exam_lab._target_source_document_ids(
+        rows_by_source,
+        fact_kind="exam",
+        include_order_document=True,
+    ) == ("CT-DOC-1",)
+
+
 @pytest.mark.asyncio
 async def test_010_composite_exam_id_reaches_authoritative_exam_time_gate(monkeypatch):
     """复合键已完整关联后，缺实际检查时间应报告时间缺口而非关联失败。"""

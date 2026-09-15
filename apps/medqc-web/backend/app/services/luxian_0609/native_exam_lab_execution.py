@@ -211,6 +211,14 @@ _EXAM_ORDER_NAME_PATTERN = re.compile(
     r"(?:^|[^A-Z])CT(?:$|[^A-Z])|(?:^|[^A-Z])MRI(?:$|[^A-Z])|磁共振|核磁",
     flags=re.IGNORECASE,
 )
+# 仅排除名称本身就是胶片/影像耗材的医嘱。带有“(含胶片)”的真实 CT/MRI
+# 检查不会匹配，因为检查主体不符合此处的整串匹配条件。
+_EXAM_FILM_SUPPLY_ORDER_PATTERN = re.compile(
+    r"^(?:(?:CT|DR)\s*(?:[/／]\s*(?:介入|放射)\s*)?)?"
+    r"(?:(?:医用\s*)?干式\s*胶片(?:\s*\d+\s*[*×xX]\s*\d+\s*(?:in|英寸|cm)?)?"
+    r"|胶片\s*\d+\s*[*×xX]\s*\d+\s*(?:in|英寸|cm)?)$",
+    flags=re.IGNORECASE,
+)
 _CANCELLED_ORDER_PATTERN = re.compile(r"撤销|作废|取消")
 _RESULT_COURSE_PATTERN = re.compile(
     r"提示|显示|结果|结合|诊断意见|未见|发现|阳性|阴性|无生长|检出|分离|"
@@ -298,6 +306,7 @@ class NativeExamLabExecutionResult:
 class _TypedSource:
     state: str
     rows: tuple[Mapping[str, Any], ...] = ()
+    source_key: str = ""
 
 
 def _clean(value: Any) -> str:
@@ -339,6 +348,12 @@ def _row_text(row: Mapping[str, Any]) -> str:
             if _clean(row.get(field))
         )
     )
+
+
+def _is_pure_exam_film_supply_order(row: Mapping[str, Any]) -> bool:
+    """识别名称明确为胶片耗材的医嘱，不过滤真实影像检查。"""
+
+    return bool(_EXAM_FILM_SUPPLY_ORDER_PATTERN.fullmatch(_clean(row.get("order_name"))))
 
 
 def _source_rows(
@@ -398,19 +413,19 @@ def _typed_source(
         None,
     )
     if observation is None:
-        return _TypedSource("missing")
+        return _TypedSource("missing", source_key=source_key)
     if observation.query_state.value in {"unavailable", "error"}:
-        return _TypedSource(observation.query_state.value)
+        return _TypedSource(observation.query_state.value, source_key=source_key)
     if observation.completeness is SourceCompleteness.TRUNCATED:
-        return _TypedSource("truncated")
+        return _TypedSource("truncated", source_key=source_key)
     try:
         rows = materials.rows(source_key)
     except EvidenceMaterialTruncated:
-        return _TypedSource("truncated")
+        return _TypedSource("truncated", source_key=source_key)
     except EvidenceMaterialUnavailable:
-        return _TypedSource("error")
+        return _TypedSource("error", source_key=source_key)
     selected = tuple(row for row in rows if isinstance(row, Mapping))
-    return _TypedSource("present" if selected else "empty", selected)
+    return _TypedSource("present" if selected else "empty", selected, source_key)
 
 
 def _snapshot_fact_state(
@@ -447,6 +462,12 @@ def _controlled_trigger_from_rows(
     for source in sources:
         for row in source.rows:
             if _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status"))):
+                continue
+            if (
+                fact_kind == "exam"
+                and source.source_key == _ORDER_SOURCE_KEY
+                and _is_pure_exam_film_supply_order(row)
+            ):
                 continue
             if fact_kind == "exam" and _is_exam_master_target(row):
                 return True
@@ -577,6 +598,10 @@ def _effective_target_orders(
         )
         for row in rows_by_source.get(_ORDER_SOURCE_KEY, ())
         if not _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status")))
+        and not (
+            fact_kind == "exam"
+            and _is_pure_exam_film_supply_order(row)
+        )
         and pattern.search(_clean(row.get("order_name")))
     )
 
@@ -597,6 +622,7 @@ def _order_exam_structure_outcome(
         row
         for row in rows_by_source.get(_ORDER_SOURCE_KEY, ())
         if isinstance(row, Mapping)
+        and not _is_pure_exam_film_supply_order(row)
         and _EXAM_ORDER_NAME_PATTERN.search(_clean(row.get("order_name")))
     )
     course_rows = tuple(
@@ -893,6 +919,12 @@ def _target_source_document_ids(
         for row in rows_by_source.get(source_key, ()):
             if not isinstance(row, Mapping):
                 continue
+            if (
+                fact_kind == "exam"
+                and source_key == _ORDER_SOURCE_KEY
+                and _is_pure_exam_film_supply_order(row)
+            ):
+                continue
             values = (
                 _clean(row.get(field))
                 for field in (
@@ -952,6 +984,10 @@ def _target_order_material_refs(
         source_key=_ORDER_SOURCE_KEY,
         predicate=lambda row: (
             not _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status")))
+            and not (
+                fact_kind == "exam"
+                and _is_pure_exam_film_supply_order(row)
+            )
             and bool(pattern.search(_clean(row.get("order_name"))))
         ),
     )
@@ -1014,7 +1050,11 @@ def _trigger_order_summaries(
         if not isinstance(row, Mapping):
             continue
         order_name = _clean(row.get("order_name"))
-        if not order_name or not pattern.search(order_name):
+        if (
+            not order_name
+            or (fact_kind == "exam" and _is_pure_exam_film_supply_order(row))
+            or not pattern.search(order_name)
+        ):
             continue
         order_time = _clean(
             row.get("start_time")
