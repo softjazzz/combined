@@ -33,6 +33,29 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('batchJobPresentation', () => {
+  it('自动补跑排队期间保持运行态，不展示最终失败', () => {
+    const job = buildJob({ status: 'failed' })
+    job.summary = {
+      ...job.summary!,
+      execution_status: 'partial_failed',
+      completed_rule_count: 1297,
+      failed_rule_count: 3,
+      automatic_failed_rule_retry: {
+        status: 'queued',
+        should_retry: true,
+        next_attempt: 1,
+      },
+    }
+
+    const model = buildBatchJobPresentation(job)
+
+    expect(model.isRunning).toBe(true)
+    expect(model.statusLabel).toBe('自动补跑中')
+    expect(model.statusClass).toBe('is-running')
+    expect(model.phaseText).toContain('系统正在自动补跑失败项')
+    expect(model.overviewText).toContain('已有有效结果会继续保留')
+  })
+
   it('部分执行失败保留有效结果并明确未完成项数', () => {
     const job = buildJob({ status: 'failed' })
     job.summary = {

@@ -183,6 +183,20 @@ export interface SichuanBatchJobSummary {
   processed_rule_count?: number
   progress_percent?: number
   retryable_rule_count?: number
+  automatic_failed_rule_retry?: {
+    max_attempts?: number
+    completed_attempts?: number
+    remaining_failure_count?: number
+    status?: 'queued' | 'running' | 'completed' | 'exhausted' | 'not_retryable' | string
+    should_retry?: boolean
+    next_attempt?: number
+    delay_seconds?: number
+  }
+  retry_status?: string
+  retry_attempt?: number
+  retry_pending_count?: number
+  retry_remaining_count?: number
+  retry_recovered_count?: number
   progress?: Record<string, unknown>
   status_breakdown?: Record<string, number>
   postprocess_summary?: {

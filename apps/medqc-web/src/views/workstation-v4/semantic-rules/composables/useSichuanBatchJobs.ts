@@ -16,6 +16,7 @@ import {
   listSichuanWorkspaceBatchJobs,
   retrySichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
+import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 type DateRangeValue = [Dayjs, Dayjs] | null
 
@@ -165,7 +166,7 @@ export function useSichuanBatchJobs() {
         includeDebugSnapshot: shouldRefreshDebugSnapshot,
       })
       await loadBatchJobs()
-      if (!current || !['queued', 'running'].includes(current.status)) {
+      if (!current || !isBatchJobPollingActive(current)) {
         stopBatchJobPolling()
       }
     }, BATCH_JOB_POLL_INTERVAL_MS)
@@ -317,6 +318,7 @@ export function useSichuanBatchJobs() {
     const previous = String(previousStatus || '')
       .trim()
       .toLowerCase()
+    if (isBatchJobPollingActive(job)) return
     if (!['completed', 'failed', 'canceled'].includes(currentStatus)) return
     if (!['queued', 'running'].includes(previous)) return
     const issueCount = Number(job.summary?.issue_records ?? job.issue_records ?? 0)

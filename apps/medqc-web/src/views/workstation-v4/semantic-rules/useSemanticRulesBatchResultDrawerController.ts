@@ -24,7 +24,10 @@ import {
   filterStructuredQCIssues,
   mapBatchJobToStructuredQC,
 } from '@/views/workstation-v4/utils/structuredQc'
-import { isBatchJobCancelable } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
+import {
+  isBatchJobCancelable,
+  isBatchJobPollingActive,
+} from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 import BatchResultOverview from '@/views/workstation-v4/semantic-rules/components/BatchResultOverview.vue'
 import BatchResultTraceModal from '@/views/workstation-v4/semantic-rules/components/BatchResultTraceModal.vue'
 import CustomerQcResultDetailCard from '@/views/workstation-v4/semantic-rules/components/CustomerQcResultDetailCard.vue'
@@ -1509,7 +1512,11 @@ export function useSemanticRulesBatchResultDrawerController(
       percent = 100
     }
     const progressStatus =
-      status === 'failed' ? 'exception' : status === 'completed' ? 'success' : 'active'
+      status === 'failed' && !isBatchJobPollingActive(props.batchJobDetail)
+        ? 'exception'
+        : status === 'completed'
+          ? 'success'
+          : 'active'
     return {
       percent,
       processedRecords,
@@ -1526,12 +1533,7 @@ export function useSemanticRulesBatchResultDrawerController(
     return state && typeof state === 'object' ? state : null
   })
 
-  const isRunningBatchJob = computed(() => {
-    const status = String(props.batchJobDetail?.status || '')
-      .trim()
-      .toLowerCase()
-    return status === 'queued' || status === 'running'
-  })
+  const isRunningBatchJob = computed(() => isBatchJobPollingActive(props.batchJobDetail))
 
   const isWaitingFirstResult = computed(
     () =>
@@ -2046,6 +2048,7 @@ export function useSemanticRulesBatchResultDrawerController(
     const dataQualityGapRecords = ruleLevelSummary.value.dataQualityGapCount
     const finishedAt = detail.finished_at || detail.updated_at
     const meta: string[] = []
+    const automaticRetrying = isBatchJobPollingActive(detail) && status === 'failed'
     if (totalRecords > 0) {
       meta.push(`已处理 ${processedRecords}/${totalRecords} 份病历`)
     }
@@ -2071,7 +2074,7 @@ export function useSemanticRulesBatchResultDrawerController(
         meta.push(`完成于 ${props.formatDateTime(finishedAt)}`)
       }
     }
-    if (status === 'failed' && detail.error_message) {
+    if (status === 'failed' && !automaticRetrying && detail.error_message) {
       meta.push('请优先查看下方失败原因与调试快照')
     }
     if (status === 'canceled' && finishedAt) {
@@ -2083,6 +2086,15 @@ export function useSemanticRulesBatchResultDrawerController(
         title: '任务已创建，等待执行',
         description:
           '系统已接收任务，正在分配执行资源。抽屉内容会自动刷新，不需要手动反复关闭再打开。',
+        meta,
+        pulse: true,
+      }
+    }
+    if (automaticRetrying) {
+      return {
+        tone: 'running',
+        title: '失败项正在自动补跑',
+        description: '已有有效结果会继续保留，补跑完成后当前抽屉会自动更新，无需人工操作。',
         meta,
         pulse: true,
       }

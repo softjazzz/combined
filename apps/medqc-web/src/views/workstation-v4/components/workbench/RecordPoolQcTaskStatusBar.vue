@@ -158,6 +158,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
+import { isBatchJobPollingActive } from '../../semantic-rules/utils/batchJobStatus'
   dismiss: []
   completed: []
 }>()
@@ -188,9 +189,9 @@ async function exportCurrentBatch() {
   }
 }
 
-const terminalStatuses = new Set(['completed', 'failed', 'canceled'])
-const isActive = computed(() =>
-  Boolean(currentJob.value && !terminalStatuses.has(currentJob.value.status)),
+const isActive = computed(() => isBatchJobPollingActive(currentJob.value))
+const automaticRetrying = computed(
+  () => isActive.value && currentJob.value?.status === 'failed',
 )
 
 function finiteCount(value: unknown): number | null {
@@ -317,6 +318,7 @@ const stepLabels: Record<string, string> = {
   failed: '执行未完成',
   canceled: '任务已停止',
 }
+  if (automaticRetrying.value) return '正在自动补跑失败项'
 
 type WorkflowStageState = 'complete' | 'active' | 'pending' | 'error'
 
@@ -343,7 +345,7 @@ const workflowStages = computed<WorkflowStageItem[]>(() => {
               ? 3
               : 2
   const terminalCompleted = status === 'completed'
-  const terminalError = status === 'failed' || status === 'canceled'
+  const terminalError = !automaticRetrying.value && (status === 'failed' || status === 'canceled')
   const stateFor = (index: number): WorkflowStageState => {
     if (terminalCompleted) return 'complete'
     if (index < activeStageIndex) return 'complete'
@@ -409,6 +411,7 @@ const terminalSummary = computed(() => {
   if (currentJob.value?.status !== 'completed') return ''
   return `成功 ${successRecords.value} 份 · 失败 ${failedRecords.value} 份`
 })
+  if (automaticRetrying.value) return '部分规则输出无效，系统正在自动补跑，已有有效结果会继续保留。'
 
 const tone = computed(() => {
   const status = currentJob.value?.status
@@ -431,6 +434,7 @@ function schedulePoll(sequence: number) {
 
 async function refreshJob(sequence: number) {
   const jobId = String(currentJob.value?.id || '').trim()
+  if (automaticRetrying.value) return 'active'
   if (!jobId || sequence !== requestSequence || !isActive.value) return
   const result = await getSichuanWorkspaceBatchJob(jobId)
   if (sequence !== requestSequence) return
@@ -452,7 +456,7 @@ watch(
     clearPollTimer()
     currentJob.value = job
     pollError.value = false
-    if (job && props.autoPoll && !terminalStatuses.has(job.status)) void refreshJob(requestSequence)
+    if (job && props.autoPoll && isBatchJobPollingActive(job)) void refreshJob(requestSequence)
   },
   { immediate: true },
 )

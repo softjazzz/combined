@@ -14,6 +14,7 @@ const {
   messageErrorMock,
   messageInfoMock,
   messageSuccessMock,
+  notificationErrorMock,
 } = vi.hoisted(() => ({
   cancelSichuanWorkspaceBatchJobMock: vi.fn(),
   exportSichuanWorkspaceBatchJobMock: vi.fn(),
@@ -24,6 +25,7 @@ const {
   messageErrorMock: vi.fn(),
   messageInfoMock: vi.fn(),
   messageSuccessMock: vi.fn(),
+  notificationErrorMock: vi.fn(),
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -31,6 +33,11 @@ vi.mock('ant-design-vue', () => ({
     success: messageSuccessMock,
     error: messageErrorMock,
     info: messageInfoMock,
+    warning: vi.fn(),
+  },
+  notification: {
+    success: vi.fn(),
+    error: notificationErrorMock,
     warning: vi.fn(),
   },
 }))
@@ -208,5 +215,33 @@ describe('useSichuanBatchJobs', () => {
     expect(clearIntervalSpy).toHaveBeenCalledWith(fakeTimer)
     expect(batchJobDetail.value).toBeNull()
     expect(batchJobDebugSnapshot.value).toBeNull()
+  })
+
+  it('自动补跑排队的短暂 failed 状态不停止轮询也不发送失败通知', async () => {
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval').mockImplementation(() => {})
+    const fakeTimer = {} as ReturnType<typeof window.setInterval>
+    let pollCallback: (() => Promise<void>) | undefined
+    vi.spyOn(window, 'setInterval').mockImplementation((callback) => {
+      pollCallback = callback as () => Promise<void>
+      return fakeTimer
+    })
+    const retryQueuedJob: SichuanBatchJob = {
+      ...baseJob,
+      status: 'failed',
+      summary: {
+        ...baseJob.summary!,
+        execution_status: 'partial_failed',
+        automatic_failed_rule_retry: { status: 'queued', should_retry: true },
+      },
+    }
+    getSichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: retryQueuedJob })
+
+    const { prependBatchJob, startBatchJobPolling } = useSichuanBatchJobs()
+    prependBatchJob(baseJob)
+    startBatchJobPolling('job-1')
+    await pollCallback?.()
+
+    expect(clearIntervalSpy).not.toHaveBeenCalledWith(fakeTimer)
+    expect(notificationErrorMock).not.toHaveBeenCalled()
   })
 })

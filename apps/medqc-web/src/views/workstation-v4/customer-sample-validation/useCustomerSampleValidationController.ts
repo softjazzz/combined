@@ -106,7 +106,7 @@ import type {
   SichuanBatchJob,
   SichuanBatchJobStatus,
 } from '@/views/workstation-v4/semantic-rules/types'
-import { isBatchJobCancelable } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
+import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 const LEGACY_RESULT_CONTRACT_ERROR = '历史质控结果交付合同不完整，无法安全展示'
 
@@ -205,7 +205,7 @@ export function useCustomerSampleValidationController() {
       ['failed', 'canceled'].includes(item.status),
     ).length
     const running = luxianAggregateJobs.value.filter((item) =>
-      isBatchJobRunning(item.status),
+      isBatchJobRunning(item.detail || item.status),
     ).length
     return {
       total,
@@ -2392,7 +2392,7 @@ export function useCustomerSampleValidationController() {
       }
       currentQcTask.value = result.data
       if (
-        isBatchJobRunning(result.data.status) &&
+        isBatchJobRunning(result.data) &&
         !batchResultOpen.value &&
         !luxianAggregateOpen.value
       ) {
@@ -2570,7 +2570,7 @@ export function useCustomerSampleValidationController() {
         }),
       )
       luxianAggregateJobs.value = nextJobs
-      if (nextJobs.every((item) => !isBatchJobRunning(item.status))) {
+      if (nextJobs.every((item) => !isBatchJobRunning(item.detail || item.status))) {
         stopLuxianAggregatePolling()
         await loadPools()
         await loadRecords()
@@ -2602,7 +2602,7 @@ export function useCustomerSampleValidationController() {
     stopLuxianAggregatePolling()
     luxianAggregateOpen.value = false
     luxianAggregateParentJobId.value = ''
-    if (currentQcTask.value && isBatchJobRunning(currentQcTask.value.status)) {
+    if (currentQcTask.value && isBatchJobRunning(currentQcTask.value)) {
       startCurrentQcTaskPolling(currentQcTask.value.id)
     }
   }
@@ -2646,7 +2646,7 @@ export function useCustomerSampleValidationController() {
     ) {
       return 4
     }
-    if (isBatchJobRunning(item.status)) return 3
+    if (isBatchJobRunning(item.detail || item.status)) return 3
     if (Number(counts.compliant || 0) > 0 || Number(counts.ai_suggested_compliant || 0) > 0) {
       return 2
     }
@@ -2731,7 +2731,7 @@ export function useCustomerSampleValidationController() {
       return
     }
     batchJobDetail.value = result.data
-    if (isBatchJobRunning(result.data.status)) {
+    if (isBatchJobRunning(result.data)) {
       startBatchJobPolling(jobId)
     }
   }
@@ -2740,13 +2740,13 @@ export function useCustomerSampleValidationController() {
     stopBatchJobPolling()
     batchResultOpen.value = false
     batchJobDetail.value = null
-    if (currentQcTask.value && isBatchJobRunning(currentQcTask.value.status)) {
+    if (currentQcTask.value && isBatchJobRunning(currentQcTask.value)) {
       startCurrentQcTaskPolling(currentQcTask.value.id)
     }
   }
 
-  function isBatchJobRunning(status?: string) {
-    return isBatchJobCancelable(status)
+  function isBatchJobRunning(job?: SichuanBatchJob | string) {
+    return isBatchJobPollingActive(typeof job === 'string' ? { status: job } : job)
   }
 
   function stopBatchJobPolling() {
@@ -2773,7 +2773,7 @@ export function useCustomerSampleValidationController() {
         return
       }
       currentQcTask.value = result.data
-      if (!isBatchJobRunning(result.data.status)) {
+      if (!isBatchJobRunning(result.data)) {
         stopCurrentQcTaskPolling()
         await Promise.all([loadPools({ refreshSyncJob: false, loadRecords: false }), loadRecords()])
       }
@@ -2868,7 +2868,7 @@ export function useCustomerSampleValidationController() {
       }
       batchJobDetail.value = result.data
       updateCurrentQcTask(result.data)
-      if (!isBatchJobRunning(result.data.status)) {
+      if (!isBatchJobRunning(result.data)) {
         stopBatchJobPolling()
         await loadPools()
         await loadRecords()

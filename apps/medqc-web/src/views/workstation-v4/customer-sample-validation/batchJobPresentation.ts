@@ -2,7 +2,7 @@ import type {
   SichuanBatchIssueItem,
   SichuanBatchJob,
 } from '@/views/workstation-v4/semantic-rules/types'
-import { isBatchJobCancelable } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
+import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 export type BatchJobStatusChip = {
   key: string
@@ -332,7 +332,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   const normalizedStatus = String(job.status || '')
     .trim()
     .toLowerCase()
-  const isRunning = isBatchJobCancelable(job.status)
+  const isRunning = isBatchJobPollingActive(job)
+  const automaticRetrying = isRunning && normalizedStatus === 'failed'
   const ruleIds = selectedRuleIds(job)
   const customerRuleCount = resolveCustomerRuleCount(job, ruleIds)
   const recordCount = resolveRecordCount(job)
@@ -377,8 +378,12 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
         ? `${failedRuleCount} 项质控执行未完成，已完成的 ${numeric(summary.completed_rule_count)} 条结果仍可查看。`
         : `${failedRuleCount} 项质控执行未完成，本次未形成可交付的判定。`
       : ''
-  const statusLabel = partialFailure ? '部分执行失败' : getBatchJobStatusText(job.status)
-  const statusClass = getBatchJobStatusClass(job.status)
+  const statusLabel = automaticRetrying
+    ? '自动补跑中'
+    : partialFailure
+      ? '部分执行失败'
+      : getBatchJobStatusText(job.status)
+  const statusClass = automaticRetrying ? 'is-running' : getBatchJobStatusClass(job.status)
   const ruleSetText = String(
     job.rule_set_name || summary.rule_set_name || job.rule_name || '质控任务',
   )
@@ -409,6 +414,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
 
   let phaseText = '任务状态待返回。'
   if (normalizedStatus === 'queued') phaseText = '等待后台领取任务，请勿重复发起。'
+  else if (automaticRetrying) phaseText = '部分规则输出无效，系统正在自动补跑失败项。'
   else if (normalizedStatus === 'failed')
     phaseText = executionFailureText || job.error_message || '本次任务执行失败。'
   else if (normalizedStatus === 'canceled') phaseText = '本次任务已取消，已返回结果仍可查看。'
@@ -421,7 +427,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
 
   const attentionChips = statusChips.filter((chip) => ATTENTION_STATUSES.has(chip.key))
   let overviewText = '暂无结果摘要'
-  if (normalizedStatus === 'failed')
+  if (automaticRetrying) overviewText = '系统正在自动补跑失败项，已有有效结果会继续保留'
+  else if (normalizedStatus === 'failed')
     overviewText = executionFailureText || job.error_message || '任务失败'
   else if (isRunning) {
     overviewText =

@@ -136,6 +136,40 @@ describe('RecordPoolQcTaskStatusBar', () => {
     expect(mocks.getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
   })
 
+  it('continues polling through the transient failed state used by automatic retry', async () => {
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: job({ status: 'completed', success_count: 20, failed_count: 0 }),
+    })
+    const wrapper = mount(RecordPoolQcTaskStatusBar, {
+      props: {
+        job: job({
+          status: 'failed',
+          summary: {
+            total_records: 20,
+            success_count: 19,
+            failed_count: 1,
+            issue_records: 0,
+            compliant_records: 19,
+            total_tokens: 0,
+            total_processing_time: 0,
+            execution_status: 'partial_failed',
+            automatic_failed_rule_retry: { status: 'queued', should_retry: true },
+          },
+        }),
+      },
+      global: { stubs: { AProgress: true } },
+    })
+
+    expect(wrapper.text()).toContain('正在自动补跑失败项')
+    await flushPromises()
+
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
+    expect(wrapper.text()).toContain('质控任务已完成')
+    expect(wrapper.emitted('completed')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('shows the real four-stage workflow and projected in-flight rule progress', async () => {
     mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,
