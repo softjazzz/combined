@@ -28,6 +28,7 @@ import {
   runManualSamplePool,
   syncManualSamplePoolRecords,
 } from '@/services/manual-case-sample-service'
+import { llmConfigService } from '@/services/llmConfigService'
 import { syntheticCaseRuleFamilies } from './syntheticCaseTemplates'
 import { testRecordDocumentTypeOptions } from './syntheticCaseBuilder'
 import { downloadBlob, normalizeBatchExportBlob } from './batchExport'
@@ -323,8 +324,9 @@ export function useCustomerSampleValidationController() {
     description: '',
   })
   const runOptions = ref({
-    maxParallelRecords: 4,
+    maxParallelRecords: 16,
   })
+  const configuredRecordConcurrency = ref(16)
   const selectedValidationMode = ref<ManualSampleValidationMode>('customer')
   const isFormalFastScreenMode = computed(
     () => selectedValidationMode.value === 'formal_fast_screen_full',
@@ -364,11 +366,25 @@ export function useCustomerSampleValidationController() {
     { label: '待人工确认', value: 'ambiguous' },
     { label: '未找到病历', value: 'unmatched' },
   ]
-  const parallelOptions = [
-    { label: '1', value: 1 },
-    { label: '2', value: 2 },
-    { label: '4', value: 4 },
-  ]
+  const parallelOptions = computed(() => {
+    const maximum = configuredRecordConcurrency.value
+    return [...new Set([1, 2, 4, 8, 16, 32, maximum])]
+      .filter((value) => value <= maximum)
+      .sort((left, right) => left - right)
+      .map((value) => ({ label: String(value), value }))
+  })
+
+  async function loadExecutionConcurrencyDefault() {
+    try {
+      const summary = await llmConfigService.getDefaultSummary()
+      const configured = Number(summary.execution_concurrency?.max_parallel_records ?? 16)
+      const normalized = Math.min(32, Math.max(1, Math.trunc(configured) || 16))
+      configuredRecordConcurrency.value = normalized
+      runOptions.value.maxParallelRecords = normalized
+    } catch (error) {
+      console.warn('加载系统病历并发设置失败，使用默认值 16', error)
+    }
+  }
   const selectedRuleSet = computed(() => {
     return (
       ruleSets.value.find((item) => item.rule_set_key === selectedRuleSetKey.value) ||
@@ -2994,6 +3010,7 @@ export function useCustomerSampleValidationController() {
   onMounted(async () => {
     window.addEventListener('resize', updateCustomerSampleTourCardPosition)
     window.addEventListener('scroll', updateCustomerSampleTourCardPosition, true)
+    await loadExecutionConcurrencyDefault()
     await loadRuleSets()
     await loadLuxian0609RuleCatalog()
     await loadPools()

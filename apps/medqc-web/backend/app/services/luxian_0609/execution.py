@@ -465,7 +465,11 @@ async def prepare_luxian_0609_execution(
                 ),
                 default_deadline_seconds=300.0,
                 max_concurrency=int(
-                    getattr(settings, "LUXIAN_0609_FAMILY_MAX_CONCURRENCY", 2)
+                    getattr(
+                        llm_client,
+                        "family_max_concurrency",
+                        settings.LUXIAN_0609_FAMILY_MAX_CONCURRENCY,
+                    )
                 ),
                 trace_sink=trace_sink,
             )

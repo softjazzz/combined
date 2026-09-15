@@ -22,6 +22,7 @@ from .llm_observability import (
     safe_status_for_exception,
     safe_status_for_http_result,
 )
+from .llm_execution_concurrency import concurrency_from_custom_parameters
 from .qc_diagnostics.capture import (
     begin_attempt as begin_diagnostic_attempt,
     finish_attempt as finish_diagnostic_attempt,
@@ -63,6 +64,10 @@ class SichuanQCLLMClient:
             ).strip()
 
             custom_params = config.get("custom_parameters", {})
+            execution_concurrency = concurrency_from_custom_parameters(custom_params)
+            self.max_parallel_records = execution_concurrency.max_parallel_records
+            self.family_max_concurrency = execution_concurrency.family_max_concurrency
+            self.http_max_concurrency = execution_concurrency.http_max_concurrency
             self.temperature: float = custom_params.get("temperature", 0.2)
             self.top_p: float = custom_params.get("top_p", 0.9)
             self.max_tokens: int = custom_params.get(
@@ -123,6 +128,15 @@ class SichuanQCLLMClient:
             self.allow_mock_when_unconfigured = s.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED
             self.config_source = "env"
             self.provider_code = provider_code
+            self.max_parallel_records = int(
+                getattr(s, "QC_BATCH_RECORD_MAX_CONCURRENCY", 16)
+            )
+            self.family_max_concurrency = int(
+                getattr(s, "LUXIAN_0609_FAMILY_MAX_CONCURRENCY", 4)
+            )
+            self.http_max_concurrency = int(
+                getattr(s, "LLM_HTTP_MAX_CONCURRENCY", 40)
+            )
             self.model_role = "first_pass"
             self.adjudicator_model_source = ""
 

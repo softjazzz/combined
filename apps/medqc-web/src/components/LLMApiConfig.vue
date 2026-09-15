@@ -259,6 +259,72 @@
 
             <div class="ds-group">
               <div class="ds-group__title">
+                执行并发
+              </div>
+
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    同时处理病历数
+                  </div>
+                  <div class="ds-row__hint">
+                    单个质控任务同时进入执行链的病历上限，已按完整链验证推荐 16。
+                  </div>
+                </div>
+                <a-input-number
+                  v-model:value="draft.max_parallel_records"
+                  class="ds-input-number"
+                  :disabled="isReadonly || loading"
+                  :min="1"
+                  :max="32"
+                  :step="1"
+                  style="width: 220px"
+                />
+              </div>
+
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    单病历规则族并发
+                  </div>
+                  <div class="ds-row__hint">
+                    每份病历可同时执行的独立规则族数量，当前安全上限为 4。
+                  </div>
+                </div>
+                <a-input-number
+                  v-model:value="draft.family_max_concurrency"
+                  class="ds-input-number"
+                  :disabled="isReadonly || loading"
+                  :min="1"
+                  :max="4"
+                  :step="1"
+                  style="width: 220px"
+                />
+              </div>
+
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    模型 HTTP 槽位
+                  </div>
+                  <div class="ds-row__hint">
+                    后端进程共享的模型请求上限；降低时不会中断正在执行的请求。
+                  </div>
+                </div>
+                <a-input-number
+                  v-model:value="draft.http_max_concurrency"
+                  class="ds-input-number"
+                  :disabled="isReadonly || loading"
+                  :min="1"
+                  :max="64"
+                  :step="1"
+                  style="width: 220px"
+                />
+              </div>
+            </div>
+
+            <div class="ds-group">
+              <div class="ds-group__title">
                 连接验证
               </div>
 
@@ -341,6 +407,7 @@ import {
   llmConfigService,
   type LLMConfigInput,
   type LLMConfigSummary,
+  type LLMExecutionConcurrency,
   type LLMModel,
   type LLMProvider,
 } from '@/services/llmConfigService'
@@ -374,6 +441,9 @@ const draft = reactive({
   temperature: 0.2,
   top_p: 0.9,
   max_tokens: 4000,
+  max_parallel_records: 16,
+  family_max_concurrency: 4,
+  http_max_concurrency: 40,
 })
 
 const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
@@ -394,7 +464,13 @@ const dirty = computed(() => {
     draft.model_code !== snap.model_code ||
     Number(draft.temperature) !== Number(snap.custom_parameters?.temperature ?? 0.2) ||
     Number(draft.top_p) !== Number(snap.custom_parameters?.top_p ?? 0.9) ||
-    Number(draft.max_tokens) !== Number(snap.custom_parameters?.max_tokens ?? 4000)
+    Number(draft.max_tokens) !== Number(snap.custom_parameters?.max_tokens ?? 4000) ||
+    Number(draft.max_parallel_records) !==
+      Number(snap.execution_concurrency?.max_parallel_records ?? 16) ||
+    Number(draft.family_max_concurrency) !==
+      Number(snap.execution_concurrency?.family_max_concurrency ?? 4) ||
+    Number(draft.http_max_concurrency) !==
+      Number(snap.execution_concurrency?.http_max_concurrency ?? 40)
   )
 })
 
@@ -404,13 +480,25 @@ function patchDraftFromSummary(summary: LLMConfigSummary) {
   draft.temperature = Number(summary.custom_parameters?.temperature ?? 0.2)
   draft.top_p = Number(summary.custom_parameters?.top_p ?? 0.9)
   draft.max_tokens = Number(summary.custom_parameters?.max_tokens ?? 4000)
+  draft.max_parallel_records = Number(summary.execution_concurrency?.max_parallel_records ?? 16)
+  draft.family_max_concurrency = Number(summary.execution_concurrency?.family_max_concurrency ?? 4)
+  draft.http_max_concurrency = Number(summary.execution_concurrency?.http_max_concurrency ?? 40)
 }
 
 function buildCustomParameters() {
   return {
+    ...(serverSnapshot.value?.custom_parameters || {}),
     temperature: Number(draft.temperature),
     top_p: Number(draft.top_p),
     max_tokens: Number(draft.max_tokens),
+  }
+}
+
+function buildExecutionConcurrency(): LLMExecutionConcurrency {
+  return {
+    max_parallel_records: Number(draft.max_parallel_records),
+    family_max_concurrency: Number(draft.family_max_concurrency),
+    http_max_concurrency: Number(draft.http_max_concurrency),
   }
 }
 
@@ -536,6 +624,7 @@ async function saveDraft() {
       provider_code: draft.provider_code,
       model_code: draft.model_code,
       custom_parameters: buildCustomParameters(),
+      execution_concurrency: buildExecutionConcurrency(),
       is_active: true,
     }
     const saved = await llmConfigService.saveConfig(payload)

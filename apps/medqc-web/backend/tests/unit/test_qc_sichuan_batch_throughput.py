@@ -1032,12 +1032,13 @@ async def test_workspace_batch_does_not_count_legacy_executor_key_as_native(monk
 
 
 @pytest.mark.parametrize(
-    ("configured_limit", "expected_peak"),
-    [(None, 4), (1, 1), (2, 2)],
+    ("system_limit", "configured_limit", "expected_peak"),
+    [(None, None, 8), (None, 1, 1), (None, 2, 2), (3, 8, 3)],
 )
 @pytest.mark.asyncio
 async def test_workspace_parallel_batch_default_and_explicit_record_limits(
     monkeypatch,
+    system_limit: Optional[int],
     configured_limit: Optional[int],
     expected_peak: int,
 ):
@@ -1050,6 +1051,8 @@ async def test_workspace_parallel_batch_default_and_explicit_record_limits(
         workspace.job["filters"]["max_parallel_records"] = configured_limit
 
     service = _ServiceStub()
+    if system_limit is not None:
+        service.client = SimpleNamespace(max_parallel_records=system_limit)
     concurrency = {"active": 0, "peak": 0}
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 

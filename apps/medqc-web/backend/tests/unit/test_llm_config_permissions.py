@@ -69,6 +69,82 @@ def test_sync_admin_default_summary_is_editable(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["data"]["readonly"] is False
+    assert response.json()["data"]["execution_concurrency"] == {
+        "max_parallel_records": 16,
+        "family_max_concurrency": 4,
+        "http_max_concurrency": 40,
+    }
+
+
+@pytest.mark.parametrize(
+    "execution_concurrency",
+    (
+        {"max_parallel_records": 0, "family_max_concurrency": 4, "http_max_concurrency": 40},
+        {"max_parallel_records": 16, "family_max_concurrency": 5, "http_max_concurrency": 40},
+        {"max_parallel_records": 16, "family_max_concurrency": 4, "http_max_concurrency": 65},
+        {"max_parallel_records": True, "family_max_concurrency": 4, "http_max_concurrency": 40},
+    ),
+)
+def test_default_llm_config_rejects_invalid_execution_concurrency(
+    client,
+    monkeypatch,
+    execution_concurrency,
+):
+    _override_user(client, ["sync_admin"])
+    monkeypatch.setattr("app.routers.llm_configs.get_supabase", lambda: None)
+
+    response = client.post(
+        "/api/v1/llm/configs",
+        json={
+            "config_name": "default",
+            "provider_code": "alibaba",
+            "model_code": "qwen3.8-flash",
+            "execution_concurrency": execution_concurrency,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_default_llm_config_saves_and_reads_execution_concurrency(client, monkeypatch):
+    _override_user(client, ["sync_admin"])
+    monkeypatch.setattr("app.routers.llm_configs.get_supabase", lambda: None)
+    monkeypatch.setattr("app.services.llm_config_loader.get_supabase", lambda: None)
+
+    saved = client.post(
+        "/api/v1/llm/configs",
+        json={
+            "config_name": "default",
+            "provider_code": "alibaba",
+            "model_code": "qwen3.8-flash",
+            "custom_parameters": {
+                "temperature": 0.15,
+                "enable_thinking": True,
+                "thinking_budget": 256,
+            },
+            "execution_concurrency": {
+                "max_parallel_records": 12,
+                "family_max_concurrency": 3,
+                "http_max_concurrency": 24,
+            },
+        },
+    )
+    summary = client.get("/api/v1/llm/configs/default/summary")
+
+    assert saved.status_code == 200
+    assert saved.json()["data"]["custom_parameters"]["execution_concurrency"] == {
+        "max_parallel_records": 12,
+        "family_max_concurrency": 3,
+        "http_max_concurrency": 24,
+    }
+    assert summary.status_code == 200
+    assert summary.json()["data"]["execution_concurrency"] == {
+        "max_parallel_records": 12,
+        "family_max_concurrency": 3,
+        "http_max_concurrency": 24,
+    }
+    assert summary.json()["data"]["custom_parameters"]["enable_thinking"] is True
+    assert summary.json()["data"]["custom_parameters"]["thinking_budget"] == 256
 
 
 def test_doctor_cannot_trigger_llm_connection_test(client, monkeypatch):

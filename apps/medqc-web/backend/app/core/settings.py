@@ -168,7 +168,7 @@ class Settings(BaseSettings):
     LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = True
     # 同一病历内互不依赖的规则族有限并发；模型 HTTP 请求仍受全进程
     # LLM_HTTP_MAX_CONCURRENCY 统一约束，避免与病历级并发相乘后失控。
-    LUXIAN_0609_FAMILY_MAX_CONCURRENCY: int = Field(default=2, ge=1, le=4)
+    LUXIAN_0609_FAMILY_MAX_CONCURRENCY: int = Field(default=4, ge=1, le=4)
     # LX0609 RuleDecision 主链总开关；关闭后正式任务失败关闭。
     LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED: bool = True
     # 以下规则族默认进入正式 Typed Decision 主链；每个开关仍可独立回滚。
@@ -217,8 +217,10 @@ class Settings(BaseSettings):
         default=120,
         validation_alias=AliasChoices("LLM_TIMEOUT_SECONDS", "SICHUAN_TIMEOUT_SECONDS"),
     )
+    # 批量质控任务同时处理的病历上限；单次任务可选择更低值。
+    QC_BATCH_RECORD_MAX_CONCURRENCY: int = Field(default=16, ge=1, le=32)
     # 全进程共享的 LLM HTTP 出口预算；所有事件循环与后台线程共同受此上限约束。
-    LLM_HTTP_MAX_CONCURRENCY: int = Field(default=8, ge=1, le=16)
+    LLM_HTTP_MAX_CONCURRENCY: int = Field(default=40, ge=1, le=64)
     LLM_ENABLE_TRUNCATE: bool = Field(
         default=False,
         validation_alias=AliasChoices("LLM_ENABLE_TRUNCATE", "SICHUAN_ENABLE_TRUNCATE"),

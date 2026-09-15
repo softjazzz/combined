@@ -17,6 +17,12 @@ from ..services.llm_config_loader import (
 )
 from ..services.qc_llm_client import SichuanQCLLMClient
 from ..services.llm_observability import llm_observation_context
+from ..services.llm_execution_concurrency import (
+    EXECUTION_CONCURRENCY_KEY,
+    concurrency_from_custom_parameters,
+    default_llm_execution_concurrency,
+    resolve_llm_execution_concurrency,
+)
 
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-configs"])
@@ -241,6 +247,25 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
         model_code = str(runtime.get("model") or "").strip()
     cfg_name = payload.get("config_name") or "custom"
 
+    custom_parameters = dict(payload.get("custom_parameters") or {})
+    requested_concurrency = payload.get("execution_concurrency")
+    if requested_concurrency is None:
+        requested_concurrency = custom_parameters.get(EXECUTION_CONCURRENCY_KEY)
+    try:
+        execution_concurrency = resolve_llm_execution_concurrency(
+            requested_concurrency
+            if isinstance(requested_concurrency, dict)
+            else None
+        )
+        if requested_concurrency is not None and not isinstance(requested_concurrency, dict):
+            raise ValueError("execution_concurrency 必须是对象")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=StatusCode.UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    custom_parameters[EXECUTION_CONCURRENCY_KEY] = execution_concurrency.as_dict()
+
     provider = _resolve_provider(provider_code)
     model = _resolve_model(model_code)
     now = _now_iso()
@@ -261,7 +286,7 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
             "model": model,
             "api_key_encrypted": None,
             "custom_endpoint": None,
-            "custom_parameters": payload.get("custom_parameters") or {},
+            "custom_parameters": custom_parameters,
             "is_active": True if payload.get("is_active") is None else bool(payload.get("is_active")),
             "updated_at": now,
         }
@@ -284,7 +309,7 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
         "model_code": model["model_code"],
         "api_key_encrypted": None,
         "custom_endpoint": None,
-        "custom_parameters": payload.get("custom_parameters") or {},
+        "custom_parameters": custom_parameters,
         "is_active": True if payload.get("is_active") is None else bool(payload.get("is_active")),
         "updated_at": now,
     }
@@ -437,6 +462,7 @@ async def get_default_summary(
     runtime = await LLMConfigLoader.load_config(config_name="default", user_id=None)
     runtime = runtime or {}
     custom_params = runtime.get("custom_parameters") or {}
+    execution_concurrency = concurrency_from_custom_parameters(custom_params)
     source = str(runtime.get("source") or "env")
     readonly = not _extract_roles(current_user).intersection(_SYSTEM_CONFIG_ROLES)
     return success_response(
@@ -447,7 +473,11 @@ async def get_default_summary(
                 "temperature": float(custom_params.get("temperature", 0.2)),
                 "top_p": float(custom_params.get("top_p", 0.9)),
                 "max_tokens": int(custom_params.get("max_tokens", 4000)),
+                "enable_thinking": bool(custom_params.get("enable_thinking", False)),
+                "thinking_budget": custom_params.get("thinking_budget"),
+                "reasoning_effort": str(custom_params.get("reasoning_effort") or ""),
             },
+            "execution_concurrency": execution_concurrency.as_dict(),
             "source": source,
             "readonly": readonly,
         },
@@ -463,6 +493,7 @@ async def reset_default_config(
     del admin_user
     default_provider = get_default_provider_code()
     runtime = build_provider_runtime_config(default_provider)
+    execution_concurrency = default_llm_execution_concurrency()
     payload = {
         "config_name": "default",
         "user_id": None,
@@ -472,7 +503,9 @@ async def reset_default_config(
             "temperature": 0.2,
             "top_p": 0.9,
             "max_tokens": 4000,
+            EXECUTION_CONCURRENCY_KEY: execution_concurrency.as_dict(),
         },
+        "execution_concurrency": execution_concurrency.as_dict(),
         "is_active": True,
     }
     await _save_config_internal(payload, request)
@@ -480,7 +513,12 @@ async def reset_default_config(
         data={
             "provider_code": payload["provider_code"],
             "model_code": payload["model_code"],
-            "custom_parameters": payload["custom_parameters"],
+            "custom_parameters": {
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "max_tokens": 4000,
+            },
+            "execution_concurrency": execution_concurrency.as_dict(),
             "source": "database+env",
             "readonly": False,
         },

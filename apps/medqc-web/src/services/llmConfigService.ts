@@ -75,7 +75,14 @@ export interface LLMConfigInput {
   api_key?: string
   custom_endpoint?: string
   custom_parameters?: Record<string, unknown>
+  execution_concurrency?: LLMExecutionConcurrency
   is_active?: boolean
+}
+
+export interface LLMExecutionConcurrency {
+  max_parallel_records: number
+  family_max_concurrency: number
+  http_max_concurrency: number
 }
 
 export interface LLMConnectionTestInput {
@@ -91,7 +98,12 @@ export interface LLMConfigSummary {
     temperature: number
     top_p: number
     max_tokens: number
+    enable_thinking?: boolean
+    thinking_budget?: number | null
+    reasoning_effort?: string
+    [key: string]: unknown
   }
+  execution_concurrency?: LLMExecutionConcurrency
   source: string
   readonly: boolean
 }
@@ -292,6 +304,9 @@ class LLMConfigService {
         ...(config.model_code ? { model_code: config.model_code } : {}),
         custom_endpoint: config.custom_endpoint || null,
         custom_parameters: config.custom_parameters || {},
+        ...(config.execution_concurrency
+          ? { execution_concurrency: config.execution_concurrency }
+          : {}),
         is_active: config.is_active !== false,
         updated_at: new Date().toISOString(),
       }

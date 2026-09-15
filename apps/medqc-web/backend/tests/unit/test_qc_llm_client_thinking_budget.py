@@ -186,7 +186,15 @@ async def test_reload_config_updates_and_clears_thinking_budget(
     )
     service = type("Service", (), {"client": client})()
     configs = [
-        {"thinking_budget": 512, "enable_thinking": True},
+        {
+            "thinking_budget": 512,
+            "enable_thinking": True,
+            "execution_concurrency": {
+                "max_parallel_records": 12,
+                "family_max_concurrency": 3,
+                "http_max_concurrency": 24,
+            },
+        },
         {"thinking_budget": 1024, "enable_thinking": True},
         {"enable_thinking": True},
     ]
@@ -203,6 +211,9 @@ async def test_reload_config_updates_and_clears_thinking_budget(
 
     assert await LLMConfigLoader.reload_config_for_service(service) is True
     assert client.thinking_budget == 512
+    assert client.max_parallel_records == 12
+    assert client.family_max_concurrency == 3
+    assert client.http_max_concurrency == 24
     assert await LLMConfigLoader.reload_config_for_service(service) is True
     assert client.thinking_budget == 1024
     assert await LLMConfigLoader.reload_config_for_service(service) is True

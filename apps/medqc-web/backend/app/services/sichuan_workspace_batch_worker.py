@@ -1377,7 +1377,26 @@ async def run_sichuan_workspace_batch_job(
         refine_confidence_threshold = _normalize_refine_threshold(filters.get("refine_confidence_threshold"))
         max_refine_candidates = _normalize_max_refine_candidates(filters.get("max_refine_candidates"))
         run_mode = _normalize_run_mode(current.get("run_mode") or filters.get("run_mode"))
-        max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 4)))
+        configured_record_concurrency = max(
+            1,
+            int(
+                getattr(
+                    getattr(qc_service, "client", None),
+                    "max_parallel_records",
+                    getattr(settings, "QC_BATCH_RECORD_MAX_CONCURRENCY", 16),
+                )
+            ),
+        )
+        max_parallel_records = min(
+            configured_record_concurrency,
+            max(
+                1,
+                int(
+                    filters.get("max_parallel_records")
+                    or configured_record_concurrency
+                ),
+            ),
+        )
         if compatibility_rule_ids:
             _enforce_sc_source_guard(
                 qc_service,

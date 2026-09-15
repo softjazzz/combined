@@ -29,6 +29,7 @@ from .copy_content_similarity import (
 )
 from .unified_rule_engine import UnifiedRuleEngine
 from .llm_config_loader import LLMConfigLoader, build_adjudicator_runtime_config
+from ..core.http import configure_shared_http_max_concurrency
 from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
 from .qc_prompt_builder import QCPromptBuilder  # 拆分出的 Prompt 构建器
 from .bundles import load_or_assemble_domain_bundle
@@ -367,6 +368,7 @@ class SichuanQCService:
                 }
             )
         )
+        configure_shared_http_max_concurrency(self.client.http_max_concurrency)
 
         # 规则缓存
         self._rules_cache: Optional[List[Dict[str, Any]]] = None
@@ -545,6 +547,9 @@ class SichuanQCService:
                 },
             }
             self.adjudicator_client = SichuanQCLLMClient(build_adjudicator_runtime_config(first_pass_config))
+            configure_shared_http_max_concurrency(
+                self.client.http_max_concurrency,
+            )
             # 同步最新截断配置到 service 与 prompt_builder
             settings = get_settings()
             self.enable_truncate = settings.LLM_ENABLE_TRUNCATE

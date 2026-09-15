@@ -51,6 +51,8 @@ from ..services.sample_validation_rule_sets import (
 )
 from ..services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
 from ..services.qc_rule_sets import get_sichuan_rule_set
+from ..services.llm_config_loader import LLMConfigLoader
+from ..services.llm_execution_concurrency import concurrency_from_custom_parameters
 
 
 router = APIRouter(
@@ -1247,11 +1249,21 @@ async def run_sample_pool_intrinsic_validation(
     )
 
     workspace = _workspace_service()
-    # 病历级并发由前端运行选项传入；统一在任务创建时收敛到 worker 的安全上限，
-    # 规则族子任务沿用该值，避免拆分后意外退化为单病历串行。
+    runtime_config = await LLMConfigLoader.load_config(config_name="default", user_id=None)
+    execution_concurrency = concurrency_from_custom_parameters(
+        (runtime_config or {}).get("custom_parameters") or {}
+    )
+    # 单次任务可以选择更低值，但不能突破系统模型设置中的病历并发上限。
+    # 规则族子任务沿用该有效值，避免拆分后意外退化为单病历串行。
     effective_max_parallel_records = min(
-        4,
-        max(1, int(payload.max_parallel_records or 4)),
+        execution_concurrency.max_parallel_records,
+        max(
+            1,
+            int(
+                payload.max_parallel_records
+                or execution_concurrency.max_parallel_records
+            ),
+        ),
     )
     requested_scope = "final" if is_formal_fast_screen_full else str(pool.get("scene") or "running").strip().lower() or "running"
     effective_scope = requested_scope

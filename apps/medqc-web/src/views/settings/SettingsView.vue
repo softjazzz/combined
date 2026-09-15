@@ -165,8 +165,8 @@
                 LLM 配置
               </h2>
               <p class="ds-section-desc">
-                配置大语言模型的厂商、模型和运行参数。当前支持阿里云百炼、SiliconFlow 和内部
-                Ollama，敏感凭据统一由后端 env 托管。
+                配置大语言模型的厂商、模型、采样参数和质控执行并发。当前支持阿里云百炼、SiliconFlow
+                和内部 Ollama，敏感凭据统一由后端 env 托管。
               </p>
             </div>
             <div class="ds-split__main">

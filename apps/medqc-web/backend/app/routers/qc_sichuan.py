@@ -3728,6 +3728,11 @@ async def reload_llm_config(
                     "user_id": user_id,
                     "current_model": qc_service.client.model,
                     "config_source": qc_service.client.config_source,
+                    "execution_concurrency": {
+                        "max_parallel_records": qc_service.client.max_parallel_records,
+                        "family_max_concurrency": qc_service.client.family_max_concurrency,
+                        "http_max_concurrency": qc_service.client.http_max_concurrency,
+                    },
                     "reloaded_at": datetime.now(timezone.utc).isoformat()
                 },
                 message="LLM 配置重新加载成功",

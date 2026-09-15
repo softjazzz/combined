@@ -15,50 +15,104 @@ T = TypeVar("T")
 
 class _SharedHttpResources:
     def __init__(self, max_concurrency: int) -> None:
+        physical_capacity = 64
         self.client = httpx.Client(
             limits=httpx.Limits(
-                max_connections=max_concurrency,
-                max_keepalive_connections=max_concurrency,
+                max_connections=physical_capacity,
+                max_keepalive_connections=physical_capacity,
             ),
             trust_env=False,
         )
         self.executor = ThreadPoolExecutor(
-            max_workers=max_concurrency,
+            max_workers=physical_capacity,
             thread_name_prefix="medqc-llm-http",
         )
-        self.budget = threading.BoundedSemaphore(max_concurrency)
+        self._condition = threading.Condition()
+        self._active_count = 0
+        self._max_concurrency = max_concurrency
         self._local = threading.local()
+
+    @property
+    def max_concurrency(self) -> int:
+        with self._condition:
+            return self._max_concurrency
+
+    def configure_max_concurrency(self, max_concurrency: int) -> None:
+        with self._condition:
+            self._max_concurrency = max_concurrency
+            self._condition.notify_all()
+
+    def _acquire_budget(self) -> None:
+        with self._condition:
+            self._condition.wait_for(
+                lambda: self._active_count < self._max_concurrency
+            )
+            self._active_count += 1
+
+    def _release_budget(self) -> None:
+        with self._condition:
+            self._active_count -= 1
+            self._condition.notify_all()
 
     def run_with_budget(self, operation: Callable[[], T]) -> T:
         depth = int(getattr(self._local, "budget_depth", 0))
         if depth > 0:
             return operation()
-        with self.budget:
-            self._local.budget_depth = depth + 1
-            try:
-                return operation()
-            finally:
-                self._local.budget_depth = depth
+        self._acquire_budget()
+        self._local.budget_depth = depth + 1
+        try:
+            return operation()
+        finally:
+            self._local.budget_depth = depth
+            self._release_budget()
 
 
 _shared_resources: Optional[_SharedHttpResources] = None
 _shared_resources_lock = threading.Lock()
+_shared_http_max_concurrency: Optional[int] = None
 
 
 def _get_or_create_shared_resources() -> _SharedHttpResources:
     global _shared_resources
     with _shared_resources_lock:
         if _shared_resources is None:
-            budget = int(get_settings().LLM_HTTP_MAX_CONCURRENCY)
+            budget = int(
+                _shared_http_max_concurrency
+                if _shared_http_max_concurrency is not None
+                else get_settings().LLM_HTTP_MAX_CONCURRENCY
+            )
             _shared_resources = _SharedHttpResources(budget)
         return _shared_resources
 
 
-async def run_shared_http_call(operation: Callable[[], T]) -> T:
+def configure_shared_http_max_concurrency(
+    max_concurrency: int,
+) -> None:
+    """热更新模型 HTTP 槽位；在途请求不取消，后续请求按新上限排队。"""
+
+    global _shared_http_max_concurrency
+    value = int(max_concurrency)
+    if value < 1 or value > 64:
+        raise ValueError("模型 HTTP 槽位必须在 1 到 64 之间")
+    with _shared_resources_lock:
+        _shared_http_max_concurrency = value
+        resources = _shared_resources
+    if resources is not None:
+        resources.configure_max_concurrency(value)
+
+
+async def run_shared_http_call(
+    operation: Callable[[], T],
+    *,
+    resources: Optional[_SharedHttpResources] = None,
+) -> T:
     """在线程池执行阻塞 HTTP 操作，并与同步旁路共享全进程并发预算。"""
 
-    resources = _get_or_create_shared_resources()
-    future = resources.executor.submit(resources.run_with_budget, operation)
+    selected_resources = resources or _get_or_create_shared_resources()
+    future = selected_resources.executor.submit(
+        selected_resources.run_with_budget,
+        operation,
+    )
     return await asyncio.wrap_future(future)
 
 
@@ -69,12 +123,13 @@ def run_shared_http_call_sync(operation: Callable[[], T]) -> T:
 
 
 def close_shared_http_resources() -> None:
-    """幂等关闭共享 HTTP 连接池；后续调用会按当前配置重新创建。"""
+    """幂等关闭共享 HTTP 连接池；后续调用按环境默认值重新创建。"""
 
-    global _shared_resources
+    global _shared_resources, _shared_http_max_concurrency
     with _shared_resources_lock:
         resources = _shared_resources
         _shared_resources = None
+        _shared_http_max_concurrency = None
     if resources is None:
         return
     resources.executor.shutdown(wait=True, cancel_futures=False)
@@ -154,5 +209,6 @@ async def safe_post_json(
             headers,
             payload,
             timeout_seconds,
-        )
+        ),
+        resources=resources,
     )

@@ -30,6 +30,7 @@ const {
   exportSichuanWorkspaceBatchJob,
   reviewSichuanWorkspaceBatchJob,
   cancelSichuanWorkspaceBatchJob,
+  getDefaultLLMConfigSummary,
   routeQuery,
   routerPush,
   routerReplace,
@@ -68,6 +69,7 @@ const {
   exportSichuanWorkspaceBatchJob: vi.fn(),
   reviewSichuanWorkspaceBatchJob: vi.fn(),
   cancelSichuanWorkspaceBatchJob: vi.fn(),
+  getDefaultLLMConfigSummary: vi.fn(),
   routeQuery: {} as Record<string, unknown>,
   routerPush: vi.fn(),
   routerReplace: vi.fn(),
@@ -115,6 +117,12 @@ vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   exportSichuanWorkspaceBatchJob,
   reviewSichuanWorkspaceBatchJob,
   cancelSichuanWorkspaceBatchJob,
+}))
+
+vi.mock('@/services/llmConfigService', () => ({
+  llmConfigService: {
+    getDefaultSummary: getDefaultLLMConfigSummary,
+  },
 }))
 
 vi.mock('xlsx', () => ({
@@ -1055,6 +1063,13 @@ describe('CustomerSampleValidationView', () => {
       revokeObjectURL: vi.fn(),
     })
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    getDefaultLLMConfigSummary.mockResolvedValue({
+      execution_concurrency: {
+        max_parallel_records: 16,
+        family_max_concurrency: 4,
+        http_max_concurrency: 40,
+      },
+    })
     listManualSamplePools.mockResolvedValue({
       success: true,
       data: { items: [buildPool()], total: 1, page: 1, page_size: 50 },
@@ -1842,7 +1857,14 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalled()
   })
 
-  it('首次运行默认按4份病历并发提交', async () => {
+  it('首次运行采用模型设置中的病历并发', async () => {
+    getDefaultLLMConfigSummary.mockResolvedValueOnce({
+      execution_concurrency: {
+        max_parallel_records: 12,
+        family_max_concurrency: 3,
+        http_max_concurrency: 24,
+      },
+    })
     const wrapper = await mountView()
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
@@ -1857,7 +1879,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         ...buildRunIdentity('V001'),
-        max_parallel_records: 4,
+        max_parallel_records: 12,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
       },
@@ -2887,7 +2909,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         ...buildRunIdentity('LX0609_SYN_001'),
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
       },
@@ -3135,7 +3157,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         ...buildRunIdentity('LX0609_SYN_001'),
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
         selected_rule_ids: ['LX0609-020', 'LX0609-021'],
@@ -3480,7 +3502,7 @@ describe('CustomerSampleValidationView', () => {
     }
     expect(submittedPayload).toEqual(
       expect.objectContaining({
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         group_by_luxian_family: true,
         selected_rule_ids: [
           'LX0609-001',
@@ -3580,7 +3602,7 @@ describe('CustomerSampleValidationView', () => {
       selected_rule_ids?: string[]
       group_by_luxian_family?: boolean
     }
-    expect(submittedPayload.max_parallel_records).toBe(4)
+    expect(submittedPayload.max_parallel_records).toBe(16)
     expect(submittedPayload.group_by_luxian_family).toBe(true)
     expect((submittedPayload.selected_rule_ids || []).sort()).toEqual(allRuleIds)
     expect(message.success).toHaveBeenCalledWith(
@@ -3713,7 +3735,7 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalledWith(
       expect.objectContaining({
         content:
-          '任务已创建，正在打开进度。luxian_0609_qc_v1 / 泸县0609质控点验证 v1，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 4 份病历',
+          '任务已创建，正在打开进度。luxian_0609_qc_v1 / 泸县0609质控点验证 v1，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 16 份病历',
       }),
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
@@ -3739,7 +3761,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         ...buildRunIdentity('V001'),
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         validation_mode: 'sc',
         rule_set_key: '',
       },
@@ -3759,7 +3781,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         validation_mode: 'sc',
         rule_set_key: '',
       },
@@ -3811,7 +3833,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         ...buildRunIdentity('V008'),
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         validation_mode: 'programmatic',
         rule_set_key: 'sample_programmatic_gate_v1',
       },
@@ -3878,7 +3900,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         ...buildRunIdentity('V084'),
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         validation_mode: 'formal_fast_screen_full',
         rule_set_key: 'sc_content_full_v1',
       },
@@ -3887,7 +3909,7 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalledWith(
       expect.objectContaining({
         content:
-          '任务已创建，正在打开进度。sc_content_full_v1 / 内涵质控全量 v1，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 4 份病历',
+          '任务已创建，正在打开进度。sc_content_full_v1 / 内涵质控全量 v1，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 16 份病历',
       }),
     )
   })
@@ -4050,7 +4072,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         ...buildRunIdentity('V084'),
-        max_parallel_records: 4,
+        max_parallel_records: 16,
         validation_mode: 'formal_fast_screen_full',
         rule_set_key: 'sc_content_full_v1',
       },

@@ -20,6 +20,7 @@ LLM_ENV_KEYS = [
     "LLM_THINKING_BUDGET",
     "LLM_DEFAULT_PROVIDER",
     "LLM_TIMEOUT_SECONDS",
+    "QC_BATCH_RECORD_MAX_CONCURRENCY",
     "LLM_HTTP_MAX_CONCURRENCY",
     "DEEPSEEK_API_ENDPOINT",
     "DEEPSEEK_API_KEY",
@@ -167,11 +168,11 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     assert diagnostics["thinking_budget"] == 256
 
 
-def test_llm_http_max_concurrency_defaults_to_eight_and_is_bounded(monkeypatch):
+def test_llm_http_max_concurrency_defaults_to_forty_and_is_bounded(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
-    assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 8
+    assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 40
 
     monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "16")
     assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 16
@@ -180,16 +181,33 @@ def test_llm_http_max_concurrency_defaults_to_eight_and_is_bounded(monkeypatch):
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 
-    monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "17")
+    monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "65")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 
 
-def test_luxian_family_concurrency_defaults_to_two_and_is_bounded(monkeypatch):
+def test_qc_batch_record_concurrency_defaults_to_sixteen_and_is_bounded(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
-    assert Settings(_env_file=None).LUXIAN_0609_FAMILY_MAX_CONCURRENCY == 2
+    assert Settings(_env_file=None).QC_BATCH_RECORD_MAX_CONCURRENCY == 16
+
+    monkeypatch.setenv("QC_BATCH_RECORD_MAX_CONCURRENCY", "8")
+    assert Settings(_env_file=None).QC_BATCH_RECORD_MAX_CONCURRENCY == 8
+
+    monkeypatch.setenv("QC_BATCH_RECORD_MAX_CONCURRENCY", "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+    monkeypatch.setenv("QC_BATCH_RECORD_MAX_CONCURRENCY", "33")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+def test_luxian_family_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+
+    assert Settings(_env_file=None).LUXIAN_0609_FAMILY_MAX_CONCURRENCY == 4
 
     monkeypatch.setenv("LUXIAN_0609_FAMILY_MAX_CONCURRENCY", "1")
     assert Settings(_env_file=None).LUXIAN_0609_FAMILY_MAX_CONCURRENCY == 1

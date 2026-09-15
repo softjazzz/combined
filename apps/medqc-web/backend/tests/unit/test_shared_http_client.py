@@ -41,8 +41,8 @@ async def test_safe_post_json_caps_eight_calls_at_shared_budget_four(monkeypatch
             with state_lock:
                 state["clients"] += 1
             assert kwargs["trust_env"] is False
-            assert kwargs["limits"].max_connections == 4
-            assert kwargs["limits"].max_keepalive_connections == 4
+            assert kwargs["limits"].max_connections == 64
+            assert kwargs["limits"].max_keepalive_connections == 64
 
         def post(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
             with state_lock:

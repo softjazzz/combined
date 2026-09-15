@@ -10,6 +10,10 @@ import os
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..storage.memory import llm_configs
+from .llm_execution_concurrency import (
+    concurrency_from_custom_parameters,
+    with_execution_concurrency_defaults,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +60,7 @@ def build_provider_runtime_config(
     settings = get_settings()
     enabled = get_enabled_provider_codes()
     code = (provider_code or get_default_provider_code()).strip().lower()
-    params = dict(custom_parameters or {})
+    params = with_execution_concurrency_defaults(custom_parameters, settings=settings)
 
     if code not in enabled:
         fallback = get_default_provider_code()
@@ -362,6 +366,10 @@ class LLMConfigLoader:
             and settings.LLM_THINKING_BUDGET is not None
         ):
             custom_parameters["thinking_budget"] = settings.LLM_THINKING_BUDGET
+        custom_parameters = with_execution_concurrency_defaults(
+            custom_parameters,
+            settings=settings,
+        )
         runtime = build_provider_runtime_config(
             get_default_provider_code(),
             custom_parameters=custom_parameters,
@@ -401,6 +409,10 @@ class LLMConfigLoader:
                     client.provider_code = str(config.get("provider_code") or "").strip().lower()
 
                 custom_params = config.get("custom_parameters", {}) or {}
+                execution_concurrency = concurrency_from_custom_parameters(custom_params)
+                client.max_parallel_records = execution_concurrency.max_parallel_records
+                client.family_max_concurrency = execution_concurrency.family_max_concurrency
+                client.http_max_concurrency = execution_concurrency.http_max_concurrency
                 if hasattr(client, "temperature"):
                     client.temperature = float(custom_params.get("temperature", 0.2))
                 if hasattr(client, "top_p"):
