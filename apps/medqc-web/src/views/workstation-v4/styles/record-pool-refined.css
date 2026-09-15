@@ -1,7 +1,7 @@
 /* 病历池专属视觉层：不改变共用队列与任务的布局。 */
 .record-pool-refined {
-  background: #fff;
-  color: #202938;
+  background: #fbfcfe;
+  color: #263449;
   font-family: 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
 }
 
@@ -12,7 +12,7 @@
 .record-pool-refined .wv4-record-pool-hero {
   padding: 0 0 20px;
   border: 0;
-  border-bottom: 1px solid #e5eaf1;
+  border-bottom: 1px solid #e8edf5;
   border-radius: 0;
   background: transparent;
   box-shadow: none !important;
@@ -26,7 +26,7 @@
 }
 
 .record-pool-refined .wv4-analysis-overview__title {
-  color: #171d29;
+  color: #1e293b;
   font-size: 24px;
   line-height: 1.3;
   letter-spacing: -0.6px;
@@ -194,7 +194,7 @@
 .record-pool-refined :deep(.ant-select-selector),
 .record-pool-refined :deep(.ant-picker) {
   background: #fff !important;
-  border-color: #e0e5ee !important;
+  border-color: #dfe6ef !important;
   box-shadow: none !important;
   border-radius: 8px !important;
 }
@@ -223,9 +223,9 @@
   box-shadow: 0 1px 3px rgb(30 64 110 / 8%);
 }
 .record-pool-refined .wv4-filter-actions__button.ant-btn-primary {
-  background: #f4f8ff !important;
-  border-color: #cddff7 !important;
-  color: #2b6cf6 !important;
+  background: #2b6cf6 !important;
+  border-color: #2b6cf6 !important;
+  color: #fff !important;
 }
 .record-pool-refined .workbench-dept-filter__count {
   background: transparent;
@@ -259,7 +259,7 @@
   padding-block: 13px;
   font-size: 13px !important;
   color: #556275 !important;
-  background: #f8faff !important;
+  background: #f3f6fb !important;
 }
 .record-pool-refined :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th::before) {
   display: none;
@@ -290,7 +290,7 @@
 .record-pool-refined :deep(.batch-table-panel__patient-name) {
   font-size: 15px;
   font-weight: 500;
-  color: #202b3b;
+  color: #24334a;
 }
 .record-pool-refined :deep(.batch-table-panel__visit-label) {
   display: none;
@@ -333,9 +333,11 @@
 
 .record-pool-refined .wv4-record-pool-main__list {
   border: 0;
-  border-radius: 0;
+  border-radius: 10px;
   background: #fff;
-  box-shadow: none;
+  box-shadow:
+    0 0 0 1px #e8edf5,
+    0 3px 12px rgb(35 60 95 / 3%);
 }
 
 @media (max-width: 1400px) {
@@ -381,4 +383,41 @@
   .record-pool-refined .workbench-hosp-filter {
     width: 100%;
   }
+}
+
+/* 蓝白视觉试点：只调整外观，保留已有网格、尺寸与间距。 */
+.record-pool-refined .workbench-hosp-segmented {
+  background: #edf2f8;
+  border-radius: 8px;
+}
+.record-pool-refined :deep(.workbench-dept-select__name) {
+  color: #34445b;
+  font-weight: 400 !important;
+}
+.record-pool-refined :deep(.ant-input-affix-wrapper:hover),
+.record-pool-refined :deep(.ant-select-selector:hover),
+.record-pool-refined :deep(.ant-picker:hover) {
+  border-color: #91b4fa !important;
+}
+.record-pool-refined :deep(.ant-input-affix-wrapper-focused),
+.record-pool-refined :deep(.ant-select-focused .ant-select-selector),
+.record-pool-refined :deep(.ant-picker-focused) {
+  border-color: #2b6cf6 !important;
+  box-shadow: 0 0 0 2px rgb(43 108 246 / 10%) !important;
+}
+.record-pool-refined :deep(.ant-table-tbody > tr > td) {
+  border-bottom-color: #edf1f6;
+}
+.record-pool-refined :deep(.ant-table-tbody > tr:hover > td),
+.record-pool-refined :deep(.ant-table-tbody > tr > td.ant-table-cell-row-hover) {
+  background: #f5f8fe !important;
+}
+.record-pool-refined :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: #edf4ff !important;
+}
+.record-pool-refined :deep(.batch-table-panel__detail-button) {
+  color: #2b6cf6 !important;
+}
+.record-pool-refined .wv4-filter-actions__button.ant-btn-primary:hover {
+  background: #467ff7 !important;
 }
