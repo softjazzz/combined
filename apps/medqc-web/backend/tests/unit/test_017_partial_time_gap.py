@@ -81,6 +81,6 @@ def test_identical_template_shell_preserves_exemption(has_missing):
         docs["daily_course_record"].pop()
     outcome = _assess_copy(docs, source_complete=True)
     assert outcome.status == ("data_gap" if has_missing else "compliant")
-    assert outcome.reason_code == ("copy_authoritative_time_missing" if has_missing else "copy_similarity_within_threshold")
+    assert outcome.reason_code == ("copy_authoritative_time_missing" if has_missing else "copy_template_shell_only")
     assert outcome.safe_metadata["template_shell_only"] is True
     assert outcome.review_candidates == ()

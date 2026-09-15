@@ -1322,6 +1322,54 @@ _RULE_COMPLIANT_FINDINGS = {
 }
 
 
+def _017_high_similarity_compliant_finding(
+    facts: Mapping[str, Any],
+) -> str:
+    """渲染017中超过候选阈值但已通过语义或模板壳核对的结果。"""
+
+    kind = facts.get("failure_kind")
+    if kind not in {"copy_semantic_review_passed", "copy_template_shell_only"}:
+        return ""
+    source_types = facts.get("copy_document_sources")
+    record_times = facts.get("copy_document_record_times")
+    similarity = facts.get("copy_similarity")
+    threshold = facts.get("copy_similarity_threshold")
+    if (
+        not isinstance(source_types, list)
+        or len(source_types) != 2
+        or any(
+            value not in {"daily_course_record", "senior_course_record"}
+            for value in source_types
+        )
+        or not isinstance(record_times, list)
+        or len(record_times) != 2
+        or not all(isinstance(value, str) and value for value in record_times)
+        or isinstance(similarity, bool)
+        or not isinstance(similarity, (int, float))
+        or isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or float(similarity) < float(threshold)
+    ):
+        return ""
+    source_labels = {
+        "daily_course_record": "日常病程记录",
+        "senior_course_record": "上级医师查房记录",
+    }
+    similarity_percent = f"{round(float(similarity) * 100, 2):g}%"
+    threshold_percent = f"{round(float(threshold) * 100, 2):g}%"
+    review_statement = (
+        "经语义复核确认属于模板或必要重复，未认定为实质复制。"
+        if kind == "copy_semantic_review_passed"
+        else "经程序核对仅包含通用模板内容，未认定为实质复制。"
+    )
+    return (
+        f"已核对{source_labels[source_types[0]]}（{record_times[0]}）与"
+        f"{source_labels[source_types[1]]}（{record_times[1]}）；程序相似度 "
+        f"{similarity_percent}，超过候选阈值 {threshold_percent}，"
+        f"{review_statement}"
+    )
+
+
 def compliant_customer_finding(
     *,
     rule_id: str,
@@ -1332,6 +1380,10 @@ def compliant_customer_finding(
 
     if rule_id == "LX0609-018":
         finding = _lx018_criterion_finding(criterion_results)
+        if finding:
+            return finding
+    if rule_id == "LX0609-017" and isinstance(safe_customer_display_facts, Mapping):
+        finding = _017_high_similarity_compliant_finding(safe_customer_display_facts)
         if finding:
             return finding
     if (
@@ -1922,6 +1974,8 @@ def customer_finding_from_controlled_facts(
         return ""
 
     if rule_id == "LX0609-017":
+        if kind in {"copy_semantic_review_passed", "copy_template_shell_only"}:
+            return _017_high_similarity_compliant_finding(facts)
         if kind != "copy_similarity_threshold_exceeded":
             return ""
         source_types = facts.get("copy_document_sources")

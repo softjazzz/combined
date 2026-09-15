@@ -18,6 +18,14 @@ COURSE_QUALITY_CUSTOMER_RULE_IDS = frozenset({
     "LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018",
 })
 _COURSE_SOURCES = frozenset({"daily_course_record", "senior_course_record"})
+_017_THRESHOLD_EXCEEDED_KIND = "copy_similarity_threshold_exceeded"
+_017_WITHIN_THRESHOLD_KIND = "copy_similarity_within_threshold"
+_017_SEMANTIC_REVIEW_PASSED_KIND = "copy_semantic_review_passed"
+_017_TEMPLATE_SHELL_ONLY_KIND = "copy_template_shell_only"
+_017_HIGH_SIMILARITY_PASS_KINDS = frozenset({
+    _017_SEMANTIC_REVIEW_PASSED_KIND,
+    _017_TEMPLATE_SHELL_ONLY_KIND,
+})
 _DATETIME = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 def is_course_quality_customer_rule(rule_id: str) -> bool:
@@ -278,13 +286,20 @@ def _safe_016(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 def _safe_017(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind, sources, times = raw.get("failure_kind"), raw.get("copy_document_sources"), raw.get("copy_document_record_times")
     similarity, threshold, pairs = raw.get("copy_similarity"), raw.get("copy_similarity_threshold"), raw.get("copy_match_pairs")
-    if (kind not in {"copy_similarity_threshold_exceeded", "copy_similarity_within_threshold"}
+    if (kind not in {
+                _017_THRESHOLD_EXCEEDED_KIND,
+                _017_WITHIN_THRESHOLD_KIND,
+                *_017_HIGH_SIMILARITY_PASS_KINDS,
+            }
             or not isinstance(sources, list) or len(sources) != 2 or any(item not in _COURSE_SOURCES for item in sources)
             or not isinstance(times, list) or len(times) != 2 or not all(_strict_copy_time(item) for item in times)
             or isinstance(similarity, bool) or not isinstance(similarity, (int, float)) or not isfinite(float(similarity)) or not 0 <= float(similarity) <= 1
             or isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not isfinite(float(threshold)) or float(threshold) != .7
-            or (kind == "copy_similarity_threshold_exceeded" and float(similarity) < float(threshold))
-            or (kind == "copy_similarity_within_threshold" and float(similarity) >= float(threshold) and pairs)):
+            or (kind in {
+                _017_THRESHOLD_EXCEEDED_KIND,
+                *_017_HIGH_SIMILARITY_PASS_KINDS,
+            } and float(similarity) < float(threshold))
+            or (kind == _017_WITHIN_THRESHOLD_KIND and float(similarity) >= float(threshold))):
         return None
     safe_pairs: list[dict[str, Any]] = []
     if pairs is not None:
@@ -330,11 +345,30 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
         return safe_facts is not None and status == "non_compliant"
     if rule_id != "LX0609-017":
         return safe_facts is not None or raw_facts is None
-    expected = {"non_compliant": "copy_similarity_threshold_exceeded", "compliant": "copy_similarity_within_threshold"}.get(str(status or "").strip().lower())
+    normalized_status = str(status or "").strip().lower()
     kind = raw_facts.get("failure_kind") if isinstance(raw_facts, Mapping) else None
-    if expected is not None:
-        return safe_facts is not None and kind == expected
-    return kind not in {"copy_similarity_threshold_exceeded", "copy_similarity_within_threshold"}
+    if normalized_status == "non_compliant":
+        return safe_facts is not None and kind == _017_THRESHOLD_EXCEEDED_KIND
+    if normalized_status == "compliant":
+        if safe_facts is None:
+            return False
+        safe_kind = safe_facts.get("failure_kind")
+        similarity = safe_facts.get("copy_similarity")
+        threshold = safe_facts.get("copy_similarity_threshold")
+        if not isinstance(similarity, (int, float)) or not isinstance(threshold, (int, float)):
+            return False
+        if safe_kind == _017_WITHIN_THRESHOLD_KIND:
+            return kind == safe_kind and float(similarity) < float(threshold)
+        return (
+            kind == safe_kind
+            and safe_kind in _017_HIGH_SIMILARITY_PASS_KINDS
+            and float(similarity) >= float(threshold)
+        )
+    return kind not in {
+        _017_THRESHOLD_EXCEEDED_KIND,
+        _017_WITHIN_THRESHOLD_KIND,
+        *_017_HIGH_SIMILARITY_PASS_KINDS,
+    }
 
 
 __all__ = [

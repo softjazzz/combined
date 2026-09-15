@@ -50,6 +50,8 @@ RULE_017_COPY_SOURCES = (
 _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
+_COPY_SEMANTIC_REVIEW_PASSED_REASON = "copy_semantic_review_passed"
+_COPY_TEMPLATE_SHELL_ONLY_REASON = "copy_template_shell_only"
 _COPY_FAST_SHINGLE_CHARS = 5
 _COPY_PRECISE_CANDIDATE_LIMIT = 20
 _COPY_DISPLAY_PAIR_LIMIT = 4
@@ -573,7 +575,7 @@ def _assess_copy(
     if threshold_pairs and all(left[3] and right[3] for _, left, right in threshold_pairs):
         return _CopyRuleOutcome(
             status="compliant",
-            reason_code="copy_similarity_within_threshold",
+            reason_code=_COPY_TEMPLATE_SHELL_ONLY_REASON,
             executor_type="program",
             safe_metadata=safe_metadata,
         )
@@ -869,7 +871,7 @@ async def _review_copy_candidates(
         selected = ()
     else:
         final_status = "compliant"
-        final_reason = "copy_similarity_within_threshold"
+        final_reason = _COPY_SEMANTIC_REVIEW_PASSED_REASON
         selected = ()
 
     safe_metadata = dict(outcome.safe_metadata)
@@ -931,12 +933,26 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
         or not isinstance(threshold, (int, float))
     ):
         return None
+    if outcome.status == "non_compliant":
+        if float(maximum) < float(threshold):
+            return None
+        failure_kind = "copy_similarity_threshold_exceeded"
+    elif outcome.reason_code == _COPY_SEMANTIC_REVIEW_PASSED_REASON:
+        if float(maximum) < float(threshold):
+            return None
+        failure_kind = _COPY_SEMANTIC_REVIEW_PASSED_REASON
+    elif outcome.reason_code == _COPY_TEMPLATE_SHELL_ONLY_REASON:
+        if float(maximum) < float(threshold):
+            return None
+        failure_kind = _COPY_TEMPLATE_SHELL_ONLY_REASON
+    elif outcome.reason_code == "copy_similarity_within_threshold":
+        if float(maximum) >= float(threshold):
+            return None
+        failure_kind = "copy_similarity_within_threshold"
+    else:
+        return None
     facts = {
-        "failure_kind": (
-            "copy_similarity_threshold_exceeded"
-            if outcome.status == "non_compliant"
-            else "copy_similarity_within_threshold"
-        ),
+        "failure_kind": failure_kind,
         "copy_similarity": round(float(maximum), 4),
         "copy_similarity_threshold": round(float(threshold), 4),
         "copy_document_sources": list(source_types),
@@ -1116,7 +1132,15 @@ def _rule_017_decision(
             ApplicabilityState.APPLICABLE,
             EvidenceState.SUFFICIENT,
             QcDirection.SATISFIED,
-            "requirement_within_threshold",
+            (
+                "requirement_satisfied"
+                if outcome.reason_code
+                in {
+                    _COPY_SEMANTIC_REVIEW_PASSED_REASON,
+                    _COPY_TEMPLATE_SHELL_ONLY_REASON,
+                }
+                else "requirement_within_threshold"
+            ),
         )
     elif outcome.status == "non_compliant":
         dimensions = (
