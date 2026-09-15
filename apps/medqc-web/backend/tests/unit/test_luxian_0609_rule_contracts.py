@@ -114,6 +114,13 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
 
 
 @pytest.mark.unit
+def test_003_decision_support_loads_anesthesia_record_for_end_time() -> None:
+    assert "anesthesia_record" in resolve_luxian_0609_decision_support_source_keys(
+        ("LX0609-003",)
+    )
+
+
+@pytest.mark.unit
 def test_009_decision_support_loads_daily_coverage_and_minimal_change_sources() -> None:
     assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-009",))) == {
         "evaluation_context.horizon",

@@ -108,6 +108,11 @@ _AUTHORITATIVE_RECORD_TIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}"
     r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
 )
+_LABELED_SURGERY_TIME_PATTERN_TEMPLATE = (
+    r"(?<!\w){label}\s*[:：]\s*"
+    r"(?P<value>\d{{4}}-\d{{1,2}}-\d{{1,2}}[T ]\d{{1,2}}:\d{{2}}"
+    r"(?::\d{{2}}(?:\.\d{{1,6}})?)?(?:Z|[+-]\d{{2}}:?\d{{2}}))"
+)
 _HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
 _TRAUMA_DIAGNOSIS_PATTERN = re.compile(
     r"外伤|创伤|颅内血肿|硬膜外血肿|硬膜下血肿"
@@ -832,29 +837,59 @@ def _authoritative_record_time(value: Any) -> datetime | None:
     return parsed.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
 
 
+def _authoritative_surgery_time(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value
+        return value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+    return parse_strict_performed_time(value)
+
+
 def _authoritative_surgery_end_time(
     *, source_key: str, row: Mapping[str, Any]
 ) -> datetime | None:
     """003 只以受控手术结束时间为锚，不用开始时间替代。"""
 
-    def parse_end_time(value: Any) -> datetime | None:
-        if isinstance(value, datetime):
-            if value.tzinfo is None or value.utcoffset() is None:
-                return value
-            return value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
-        return parse_strict_performed_time(value)
-
     if source_key == "surgery_record":
         parsed = tuple(
             value
             for field in ("surgery_end_time", "surgery_end_datetime")
-            if (value := parse_end_time(row.get(field))) is not None
+            if (value := _authoritative_surgery_time(row.get(field))) is not None
         )
         return max(parsed) if parsed else None
     if source_key == "mr_surgery":
         value = row.get("surgery_end_datetime")
         return value if isinstance(value, datetime) and value.tzinfo is None else None
     return None
+
+
+def _authoritative_surgery_begin_time(row: Mapping[str, Any]) -> datetime | None:
+    """读取手术记录的结构化开始时间，用于关联同台麻醉记录。"""
+
+    values = tuple(
+        value
+        for field in ("surgery_begin_time", "surgery_begin_datetime")
+        if (value := _authoritative_surgery_time(row.get(field))) is not None
+    )
+    return max(values) if values else None
+
+
+def _labeled_anesthesia_surgery_time(
+    row: Mapping[str, Any], *, label: str
+) -> datetime | None:
+    """只读取麻醉记录正文中唯一、带时区且明确标注的手术时间。"""
+
+    text = str(row.get("record_content") or "")
+    pattern = re.compile(
+        _LABELED_SURGERY_TIME_PATTERN_TEMPLATE.format(label=re.escape(label))
+    )
+    parsed = tuple(
+        value
+        for match in pattern.finditer(text)
+        if (value := parse_strict_performed_time(match.group("value"))) is not None
+    )
+    unique = tuple(dict.fromkeys(parsed))
+    return unique[0] if len(unique) == 1 else None
 
 
 def _typed_003_decision(
@@ -873,6 +908,7 @@ def _typed_003_decision(
         raise ValueError("typed 003 requires one evidence session")
     source_keys = (
         "surgery_record",
+        "anesthesia_record",
         "mr_surgery",
         "surgery_application",
         "inpat_nondrug_order",
@@ -1103,7 +1139,9 @@ def _typed_003_decision(
             )
         return decision("data_gap", "authoritative_time_missing")
 
-    intervals: list[tuple[timedelta, datetime, datetime, str | None, str]] = []
+    intervals: list[
+        tuple[timedelta, datetime, datetime, str | None, tuple[str, ...]]
+    ] = []
     incomplete_performed_row = False
     missing_time_fields: set[str] = set()
     time_conflict = False
@@ -1132,7 +1170,15 @@ def _typed_003_decision(
             source_key="surgery_record",
             selected_row=row,
         )
-        intervals.append((interval, surgery_end_time, record_time, document_id, document_ref))
+        intervals.append(
+            (
+                interval,
+                surgery_end_time,
+                record_time,
+                document_id,
+                (document_ref,) if document_ref else (),
+            )
+        )
 
     # 当 surgery_record 自身没有批准手术时间时，仅允许唯一 mr_surgery 时间
     # 与唯一手术记录时间配对；多记录无关联键时必须保守为数据不足。
@@ -1171,8 +1217,68 @@ def _typed_003_decision(
                     source_key="surgery_record",
                     selected_row=surgery_rows[0],
                 )
-                intervals.append((interval, mr_end_times[0], record_times[0], document_id, document_ref))
+                intervals.append(
+                    (
+                        interval,
+                        mr_end_times[0],
+                        record_times[0],
+                        document_id,
+                        (document_ref,) if document_ref else (),
+                    )
+                )
                 fallback_resolved = True
+
+    # 源合同已将 anesthesia_record 列为 003 的判定资料。只有唯一手术记录
+    # 与唯一麻醉记录的结构化/明确标注开始时间完全相同时，才允许用麻醉记录
+    # 中明确标注的手术结束时间补齐锚点，避免跨手术串用。
+    anesthesia_rows = support_rows["anesthesia_record"]
+    anesthesia_association_failed = False
+    if not intervals and len(surgery_rows) == len(anesthesia_rows) == 1:
+        surgery_begin_time = _authoritative_surgery_begin_time(surgery_rows[0])
+        anesthesia_begin_time = _labeled_anesthesia_surgery_time(
+            anesthesia_rows[0], label="手术开始时间"
+        )
+        anesthesia_end_time = _labeled_anesthesia_surgery_time(
+            anesthesia_rows[0], label="手术结束时间"
+        )
+        record_time = _authoritative_record_time(surgery_rows[0].get("record_time"))
+        if (
+            surgery_begin_time is not None
+            and anesthesia_begin_time == surgery_begin_time
+            and anesthesia_end_time is not None
+            and record_time is not None
+        ):
+            interval = record_time - anesthesia_end_time
+            if interval.total_seconds() >= 0:
+                surgery_ref = _material_document_ref_for_row(
+                    materials=materials,
+                    snapshot=snapshot,
+                    source_key="surgery_record",
+                    selected_row=surgery_rows[0],
+                )
+                anesthesia_ref = _material_document_ref_for_row(
+                    materials=materials,
+                    snapshot=snapshot,
+                    source_key="anesthesia_record",
+                    selected_row=anesthesia_rows[0],
+                )
+                document_id = (
+                    str(surgery_rows[0].get("document_id") or "").strip() or None
+                )
+                intervals.append(
+                    (
+                        interval,
+                        anesthesia_end_time,
+                        record_time,
+                        document_id,
+                        tuple(ref for ref in (surgery_ref, anesthesia_ref) if ref),
+                    )
+                )
+                fallback_resolved = True
+            else:
+                time_conflict = True
+        elif anesthesia_begin_time is not None and anesthesia_end_time is not None:
+            anesthesia_association_failed = True
 
     late_interval = next(
         (
@@ -1183,7 +1289,13 @@ def _typed_003_decision(
         None,
     )
     if late_interval is not None:
-        interval, surgery_end_time, record_time, source_document_id, document_ref = late_interval
+        (
+            interval,
+            surgery_end_time,
+            record_time,
+            source_document_id,
+            document_refs,
+        ) = late_interval
         display_facts: dict[str, Any] = {
             "failure_kind": "surgery_record_late",
             "performed_surgery_confirmed": True,
@@ -1199,13 +1311,16 @@ def _typed_003_decision(
             "non_compliant",
             "threshold_exceeded",
             display_facts,
-            (document_ref,) if document_ref else (),
+            document_refs,
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
-        interval, surgery_end_time, record_time, source_document_id, document_ref = min(
-            intervals,
-            key=lambda item: item[2],
-        )
+        (
+            interval,
+            surgery_end_time,
+            record_time,
+            source_document_id,
+            document_refs,
+        ) = min(intervals, key=lambda item: item[2])
         display_facts = {
             "failure_kind": "surgery_record_within_threshold",
             "performed_surgery_confirmed": True,
@@ -1221,7 +1336,7 @@ def _typed_003_decision(
             "compliant",
             "requirement_within_threshold",
             display_facts,
-            (document_ref,) if document_ref else (),
+            document_refs,
         )
     mr_observation = observations["mr_surgery"]
     if mr_observation.query_state.value == "unavailable":
@@ -1232,6 +1347,10 @@ def _typed_003_decision(
     reason = "authoritative_time_missing"
     if time_conflict and not missing_time_fields:
         reason = "authoritative_time_conflict"
+    elif not intervals and anesthesia_association_failed:
+        reason = "association_failed"
+        missing_time_fields.discard("surgery_end_time")
+        missing_time_fields.add("surgery_record_association")
     elif not intervals and mr_end_times and (len(mr_rows) != 1 or len(surgery_rows) != 1):
         reason = "association_failed"
         missing_time_fields.discard("surgery_end_time")

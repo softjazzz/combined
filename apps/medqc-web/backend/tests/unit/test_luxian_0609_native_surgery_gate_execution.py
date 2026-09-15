@@ -493,11 +493,14 @@ def test_003_multiple_candidate_end_times_report_association_gap():
 
 def _typed_003_session(
     *,
+    surgery_document_id: str | None = None,
     record_time: object = None,
     surgery_time: object = None,
     surgery_begin_time: object = None,
     mr_surgery_time: object = None,
     mr_surgery_times: tuple[datetime, ...] = (),
+    anesthesia_surgery_begin_time: str | None = None,
+    anesthesia_surgery_end_time: str | None = None,
     source_mode: str = "available",
     evaluation_as_of_date: str | None = None,
 ):
@@ -510,6 +513,7 @@ def _typed_003_session(
         rows = {
             "surgery_record": () if source_mode == "empty" else (
                 {
+                    "document_id": surgery_document_id,
                     "surgery_begin_time": surgery_begin_time,
                     "surgery_end_time": surgery_time,
                     "record_time": record_time,
@@ -525,6 +529,17 @@ def _typed_003_session(
                     mr_surgery_times
                     or ((mr_surgery_time,) if mr_surgery_time is not None else ())
                 )
+            ),
+            "anesthesia_record": (
+                ({
+                    "document_id": "anesthesia-record-003",
+                    "record_content": (
+                        f"手术开始时间：{anesthesia_surgery_begin_time} "
+                        f"手术结束时间：{anesthesia_surgery_end_time}"
+                    ),
+                },)
+                if anesthesia_surgery_begin_time and anesthesia_surgery_end_time
+                else ()
             ),
         }.get(source_key, ())
         return SnapshotSourceRows.create(
@@ -1984,6 +1999,93 @@ async def test_typed_003_begin_time_without_end_time_is_data_gap():
 
     assert reduced[0].final_state.value == "data_gap"
     assert reduced[0].reason_code == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_typed_003_uses_matching_anesthesia_surgery_end_time():
+    """手术记录缺结束时间时，可用同台麻醉记录的明确手术结束时间。"""
+
+    session = _typed_003_session(
+        surgery_document_id="surgery-record-003",
+        surgery_begin_time="2025-08-14 01:25:00+00:00",
+        record_time=datetime(2025, 8, 14, 10, 44, 27),
+        anesthesia_surgery_begin_time="2025-08-14 01:25:00+00:00",
+        anesthesia_surgery_end_time="2025-08-14 01:55:00+00:00",
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert result.customer_display_facts[0][1]["surgery_end_time"] == (
+        "2025-08-14 09:55:00"
+    )
+    assert result.customer_display_facts[0][1]["elapsed_hours"] == 0.82
+    assert result.llm_call_count == result.total_tokens == 0
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_reduced_customer_result,
+    )
+
+    final = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced[0],
+        raw_customer_display_facts=dict(result.customer_display_facts)["LX0609-003"],
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    assert final["status"] == "compliant"
+    assert {item["source_type"] for item in final["customer_evidence"]} >= {
+        "surgery_record",
+        "anesthesia_record",
+    }
+
+
+@pytest.mark.asyncio
+async def test_typed_003_does_not_cross_bind_mismatched_anesthesia_event():
+    session = _typed_003_session(
+        surgery_begin_time="2025-08-14 01:25:00+00:00",
+        record_time=datetime(2025, 8, 14, 10, 44, 27),
+        anesthesia_surgery_begin_time="2025-08-14 03:25:00+00:00",
+        anesthesia_surgery_end_time="2025-08-14 03:55:00+00:00",
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
 
 
 @pytest.mark.asyncio

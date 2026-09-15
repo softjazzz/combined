@@ -1786,8 +1786,10 @@ def test_provider_fingerprint_and_document_refs_are_stable_for_order_and_duplica
     second = _build(row_reader=reader)
     assert first.snapshot_hash == second.snapshot_hash
     assert first.document_refs == second.document_refs
-    assert len(first.document_refs) == 3
-    assert len(set(first.document_refs)) == 3
+    # 同样的业务 document_id 在 surgery_record 与 anesthesia_record 中仍是
+    # 两份不同来源文书；每个来源各保留 3 个稳定引用。
+    assert len(first.document_refs) == 6
+    assert len(set(first.document_refs)) == 6
     assert "private-a" not in repr(first.to_safe_dict())
 
 

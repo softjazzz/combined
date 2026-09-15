@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v31"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v32"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -270,12 +270,14 @@ _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
 )
 
 _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
-    # 003 优先使用 surgery_record 自带时间，缺失时仅允许唯一 mr_surgery 时间配对；
+    # 003 优先使用 surgery_record 自带时间；缺失时可用开始时间完全匹配的
+    # 唯一 anesthesia_record 明确手术结束时间，或唯一 mr_surgery 时间配对；
     # 手术记录为空时，合格 mr_surgery 的结束时间是独立已实施手术事实，
     # 必须以正式评价时点判断24小时窗口是否成熟；其余场景仍用申请与手术类
     # 医嘱共同确认“确无手术”，避免把未同步误判为不适用。
     "LX0609-003": (
         "evaluation_context.horizon",
+        "anesthesia_record",
         "mr_surgery",
         "surgery_application",
         "inpat_nondrug_order",
