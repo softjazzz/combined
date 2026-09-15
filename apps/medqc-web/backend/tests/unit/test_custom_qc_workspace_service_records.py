@@ -6,7 +6,7 @@ import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 import app.services.qc_workspace.record_repository as record_repository_module
 from app.services.qc_workspace.record_repository import RecordRepository
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 
@@ -518,6 +518,138 @@ def test_collect_records_today_inpatient_requires_today_verified_projection() ->
         )
 
     assert [item["visit_id"] for item in records] == ["TODAY-INPATIENT"]
+
+
+def test_collect_records_today_inpatient_includes_filtered_visit_index_anchors() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    for model in (
+        record_repository_module.MedicalRecordFrontpage,
+        record_repository_module.AdmissionRecord,
+        record_repository_module.DischargeRecord,
+        record_repository_module.InpatRegistration,
+        record_repository_module.HospitalizationStatusProjection,
+    ):
+        model.__table__.create(bind=engine)
+
+    now = datetime.now()
+    admission_time = now - timedelta(days=2)
+    expected_visit_ids = [f"INDEXED-{index:02d}" for index in range(14)]
+    with Session(engine) as session:
+        session.execute(
+            text(
+                """
+                CREATE TABLE visit_index (
+                    institute_id TEXT NOT NULL,
+                    patient_id TEXT NOT NULL,
+                    visit_id TEXT NOT NULL,
+                    scene_current TEXT,
+                    updated_at DATETIME,
+                    PRIMARY KEY (institute_id, patient_id, visit_id)
+                )
+                """
+            )
+        )
+        for index, visit_id in enumerate(expected_visit_ids):
+            identity = {
+                "institute_id": "H1",
+                "patient_id": f"P-{index:02d}",
+                "visit_id": visit_id,
+            }
+            session.add(
+                record_repository_module.InpatRegistration(
+                    **identity,
+                    name=f"在院患者{index:02d}",
+                    admission_dept_name="骨科",
+                    admission_datetime=admission_time,
+                )
+            )
+            session.add(
+                record_repository_module.AdmissionRecord(
+                    **identity,
+                    document_id=f"A-{index:02d}",
+                    dept_name="骨科",
+                    attending_physician_sign="王医师",
+                    admission_datetime=admission_time,
+                )
+            )
+            session.add(
+                record_repository_module.HospitalizationStatusProjection(
+                    **identity,
+                    status="inpatient",
+                    verified_at=now,
+                    source="test",
+                )
+            )
+            session.execute(
+                text(
+                    """
+                    INSERT INTO visit_index (
+                        institute_id, patient_id, visit_id, scene_current, updated_at
+                    ) VALUES (
+                        :institute_id, :patient_id, :visit_id, 'running', :updated_at
+                    )
+                    """
+                ),
+                {**identity, "updated_at": now},
+            )
+        session.commit()
+
+        records = RecordRepository(session_factory=lambda: session).collect_records(
+            scope="running",
+            sync_scope="today_inpatient",
+            department="骨科",
+            doctor="王医师",
+            date_field="admission",
+            start_date=admission_time.date().isoformat(),
+            end_date=admission_time.date().isoformat(),
+            keyword="在院患者",
+        )
+
+    assert len(records) == 14
+    assert {item["visit_id"] for item in records} == set(expected_visit_ids)
+    assert all(item["scope"] == "running" for item in records)
+    assert all(item["department"] == "骨科" for item in records)
+    assert all(item["doctor"] == "王医师" for item in records)
+
+
+def test_collect_records_excludes_frontpage_with_incomplete_case_identity() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    for model in (
+        record_repository_module.MedicalRecordFrontpage,
+        record_repository_module.AdmissionRecord,
+        record_repository_module.DischargeRecord,
+        record_repository_module.InpatRegistration,
+        record_repository_module.HospitalizationStatusProjection,
+    ):
+        model.__table__.create(bind=engine)
+
+    with Session(engine) as session:
+        session.add_all(
+            [
+                record_repository_module.MedicalRecordFrontpage(
+                    institute_id="H1",
+                    patient_id="P1",
+                    visit_id="VALID",
+                ),
+                record_repository_module.MedicalRecordFrontpage(
+                    institute_id="H1",
+                    patient_id="",
+                    visit_id="INVALID",
+                ),
+            ]
+        )
+        session.commit()
+        records = RecordRepository(session_factory=lambda: session).collect_records(
+            scope="all",
+            department=None,
+            doctor=None,
+            date_field="visit",
+            start_date=None,
+            end_date=None,
+            keyword=None,
+        )
+
+    assert [item["visit_id"] for item in records] == ["VALID"]
 
 
 def test_refresh_parent_batch_job_persists_completed_status_after_children_finish(monkeypatch):

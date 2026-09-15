@@ -347,6 +347,19 @@ class RecordRepository:
             source = anchor_by_ref.get(ref)
             if source is None:
                 continue
+            registration_source = registration_by_ref.get(ref)
+            admission_source = admission_by_ref.get(ref)
+
+            def first_anchor_value(*names: str) -> Any:
+                for candidate_source in (registration_source, admission_source):
+                    if candidate_source is None:
+                        continue
+                    for name in names:
+                        candidate = getattr(candidate_source, name, None)
+                        if candidate not in (None, ""):
+                            return candidate
+                return None
+
             discharge_source = discharge_by_ref.get(ref)
             discharge_datetime = (
                 getattr(source, "discharge_datetime", None)
@@ -357,14 +370,13 @@ class RecordRepository:
             if scope_value != "all" and item_scope != scope_value:
                 continue
             item_department = _safe_text(
-                getattr(source, "discharge_dept_name", None)
-                or getattr(source, "admission_dept_name", None)
-                or getattr(source, "dept_name", None)
-                or getattr(discharge_source, "dept_name", None)
+                getattr(discharge_source, "dept_name", None)
+                or first_anchor_value(
+                    "discharge_dept_name", "admission_dept_name", "dept_name"
+                )
             )
             item_doctor = _safe_text(
-                getattr(source, "attending_physician_sign", None)
-                or getattr(source, "submitter", None)
+                first_anchor_value("attending_physician_sign", "submitter")
             )
             if department and item_department != department:
                 continue
@@ -374,9 +386,9 @@ class RecordRepository:
                 normalized_keyword = keyword.strip().lower()
                 searchable_values = (
                     ref.visit_id,
-                    _safe_text(getattr(source, "name", "")),
-                    _safe_text(getattr(source, "mr_no", "")),
-                    _safe_text(getattr(source, "inpat_no", "")),
+                    _safe_text(first_anchor_value("name")),
+                    _safe_text(first_anchor_value("mr_no")),
+                    _safe_text(first_anchor_value("inpat_no")),
                 )
                 if normalized_keyword and not any(
                     normalized_keyword in value.lower()
@@ -396,15 +408,15 @@ class RecordRepository:
                 end=end,
             ):
                 continue
-            medical_text = _safe_text(getattr(source, "record_content", None))
+            medical_text = _safe_text(first_anchor_value("record_content"))
             records.append(
                 {
                     **ref.as_dict(),
                     "record_id": ref.visit_id,
                     "record_key": ref.as_key(),
-                    "patient_name": _safe_text(getattr(source, "name", "")),
-                    "mr_no": _safe_text(getattr(source, "mr_no", "")),
-                    "inpat_no": _safe_text(getattr(source, "inpat_no", "")),
+                    "patient_name": _safe_text(first_anchor_value("name")),
+                    "mr_no": _safe_text(first_anchor_value("mr_no")),
+                    "inpat_no": _safe_text(first_anchor_value("inpat_no")),
                     "scope": item_scope,
                     "department": item_department,
                     "doctor": item_doctor,
@@ -418,6 +430,69 @@ class RecordRepository:
                 }
             )
         return records
+
+    def _collect_filtered_indexed_anchor_records(
+        self,
+        session: Session,
+        *,
+        excluded_record_refs: set[CaseRef],
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """复用病历池口径补齐今日核验在院、但尚无病案首页的病例。"""
+
+        # 病历池已经负责 visit_index、住院状态投影及登记/入院记录的统一筛选。
+        # 此处复用同一口径，避免列表可见范围与“质控当前筛选”再次分叉。
+        from ..medical_records.query_service import (
+            _filter_indexed_registration_records,
+            _load_hospitalization_projection_map,
+            _load_indexed_registration_records,
+        )
+
+        indexed_records = _filter_indexed_registration_records(
+            _load_indexed_registration_records(session),
+            dept=department,
+            doctor=doctor,
+            keyword=keyword,
+            start_date=_as_date(start_date),
+            end_date=_as_date(end_date),
+            date_field=date_field,
+            hospital_status="inpatient",
+            sync_scope="today_inpatient",
+            hospitalization_projection_map=_load_hospitalization_projection_map(session),
+        )
+        record_refs = [
+            CaseRef(
+                _safe_text(getattr(record, "institute_id", "")),
+                _safe_text(getattr(record, "patient_id", "")),
+                _safe_text(getattr(record, "visit_id", "")),
+            )
+            for record in indexed_records
+        ]
+        record_refs = [
+            ref for ref in record_refs if all(ref) and ref not in excluded_record_refs
+        ]
+        if not record_refs:
+            return []
+        # 上面的病历池筛选已完整应用科室、医师、日期和关键字；这里仅负责
+        # 将同一组三坐标水合为现有批量执行记录，避免重复筛选时字段来源不一致。
+        return self._collect_explicit_anchor_records_by_refs(
+            session,
+            record_refs=record_refs,
+            excluded_record_refs=excluded_record_refs,
+            scope=scope,
+            department=None,
+            doctor=None,
+            date_field=date_field,
+            start_date=None,
+            end_date=None,
+            keyword=None,
+        )
 
     def _build_records_query(
         self,
@@ -485,6 +560,14 @@ class RecordRepository:
                     InpatRegistration.visit_id == MedicalRecordFrontpage.visit_id,
                 ),
             )
+        )
+        query = query.filter(
+            MedicalRecordFrontpage.institute_id.is_not(None),
+            MedicalRecordFrontpage.institute_id != "",
+            MedicalRecordFrontpage.patient_id.is_not(None),
+            MedicalRecordFrontpage.patient_id != "",
+            MedicalRecordFrontpage.visit_id.is_not(None),
+            MedicalRecordFrontpage.visit_id != "",
         )
 
         if scope_value == "final":
@@ -765,6 +848,24 @@ class RecordRepository:
                             _safe_text(item.get("visit_id"))
                             for item in records
                             if _safe_text(item.get("visit_id"))
+                        },
+                        scope=scope,
+                        department=department,
+                        doctor=doctor,
+                        date_field=date_field,
+                        start_date=start_date,
+                        end_date=end_date,
+                        keyword=keyword,
+                    )
+                )
+            elif _safe_text(sync_scope).lower() == "today_inpatient":
+                records.extend(
+                    self._collect_filtered_indexed_anchor_records(
+                        session,
+                        excluded_record_refs={
+                            CaseRef.from_mapping(item)
+                            for item in records
+                            if all(CaseRef.from_mapping(item))
                         },
                         scope=scope,
                         department=department,
