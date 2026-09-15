@@ -8,6 +8,9 @@ from app.services.luxian_0609.customer_evidence_enrichment import (
     project_selected_grouped_document_refs,
     project_selected_document_evidence,
 )
+from app.services.luxian_0609.canonical_result_finalizer import (
+    finalize_luxian_0609_reduced_customer_result,
+)
 from app.services.luxian_0609.source_registry import (
     resolve_luxian_0609_customer_document_type,
 )
@@ -69,6 +72,51 @@ def test_002_projects_selected_first_course_document_coordinate():
     assert result["status"] == "compliant"
     assert _coordinates(result) == [
         ("first_course_record", "FC-SELECTED", "record_content", "2026-06-01 10:00:00")
+    ]
+
+
+def test_024_customer_evidence_prefers_surgery_name_over_generic_record_content():
+    """024 证据应定位到手术项目，不能被器械用量正文抢占。"""
+
+    source_rows = _source_rows(
+        "surgery_record",
+        (
+            {
+                "document_id": "SURGERY-024",
+                "record_time": "2026-07-16 10:00:00",
+                "record_content": "术中使用一次性腔镜切割缝合器 1个。",
+                "surgery_name": "胸腔镜下右肺上叶切除术+纵隔淋巴结清扫术",
+                "surgery_process": "清扫11组、10组、7组淋巴结。",
+            },
+        ),
+    )
+    snapshot, materials = _snapshot_and_materials({"surgery_record": source_rows})
+    document_ref = build_material_document_refs(
+        "surgery_record", source_rows.rows
+    )[0]
+    reduced = _bind(
+        snapshot,
+        _decision(snapshot, document_ref, rule_id="LX0609-024"),
+        materials,
+    )
+
+    result = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced,
+        raw_customer_display_facts=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    assert result["status"] == "compliant"
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "surgery_record",
+            "source_document_id": "SURGERY-024",
+            "field_path": "surgery_name",
+            "evidence_excerpt": "胸腔镜下右肺上叶切除术+纵隔淋巴结清扫术",
+            "excerpt_kind": "字段级依据",
+            "record_time": "2026-07-16 10:00:00",
+        }
     ]
 
 
