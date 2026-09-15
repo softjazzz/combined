@@ -55,6 +55,16 @@ def _payload():
         "total_records": 1, "success_count": 0, "failed_count": 1, "compliant_records": 0,
         "execution_status": "partial_failed", "completed_rule_count": 1, "failed_rule_count": 1,
         "failed_rule_ids": ["LX0609-012"],
+        "automatic_failed_rule_retry": {
+            "max_attempts": 3,
+            "completed_attempts": 0,
+            "remaining_failure_count": 1,
+            "status": "queued",
+            "should_retry": True,
+            "next_attempt": 1,
+            "delay_seconds": 0.0,
+            "internal_failure_details": "must-not-leak",
+        },
         "model_execution_stats": {
             "scope": "exam_lab", "requested_rule_count": 2, "first_success_rule_count": 1,
             "retried_rule_count": 1, "recovered_rule_count": 0, "failed_rule_count": 1,
@@ -87,6 +97,15 @@ def test_failed_job_persists_valid_items_and_operational_failure(storage, all_fa
     assert safe["summary"]["compliant_records"] == 0
     assert safe["summary"]["failed_rule_count"] == len(failures)
     assert safe["summary"]["model_execution_stats"]["model_failure_rate"] == 0.5
+    assert safe["summary"]["automatic_failed_rule_retry"] == {
+        "status": "queued",
+        "max_attempts": 3,
+        "completed_attempts": 0,
+        "remaining_failure_count": 1,
+        "should_retry": True,
+        "next_attempt": 1,
+        "delay_seconds": 0.0,
+    }
     assert len(safe["items"]) == len(items)
     assert safe["failed_records"][0]["rule_id"] == "LX0609-012"
 

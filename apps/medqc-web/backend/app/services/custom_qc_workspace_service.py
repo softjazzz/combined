@@ -960,6 +960,45 @@ def project_customer_safe_batch_job(
             for rule_id in (raw_summary.get("failed_rule_ids") or [])
             if re.fullmatch(r"LX0609-\d{3}", _safe_text(rule_id).upper())
         })
+    raw_automatic_retry = (
+        raw_summary.get("automatic_failed_rule_retry")
+        if isinstance(raw_summary.get("automatic_failed_rule_retry"), dict)
+        else {}
+    )
+    automatic_retry_status = _safe_text(raw_automatic_retry.get("status")).lower()
+    if automatic_retry_status in {
+        "queued",
+        "running",
+        "completed",
+        "exhausted",
+        "not_applicable",
+        "not_retryable",
+    }:
+        safe_automatic_retry: Dict[str, Any] = {
+            "status": automatic_retry_status,
+            "max_attempts": max(0, _to_int(raw_automatic_retry.get("max_attempts"))),
+            "completed_attempts": max(
+                0,
+                _to_int(raw_automatic_retry.get("completed_attempts")),
+            ),
+            "remaining_failure_count": max(
+                0,
+                _to_int(raw_automatic_retry.get("remaining_failure_count")),
+            ),
+        }
+        if isinstance(raw_automatic_retry.get("should_retry"), bool):
+            safe_automatic_retry["should_retry"] = raw_automatic_retry["should_retry"]
+        if raw_automatic_retry.get("next_attempt") is not None:
+            safe_automatic_retry["next_attempt"] = max(
+                0,
+                _to_int(raw_automatic_retry.get("next_attempt")),
+            )
+        if raw_automatic_retry.get("delay_seconds") is not None:
+            safe_automatic_retry["delay_seconds"] = max(
+                0.0,
+                _to_float(raw_automatic_retry.get("delay_seconds")),
+            )
+        safe_summary["automatic_failed_rule_retry"] = safe_automatic_retry
     model_counts = _normalize_luxian_model_execution_stats(raw_summary.get("model_execution_stats"))
     if model_counts is not None:
         safe_summary["model_execution_stats"] = _build_luxian_model_execution_summary(model_counts)
