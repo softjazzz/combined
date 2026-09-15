@@ -648,6 +648,62 @@ def test_055_058_session_reads_each_executor_input_source() -> None:
     }
 
 
+def test_063_session_prefetches_mr_diagnosis_as_a_bounded_source() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-063",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert calls.count("mr_diagnosis") == 1
+    observation = next(
+        item for item in session.snapshot.observations
+        if item.source_key == "mr_diagnosis"
+    )
+    assert observation.query_state is SourceQueryState.EMPTY
+    assert observation.completeness is SourceCompleteness.COMPLETE
+
+
+def test_063_unavailable_mr_diagnosis_is_kept_as_unavailable_observation() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == "mr_diagnosis":
+            raise SourceEvidenceUnavailable()
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-063",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert calls.count("mr_diagnosis") == 1
+    observation = next(
+        item for item in session.snapshot.observations
+        if item.source_key == "mr_diagnosis"
+    )
+    assert observation.query_state is SourceQueryState.UNAVAILABLE
+    assert observation.reason_code == "SOURCE_CAPABILITY_UNAVAILABLE"
+
+
 def test_055_focused_scopes_freeze_the_same_evaluation_horizon() -> None:
     """055 单选或聚焦组合都必须获得与既有终点规则相同的冻结终点。"""
 
@@ -1675,6 +1731,7 @@ def test_all_77_registered_rules_query_each_bounded_source_once_and_never_query_
             "preane_surveil_record",
             "surgery_application",
             "surgery_record",
+            "mr_diagnosis",
         }
     )
     assert len(calls) == len(set(calls))
@@ -1712,6 +1769,7 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         "postane_surveil_record",
         "preane_surveil_record",
         "diagnosis",
+        "mr_diagnosis",
         "exam_master",
         "inpat_drug_order",
         "inpat_nondrug_order",
@@ -1912,7 +1970,7 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
     entry = load_luxian_0609_source_registry()["bloodtrans_record"]
 
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v30"
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v33"
     assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
     assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
 

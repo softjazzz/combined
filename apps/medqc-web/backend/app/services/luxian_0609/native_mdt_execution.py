@@ -35,6 +35,7 @@ from .surgery_procedure_catalog import (
 
 RULE_ID = "LX0609-040"
 LEGACY_RULE_IDS = ("SC-083", "CL-108")
+_SURGERY_TRIGGER_SOURCE_KEYS = ("surgery_record", "mr_surgery")
 _COMPLETED_MDT_PATTERN = re.compile(
     r"多学科会诊记录|经多学科(?:讨论|会诊)[^。；]{0,160}(?:一致认为|讨论后|会诊后)|"
     r"MDT讨论[^。；]{0,160}(?:一致认为|可手术|结论)",
@@ -414,31 +415,15 @@ def _typed_source_blockers(
     """区分手术触发源的终局阻塞与MDT文书源的条件阻塞。"""
 
     observations = {item.source_key: item for item in snapshot.observations}
-    trigger = observations.get("mr_surgery")
-    if trigger is None:
+    if any(source_key not in observations for source_key in _SURGERY_TRIGGER_SOURCE_KEYS):
         return (
             _MdtRuleOutcome(
                 "technical_error", "technical_failure", "snapshot_mismatch"
             ),
             None,
         )
-    if trigger.query_state.value == "error":
-        return (
-            _MdtRuleOutcome(
-                "technical_error", "technical_failure", "source_query_error"
-            ),
-            None,
-        )
-    if trigger.query_state.value == "unavailable":
-        return (
-            _MdtRuleOutcome("data_gap", "data_gap", "source_unavailable"),
-            None,
-        )
-    if trigger.completeness.value == "truncated":
-        return (
-            _MdtRuleOutcome("data_gap", "data_gap", "source_truncated"),
-            None,
-        )
+    # 手术适用性解析器统一处理两个触发源的完整性，并允许其中任一可信来源
+    # 独立确认已实施手术；不能在这里让空的病案首页手术表遮蔽手术记录。
 
     conditional: _MdtRuleOutcome | None = None
     for source_key in ("presurg_summary", "presurg_discussion"):
@@ -519,6 +504,38 @@ def _selected_material_fact_refs(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
         if observation.source_key == source_key
+    )
+
+
+def _surgery_source_fact_refs(
+    *,
+    materials: Luxian0609EvidenceMaterialStore,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> tuple[str, ...]:
+    """返回040实际使用的两类手术触发来源坐标。"""
+
+    refs: list[str] = []
+    readable_source_keys: list[str] = []
+    for source_key in _SURGERY_TRIGGER_SOURCE_KEYS:
+        try:
+            rows = tuple(materials.rows(source_key))
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            continue
+        readable_source_keys.append(source_key)
+        refs.extend(
+            _selected_material_fact_refs(
+                materials=materials,
+                snapshot=snapshot,
+                source_key=source_key,
+                rows=rows,
+            )
+        )
+    if refs:
+        return tuple(dict.fromkeys(refs))
+    return tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key in readable_source_keys
     )
 
 
@@ -834,7 +851,7 @@ async def execute_luxian_0609_native_mdt_rule(
         surgery_applicability = resolve_surgery_applicability(
             snapshot=evidence_snapshot,
             materials=evidence_materials,
-            source_keys=("mr_surgery",),
+            source_keys=_SURGERY_TRIGGER_SOURCE_KEYS,
         )
         display_facts.update(
             {
@@ -873,12 +890,19 @@ async def execute_luxian_0609_native_mdt_rule(
                 _MdtRuleOutcome(
                     "not_applicable", "trigger_absent", "performed_surgery_absent"
                 ),
-                selected_fact_refs=_selected_material_fact_refs(
+                selected_fact_refs=_surgery_source_fact_refs(
                     materials=evidence_materials,
                     snapshot=evidence_snapshot,
-                    source_key="mr_surgery",
-                    rows=tuple(evidence_materials.rows("mr_surgery")),
-                    fallback_to_source=True,
+                ),
+            )
+        if not surgery_applicability.effective_level:
+            return finish(
+                _MdtRuleOutcome(
+                    "data_gap", "data_gap", "surgery_level_missing"
+                ),
+                selected_fact_refs=_surgery_source_fact_refs(
+                    materials=evidence_materials,
+                    snapshot=evidence_snapshot,
                 ),
             )
         if surgery_applicability.effective_level != "四级":
@@ -886,12 +910,9 @@ async def execute_luxian_0609_native_mdt_rule(
                 _MdtRuleOutcome(
                     "not_applicable", "trigger_absent", "level4_surgery_absent"
                 ),
-                selected_fact_refs=_selected_material_fact_refs(
+                selected_fact_refs=_surgery_source_fact_refs(
                     materials=evidence_materials,
                     snapshot=evidence_snapshot,
-                    source_key="mr_surgery",
-                    rows=tuple(evidence_materials.rows("mr_surgery")),
-                    fallback_to_source=True,
                 ),
             )
         # 保持既有优先级：明确急诊豁免不再因后续多台手术关联资料不足而失效。

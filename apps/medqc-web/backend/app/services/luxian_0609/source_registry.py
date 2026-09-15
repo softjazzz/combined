@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v32"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v33"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -260,6 +260,9 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
     _entry("admission_record_diagnosis", access_mode=_BOUNDED),
+    # 063 的病案首页诊断是内部决策支持来源；客户适用文书仍由规则合同声明，
+    # 不把该来源提升为第二个同名客户事实所有者。
+    _entry("mr_diagnosis", access_mode=_BOUNDED),
     _entry("surgery_application", access_mode=_BOUNDED),
     _entry("preane_surveil_record", access_mode=_BOUNDED),
     _entry("postane_surveil_record", access_mode=_BOUNDED),
@@ -488,6 +491,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 术前小结中的“今日急诊/急诊手术”是免除术前 MDT 的受控例外依据，
     # 必须与手术等级一并进入同一证据快照，不能让执行器另行读取旧数据。
     "LX0609-040": (
+        "surgery_record",
         "mr_surgery",
         "presurg_summary",
         "presurg_discussion",
@@ -577,7 +581,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
         "senior_course_record",
     ),
-    "LX0609-063": ("discharge_record",),
+    # 063 比较病案首页与出院记录的出院/死亡诊断；mr_diagnosis 仅作为
+    # 规则内部决策支持来源，不改变客户适用文书范围。
+    "LX0609-063": ("discharge_record", "mr_diagnosis"),
     "LX0609-064": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-065": ("evaluation_context.horizon", "mr_surgery"),
     "LX0609-066": ("mr_surgery",),

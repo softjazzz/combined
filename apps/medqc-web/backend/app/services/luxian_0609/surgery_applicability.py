@@ -175,11 +175,13 @@ def resolve_surgery_applicability(
             reason_code="performed_surgery_confirmed",
             procedure_kind="surgery",
             effective_level=(
-                classification.effective_level if classification else fallback_level
+                classification.effective_level
+                if classification and classification.effective_level
+                else fallback_level
             ),
             level_source=(
                 classification.source
-                if classification
+                if classification and classification.effective_level
                 else "structured_field"
                 if fallback_level
                 else ""

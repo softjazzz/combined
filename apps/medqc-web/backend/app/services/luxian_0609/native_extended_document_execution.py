@@ -156,6 +156,7 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
 
 _DEATH_MARKERS = ("死亡", "病故")
 _ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院")
+_DISCHARGE_DIAGNOSIS_TYPES = frozenset(("出院诊断", "死亡诊断"))
 _UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确")
 _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS = ("原因待查", "性质待定")
 _DIAGNOSIS_CHANGE_EVENT_PATTERN = re.compile(
@@ -350,6 +351,38 @@ def _source_rows(
     except EvidenceMaterialUnavailable:
         return (), "source_unavailable"
     return tuple(dict(row) for row in rows), ""
+
+
+def _has_source_observation(
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_key: str,
+) -> bool:
+    normalized = str(source_key or "").strip().lower()
+    return any(observation.source_key == normalized for observation in snapshot.observations)
+
+
+def _discharge_or_death_diagnosis_rows(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    allow_untyped_legacy_rows: bool = False,
+) -> tuple[Mapping[str, Any], ...]:
+    """只保留首页/出院记录中的出院或死亡诊断。
+
+    旧 ``diagnosis`` 兼容快照可能没有诊断类型字段；仅当整组行都未提供
+    类型时允许沿用该来源的既有语义。只要出现类型，就严格按出院/死亡类型
+    过滤，避免把入院、门诊或病理诊断混入比较。
+    """
+
+    selected = tuple(
+        row
+        for row in rows
+        if _clean(row.get("diagnosis_type")) in _DISCHARGE_DIAGNOSIS_TYPES
+    )
+    if selected or not allow_untyped_legacy_rows:
+        return selected
+    if rows and all(not _clean(row.get("diagnosis_type")) for row in rows):
+        return tuple(rows)
+    return ()
 
 
 def _critical_value_evaluation_horizon(
@@ -1287,6 +1320,10 @@ def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, .
     names = tuple(_clean(row.get("diagnosis_name") or row.get("diagnosis")) for row in rows)
     if not all(names):
         return names, "name_missing"
+    # 单条诊断不存在相对顺序问题；不能因为源表未填写冗余序号而丢掉
+    # 已经可以确定的名称一致性结论。
+    if len(rows) == 1:
+        return names, None
     positions: list[int] = []
     missing = False
     invalid = False
@@ -1297,8 +1334,18 @@ def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, .
             continue
         if type(value) is int:
             position = value
-        elif isinstance(value, str) and re.fullmatch(r"[0-9]{1,9}", value.strip()):
-            position = int(value.strip())
+        elif isinstance(value, str):
+            normalized = value.strip()
+            if re.fullmatch(r"[0-9]{1,9}", normalized):
+                position = int(normalized)
+            else:
+                composite = re.fullmatch(
+                    r"[^|\r\n]+\|\|([0-9]{1,9})", normalized
+                )
+                if composite is None or not normalized.rsplit("||", 1)[0].strip():
+                    invalid = True
+                    continue
+                position = int(composite.group(1))
         else:
             invalid = True
             continue
@@ -1307,8 +1354,6 @@ def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, .
         positions.append(position)
     if invalid or len(positions) != len(set(positions)):
         return names, "order_invalid"
-    if len(rows) == 1:
-        return names, None
     if missing:
         return names, "order_missing"
     return tuple(name for _, name in sorted(zip(positions, names))), None
@@ -1988,6 +2033,15 @@ async def execute_luxian_0609_native_extended_document_rules(
         evidence_materials, "inpat_nondrug_order"
     )
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
+    mr_diagnosis_rows, mr_diagnosis_error = (
+        _source_rows(evidence_materials, "mr_diagnosis")
+        if "LX0609-063" in selected
+        else ((), "")
+    )
+    mr_diagnosis_observed = _has_source_observation(
+        evidence_snapshot,
+        "mr_diagnosis",
+    )
     # 074 的结构化变更声明只作为触发信号：该来源缺少诊断序号与诊断时间，
     # 绝不能挂成 diagnosis_rows。
     (
@@ -2669,38 +2723,107 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-063":
+            authority_source_key = (
+                "mr_diagnosis" if mr_diagnosis_observed else "diagnosis"
+            )
             if discharge_error:
                 final_state, reason_code = "data_gap", discharge_error
             elif not discharge_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif diagnosis_error or discharge_diagnosis_error:
-                final_state, reason_code = "data_gap", diagnosis_error or discharge_diagnosis_error
             else:
-                authority, authority_gap = _diagnosis_sequence(diagnosis_rows)
-                written, written_gap = _diagnosis_sequence(discharge_diagnosis_rows)
-                names_complete = authority_gap not in {"diagnoses_missing", "name_missing"} and written_gap not in {"diagnoses_missing", "name_missing"}
-                order_comparable = authority_gap is None and written_gap is None
-                # 名称多重集保留重复数量；顺序不可靠时不以名称排序建立临床顺序。
-                content_equal = sorted(authority) == sorted(written)
-                if not names_complete or (content_equal and not order_comparable):
-                    final_state, reason_code = "data_gap", "required_field_missing"
-                    display.append((rule_id, {
-                        "verification_kind": "discharge_diagnosis_data_gap",
-                        "authoritative_gap": authority_gap, "written_gap": written_gap,
-                    }))
+                # 新快照明确包含 mr_diagnosis 时，它是本规则唯一的首页权威
+                # 来源；不把 diagnosis 与 mr_diagnosis 合并。没有该观察的旧
+                # 兼容快照才回退到 diagnosis，便于历史任务按原合同重放。
+                if mr_diagnosis_observed:
+                    authority_source_key = "mr_diagnosis"
+                    authority_error = mr_diagnosis_error
+                    authority_rows = (
+                        _discharge_or_death_diagnosis_rows(mr_diagnosis_rows)
+                        if not authority_error
+                        else ()
+                    )
                 else:
-                    complete = order_comparable and authority == written
-                    final_state = "compliant" if complete else "non_compliant"
-                    reason_code = "requirement_satisfied" if complete else "requirement_violated"
-                    display.append((rule_id, {
-                        "verification_kind": "discharge_diagnosis_consistency_check",
-                        "authoritative_diagnoses": list(authority) if order_comparable else sorted(authority),
-                        "written_diagnoses": list(written) if order_comparable else sorted(written),
-                        "diagnoses_consistent": complete, "order_comparable": order_comparable,
-                    }))
+                    authority_source_key = "diagnosis"
+                    authority_error = diagnosis_error
+                    authority_rows = (
+                        _discharge_or_death_diagnosis_rows(
+                            diagnosis_rows,
+                            allow_untyped_legacy_rows=True,
+                        )
+                        if not authority_error
+                        else ()
+                    )
+
+                if authority_error:
+                    final_state, reason_code = "data_gap", authority_error
+                elif discharge_diagnosis_error:
+                    final_state, reason_code = "data_gap", discharge_diagnosis_error
+                else:
+                    written_rows = _discharge_or_death_diagnosis_rows(
+                        discharge_diagnosis_rows,
+                        # 旧快照从未声明 mr_diagnosis，历史测试与回放中的
+                        # discharge_record_diagnosis 也可能没有 diagnosis_type；
+                        # 仅在这条兼容链允许无类型行。新快照必须按出院/死亡
+                        # 类型过滤，避免把初步诊断混入比较。
+                        allow_untyped_legacy_rows=not mr_diagnosis_observed,
+                    )
+                    authority, authority_gap = _diagnosis_sequence(authority_rows)
+                    written, written_gap = _diagnosis_sequence(written_rows)
+                    names_complete = (
+                        authority_gap not in {"diagnoses_missing", "name_missing"}
+                        and written_gap not in {"diagnoses_missing", "name_missing"}
+                    )
+                    order_gap = {"order_missing", "order_invalid"}
+                    order_comparable = authority_gap is None and written_gap is None
+                    # 名称多重集保留重复数量；顺序不可靠时不以名称排序建立临床顺序。
+                    if not names_complete:
+                        final_state, reason_code = "data_gap", "required_field_missing"
+                        display.append((rule_id, {
+                            "verification_kind": "discharge_diagnosis_data_gap",
+                            "authoritative_gap": authority_gap, "written_gap": written_gap,
+                        }))
+                    else:
+                        # 顺序字段缺失不妨碍识别确定的错填或漏填：先比较名称
+                        # 多重集（保留重复数量），只有内容一致时才需要可靠顺序。
+                        content_consistent = sorted(authority) == sorted(written)
+                        if not content_consistent:
+                            final_state, reason_code = "non_compliant", "requirement_violated"
+                            display.append((rule_id, {
+                                "verification_kind": "discharge_diagnosis_consistency_check",
+                                "authoritative_diagnoses": sorted(authority),
+                                "written_diagnoses": sorted(written),
+                                "diagnoses_consistent": False,
+                                "order_comparable": order_comparable,
+                            }))
+                        elif authority_gap in order_gap or written_gap in order_gap:
+                            final_state, reason_code = "data_gap", "required_field_missing"
+                            display.append((rule_id, {
+                                "verification_kind": "discharge_diagnosis_data_gap",
+                                "authoritative_gap": authority_gap,
+                                "written_gap": written_gap,
+                            }))
+                        else:
+                            complete = authority == written
+                            final_state = "compliant" if complete else "non_compliant"
+                            reason_code = (
+                                "requirement_satisfied"
+                                if complete
+                                else "requirement_violated"
+                            )
+                            display.append((rule_id, {
+                                "verification_kind": "discharge_diagnosis_consistency_check",
+                                "authoritative_diagnoses": list(authority),
+                                "written_diagnoses": list(written),
+                                "diagnoses_consistent": complete,
+                                "order_comparable": True,
+                            }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=("discharge_record", "diagnosis", "discharge_record_diagnosis"),
+                source_keys=(
+                    "discharge_record",
+                    authority_source_key,
+                    "discharge_record_diagnosis",
+                ),
                 final_state=final_state, reason_code=reason_code,
             ))
             continue

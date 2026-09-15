@@ -120,6 +120,61 @@ def test_snapshot_reader_projects_real_mr_surgery_primary_identity(monkeypatch) 
     assert '"surgery_id"' in sql
 
 
+def test_063_snapshot_reader_projects_mr_diagnosis_identity_order_and_type(
+    monkeypatch,
+) -> None:
+    source_row = {
+        "diagnosis_id": "DX-1",
+        "document_id": "DOC-1",
+        "diagnosis_no": "visit||2",
+        "diagnosis_type": "出院诊断",
+        "diagnosis_name": "社区获得性肺炎",
+    }
+    connection = _SourceRowsConnection([source_row])
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            *source_row,
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key="mr_diagnosis",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+    )
+
+    assert result.rows == (source_row,)
+    sql, _params = connection.calls[0]
+    assert 'FROM "cdm"."mr_diagnosis"' in sql
+    for field in source_row:
+        assert f'"{field}"' in sql
+
+
+def test_063_discharge_diagnosis_snapshot_projection_keeps_type_field() -> None:
+    assert "diagnosis_type" in source_evidence_reader._NATIVE_SOURCE_FIELDS[
+        "discharge_record_diagnosis"
+    ]
+    assert "diagnosis_type" in source_evidence_reader._SNAPSHOT_SOURCE_FIELDS[
+        "discharge_record_diagnosis"
+    ]
+    assert "mr_diagnosis" in source_evidence_reader._SNAPSHOT_SOURCE_FIELDS
+
+
 def test_snapshot_reader_projects_drug_order_planned_start_time(monkeypatch) -> None:
     signature_fields = {
         "repeat_indicator": "临时",

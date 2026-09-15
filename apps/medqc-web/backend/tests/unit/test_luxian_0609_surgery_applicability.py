@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import app.services.luxian_0609.surgery_applicability as surgery_applicability
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -12,6 +13,9 @@ from app.services.luxian_0609.source_evidence_reader import (
 )
 from app.services.luxian_0609.surgery_applicability import (
     resolve_surgery_applicability,
+)
+from app.services.luxian_0609.surgery_procedure_catalog import (
+    SurgeryProcedureClassification,
 )
 
 
@@ -134,6 +138,42 @@ def test_performed_level_four_surgery_uses_approved_catalog_level_and_source():
     assert result.is_performed_surgery
     assert result.effective_level == "四级"
     assert result.level_source == "hospital_performance"
+
+
+def test_structured_level_is_reported_as_source_when_catalog_match_has_no_level(
+    monkeypatch,
+):
+    session = _session(
+        {
+            "surgery_record": (
+                {
+                    "surgery_name": "测试开放手术",
+                    "surgery_begin_time": "2026-08-01 09:00:00+08:00",
+                    "surgical_level": "三级",
+                },
+            )
+        }
+    )
+    monkeypatch.setattr(
+        surgery_applicability,
+        "_best_classification",
+        lambda _rows: SurgeryProcedureClassification(
+            code="00.00",
+            name="测试开放手术",
+            category="手术",
+            effective_level="",
+            raw_level="",
+            source="hospital_performance",
+            match_mode="code",
+        ),
+    )
+
+    result = resolve_surgery_applicability(
+        snapshot=session.snapshot, materials=session.materials
+    )
+
+    assert result.effective_level == "三级"
+    assert result.level_source == "structured_field"
 
 
 def test_source_unavailable_is_data_gap_instead_of_not_applicable():

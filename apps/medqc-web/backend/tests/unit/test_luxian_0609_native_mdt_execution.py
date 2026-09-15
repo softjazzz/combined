@@ -464,13 +464,100 @@ async def test_typed_mdt_complete_empty_trigger_is_bound_not_applicable():
     assert execution.result is None
     assert decision.applicability is ApplicabilityState.NOT_APPLICABLE
     assert decision.reason_code == "trigger_absent_complete"
-    assert decision.fact_refs == tuple(
+    assert set(decision.fact_refs) == {
         item.snapshot_ref.removeprefix("sha256:")
         for item in session.snapshot.observations
-        if item.source_key == "mr_surgery"
-    )
+        if item.source_key in {"surgery_record", "mr_surgery"}
+    }
     _, result = _aggregate_typed(session, execution)
     assert _customer_evidence_coordinates(result) == set()
+    assert execution.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_surgery_record_only_without_level_is_data_gap():
+    session = _session(
+        {
+            "mr_surgery": [],
+            "surgery_record": [
+                {
+                    "document_id": "formal-surgery-without-level",
+                    "surgery_name": "测试开放手术",
+                    "surgery_begin_time": "2026-01-02 09:00:00+08:00",
+                }
+            ],
+            "presurg_summary": [],
+            "presurg_discussion": [],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    decision = execution.decisions[0]
+    assert decision.applicability is ApplicabilityState.UNKNOWN
+    assert decision.evidence_state is EvidenceState.DATA_GAP
+    assert decision.qc_direction is QcDirection.UNKNOWN
+    assert decision.reason_code == "required_field_missing"
+    assert set(decision.fact_refs) == _material_document_refs(session, "surgery_record")
+    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "mdt_discussion_state": "unknown",
+    }
+    assert execution.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_surgery_record_only_with_non_level4_is_not_applicable():
+    session = _session(
+        {
+            "mr_surgery": [],
+            "surgery_record": [
+                {
+                    "document_id": "formal-level3-surgery",
+                    "surgery_name": "测试开放手术",
+                    "surgical_level": "三级",
+                    "surgery_begin_time": "2026-01-02 09:00:00+08:00",
+                }
+            ],
+            "presurg_summary": [],
+            "presurg_discussion": [],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    decision = execution.decisions[0]
+    assert decision.applicability is ApplicabilityState.NOT_APPLICABLE
+    assert decision.evidence_state is EvidenceState.SUFFICIENT
+    assert decision.reason_code == "trigger_absent_complete"
+    assert set(decision.fact_refs) == _material_document_refs(session, "surgery_record")
+    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "三级",
+        "surgery_level_source": "structured_field",
+    }
     assert execution.llm_call_count == 0
 
 

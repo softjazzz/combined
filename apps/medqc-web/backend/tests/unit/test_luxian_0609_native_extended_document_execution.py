@@ -83,6 +83,13 @@ def _session(
         "transfer_out_record": "snapshot-provider-transfer_out_record-v1",
         "inpat_nondrug_order": "snapshot-provider-inpat_nondrug_order-v1",
         "diagnosis": "snapshot-provider-diagnosis-v1",
+        # 063 的病案首页出院/死亡诊断决策支持来源；保持与旧 diagnosis
+        # 兼容夹具独立，避免两份来源在测试中被隐式合并。
+        **(
+            {"mr_diagnosis": "snapshot-provider-mr_diagnosis-v1"}
+            if "mr_diagnosis" in rows_by_source
+            else {}
+        ),
         "diffcase_discussion_record": "snapshot-provider-diffcase_discussion_record-v1",
         "crisis_value_record": "snapshot-provider-crisis_value_record-v1",
         "labtest_item_report": "snapshot-provider-labtest_item_report-v1",
@@ -7371,7 +7378,11 @@ async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant()
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
             "diagnosis": ({"diagnosis_no": 1, "diagnosis_name": "社区获得性肺炎"},),
-            "discharge_record_diagnosis": ({"diagnosis_no": 1, "diagnosis_name": "社区获得性肺炎"},),
+            "discharge_record_diagnosis": ({
+                "diagnosis_no": 1,
+                "diagnosis_type": "出院诊断",
+                "diagnosis_name": "社区获得性肺炎",
+            },),
         },
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -8086,8 +8097,16 @@ async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
                 {"diagnosis_no": 2, "diagnosis_name": "高血压病"},
             ),
             "discharge_record_diagnosis": (
-                {"diagnosis_no": 1, "diagnosis_name": "高血压病"},
-                {"diagnosis_no": 2, "diagnosis_name": "社区获得性肺炎"},
+                {
+                    "diagnosis_no": 1,
+                    "diagnosis_type": "出院诊断",
+                    "diagnosis_name": "高血压病",
+                },
+                {
+                    "diagnosis_no": 2,
+                    "diagnosis_type": "出院诊断",
+                    "diagnosis_name": "社区获得性肺炎",
+                },
             ),
         },
     )
@@ -8096,6 +8115,213 @@ async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
     facts = dict(result.customer_display_facts)["LX0609-063"]
     assert facts["diagnoses_consistent"] is False
     assert facts["authoritative_diagnoses"] != facts["written_diagnoses"]
+
+
+def test_063_declares_mr_diagnosis_as_internal_decision_support_source() -> None:
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-063",))) == {
+        "discharge_record",
+        "mr_diagnosis",
+    }
+
+
+@pytest.mark.asyncio
+async def test_063_prefers_mr_diagnosis_when_diagnosis_is_empty() -> None:
+    rows_by_source = {
+        "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
+        "diagnosis": (),
+        "mr_diagnosis": (
+            {
+                "diagnosis_type": "出院诊断",
+                "diagnosis_no": "visit||2",
+                "diagnosis_name": "高血压病",
+            },
+            {
+                "diagnosis_type": "出院诊断",
+                "diagnosis_no": "visit||1",
+                "diagnosis_name": "社区获得性肺炎",
+            },
+            {
+                "diagnosis_type": "入院诊断",
+                "diagnosis_no": "visit||3",
+                "diagnosis_name": "入院阶段诊断",
+            },
+            {
+                "diagnosis_type": "门诊诊断",
+                "diagnosis_no": "visit||4",
+                "diagnosis_name": "门诊阶段诊断",
+            },
+            {
+                "diagnosis_type": "病理诊断",
+                "diagnosis_no": "visit||5",
+                "diagnosis_name": "病理阶段诊断",
+            },
+        ),
+        "discharge_record_diagnosis": (
+            {
+                "diagnosis_type": "出院诊断",
+                "diagnosis_no": "record||1",
+                "diagnosis_name": "社区获得性肺炎",
+            },
+            {
+                "diagnosis_type": "出院诊断",
+                "diagnosis_no": "record||2",
+                "diagnosis_name": "高血压病",
+            },
+            {
+                "diagnosis_type": "初步诊断",
+                "diagnosis_no": "record||3",
+                "diagnosis_name": "不应参与比较的初步诊断",
+            },
+        ),
+    }
+    result, reduced = await _evaluate("LX0609-063", rows_by_source)
+    expected_snapshot, _ = _session(rows_by_source)
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-063"]
+    assert facts["authoritative_diagnoses"] == ["社区获得性肺炎", "高血压病"]
+    assert facts["written_diagnoses"] == ["社区获得性肺炎", "高血压病"]
+    assert all("阶段诊断" not in name for name in facts["authoritative_diagnoses"])
+    assert all("初步诊断" not in name for name in facts["written_diagnoses"])
+    mr_ref = next(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in expected_snapshot.observations
+        if observation.source_key == "mr_diagnosis"
+    )
+    diagnosis_ref = next(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in expected_snapshot.observations
+        if observation.source_key == "diagnosis"
+    )
+    assert mr_ref in result.decisions[0].fact_refs
+    assert diagnosis_ref not in result.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_063_single_mr_diagnosis_is_naturally_ordered_without_sequence() -> None:
+    rows_by_source = {
+        "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
+        "diagnosis": (),
+        "mr_diagnosis": (
+            {
+                "diagnosis_type": "出院诊断",
+                "diagnosis_name": "社区获得性肺炎",
+            },
+        ),
+        "discharge_record_diagnosis": (
+            {
+                "diagnosis_type": "出院诊断",
+                "diagnosis_no": "record||1",
+                "diagnosis_name": "社区获得性肺炎",
+            },
+        ),
+    }
+    result, reduced = await _evaluate("LX0609-063", rows_by_source)
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-063"]
+    assert facts == {
+        "verification_kind": "discharge_diagnosis_consistency_check",
+        "authoritative_diagnoses": ["社区获得性肺炎"],
+        "written_diagnoses": ["社区获得性肺炎"],
+        "diagnoses_consistent": True,
+        "order_comparable": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_order_missing() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-063",
+        {
+            "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
+            "diagnosis": (),
+            "mr_diagnosis": (
+                {
+                    "diagnosis_type": "出院诊断",
+                    "diagnosis_no": "visit||1",
+                    "diagnosis_name": "社区获得性肺炎",
+                },
+                {
+                    "diagnosis_type": "出院诊断",
+                    "diagnosis_no": "visit||2",
+                    "diagnosis_name": "高血压病",
+                },
+            ),
+            "discharge_record_diagnosis": (
+                {
+                    "diagnosis_type": "出院诊断",
+                    "diagnosis_name": "社区获得性肺炎",
+                },
+                {
+                    "diagnosis_type": "出院诊断",
+                    "diagnosis_name": "糖尿病",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "requirement_violated"
+    facts = dict(result.customer_display_facts)["LX0609-063"]
+    assert facts["diagnoses_consistent"] is False
+    assert facts["order_comparable"] is False
+
+
+@pytest.mark.asyncio
+async def test_063_compares_death_diagnoses() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-063",
+        {
+            "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
+            "diagnosis": (),
+            "mr_diagnosis": ({
+                "diagnosis_type": "死亡诊断",
+                "diagnosis_no": "visit||1",
+                "diagnosis_name": "重症肺炎",
+            },),
+            "discharge_record_diagnosis": ({
+                "diagnosis_type": "死亡诊断",
+                "diagnosis_no": "record||1",
+                "diagnosis_name": "重症肺炎",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-063"]
+    assert facts["authoritative_diagnoses"] == ["重症肺炎"]
+    assert facts["written_diagnoses"] == ["重症肺炎"]
+
+
+@pytest.mark.asyncio
+async def test_063_mr_diagnosis_unavailable_does_not_fallback_to_diagnosis() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-063",
+        {
+            "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
+            "diagnosis": ({
+                "diagnosis_no": 1,
+                "diagnosis_name": "旧来源诊断",
+            },),
+            "mr_diagnosis": ({
+                "diagnosis_type": "出院诊断",
+                "diagnosis_no": "visit||1",
+                "diagnosis_name": "病案首页诊断",
+            },),
+            "discharge_record_diagnosis": ({
+                "diagnosis_type": "出院诊断",
+                "diagnosis_no": "record||1",
+                "diagnosis_name": "病案首页诊断",
+            },),
+        },
+        unavailable_sources={"mr_diagnosis"},
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_unavailable"
+    assert dict(result.customer_display_facts).get("LX0609-063") is None
 
 
 @pytest.mark.asyncio
