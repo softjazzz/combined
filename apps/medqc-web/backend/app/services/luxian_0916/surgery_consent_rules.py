@@ -20,6 +20,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .contracts import Luxian0916RuleResult
+from .surgical_document_completeness import validated_missing_items
 
 
 _RULE_IDS = tuple(f"LX0916-{number:03d}" for number in range(21, 31))
@@ -52,11 +53,13 @@ _RULE_SPECS: dict[str, dict[str, str]] = {
         "name": "手术记录缺项或描述不清",
         "event": "surgery_performed",
         "document": "surgery_record",
+        "requirements": "患者一般项目、手术日期、术前诊断、术中诊断、手术名称、手术者及助手、麻醉方法、手术经过、出血量、输血量、术中情况及处理",
     },
     "LX0916-026": {
         "name": "手术安全核查记录缺项或描述不清",
         "event": "surgery_performed",
         "document": "surgery_safety_check",
+        "requirements": "麻醉实施前、手术开始前、患者离开手术室前三阶段的身份/部位/方式及风险核查、设备和器械物品清点、各阶段手术医师/麻醉医师/巡回护士三方逐次确认签字；标本及输血核对仅在明确适用时另行核对",
     },
     "LX0916-027": {
         "name": "急诊手术缺主治及以上医师指示记录",
@@ -201,7 +204,6 @@ def _evaluate_rule(
     anchors = _safe_anchors(fact.get("anchors"))
     diagnostics["document_presence"] = presence
     diagnostics["document_completeness"] = completeness
-
     if rule_id == "LX0916-023":
         if presence == "present":
             return _result(
@@ -256,6 +258,19 @@ def _evaluate_rule(
             anchors=anchors,
             diagnostics=diagnostics,
         )
+    grounded_missing_items = validated_missing_items(spec["document"], fact)
+    if rule_id in {"LX0916-024", "LX0916-025", "LX0916-026"}:
+        if grounded_missing_items is None:
+            return _result(
+                rule_id=rule_id,
+                status="data_quality_gap",
+                reason_code="semantic_fact_unavailable",
+                findings="无法确认目标文书的逐项原文完整性，不能以总体完整性判断替代。",
+                evidence=evidence,
+                anchors=anchors,
+                diagnostics=diagnostics,
+            )
+        diagnostics["missing_items"] = grounded_missing_items
     if presence != "present" or completeness not in {"complete", "incomplete"}:
         return _result(
             rule_id=rule_id,
@@ -277,16 +292,23 @@ def _evaluate_rule(
             diagnostics=diagnostics,
         )
     requirements = spec.get("requirements", "该文书对应的必填内容")
+    missing_items = grounded_missing_items or ()
+    missing_text = "、".join(missing_items)
     return _result(
         rule_id=rule_id,
         status="non_compliant",
         reason_code="required_document_incomplete",
         findings=(
             f"已确认触发事件，但{spec['name']}对应文书存在缺项或描述不清；"
-            f"完整性核验范围包括：{requirements}。"
+            + (f"具体缺项：{missing_text}。" if missing_text else "")
+            + f"完整性核验范围包括：{requirements}。"
         ),
         evidence=evidence,
-        suggestion=f"对照完整性核验范围补全必填项目：{requirements}。",
+        suggestion=(
+            f"补全以下必填项目：{missing_text}。"
+            if missing_text
+            else f"对照完整性核验范围补全必填项目：{requirements}。"
+        ),
         anchors=anchors,
         diagnostics=diagnostics,
     )

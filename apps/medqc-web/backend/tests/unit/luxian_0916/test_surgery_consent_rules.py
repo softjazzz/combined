@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.services.luxian_0916.surgery_consent_rules import (
     execute_surgery_consent_rules,
 )
@@ -35,6 +34,8 @@ _DOCUMENT_FOR_RULE = {
     "LX0916-030": "critical_condition_notice",
 }
 
+_COMPLETENESS_RULE_IDS = ("LX0916-024", "LX0916-025", "LX0916-026")
+
 
 def _context(rule_id: str, document_fact: dict[str, object] | None) -> dict[str, object]:
     event_facts = {event: False for event in set(_EVENT_FOR_RULE.values())}
@@ -46,7 +47,7 @@ def _context(rule_id: str, document_fact: dict[str, object] | None) -> dict[str,
     return {"event_facts": event_facts, "document_facts": document_facts}
 
 
-@pytest.mark.parametrize("rule_id", _RULE_IDS)
+@pytest.mark.parametrize("rule_id", tuple(rule_id for rule_id in _RULE_IDS if rule_id not in _COMPLETENESS_RULE_IDS))
 def test_surgery_rules_report_compliant_from_complete_authoritative_fact(
     rule_id: str,
 ) -> None:
@@ -58,7 +59,54 @@ def test_surgery_rules_report_compliant_from_complete_authoritative_fact(
     assert result.evidence == ("文书已核验",)
 
 
-@pytest.mark.parametrize("rule_id", _RULE_IDS)
+@pytest.mark.parametrize("rule_id", _COMPLETENESS_RULE_IDS)
+def test_024_to_026_reject_legacy_complete_fact_without_required_items(rule_id: str) -> None:
+    fact = {"presence": "present", "completeness": "complete"}
+
+    result = execute_surgery_consent_rules(_context(rule_id, fact), (rule_id,))[0]
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "semantic_fact_unavailable"
+
+
+@pytest.mark.parametrize("rule_id", _COMPLETENESS_RULE_IDS)
+def test_024_to_026_reject_direct_executor_marker_without_complete_contract(rule_id: str) -> None:
+    fact = {
+        "presence": "present",
+        "completeness": "complete",
+        "completeness_basis": "grounded_required_items",
+        "missing_items": (),
+    }
+
+    result = execute_surgery_consent_rules(_context(rule_id, fact), (rule_id,))[0]
+
+    assert result.status == "data_quality_gap"
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "missing_item"),
+    (
+        ("LX0916-024", "麻醉医师签名"),
+        ("LX0916-025", "出血量"),
+        ("LX0916-026", "患者离开手术室前三方逐次确认签字"),
+    ),
+)
+def test_024_to_026_name_the_specific_missing_required_item(
+    rule_id: str, missing_item: str
+) -> None:
+    fact = {
+        "presence": "present",
+        "completeness": "incomplete",
+        "completeness_basis": "grounded_required_items",
+        "missing_items": (missing_item,),
+    }
+
+    result = execute_surgery_consent_rules(_context(rule_id, fact), (rule_id,))[0]
+
+    assert result.status == "data_quality_gap"
+
+
+@pytest.mark.parametrize("rule_id", tuple(rule_id for rule_id in _RULE_IDS if rule_id not in _COMPLETENESS_RULE_IDS))
 def test_surgery_rules_report_explicit_defect_from_authoritative_fact(
     rule_id: str,
 ) -> None:
@@ -129,16 +177,21 @@ def test_anesthesia_record_content_rule_reports_conflicting_authoritative_facts(
         ("LX0916-021", "经治医师和术者签名"),
         ("LX0916-022", "拟施手术及麻醉方式"),
         ("LX0916-022", "患者及麻醉医师签名和日期"),
-        ("LX0916-024", "术前用药"),
-        ("LX0916-024", "手术起止时间"),
-        ("LX0916-024", "麻醉医师签名"),
     ),
 )
 def test_surgery_document_content_findings_keep_required_item_scope(
     rule_id: str, required_item: str
 ) -> None:
     result = execute_surgery_consent_rules(
-        _context(rule_id, {"presence": "present", "completeness": "incomplete"}),
+        _context(
+            rule_id,
+            {
+                "presence": "present",
+                "completeness": "incomplete",
+                "completeness_basis": "grounded_required_items",
+                "missing_items": (required_item,),
+            },
+        ),
         (rule_id,),
     )[0]
 

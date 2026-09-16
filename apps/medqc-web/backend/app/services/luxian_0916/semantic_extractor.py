@@ -11,6 +11,13 @@ import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
+from .surgical_document_completeness import (
+    ground_document_fact,
+    instruction_for,
+    is_target_fact,
+    sanitize_model_fact,
+)
+
 
 _MAX_TOTAL_CHARS = 20_000
 _DEFAULT_MAX_CHARS_PER_DOCUMENT = 800
@@ -294,7 +301,9 @@ def _prompt(*, documents: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) 
         "病例特点应综合病史、体格检查和辅助检查的阳性发现及有鉴别意义的阴性表现；"
         "诊疗计划应列具体检查和治疗措施。手术同意书包括术前诊断、手术名称、并发症、风险、患者意见/签名、经治医师和术者签名；"
         "麻醉同意书包括基本信息、术前诊断、拟手术及麻醉方式、影响麻醉的基础疾病/特殊情况、有创操作与监测、风险/并发症/意外、患者意见/签名、麻醉医师签名和日期；"
-        "麻醉记录包括术前情况与用药、术前/术中诊断、手术及麻醉方式、各项开始结束时间、期间用药、特殊情况处理、手术起止时间和麻醉医师签名。"
+        "麻醉记录包括患者一般情况、术前特殊情况、麻醉前用药、术前/术中诊断、手术方式、麻醉方式、手术日期、麻醉诱导及各项操作开始/结束时间、手术起止时间、麻醉期间用药名称/方式/剂量、特殊情况处理和麻醉医师签名。"
+        "手术记录包括患者一般项目、手术日期、术前诊断、术中诊断、手术名称、手术者及助手姓名、麻醉方法、手术经过、出血量、输血量、术中情况及处理。"
+        "手术安全核查记录必须覆盖麻醉实施前、手术开始前、患者离开手术室前三个阶段；每阶段均须有手术医师、麻醉医师和巡回护士三方逐次确认签字，并核查身份、部位、方式、风险及适用的设备、器械物品清点。标本和输血核对仅在文书明确适用时检查。"
         "这些仅用于选择事实枚举，不得输出结论状态。"
         "文书标题是识别共享来源中手术同意书、麻醉同意书等具体类型的重要事实，必须与正文共同核对。"
         "输入中未提供某类文书只表示本次受控上下文无可读材料，不等于该文书不存在；不得仅凭输入缺项输出 presence=missing。"
@@ -317,7 +326,8 @@ def _prompt(*, documents: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) 
         "documentation 仅可有 record_present、complete、analysis_recorded、specific_management_recorded、report_recorded、disposition_recorded、reason_recorded、basis_recorded，且全部为布尔值。"
         "document_facts 的键仅可为 surgery_consent、anesthesia_consent、anesthesia_record、surgery_record、surgery_safety_check、emergency_surgery_instruction、unplanned_reoperation_explanation、special_treatment_consent、critical_condition_notice、discharge_record、discharge_orders；"
         "每项必须有 presence=present、document_id、source_type；可有 completeness（complete/incomplete）。不得输出 presence=missing。"
-        "每个 document_id/source_type 必须精确引用下方给出的同一份文书。若文书 truncated=true，只能确认 presence=present，不能输出 completeness。"
+        + instruction_for(rule_ids)
+        + "每个 document_id/source_type 必须精确引用下方给出的同一份文书。若文书 truncated=true，只能确认 presence=present，不能输出 completeness。"
         "discharge_facts 仅可有 discharge_arranged、discharge_record_formed，且均为布尔值。"
         "所有无法由给定文书确认的键必须省略。只返回 JSON，不要 Markdown 或额外字段。"
         f"待服务规则：{json.dumps(list(rule_ids), ensure_ascii=False, separators=(',', ':'))}\n"
@@ -427,7 +437,14 @@ def _validate_facts(content: str) -> dict[str, Any]:
             raise ValueError("invalid course event fact")
     if not set(documents).issubset(_DOCUMENT_FACT_KEYS):
         raise ValueError("unknown document fact")
-    for fact in documents.values():
+    validated_documents: dict[str, dict[str, Any]] = {}
+    for fact_key, raw_fact in documents.items():
+        if is_target_fact(fact_key):
+            sanitized = sanitize_model_fact(fact_key, raw_fact)
+            if sanitized is not None:
+                validated_documents[fact_key] = sanitized
+            continue
+        fact = raw_fact
         if not isinstance(fact, Mapping) or not set(fact).issubset(
             {"presence", "completeness", "document_id", "source_type"}
         ):
@@ -452,7 +469,12 @@ def _validate_facts(content: str) -> dict[str, Any]:
     return {
         "semantic_facts": dict(semantic),
         "event_facts": dict(events),
-        "document_facts": dict(documents),
+        "document_facts": validated_documents
+        | {
+            key: dict(value)
+            for key, value in documents.items()
+            if not is_target_fact(key)
+        },
         "discharge_facts": dict(discharge),
     }
 
@@ -461,11 +483,18 @@ def _selected_document_index(
     documents: Sequence[Mapping[str, Any]],
 ) -> dict[tuple[str, str], Mapping[str, Any]]:
     result: dict[tuple[str, str], Mapping[str, Any]] = {}
+    duplicate_coordinates: set[tuple[str, str]] = set()
     for document in documents:
         source_type = str(document.get("source_type") or "").strip()
         document_id = str(document.get("document_id") or "").strip()
         if source_type and document_id:
-            result[(source_type, document_id)] = document
+            coordinate = (source_type, document_id)
+            if coordinate in result:
+                duplicate_coordinates.add(coordinate)
+            else:
+                result[coordinate] = document
+    for coordinate in duplicate_coordinates:
+        result.pop(coordinate, None)
     return result
 
 
@@ -479,10 +508,11 @@ def _is_complete_selected_document(
     return document is not None and document.get("truncated") is not True
 
 
-def _document_evidence(*, source_type: str, document_id: str, completeness: str | None) -> tuple[tuple[str, ...], tuple[dict[str, Any], ...]]:
+def _document_evidence(*, source_type: str, document_id: str, completeness: str | None, required_item_keys: Sequence[str] = ()) -> tuple[tuple[str, ...], tuple[dict[str, Any], ...]]:
     fields = ["presence"]
     if completeness:
         fields.append("completeness")
+    fields.extend(f"required_items.{key}" for key in required_item_keys)
     evidence = (f"已核对来源文书：{source_type} · {document_id}。",)
     anchors = (
         {
@@ -574,8 +604,21 @@ def _gate_facts_to_selected_documents(
             or (source_type, document_id) not in index
         ):
             continue
+        document = index[(source_type, document_id)]
         completeness = str(fact.get("completeness") or "").strip() or None
-        if completeness and not _is_complete_selected_document(
+        required_items: dict[str, str | None] | None = None
+        missing_items: tuple[str, ...] = ()
+        if is_target_fact(fact_key):
+            completeness = None
+            if _is_complete_selected_document(
+                index, source_type=source_type, document_id=document_id
+            ):
+                grounded = ground_document_fact(fact_key, fact, document)
+                if grounded is not None:
+                    required_items = grounded.required_items
+                    missing_items = grounded.missing_items
+                    completeness = "incomplete" if missing_items else "complete"
+        elif completeness and not _is_complete_selected_document(
             index, source_type=source_type, document_id=document_id
         ):
             completeness = None
@@ -583,6 +626,7 @@ def _gate_facts_to_selected_documents(
             source_type=source_type,
             document_id=document_id,
             completeness=completeness,
+            required_item_keys=tuple(required_items or ()),
         )
         sanitized_fact: dict[str, Any] = {
             "presence": "present",
@@ -593,6 +637,10 @@ def _gate_facts_to_selected_documents(
         }
         if completeness:
             sanitized_fact["completeness"] = completeness
+        if required_items is not None:
+            sanitized_fact["required_items"] = required_items
+            sanitized_fact["missing_items"] = missing_items
+            sanitized_fact["completeness_basis"] = "grounded_required_items"
         sanitized_document_facts[fact_key] = sanitized_fact
 
     return {

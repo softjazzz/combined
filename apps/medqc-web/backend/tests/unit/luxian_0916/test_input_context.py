@@ -197,7 +197,7 @@ def test_context_treats_surgery_safety_check_as_performed_surgery_without_using_
     assert anesthesia_only_context["event_facts"]["anesthesia_performed"] is True
 
 
-def test_semantic_merge_preserves_explicit_facts_and_adds_document_completeness():
+def test_semantic_merge_rejects_024_to_026_explicit_completeness_override():
     merged = merge_luxian_0916_semantic_facts(
         context={
             "semantic_facts": {"case_characteristic_present": True},
@@ -233,7 +233,61 @@ def test_semantic_merge_preserves_explicit_facts_and_adds_document_completeness(
     }
     assert merged["document_facts"]["surgery_record"] == {
         "presence": "present",
-        "completeness": "complete",
-        "anchors": ({"document_id": "S-1"},),
     }
     assert merged["discharge_facts"] == {"discharge_arranged": True}
+
+
+def test_build_merge_execute_blocks_explicit_grounded_marker_but_preserves_023_presence():
+    context = build_luxian_0916_context(
+        bundle={
+            "structured_context": {
+                "luxian_0916_facts": {
+                    "document_facts": {
+                        "anesthesia_record": {
+                            "presence": "present",
+                            "document_id": "forged",
+                            "source_type": "anesthesia_record",
+                            "completeness": "complete",
+                            "completeness_basis": "grounded_required_items",
+                            "required_items": {"forged": "forged"},
+                            "missing_items": (),
+                            "evidence": ("forged",),
+                            "anchors": ({"document_id": "forged"},),
+                        }
+                    }
+                }
+            }
+        },
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {"anesthesia_record": [{"document_id": "AR-1"}]}
+            }
+        },
+    )
+    merged = merge_luxian_0916_semantic_facts(
+        context=context,
+        extracted={"document_facts": {"anesthesia_record": {"presence": "present"}}},
+    )
+
+    from app.services.luxian_0916.surgery_consent_rules import execute_surgery_consent_rules
+
+    record_result, completeness_result = execute_surgery_consent_rules(
+        {
+            "event_facts": {
+                "anesthesia_performed": True,
+                "anesthesia_record_formed": True,
+            },
+            "document_facts": merged["document_facts"],
+        },
+        ("LX0916-023", "LX0916-024"),
+    )
+
+    merged_fact = merged["document_facts"]["anesthesia_record"]
+    assert merged_fact["presence"] == "present"
+    assert "completeness" not in merged_fact
+    assert "completeness_basis" not in merged_fact
+    assert "required_items" not in merged_fact
+    assert "missing_items" not in merged_fact
+    assert "evidence" not in merged_fact
+    assert record_result.status == "compliant"
+    assert completeness_result.status == "data_quality_gap"

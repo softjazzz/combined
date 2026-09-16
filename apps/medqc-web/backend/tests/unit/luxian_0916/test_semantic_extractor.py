@@ -9,6 +9,90 @@ from app.services.luxian_0916.semantic_extractor import extract_luxian_0916_fact
 from app.services.luxian_0916.surgery_consent_rules import execute_surgery_consent_rules
 
 
+_COMPLETENESS_CASES = (
+    (
+        "LX0916-024",
+        "anesthesia_record",
+        "anesthesia_record",
+        "AR-1",
+        (
+            "patient_general_information",
+            "preoperative_medication",
+            "preoperative_special_conditions",
+            "preoperative_diagnosis",
+            "intraoperative_diagnosis",
+            "surgery_method",
+            "anesthesia_method",
+            "surgery_date",
+            "anesthesia_induction_and_operation_times",
+            "surgery_start_end_time",
+            "anesthesia_medication_name",
+            "anesthesia_medication_method",
+            "anesthesia_medication_dose",
+            "special_circumstance_management",
+            "anesthesiologist_signature",
+        ),
+    ),
+    (
+        "LX0916-025",
+        "surgery_record",
+        "surgery_record",
+        "SR-1",
+        (
+            "patient_general_information",
+            "operation_datetime",
+            "preoperative_diagnosis",
+            "intraoperative_diagnosis",
+            "operation_name",
+            "operator_and_assistants",
+            "anesthesia_method",
+            "operation_procedure",
+            "blood_loss",
+            "transfusion_volume",
+            "intraoperative_condition_and_management",
+        ),
+    ),
+    (
+        "LX0916-026",
+        "surgery_safety_check",
+        "surgery_safecheck_record",
+        "SSC-1",
+        (
+            "before_anesthesia_identity_site_and_procedure",
+            "before_anesthesia_risk_assessment",
+            "before_anesthesia_three_party_signatures",
+            "before_incision_identity_site_and_procedure",
+            "before_incision_risk_and_equipment_confirmation",
+            "before_incision_three_party_signatures",
+            "before_exit_identity_and_actual_procedure_confirmation",
+            "before_exit_instrument_and_material_count_confirmation",
+            "before_exit_three_party_signatures",
+        ),
+    ),
+)
+
+
+def _completeness_payload(
+    *, source_type: str, document_id: str, item_keys: tuple[str, ...]
+) -> tuple[dict[str, Any], dict[str, str | None]]:
+    required_items = {key: f"{key}原文" for key in item_keys}
+    return (
+        {
+            "programmatic_timeline": {
+                "documents": {
+                    source_type: [
+                        {
+                            "document_id": document_id,
+                            "content": "；".join(required_items.values()),
+                        }
+                    ]
+                }
+            }
+        },
+        required_items,
+    )
+
+
 def _payload() -> dict[str, Any]:
     return {
         "programmatic_timeline": {
@@ -40,6 +124,403 @@ def _content(*, extra: dict[str, Any] | None = None) -> str:
     if extra:
         facts.update(extra)
     return json.dumps(facts, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rule_id", "fact_key", "source_type", "document_id", "item_keys"),
+    _COMPLETENESS_CASES,
+)
+async def test_derives_completeness_only_from_exact_bound_required_items(
+    rule_id: str,
+    fact_key: str,
+    source_type: str,
+    document_id: str,
+    item_keys: tuple[str, ...],
+) -> None:
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+    calls = 0
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    fact_key: {
+                                        "presence": "present",
+                                        "document_id": document_id,
+                                        "source_type": source_type,
+                                        "required_items": required_items,
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+
+    fact = result["document_facts"][fact_key]
+    assert calls == 1
+    assert result["diagnostic"]["llm_call_count"] == 1
+    assert fact["required_items"] == required_items
+    assert fact["missing_items"] == ()
+    assert fact["completeness_basis"] == "grounded_required_items"
+    assert fact["completeness"] == "complete"
+    event_key = {
+        "LX0916-024": "anesthesia_record_formed",
+        "LX0916-025": "surgery_performed",
+        "LX0916-026": "surgery_performed",
+    }[rule_id]
+    rule_result = execute_surgery_consent_rules(
+        {"event_facts": {event_key: True}, "document_facts": result["document_facts"]},
+        (rule_id,),
+    )[0]
+    assert rule_result.status == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_derives_specific_missing_item_from_null_required_item() -> None:
+    rule_id, fact_key, source_type, document_id, item_keys = _COMPLETENESS_CASES[2]
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+    required_items["before_exit_three_party_signatures"] = None
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    fact_key: {
+                                        "presence": "present",
+                                        "document_id": document_id,
+                                        "source_type": source_type,
+                                        "required_items": required_items,
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+
+    fact = result["document_facts"][fact_key]
+    assert fact["completeness_basis"] == "grounded_required_items"
+    assert fact["completeness"] == "incomplete"
+    assert fact["missing_items"] == ("患者离开手术室前三方逐次确认签字",)
+    rule_result = execute_surgery_consent_rules(
+        {"event_facts": {"surgery_performed": True}, "document_facts": result["document_facts"]},
+        (rule_id,),
+    )[0]
+    assert rule_result.status == "non_compliant"
+    assert rule_result.diagnostics["missing_items"] == fact["missing_items"]
+
+
+@pytest.mark.asyncio
+async def test_rejects_legacy_complete_and_unbound_required_item_quote_for_024_to_026() -> None:
+    rule_id, fact_key, source_type, document_id, item_keys = _COMPLETENESS_CASES[0]
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    fact_key: {
+                                        "presence": "present",
+                                        "completeness": "complete",
+                                        "document_id": document_id,
+                                        "source_type": source_type,
+                                        "required_items": {
+                                            **required_items,
+                                            "anesthesiologist_signature": "绑定文书中不存在的引用",
+                                        },
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+
+    assert result["document_facts"][fact_key] == {
+        "presence": "present",
+        "document_id": document_id,
+        "source_type": source_type,
+        "evidence": (f"已核对来源文书：{source_type} · {document_id}。",),
+        "anchors": (
+            {
+                "document_type": source_type,
+                "document_id": document_id,
+                "fields": ["presence"],
+            },
+        ),
+    }
+    rule_result = execute_surgery_consent_rules(
+        {
+            "event_facts": {"anesthesia_record_formed": True},
+            "document_facts": result["document_facts"],
+        },
+        (rule_id,),
+    )[0]
+    assert rule_result.status == "data_quality_gap"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rule_id", "fact_key", "source_type", "document_id", "item_keys", "malformed_items"),
+    (
+        (*_COMPLETENESS_CASES[0], None),
+        (*_COMPLETENESS_CASES[1], {}),
+        (*_COMPLETENESS_CASES[2], {"before_anesthesia_identity_site_and_procedure": ""}),
+    ),
+)
+async def test_target_contract_malformed_at_fact_scope_preserves_anesthesia_record_presence(
+    rule_id: str,
+    fact_key: str,
+    source_type: str,
+    document_id: str,
+    item_keys: tuple[str, ...],
+    malformed_items: dict[str, str] | None,
+) -> None:
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+    model_fact: dict[str, Any] = {
+        "presence": "present",
+        "document_id": document_id,
+        "source_type": source_type,
+    }
+    if malformed_items is None:
+        model_fact["completeness"] = "complete"
+    else:
+        model_fact["required_items"] = malformed_items
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={"document_facts": {fact_key: model_fact}}
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+
+    fact = result["document_facts"][fact_key]
+    assert set(fact) == {"presence", "document_id", "source_type", "evidence", "anchors"}
+    assert "completeness" not in fact
+    assert "completeness_basis" not in fact
+
+    if fact_key == "anesthesia_record":
+        present_result, completeness_result = execute_surgery_consent_rules(
+            {
+                "event_facts": {
+                    "anesthesia_performed": True,
+                    "anesthesia_record_formed": True,
+                },
+                "document_facts": result["document_facts"],
+            },
+            ("LX0916-023", "LX0916-024"),
+        )
+        assert present_result.status == "compliant"
+        assert completeness_result.status == "data_quality_gap"
+
+
+@pytest.mark.asyncio
+async def test_rejects_duplicate_and_cross_document_required_item_quotes() -> None:
+    rule_id, fact_key, source_type, document_id, item_keys = _COMPLETENESS_CASES[1]
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+    other_quote = "仅在另一份文书中的连续引用"
+    payload["programmatic_timeline"]["documents"][source_type].append(
+        {"document_id": "SR-2", "content": other_quote}
+    )
+    required_items[item_keys[0]] = other_quote
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    fact_key: {
+                                        "presence": "present",
+                                        "document_id": document_id,
+                                        "source_type": source_type,
+                                        "required_items": required_items,
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+
+    assert "completeness" not in result["document_facts"][fact_key]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rule_id", "fact_key", "source_type", "document_id", "item_keys"),
+    _COMPLETENESS_CASES,
+)
+async def test_truncated_target_document_never_produces_grounded_completeness(
+    rule_id: str,
+    fact_key: str,
+    source_type: str,
+    document_id: str,
+    item_keys: tuple[str, ...],
+) -> None:
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+    documents = payload["programmatic_timeline"]["documents"][source_type]
+    documents[0]["content"] += "补充记录。" * 1000
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    fact_key: {
+                                        "presence": "present",
+                                        "document_id": document_id,
+                                        "source_type": source_type,
+                                        "required_items": required_items,
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+
+    assert "completeness" not in result["document_facts"][fact_key]
+
+
+@pytest.mark.asyncio
+async def test_rejects_reused_required_item_quote_and_duplicate_document_coordinate() -> None:
+    rule_id, fact_key, source_type, document_id, item_keys = _COMPLETENESS_CASES[0]
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+    shared_quote = required_items[item_keys[0]]
+    required_items[item_keys[1]] = shared_quote
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    fact_key: {
+                                        "presence": "present",
+                                        "document_id": document_id,
+                                        "source_type": source_type,
+                                        "required_items": required_items,
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    reused = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+    assert "completeness" not in reused["document_facts"][fact_key]
+
+    payload["programmatic_timeline"]["documents"][source_type].append(
+        {"document_id": document_id, "content": "另一份重复坐标文书。"}
+    )
+    unique_quotes = {key: f"{key}另一引用" for key in item_keys}
+    payload["programmatic_timeline"]["documents"][source_type][0]["content"] = "；".join(
+        unique_quotes.values()
+    )
+
+    async def generate_unique(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    fact_key: {
+                                        "presence": "present",
+                                        "document_id": document_id,
+                                        "source_type": source_type,
+                                        "required_items": unique_quotes,
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    duplicate_coordinate = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate_unique
+    )
+    assert fact_key not in duplicate_coordinate["document_facts"]
 
 
 @pytest.mark.asyncio

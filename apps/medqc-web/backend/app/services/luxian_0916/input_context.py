@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .surgical_document_completeness import is_target_fact, validated_missing_items
+
 
 _DOCUMENT_FACT_SOURCES = {
     "surgery_consent": "surgery_inform_consent",
@@ -82,7 +84,13 @@ def build_luxian_0916_context(
     _project_patient_age(documents, _mapping(explicit.get("patient")))
 
     document_facts = _presence_facts(source_documents)
-    document_facts.update(_mapping(explicit.get("document_facts")))
+    document_facts.update(
+        {
+            key: value
+            for key, value in _mapping(explicit.get("document_facts")).items()
+            if not is_target_fact(key)
+        }
+    )
 
     event_facts: dict[str, Any] = {}
     for fact_key, source_key in (
@@ -145,6 +153,14 @@ def merge_luxian_0916_semantic_facts(
     for key in set(extracted_documents) | set(explicit_documents):
         extracted_fact = _mapping(extracted_documents.get(key))
         explicit_fact = _mapping(explicit_documents.get(key))
+        if is_target_fact(key):
+            if validated_missing_items(key, extracted_fact) is not None:
+                document_facts[key] = extracted_fact
+            else:
+                document_facts[key] = _presence_only_fact(
+                    explicit_fact or extracted_fact
+                )
+            continue
         document_facts[key] = {**extracted_fact, **explicit_fact}
     merged["document_facts"] = document_facts
     return merged
@@ -152,6 +168,12 @@ def merge_luxian_0916_semantic_facts(
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _presence_only_fact(fact: Mapping[str, Any]) -> dict[str, Any]:
+    if fact.get("presence") == "present":
+        return {"presence": "present"}
+    return {}
 
 
 def _project_patient_age(documents: dict[str, Any], explicit_patient: Mapping[str, Any]) -> None:
