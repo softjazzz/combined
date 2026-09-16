@@ -1,16 +1,10 @@
 <template>
-  <section
-    class="exam-event-block"
-    data-testid="exam-event-facts"
-  >
+  <section class="exam-event-block" data-testid="exam-event-facts">
     <header class="exam-event-header">
       <h4>逐次检查核对</h4>
       <span>按报告时间展示适用性与分析记录</span>
     </header>
-    <div
-      class="exam-event-summary"
-      data-testid="exam-event-summary"
-    >
+    <div class="exam-event-summary" data-testid="exam-event-summary">
       <span>{{ presentation.totalLabel }}</span>
       <span>{{ presentation.positiveLabel }}</span>
       <span class="is-danger">{{ presentation.issueLabel }}</span>
@@ -25,10 +19,7 @@
         <div class="exam-event-row-head">
           <span class="exam-event-position">第 {{ event.eventPosition }} 次</span>
           <time>{{ event.reportTime }}</time>
-          <span
-            class="exam-event-status"
-            :class="`is-${event.tone}`"
-          >{{ event.statusLabel }}</span>
+          <span class="exam-event-status" :class="`is-${event.tone}`">{{ event.statusLabel }}</span>
         </div>
         <p>{{ event.description }}</p>
       </article>
@@ -46,10 +37,11 @@ defineProps<{
 
 <style scoped>
 .exam-event-block {
+  margin: 0 14px 12px;
   overflow: hidden;
-  border: 1px solid rgba(0, 102, 204, 0.13);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(99, 119, 145, 0.12);
+  border-radius: 10px;
+  background: #f8fafc;
 }
 
 .exam-event-header {
@@ -57,22 +49,22 @@ defineProps<{
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(18, 38, 63, 0.07);
-  background: rgba(22, 119, 255, 0.035);
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .exam-event-header h4 {
   margin: 0;
-  color: rgba(20, 42, 68, 0.78);
-  font-size: 12px;
-  font-weight: 700;
+  color: #344256;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 18px;
 }
 
 .exam-event-header > span {
   color: rgba(20, 42, 68, 0.5);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 17px;
 }
 
@@ -80,17 +72,17 @@ defineProps<{
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 9px 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.065);
 }
 
 .exam-event-summary span {
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.065);
-  color: #245f9e;
-  font-size: 11px;
-  font-weight: 650;
+  background: rgba(0, 122, 255, 0.07);
+  color: #366b9b;
+  font-size: 12px;
+  font-weight: 400;
   line-height: 18px;
 }
 
@@ -106,7 +98,7 @@ defineProps<{
 .exam-event-row {
   display: grid;
   gap: 4px;
-  padding: 9px 10px;
+  padding: 11px 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.055);
 }
 
@@ -124,14 +116,14 @@ defineProps<{
 .exam-event-position {
   color: rgba(29, 29, 31, 0.72);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 18px;
 }
 
 .exam-event-row time {
   color: rgba(29, 29, 31, 0.54);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 11px;
+  font-family: inherit;
+  font-size: 12px;
   line-height: 18px;
   font-variant-numeric: tabular-nums;
 }
@@ -141,8 +133,8 @@ defineProps<{
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.045);
   color: rgba(29, 29, 31, 0.58);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 400;
   line-height: 18px;
   white-space: nowrap;
 }
@@ -165,8 +157,9 @@ defineProps<{
 .exam-event-row p {
   margin: 0;
   color: rgba(29, 29, 31, 0.72);
-  font-size: 12px;
-  line-height: 19px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 21px;
 }
 
 @container (max-width: 560px) {

@@ -35,10 +35,15 @@ export const NOT_APPLICABLE_UNKNOWN_TEXT = '未确认本次检查为需分析的
 export function buildExamLabEventPresentation(
   item: SingleRecordQcResultItem,
 ): ExamLabEventPresentation | null {
-  if (!['LX0609-012', 'LX0609-015'].includes(item.rule_id)) return null
+  const analysisRule = ['LX0609-012', 'LX0609-015'].includes(item.rule_id)
+  const recordingRule = ['LX0609-011', 'LX0609-014'].includes(item.rule_id)
+  if (!analysisRule && !recordingRule) return null
   const facts = item.customer_display_facts
+  const expectedRequirement = analysisRule
+    ? 'positive_result_analysis_within_24h'
+    : 'result_recording_within_24h'
   if (
-    facts?.requirement !== 'positive_result_analysis_within_24h' ||
+    facts?.requirement !== expectedRequirement ||
     (facts.subject !== 'ct_mri' && facts.subject !== 'culture_susceptibility') ||
     facts.threshold_hours !== 24 ||
     !Array.isArray(facts.event_results) ||
@@ -62,9 +67,11 @@ export function buildExamLabEventPresentation(
       eventPosition !== index + 1 ||
       typeof reportTime !== 'string' ||
       !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(reportTime) ||
-      (positiveState !== 'positive' &&
+      (analysisRule &&
+        positiveState !== 'positive' &&
         positiveState !== 'negative' &&
         positiveState !== 'unknown') ||
+      (recordingRule && positiveState !== 'not_relevant') ||
       ![
         'non_compliant',
         'compliant',
@@ -81,6 +88,55 @@ export function buildExamLabEventPresentation(
     }
 
     const positive = positiveState === 'positive'
+    const responseRecordTime =
+      typeof event.response_record_time === 'string' ? event.response_record_time : ''
+    const intervalHours =
+      typeof event.interval_hours === 'number' && Number.isFinite(event.interval_hours)
+        ? event.interval_hours
+        : null
+    if (recordingRule) {
+      if (eventStatus === 'compliant') {
+        const timing =
+          responseRecordTime && intervalHours !== null
+            ? `；最早相关病程 ${responseRecordTime}，间隔 ${intervalHours} 小时`
+            : ''
+        events.push({
+          eventPosition,
+          reportTime,
+          positive: false,
+          eventStatus,
+          tone: 'success',
+          statusLabel: '已记录',
+          description: `已完成报告结果记录${timing}`,
+        })
+        continue
+      }
+      if (eventStatus === 'non_compliant') {
+        events.push({
+          eventPosition,
+          reportTime,
+          positive: false,
+          eventStatus,
+          tone: 'danger',
+          statusLabel: '未记录',
+          description: '报告后 24 小时内未找到报告结果记录',
+        })
+        continue
+      }
+      events.push({
+        eventPosition,
+        reportTime,
+        positive: false,
+        eventStatus,
+        tone: eventStatus === 'not_applicable' ? 'neutral' : 'warning',
+        statusLabel: eventStatus === 'not_applicable' ? '不适用' : '待核实',
+        description:
+          eventStatus === 'not_applicable'
+            ? '本次事件不适用'
+            : '资料待核实，暂无法确认报告结果是否已记录',
+      })
+      continue
+    }
     if (eventStatus === 'not_applicable') {
       events.push({
         eventPosition,
@@ -136,11 +192,14 @@ export function buildExamLabEventPresentation(
   const subject = facts.subject === 'ct_mri' ? 'CT/MRI' : '细菌培养及药敏'
   const positiveCount = events.filter((event) => event.positive).length
   const issueCount = events.filter((event) => event.eventStatus === 'non_compliant').length
+  const completedCount = events.filter((event) => event.eventStatus === 'compliant').length
   return {
-    headline: `共核对 ${events.length} 次 ${subject} 检查；${positiveCount} 次阳性结果中，${issueCount} 次未在 24 小时内完成分析。`,
+    headline: recordingRule
+      ? `共核对 ${events.length} 次 ${subject} 检查；${completedCount} 次已记录，${issueCount} 次未在 24 小时内记录。`
+      : `共核对 ${events.length} 次 ${subject} 检查；${positiveCount} 次阳性结果中，${issueCount} 次未在 24 小时内完成分析。`,
     totalLabel: `检查 ${events.length} 次`,
-    positiveLabel: `阳性 ${positiveCount} 次`,
-    issueLabel: `未完成分析 ${issueCount} 次`,
+    positiveLabel: recordingRule ? `已记录 ${completedCount} 次` : `阳性 ${positiveCount} 次`,
+    issueLabel: recordingRule ? `未记录 ${issueCount} 次` : `未完成分析 ${issueCount} 次`,
     events,
   }
 }

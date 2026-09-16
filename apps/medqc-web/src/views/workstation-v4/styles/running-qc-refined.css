@@ -733,14 +733,17 @@
 }
 
 .running-qc-apple :deep(.preview-primary-action) {
-  padding: 0 16px 14px;
+  padding: 0;
+  margin-left: auto;
 }
 .running-qc-apple :deep(.preview-primary-action:empty) {
   display: none;
 }
 .running-qc-apple :deep(.preview-primary-action .full-result-button) {
-  width: 100%;
-  min-height: 40px;
+  width: auto;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12px;
   background: #007aff;
   color: #fff;
   box-shadow: 0 2px 6px rgba(0, 122, 255, 0.16);
@@ -750,4 +753,118 @@
 }
 .running-qc-apple :deep(.preview-primary-action .full-result-button:hover) {
   background: #0069dc;
+}
+
+/* 复核预览：标题与入口同层，患者资料融入背景，问题独立成卡。 */
+.running-qc-apple :deep(.preview-heading) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 16px 12px;
+}
+.running-qc-apple :deep(.patient-context) {
+  margin: 0 16px 8px;
+  padding: 12px 0 18px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(99, 119, 145, 0.12);
+  border-radius: 0;
+  box-shadow: none;
+}
+.running-qc-apple :deep(.patient-context dt) {
+  color: #8893a2;
+}
+.running-qc-apple :deep(.patient-context dd) {
+  color: #4c596b;
+}
+.running-qc-apple :deep(.item-meta) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.running-qc-apple :deep(.status-label) {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #f5f7fa;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.running-qc-apple :deep(.preview-item-actions) {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f5;
+}
+.running-qc-apple :deep(.preview-item-actions .suggestion-details) {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.running-qc-apple :deep(.preview-item-actions .text-button) {
+  flex-shrink: 0;
+  margin: 0 0 0 auto;
+}
+.running-qc-apple :deep(.preview-item-actions summary) {
+  line-height: 22px;
+}
+
+/* 正文与操作建议以常规字重呈现，避免继承侧栏标题字重。 */
+.running-qc-apple :deep(.preview-item .item-summary),
+.running-qc-apple :deep(.preview-item .full-text),
+.running-qc-apple :deep(.preview-item .suggestion-content) {
+  font-weight: 400;
+  font-synthesis: none;
+  color: #536174;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.running-qc-apple :deep(.preview-item .section-label) {
+  font-size: 13px;
+  font-weight: 500;
+  color: #344256;
+  margin: 16px 0 6px;
+}
+.running-qc-apple :deep(.preview-item .item-summary) {
+  color: #637084;
+  font-weight: 400;
+  padding-left: 12px;
+  border-left: 2px solid #dce8f5;
+}
+.running-qc-apple :deep(.preview-item-actions:has(details[open])) {
+  flex-wrap: wrap;
+}
+.running-qc-apple :deep(.preview-item-actions details[open]) {
+  flex-basis: 100%;
+}
+.running-qc-apple :deep(.suggestion-content .full-text) {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  column-gap: 12px;
+  padding: 10px 0;
+  margin: 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.running-qc-apple :deep(.suggestion-content .full-text:last-child) {
+  border-bottom: 0;
+}
+.running-qc-apple :deep(.suggestion-content .full-text:not(:has(.suggestion-term))) {
+  display: block;
+}
+.running-qc-apple :deep(.suggestion-term) {
+  color: #344256;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: inherit;
+}
+.running-qc-apple :deep(.suggestion-description) {
+  color: #637084;
+  font-size: 13px;
+  font-weight: 400;
 }

@@ -2022,3 +2022,5 @@ const {
 </script>
 
 <style scoped src="./CustomerSampleValidationView.css"></style>
+
+<style scoped src="./styles/customer-sample-refined.css"></style>

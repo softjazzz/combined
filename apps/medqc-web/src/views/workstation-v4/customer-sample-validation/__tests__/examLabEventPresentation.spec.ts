@@ -241,10 +241,10 @@ describe('012/015 逐次检查非法输入返回 null', () => {
     },
   )
 
-  it('非 012/015 规则返回 null', () => {
+  it('非检查检验逐次核对规则返回 null', () => {
     expect(
       buildExamLabEventPresentation(
-        buildItem([buildRow('not_applicable', 'positive', 0)], 'LX0609-011'),
+        buildItem([buildRow('not_applicable', 'positive', 0)], 'LX0609-010'),
       ),
     ).toBeNull()
   })
@@ -255,6 +255,62 @@ describe('012/015 逐次检查非法输入返回 null', () => {
     facts.event_count = 2
 
     expect(buildExamLabEventPresentation(item)).toBeNull()
+  })
+})
+
+describe('011/014 报告结果记录逐次核对', () => {
+  it('将多次检查转换为摘要和逐次状态，不再展示一整段编号文本', () => {
+    const item = buildItem(
+      [
+        {
+          event_status: 'compliant',
+          positive_state: 'not_relevant',
+          response_record_count: 1,
+          response_record_time: '2025-08-13 11:00:00',
+          interval_hours: 16.01,
+        },
+        {
+          event_status: 'non_compliant',
+          positive_state: 'not_relevant',
+          response_record_count: 0,
+        },
+        {
+          event_status: 'compliant',
+          positive_state: 'not_relevant',
+          response_record_count: 1,
+          response_record_time: '2025-08-16 09:50:01',
+          interval_hours: 22.75,
+        },
+      ],
+      'LX0609-011',
+    )
+    const facts = item.customer_display_facts as Record<string, unknown>
+    facts.requirement = 'result_recording_within_24h'
+
+    const presentation = buildExamLabEventPresentation(item)
+
+    expect(presentation?.headline).toBe(
+      '共核对 3 次 CT/MRI 检查；2 次已记录，1 次未在 24 小时内记录。',
+    )
+    expect(presentation?.positiveLabel).toBe('已记录 2 次')
+    expect(presentation?.issueLabel).toBe('未记录 1 次')
+    expect(presentation?.events).toMatchObject([
+      {
+        statusLabel: '已记录',
+        tone: 'success',
+        description: '已完成报告结果记录；最早相关病程 2025-08-13 11:00:00，间隔 16.01 小时',
+      },
+      {
+        statusLabel: '未记录',
+        tone: 'danger',
+        description: '报告后 24 小时内未找到报告结果记录',
+      },
+      {
+        statusLabel: '已记录',
+        tone: 'success',
+        description: '已完成报告结果记录；最早相关病程 2025-08-16 09:50:01，间隔 22.75 小时',
+      },
+    ])
   })
 })
 

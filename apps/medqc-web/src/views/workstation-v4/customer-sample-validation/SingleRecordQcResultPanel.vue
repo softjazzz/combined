@@ -197,6 +197,12 @@
           </span>
         </button>
 
+        <ExamLabEventResultBlock
+          v-if="isDocumentGroupExpandedForItem(item.key) && examLabEventPresentation(item)"
+          class="result-event-overview"
+          :presentation="examLabEventPresentation(item)!"
+        />
+
         <section
           v-if="
             isDocumentGroupExpandedForItem(item.key) &&
@@ -270,10 +276,6 @@
             data-testid="single-record-detail-grid"
           >
             <div class="detail-column detail-column-main">
-              <ExamLabEventResultBlock
-                v-if="examLabEventPresentation(item)"
-                :presentation="examLabEventPresentation(item)!"
-              />
               <section
                 v-if="implantEventFacts(item).length"
                 class="detail-block implant-event-block"
