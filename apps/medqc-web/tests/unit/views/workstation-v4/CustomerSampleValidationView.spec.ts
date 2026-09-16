@@ -1825,8 +1825,44 @@ describe('CustomerSampleValidationView', () => {
     const wrapper = await mountView()
 
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
+    expect(wrapper.text()).toContain('Luxian0916 质控点 v1')
     expect(wrapper.text()).toContain('SC 内涵质控全量 v1')
     expect(wrapper.text()).toContain('内置目录')
+  })
+
+  it('Luxian0916 需主动选择，并且提交时不携带 LX0609 专属范围参数', async () => {
+    const wrapper = await mountView()
+
+    const defaultCard = wrapper.find('[data-rule-set-key="luxian_0609_qc_v1"]')
+    const luxian0916Card = wrapper.find('[data-rule-set-key="luxian_0916_qc_v1"]')
+    expect(defaultCard.classes()).toContain('is-selected')
+    expect(luxian0916Card.exists()).toBe(true)
+    expect(luxian0916Card.classes()).not.toContain('is-selected')
+
+    await luxian0916Card.trigger('click')
+    await flushPromises()
+    expect(luxian0916Card.classes()).toContain('is-selected')
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0916质控'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        ...buildRunIdentity('V001'),
+        max_parallel_records: 16,
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0916_qc_v1',
+      },
+      { timeout: 90000 },
+    )
+    const submittedPayload = runManualSamplePool.mock.calls[0][1] as Record<string, unknown>
+    expect(submittedPayload).not.toHaveProperty('selected_rule_ids')
+    expect(submittedPayload).not.toHaveProperty('group_by_luxian_family')
   })
 
   it('可从更多操作导出泸县0609专项评估报告', async () => {

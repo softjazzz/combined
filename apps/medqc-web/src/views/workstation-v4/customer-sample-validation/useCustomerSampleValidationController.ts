@@ -89,6 +89,7 @@ import {
 } from './customerSampleValidationPresentation'
 import {
   LUXIAN_0609_RULE_SET_KEY,
+  LUXIAN_0916_RULE_SET_KEY,
   FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
   SC_SAMPLE_RULE_SET_KEY,
   PROGRAMMATIC_RULE_SET_KEY,
@@ -403,6 +404,9 @@ export function useCustomerSampleValidationController() {
   )
   const isLuxian0609Mode = computed(
     () => selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY,
+  )
+  const isLuxian0916Mode = computed(
+    () => selectedRuleSet.value?.rule_set_key === LUXIAN_0916_RULE_SET_KEY,
   )
   const luxianRuleFamilies = computed<LuxianRuleFamilyView[]>(() => {
     if (luxian0609RuleCatalog.value.length) {
@@ -781,7 +785,7 @@ export function useCustomerSampleValidationController() {
   })
 
   const requiresSelectedRecords = computed(
-    () => isFormalFastScreenMode.value || isLuxian0609Mode.value,
+    () => isFormalFastScreenMode.value || isLuxian0609Mode.value || isLuxian0916Mode.value,
   )
 
   const runButtonDisabled = computed(
@@ -793,7 +797,9 @@ export function useCustomerSampleValidationController() {
       ? '开始SC质控'
       : isLuxian0609Mode.value
         ? '开始0609质控'
-        : '开始样本验证',
+        : isLuxian0916Mode.value
+          ? '开始0916质控'
+          : '开始样本验证',
   )
 
   const runButtonText = computed(() =>
@@ -813,6 +819,7 @@ export function useCustomerSampleValidationController() {
   )
 
   const selectedRunScopeSummary = computed(() => {
+    if (isLuxian0916Mode.value) return 'Luxian0916 独立规则包'
     if (!isLuxian0609Mode.value) return validationModeLabel(selectedValidationMode.value)
     if (!selectedLuxianCustomerRuleIds.value.length) return '全量0609'
     const selected = new Set(selectedLuxianCustomerRuleIds.value)
@@ -1305,6 +1312,7 @@ export function useCustomerSampleValidationController() {
     }
     const priority = [
       LUXIAN_0609_RULE_SET_KEY,
+      LUXIAN_0916_RULE_SET_KEY,
       FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
       SC_SAMPLE_RULE_SET_KEY,
       PROGRAMMATIC_RULE_SET_KEY,
@@ -2070,9 +2078,11 @@ export function useCustomerSampleValidationController() {
     }
     const creatingMessage = isLuxian0609Mode.value
       ? '正在创建泸县0609验证任务...'
-      : isFormalFastScreenMode.value
-        ? '正式84条质控任务已提交，正在准备执行'
-        : '正在创建样本验证任务...'
+      : isLuxian0916Mode.value
+        ? '正在创建Luxian0916验证任务...'
+        : isFormalFastScreenMode.value
+          ? '正式84条质控任务已提交，正在准备执行'
+          : '正在创建样本验证任务...'
     message.loading({
       content: creatingMessage,
       key: runKey,

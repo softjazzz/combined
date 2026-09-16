@@ -160,6 +160,42 @@ def test_authorized_role_can_read_shared_pool_latest_job_created_by_another_admi
 
 @pytest.mark.unit
 @pytest.mark.api
+def test_shared_luxian_0916_job_preserves_independent_result_contract(client, monkeypatch):
+    job = _workspace_job(rule_set_key="luxian_0916_qc_v1")
+    job["items"] = [
+        {
+            "institute_id": "I-1",
+            "patient_id": "P-1",
+            "visit_id": "V-1",
+            "rule_id": "LX0916-001",
+            "status": "data_quality_gap",
+            "reason_code": "semantic_fact_unavailable",
+            "findings": "缺少权威语义事实。",
+            "evidence": [],
+            "suggestion": "补齐资料后复核。",
+            "document_anchors": [],
+            "diagnostics": {"family": "admission"},
+        }
+    ]
+    workspace = _WorkspaceStub({SHARED_JOB_OWNER: job})
+    pool = _SharedPoolStub((SHARED_POOL_ID, SHARED_JOB_OWNER))
+    _install_services(monkeypatch, workspace=workspace, pool=pool)
+    _set_user(client, role="sync_admin")
+
+    response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{SHARED_JOB_ID}")
+
+    assert response.status_code == 200
+    response_data = response.json()["data"]
+    assert response_data["read_only"] is True
+    assert "created_by" not in response_data
+    assert "filters" not in response_data
+    assert response_data["items"][0]["status"] == "data_quality_gap"
+    assert response_data["items"][0]["reason_code"] == "semantic_fact_unavailable"
+    assert response_data["items"][0]["diagnostics"] == {"family": "admission"}
+
+
+@pytest.mark.unit
+@pytest.mark.api
 @pytest.mark.parametrize(
     ("resolved", "candidate"),
     [

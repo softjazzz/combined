@@ -14,10 +14,7 @@
       <div class="qc-task-status__layout">
         <div class="qc-task-status__header">
           <div class="qc-task-status__heading">
-            <span
-              class="qc-task-status__indicator"
-              aria-hidden="true"
-            />
+            <span class="qc-task-status__indicator" aria-hidden="true" />
             <div class="qc-task-status__title">
               <div>
                 <strong>{{ presentation?.statusTitle }}</strong>
@@ -53,12 +50,7 @@
               v-if="task.status === 'completed' && !task.read_only"
               placement="bottomRight"
             >
-              <a-button
-                size="small"
-                data-testid="qc-task-more-actions"
-              >
-                更多
-              </a-button>
+              <a-button size="small" data-testid="qc-task-more-actions"> 更多 </a-button>
               <template #overlay>
                 <a-menu>
                   <a-menu-item
@@ -114,10 +106,7 @@
             <i :style="{ width: `${presentation.progressPercent}%` }" />
           </div>
 
-          <div
-            v-if="presentation?.isRunning"
-            class="qc-task-status__progress-detail"
-          >
+          <div v-if="presentation?.isRunning" class="qc-task-status__progress-detail">
             <strong>
               {{
                 presentation.progressPercent > 0
@@ -143,10 +132,7 @@
               }}
             </div>
             <div class="qc-task-status__live-result-content">
-              <Transition
-                name="qc-live-result"
-                mode="out-in"
-              >
+              <Transition name="qc-live-result" mode="out-in">
                 <div
                   v-if="currentLiveResult"
                   :key="currentLiveResult.key"
@@ -184,6 +170,13 @@
               <span>{{ presentation?.recordProgressText }}</span>
               <span>{{ presentation?.resultProgressText }}</span>
               <span>{{ presentation?.scopeText }}</span>
+              <span
+                v-if="presentation?.diagnosticRuleFailureCount"
+                class="qc-task-status__diagnostic-warning"
+                data-testid="qc-task-diagnostic-warning"
+              >
+                {{ presentation.diagnosticRuleFailureCount }} 项规则未完成，请查看技术详情
+              </span>
               <span>更新 {{ presentation?.updatedText }}</span>
             </div>
 
@@ -196,11 +189,7 @@
                 class="qc-task-status__chips qc-task-status__chips--attention"
                 data-testid="qc-task-attention-statuses"
               >
-                <span
-                  v-for="chip in attentionStatusChips"
-                  :key="chip.key"
-                  :class="chip.className"
-                >
+                <span v-for="chip in attentionStatusChips" :key="chip.key" :class="chip.className">
                   {{ chip.label }} <strong>{{ chip.value }}</strong>
                 </span>
               </div>
@@ -210,11 +199,7 @@
                 data-testid="qc-task-other-statuses"
               >
                 <span>其他结果</span>
-                <span
-                  v-for="chip in neutralStatusChips"
-                  :key="chip.key"
-                  :class="chip.className"
-                >
+                <span v-for="chip in neutralStatusChips" :key="chip.key" :class="chip.className">
                   {{ chip.label }} <strong>{{ chip.value }}</strong>
                 </span>
               </div>
@@ -259,6 +244,7 @@ const attentionStatusKeys = new Set([
   'technical_error',
   'non_compliant',
   'data_gap',
+  'data_quality_gap',
   'uncertain',
   'ai_suggested_non_compliant',
 ])
@@ -668,6 +654,11 @@ onBeforeUnmount(stopLiveResultRotation)
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
   line-height: 20px;
+}
+
+.qc-task-status__diagnostic-warning {
+  color: #b54708;
+  font-weight: 600;
 }
 
 .qc-task-status__result-groups {

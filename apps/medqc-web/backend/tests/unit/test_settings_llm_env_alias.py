@@ -21,6 +21,7 @@ LLM_ENV_KEYS = [
     "LLM_DEFAULT_PROVIDER",
     "LLM_TIMEOUT_SECONDS",
     "QC_BATCH_RECORD_MAX_CONCURRENCY",
+    "LUXIAN_0916_RECORD_MAX_CONCURRENCY",
     "LLM_HTTP_MAX_CONCURRENCY",
     "DEEPSEEK_API_ENDPOINT",
     "DEEPSEEK_API_KEY",
@@ -200,6 +201,24 @@ def test_qc_batch_record_concurrency_defaults_to_sixteen_and_is_bounded(monkeypa
         Settings(_env_file=None)
 
     monkeypatch.setenv("QC_BATCH_RECORD_MAX_CONCURRENCY", "33")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_luxian_0916_record_concurrency_is_independent_and_bounded(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+
+    settings = Settings(_env_file=None)
+    assert settings.LUXIAN_0916_RECORD_MAX_CONCURRENCY == 4
+    assert settings.QC_BATCH_RECORD_MAX_CONCURRENCY == 16
+
+    monkeypatch.setenv("LUXIAN_0916_RECORD_MAX_CONCURRENCY", "8")
+    settings = Settings(_env_file=None)
+    assert settings.LUXIAN_0916_RECORD_MAX_CONCURRENCY == 8
+    assert settings.QC_BATCH_RECORD_MAX_CONCURRENCY == 16
+
+    monkeypatch.setenv("LUXIAN_0916_RECORD_MAX_CONCURRENCY", "0")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 

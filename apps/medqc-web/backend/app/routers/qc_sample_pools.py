@@ -44,6 +44,7 @@ from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
     FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
     LUXIAN_0609_QC_RULE_SET_KEY,
+    LUXIAN_0916_QC_RULE_SET_KEY,
     get_sample_programmatic_rule_set,
     list_sample_validation_rule_sets,
     resolve_sample_validation_rule_set_by_key,
@@ -1045,12 +1046,21 @@ async def run_sample_pool_intrinsic_validation(
         )
     requires_explicit_sample_selection = (
         is_formal_fast_screen_full
-        or requested_rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+        or requested_rule_set_key in {
+            LUXIAN_0609_QC_RULE_SET_KEY,
+            LUXIAN_0916_QC_RULE_SET_KEY,
+        }
     )
     if requires_explicit_sample_selection and not (
         requested_sample_item_ids or requested_record_refs
     ):
-        selection_name = "正式84条质控" if is_formal_fast_screen_full else "泸县0609质控"
+        selection_name = (
+            "正式84条质控"
+            if is_formal_fast_screen_full
+            else "Luxian0916质控"
+            if requested_rule_set_key == LUXIAN_0916_QC_RULE_SET_KEY
+            else "泸县0609质控"
+        )
         raise HTTPException(status_code=422, detail=f"{selection_name}请先选择病历")
 
     if requested_sample_item_ids or not requested_record_refs:
@@ -1398,6 +1408,17 @@ async def run_sample_pool_intrinsic_validation(
             else {}
         ),
     }
+    if rule_set_key == LUXIAN_0916_QC_RULE_SET_KEY:
+        job_filters["bucket_strategy"] = "domain_only"
+        for legacy_scope_key in (
+            "selected_rule_ids",
+            "scoped_customer_rule_ids",
+            "gate_only_customer_rule_ids",
+            "gate_only_customer_rule_count",
+            "paused_customer_rule_ids",
+            "paused_customer_rule_count",
+        ):
+            job_filters.pop(legacy_scope_key, None)
     if record_rule_map:
         job_filters["record_rule_map"] = record_rule_map
 

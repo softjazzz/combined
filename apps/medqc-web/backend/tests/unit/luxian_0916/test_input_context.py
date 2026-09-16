@@ -1,0 +1,151 @@
+from app.services.luxian_0916.input_context import (
+    add_luxian_0916_evidence_sources,
+    build_luxian_0916_context,
+    merge_luxian_0916_semantic_facts,
+)
+
+
+def test_adds_consent_form_from_bundle_inventory_without_changing_common_sources() -> None:
+    evidence = {
+        "programmatic_timeline": {
+            "documents": {"surgery_inform_consent": [{"document_id": "S-1", "content": "手术同意书"}]}
+        }
+    }
+    bundle = {
+        "structured_context": {
+            "document_inventory": [
+                {
+                    "source_table": "consent_form",
+                    "document_id": "A-1",
+                    "document_title": "麻醉知情同意书",
+                    "content": "拟行全身麻醉。",
+                }
+            ]
+        }
+    }
+
+    projected = add_luxian_0916_evidence_sources(bundle=bundle, evidence_payload=evidence)
+
+    documents = projected["programmatic_timeline"]["documents"]
+    assert documents["surgery_inform_consent"][0]["document_id"] == "S-1"
+    assert documents["consent_form"] == (
+        {
+            "document_id": "A-1",
+            "title": "麻醉知情同意书",
+            "content": "拟行全身麻醉。",
+        },
+    )
+
+
+def test_context_builder_projects_documents_and_deterministic_events_without_guessing_semantics():
+    bundle = {"structured_context": {}}
+    evidence_payload = {
+        "programmatic_timeline": {
+            "discharge_time": "",
+            "documents": {
+                "admission_record": [{"document_id": "a-1", "content": "入院记录"}],
+                "first_course_record": [{"document_id": "f-1", "case_characteristic": ""}],
+                "surgery_record": [{"document_id": "s-1"}],
+                "anesthesia_record": [{"document_id": "m-1"}],
+                "surgery_inform_consent": [{"document_id": "c-1"}],
+                "discharge_record": [],
+            },
+        }
+    }
+
+    context = build_luxian_0916_context(bundle=bundle, evidence_payload=evidence_payload)
+
+    assert context["documents"]["admission_record"]["document_id"] == "a-1"
+    assert context["documents"]["first_course_record"][0]["document_id"] == "f-1"
+    assert context["event_facts"]["surgery_performed"] is True
+    assert context["event_facts"]["anesthesia_performed"] is True
+    assert context["document_facts"]["surgery_consent"]["presence"] == "present"
+    assert "completeness" not in context["document_facts"]["surgery_consent"]
+    assert context["semantic_facts"] == {}
+    assert context["discharge_facts"] == {
+        "discharge_arranged": False,
+        "discharge_record_formed": False,
+    }
+
+
+def test_explicit_0916_facts_override_only_their_owned_fact_fields():
+    bundle = {
+        "structured_context": {
+            "luxian_0916_facts": {
+                "event_facts": {"special_treatment": True},
+                "document_facts": {
+                    "special_treatment_consent": {
+                        "presence": "present",
+                        "completeness": "complete",
+                    }
+                },
+                "semantic_facts": {"LX0916-003": {"state": "complete"}},
+                "first_course_evaluation_window_mature": False,
+                "admission_evaluation_window_mature": False,
+            }
+        }
+    }
+
+    context = build_luxian_0916_context(
+        bundle=bundle,
+        evidence_payload={"programmatic_timeline": {"documents": {}}},
+    )
+
+    assert context["event_facts"]["special_treatment"] is True
+    assert context["document_facts"]["special_treatment_consent"]["completeness"] == "complete"
+    assert context["semantic_facts"]["LX0916-003"]["state"] == "complete"
+    assert context["first_course_evaluation_window_mature"] is False
+    assert context["admission_evaluation_window_mature"] is False
+
+
+def test_missing_document_source_does_not_become_a_false_event_fact():
+    context = build_luxian_0916_context(
+        bundle={"structured_context": {}},
+        evidence_payload={"programmatic_timeline": {"documents": {}}},
+    )
+
+    assert "surgery_performed" not in context["event_facts"]
+    assert "anesthesia_performed" not in context["event_facts"]
+    assert "discharge_record_formed" not in context["discharge_facts"]
+
+
+def test_semantic_merge_preserves_explicit_facts_and_adds_document_completeness():
+    merged = merge_luxian_0916_semantic_facts(
+        context={
+            "semantic_facts": {"case_characteristic_present": True},
+            "event_facts": {"surgery_performed": True},
+            "document_facts": {
+                "surgery_record": {
+                    "presence": "present",
+                    "anchors": ({"document_id": "S-1"},),
+                }
+            },
+            "discharge_facts": {},
+        },
+        extracted={
+            "semantic_facts": {"case_characteristic_present": False},
+            "event_facts": {
+                "surgery_performed": False,
+                "anesthesia_performed": True,
+            },
+            "document_facts": {
+                "surgery_record": {
+                    "presence": "present",
+                    "completeness": "complete",
+                }
+            },
+            "discharge_facts": {"discharge_arranged": True},
+        },
+    )
+
+    assert merged["semantic_facts"]["case_characteristic_present"] is True
+    assert merged["event_facts"] == {
+        "surgery_performed": True,
+        "anesthesia_performed": True,
+    }
+    assert merged["document_facts"]["surgery_record"] == {
+        "presence": "present",
+        "completeness": "complete",
+        "anchors": ({"document_id": "S-1"},),
+    }
+    assert merged["discharge_facts"] == {"discharge_arranged": True}

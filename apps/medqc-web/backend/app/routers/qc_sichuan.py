@@ -78,6 +78,7 @@ from ..services.luxian_0609.native_package import (
 from ..services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 from ..services.sample_validation_rule_sets import (
     LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS,
+    LUXIAN_0916_QC_RULE_SET_KEY,
     is_workspace_batch_draft_id,
 )
 from ..services.sichuan_workspace_batch_worker import (
@@ -629,6 +630,16 @@ def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False
         "max_refine_candidates": int((summary.get("max_refine_candidates") or filters.get("max_refine_candidates") or 0) or 0),
         "refine_summary": summary.get("refine_summary"),
     }
+
+
+def _project_luxian_0916_shared_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    """共享只读视图仅移除任务私有元数据，0916 规则结果字段保持原样。"""
+
+    response = dict(_workspace_batch_response_item(job))
+    for private_key in ("created_by", "filters", "rule_results", "children", "child_jobs"):
+        response.pop(private_key, None)
+    response["read_only"] = True
+    return response
 
 
 
@@ -1647,10 +1658,22 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
     workspace = _sichuan_workspace_service()
     capture = capture_for_job(workspace, job_id)
     try:
-        await run_sichuan_workspace_batch_job(
-            job_id, workspace=workspace, qc_service_provider=get_qc_service,
-            diagnostic_capture=capture,
-        )
+        get_batch_job = getattr(workspace, "get_batch_job", None)
+        job = get_batch_job(job_id=job_id) if callable(get_batch_job) else {}
+        filters = job.get("filters") if isinstance(job, dict) and isinstance(job.get("filters"), dict) else {}
+        if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
+            from ..services.luxian_0916.batch_worker import run_luxian_0916_batch_job
+
+            await run_luxian_0916_batch_job(
+                job_id,
+                workspace=workspace,
+                max_record_concurrency=get_settings().LUXIAN_0916_RECORD_MAX_CONCURRENCY,
+            )
+        else:
+            await run_sichuan_workspace_batch_job(
+                job_id, workspace=workspace, qc_service_provider=get_qc_service,
+                diagnostic_capture=capture,
+            )
     finally:
         if capture is not None:
             finalize(job_id)
@@ -2127,14 +2150,16 @@ async def get_workspace_batch_job(
             workspace=workspace,
             job=job,
         )
-    response_data = (
-        {
-            **_project_customer_safe_batch_job_or_409(job),
-            "read_only": True,
-        }
-        if shared_read
-        else _workspace_batch_response_item(job)
-    )
+    if shared_read:
+        if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
+            response_data = _project_luxian_0916_shared_job(job)
+        else:
+            response_data = {
+                **_project_customer_safe_batch_job_or_409(job),
+                "read_only": True,
+            }
+    else:
+        response_data = _workspace_batch_response_item(job)
     return success_response(
         data=response_data,
         message="获取四川规则批量任务详情成功",

@@ -45,6 +45,7 @@ export type BatchJobPresentation = {
   progressPercent: number
   statusCounts: Record<string, number>
   statusChips: BatchJobStatusChip[]
+  diagnosticRuleFailureCount: number
   liveResultLines: BatchJobLiveResult[]
   liveExecutionPhase: BatchJobExecutionPhase | null
   overviewText: string
@@ -68,6 +69,12 @@ const STATUS_META: Array<{
     attention: true,
   },
   { key: 'data_gap', label: '数据不足', className: 'is-warning', attention: true },
+  {
+    key: 'data_quality_gap',
+    label: '资料待核实',
+    className: 'is-warning',
+    attention: true,
+  },
   { key: 'uncertain', label: 'AI判断', className: 'is-review', attention: true },
   { key: 'not_executed', label: '未执行', className: 'is-muted', attention: true },
   {
@@ -167,8 +174,15 @@ function resolveStatusCounts(job: SichuanBatchJob): Record<string, number> {
 
 function normalizeRuleIds(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.map((item) => String(item).trim()).filter((item) => /^LX0609-\d+/u.test(item))
+    ? value.map((item) => String(item).trim()).filter((item) => /^LX(?:0609|0916)-\d+/u.test(item))
     : []
+}
+
+function resolveRulePrefix(ruleIds: string[]): string {
+  const prefixes = Array.from(
+    new Set(ruleIds.map((ruleId) => ruleId.match(/^(LX(?:0609|0916))-/u)?.[1]).filter(Boolean)),
+  )
+  return prefixes.length === 1 ? prefixes[0] : '客户'
 }
 
 function selectedRuleIds(job: SichuanBatchJob): string[] {
@@ -339,6 +353,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   const recordCount = resolveRecordCount(job)
   const completedRecordCount = resolveCompletedRecordCount(job)
   const statusCounts = resolveStatusCounts(job)
+  const diagnosticRuleFailureCount = numeric(summary.diagnostic_rule_failure_count)
   const statusChips = STATUS_META.map(({ key, label, className }) => ({
     key,
     label,
@@ -393,7 +408,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
       ? `全量规则 · ${customerRuleCount} 个客户质控点`
       : '质控范围未返回'
   const compactRuleIdsText = ruleIds.length
-    ? `${customerRuleCount || ruleIds.length} 个 LX0609 质控点：${ruleIds.slice(0, 3).join('、')}${ruleIds.length > 3 ? ` +${ruleIds.length - 3}` : ''}`
+    ? `${customerRuleCount || ruleIds.length} 个 ${resolveRulePrefix(ruleIds)} 质控点：${ruleIds.slice(0, 3).join('、')}${ruleIds.length > 3 ? ` +${ruleIds.length - 3}` : ''}`
     : customerRuleCount > 0
       ? `${customerRuleCount} 个客户质控点`
       : '未返回质控点范围'
@@ -465,6 +480,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     progressPercent,
     statusCounts,
     statusChips,
+    diagnosticRuleFailureCount,
     liveResultLines: resolveLiveResultLines(job),
     liveExecutionPhase: resolveLiveExecutionPhase(job),
     overviewText,

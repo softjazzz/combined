@@ -9,6 +9,7 @@ import type {
 } from '@/views/workstation-v4/semantic-rules/types'
 
 export const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
+export const LUXIAN_0916_RULE_SET_KEY = 'luxian_0916_qc_v1'
 export const FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = 'sc_content_full_v1'
 export const SC_SAMPLE_RULE_SET_KEY = 'sc_sample_running_v1'
 export const PROGRAMMATIC_RULE_SET_KEY = 'sample_programmatic_gate_v1'
@@ -282,6 +283,18 @@ export const fallbackRuleSets: ManualSampleValidationRuleSet[] = [
       },
     },
     note: '客户第一批专项验证规则包；当前为验证版，未达到正式上线闸门。',
+  },
+  {
+    rule_set_key: LUXIAN_0916_RULE_SET_KEY,
+    rule_set_name: 'Luxian0916 质控点 v1',
+    rule_set_version: '2026-09-16',
+    scope: 'running',
+    rule_count: 32,
+    validation_mode: 'customer',
+    advanced: false,
+    display_group: 'main',
+    coverage_status: '独立运行病历规则包，不计算评分。',
+    note: '独立规则包；仅在主动选择后启用，不影响泸县0609质控点。',
   },
   {
     rule_set_key: FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,

@@ -249,6 +249,50 @@ def test_complete_batch_job_commits_task_and_canonical_envelope_once(
     assert session.rollback_count == 0
 
 
+def test_complete_independent_result_can_skip_luxian_0609_canonical_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """独立规则包只保存自身任务 items，不进入 0609 Canonical 合同。"""
+
+    session = _CompletionSession(
+        {
+            "id": "job-0916",
+            "parent_job_id": None,
+            "created_by": "reviewer-1",
+            "filters_json": '{"rule_set_key":"luxian_0916_qc_v1"}',
+        }
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    service = CustomQCWorkspaceService()
+    envelope_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        service,
+        "_write_record_result_envelopes",
+        lambda *_args, **kwargs: envelope_calls.append(kwargs),
+    )
+
+    service.complete_batch_job(
+        job_id="job-0916",
+        summary={"total_records": 1, "success_count": 1},
+        items=[
+            {
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "visit_id": "visit-1",
+                "rule_id": "LX0916-001",
+                "status": "data_quality_gap",
+                "reason_code": "semantic_fact_unavailable",
+            }
+        ],
+        failed_records=[],
+        persist_record_envelopes=False,
+    )
+
+    assert envelope_calls == []
+    assert session.commit_count == 1
+    assert session.rollback_count == 0
+
+
 def test_complete_batch_job_rejects_luxian_result_without_frozen_case_envelope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

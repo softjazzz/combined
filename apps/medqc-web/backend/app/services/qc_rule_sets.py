@@ -59,6 +59,11 @@ SC_CONTENT_LAUNCH_C_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by
 LUXIAN_0609_QC_V1_RULE_IDS: tuple[str, ...] = tuple(
     entry.rule_id for entry in load_luxian_0609_phase_scope()
 )
+# 公共规则集目录只保存发布合同，不导入 0916 执行模块。
+# 这样 0916 目录或执行器故障不会阻断现有 0609 规则集加载。
+LUXIAN_0916_QC_V1_RULE_IDS: tuple[str, ...] = tuple(
+    f"LX0916-{number:03d}" for number in range(1, 33)
+)
 
 
 @dataclass(frozen=True)
@@ -136,6 +141,21 @@ SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
         batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
         max_refine_candidates=0,
         description="泸县0609客户质控点正式规则包，完整纳入75条权威范围；待定义规则统一失败关闭为未执行。",
+    ),
+    "luxian_0916_qc_v1": QCRuleSet(
+        key="luxian_0916_qc_v1",
+        name="Luxian0916 质控点 v1",
+        version="2026-09-16",
+        scope="running",
+        rule_ids=LUXIAN_0916_QC_V1_RULE_IDS,
+        execution_strategy=EXECUTION_STRATEGY_STANDARD,
+        quality_profile=QUALITY_PROFILE_THROUGHPUT,
+        bucket_strategy="domain_only",
+        enable_selective_refine=False,
+        refine_confidence_threshold=0.0,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=0,
+        description="泸县0916独立质控规则包；仅在客户样本验证中显式选择后执行，不计算评分。",
     ),
     "sc_content_launch_a_v1": QCRuleSet(
         key="sc_content_launch_a_v1",

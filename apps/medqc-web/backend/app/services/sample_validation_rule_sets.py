@@ -23,6 +23,7 @@ from .luxian_0609.phase_scope import (
 FORMAL_FAST_SCREEN_FULL_MODE = "formal_fast_screen_full"
 FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = "sc_content_full_v1"
 LUXIAN_0609_QC_RULE_SET_KEY = "luxian_0609_qc_v1"
+LUXIAN_0916_QC_RULE_SET_KEY = "luxian_0916_qc_v1"
 # 客户已明确排除缺失同意书/收费资料的五条规则；阶段冻结规则另由 worker 以 not_executed 投影。
 LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS: frozenset[str] = frozenset(
     {"LX0609-033", "LX0609-034", "LX0609-035", "LX0609-041", "LX0609-042"}
@@ -336,6 +337,16 @@ def get_luxian_0609_sample_validation_rule_set() -> QCRuleSet:
 
 
 @lru_cache(maxsize=1)
+def get_luxian_0916_sample_validation_rule_set() -> QCRuleSet:
+    """返回独立的 Luxian0916 客户样本验证规则集。"""
+
+    rule_set = get_sichuan_rule_set(LUXIAN_0916_QC_RULE_SET_KEY)
+    if rule_set is None:
+        raise RuntimeError("Luxian0916 规则集未注册")
+    return rule_set
+
+
+@lru_cache(maxsize=1)
 def get_luxian_0609_customer_delivery_rule_ids() -> tuple[str, ...]:
     """返回客户交付范围（70条），保持目录顺序并排除客户明确无来源的规则。"""
 
@@ -353,6 +364,7 @@ def get_luxian_0609_customer_execution_scope() -> tuple[
 
 def list_sample_validation_rule_sets() -> list[dict[str, Any]]:
     luxian_rule_set = get_luxian_0609_sample_validation_rule_set()
+    luxian_0916_rule_set = get_luxian_0916_sample_validation_rule_set()
     formal_rule_set = get_sichuan_rule_set(FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY)
     legacy_rule_set = get_customer_luxian_rule_set()
     programmatic_rule_set = get_sample_programmatic_rule_set()
@@ -373,6 +385,20 @@ def list_sample_validation_rule_sets() -> list[dict[str, Any]]:
                 "note": "客户第一批专项验证规则包；当前为验证版，未达到正式上线闸门。",
             }
         )
+    items.append(
+        {
+            **luxian_0916_rule_set.to_dict(),
+            "rule_set_name": "Luxian0916 质控点 v1",
+            "name": "Luxian0916 质控点 v1",
+            "version": luxian_0916_rule_set.version,
+            "validation_mode": "customer",
+            "requires_synced": False,
+            "advanced": False,
+            "display_group": "main",
+            "coverage_summary": {},
+            "note": "独立的0916验证规则包；仅在显式选择后运行，不计算评分。",
+        }
+    )
     if formal_rule_set:
         items.append(
             {
@@ -448,6 +474,12 @@ def resolve_sample_validation_rule_set_by_key(rule_set_key: Any) -> dict[str, An
     if normalized_key == LUXIAN_0609_QC_RULE_SET_KEY:
         rule_set = get_luxian_0609_sample_validation_rule_set()
         return {"validation_mode": "customer", "rule_set": rule_set}
+
+    if normalized_key == LUXIAN_0916_QC_RULE_SET_KEY:
+        return {
+            "validation_mode": "customer",
+            "rule_set": get_luxian_0916_sample_validation_rule_set(),
+        }
 
     if normalized_key == FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY:
         rule_set = get_sichuan_rule_set(normalized_key)

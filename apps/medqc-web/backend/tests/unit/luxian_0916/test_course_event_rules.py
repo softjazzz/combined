@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+import pytest
+
+from app.services.luxian_0916.course_event_rules import execute_course_event_rules
+
+
+_EVENT_KEY_BY_RULE = {
+    "LX0916-015": "disease_changes",
+    "LX0916-016": "disease_changes",
+    "LX0916-017": "exam_or_medication_orders",
+    "LX0916-018": "critical_values",
+    "LX0916-019": "important_operations",
+    "LX0916-020": "diagnosis_changes",
+}
+_DOCUMENTATION_BY_RULE = {
+    "LX0916-015": {"record_present": True, "complete": True},
+    "LX0916-016": {"analysis_recorded": True, "specific_management_recorded": True},
+    "LX0916-018": {"report_recorded": True, "disposition_recorded": True},
+    "LX0916-019": {"record_present": True, "complete": True},
+    "LX0916-020": {"reason_recorded": True, "basis_recorded": True},
+}
+
+
+def _run(rule_id: str, context: dict) -> object:
+    results = execute_course_event_rules(context, [rule_id])
+    assert len(results) == 1
+    return results[0]
+
+
+def _event(rule_id: str, **overrides: object) -> dict:
+    event = {
+        "event_id": f"event-{rule_id[-3:]}",
+        "event_type": _EVENT_KEY_BY_RULE[rule_id],
+        "trigger_confirmed": True,
+        "evaluation_window_mature": True,
+        "documentation": _DOCUMENTATION_BY_RULE.get(rule_id, {}),
+        "appropriateness": "reasonable",
+    }
+    event.update(overrides)
+    return event
+
+
+def _context(rule_id: str, **event_overrides: object) -> dict:
+    return {"event_facts": {_EVENT_KEY_BY_RULE[rule_id]: [_event(rule_id, **event_overrides)]}}
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "event_overrides", "expected_reason"),
+    [
+        ("LX0916-015", {"documentation": {"record_present": False, "complete": True}}, "disease_change_documentation_incomplete"),
+        ("LX0916-016", {"documentation": {"analysis_recorded": False, "specific_management_recorded": True}}, "disease_change_analysis_or_management_missing"),
+        ("LX0916-017", {"appropriateness": "unreasonable"}, "exam_or_medication_unreasonable"),
+        ("LX0916-018", {"documentation": {"report_recorded": True, "disposition_recorded": False}}, "critical_value_documentation_incomplete"),
+        ("LX0916-019", {"documentation": {"record_present": False, "complete": True}}, "important_operation_documentation_incomplete"),
+        ("LX0916-020", {"documentation": {"reason_recorded": True, "basis_recorded": False}}, "diagnosis_change_reason_or_basis_missing"),
+    ],
+)
+def test_event_rules_report_confirmed_defects(rule_id, event_overrides, expected_reason):
+    result = _run(rule_id, _context(rule_id, **event_overrides))
+
+    assert result.status == "non_compliant"
+    assert result.reason_code == expected_reason
+    assert result.document_anchors
+
+
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
+def test_event_rules_report_compliance_with_confirmed_complete_facts(rule_id):
+    result = _run(rule_id, _context(rule_id))
+
+    assert result.status == "compliant"
+
+
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
+def test_event_rules_wait_for_mature_evaluation_window(rule_id):
+    result = _run(rule_id, _context(rule_id, evaluation_window_mature=False))
+
+    assert result.status == "not_executed"
+    assert result.reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
+def test_event_rules_return_data_gap_without_required_event_source(rule_id):
+    result = _run(rule_id, {"event_facts": {}})
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "event_source_missing"
+
+
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
+def test_event_rules_are_not_applicable_without_confirmed_trigger(rule_id):
+    result = _run(rule_id, {"event_facts": {_EVENT_KEY_BY_RULE[rule_id]: []}})
+
+    assert result.status == "not_applicable"
+    assert result.reason_code == "trigger_event_absent"

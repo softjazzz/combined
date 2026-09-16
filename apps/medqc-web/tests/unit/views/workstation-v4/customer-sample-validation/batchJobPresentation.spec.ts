@@ -140,6 +140,64 @@ describe('batchJobPresentation', () => {
     ])
   })
 
+  it('保留0916规则范围与 data_quality_gap 的精确展示口径', () => {
+    const ruleIds = Array.from(
+      { length: 32 },
+      (_, index) => `LX0916-${String(index + 1).padStart(3, '0')}`,
+    )
+    const model = buildBatchJobPresentation(
+      buildJob({
+        rule_code: 'LX0916',
+        rule_name: '泸县0916质控点验证',
+        rule_set_key: 'luxian_0916_qc_v1',
+        rule_set_name: '泸县0916质控点验证 v1',
+        customer_rule_count: 32,
+        filters: { selected_rule_ids: ruleIds },
+        summary: {
+          total_records: 1,
+          success_count: 1,
+          failed_count: 0,
+          issue_records: 1,
+          compliant_records: 0,
+          total_tokens: 0,
+          total_processing_time: 0,
+          diagnostic_rule_failure_count: 2,
+          display_status_counts: {
+            data_quality_gap: 4,
+            compliant: 28,
+          },
+        },
+        items: [
+          {
+            rule_id: 'LX0916-001',
+            rule_name: '入院记录内容完整性',
+            status: 'data_quality_gap',
+            is_compliant: null,
+            conclusion: '入院记录来源不可用，暂无法核对。',
+          },
+        ],
+      }),
+    )
+
+    expect(model.scopeText).toBe('选定 32 个质控点')
+    expect(model.compactRuleIdsText).toBe(
+      '32 个 LX0916 质控点：LX0916-001、LX0916-002、LX0916-003 +29',
+    )
+    expect(model.statusChips.map((chip) => [chip.key, chip.label, chip.value])).toEqual([
+      ['data_quality_gap', '资料待核实', 4],
+      ['compliant', '合规', 28],
+    ])
+    expect(model.overviewText).toBe('发现需关注结果：资料待核实 4')
+    expect(model.diagnosticRuleFailureCount).toBe(2)
+    expect(model.issueSummaryText).toBe('问题点：LX0916-001 入院记录内容完整性')
+    expect(model.liveResultLines).toEqual([
+      expect.objectContaining({
+        ruleId: 'LX0916-001',
+        statusLabel: '资料待核实',
+      }),
+    ])
+  })
+
   it('同时识别数组型 status_breakdown 和 AI 建议状态', () => {
     const model = buildBatchJobPresentation(
       buildJob({

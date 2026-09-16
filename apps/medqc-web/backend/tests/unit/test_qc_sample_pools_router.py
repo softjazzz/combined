@@ -1311,6 +1311,45 @@ async def test_sample_pool_worker_reads_persisted_record_refs_instead_of_legacy_
 
 
 @pytest.mark.asyncio
+async def test_workspace_worker_dispatches_exact_luxian_0916_key_without_calling_legacy_worker(
+    monkeypatch,
+):
+    from app.services.luxian_0916 import batch_worker as luxian_0916_batch_worker
+    from app.services.qc_diagnostics import support_store
+
+    class _DispatchWorkspace:
+        def get_batch_job(self, *, job_id: str):
+            assert job_id == "job-0916"
+            return {"filters": {"rule_set_key": "luxian_0916_qc_v1"}}
+
+    independent_calls = []
+    legacy_calls = []
+
+    async def _run_independent(job_id, **kwargs):
+        independent_calls.append((job_id, kwargs))
+
+    async def _run_legacy(job_id, **kwargs):
+        legacy_calls.append((job_id, kwargs))
+
+    workspace = _DispatchWorkspace()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "run_sichuan_workspace_batch_job", _run_legacy)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0916_RECORD_MAX_CONCURRENCY=7))
+    monkeypatch.setattr(luxian_0916_batch_worker, "run_luxian_0916_batch_job", _run_independent)
+    monkeypatch.setattr(support_store, "capture_for_job", lambda *_args: None)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-0916")
+
+    assert legacy_calls == []
+    assert independent_calls == [
+        (
+            "job-0916",
+            {"workspace": workspace, "max_record_concurrency": 7},
+        )
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("persisted_record_refs", [None, []])
 async def test_sample_pool_worker_rejects_missing_record_refs_without_collecting_by_visit(
     monkeypatch,
@@ -1562,6 +1601,66 @@ async def test_run_sample_pool_intrinsic_validation_should_use_customer_rule_pac
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_name"] == "客户专项规则包 v1"
     assert response["data"]["rule_ids"] == ["CL-001", "CL-002"]
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0916_without_0609_scope_metadata(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_refs=[_run_record_ref()],
+            sample_item_ids=["item-1"],
+            max_parallel_records=2,
+            rule_set_key="luxian_0916_qc_v1",
+        ),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    expected_rule_ids = [f"LX0916-{index:03d}" for index in range(1, 33)]
+    assert created["draft_ids"] == expected_rule_ids
+    assert created["filters"]["rule_ids"] == expected_rule_ids
+    assert created["filters"]["rule_set_key"] == "luxian_0916_qc_v1"
+    assert created["filters"]["validation_mode"] == "customer"
+    assert created["filters"]["max_parallel_records"] == 2
+    assert created["filters"]["bucket_strategy"] == "domain_only"
+    assert "record_rule_map" not in created["filters"]
+    assert "selected_rule_ids" not in created["filters"]
+    assert "paused_customer_rule_ids" not in created["filters"]
+    assert "gate_only_customer_rule_ids" not in created["filters"]
+    assert response["data"]["rule_set_key"] == "luxian_0916_qc_v1"
+    assert response["data"]["rule_count"] == 32
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_luxian_0916_requires_explicit_sample_selection(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                rule_set_key="luxian_0916_qc_v1",
+            ),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "选择病历" in str(exc_info.value.detail)
+    assert sample_service.get_runnable_items_calls == []
+    assert workspace_service.create_batch_job_calls == []
 
 
 @pytest.mark.asyncio

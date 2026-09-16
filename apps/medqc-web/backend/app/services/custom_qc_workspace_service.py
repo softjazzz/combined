@@ -4357,6 +4357,7 @@ class CustomQCWorkspaceService:
         summary: Dict[str, Any],
         items: List[Dict[str, Any]],
         failed_records: List[Dict[str, Any]],
+        persist_record_envelopes: bool = True,
     ) -> None:
         session = _session()
         try:
@@ -4403,7 +4404,9 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
-            envelope_items: Sequence[Dict[str, Any]] = items if not execution_failed else ()
+            envelope_items: Sequence[Dict[str, Any]] = (
+                items if persist_record_envelopes and not execution_failed else ()
+            )
             envelope_record_refs: Optional[Sequence[CaseRef]] = None
             if execution_failed:
                 filters = _safe_json_loads(row.get("filters_json"), {})

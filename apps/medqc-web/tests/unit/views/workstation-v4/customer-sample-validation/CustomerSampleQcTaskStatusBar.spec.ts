@@ -287,11 +287,13 @@ describe('CustomerSampleQcTaskStatusBar', () => {
               technical_error: 2,
               non_compliant: 8,
               data_gap: 13,
+              data_quality_gap: 6,
               uncertain: 3,
               compliant: 28,
               not_applicable: 17,
               not_executed: 4,
             },
+            diagnostic_rule_failure_count: 2,
           },
         }),
       },
@@ -304,6 +306,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(attention).toContain('技术异常 2')
     expect(attention).toContain('不合规 8')
     expect(attention).toContain('数据不足 13')
+    expect(attention).toContain('资料待核实 6')
     expect(attention).toContain('AI判断 3')
     expect(attention).not.toContain('合规 28')
     expect(other).toContain('其他结果')
@@ -311,6 +314,9 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(other).toContain('不适用 17')
     expect(other).toContain('未执行 4')
     expect(wrapper.get('[data-testid="qc-task-settled-summary"]').text()).toContain('更新')
+    expect(wrapper.get('[data-testid="qc-task-diagnostic-warning"]').text()).toBe(
+      '2 项规则未完成，请查看技术详情',
+    )
     expect(wrapper.get('[data-testid="qc-task-view-result"]').element).toBeTruthy()
     expect(wrapper.get('[data-testid="qc-task-more-actions"]').element).toBeTruthy()
     expect(wrapper.get('[data-testid="qc-task-open-history"]').element).toBeTruthy()
