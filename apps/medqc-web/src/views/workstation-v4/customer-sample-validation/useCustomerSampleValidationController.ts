@@ -36,6 +36,7 @@ import {
   cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
+  getSichuanWorkspaceBatchJobDebugSnapshot,
   reviewSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
@@ -105,6 +106,7 @@ import {
 } from './customerSampleValidationConfig'
 import type {
   SichuanBatchJob,
+  SichuanBatchJobDebugSnapshot,
   SichuanBatchJobStatus,
 } from '@/views/workstation-v4/semantic-rules/types'
 import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
@@ -191,6 +193,8 @@ export function useCustomerSampleValidationController() {
   const batchResultOpen = ref(false)
   const batchJobDetail = ref<SichuanBatchJob | null>(null)
   const batchJobLoading = ref(false)
+  const batchJobDebugSnapshot = ref<SichuanBatchJobDebugSnapshot | null>(null)
+  const batchJobDebugLoading = ref(false)
   const cancelBatchJobLoading = ref(false)
   const reviewBatchJobLoadingId = ref('')
   const currentQcTask = ref<SichuanBatchJob | null>(null)
@@ -266,6 +270,8 @@ export function useCustomerSampleValidationController() {
     label: string
   } | null>(null)
   let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
+  let batchJobPollTick = 0
+  let batchJobDebugRequestId = 0
   let currentQcTaskPollTimer: ReturnType<typeof setInterval> | null = null
   let luxianAggregatePollTimer: ReturnType<typeof setInterval> | null = null
   let syncJobPollTimer: ReturnType<typeof setInterval> | null = null
@@ -2724,10 +2730,13 @@ export function useCustomerSampleValidationController() {
 
   async function openBatchJob(jobId: string) {
     stopBatchJobPolling()
+    batchJobDebugRequestId += 1
+    batchJobDebugLoading.value = false
     if (currentQcTask.value?.id === jobId) {
       stopCurrentQcTaskPolling()
     }
     batchJobLoading.value = true
+    batchJobDebugSnapshot.value = null
     batchResultOpen.value = true
     const result = await getSichuanWorkspaceBatchJob(jobId)
     batchJobLoading.value = false
@@ -2743,15 +2752,51 @@ export function useCustomerSampleValidationController() {
       return
     }
     batchJobDetail.value = result.data
+    void fetchBatchJobDebugSnapshot(jobId)
     if (isBatchJobRunning(result.data)) {
       startBatchJobPolling(jobId)
     }
   }
 
+  async function fetchBatchJobDebugSnapshot(
+    jobId: string,
+    options?: { ruleJobId?: string; itemLimit?: number },
+  ) {
+    const normalizedJobId = String(jobId || '').trim()
+    if (!normalizedJobId) return null
+    const requestId = ++batchJobDebugRequestId
+    batchJobDebugLoading.value = true
+    try {
+      const result = await getSichuanWorkspaceBatchJobDebugSnapshot(normalizedJobId, {
+        rule_job_id: options?.ruleJobId,
+        item_limit: options?.itemLimit,
+      })
+      if (requestId !== batchJobDebugRequestId) return null
+      if (!result.success || !result.data) {
+        message.warning(result.message || '调试信息暂不可用，质控结果仍可正常查看')
+        return null
+      }
+      batchJobDebugSnapshot.value = result.data
+      return result.data
+    } catch (error: any) {
+      if (requestId === batchJobDebugRequestId) {
+        message.warning(error?.message || '调试信息暂不可用，质控结果仍可正常查看')
+      }
+      return null
+    } finally {
+      if (requestId === batchJobDebugRequestId) {
+        batchJobDebugLoading.value = false
+      }
+    }
+  }
+
   function closeBatchDrawer() {
     stopBatchJobPolling()
+    batchJobDebugRequestId += 1
     batchResultOpen.value = false
     batchJobDetail.value = null
+    batchJobDebugSnapshot.value = null
+    batchJobDebugLoading.value = false
     if (currentQcTask.value && isBatchJobRunning(currentQcTask.value)) {
       startCurrentQcTaskPolling(currentQcTask.value.id)
     }
@@ -2766,6 +2811,7 @@ export function useCustomerSampleValidationController() {
       clearInterval(batchJobPollTimer)
       batchJobPollTimer = null
     }
+    batchJobPollTick = 0
   }
 
   function startCurrentQcTaskPolling(jobId: string) {
@@ -2870,6 +2916,7 @@ export function useCustomerSampleValidationController() {
         stopBatchJobPolling()
         return
       }
+      batchJobPollTick += 1
       const result = await getSichuanWorkspaceBatchJob(jobId)
       if (!result.success || !result.data) {
         if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
@@ -2880,6 +2927,9 @@ export function useCustomerSampleValidationController() {
       }
       batchJobDetail.value = result.data
       updateCurrentQcTask(result.data)
+      if (batchJobPollTick % 3 === 0 || !isBatchJobRunning(result.data)) {
+        void fetchBatchJobDebugSnapshot(jobId)
+      }
       if (!isBatchJobRunning(result.data)) {
         stopBatchJobPolling()
         await loadPools()
@@ -3033,6 +3083,8 @@ export function useCustomerSampleValidationController() {
     backlogBucketCardClass,
     backlogBucketTagClass,
     batchJobDetail,
+    batchJobDebugLoading,
+    batchJobDebugSnapshot,
     batchJobLoading,
     batchResultOpen,
     bundleStatusHint,
@@ -3092,6 +3144,7 @@ export function useCustomerSampleValidationController() {
     formatDateTime,
     formatEditableCopyDocumentMeta,
     formatEditableCopyOrderGroupMeta,
+    fetchBatchJobDebugSnapshot,
     getBatchJobStatusTagClass,
     getBatchJobStatusText,
     goToCustomerSampleGuideStep,

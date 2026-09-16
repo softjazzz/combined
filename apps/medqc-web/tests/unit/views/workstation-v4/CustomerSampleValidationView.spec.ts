@@ -26,6 +26,7 @@ const {
   runManualSamplePool,
   syncManualSamplePoolRecords,
   getSichuanWorkspaceBatchJob,
+  getSichuanWorkspaceBatchJobDebugSnapshot,
   listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
   reviewSichuanWorkspaceBatchJob,
@@ -65,6 +66,7 @@ const {
   runManualSamplePool: vi.fn(),
   syncManualSamplePoolRecords: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
+  getSichuanWorkspaceBatchJobDebugSnapshot: vi.fn(),
   listSichuanWorkspaceBatchJobs: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   reviewSichuanWorkspaceBatchJob: vi.fn(),
@@ -113,6 +115,7 @@ vi.mock('@/services/manual-case-sample-service', () => ({
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getSichuanWorkspaceBatchJob,
+  getSichuanWorkspaceBatchJobDebugSnapshot,
   listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
   reviewSichuanWorkspaceBatchJob,
@@ -612,6 +615,15 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
     batchJobDetail: {
       type: Object,
       default: null,
+    },
+    batchJobDebugSnapshot: {
+      type: Object,
+      default: null,
+    },
+    batchJobDebugLoading: Boolean,
+    fetchBatchJobDebugSnapshot: {
+      type: Function,
+      default: undefined,
     },
     enableRecordComparison: {
       type: Boolean,
@@ -1334,6 +1346,18 @@ describe('CustomerSampleValidationView', () => {
     getSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,
       data: { id: 'job-2', status: 'completed' },
+    })
+    getSichuanWorkspaceBatchJobDebugSnapshot.mockResolvedValue({
+      success: true,
+      data: {
+        job_id: 'job-2',
+        status: 'completed',
+        scope: 'running',
+        execution_mode: 'native',
+        rules: [],
+        recent_items: [],
+        recent_failed_records: [],
+      },
     })
     exportSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: new Blob() })
     reviewSichuanWorkspaceBatchJob.mockResolvedValue({
@@ -2833,6 +2857,11 @@ describe('CustomerSampleValidationView', () => {
     expect(detail.filters?.record_rule_map).toEqual({
       V001: ['LX-017', 'CL-250', 'SC-068'],
     })
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).toHaveBeenCalledWith('job-0609', {
+      rule_job_id: undefined,
+      item_limit: undefined,
+    })
+    expect(latestBatchResultDrawerProps?.fetchBatchJobDebugSnapshot).toBeTypeOf('function')
   })
 
   it('只选中不可执行病历时提示并阻止发起验证', async () => {

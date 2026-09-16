@@ -173,8 +173,9 @@
       :open="resultOpen"
       :batch-job-detail="jobDetail"
       :batch-job-detail-loading="jobDetailLoading"
-      :batch-job-debug-snapshot="null"
-      :batch-job-debug-loading="false"
+      :batch-job-debug-snapshot="jobDebugSnapshot"
+      :batch-job-debug-loading="jobDebugLoading"
+      :fetch-batch-job-debug-snapshot="fetchJobDebugSnapshot"
       :close="closeResult"
       :export-batch-job-report="exportCurrentJob"
       :review-batch-job-result="reviewCurrentJob"
@@ -193,12 +194,14 @@ import { useRouter } from 'vue-router'
 import {
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
+  getSichuanWorkspaceBatchJobDebugSnapshot,
   listSichuanWorkspaceBatchJobs,
   reviewSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
 import type {
   SichuanBatchJob,
+  SichuanBatchJobDebugSnapshot,
   SichuanBatchJobStatus,
 } from '@/views/workstation-v4/semantic-rules/types'
 import { downloadBlob, normalizeBatchExportBlob } from './batchExport'
@@ -216,8 +219,11 @@ const jobs = ref<SichuanBatchJob[]>([])
 const total = ref(0)
 const jobDetail = ref<SichuanBatchJob | null>(null)
 const jobDetailLoading = ref(false)
+const jobDebugSnapshot = ref<SichuanBatchJobDebugSnapshot | null>(null)
+const jobDebugLoading = ref(false)
 const resultOpen = ref(false)
 const reviewingJobId = ref('')
+let jobDebugRequestId = 0
 
 const query = reactive({
   keyword: '',
@@ -279,6 +285,9 @@ function goPage(page: number) {
 
 async function openJob(job: SichuanBatchJob) {
   resultOpen.value = true
+  jobDebugRequestId += 1
+  jobDebugLoading.value = false
+  jobDebugSnapshot.value = null
   jobDetailLoading.value = true
   try {
     const result = await getSichuanWorkspaceBatchJob(job.id)
@@ -287,14 +296,50 @@ async function openJob(job: SichuanBatchJob) {
       return
     }
     jobDetail.value = result.data
+    void fetchJobDebugSnapshot(job.id)
   } finally {
     jobDetailLoading.value = false
   }
 }
 
+async function fetchJobDebugSnapshot(
+  jobId: string,
+  options?: { ruleJobId?: string; itemLimit?: number },
+) {
+  const normalizedJobId = String(jobId || '').trim()
+  if (!normalizedJobId) return null
+  const requestId = ++jobDebugRequestId
+  jobDebugLoading.value = true
+  try {
+    const result = await getSichuanWorkspaceBatchJobDebugSnapshot(normalizedJobId, {
+      rule_job_id: options?.ruleJobId,
+      item_limit: options?.itemLimit,
+    })
+    if (requestId !== jobDebugRequestId) return null
+    if (!result.success || !result.data) {
+      message.warning(result.message || '调试信息暂不可用，质控结果仍可正常查看')
+      return null
+    }
+    jobDebugSnapshot.value = result.data
+    return result.data
+  } catch (error: any) {
+    if (requestId === jobDebugRequestId) {
+      message.warning(error?.message || '调试信息暂不可用，质控结果仍可正常查看')
+    }
+    return null
+  } finally {
+    if (requestId === jobDebugRequestId) {
+      jobDebugLoading.value = false
+    }
+  }
+}
+
 function closeResult() {
+  jobDebugRequestId += 1
   resultOpen.value = false
   jobDetail.value = null
+  jobDebugSnapshot.value = null
+  jobDebugLoading.value = false
 }
 
 async function exportById(jobId: string, format: 'xlsx' | 'csv' | 'html' = 'html') {

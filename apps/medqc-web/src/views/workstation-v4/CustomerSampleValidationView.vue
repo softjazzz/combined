@@ -1661,9 +1661,9 @@
       :batch-job-detail-loading="batchJobLoading"
       :cancel-batch-job="handleCancelBatchJob"
       :cancel-batch-job-loading="cancelBatchJobLoading"
-      :batch-job-debug-snapshot="null"
-      :batch-job-debug-loading="false"
-      :fetch-batch-job-debug-snapshot="undefined"
+      :batch-job-debug-snapshot="batchJobDebugSnapshot"
+      :batch-job-debug-loading="batchJobDebugLoading"
+      :fetch-batch-job-debug-snapshot="fetchBatchJobDebugSnapshot"
       :close="closeBatchDrawer"
       :export-batch-job-report="handleExportBatchReport"
       :review-batch-job-result="handleReviewBatchResult"
@@ -1801,6 +1801,8 @@ const {
   backlogBucketCardClass,
   backlogBucketTagClass,
   batchJobDetail,
+  batchJobDebugLoading,
+  batchJobDebugSnapshot,
   batchJobLoading,
   batchResultOpen,
   bundleStatusHint,
@@ -1855,6 +1857,7 @@ const {
   exactReviewReasonTags,
   exactReviewStatusCards,
   expandedLuxianRuleFamilyKeys,
+  fetchBatchJobDebugSnapshot,
   FilePlus2,
   filters,
   formatDateTime,

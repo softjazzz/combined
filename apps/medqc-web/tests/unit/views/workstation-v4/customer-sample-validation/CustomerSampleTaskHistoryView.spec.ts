@@ -11,6 +11,7 @@ const {
   routerPush,
   listSichuanWorkspaceBatchJobs,
   getSichuanWorkspaceBatchJob,
+  getSichuanWorkspaceBatchJobDebugSnapshot,
   reviewSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   normalizeBatchExportBlob,
@@ -24,6 +25,7 @@ const {
   routerPush: vi.fn(),
   listSichuanWorkspaceBatchJobs: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
+  getSichuanWorkspaceBatchJobDebugSnapshot: vi.fn(),
   reviewSichuanWorkspaceBatchJob: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   normalizeBatchExportBlob: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   listSichuanWorkspaceBatchJobs,
   getSichuanWorkspaceBatchJob,
+  getSichuanWorkspaceBatchJobDebugSnapshot,
   reviewSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
 }))
@@ -70,6 +73,15 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
     batchJobDetail: {
       type: Object,
       default: null,
+    },
+    batchJobDebugSnapshot: {
+      type: Object,
+      default: null,
+    },
+    batchJobDebugLoading: Boolean,
+    fetchBatchJobDebugSnapshot: {
+      type: Function,
+      default: undefined,
     },
   },
   setup(props) {
@@ -145,6 +157,18 @@ describe('CustomerSampleTaskHistoryView', () => {
       },
     })
     getSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: job })
+    getSichuanWorkspaceBatchJobDebugSnapshot.mockResolvedValue({
+      success: true,
+      data: {
+        job_id: 'job-history-1',
+        status: 'completed',
+        scope: 'running',
+        execution_mode: 'native',
+        rules: [],
+        recent_items: [],
+        recent_failed_records: [],
+      },
+    })
     reviewSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,
       data: {
@@ -193,10 +217,19 @@ describe('CustomerSampleTaskHistoryView', () => {
     await flushPromises()
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).toHaveBeenCalledWith('job-history-1', {
+      rule_job_id: undefined,
+      item_limit: undefined,
+    })
     expect(latestResultDrawerProps?.open).toBe(true)
     expect((latestResultDrawerProps?.batchJobDetail as { id?: string } | null)?.id).toBe(
       'job-history-1',
     )
+    expect(latestResultDrawerProps?.batchJobDebugSnapshot).toMatchObject({
+      job_id: 'job-history-1',
+      execution_mode: 'native',
+    })
+    expect(latestResultDrawerProps?.fetchBatchJobDebugSnapshot).toBeTypeOf('function')
   })
 
   it('已完成任务提供复核与HTML导出入口', async () => {
