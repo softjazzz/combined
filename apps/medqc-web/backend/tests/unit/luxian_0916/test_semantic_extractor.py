@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from app.services.luxian_0916.semantic_extractor import extract_luxian_0916_facts
+from app.services.luxian_0916.semantic_extractor import (
+    _contract_failure_detail,
+    extract_luxian_0916_facts,
+)
 from app.services.luxian_0916.surgery_consent_rules import execute_surgery_consent_rules
 
 
@@ -124,6 +127,79 @@ def _content(*, extra: dict[str, Any] | None = None) -> str:
     if extra:
         facts.update(extra)
     return json.dumps(facts, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("top_level_maturity", [False, True, "true"])
+async def test_retries_top_level_evaluation_window_mature_and_keeps_other_event_facts(
+    top_level_maturity: Any,
+) -> None:
+    prompts: list[str] = []
+
+    async def generate(prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        prompts.append(prompt)
+        misplaced = (
+            {"evaluation_window_mature": top_level_maturity}
+            if len(prompts) == 1
+            else {}
+        )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {
+                                    **misplaced,
+                                    "surgery_performed": True,
+                                    "disease_changes": [
+                                        {
+                                            "event_type": "disease_changes",
+                                            "document_id": "D-1",
+                                            "source_type": "daily_course_record",
+                                            "evaluation_window_mature": True,
+                                        }
+                                    ],
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-015",), generate=generate
+    )
+
+    assert result["diagnostic"] == {
+        "code": "semantic_extraction_ready",
+        "document_count": 1,
+        "llm_call_count": 2,
+        "contract_retry_applied": True,
+        "contract_retry_detail": "invalid_top_level_evaluation_window_mature",
+    }
+    assert result["event_facts"] == {
+        "surgery_performed": True,
+        "disease_changes": [
+            {
+                "event_type": "disease_changes",
+                "document_id": "D-1",
+                "source_type": "daily_course_record",
+                "evaluation_window_mature": True,
+            }
+        ],
+    }
+    top_level_boolean_contract = (
+        "event_facts：布尔键仅可为 surgery_arranged、surgery_performed、anesthesia_arranged、"
+        "anesthesia_performed、anesthesia_record_formed、evaluation_window_mature"
+    )
+    array_event_contract = (
+        "数组项仅可有 event_type、event_id、document_id、source_type、trigger_confirmed、"
+        "evaluation_window_mature、documentation、appropriateness"
+    )
+    assert top_level_boolean_contract not in prompts[0]
+    assert array_event_contract in prompts[0]
 
 
 @pytest.mark.asyncio
@@ -539,6 +615,7 @@ async def test_extracts_only_minimal_target_documents_and_calls_model_once() -> 
 
     assert result["semantic_facts"] == {"case_characteristic_quality": "adequate"}
     assert result["diagnostic"]["llm_call_count"] == 1
+    assert "contract_retry_applied" not in result["diagnostic"]
     assert len(calls) == 1
     prompt, kwargs = calls[0]
     assert "F-1" in prompt and "S-1" in prompt
@@ -700,14 +777,22 @@ async def test_grounding_drops_event_facts_bound_to_unlocatable_document_id() ->
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "extra",
+    ("extra", "failure_detail"),
     [
-        {"unexpected": {}},
-        {"semantic_facts": {"case_characteristic_quality": "maybe"}},
-        {"document_facts": {"surgery_consent": {"presence": "unknown"}}},
+        ({"unexpected": {}}, "invalid_top_level_facts"),
+        (
+            {"semantic_facts": {"case_characteristic_quality": "maybe"}},
+            "invalid_quality_semantic_fact",
+        ),
+        (
+            {"document_facts": {"surgery_consent": {"presence": "unknown"}}},
+            "invalid_document_presence",
+        ),
     ],
 )
-async def test_rejects_unknown_keys_and_illegal_enum_values(extra: dict[str, Any]) -> None:
+async def test_rejects_unknown_keys_and_illegal_enum_values(
+    extra: dict[str, Any], failure_detail: str
+) -> None:
     async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
         return {"choices": [{"message": {"content": _content(extra=extra)}}]}
 
@@ -721,9 +806,335 @@ async def test_rejects_unknown_keys_and_illegal_enum_values(extra: dict[str, Any
     assert result["diagnostic"] == {
         "code": "semantic_extraction_invalid",
         "document_count": 1,
-        "llm_call_count": 1,
+        "llm_call_count": 2,
         "failure_stage": "contract_validation",
+        "failure_detail": failure_detail,
+        "contract_retry_detail": failure_detail,
     }
+
+
+@pytest.mark.asyncio
+async def test_unknown_event_fact_has_safe_contract_failure_detail() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {"message": {"content": _content(extra={"event_facts": {"unknown_event": True}})}}
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-011",), generate=generate
+    )
+
+    assert result["diagnostic"] == {
+        "code": "semantic_extraction_invalid",
+        "document_count": 1,
+        "llm_call_count": 2,
+        "failure_stage": "contract_validation",
+        "failure_detail": "unknown_event_fact",
+        "contract_retry_detail": "unknown_event_fact",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("admission_fact", "failure_detail"),
+    [
+        (None, "invalid_admission_semantic_fact_type"),
+        (
+            {"document_id": "A-1", "source_type": "admission_record"},
+            "invalid_admission_semantic_fact_missing_state",
+        ),
+        (
+            {"state": "complete", "source_type": "admission_record"},
+            "invalid_admission_semantic_fact_missing_document_id",
+        ),
+        (
+            {"state": "complete", "document_id": "A-1"},
+            "invalid_admission_semantic_fact_missing_source_type",
+        ),
+        (
+            {"state": "complete"},
+            "invalid_admission_semantic_fact_missing_multiple_fields",
+        ),
+        (
+            {"state": "complete", "extra": True},
+            "invalid_admission_semantic_fact_missing_and_extra_fields",
+        ),
+        (
+            {
+                "state": "invalid",
+                "document_id": "A-1",
+                "source_type": "admission_record",
+            },
+            "invalid_admission_semantic_fact_state",
+        ),
+        (
+            {
+                "state": "complete",
+                "document_id": "",
+                "source_type": "admission_record",
+            },
+            "invalid_admission_semantic_fact_document_id",
+        ),
+        (
+            {
+                "state": "complete",
+                "document_id": "A-1",
+                "source_type": "",
+            },
+            "invalid_admission_semantic_fact_source_type",
+        ),
+    ],
+)
+async def test_admission_contract_failures_have_granular_safe_details(
+    admission_fact: Any, failure_detail: str
+) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={"semantic_facts": {"LX0916-001": admission_fact}}
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "admission_record": [
+                        {"document_id": "A-1", "content": "入院记录。"}
+                    ]
+                }
+            }
+        },
+        rule_ids=("LX0916-001",),
+        generate=generate,
+    )
+
+    assert result["diagnostic"]["failure_stage"] == "contract_validation"
+    assert result["diagnostic"]["failure_detail"] == failure_detail
+
+
+@pytest.mark.asyncio
+async def test_retries_admission_extra_fields_without_reusing_invalid_output() -> None:
+    prompts: list[str] = []
+
+    async def generate(prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        prompts.append(prompt)
+        content = (
+            _content(
+                extra={
+                    "semantic_facts": {
+                        "LX0916-001": {
+                            "state": "complete",
+                            "document_id": "A-1",
+                            "source_type": "admission_record",
+                            "extra": True,
+                        }
+                    }
+                }
+            )
+            if len(prompts) == 1
+            else _content(
+                extra={
+                    "semantic_facts": {
+                        "LX0916-001": {
+                            "state": "complete",
+                            "document_id": "A-1",
+                            "source_type": "admission_record",
+                        }
+                    }
+                }
+            )
+        )
+        return {"choices": [{"message": {"content": content}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={"programmatic_timeline": {"documents": {"admission_record": [{"document_id": "A-1", "content": "入院记录。"}]}}},
+        rule_ids=("LX0916-001",), generate=generate,
+    )
+
+    assert result["diagnostic"] == {
+        "code": "semantic_extraction_ready",
+        "document_count": 1,
+        "llm_call_count": 2,
+        "contract_retry_applied": True,
+        "contract_retry_detail": "invalid_admission_semantic_fact_extra_fields",
+    }
+    assert result["semantic_facts"]["LX0916-001"] == {"state": "complete", "document_id": "A-1", "source_type": "admission_record"}
+    assert "上次输出合同无效" in prompts[1]
+    assert "A-1" in prompts[1]
+    assert "\"extra\": true" not in prompts[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("course_events", "failure_detail"),
+    [
+        ({}, "invalid_course_event_collection_type"),
+        ([None], "invalid_course_event_item_type"),
+        ([{"event_type": "critical_values"}], "invalid_course_event_event_type"),
+        (
+            [{"event_type": "disease_changes", "event_id": ""}],
+            "invalid_course_event_event_id",
+        ),
+        (
+            [{"event_type": "disease_changes", "document_id": ""}],
+            "invalid_course_event_document_id",
+        ),
+        (
+            [{"event_type": "disease_changes", "source_type": ""}],
+            "invalid_course_event_source_type",
+        ),
+        (
+            [{"event_type": "disease_changes", "trigger_confirmed": "true"}],
+            "invalid_course_event_trigger_confirmed",
+        ),
+        (
+            [{"event_type": "disease_changes", "appropriateness": "unknown"}],
+            "invalid_course_event_appropriateness",
+        ),
+        (
+            [{"event_type": "disease_changes", "documentation": []}],
+            "invalid_course_event_documentation_type",
+        ),
+        (
+            [{"event_type": "disease_changes", "documentation": {"extra": True}}],
+            "invalid_course_event_documentation_fields",
+        ),
+        (
+            [{"event_type": "disease_changes", "documentation": {"complete": "yes"}}],
+            "invalid_course_event_documentation_flag_type",
+        ),
+    ],
+)
+async def test_course_event_contract_failures_have_granular_safe_details(
+    course_events: Any, failure_detail: str
+) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={"event_facts": {"disease_changes": course_events}}
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-015",), generate=generate
+    )
+
+    assert result["diagnostic"]["failure_stage"] == "contract_validation"
+    assert result["diagnostic"]["failure_detail"] == failure_detail
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("maturity", [None, "false", {"value": False}])
+async def test_retries_non_boolean_course_event_maturity(maturity: Any) -> None:
+    calls = 0
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        event = {
+            "event_type": "disease_changes",
+            "document_id": "D-1",
+            "source_type": "daily_course_record",
+            "trigger_confirmed": True,
+        }
+        event["evaluation_window_mature"] = maturity if calls == 1 else False
+        return {"choices": [{"message": {"content": _content(extra={"event_facts": {"disease_changes": [event]}})}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-015",), generate=generate
+    )
+
+    event = result["event_facts"]["disease_changes"][0]
+    assert result["diagnostic"]["llm_call_count"] == 2
+    assert result["diagnostic"]["contract_retry_applied"] is True
+    assert result["diagnostic"]["contract_retry_detail"] == "invalid_course_event_evaluation_window_mature"
+    assert event["evaluation_window_mature"] is False
+    assert event["trigger_confirmed"] is True
+
+
+@pytest.mark.asyncio
+async def test_retries_extra_course_event_item_fields() -> None:
+    calls = 0
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        event = {
+            "event_type": "disease_changes",
+            "document_id": "D-1",
+            "source_type": "daily_course_record",
+        }
+        if calls == 1:
+            event["extra"] = True
+        return {"choices": [{"message": {"content": _content(extra={"event_facts": {"disease_changes": [event]}})}}]}
+
+    result = await extract_luxian_0916_facts(evidence_payload=_payload(), rule_ids=("LX0916-015",), generate=generate)
+    assert result["diagnostic"]["llm_call_count"] == 2
+    assert result["diagnostic"]["contract_retry_applied"] is True
+    assert result["diagnostic"]["contract_retry_detail"] == "invalid_course_event_item_fields"
+    assert "extra" not in result["event_facts"]["disease_changes"][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("item", "detail"),
+    [
+        ({"extra": True}, "invalid_course_event_item_fields"),
+        ({"event_type": "disease_changes", "documentation": {"extra": True}}, "invalid_course_event_documentation_fields"),
+    ],
+)
+async def test_rejects_course_event_invalid_on_both_attempts(item: dict[str, Any], detail: str) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": _content(extra={"event_facts": {"disease_changes": [item]}})}}]}
+
+    result = await extract_luxian_0916_facts(evidence_payload=_payload(), rule_ids=("LX0916-015",), generate=generate)
+    assert result["semantic_facts"] == {}
+    assert result["diagnostic"] == {
+        "code": "semantic_extraction_invalid",
+        "document_count": 1,
+        "llm_call_count": 2,
+        "failure_stage": "contract_validation",
+        "failure_detail": detail,
+        "contract_retry_detail": detail,
+    }
+
+
+@pytest.mark.asyncio
+async def test_keeps_boolean_course_event_maturity() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": _content(extra={"event_facts": {"disease_changes": [{
+            "event_type": "disease_changes", "document_id": "D-1", "source_type": "daily_course_record",
+            "evaluation_window_mature": False,
+        }]}})}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-015",), generate=generate
+    )
+
+    assert result["event_facts"]["disease_changes"][0]["evaluation_window_mature"] is False
+
+
+@pytest.mark.parametrize(
+    "error",
+    [RuntimeError("private model or patient content"), ValueError("unexpected validation text")],
+)
+def test_unrecognized_contract_error_uses_safe_fallback_detail(error: BaseException) -> None:
+    assert _contract_failure_detail(error) == "unclassified_contract_error"
 
 
 @pytest.mark.asyncio
@@ -901,6 +1312,41 @@ async def test_model_generation_failure_keeps_safe_failure_stage() -> None:
         "failure_stage": "generation",
     }
     assert "private endpoint detail" not in json.dumps(result, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_contract_retry_generation_failure_is_closed_with_two_calls() -> None:
+    prompts: list[str] = []
+
+    async def generate(prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        prompts.append(prompt)
+        if len(prompts) == 2:
+            raise TimeoutError("private retry failure")
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(extra={"event_facts": {"unknown_event": True}})
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-011",), generate=generate
+    )
+
+    assert result["semantic_facts"] == {}
+    assert result["diagnostic"] == {
+        "code": "semantic_extraction_invalid",
+        "document_count": 1,
+        "llm_call_count": 2,
+        "failure_stage": "generation",
+        "contract_retry_detail": "unknown_event_fact",
+    }
+    assert '"unknown_event": true' not in prompts[1]
+    assert "unknown_event_fact" in prompts[1]
+    assert "private retry failure" not in json.dumps(result, ensure_ascii=False)
 
 
 @pytest.mark.asyncio

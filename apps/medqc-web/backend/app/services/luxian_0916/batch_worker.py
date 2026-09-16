@@ -22,7 +22,10 @@ from .input_context import (
 )
 from .orchestrator import Luxian0916Execution, execute_luxian_0916
 from .rule_catalog import LUXIAN_0916_RULE_CATALOG
-from .semantic_extractor import extract_luxian_0916_facts
+from .semantic_extractor import (
+    SEMANTIC_CONTRACT_FAILURE_DETAILS,
+    extract_luxian_0916_facts,
+)
 
 
 LUXIAN_0916_RULE_SET_KEY = "luxian_0916_qc_v1"
@@ -176,6 +179,7 @@ async def run_luxian_0916_batch_job(
             if outcome.semantic_diagnostic
         ]
         semantic_extraction_failures = _semantic_extraction_failures(outcomes)
+        semantic_contract_retries = _semantic_contract_retries(outcomes)
         summary = {
             "execution_status": (
                 "completed_with_record_failures" if failed_records else "completed"
@@ -197,6 +201,8 @@ async def run_luxian_0916_batch_job(
             ),
             "semantic_extraction_invalid_count": len(semantic_extraction_failures),
             "semantic_extraction_failures": semantic_extraction_failures,
+            "semantic_contract_retry_count": len(semantic_contract_retries),
+            "semantic_contract_retries": semantic_contract_retries,
             "progress": {
                 "step_key": "completed",
                 "processed_records": total_records,
@@ -224,12 +230,14 @@ class _RecordExecution:
         failed_records: Sequence[dict[str, Any]] = (),
         semantic_diagnostic: Mapping[str, Any] | None = None,
         semantic_extraction_failure: Mapping[str, Any] | None = None,
+        semantic_contract_retry: Mapping[str, Any] | None = None,
     ) -> None:
         self.items = tuple(items)
         self.diagnostic_failures = tuple(diagnostic_failures)
         self.failed_records = tuple(failed_records)
         self.semantic_diagnostic = dict(semantic_diagnostic or {})
         self.semantic_extraction_failure = dict(semantic_extraction_failure or {})
+        self.semantic_contract_retry = dict(semantic_contract_retry or {})
 
 
 async def _execute_record(
@@ -281,6 +289,11 @@ async def _execute_record(
             failed_records=outcome.failed_records,
             semantic_diagnostic=_mapping(extracted.get("diagnostic")),
             semantic_extraction_failure=_semantic_extraction_failure(
+                identity=identity,
+                record=record,
+                diagnostic=_mapping(extracted.get("diagnostic")),
+            ),
+            semantic_contract_retry=_semantic_contract_retry(
                 identity=identity,
                 record=record,
                 diagnostic=_mapping(extracted.get("diagnostic")),
@@ -388,18 +401,16 @@ def _resolve_concurrency(*, requested: int | None, filter_value: Any, total_reco
 
 
 async def _build_semantic_generate(filters: Mapping[str, Any]) -> SemanticGenerate:
-    """为本任务构造一个模型客户端；每份病历由提取器最多调用一次。"""
+    """构造固定采样客户端；每份病历最多调用两次，第二次仅用于合同无效重试。"""
 
     config = dict(await LLMConfigLoader.load_config(config_name="default", user_id=None) or {})
     custom_parameters = dict(_mapping(config.get("custom_parameters")))
-    for filter_key, config_key in (
-        ("temperature", "temperature"),
-        ("top_p", "top_p"),
-        ("max_tokens", "max_tokens"),
-    ):
-        value = filters.get(filter_key)
-        if value is not None:
-            custom_parameters[config_key] = value
+    max_tokens = filters.get("max_tokens")
+    if max_tokens is not None:
+        custom_parameters["max_tokens"] = max_tokens
+    # 0916 的语义事实抽取需要固定采样，任务筛选和保存的默认模型配置均不得覆盖。
+    custom_parameters["temperature"] = 0.0
+    custom_parameters["top_p"] = 1.0
     config["custom_parameters"] = custom_parameters
     model_code = str(filters.get("model_code") or "").strip()
     if model_code:
@@ -480,6 +491,19 @@ def _semantic_extraction_failure(
     failure_stage = diagnostic.get("failure_stage")
     if isinstance(failure_stage, str) and failure_stage in _SEMANTIC_FAILURE_STAGES:
         failure["failure_stage"] = failure_stage
+    failure_detail = diagnostic.get("failure_detail")
+    if (
+        failure_stage == "contract_validation"
+        and isinstance(failure_detail, str)
+        and failure_detail in SEMANTIC_CONTRACT_FAILURE_DETAILS
+    ):
+        failure["failure_detail"] = failure_detail
+    contract_retry_detail = diagnostic.get("contract_retry_detail")
+    if (
+        isinstance(contract_retry_detail, str)
+        and contract_retry_detail in SEMANTIC_CONTRACT_FAILURE_DETAILS
+    ):
+        failure["contract_retry_detail"] = contract_retry_detail
     return failure
 
 
@@ -495,6 +519,46 @@ def _semantic_extraction_failures(
             continue
         identity = _record_identity_from_item(failure)
         unique.setdefault(identity, dict(failure))
+    return [unique[identity] for identity in sorted(unique)]
+
+
+def _semantic_contract_retry(
+    *,
+    identity: Mapping[str, str],
+    record: Mapping[str, Any],
+    diagnostic: Mapping[str, Any],
+) -> dict[str, Any]:
+    """保留已恢复合同抖动的病历坐标和固定子码，不保存模型输出或病历原文。"""
+
+    detail = diagnostic.get("contract_retry_detail")
+    if (
+        diagnostic.get("code") != "semantic_extraction_ready"
+        or diagnostic.get("contract_retry_applied") is not True
+        or not isinstance(detail, str)
+        or detail not in SEMANTIC_CONTRACT_FAILURE_DETAILS
+    ):
+        return {}
+    return {
+        **identity,
+        "record_id": str(record.get("record_id") or identity["visit_id"]),
+        "code": "semantic_contract_retry_applied",
+        "llm_call_count": _nonnegative_int(diagnostic.get("llm_call_count")),
+        "contract_retry_detail": detail,
+    }
+
+
+def _semantic_contract_retries(
+    outcomes: Sequence[_RecordExecution],
+) -> list[dict[str, Any]]:
+    """按病历三坐标去重汇总已恢复的合同重试。"""
+
+    unique: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for outcome in outcomes:
+        retry = outcome.semantic_contract_retry
+        if not retry:
+            continue
+        identity = _record_identity_from_item(retry)
+        unique.setdefault(identity, dict(retry))
     return [unique[identity] for identity in sorted(unique)]
 
 

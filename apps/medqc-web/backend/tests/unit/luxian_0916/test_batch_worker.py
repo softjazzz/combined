@@ -123,6 +123,56 @@ async def _invalid_semantic_generate(_prompt: str, **_kwargs: Any) -> dict[str, 
 
 
 @pytest.mark.asyncio
+async def test_semantic_generate_forces_deterministic_sampling_without_losing_model_or_token_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_configs: list[dict[str, Any]] = []
+
+    async def load_config(**_kwargs: Any) -> dict[str, Any]:
+        return {
+            "model": "saved-model",
+            "custom_parameters": {
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "max_tokens": 512,
+                "preserved_setting": "value",
+            },
+        }
+
+    class Client:
+        def __init__(self, config: dict[str, Any]) -> None:
+            captured_configs.append(config)
+
+        async def generate(self, _prompt: str, **_kwargs: Any) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.setattr(batch_worker.LLMConfigLoader, "load_config", load_config)
+    monkeypatch.setattr(batch_worker, "SichuanQCLLMClient", Client)
+
+    generate = await batch_worker._build_semantic_generate(
+        {
+            "temperature": 0.8,
+            "top_p": 0.2,
+            "max_tokens": 4096,
+            "model_code": "task-model",
+        }
+    )
+
+    assert callable(generate)
+    assert captured_configs == [
+        {
+            "model": "task-model",
+            "custom_parameters": {
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "max_tokens": 4096,
+                "preserved_setting": "value",
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -320,6 +370,91 @@ async def test_batch_worker_persists_one_locatable_semantic_extraction_failure_p
         "patient_name" not in item and "content" not in item
         for item in summary["semantic_extraction_failures"]
     )
+
+
+@pytest.mark.asyncio
+async def test_batch_worker_persists_locatable_successful_contract_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record()])
+    _patch_loaders(monkeypatch)
+
+    async def extract(**_kwargs: Any) -> dict[str, Any]:
+        return {
+            "semantic_facts": {},
+            "event_facts": {},
+            "document_facts": {},
+            "discharge_facts": {},
+            "event_source_state_by_rule": {},
+            "diagnostic": {
+                "code": "semantic_extraction_ready",
+                "document_count": 1,
+                "llm_call_count": 2,
+                "contract_retry_applied": True,
+                "contract_retry_detail": "invalid_course_event_item_fields",
+            },
+        }
+
+    monkeypatch.setattr(batch_worker, "extract_luxian_0916_facts", extract)
+    monkeypatch.setattr(
+        batch_worker,
+        "execute_luxian_0916",
+        lambda *_args: Luxian0916Execution(results=(_result("LX0916-001"),)),
+    )
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=_semantic_generate
+    )
+
+    assert workspace.completed is not None
+    summary = workspace.completed["summary"]
+    assert summary["semantic_llm_call_count"] == 2
+    assert summary["semantic_extraction_invalid_count"] == 0
+    assert summary["semantic_contract_retry_count"] == 1
+    assert summary["semantic_contract_retries"] == [
+        {
+            "institute_id": "I-1",
+            "patient_id": "P-1",
+            "visit_id": "V-1",
+            "record_id": "V-1",
+            "code": "semantic_contract_retry_applied",
+            "llm_call_count": 2,
+            "contract_retry_detail": "invalid_course_event_item_fields",
+        }
+    ]
+    assert "patient_name" not in summary["semantic_contract_retries"][0]
+
+
+def test_semantic_extraction_failure_only_persists_allowed_contract_detail() -> None:
+    identity = {"institute_id": "I-1", "patient_id": "P-1", "visit_id": "V-1"}
+    record = {"record_id": "V-1"}
+    allowed = batch_worker._semantic_extraction_failure(
+        identity=identity,
+        record=record,
+        diagnostic={
+            "code": "semantic_extraction_invalid",
+            "document_count": 1,
+            "llm_call_count": 1,
+            "failure_stage": "contract_validation",
+            "failure_detail": "invalid_course_event_documentation_fields",
+            "contract_retry_detail": "invalid_course_event_item_fields",
+        },
+    )
+    rejected = batch_worker._semantic_extraction_failure(
+        identity=identity,
+        record=record,
+        diagnostic={
+            "code": "semantic_extraction_invalid",
+            "document_count": 1,
+            "llm_call_count": 1,
+            "failure_stage": "contract_validation",
+            "failure_detail": "private exception or patient content",
+        },
+    )
+
+    assert allowed["failure_detail"] == "invalid_course_event_documentation_fields"
+    assert allowed["contract_retry_detail"] == "invalid_course_event_item_fields"
+    assert "failure_detail" not in rejected
 
 
 @pytest.mark.asyncio

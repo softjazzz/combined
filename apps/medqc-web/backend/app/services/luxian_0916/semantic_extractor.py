@@ -140,7 +140,6 @@ _BOOLEAN_EVENT_KEYS = frozenset(
         "anesthesia_arranged",
         "anesthesia_performed",
         "anesthesia_record_formed",
-        "evaluation_window_mature",
         "emergency_surgery",
         "unplanned_reoperation",
         "special_treatment",
@@ -173,6 +172,65 @@ _DOCUMENT_FACT_KEYS = frozenset(
 )
 _DOCUMENT_PRESENCE = frozenset({"present", "missing"})
 _DOCUMENT_COMPLETENESS = frozenset({"complete", "incomplete"})
+_COURSE_EVENT_ITEM_KEYS = frozenset(
+    {
+        "event_type", "event_id", "document_id", "source_type", "trigger_confirmed",
+        "evaluation_window_mature", "documentation", "appropriateness",
+    }
+)
+
+
+# 合同失败子码只允许来自本模块固定的校验文案，避免把模型输出、异常文本或
+# 患者内容写入任务诊断。批处理仅可搬运此集合中的值。
+_CONTRACT_FAILURE_DETAIL_BY_ERROR_MESSAGE = {
+    "duplicate output field": "duplicate_output_field",
+    "invalid misplaced discharge fact": "invalid_misplaced_discharge_fact",
+    "conflicting discharge fact": "conflicting_discharge_fact",
+    "invalid surgery safety-check document alias": "invalid_surgery_safety_check_document_alias",
+    "conflicting surgery safety-check document facts": "conflicting_surgery_safety_check_document_facts",
+    "invalid top-level facts": "invalid_top_level_facts",
+    "fact containers must be objects": "invalid_fact_containers",
+    "unknown semantic fact": "unknown_semantic_fact",
+    "invalid admission semantic fact type": "invalid_admission_semantic_fact_type",
+    "invalid admission semantic fact has extra fields": "invalid_admission_semantic_fact_extra_fields",
+    "invalid admission semantic fact missing state": "invalid_admission_semantic_fact_missing_state",
+    "invalid admission semantic fact missing document_id": "invalid_admission_semantic_fact_missing_document_id",
+    "invalid admission semantic fact missing source_type": "invalid_admission_semantic_fact_missing_source_type",
+    "invalid admission semantic fact missing multiple fields": "invalid_admission_semantic_fact_missing_multiple_fields",
+    "invalid admission semantic fact has missing and extra fields": "invalid_admission_semantic_fact_missing_and_extra_fields",
+    "invalid admission semantic fact state": "invalid_admission_semantic_fact_state",
+    "invalid admission semantic fact document_id": "invalid_admission_semantic_fact_document_id",
+    "invalid admission semantic fact source_type": "invalid_admission_semantic_fact_source_type",
+    "invalid first-course presence fact": "invalid_first_course_presence_fact",
+    "invalid quality semantic fact": "invalid_quality_semantic_fact",
+    "unknown event fact": "unknown_event_fact",
+    "invalid boolean event fact": "invalid_boolean_event_fact",
+    "invalid course event collection type": "invalid_course_event_collection_type",
+    "invalid course event item type": "invalid_course_event_item_type",
+    "invalid course event item fields": "invalid_course_event_item_fields",
+    "invalid course event event_type": "invalid_course_event_event_type",
+    "invalid course event event_id": "invalid_course_event_event_id",
+    "invalid course event document_id": "invalid_course_event_document_id",
+    "invalid course event source_type": "invalid_course_event_source_type",
+    "invalid course event trigger_confirmed": "invalid_course_event_trigger_confirmed",
+    "invalid course event evaluation_window_mature": "invalid_course_event_evaluation_window_mature",
+    "invalid course event appropriateness": "invalid_course_event_appropriateness",
+    "invalid course event documentation type": "invalid_course_event_documentation_type",
+    "invalid course event documentation fields": "invalid_course_event_documentation_fields",
+    "invalid course event documentation flag type": "invalid_course_event_documentation_flag_type",
+    "invalid top-level evaluation_window_mature": "invalid_top_level_evaluation_window_mature",
+    "unknown document fact": "unknown_document_fact",
+    "invalid document fact fields": "invalid_document_fact_fields",
+    "invalid document presence": "invalid_document_presence",
+    "missing document fact cannot assert completeness": "missing_document_fact_asserts_completeness",
+    "document fact requires document_id": "document_fact_requires_document_id",
+    "document fact requires source_type": "document_fact_requires_source_type",
+    "invalid document completeness": "invalid_document_completeness",
+    "invalid discharge fact": "invalid_discharge_fact",
+}
+SEMANTIC_CONTRACT_FAILURE_DETAILS = frozenset(
+    _CONTRACT_FAILURE_DETAIL_BY_ERROR_MESSAGE.values()
+) | frozenset({"unclassified_contract_error"})
 
 # 文书存在性或完整性不能由模型对空白上下文的推测产生。每一类事实只可引用
 # 本次受控选择的、与该事实相符的来源文书。这里是语义提取层的输入边界，不是
@@ -221,6 +279,8 @@ def _empty_facts(
     llm_call_count: int = 0,
     event_source_state_by_rule: Mapping[str, str] | None = None,
     failure_stage: str | None = None,
+    failure_detail: str | None = None,
+    contract_retry_detail: str | None = None,
 ) -> dict[str, Any]:
     diagnostic: dict[str, Any] = {
         "code": code,
@@ -229,6 +289,13 @@ def _empty_facts(
     }
     if failure_stage:
         diagnostic["failure_stage"] = failure_stage
+    if (
+        failure_stage == "contract_validation"
+        and failure_detail in SEMANTIC_CONTRACT_FAILURE_DETAILS
+    ):
+        diagnostic["failure_detail"] = failure_detail
+    if contract_retry_detail in SEMANTIC_CONTRACT_FAILURE_DETAILS:
+        diagnostic["contract_retry_detail"] = contract_retry_detail
     return {
         "semantic_facts": {},
         "event_facts": {},
@@ -389,7 +456,7 @@ def _prompt(*, documents: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) 
         "semantic_facts：仅可含 LX0916-001 至 LX0916-009（每项必须有 state、document_id、source_type；state 为 complete/incomplete/not_applicable/unknown），"
         "以及 case_characteristic_present、diagnosis_basis_present、differential_diagnosis_present、treatment_plan_present（布尔值），"
         "和 case_characteristic_quality、diagnosis_basis_quality、differential_diagnosis_quality、treatment_plan_quality（值为 adequate/inadequate）。"
-        "event_facts：布尔键仅可为 surgery_arranged、surgery_performed、anesthesia_arranged、anesthesia_performed、anesthesia_record_formed、evaluation_window_mature、emergency_surgery、unplanned_reoperation、special_treatment、critical_or_serious_condition。"
+        "event_facts：布尔键仅可为 surgery_arranged、surgery_performed、anesthesia_arranged、anesthesia_performed、anesthesia_record_formed、emergency_surgery、unplanned_reoperation、special_treatment、critical_or_serious_condition。"
         "还可含 disease_changes、exam_or_medication_orders、critical_values、important_operations、diagnosis_changes，每项为数组；数组项仅可有 event_type、event_id、document_id、source_type、trigger_confirmed、evaluation_window_mature、documentation、appropriateness。"
         "event_type 必须等于所属数组键；trigger_confirmed/evaluation_window_mature 为布尔值；"
         "evaluation_window_mature 仅在文书明确给出事件时间及已到记录检查时点时填写；"
@@ -407,6 +474,21 @@ def _prompt(*, documents: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) 
     )
 
 
+def _contract_retry_prompt(
+    *,
+    documents: Sequence[Mapping[str, Any]],
+    rule_ids: Sequence[str],
+    failure_detail: str,
+) -> str:
+    """丢弃无效输出，按同一受控文书上下文重试一次。"""
+
+    return (
+        _prompt(documents=documents, rule_ids=rule_ids)
+        + "\n上次输出合同无效；严格按既定字段重新提取，不得输出额外字段。"
+        + f"固定合同失败子码：{failure_detail}。"
+    )
+
+
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -416,19 +498,48 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _valid_course_event(key: str, value: Any) -> bool:
+def _contract_failure_detail(error: BaseException) -> str:
+    """把合同校验异常收敛为不含模型或患者原文的固定子码。"""
+
+    if isinstance(error, ValueError):
+        return _CONTRACT_FAILURE_DETAIL_BY_ERROR_MESSAGE.get(
+            str(error), "unclassified_contract_error"
+        )
+    return "unclassified_contract_error"
+
+
+def _validate_admission_semantic_fact(value: Any) -> None:
+    """校验入院规则事实，并保留固定且无患者内容的失败原因。"""
+
+    if not isinstance(value, Mapping):
+        raise ValueError("invalid admission semantic fact type")
+    required_fields = {"state", "document_id", "source_type"}
+    actual_fields = set(value)
+    missing_fields = required_fields - actual_fields
+    extra_fields = actual_fields - required_fields
+    if missing_fields and extra_fields:
+        raise ValueError("invalid admission semantic fact has missing and extra fields")
+    if extra_fields:
+        raise ValueError("invalid admission semantic fact has extra fields")
+    if missing_fields == {"state"}:
+        raise ValueError("invalid admission semantic fact missing state")
+    if missing_fields == {"document_id"}:
+        raise ValueError("invalid admission semantic fact missing document_id")
+    if missing_fields == {"source_type"}:
+        raise ValueError("invalid admission semantic fact missing source_type")
+    if missing_fields:
+        raise ValueError("invalid admission semantic fact missing multiple fields")
+    if value.get("state") not in _SEMANTIC_STATES:
+        raise ValueError("invalid admission semantic fact state")
+    if not isinstance(value.get("document_id"), str) or not value["document_id"].strip():
+        raise ValueError("invalid admission semantic fact document_id")
+    if not isinstance(value.get("source_type"), str) or not value["source_type"].strip():
+        raise ValueError("invalid admission semantic fact source_type")
+
+
+def _validate_course_event(key: str, value: Any) -> None:
     if not isinstance(value, list):
-        return False
-    allowed = {
-        "event_type",
-        "event_id",
-        "document_id",
-        "source_type",
-        "trigger_confirmed",
-        "evaluation_window_mature",
-        "documentation",
-        "appropriateness",
-    }
+        raise ValueError("invalid course event collection type")
     documentation_keys = {
         "record_present",
         "complete",
@@ -440,27 +551,28 @@ def _valid_course_event(key: str, value: Any) -> bool:
         "basis_recorded",
     }
     for item in value:
-        if not isinstance(item, Mapping) or not set(item).issubset(allowed):
-            return False
+        if not isinstance(item, Mapping):
+            raise ValueError("invalid course event item type")
+        if not set(item).issubset(_COURSE_EVENT_ITEM_KEYS):
+            raise ValueError("invalid course event item fields")
         if item.get("event_type") != key:
-            return False
+            raise ValueError("invalid course event event_type")
         for identifier in ("event_id", "document_id", "source_type"):
             if identifier in item and (not isinstance(item[identifier], str) or not item[identifier].strip()):
-                return False
+                raise ValueError(f"invalid course event {identifier}")
         for boolean_key in ("trigger_confirmed", "evaluation_window_mature"):
             if boolean_key in item and type(item[boolean_key]) is not bool:
-                return False
+                raise ValueError(f"invalid course event {boolean_key}")
         if "appropriateness" in item and item["appropriateness"] not in {"reasonable", "unreasonable"}:
-            return False
+            raise ValueError("invalid course event appropriateness")
         if "documentation" in item:
             documentation = item["documentation"]
-            if (
-                not isinstance(documentation, Mapping)
-                or not set(documentation).issubset(documentation_keys)
-                or any(type(flag) is not bool for flag in documentation.values())
-            ):
-                return False
-    return True
+            if not isinstance(documentation, Mapping):
+                raise ValueError("invalid course event documentation type")
+            if not set(documentation).issubset(documentation_keys):
+                raise ValueError("invalid course event documentation fields")
+            if any(type(flag) is not bool for flag in documentation.values()):
+                raise ValueError("invalid course event documentation flag type")
 
 
 def _normalize_known_model_deviations(
@@ -472,6 +584,10 @@ def _normalize_known_model_deviations(
     normalized_events = dict(events)
     normalized_documents = dict(documents)
     normalized_discharge = dict(discharge)
+    # 评估窗口成熟度只属于逐项病程事件。顶层裸值没有事件归属，不能静默
+    # 删除后让同次输出进入业务判定；交给一次受控重试重新提取完整事实。
+    if "evaluation_window_mature" in normalized_events:
+        raise ValueError("invalid top-level evaluation_window_mature")
     for key in ("discharge_arranged", "discharge_record_formed"):
         if key not in normalized_events:
             continue
@@ -545,16 +661,7 @@ def _validate_facts(content: str) -> dict[str, Any]:
         raise ValueError("unknown semantic fact")
     for key, value in semantic.items():
         if key in _ADMISSION_RULE_IDS:
-            if (
-                not isinstance(value, Mapping)
-                or set(value) != {"state", "document_id", "source_type"}
-                or value.get("state") not in _SEMANTIC_STATES
-                or not isinstance(value.get("document_id"), str)
-                or not value["document_id"].strip()
-                or not isinstance(value.get("source_type"), str)
-                or not value["source_type"].strip()
-            ):
-                raise ValueError("invalid admission semantic fact")
+            _validate_admission_semantic_fact(value)
         elif key in _FIRST_COURSE_PRESENCE_KEYS:
             if type(value) is not bool:
                 raise ValueError("invalid first-course presence fact")
@@ -565,8 +672,8 @@ def _validate_facts(content: str) -> dict[str, Any]:
     for key, value in events.items():
         if key in _BOOLEAN_EVENT_KEYS and type(value) is not bool:
             raise ValueError("invalid boolean event fact")
-        if key in _COURSE_EVENT_KEYS and not _valid_course_event(key, value):
-            raise ValueError("invalid course event fact")
+        if key in _COURSE_EVENT_KEYS:
+            _validate_course_event(key, value)
     if not set(documents).issubset(_DOCUMENT_FACT_KEYS):
         raise ValueError("unknown document fact")
     validated_documents: dict[str, dict[str, Any]] = {}
@@ -789,7 +896,7 @@ async def extract_luxian_0916_facts(
     rule_ids: Sequence[str],
     generate: Generate,
 ) -> dict[str, Any]:
-    """执行一次受控提取；异常仅返回诊断和空事实，绝不生成客户状态。"""
+    """执行受控提取；仅合同校验失败时再提取一次，其余异常返回空事实。"""
 
     documents = _selected_documents(evidence_payload, rule_ids)
     event_source_state_by_rule = _event_source_state_by_rule(
@@ -845,6 +952,9 @@ async def extract_luxian_0916_facts(
             event_source_state_by_rule=event_source_state_by_rule,
             failure_stage="content_type",
         )
+    llm_call_count = 1
+    contract_retry_applied = False
+    contract_retry_detail: str | None = None
     try:
         validated = _validate_facts(content)
     except json.JSONDecodeError:
@@ -855,13 +965,91 @@ async def extract_luxian_0916_facts(
             event_source_state_by_rule=event_source_state_by_rule,
             failure_stage="json_syntax",
         )
-    except Exception:
+    except ValueError as exc:
+        failure_detail = _contract_failure_detail(exc)
+        contract_retry_detail = failure_detail
+        try:
+            repaired_response = await generate(
+                _contract_retry_prompt(
+                    documents=documents,
+                    rule_ids=rule_ids,
+                    failure_detail=failure_detail,
+                ),
+                max_completion_tokens=_MAX_COMPLETION_TOKENS,
+                allow_length_retry=False,
+                response_format={"type": "json_object"},
+            )
+        except Exception:
+            return _empty_facts(
+                code="semantic_extraction_invalid",
+                document_count=len(documents),
+                llm_call_count=2,
+                event_source_state_by_rule=event_source_state_by_rule,
+                failure_stage="generation",
+                contract_retry_detail=failure_detail,
+            )
+        llm_call_count = 2
+        try:
+            repaired_choice = repaired_response["choices"][0]
+            repaired_finish_reason = repaired_choice.get("finish_reason")
+            repaired_content = repaired_choice["message"]["content"]
+        except Exception:
+            return _empty_facts(
+                code="semantic_extraction_invalid",
+                document_count=len(documents),
+                llm_call_count=2,
+                event_source_state_by_rule=event_source_state_by_rule,
+                failure_stage="response_shape",
+                contract_retry_detail=failure_detail,
+            )
+        if repaired_finish_reason == "length":
+            return _empty_facts(
+                code="semantic_extraction_invalid",
+                document_count=len(documents),
+                llm_call_count=2,
+                event_source_state_by_rule=event_source_state_by_rule,
+                failure_stage="output_truncated",
+                contract_retry_detail=failure_detail,
+            )
+        if not isinstance(repaired_content, str):
+            return _empty_facts(
+                code="semantic_extraction_invalid",
+                document_count=len(documents),
+                llm_call_count=2,
+                event_source_state_by_rule=event_source_state_by_rule,
+                failure_stage="content_type",
+                contract_retry_detail=failure_detail,
+            )
+        try:
+            validated = _validate_facts(repaired_content)
+        except json.JSONDecodeError:
+            return _empty_facts(
+                code="semantic_extraction_invalid",
+                document_count=len(documents),
+                llm_call_count=2,
+                event_source_state_by_rule=event_source_state_by_rule,
+                failure_stage="json_syntax",
+                contract_retry_detail=failure_detail,
+            )
+        except ValueError as repaired_exc:
+            return _empty_facts(
+                code="semantic_extraction_invalid",
+                document_count=len(documents),
+                llm_call_count=2,
+                event_source_state_by_rule=event_source_state_by_rule,
+                failure_stage="contract_validation",
+                failure_detail=_contract_failure_detail(repaired_exc),
+                contract_retry_detail=failure_detail,
+            )
+        contract_retry_applied = True
+    except Exception as exc:
         return _empty_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
-            llm_call_count=1,
+            llm_call_count=llm_call_count,
             event_source_state_by_rule=event_source_state_by_rule,
             failure_stage="contract_validation",
+            failure_detail=_contract_failure_detail(exc),
         )
     try:
         facts = _gate_facts_to_selected_documents(validated, documents=documents)
@@ -869,18 +1057,23 @@ async def extract_luxian_0916_facts(
         return _empty_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
-            llm_call_count=1,
+            llm_call_count=llm_call_count,
             event_source_state_by_rule=event_source_state_by_rule,
             failure_stage="grounding_validation",
+            contract_retry_detail=contract_retry_detail,
         )
+    diagnostic: dict[str, Any] = {
+        "code": "semantic_extraction_ready",
+        "document_count": len(documents),
+        "llm_call_count": llm_call_count,
+    }
+    if contract_retry_applied:
+        diagnostic["contract_retry_applied"] = True
+        diagnostic["contract_retry_detail"] = contract_retry_detail
     return {
         **facts,
         "event_source_state_by_rule": event_source_state_by_rule,
-        "diagnostic": {
-            "code": "semantic_extraction_ready",
-            "document_count": len(documents),
-            "llm_call_count": 1,
-        },
+        "diagnostic": diagnostic,
     }
 
 
