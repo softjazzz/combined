@@ -37,6 +37,11 @@ import { normalizeCustomerQcResult } from '@/domain/customer-qc/result-normalize
 import { resolveIssueCanonicalStatus } from '@/views/workstation-v4/semantic-rules/batchResultStatus'
 import { createIssueEvidencePresentation } from '@/views/workstation-v4/semantic-rules/issueEvidencePresentation'
 import { buildRecommendationEvidence } from '@/views/workstation-v4/semantic-rules/record-comparison-model'
+import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
+import {
+  batchJobDiagnosticFilename,
+  buildBatchJobDiagnosticText,
+} from '@/views/workstation-v4/semantic-rules/batchJobDiagnosticExport'
 
 export type SemanticRulesBatchResultDrawerProps = {
   open: boolean
@@ -71,10 +76,33 @@ export function useSemanticRulesBatchResultDrawerController(
   props: Readonly<SemanticRulesBatchResultDrawerProps>,
 ) {
   type BatchJobExportFormat = 'xlsx' | 'csv' | 'html'
+  const diagnosticPackageLoading = ref(false)
 
   function handleExportMenuClick(event: { key?: unknown }) {
     const format = String(event?.key || 'html') as BatchJobExportFormat
     props.exportBatchJobReport(['xlsx', 'csv', 'html'].includes(format) ? format : 'html')
+  }
+
+  async function downloadBatchJobDiagnosticPackage() {
+    const job = props.batchJobDetail
+    if (!job || diagnosticPackageLoading.value) return
+    diagnosticPackageLoading.value = true
+    try {
+      const refreshedSnapshot = props.fetchBatchJobDebugSnapshot
+        ? await props.fetchBatchJobDebugSnapshot(job.id, { itemLimit: 200 })
+        : null
+      const snapshot = refreshedSnapshot || props.batchJobDebugSnapshot
+      const content = buildBatchJobDiagnosticText(job, snapshot)
+      downloadBlob(
+        new Blob([content], { type: 'text/markdown;charset=utf-8' }),
+        batchJobDiagnosticFilename(job),
+      )
+      message.success('质控诊断包已开始下载')
+    } catch {
+      message.error('生成质控诊断包失败，请稍后重试')
+    } finally {
+      diagnosticPackageLoading.value = false
+    }
   }
 
   async function handleReviewBatchJobResult() {
@@ -1632,10 +1660,10 @@ export function useSemanticRulesBatchResultDrawerController(
     const filters = (detail?.filters || {}) as Record<string, unknown>
     return Boolean(
       summary?.postprocess_summary ||
-      summary?.display_status_counts ||
-      filters.validation_mode === 'formal_fast_screen_full' ||
-      filters.rule_set_key === 'sc_content_full_v1' ||
-      summary?.rule_set_key === 'sc_content_full_v1',
+        summary?.display_status_counts ||
+        filters.validation_mode === 'formal_fast_screen_full' ||
+        filters.rule_set_key === 'sc_content_full_v1' ||
+        summary?.rule_set_key === 'sc_content_full_v1',
     )
   })
 
@@ -2182,8 +2210,12 @@ export function useSemanticRulesBatchResultDrawerController(
   const partialFailureItems = computed(() => {
     const detail = props.batchJobDetail
     if (
-      String(detail?.status || '').trim().toLowerCase() !== 'failed' ||
-      String(detail?.summary?.execution_status || '').trim().toLowerCase() !== 'partial_failed'
+      String(detail?.status || '')
+        .trim()
+        .toLowerCase() !== 'failed' ||
+      String(detail?.summary?.execution_status || '')
+        .trim()
+        .toLowerCase() !== 'partial_failed'
     ) {
       return []
     }
@@ -3008,6 +3040,7 @@ export function useSemanticRulesBatchResultDrawerController(
     debugDetailEntries,
     debugProgressEntries,
     debugRuleOptions,
+    diagnosticPackageLoading,
     deepReviewError,
     deepReviewLoading,
     deepReviewModalOpen,
@@ -3017,6 +3050,7 @@ export function useSemanticRulesBatchResultDrawerController(
     focusedLuxianRecordLabel,
     focusedSummaryCards,
     handleDebugRuleChange,
+    downloadBatchJobDiagnosticPackage,
     handleExportMenuClick,
     handleIssueTableChange,
     handleReviewBatchJobResult,

@@ -1,5 +1,7 @@
+import { Select } from 'ant-design-vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import QcRecordReviewPreview from '@/views/workstation-v4/components/qc/QcRecordReviewPreview.vue'
 import type { QcRecordResultRow } from '@/views/workstation-v4/components/qc/QcRecordResultTable.vue'
 import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
@@ -61,7 +63,7 @@ describe('QcRecordReviewPreview', () => {
     await flushPromises()
     expect(wrapper.get('.status-label').text()).toBe('确定问题')
     expect(wrapper.text()).not.toContain('non_compliant')
-    expect(wrapper.get('select').element.value).toBe('non_compliant')
+    expect(wrapper.getComponent(Select).props('value')).toBe('non_compliant')
     wrapper.unmount()
   })
 
@@ -105,9 +107,19 @@ describe('QcRecordReviewPreview', () => {
       patientId: 'P-1',
       visitId: 'V-1',
     })
-    expect(wrapper.get('select').element.value).toBe('non_compliant')
+    expect(wrapper.getComponent(Select).props('value')).toBe('non_compliant')
     expect(wrapper.text()).toContain('后端已保存的结论')
     expect(wrapper.text()).toContain('入院记录')
+    const diagnosticExport = wrapper.getComponent(QcDiagnosticExport)
+    expect(diagnosticExport.text()).toContain('质控诊断包')
+    expect(diagnosticExport.props('context')).toMatchObject({
+      instituteId: 'H-1',
+      patientId: 'P-1',
+      visitId: 'V-1',
+      recordRef: 'authorized-record',
+      jobId: 'job-1',
+      resultSchemaVersion: 'lx0609-single-record-result-v1',
+    })
     await wrapper.get('.preview-item .text-button').trigger('click')
     await wrapper.get('.full-result-button').trigger('click')
     expect(wrapper.emitted('open-full')).toEqual([[row.recordKey], [row.recordKey]])
@@ -123,7 +135,7 @@ describe('QcRecordReviewPreview', () => {
     await flushPromises()
     const summary = wrapper.get('.item-summary').element
     expect(wrapper.get('.suggestion-details').attributes('open')).toBeUndefined()
-    expect(wrapper.get('.suggestion-details summary').text()).toContain('点击查看')
+    expect(wrapper.get('.suggestion-details summary').text()).toBe('处理建议')
     expect(wrapper.findAll('.suggestion-content p')).toHaveLength(4)
     await wrapper.get('.expand-button').trigger('click')
     expect(wrapper.get('.item-summary').element).toBe(summary)
@@ -164,6 +176,7 @@ describe('QcRecordReviewPreview', () => {
     expect(wrapper.text()).toContain(message)
     expect(wrapper.text()).not.toContain('后端已保存的结论')
     expect(wrapper.find('.full-result-button').exists()).toBe(false)
+    expect(wrapper.findComponent(QcDiagnosticExport).exists()).toBe(false)
   })
 
   it('读取失败支持重试，refreshKey重读同一病历', async () => {
@@ -227,15 +240,22 @@ describe('QcRecordReviewPreview', () => {
     })
     const wrapper = mount(QcRecordReviewPreview, { props: { row } })
     await flushPromises()
-    expect(wrapper.get('select').element.value).toBe('pending')
-    expect(wrapper.get('[data-tab="pending"]').text()).toContain('5')
+    expect(wrapper.getComponent(Select).props('value')).toBe('pending')
+    expect(
+      wrapper
+        .getComponent(Select)
+        .props('options')
+        .find((option) => option.value === 'pending')!.label,
+    ).toContain('5')
     expect(wrapper.text()).toContain('技术异常')
     expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(3)
-    expect(wrapper.findAll('[data-tab]')).toHaveLength(5)
+    expect(wrapper.getComponent(Select).props('options')).toHaveLength(5)
     expect(wrapper.find('.ant-pagination').exists()).toBe(false)
-    await wrapper.get('select').setValue('compliant')
+    wrapper.getComponent(Select).vm.$emit('update:value', 'compliant')
+    await flushPromises()
     expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(1)
-    await wrapper.get('select').setValue('all')
+    wrapper.getComponent(Select).vm.$emit('update:value', 'all')
+    await flushPromises()
     expect(wrapper.text()).toContain('共 7 项')
   })
 

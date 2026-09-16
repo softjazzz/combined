@@ -3,21 +3,23 @@
     <header class="preview-heading">
       <ClipboardCheck :size="18" />
       <h2>复核预览</h2>
+      <div v-if="row && ready && !loading && !loadError" class="preview-heading-actions">
+        <QcDiagnosticExport
+          v-if="loadedResult"
+          :items="loadedResult.items"
+          :context="diagnosticContext"
+        />
+        <div class="preview-primary-action">
+          <button type="button" class="full-result-button" @click="openFull">
+            <span class="full-result-label">
+              <FileText :size="17" aria-hidden="true" />
+              查看完整质控结果
+            </span>
+            <ArrowRight :size="16" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
     </header>
-    <div class="preview-primary-action">
-      <button
-        v-if="row && ready && !loading && !loadError"
-        type="button"
-        class="full-result-button"
-        @click="openFull"
-      >
-        <span class="full-result-label">
-          <FileText :size="17" aria-hidden="true" />
-          查看完整质控结果
-        </span>
-        <ArrowRight :size="16" aria-hidden="true" />
-      </button>
-    </div>
     <div v-if="!row" class="preview-state">请选择左侧病历，查看最近一次质控结果</div>
     <template v-else>
       <section class="patient-context" aria-label="当前患者">
@@ -59,12 +61,15 @@
         <div class="status-tabs">
           <span>问题预览</span>
           <div class="status-select">
-            <select v-model="activeTab" aria-label="质控状态筛选" title="点击切换质控状态">
-              <option v-for="tab in tabs" :key="tab.key" :value="tab.key" :data-tab="tab.key">
-                {{ tab.label }} · {{ tab.count }}
-              </option>
-            </select>
-            <span class="status-select-arrow" aria-hidden="true" />
+            <Select
+              v-model:value="activeTab"
+              aria-label="质控状态筛选"
+              class="preview-status-select"
+              popup-class-name="preview-status-popup"
+              :options="
+                tabs.map((tab) => ({ value: tab.key, label: `${tab.label} · ${tab.count}` }))
+              "
+            />
           </div>
         </div>
         <div class="preview-results" aria-live="polite">
@@ -77,9 +82,9 @@
           >
             <div class="item-heading">
               <div class="item-meta">
-                <span v-if="item.source_document" class="item-source"
-                  >{{ item.source_document }}<span aria-hidden="true"> · </span></span
-                >
+                <span v-if="item.source_document" class="item-source">{{
+                  item.source_document
+                }}</span>
                 <span class="status-label" :data-tone="item.tone">{{ item.displayStatus }}</span>
               </div>
               <h3 :title="item.rule_name || item.rule_id">
@@ -90,7 +95,10 @@
             <p class="item-summary" :class="{ 'is-expanded': expandedItems.includes(item.key) }">
               {{ item.conclusionText || '暂无结论说明' }}
             </p>
-            <p v-if="documentLabels(item)" class="document-label">
+            <p
+              v-if="documentLabels(item) && documentLabels(item) !== item.source_document"
+              class="document-label"
+            >
               <FileText :size="14" />{{ documentLabels(item) }}
             </p>
             <button
@@ -108,21 +116,29 @@
               <p v-if="item.actual" class="full-text">实际情况：{{ item.actual }}</p>
               <p v-if="item.standard" class="full-text">质控标准：{{ item.standard }}</p>
             </div>
-            <details v-if="item.suggestion" class="suggestion-details">
-              <summary>处理建议<span class="suggestion-hint">点击查看</span></summary>
-              <div class="suggestion-content">
-                <p
-                  v-for="(paragraph, index) in suggestionParagraphs(item.suggestion)"
-                  :key="index"
-                  class="full-text"
-                >
-                  {{ paragraph }}
-                </p>
-              </div>
-            </details>
-            <button type="button" class="text-button" @click="openFull">
-              查看原文与结果<ArrowUpRight :size="14" />
-            </button>
+            <div class="preview-item-actions">
+              <details v-if="item.suggestion" class="suggestion-details">
+                <summary>处理建议</summary>
+                <div class="suggestion-content">
+                  <p
+                    v-for="(paragraph, index) in suggestionParagraphs(item.suggestion)"
+                    :key="index"
+                    class="full-text"
+                  >
+                    <template v-if="/^(修改对象|需要补充|推荐写法|注意事项)[：:]/u.test(paragraph)">
+                      <span class="suggestion-term">{{ paragraph.slice(0, 4) }}</span>
+                      <span class="suggestion-description">{{ paragraph.slice(5).trim() }}</span>
+                    </template>
+                    <template v-else>
+                      {{ paragraph }}
+                    </template>
+                  </p>
+                </div>
+              </details>
+              <button type="button" class="text-button" @click="openFull">
+                原文核对<ArrowUpRight :size="14" />
+              </button>
+            </div>
           </article>
         </div>
         <footer class="preview-footer">
@@ -140,12 +156,15 @@
 
 <script setup lang="ts">
 import { ArrowRight, ArrowUpRight, ClipboardCheck, FileText, RotateCcw } from 'lucide-vue-next'
+import { Select } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import { getLatestLuxian0609RecordResult } from '@/services/sichuan-rule-workspace-service'
 import {
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
   resolveSingleRecordQcResultTab,
+  type SingleRecordQcResultPayload,
   type SingleRecordQcResultItem,
   type SingleRecordQcResultTabKey,
 } from '../../customer-sample-validation/single-record-result-model'
@@ -165,6 +184,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ 'open-full': [recordKey: string] }>()
 const items = ref<SingleRecordQcResultItem[]>([])
+const loadedResult = ref<SingleRecordQcResultPayload | null>(null)
 const loading = ref(false)
 const ready = ref(false)
 const loadError = ref('')
@@ -190,6 +210,27 @@ const filteredItems = computed(() =>
     (item) => activeTab.value === 'all' || resolveSingleRecordQcResultTab(item) === activeTab.value,
   ),
 )
+const diagnosticContext = computed(() => {
+  const result = loadedResult.value
+  const row = props.row
+  if (!result || !row?.visitId) return undefined
+  return {
+    instituteId: row.instituteId,
+    patientId: row.patientId,
+    visitId: row.visitId,
+    recordRef: result.record_ref,
+    jobId: result.job_id,
+    ruleSetKey: result.rule_set_key,
+    ruleSetVersion: result.rule_set_version,
+    resultSchemaVersion: result.schema_version,
+    expectedRuleCount: result.expected_rule_count,
+    resultRuleCount: result.result_rule_count,
+    isComplete: result.is_complete,
+    missingRuleIds: result.missing_rule_ids,
+    conflictingRuleIds: result.conflicting_rule_ids,
+    patientName: row.patientName,
+  }
+})
 
 function documentLabels(item: SingleRecordQcResultItem): string {
   return [
@@ -222,6 +263,7 @@ async function loadResult() {
   const sequence = ++requestSequence
   const row = props.row
   items.value = []
+  loadedResult.value = null
   expandedItems.value = []
   ready.value = false
   loading.value = false
@@ -254,6 +296,7 @@ async function loadResult() {
       return
     }
     items.value = result.data.items
+    loadedResult.value = result.data
     ready.value = true
     activeTab.value =
       tabs.value.find((tab) => tab.key === 'non_compliant' && tab.count)?.key ||
@@ -305,6 +348,14 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 17px;
   font-weight: 600;
+}
+.preview-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
 }
 .patient-context {
   margin: 0 16px 16px;
@@ -594,5 +645,36 @@ button:focus-visible,
 summary:focus-visible {
   outline: 2px solid #2b6cf6;
   outline-offset: 3px;
+}
+</style>
+
+<style scoped>
+.preview-status-select {
+  width: 156px;
+}
+.preview-status-select :deep(.ant-select-selector) {
+  border-radius: 8px !important;
+  border-color: #dce3ed !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  font-size: 13px;
+  font-weight: 400;
+}
+:global(.preview-status-popup) {
+  padding: 5px;
+  border: 1px solid #e8edf3;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(38, 58, 86, 0.14);
+  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', sans-serif;
+}
+:global(.preview-status-popup .ant-select-item) {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+:global(.preview-status-popup .ant-select-item-option-selected) {
+  color: #007aff;
+  background: #eaf3ff;
+  font-weight: 500;
 }
 </style>

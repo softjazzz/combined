@@ -405,6 +405,17 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(props.close).toHaveBeenCalledTimes(1)
   })
 
+  it('任务未完成或失败时也提供质控诊断包入口', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'failed'
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: { stubs: drawerStubs },
+    })
+
+    expect(wrapper.text()).toContain('下载质控诊断包')
+  })
+
   it('已完成任务应提供 HTML 明细、Excel 和 CSV 导出入口', async () => {
     const props = buildProps()
     props.batchJobDetail.status = 'completed'

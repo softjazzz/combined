@@ -1,6 +1,14 @@
 <template>
-  <a-button size="small" :disabled="!items.length" @click="prepare"> 诊断导包 </a-button>
-  <a-modal :open="open" title="诊断导包" :width="800" :footer="null" @cancel="close">
+  <a-button
+    class="diagnostic-export__trigger"
+    size="small"
+    :disabled="!items.length"
+    @click="prepare"
+  >
+    <FileArchive :size="15" />
+    质控诊断包
+  </a-button>
+  <a-modal :open="open" title="质控诊断包" :width="800" :footer="null" @cancel="close">
     <p class="diagnostic-export__notice">
       包含当前已加载结果、原因码分组、证据来源索引及机器可读数据；仅为结果摘要，不含完整病历或模型原始请求，不支持自动回放，仅供人工核查。
       摘要导出不请求新数据、不重跑质控、不自动发送。请复核脱敏后再发送。
@@ -67,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import { FileArchive } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { diagnosticCaptureFilename } from './diagnosticCaptureFilename'
 import {
@@ -274,6 +283,24 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.diagnostic-export__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding-inline: 11px;
+  border-color: #d7e2ef;
+  border-radius: 8px;
+  color: #35516f;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 1px 2px rgba(36, 65, 100, 0.04);
+}
+.diagnostic-export__trigger:hover,
+.diagnostic-export__trigger:focus-visible {
+  border-color: #8db8e8;
+  color: #1768b0;
+  background: #fff;
+}
 .diagnostic-export__notice {
   margin: 12px 0;
   color: var(--workstation-text-secondary, #64748b);
