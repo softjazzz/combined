@@ -544,7 +544,7 @@ async def test_extracts_only_minimal_target_documents_and_calls_model_once() -> 
     assert "F-1" in prompt and "S-1" in prompt
     assert "D-1" not in prompt and "L-1" not in prompt
     assert kwargs == {
-        "max_completion_tokens": 4096,
+        "max_completion_tokens": 8192,
         "allow_length_retry": False,
         "response_format": {"type": "json_object"},
     }
@@ -722,7 +722,185 @@ async def test_rejects_unknown_keys_and_illegal_enum_values(extra: dict[str, Any
         "code": "semantic_extraction_invalid",
         "document_count": 1,
         "llm_call_count": 1,
+        "failure_stage": "contract_validation",
     }
+
+
+@pytest.mark.asyncio
+async def test_normalizes_confirmed_discharge_field_misplacement_and_null_appropriateness() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {
+                                    "discharge_arranged": True,
+                                    "discharge_record_formed": False,
+                                    "disease_changes": [
+                                        {
+                                            "event_type": "disease_changes",
+                                            "appropriateness": None,
+                                        }
+                                    ],
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-011",), generate=generate
+    )
+
+    assert result["event_facts"] == {"disease_changes": [{"event_type": "disease_changes"}]}
+    assert result["discharge_facts"] == {
+        "discharge_arranged": True,
+        "discharge_record_formed": False,
+    }
+    assert result["diagnostic"]["code"] == "semantic_extraction_ready"
+
+
+@pytest.mark.asyncio
+async def test_normalizes_confirmed_surgery_safety_check_document_alias() -> None:
+    rule_id, _fact_key, source_type, document_id, item_keys = _COMPLETENESS_CASES[2]
+    payload, required_items = _completeness_payload(
+        source_type=source_type, document_id=document_id, item_keys=item_keys
+    )
+    alias_fact = {
+        "presence": "present",
+        "document_id": document_id,
+        "source_type": "surgery_safecheck_record",
+        "required_items": required_items,
+    }
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "document_facts": {
+                                    "surgery_safecheck_record": alias_fact,
+                                    "surgery_safety_check": dict(alias_fact),
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=payload, rule_ids=(rule_id,), generate=generate
+    )
+
+    fact = result["document_facts"]["surgery_safety_check"]
+    assert "surgery_safecheck_record" not in result["document_facts"]
+    assert fact["source_type"] == "surgery_safecheck_record"
+    assert fact["required_items"] == required_items
+    assert result["diagnostic"]["code"] == "semantic_extraction_ready"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {
+            "event_facts": {"discharge_arranged": True},
+            "discharge_facts": {"discharge_arranged": False},
+        },
+        {"event_facts": {"discharge_arranged": "true"}},
+        {"event_facts": {"unexpected": True}},
+        {
+            "event_facts": {
+                "disease_changes": [
+                    {"event_type": "disease_changes", "appropriateness": "unknown"}
+                ]
+            }
+        },
+    ],
+)
+async def test_rejects_unconfirmed_normalization_variants(extra: dict[str, Any]) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": _content(extra=extra)}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-011",), generate=generate
+    )
+
+    assert result["semantic_facts"] == {}
+    assert result["event_facts"] == {}
+    assert result["discharge_facts"] == {}
+    assert result["diagnostic"]["code"] == "semantic_extraction_invalid"
+    assert result["diagnostic"]["failure_stage"] == "contract_validation"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "document_facts",
+    [
+        {
+            "surgery_safecheck_record": {
+                "presence": "present",
+                "document_id": "SSC-1",
+                "source_type": "surgery_record",
+            }
+        },
+        {"surgery_safecheck_record": []},
+        {
+            "surgery_safecheck_record": {
+                "presence": "present",
+                "document_id": "SSC-1",
+                "source_type": "surgery_safecheck_record",
+            },
+            "surgery_safety_check": {
+                "presence": "present",
+                "document_id": "SSC-2",
+                "source_type": "surgery_safecheck_record",
+            },
+        },
+    ],
+)
+async def test_rejects_invalid_surgery_safety_check_document_alias(
+    document_facts: dict[str, Any],
+) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {"message": {"content": _content(extra={"document_facts": document_facts})}}
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-011",), generate=generate
+    )
+
+    assert result["document_facts"] == {}
+    assert result["diagnostic"]["code"] == "semantic_extraction_invalid"
+    assert result["diagnostic"]["failure_stage"] == "contract_validation"
+
+
+@pytest.mark.asyncio
+async def test_model_generation_failure_keeps_safe_failure_stage() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        raise TimeoutError("private endpoint detail must not be persisted")
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-011",), generate=generate
+    )
+
+    assert result["diagnostic"] == {
+        "code": "semantic_extraction_invalid",
+        "document_count": 1,
+        "llm_call_count": 1,
+        "failure_stage": "generation",
+    }
+    assert "private endpoint detail" not in json.dumps(result, ensure_ascii=False)
 
 
 @pytest.mark.asyncio
@@ -739,6 +917,7 @@ async def test_parse_failure_returns_empty_facts_with_diagnostic() -> None:
     assert result["document_facts"] == {}
     assert result["discharge_facts"] == {}
     assert result["diagnostic"]["code"] == "semantic_extraction_invalid"
+    assert result["diagnostic"]["failure_stage"] == "json_syntax"
 
 
 @pytest.mark.asyncio

@@ -313,6 +313,7 @@ async def test_batch_worker_persists_one_locatable_semantic_extraction_failure_p
             "code": "semantic_extraction_invalid",
             "document_count": 1,
             "llm_call_count": 1,
+            "failure_stage": "json_syntax",
         }
     ]
     assert all(

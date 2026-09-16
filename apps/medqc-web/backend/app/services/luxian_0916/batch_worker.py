@@ -29,6 +29,17 @@ LUXIAN_0916_RULE_SET_KEY = "luxian_0916_qc_v1"
 _RULE_IDS = tuple(rule.rule_id for rule in LUXIAN_0916_RULE_CATALOG)
 _RULE_ORDER = {rule_id: index for index, rule_id in enumerate(_RULE_IDS)}
 _RULE_NAMES = {rule.rule_id: rule.name for rule in LUXIAN_0916_RULE_CATALOG}
+_SEMANTIC_FAILURE_STAGES = frozenset(
+    {
+        "generation",
+        "response_shape",
+        "output_truncated",
+        "content_type",
+        "json_syntax",
+        "contract_validation",
+        "grounding_validation",
+    }
+)
 SemanticGenerate = Callable[..., Awaitable[dict[str, Any]]]
 
 
@@ -459,13 +470,17 @@ def _semantic_extraction_failure(
 
     if diagnostic.get("code") != "semantic_extraction_invalid":
         return {}
-    return {
+    failure = {
         **identity,
         "record_id": str(record.get("record_id") or identity["visit_id"]),
         "code": "semantic_extraction_invalid",
         "document_count": _nonnegative_int(diagnostic.get("document_count")),
         "llm_call_count": _nonnegative_int(diagnostic.get("llm_call_count")),
     }
+    failure_stage = diagnostic.get("failure_stage")
+    if isinstance(failure_stage, str) and failure_stage in _SEMANTIC_FAILURE_STAGES:
+        failure["failure_stage"] = failure_stage
+    return failure
 
 
 def _semantic_extraction_failures(

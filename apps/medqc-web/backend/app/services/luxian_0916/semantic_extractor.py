@@ -64,7 +64,7 @@ _SOURCE_PRIORITY = {
         )
     )
 }
-_MAX_COMPLETION_TOKENS = 4_096
+_MAX_COMPLETION_TOKENS = 8_192
 
 _DOCUMENT_LIMITS = {
     "admission_record": 1,
@@ -220,18 +220,22 @@ def _empty_facts(
     document_count: int,
     llm_call_count: int = 0,
     event_source_state_by_rule: Mapping[str, str] | None = None,
+    failure_stage: str | None = None,
 ) -> dict[str, Any]:
+    diagnostic: dict[str, Any] = {
+        "code": code,
+        "document_count": document_count,
+        "llm_call_count": llm_call_count,
+    }
+    if failure_stage:
+        diagnostic["failure_stage"] = failure_stage
     return {
         "semantic_facts": {},
         "event_facts": {},
         "document_facts": {},
         "discharge_facts": {},
         "event_source_state_by_rule": dict(event_source_state_by_rule or {}),
-        "diagnostic": {
-            "code": code,
-            "document_count": document_count,
-            "llm_call_count": llm_call_count,
-        },
+        "diagnostic": diagnostic,
     }
 
 
@@ -459,6 +463,64 @@ def _valid_course_event(key: str, value: Any) -> bool:
     return True
 
 
+def _normalize_known_model_deviations(
+    events: Mapping[str, Any],
+    documents: Mapping[str, Any],
+    discharge: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """仅兼容已在真实回放中确认的模型字段归属与可选字段偏差。"""
+    normalized_events = dict(events)
+    normalized_documents = dict(documents)
+    normalized_discharge = dict(discharge)
+    for key in ("discharge_arranged", "discharge_record_formed"):
+        if key not in normalized_events:
+            continue
+        value = normalized_events.pop(key)
+        if type(value) is not bool:
+            raise ValueError("invalid misplaced discharge fact")
+        if key in normalized_discharge:
+            if (
+                type(normalized_discharge[key]) is not bool
+                or normalized_discharge[key] is not value
+            ):
+                raise ValueError("conflicting discharge fact")
+            continue
+        normalized_discharge[key] = value
+    legacy_document_key = "surgery_safecheck_record"
+    canonical_document_key = "surgery_safety_check"
+    if legacy_document_key in normalized_documents:
+        legacy_document = normalized_documents.pop(legacy_document_key)
+        if (
+            not isinstance(legacy_document, Mapping)
+            or legacy_document.get("source_type") != legacy_document_key
+        ):
+            raise ValueError("invalid surgery safety-check document alias")
+        if (
+            canonical_document_key in normalized_documents
+            and normalized_documents[canonical_document_key] != legacy_document
+        ):
+            raise ValueError("conflicting surgery safety-check document facts")
+        normalized_documents[canonical_document_key] = dict(legacy_document)
+    for key in _COURSE_EVENT_KEYS:
+        value = normalized_events.get(key)
+        if not isinstance(value, list):
+            continue
+        normalized_items: list[Any] = []
+        for item in value:
+            if (
+                isinstance(item, Mapping)
+                and item.get("appropriateness") is None
+                and "appropriateness" in item
+            ):
+                normalized_item = dict(item)
+                normalized_item.pop("appropriateness")
+                normalized_items.append(normalized_item)
+            else:
+                normalized_items.append(item)
+        normalized_events[key] = normalized_items
+    return normalized_events, normalized_documents, normalized_discharge
+
+
 def _validate_facts(content: str) -> dict[str, Any]:
     payload = json.loads(content, object_pairs_hook=_unique_object)
     required = {"semantic_facts", "event_facts", "document_facts", "discharge_facts"}
@@ -470,6 +532,9 @@ def _validate_facts(content: str) -> dict[str, Any]:
     discharge = payload["discharge_facts"]
     if not all(isinstance(value, Mapping) for value in (semantic, events, documents, discharge)):
         raise ValueError("fact containers must be objects")
+    events, documents, discharge = _normalize_known_model_deviations(
+        events, documents, discharge
+    )
     allowed_semantic = _ADMISSION_RULE_IDS | _FIRST_COURSE_PRESENCE_KEYS | {
         "case_characteristic_quality",
         "diagnosis_basis_quality",
@@ -744,22 +809,69 @@ async def extract_luxian_0916_facts(
             allow_length_retry=False,
             response_format={"type": "json_object"},
         )
-        choice = response["choices"][0]
-        if choice.get("finish_reason") == "length":
-            raise ValueError("truncated model output")
-        content = choice["message"]["content"]
-        if not isinstance(content, str):
-            raise ValueError("invalid model content")
-        facts = _gate_facts_to_selected_documents(
-            _validate_facts(content),
-            documents=documents,
-        )
-    except Exception:  # 模型/解析异常只作为内部诊断，调用方可继续执行确定性规则。
+    except Exception:  # 模型调用异常只保留稳定阶段码，不泄露接口或患者内容。
         return _empty_facts(
             code="semantic_extraction_invalid",
             document_count=len(documents),
             llm_call_count=1,
             event_source_state_by_rule=event_source_state_by_rule,
+            failure_stage="generation",
+        )
+    try:
+        choice = response["choices"][0]
+        finish_reason = choice.get("finish_reason")
+        content = choice["message"]["content"]
+    except Exception:
+        return _empty_facts(
+            code="semantic_extraction_invalid",
+            document_count=len(documents),
+            llm_call_count=1,
+            event_source_state_by_rule=event_source_state_by_rule,
+            failure_stage="response_shape",
+        )
+    if finish_reason == "length":
+        return _empty_facts(
+            code="semantic_extraction_invalid",
+            document_count=len(documents),
+            llm_call_count=1,
+            event_source_state_by_rule=event_source_state_by_rule,
+            failure_stage="output_truncated",
+        )
+    if not isinstance(content, str):
+        return _empty_facts(
+            code="semantic_extraction_invalid",
+            document_count=len(documents),
+            llm_call_count=1,
+            event_source_state_by_rule=event_source_state_by_rule,
+            failure_stage="content_type",
+        )
+    try:
+        validated = _validate_facts(content)
+    except json.JSONDecodeError:
+        return _empty_facts(
+            code="semantic_extraction_invalid",
+            document_count=len(documents),
+            llm_call_count=1,
+            event_source_state_by_rule=event_source_state_by_rule,
+            failure_stage="json_syntax",
+        )
+    except Exception:
+        return _empty_facts(
+            code="semantic_extraction_invalid",
+            document_count=len(documents),
+            llm_call_count=1,
+            event_source_state_by_rule=event_source_state_by_rule,
+            failure_stage="contract_validation",
+        )
+    try:
+        facts = _gate_facts_to_selected_documents(validated, documents=documents)
+    except Exception:
+        return _empty_facts(
+            code="semantic_extraction_invalid",
+            document_count=len(documents),
+            llm_call_count=1,
+            event_source_state_by_rule=event_source_state_by_rule,
+            failure_stage="grounding_validation",
         )
     return {
         **facts,
