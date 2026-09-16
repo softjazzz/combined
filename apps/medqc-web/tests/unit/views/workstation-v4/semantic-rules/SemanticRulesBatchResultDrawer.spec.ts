@@ -131,6 +131,27 @@ const AProgressStub = defineComponent({
   },
 })
 
+const ASpinStub = defineComponent({
+  name: 'ASpinStub',
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-spin-stub' }, slots.default?.())
+  },
+})
+
+const AEmptyStub = defineComponent({
+  name: 'AEmptyStub',
+  props: {
+    description: {
+      type: String,
+      default: '',
+    },
+  },
+  setup(props, { slots }) {
+    return () =>
+      h('div', { class: 'a-empty-stub' }, [h('span', props.description), slots.default?.()])
+  },
+})
+
 const ARadioGroupStub = defineComponent({
   name: 'ARadioGroupStub',
   props: {
@@ -215,6 +236,8 @@ const drawerStubs = {
   'a-menu-item': AMenuItemStub,
   'a-tag': ATagStub,
   'a-progress': AProgressStub,
+  'a-spin': ASpinStub,
+  'a-empty': AEmptyStub,
   'a-radio-group': ARadioGroupStub,
   'a-radio-button': ARadioButtonStub,
   'a-switch': ASwitchStub,
@@ -224,7 +247,7 @@ const drawerStubs = {
 type DrawerTestProps = {
   open: boolean
   batchJobDetail: SichuanBatchJob
-  batchJobDebugSnapshot: SichuanBatchJobDebugSnapshot
+  batchJobDebugSnapshot: SichuanBatchJobDebugSnapshot | null
   batchJobDebugLoading: boolean
   batchJobDetailLoading: boolean
   fetchBatchJobDebugSnapshot: ReturnType<typeof vi.fn>
@@ -596,6 +619,29 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('不合规规则2')
     expect(wrapper.text()).toContain('AI判断规则0')
     expect(wrapper.text()).toContain('已完成 0 / 10 份病历')
+  })
+
+  it('调试快照尚未返回时仍展示入口并允许重新加载', async () => {
+    const props = buildProps()
+    props.batchJobDebugSnapshot = null
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain('调试快照暂未加载')
+
+    const reloadButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('重新加载'))
+    expect(reloadButton).toBeTruthy()
+    await reloadButton?.trigger('click')
+    await flushPromises()
+    expect(props.fetchBatchJobDebugSnapshot).toHaveBeenCalledWith('job-1', {
+      ruleJobId: undefined,
+    })
   })
 
   it('按单规则筛选时应联动规则结果概览、命中明细并拉取调试快照', async () => {

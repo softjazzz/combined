@@ -519,3 +519,32 @@ def test_debug_snapshot_collects_parent_child_items_without_changing_status() ->
     assert item["status"] == "data_gap"
     assert item["evidence_items"][0]["source_ref"] == evidence["source_ref"]
     assert item["customer_evidence"][0]["evidence_excerpt"] == evidence["evidence_excerpt"]
+
+
+def test_debug_snapshot_does_not_repeat_heavy_summary_payloads() -> None:
+    snapshot = qc_sichuan._build_debug_snapshot(
+        {
+            "id": "job-heavy-summary",
+            "status": "completed",
+            "summary": {
+                "rule_set_key": "luxian_0609_qc_v1",
+                "total_records": 20,
+                "wall_clock_time": 79.5,
+                "progress": {"processed_records": 20},
+                "rule_results": [{"items": [{"raw": "x" * 1000}]}],
+                "performance_profile": {"records": [{"raw": "y" * 1000}]},
+                "last_retry_performance_profile": {"records": [{"raw": "z" * 1000}]},
+            },
+            "items": [],
+        }
+    )
+
+    assert snapshot["summary"] == {
+        "rule_set_key": "luxian_0609_qc_v1",
+        "progress": {"processed_records": 20},
+        "total_records": 20,
+        "wall_clock_time": 79.5,
+    }
+    assert "rule_results" not in snapshot["summary"]
+    assert "performance_profile" not in snapshot["summary"]
+    assert "last_retry_performance_profile" not in snapshot["summary"]

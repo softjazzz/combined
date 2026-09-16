@@ -1656,9 +1656,26 @@
               />
             </div>
           </a-collapse-panel>
+        </a-collapse>
 
-          <a-collapse-panel v-if="batchJobDebugSnapshot" key="debug" header="技术详情：调试快照">
-            <div class="drawer-card drawer-card--nested">
+        <a-collapse v-if="canLoadDebugSnapshot" ghost class="drawer-advanced-collapse">
+          <a-collapse-panel key="debug" header="技术详情：调试快照">
+            <div v-if="!batchJobDebugSnapshot" class="drawer-card drawer-card--nested">
+              <a-spin :spinning="batchJobDebugLoading">
+                <a-empty
+                  :description="batchJobDebugLoading ? '正在加载调试快照…' : '调试快照暂未加载'"
+                >
+                  <a-button
+                    v-if="!batchJobDebugLoading"
+                    size="small"
+                    @click="handleDebugRuleChange(undefined)"
+                  >
+                    重新加载
+                  </a-button>
+                </a-empty>
+              </a-spin>
+            </div>
+            <div v-else class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
                 <div class="drawer-section-title">执行调试快照</div>
                 <div class="debug-toolbar">
@@ -2076,6 +2093,7 @@ const {
   BatchResultTraceModal,
   businessIssueCardGroups,
   businessIssueCards,
+  canLoadDebugSnapshot,
   canCancelBatchJob,
   cancelBatchJobLoading,
   canShowResultTrace,

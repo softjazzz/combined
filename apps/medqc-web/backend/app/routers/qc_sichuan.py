@@ -769,6 +769,64 @@ def _debug_snapshot_items(job: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [_debug_evidence_projection(item) for item in items]
 
 
+_DEBUG_SNAPSHOT_SUMMARY_FIELDS = (
+    "rule_set_key",
+    "rule_set_name",
+    "rule_set_version",
+    "execution_status",
+    "execution_strategy",
+    "quality_profile",
+    "bucket_strategy",
+    "batch_output_mode",
+    "run_mode",
+    "progress",
+    "status_breakdown",
+    "record_status_breakdown",
+    "executor_breakdown",
+    "cache_breakdown",
+    "cot_summary",
+    "automatic_failed_rule_retry",
+    "refine_summary",
+    "total_records",
+    "success_count",
+    "failed_count",
+    "failed_record_count",
+    "issue_records",
+    "compliant_records",
+    "not_applicable_records",
+    "uncertain_records",
+    "data_quality_gap_count",
+    "rejected_by_system_count",
+    "technical_error_internal_count",
+    "total_tokens",
+    "total_prompt_tokens",
+    "total_completion_tokens",
+    "total_processing_time",
+    "wall_clock_time",
+    "first_result_latency",
+    "completed_rule_count",
+    "failed_rule_count",
+    "retry_status",
+    "retry_attempt",
+    "retry_pending_count",
+    "retry_remaining_count",
+    "retry_recovered_count",
+    "updated_at",
+)
+
+
+def _debug_snapshot_summary(job: Dict[str, Any]) -> Dict[str, Any]:
+    """只返回调试页消费的汇总，避免把规则结果和逐病例性能明细重复传输。"""
+
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    removed_keys: set[str] = set()
+    return {
+        field: _sanitize_trace_value(summary[field], removed_keys)
+        for field in _DEBUG_SNAPSHOT_SUMMARY_FIELDS
+        if field in summary
+    }
+
+
 def _build_debug_snapshot(
     job: Dict[str, Any],
     *,
@@ -795,7 +853,7 @@ def _build_debug_snapshot(
         "execution_mode": job.get("execution_mode") or "batch",
         "rule_count": int((job.get("summary") or {}).get("rule_count") or len(job.get("rule_results") or [])),
         "filtered_rule_count": len(rules),
-        "summary": job.get("summary") or {},
+        "summary": _debug_snapshot_summary(job),
         "current_rule": {
             "rule_job_id": current_rule.get("id"),
             "rule_code": current_rule.get("rule_code"),

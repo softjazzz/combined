@@ -77,6 +77,7 @@ export function useSemanticRulesBatchResultDrawerController(
 ) {
   type BatchJobExportFormat = 'xlsx' | 'csv' | 'html'
   const diagnosticPackageLoading = ref(false)
+  const canLoadDebugSnapshot = computed(() => Boolean(props.fetchBatchJobDebugSnapshot))
 
   function handleExportMenuClick(event: { key?: unknown }) {
     const format = String(event?.key || 'html') as BatchJobExportFormat
@@ -3027,6 +3028,7 @@ export function useSemanticRulesBatchResultDrawerController(
     BatchResultTraceModal,
     businessIssueCardGroups,
     businessIssueCards,
+    canLoadDebugSnapshot,
     canCancelBatchJob,
     cancelBatchJobLoading,
     canShowResultTrace,
