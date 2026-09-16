@@ -178,3 +178,67 @@ def test_admission_applicability_can_fall_back_to_controlled_semantic_fact(
 
     assert result.status == "compliant"
     assert result.reason_code == "requirement_satisfied"
+
+
+@pytest.mark.parametrize(
+    ("age_years", "history_narrator", "expected_status"),
+    (
+        (13, "guardian", "compliant"),
+        (13, "patient", "non_compliant"),
+        (4, "guardian", "compliant"),
+    ),
+)
+def test_002_treats_children_under_16_as_non_full_capacity_without_semantic_override(
+    age_years: int, history_narrator: str, expected_status: str
+) -> None:
+    result = execute_admission_rules(
+        _context(
+            _record(patient={"age_years": age_years}, history_narrator=history_narrator),
+        ),
+        rule_ids=("LX0916-002",),
+    )[0]
+
+    assert result.status == expected_status
+
+
+@pytest.mark.parametrize("age_years", (16, 17))
+def test_002_keeps_16_to_17_year_old_without_explicit_capacity_as_data_gap(
+    age_years: int,
+) -> None:
+    result = execute_admission_rules(
+        _context(_record(patient={"age_years": age_years}, history_narrator="guardian")),
+        rule_ids=("LX0916-002",),
+    )[0]
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "civil_capacity_fact_unavailable"
+
+
+@pytest.mark.parametrize("age_years", (70, 76))
+def test_008_makes_adults_not_applicable_even_when_semantic_fact_is_incomplete(
+    age_years: int,
+) -> None:
+    result = execute_admission_rules(
+        _context(
+            _record(patient={"age_years": age_years}),
+            _facts(**{"LX0916-008": "incomplete"}),
+        ),
+        rule_ids=("LX0916-008",),
+    )[0]
+
+    assert result.status == "not_applicable"
+    assert result.reason_code == "eligibility_not_met"
+
+
+@pytest.mark.parametrize("age_years", (4, 13))
+def test_008_rejects_semantic_not_applicable_for_children(age_years: int) -> None:
+    result = execute_admission_rules(
+        _context(
+            _record(patient={"age_years": age_years}),
+            _facts(**{"LX0916-008": "not_applicable"}),
+        ),
+        rule_ids=("LX0916-008",),
+    )[0]
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "semantic_fact_conflicts_with_age"

@@ -75,10 +75,11 @@ def build_luxian_0916_context(
     }
     admission_records = source_documents.get("admission_record", ())
     if admission_records:
-        documents["admission_record"] = admission_records[0]
+        documents["admission_record"] = dict(admission_records[0])
 
     explicit_documents = _mapping(explicit.get("documents"))
     documents.update(explicit_documents)
+    _project_patient_age(documents, _mapping(explicit.get("patient")))
 
     document_facts = _presence_facts(source_documents)
     document_facts.update(_mapping(explicit.get("document_facts")))
@@ -92,6 +93,8 @@ def build_luxian_0916_context(
     ):
         if source_key in source_documents:
             event_facts[fact_key] = bool(source_documents[source_key])
+    if source_documents.get("surgery_safecheck_record"):
+        event_facts["surgery_performed"] = True
     event_facts.update(_mapping(explicit.get("event_facts")))
 
     discharge_time = str(timeline.get("discharge_time") or "").strip()
@@ -149,6 +152,117 @@ def merge_luxian_0916_semantic_facts(
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _project_patient_age(documents: dict[str, Any], explicit_patient: Mapping[str, Any]) -> None:
+    admission_record = documents.get("admission_record")
+    if not isinstance(admission_record, Mapping):
+        return
+    projected_record = dict(admission_record)
+    patient = {
+        **_mapping(projected_record.get("patient")),
+        **dict(explicit_patient),
+    }
+    if not patient:
+        return
+    normalized_age = _normalize_age_years(patient)
+    patient.pop("age_years", None)
+    if normalized_age is not None:
+        patient["age_years"] = normalized_age
+    projected_record["patient"] = patient
+    documents["admission_record"] = projected_record
+
+
+def _normalize_age_years(patient: Mapping[str, Any]) -> int | None:
+    """只接受明确且彼此不矛盾的年龄资料，无法确认时保持未知。"""
+
+    year_value = patient.get("age_year")
+    age_value = patient.get("age")
+    month_value = patient.get("age_month")
+    normalized_value = patient.get("age_years")
+    year_pair = _parse_age_pair(year_value, allow_plain_number=True)
+    age_pair = _parse_age_pair(age_value, allow_plain_number=False)
+    month = _parse_month(month_value)
+    normalized_years = _parse_normalized_age_years(normalized_value)
+    if _has_value(year_value) and year_pair is None:
+        return None
+    if _has_value(age_value) and age_pair is None:
+        return None
+    if _has_value(month_value) and month is None:
+        return None
+    if _has_value(normalized_value) and normalized_years is None:
+        return None
+    pairs = tuple(value for value in (year_pair, age_pair) if value is not None)
+    candidate_years = tuple(value[0] for value in pairs)
+    if normalized_years is not None:
+        candidate_years = (*candidate_years, normalized_years)
+    if not candidate_years:
+        return None
+    years = candidate_years[0]
+    if any(value != years for value in candidate_years[1:]):
+        return None
+    embedded_months = tuple(value[1] for value in pairs if value[1] is not None)
+    if len(set(embedded_months)) > 1:
+        return None
+    if month is not None and embedded_months and month != embedded_months[0]:
+        return None
+    return years
+
+
+def _parse_normalized_age_years(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 0 <= value <= 130 else None
+
+
+def _parse_age_pair(value: Any, *, allow_plain_number: bool) -> tuple[int, int | None] | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return (value, None) if 0 <= value <= 130 else None
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if allow_plain_number and normalized.isdecimal():
+        years = int(normalized)
+        return (years, None) if years <= 130 else None
+    if "岁" not in normalized:
+        return None
+    years_text, suffix = normalized.split("岁", 1)
+    if not years_text.isdecimal():
+        return None
+    years = int(years_text)
+    if years > 130:
+        return None
+    if not suffix:
+        return years, None
+    if not suffix.endswith("月"):
+        return None
+    month_text = suffix[:-1]
+    if not month_text.isdecimal():
+        return None
+    month = int(month_text)
+    return (years, month) if 0 <= month < 12 else None
+
+
+def _parse_month(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 0 <= value < 12 else None
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().removesuffix("月")
+    if not normalized.isdecimal():
+        return None
+    month = int(normalized)
+    return month if 0 <= month < 12 else None
+
+
+def _has_value(value: Any) -> bool:
+    return value is not None and (not isinstance(value, str) or bool(value.strip()))
 
 
 def _document_lists(value: Any) -> dict[str, tuple[Mapping[str, Any], ...]]:

@@ -93,6 +93,15 @@ def _evaluate_civil_capacity(
             "LX0916-002", "not_applicable", "eligibility_not_met", admission_record,
             "患者具完全民事行为能力，本规则不适用。",
         )
+    age_years = _patient_age_years(patient)
+    if capacity not in {"limited", "none"} and age_years is not None:
+        if age_years < 16:
+            capacity = "none"
+        elif age_years < 18:
+            return _result(
+                "LX0916-002", "data_quality_gap", "civil_capacity_fact_unavailable", admission_record,
+                "16至17岁患者未取得明确民事行为能力事实，无法忽略法定例外。",
+            )
     if capacity not in {"limited", "none"}:
         return _evaluate_semantic_content("LX0916-002", admission_record, semantic_facts)
     narrator = admission_record.get("history_narrator")
@@ -116,13 +125,18 @@ def _evaluate_civil_capacity(
 def _evaluate_child_history(
     admission_record: Mapping[str, Any], semantic_facts: Any
 ) -> Luxian0916RuleResult:
-    age_years = _patient(admission_record).get("age_years")
-    if not isinstance(age_years, int) or isinstance(age_years, bool) or not 0 <= age_years <= 130:
+    age_years = _patient_age_years(_patient(admission_record))
+    if age_years is None:
         return _evaluate_semantic_content("LX0916-008", admission_record, semantic_facts)
     if age_years >= 18:
         return _result(
             "LX0916-008", "not_applicable", "eligibility_not_met", admission_record,
             "患者不属于儿童，婴幼儿喂养史和生长发育史要求不适用。",
+        )
+    if _semantic_state(semantic_facts, "LX0916-008") == "not_applicable":
+        return _result(
+            "LX0916-008", "data_quality_gap", "semantic_fact_conflicts_with_age", admission_record,
+            "儿童年龄事实与文书内容不适用的语义事实冲突，无法作出可靠判断。",
         )
     return _evaluate_semantic_content("LX0916-008", admission_record, semantic_facts)
 
@@ -166,6 +180,13 @@ def _semantic_state(semantic_facts: Any, rule_id: str) -> str | None:
 def _patient(admission_record: Mapping[str, Any]) -> Mapping[str, Any]:
     patient = admission_record.get("patient")
     return patient if isinstance(patient, Mapping) else {}
+
+
+def _patient_age_years(patient: Mapping[str, Any]) -> int | None:
+    value = patient.get("age_years")
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 130:
+        return None
+    return value
 
 
 def _not_executed(rule_id: str) -> Luxian0916RuleResult:

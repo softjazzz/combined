@@ -8,11 +8,24 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from sqlalchemy import text
+
 from ...database.connection import engine
 from ..bundles import load_or_assemble_scene_bundle
 
 
 _SUPPORTED_SCENES = frozenset({"running", "final"})
+_PATIENT_AGE_QUERY = text(
+    """
+    SELECT age_year, age_month, age
+    FROM cdm.admission_record
+    WHERE institute_id = :institute_id
+      AND patient_id = :patient_id
+      AND visit_id = :visit_id
+    ORDER BY record_datetime DESC NULLS LAST, document_id DESC
+    LIMIT 1
+    """
+)
 
 
 def _json_value(value: Any) -> Any:
@@ -24,6 +37,34 @@ def _json_value(value: Any) -> Any:
         except (TypeError, ValueError):
             return {}
     return {}
+
+
+def _load_luxian_0916_patient_facts(
+    *, institute_id: str, patient_id: str, visit_id: str
+) -> dict[str, Any]:
+    """只读读取 0916 专属年龄事实；查询失败时保持未知。"""
+
+    if engine is None:
+        return {}
+    try:
+        with engine.connect() as connection:
+            row = connection.execute(
+                _PATIENT_AGE_QUERY,
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                },
+            ).mappings().first()
+    except Exception:  # noqa: BLE001 - 年龄事实不可用时由规则返回数据缺口
+        return {}
+    if row is None:
+        return {}
+    return {
+        key: row[key]
+        for key in ("age_year", "age_month", "age")
+        if row.get(key) is not None and str(row[key]).strip()
+    }
 
 
 def load_luxian_0916_bundle(
@@ -68,6 +109,20 @@ def load_luxian_0916_bundle(
         "source_doc_priority",
     ):
         result[key] = _json_value(result.get(key))
+    patient_facts = _load_luxian_0916_patient_facts(
+        institute_id=coordinates[0],
+        patient_id=coordinates[1],
+        visit_id=coordinates[2],
+    )
+    if patient_facts:
+        structured = dict(result["structured_context"])
+        luxian_facts = _json_value(structured.get("luxian_0916_facts"))
+        luxian_facts["patient"] = {
+            **_json_value(luxian_facts.get("patient")),
+            **patient_facts,
+        }
+        structured["luxian_0916_facts"] = luxian_facts
+        result["structured_context"] = structured
     return result
 
 

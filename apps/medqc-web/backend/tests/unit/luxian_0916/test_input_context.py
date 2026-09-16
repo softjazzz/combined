@@ -1,3 +1,5 @@
+import pytest
+
 from app.services.luxian_0916.input_context import (
     add_luxian_0916_evidence_sources,
     build_luxian_0916_context,
@@ -107,6 +109,92 @@ def test_missing_document_source_does_not_become_a_false_event_fact():
     assert "surgery_performed" not in context["event_facts"]
     assert "anesthesia_performed" not in context["event_facts"]
     assert "discharge_record_formed" not in context["discharge_facts"]
+
+
+@pytest.mark.parametrize(
+    ("patient", "expected_age_years"),
+    (
+        ({"age_year": "13", "age_month": "11", "age": "13岁11月"}, 13),
+        ({"age_year": "4岁9月", "age": "4岁9月"}, 4),
+        ({"age_year": "70", "age": "70岁"}, 70),
+        ({"age_year": "76", "age": "76岁"}, 76),
+        ({"age_year": "16", "age_month": "11", "age": "16岁11月"}, 16),
+        ({"age_year": "17", "age_month": "0", "age": "17岁"}, 17),
+        ({"age_years": 13}, 13),
+    ),
+)
+def test_context_normalizes_explicit_0916_patient_age(
+    patient, expected_age_years
+) -> None:
+    context = build_luxian_0916_context(
+        bundle={"structured_context": {"luxian_0916_facts": {"patient": patient}}},
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {"admission_record": [{"document_id": "a-1"}]}
+            }
+        },
+    )
+
+    assert context["documents"]["admission_record"]["patient"]["age_years"] == expected_age_years
+
+
+@pytest.mark.parametrize(
+    "patient",
+    (
+        {"age_year": "invalid", "age": "unknown"},
+        {"age_year": "13", "age_month": "12", "age": "13岁"},
+        {"age_year": "13", "age": "14岁"},
+        {"age_years": 13, "age_year": "14"},
+        {"age_years": 13, "age": "14岁"},
+    ),
+)
+def test_context_keeps_invalid_or_conflicting_patient_age_unknown(patient) -> None:
+    context = build_luxian_0916_context(
+        bundle={"structured_context": {"luxian_0916_facts": {"patient": patient}}},
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {"admission_record": [{"document_id": "a-1"}]}
+            }
+        },
+    )
+
+    assert "age_years" not in context["documents"]["admission_record"]["patient"]
+
+
+def test_context_treats_surgery_safety_check_as_performed_surgery_without_using_anesthesia():
+    safety_context = build_luxian_0916_context(
+        bundle={"structured_context": {}},
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {"surgery_safecheck_record": [{"document_id": "safe-1"}]}
+            }
+        },
+    )
+    explicit_override_context = build_luxian_0916_context(
+        bundle={
+            "structured_context": {
+                "luxian_0916_facts": {"event_facts": {"surgery_performed": False}}
+            }
+        },
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {"surgery_safecheck_record": [{"document_id": "safe-1"}]}
+            }
+        },
+    )
+    anesthesia_only_context = build_luxian_0916_context(
+        bundle={"structured_context": {}},
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {"anesthesia_record": [{"document_id": "anes-1"}]}
+            }
+        },
+    )
+
+    assert safety_context["event_facts"]["surgery_performed"] is True
+    assert explicit_override_context["event_facts"]["surgery_performed"] is False
+    assert "surgery_performed" not in anesthesia_only_context["event_facts"]
+    assert anesthesia_only_context["event_facts"]["anesthesia_performed"] is True
 
 
 def test_semantic_merge_preserves_explicit_facts_and_adds_document_completeness():
