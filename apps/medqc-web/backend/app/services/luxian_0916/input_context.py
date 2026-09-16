@@ -206,7 +206,25 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 def _presence_only_fact(fact: Mapping[str, Any]) -> dict[str, Any]:
     if fact.get("presence") == "present":
-        return {"presence": "present"}
+        anchors = fact.get("anchors")
+        locatable_anchors = ()
+        if isinstance(anchors, Sequence) and not isinstance(anchors, (str, bytes)):
+            locatable_anchors = tuple(
+                {
+                    "document_type": document_type.strip(),
+                    "document_id": document_id.strip(),
+                }
+                for anchor in anchors
+                if isinstance(anchor, Mapping)
+                and isinstance((document_type := anchor.get("document_type")), str)
+                and document_type.strip()
+                and isinstance((document_id := anchor.get("document_id")), str)
+                and document_id.strip()
+            )
+        return {
+            "presence": "present",
+            **({"anchors": locatable_anchors} if locatable_anchors else {}),
+        }
     return {}
 
 

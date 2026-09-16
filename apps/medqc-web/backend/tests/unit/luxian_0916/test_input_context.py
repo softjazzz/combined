@@ -306,7 +306,14 @@ def test_build_merge_execute_blocks_explicit_grounded_marker_but_preserves_023_p
     )
     merged = merge_luxian_0916_semantic_facts(
         context=context,
-        extracted={"document_facts": {"anesthesia_record": {"presence": "present"}}},
+        extracted={
+            "document_facts": {
+                "anesthesia_record": {
+                    "presence": "present",
+                    "required_items": {"forged": "forged"},
+                }
+            }
+        },
     )
 
     from app.services.luxian_0916.surgery_consent_rules import execute_surgery_consent_rules
@@ -329,5 +336,43 @@ def test_build_merge_execute_blocks_explicit_grounded_marker_but_preserves_023_p
     assert "required_items" not in merged_fact
     assert "missing_items" not in merged_fact
     assert "evidence" not in merged_fact
+    assert merged_fact["anchors"] == (
+        {"document_type": "anesthesia_record", "document_id": "AR-1"},
+    )
     assert record_result.status == "compliant"
+    assert record_result.document_anchors == merged_fact["anchors"]
     assert completeness_result.status == "data_quality_gap"
+
+
+def test_presence_only_fact_drops_empty_or_malformed_anchors() -> None:
+    merged = merge_luxian_0916_semantic_facts(
+        context={
+            "document_facts": {
+                "anesthesia_record": {
+                    "presence": "present",
+                    "anchors": (
+                        {"document_type": "anesthesia_record", "document_id": " "},
+                        {"document_type": "", "document_id": "AR-2"},
+                        {"document_type": "anesthesia_record", "document_id": "AR-3"},
+                        {"document_type": "anesthesia_record"},
+                        "not-an-anchor",
+                    ),
+                }
+            }
+        },
+        extracted={
+            "document_facts": {
+                "anesthesia_record": {
+                    "presence": "present",
+                    "required_items": {"forged": "forged"},
+                }
+            }
+        },
+    )
+
+    assert merged["document_facts"]["anesthesia_record"] == {
+        "presence": "present",
+        "anchors": (
+            {"document_type": "anesthesia_record", "document_id": "AR-3"},
+        ),
+    }
