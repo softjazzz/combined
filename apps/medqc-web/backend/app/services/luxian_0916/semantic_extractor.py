@@ -276,6 +276,7 @@ def _selected_documents(
 ) -> list[dict[str, Any]]:
     timeline = _mapping(evidence_payload.get("programmatic_timeline"))
     source_documents = _mapping(timeline.get("documents"))
+    locatable_coordinates = _locatable_document_coordinates(timeline)
     requested_sources = {
         source
         for rule_id in rule_ids
@@ -292,10 +293,18 @@ def _selected_documents(
             continue
         limit = _DOCUMENT_LIMITS[source_type]
         selected_from_source = 0
-        for index, raw_row in enumerate(rows):
+        for raw_row in rows:
             if selected_from_source >= limit:
                 break
             if not isinstance(raw_row, Mapping):
+                continue
+            document_id = str(raw_row.get("document_id") or raw_row.get("id") or "").strip()
+            if not document_id:
+                continue
+            if (
+                locatable_coordinates is not None
+                and (source_type, document_id) not in locatable_coordinates
+            ):
                 continue
             content = _text(raw_row)
             if not content or remaining <= 0:
@@ -306,7 +315,6 @@ def _selected_documents(
             clipped = content[: min(source_limit, remaining)]
             if not clipped:
                 continue
-            document_id = str(raw_row.get("document_id") or raw_row.get("id") or f"{source_type}-{index + 1}").strip()
             title = str(
                 raw_row.get("title")
                 or raw_row.get("document_name")
@@ -314,7 +322,7 @@ def _selected_documents(
                 or ""
             ).strip()
             document = {
-                "document_id": document_id or f"{source_type}-{index + 1}",
+                "document_id": document_id,
                 "source_type": source_type,
                 "content": clipped,
                 "truncated": len(clipped) < len(content),
@@ -325,6 +333,31 @@ def _selected_documents(
             remaining -= len(clipped)
             selected_from_source += 1
     return documents
+
+
+def _locatable_document_coordinates(
+    timeline: Mapping[str, Any],
+) -> set[tuple[str, str]] | None:
+    raw_coordinates = timeline.get("locatable_document_coordinates")
+    if raw_coordinates is None:
+        return None
+    if not isinstance(raw_coordinates, Sequence) or isinstance(
+        raw_coordinates, (str, bytes)
+    ):
+        return set()
+    coordinates: set[tuple[str, str]] = set()
+    for raw_coordinate in raw_coordinates:
+        if (
+            not isinstance(raw_coordinate, Sequence)
+            or isinstance(raw_coordinate, (str, bytes))
+            or len(raw_coordinate) != 2
+        ):
+            continue
+        source_type = str(raw_coordinate[0] or "").strip().lower()
+        document_id = str(raw_coordinate[1] or "").strip()
+        if source_type and document_id:
+            coordinates.add((source_type, document_id))
+    return coordinates
 
 
 def _prompt(*, documents: Sequence[Mapping[str, Any]], rule_ids: Sequence[str]) -> str:

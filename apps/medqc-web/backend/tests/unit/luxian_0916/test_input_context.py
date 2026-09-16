@@ -37,6 +37,31 @@ def test_adds_consent_form_from_bundle_inventory_without_changing_common_sources
             "content": "拟行全身麻醉。",
         },
     )
+    assert projected["programmatic_timeline"]["locatable_document_coordinates"] == (
+        ("consent_form", "A-1"),
+    )
+
+
+def test_projects_locatable_coordinates_from_top_level_bundle_inventory() -> None:
+    projected = add_luxian_0916_evidence_sources(
+        bundle={
+            "source_documents": [
+                {"source_table": "DAILY_COURSE_RECORD", "id": "D-1"},
+                {"document_type": "EXAM_MASTER", "document_id": "E-1"},
+                {"type": "labtest_master", "id": "L-1"},
+                {"doc_type": "inpat_drug_order", "id": "O-1"},
+                {"source_table": "labtest_item_report", "document_id": ""},
+            ]
+        },
+        evidence_payload={"programmatic_timeline": {"documents": {}}},
+    )
+
+    assert projected["programmatic_timeline"]["locatable_document_coordinates"] == (
+        ("daily_course_record", "D-1"),
+        ("exam_master", "E-1"),
+        ("inpat_drug_order", "O-1"),
+        ("labtest_master", "L-1"),
+    )
 
 
 def test_context_builder_projects_documents_and_deterministic_events_without_guessing_semantics():

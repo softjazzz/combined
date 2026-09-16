@@ -24,7 +24,7 @@ def add_luxian_0916_evidence_sources(
     bundle: Mapping[str, Any],
     evidence_payload: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """只为 0916 补入通用证据白名单未承载的同意书来源。"""
+    """补入同意书来源，并携带本次 bundle 的可定位文书坐标。"""
 
     result = dict(evidence_payload)
     timeline = _mapping(result.get("programmatic_timeline"))
@@ -38,7 +38,7 @@ def add_luxian_0916_evidence_sources(
         for raw_item in inventory:
             if not isinstance(raw_item, Mapping):
                 continue
-            source = str(raw_item.get("source_table") or raw_item.get("document_type") or "").strip()
+            source = _source_type(raw_item)
             if source not in _SUPPLEMENTAL_EVIDENCE_SOURCES:
                 continue
             content = str(raw_item.get("content") or raw_item.get("text_preview") or "").strip()
@@ -55,8 +55,38 @@ def add_luxian_0916_evidence_sources(
         if rows:
             documents[source] = tuple(rows)
     timeline["documents"] = documents
+    timeline["locatable_document_coordinates"] = _locatable_document_coordinates(
+        inventory
+    )
     result["programmatic_timeline"] = timeline
     return result
+
+
+def _locatable_document_coordinates(inventory: Any) -> tuple[tuple[str, str], ...]:
+    if not isinstance(inventory, Sequence) or isinstance(inventory, (str, bytes)):
+        return ()
+    coordinates = {
+        (_source_type(item), _document_id(item))
+        for item in inventory
+        if isinstance(item, Mapping)
+        and _source_type(item)
+        and _document_id(item)
+    }
+    return tuple(sorted(coordinates))
+
+
+def _source_type(item: Mapping[str, Any]) -> str:
+    return str(
+        item.get("source_table")
+        or item.get("document_type")
+        or item.get("type")
+        or item.get("doc_type")
+        or ""
+    ).strip().lower()
+
+
+def _document_id(item: Mapping[str, Any]) -> str:
+    return str(item.get("document_id") or item.get("id") or "").strip()
 
 
 def build_luxian_0916_context(

@@ -554,6 +554,151 @@ async def test_extracts_only_minimal_target_documents_and_calls_model_once() -> 
 
 
 @pytest.mark.asyncio
+async def test_skips_idless_rows_and_selects_later_real_document_within_source_limit() -> None:
+    prompts: list[str] = []
+
+    async def generate(prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        prompts.append(prompt)
+        return {"choices": [{"message": {"content": _content()}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "inpat_drug_order": [
+                        {"content": "无主键的医嘱回退副本。"},
+                        {"document_id": "ORDER-STALE", "content": "不属于本次病历的旧医嘱。"},
+                        {"id": "ORDER-REAL", "content": "有主键的真实医嘱。"},
+                    ],
+                },
+                "locatable_document_coordinates": (
+                    ("INPAT_DRUG_ORDER", "ORDER-REAL"),
+                ),
+            }
+        },
+        rule_ids=("LX0916-017",),
+        generate=generate,
+    )
+
+    assert result["diagnostic"]["document_count"] == 1
+    assert len(prompts) == 1
+    assert "ORDER-REAL" in prompts[0]
+    assert "ORDER-STALE" not in prompts[0]
+    assert "inpat_drug_order-1" not in prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_idless_target_documents_do_not_call_model_and_report_not_selected() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("仅有无主键文书时不应调用模型")
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "exam_master": [{"content": "无主键的检查报告回退副本。"}],
+                    "inpat_drug_order": [{"content": "无主键的医嘱回退副本。"}],
+                }
+            }
+        },
+        rule_ids=("LX0916-017",),
+        generate=generate,
+    )
+
+    assert result["diagnostic"] == {
+        "code": "readable_target_documents_missing",
+        "document_count": 0,
+        "llm_call_count": 0,
+    }
+    assert result["event_source_state_by_rule"] == {"LX0916-017": "not_selected"}
+
+
+@pytest.mark.asyncio
+async def test_unlocatable_target_documents_do_not_call_model_and_report_not_selected() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("仅有未命中目录的文书时不应调用模型")
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "exam_master": [
+                        {"document_id": "EXAM-STALE", "content": "旧检查报告。"}
+                    ]
+                },
+                "locatable_document_coordinates": (("exam_master", "EXAM-REAL"),),
+            }
+        },
+        rule_ids=("LX0916-017",),
+        generate=generate,
+    )
+
+    assert result["diagnostic"] == {
+        "code": "readable_target_documents_missing",
+        "document_count": 0,
+        "llm_call_count": 0,
+    }
+    assert result["event_source_state_by_rule"] == {"LX0916-017": "not_selected"}
+
+
+@pytest.mark.asyncio
+async def test_grounding_drops_event_facts_bound_to_unlocatable_document_id() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {
+                                    "disease_changes": [
+                                        {
+                                            "event_type": "disease_changes",
+                                            "event_id": "event-legacy-id",
+                                            "document_id": "D-STALE",
+                                            "source_type": "daily_course_record",
+                                            "trigger_confirmed": True,
+                                            "evaluation_window_mature": True,
+                                            "documentation": {
+                                                "analysis_recorded": False,
+                                                "specific_management_recorded": False,
+                                            },
+                                            "appropriateness": "unreasonable",
+                                        }
+                                    ]
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": "D-1", "content": "真实病程文书。"}
+                    ]
+                },
+                "locatable_document_coordinates": (("daily_course_record", "D-1"),),
+            }
+        },
+        rule_ids=("LX0916-015",),
+        generate=generate,
+    )
+
+    event = result["event_facts"]["disease_changes"][0]
+    assert event == {
+        "event_type": "disease_changes",
+        "event_id": "event-legacy-id",
+        "document_id": "D-STALE",
+        "source_type": "daily_course_record",
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "extra",
     [
