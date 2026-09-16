@@ -147,6 +147,10 @@ def merge_luxian_0916_semantic_facts(
         explicit_group = _mapping(context.get(group))
         merged[group] = {**extracted_group, **explicit_group}
 
+    merged["event_source_state_by_rule"] = _mapping(
+        extracted.get("event_source_state_by_rule")
+    )
+
     extracted_documents = _mapping(extracted.get("document_facts"))
     explicit_documents = _mapping(context.get("document_facts"))
     document_facts: dict[str, Any] = {}

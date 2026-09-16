@@ -615,6 +615,51 @@ async def test_missing_readable_target_document_does_not_call_model() -> None:
 
 
 @pytest.mark.asyncio
+async def test_returns_event_source_state_for_normal_extraction() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": _content()}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(),
+        rule_ids=("LX0916-015",),
+        generate=generate,
+    )
+
+    assert result["diagnostic"]["code"] == "semantic_extraction_ready"
+    assert result["event_source_state_by_rule"] == {"LX0916-015": "selected"}
+
+
+@pytest.mark.asyncio
+async def test_returns_event_source_state_when_semantic_extraction_is_invalid() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": "not json"}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(),
+        rule_ids=("LX0916-015",),
+        generate=generate,
+    )
+
+    assert result["diagnostic"]["code"] == "semantic_extraction_invalid"
+    assert result["event_source_state_by_rule"] == {"LX0916-015": "selected"}
+
+
+@pytest.mark.asyncio
+async def test_returns_not_selected_event_source_state_without_readable_documents() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("无可读目标文书时不应调用模型")
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={"programmatic_timeline": {"documents": {}}},
+        rule_ids=("LX0916-015",),
+        generate=generate,
+    )
+
+    assert result["diagnostic"]["code"] == "readable_target_documents_missing"
+    assert result["event_source_state_by_rule"] == {"LX0916-015": "not_selected"}
+
+
+@pytest.mark.asyncio
 async def test_retains_admission_and_first_course_facts_for_realistic_document_lengths() -> None:
     async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
         return {

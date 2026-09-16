@@ -237,6 +237,21 @@ def test_semantic_merge_rejects_024_to_026_explicit_completeness_override():
     assert merged["discharge_facts"] == {"discharge_arranged": True}
 
 
+def test_semantic_merge_preserves_deterministic_event_source_states():
+    extracted_states = {
+        "LX0916-015": "selected",
+        "LX0916-018": "not_selected",
+    }
+
+    merged = merge_luxian_0916_semantic_facts(
+        context={"event_facts": {}},
+        extracted={"event_source_state_by_rule": extracted_states},
+    )
+
+    assert merged["event_source_state_by_rule"] == extracted_states
+    assert merged["event_source_state_by_rule"] is not extracted_states
+
+
 def test_build_merge_execute_blocks_explicit_grounded_marker_but_preserves_023_presence():
     context = build_luxian_0916_context(
         bundle={

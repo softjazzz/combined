@@ -59,13 +59,27 @@ def _event_rows(
     facts = context.get("event_facts")
     event_key = _EVENT_KEY_BY_RULE[rule_id]
     if not isinstance(facts, Mapping) or event_key not in facts:
+        states = context.get("event_source_state_by_rule")
+        source_state = states.get(rule_id) if isinstance(states, Mapping) else None
+        if source_state == "selected":
+            reason_code = "event_fact_unavailable"
+            findings = "该规则相关资料已纳入本次受控核对，但未形成可验证的事件事实，无法确认是否触发病程记录检查。"
+            suggestion = "复核受控提取后重新质控。"
+        elif source_state == "not_selected":
+            reason_code = "event_source_unavailable"
+            findings = "本次受控输入未选出可读取的目标文书，无法确认是否触发病程记录检查。"
+            suggestion = "补充可读取的目标文书后重新质控。"
+        else:
+            reason_code = "event_source_unverified"
+            findings = "未验证本次受控输入是否选出该规则的目标文书，无法确认是否触发病程记录检查。"
+            suggestion = "核对事件来源选择与受控事实后重新质控。"
         return None, _result(
             rule_id,
             "data_quality_gap",
-            "event_source_missing",
-            "未提供该规则所需的事件数据源，无法确认是否触发病程记录检查。",
-            suggestion="补齐事件数据源后重新质控。",
-            diagnostics={"event_key": event_key},
+            reason_code,
+            findings,
+            suggestion=suggestion,
+            diagnostics={"event_key": event_key, "event_source_state": source_state},
         )
     rows = facts.get(event_key)
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):

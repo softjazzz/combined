@@ -207,21 +207,55 @@ _COURSE_EVENT_SOURCE_TYPES_BY_KEY: dict[str, frozenset[str]] = {
     "important_operations": frozenset({"daily_course_record"}),
     "diagnosis_changes": frozenset({"daily_course_record"}),
 }
+_EVENT_SELECTION_RULE_IDS = frozenset(
+    f"LX0916-{number:03d}" for number in range(15, 21)
+)
 
 Generate = Callable[..., Awaitable[dict[str, Any]]]
 
 
-def _empty_facts(*, code: str, document_count: int, llm_call_count: int = 0) -> dict[str, Any]:
+def _empty_facts(
+    *,
+    code: str,
+    document_count: int,
+    llm_call_count: int = 0,
+    event_source_state_by_rule: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     return {
         "semantic_facts": {},
         "event_facts": {},
         "document_facts": {},
         "discharge_facts": {},
+        "event_source_state_by_rule": dict(event_source_state_by_rule or {}),
         "diagnostic": {
             "code": code,
             "document_count": document_count,
             "llm_call_count": llm_call_count,
         },
+    }
+
+
+def _event_source_state_by_rule(
+    *,
+    documents: Sequence[Mapping[str, Any]],
+    rule_ids: Sequence[str],
+) -> dict[str, str]:
+    """记录事件规则目标文书是否进入本次受控输入，不接受模型输出。"""
+
+    selected_sources = {
+        str(document.get("source_type") or "").strip()
+        for document in documents
+    }
+    selected_sources.discard("")
+    return {
+        rule_id: (
+            "selected"
+            if selected_sources.intersection(_SOURCES_BY_RULE[rule_id])
+            else "not_selected"
+        )
+        for raw_rule_id in rule_ids
+        for rule_id in (str(raw_rule_id).strip().upper(),)
+        if rule_id in _EVENT_SELECTION_RULE_IDS
     }
 
 
@@ -660,8 +694,16 @@ async def extract_luxian_0916_facts(
     """执行一次受控提取；异常仅返回诊断和空事实，绝不生成客户状态。"""
 
     documents = _selected_documents(evidence_payload, rule_ids)
+    event_source_state_by_rule = _event_source_state_by_rule(
+        documents=documents,
+        rule_ids=rule_ids,
+    )
     if not documents:
-        return _empty_facts(code="readable_target_documents_missing", document_count=0)
+        return _empty_facts(
+            code="readable_target_documents_missing",
+            document_count=0,
+            event_source_state_by_rule=event_source_state_by_rule,
+        )
     try:
         response = await generate(
             _prompt(documents=documents, rule_ids=rule_ids),
@@ -680,9 +722,15 @@ async def extract_luxian_0916_facts(
             documents=documents,
         )
     except Exception:  # 模型/解析异常只作为内部诊断，调用方可继续执行确定性规则。
-        return _empty_facts(code="semantic_extraction_invalid", document_count=len(documents), llm_call_count=1)
+        return _empty_facts(
+            code="semantic_extraction_invalid",
+            document_count=len(documents),
+            llm_call_count=1,
+            event_source_state_by_rule=event_source_state_by_rule,
+        )
     return {
         **facts,
+        "event_source_state_by_rule": event_source_state_by_rule,
         "diagnostic": {
             "code": "semantic_extraction_ready",
             "document_count": len(documents),

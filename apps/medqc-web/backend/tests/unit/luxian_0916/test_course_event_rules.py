@@ -83,12 +83,40 @@ def test_event_rules_wait_for_mature_evaluation_window(rule_id):
     assert result.reason_code == "evaluation_window_not_mature"
 
 
-@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
-def test_event_rules_return_data_gap_without_required_event_source(rule_id):
-    result = _run(rule_id, {"event_facts": {}})
+@pytest.mark.parametrize(
+    ("source_state", "expected_reason", "expected_findings"),
+    (
+        (
+            "selected",
+            "event_fact_unavailable",
+            "该规则相关资料已纳入本次受控核对，但未形成可验证的事件事实，无法确认是否触发病程记录检查。",
+        ),
+        (
+            "not_selected",
+            "event_source_unavailable",
+            "本次受控输入未选出可读取的目标文书，无法确认是否触发病程记录检查。",
+        ),
+        (
+            None,
+            "event_source_unverified",
+            "未验证本次受控输入是否选出该规则的目标文书，无法确认是否触发病程记录检查。",
+        ),
+    ),
+)
+def test_event_rules_describe_missing_event_facts_by_source_state(
+    source_state, expected_reason, expected_findings
+):
+    rule_id = "LX0916-015"
+    context = {"event_facts": {}}
+    if source_state is not None:
+        context["event_source_state_by_rule"] = {rule_id: source_state}
+
+    result = _run(rule_id, context)
 
     assert result.status == "data_quality_gap"
-    assert result.reason_code == "event_source_missing"
+    assert result.reason_code == expected_reason
+    assert result.findings == expected_findings
+    assert result.diagnostics["event_source_state"] == source_state
 
 
 @pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
