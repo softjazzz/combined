@@ -23,9 +23,6 @@ importers:
       '@ant-design/icons-vue':
         specifier: ^7.0.1
         version: 7.0.1(vue@3.5.21)
-      '@supabase/supabase-js':
-        specifier: ^2.57.4
-        version: 2.78.0
       '@types/crypto-js':
         specifier: ^4.2.2
         version: 4.2.2
@@ -56,6 +53,9 @@ importers:
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21
+      lucide-vue-next:
+        specifier: ^0.577.0
+        version: 0.577.0(vue@3.5.21)
       mammoth:
         specifier: ^1.10.0
         version: 1.10.0
@@ -1548,24 +1548,10 @@ packages:
       '@supabase/node-fetch': 2.6.15
     dev: false
 
-  /@supabase/auth-js@2.78.0:
-    resolution: {integrity: sha512-cXDtu1U0LeZj/xfnFoV7yCze37TcbNo8FCxy1FpqhMbB9u9QxxDSW6pA5gm/07Ei7m260Lof4CZx67Cu6DPeig==}
-    dependencies:
-      '@supabase/node-fetch': 2.6.15
-      tslib: 2.8.1
-    dev: false
-
   /@supabase/functions-js@2.4.5:
     resolution: {integrity: sha512-v5GSqb9zbosquTo6gBwIiq7W9eQ7rE5QazsK/ezNiQXdCbY+bH8D9qEaBIkhVvX4ZRW5rP03gEfw5yw9tiq4EQ==}
     dependencies:
       '@supabase/node-fetch': 2.6.15
-    dev: false
-
-  /@supabase/functions-js@2.78.0:
-    resolution: {integrity: sha512-t1jOvArBsOINyqaRee1xJ3gryXLvkBzqnKfi6q3YRzzhJbGS6eXz0pXR5fqmJeB01fLC+1njpf3YhMszdPEF7g==}
-    dependencies:
-      '@supabase/node-fetch': 2.6.15
-      tslib: 2.8.1
     dev: false
 
   /@supabase/node-fetch@2.6.15:
@@ -1581,13 +1567,6 @@ packages:
       '@supabase/node-fetch': 2.6.15
     dev: false
 
-  /@supabase/postgrest-js@2.78.0:
-    resolution: {integrity: sha512-AwhpYlSvJ+PSnPmIK8sHj7NGDyDENYfQGKrMtpVIEzQA2ApUjgpUGxzXWN4Z0wEtLQsvv7g4y9HVad9Hzo1TNA==}
-    dependencies:
-      '@supabase/node-fetch': 2.6.15
-      tslib: 2.8.1
-    dev: false
-
   /@supabase/realtime-js@2.15.5:
     resolution: {integrity: sha512-/Rs5Vqu9jejRD8ZeuaWXebdkH+J7V6VySbCZ/zQM93Ta5y3mAmocjioa/nzlB6qvFmyylUgKVS1KpE212t30OA==}
     dependencies:
@@ -1600,30 +1579,10 @@ packages:
       - utf-8-validate
     dev: false
 
-  /@supabase/realtime-js@2.78.0:
-    resolution: {integrity: sha512-rCs1zmLe7of7hj4s7G9z8rTqzWuNVtmwDr3FiCRCJFawEoa+RQO1xpZGbdeuVvVmKDyVN6b542Okci+117y/LQ==}
-    dependencies:
-      '@supabase/node-fetch': 2.6.15
-      '@types/phoenix': 1.6.6
-      '@types/ws': 8.18.1
-      tslib: 2.8.1
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-    dev: false
-
   /@supabase/storage-js@2.11.1:
     resolution: {integrity: sha512-kaKCJZcZrHDCO9L76bEPzNv2caCStOigOUioHw7CvdEzvcSKjVuomRfN2Y9EqXmJH4tEHoBi3tCs/Ye2e3HwDw==}
     dependencies:
       '@supabase/node-fetch': 2.6.15
-    dev: false
-
-  /@supabase/storage-js@2.78.0:
-    resolution: {integrity: sha512-n17P0JbjHOlxqJpkaGFOn97i3EusEKPEbWOpuk1r4t00Wg06B8Z4GUiq0O0n1vUpjiMgJUkLIMuBVp+bEgunzQ==}
-    dependencies:
-      '@supabase/node-fetch': 2.6.15
-      tslib: 2.8.1
     dev: false
 
   /@supabase/supabase-js@2.57.2:
@@ -1635,20 +1594,6 @@ packages:
       '@supabase/postgrest-js': 1.21.3
       '@supabase/realtime-js': 2.15.5
       '@supabase/storage-js': 2.11.1
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-    dev: false
-
-  /@supabase/supabase-js@2.78.0:
-    resolution: {integrity: sha512-xYMRNBFmKp2m1gMuwcp/gr/HlfZKqjye1Ib8kJe29XJNsgwsfO/f8skxnWiscFKTlkOKLuBexNgl5L8dzGt6vA==}
-    dependencies:
-      '@supabase/auth-js': 2.78.0
-      '@supabase/functions-js': 2.78.0
-      '@supabase/node-fetch': 2.6.15
-      '@supabase/postgrest-js': 2.78.0
-      '@supabase/realtime-js': 2.78.0
-      '@supabase/storage-js': 2.78.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -4122,6 +4067,15 @@ packages:
       yallist: 3.1.1
     dev: true
 
+  /lucide-vue-next@0.577.0(vue@3.5.21):
+    resolution: {integrity: sha512-py05bAfv9SHVJqscbiOnjcnLlEmOffA58a+7XhZuFxrs6txe1E8VoR1ngWGTYO+9aVKABAz8l3ee3PqiQN9QPA==}
+    deprecated: Package deprecated. Please use @lucide/vue instead.
+    peerDependencies:
+      vue: '>=3.0.1'
+    dependencies:
+      vue: 3.5.21(typescript@5.7.3)
+    dev: false
+
   /magic-string@0.30.18:
     resolution: {integrity: sha512-yi8swmWbO17qHhwIBNeeZxTceJMeBvWJaId6dyvTSOwTipqeHhMhOrz6513r1sOKnpvQ7zkhlG8tPrpilwTxHQ==}
     dependencies:
@@ -5556,6 +5510,7 @@ packages:
 
   /tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
+    dev: true
 
   /tsx@4.20.5:
     resolution: {integrity: sha512-+wKjMNU9w/EaQayHXb7WA7ZaHY6hN8WgfvHNQ3t1PnU91/7O8TcTnIhCDYTZwnt8JsO9IBqZ30Ln1r7pPF52Aw==}
