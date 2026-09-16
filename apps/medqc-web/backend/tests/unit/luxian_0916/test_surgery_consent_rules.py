@@ -4,6 +4,7 @@ import pytest
 from app.services.luxian_0916.surgery_consent_rules import (
     execute_surgery_consent_rules,
 )
+from app.services.luxian_0916.surgical_document_completeness import _ITEM_LABELS
 
 
 _RULE_IDS = tuple(f"LX0916-{number:03d}" for number in range(21, 31))
@@ -51,12 +52,29 @@ def _context(rule_id: str, document_fact: dict[str, object] | None) -> dict[str,
 def test_surgery_rules_report_compliant_from_complete_authoritative_fact(
     rule_id: str,
 ) -> None:
-    fact = {"presence": "present", "completeness": "complete", "evidence": ["文书已核验"]}
+    fact = {
+        "presence": "present",
+        "completeness": "complete",
+        "evidence": ["文书已核验"],
+        "document_id": "DOC-1",
+        "source_type": "surgery_inform_consent",
+    }
 
     result = execute_surgery_consent_rules(_context(rule_id, fact), (rule_id,))[0]
 
     assert result.status == "compliant"
     assert result.evidence == ("文书已核验",)
+    assert result.decision_facts == {
+        "event_gate": result.diagnostics["event_gate"],
+        "event_value": True,
+        "evaluation_window_mature": None,
+        "document_fact_key": _DOCUMENT_FOR_RULE[rule_id],
+        "document_presence": "present",
+        "document_completeness": "complete",
+        "document_id": "DOC-1",
+        "source_type": "surgery_inform_consent",
+    }
+    assert "required_items" not in result.decision_facts
 
 
 @pytest.mark.parametrize("rule_id", _COMPLETENESS_RULE_IDS)
@@ -149,6 +167,12 @@ def test_surgery_rules_wait_when_upstream_marks_evaluation_window_immature(
 
     assert result.status == "not_executed"
     assert result.reason_code == "evaluation_window_not_mature"
+    assert result.decision_facts == {
+        "event_gate": result.diagnostics["event_gate"],
+        "event_value": None,
+        "evaluation_window_mature": False,
+        "document_fact_key": _DOCUMENT_FOR_RULE[rule_id],
+    }
 
 
 @pytest.mark.parametrize("rule_id", _RULE_IDS)
@@ -198,6 +222,42 @@ def test_surgery_document_content_findings_keep_required_item_scope(
     assert result.status == "non_compliant"
     assert required_item in result.findings
     assert required_item in result.suggestion
+
+
+def test_025_persists_only_missing_item_labels_not_required_item_quotes() -> None:
+    item_keys = tuple(_ITEM_LABELS["surgery_record"])
+    required_items = {
+        item_key: (None if item_key == "blood_loss" else f"受控原文{index}")
+        for index, item_key in enumerate(item_keys, start=1)
+    }
+    fact = {
+        "presence": "present",
+        "document_id": "SR-1",
+        "source_type": "surgery_record",
+        "evidence": ["手术记录已定位"],
+        "anchors": [
+            {
+                "document_type": "surgery_record",
+                "document_id": "SR-1",
+                "fields": [
+                    "presence",
+                    "completeness",
+                    *(f"required_items.{item_key}" for item_key in item_keys),
+                ],
+            }
+        ],
+        "completeness": "incomplete",
+        "completeness_basis": "grounded_required_items",
+        "required_items": required_items,
+        "missing_items": ("出血量",),
+    }
+
+    result = execute_surgery_consent_rules(_context("LX0916-025", fact), ("LX0916-025",))[0]
+
+    assert result.status == "non_compliant"
+    assert result.decision_facts["missing_items"] == ("出血量",)
+    assert "required_items" not in result.decision_facts
+    assert all("受控原文" not in str(value) for value in result.decision_facts.values())
 
 
 def test_surgery_rules_reject_unknown_rule_id() -> None:

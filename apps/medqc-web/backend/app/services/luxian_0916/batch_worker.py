@@ -164,6 +164,7 @@ async def run_luxian_0916_batch_job(
             for outcome in outcomes
             if outcome.semantic_diagnostic
         ]
+        semantic_extraction_failures = _semantic_extraction_failures(outcomes)
         summary = {
             "execution_status": (
                 "completed_with_record_failures" if failed_records else "completed"
@@ -171,6 +172,7 @@ async def run_luxian_0916_batch_job(
             "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
             "rule_count": len(_RULE_IDS),
             "total_records": total_records,
+            "max_parallel_records": concurrency,
             "success_count": completed_records,
             "failed_count": len(failed_records),
             "failed_record_count": len(failed_records),
@@ -182,15 +184,13 @@ async def run_luxian_0916_batch_job(
             "semantic_llm_call_count": sum(
                 int(item.get("llm_call_count") or 0) for item in semantic_diagnostics
             ),
-            "semantic_extraction_invalid_count": sum(
-                1
-                for item in semantic_diagnostics
-                if item.get("code") == "semantic_extraction_invalid"
-            ),
+            "semantic_extraction_invalid_count": len(semantic_extraction_failures),
+            "semantic_extraction_failures": semantic_extraction_failures,
             "progress": {
                 "step_key": "completed",
                 "processed_records": total_records,
                 "total_records": total_records,
+                "max_parallel_records": concurrency,
             },
         }
         workspace.complete_batch_job(
@@ -212,11 +212,13 @@ class _RecordExecution:
         diagnostic_failures: Sequence[dict[str, Any]] = (),
         failed_records: Sequence[dict[str, Any]] = (),
         semantic_diagnostic: Mapping[str, Any] | None = None,
+        semantic_extraction_failure: Mapping[str, Any] | None = None,
     ) -> None:
         self.items = tuple(items)
         self.diagnostic_failures = tuple(diagnostic_failures)
         self.failed_records = tuple(failed_records)
         self.semantic_diagnostic = dict(semantic_diagnostic or {})
+        self.semantic_extraction_failure = dict(semantic_extraction_failure or {})
 
 
 async def _execute_record(
@@ -267,6 +269,11 @@ async def _execute_record(
             diagnostic_failures=outcome.diagnostic_failures,
             failed_records=outcome.failed_records,
             semantic_diagnostic=_mapping(extracted.get("diagnostic")),
+            semantic_extraction_failure=_semantic_extraction_failure(
+                identity=identity,
+                record=record,
+                diagnostic=_mapping(extracted.get("diagnostic")),
+            ),
         )
     except Exception as exc:  # noqa: BLE001 - 单病历必须隔离
         return _RecordExecution(
@@ -440,6 +447,47 @@ def _record_identity_from_item(item: Mapping[str, Any]) -> tuple[str, str, str]:
         str(item.get("patient_id") or ""),
         str(item.get("visit_id") or ""),
     )
+
+
+def _semantic_extraction_failure(
+    *,
+    identity: Mapping[str, str],
+    record: Mapping[str, Any],
+    diagnostic: Mapping[str, Any],
+) -> dict[str, Any]:
+    """为提取无效保留一次、可定位且不含病历原文的任务级诊断。"""
+
+    if diagnostic.get("code") != "semantic_extraction_invalid":
+        return {}
+    return {
+        **identity,
+        "record_id": str(record.get("record_id") or identity["visit_id"]),
+        "code": "semantic_extraction_invalid",
+        "document_count": _nonnegative_int(diagnostic.get("document_count")),
+        "llm_call_count": _nonnegative_int(diagnostic.get("llm_call_count")),
+    }
+
+
+def _semantic_extraction_failures(
+    outcomes: Sequence[_RecordExecution],
+) -> list[dict[str, Any]]:
+    """按病历三坐标去重，确保汇总计数与可定位异常明细严格一致。"""
+
+    unique: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for outcome in outcomes:
+        failure = outcome.semantic_extraction_failure
+        if not failure:
+            continue
+        identity = _record_identity_from_item(failure)
+        unique.setdefault(identity, dict(failure))
+    return [unique[identity] for identity in sorted(unique)]
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _mapping(value: Any) -> dict[str, Any]:

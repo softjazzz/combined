@@ -110,6 +110,7 @@ def _result(
     suggestion: str = "",
     anchors: tuple[Mapping[str, Any], ...] = (),
     diagnostics: Mapping[str, Any],
+    decision_facts: Mapping[str, Any],
 ) -> Luxian0916RuleResult:
     return Luxian0916RuleResult(
         rule_id=rule_id,
@@ -120,6 +121,7 @@ def _result(
         suggestion=suggestion,
         document_anchors=anchors,
         diagnostics=diagnostics,
+        decision_facts=decision_facts,
     )
 
 
@@ -144,6 +146,44 @@ def _event_value(event_facts: Mapping[str, Any], event_key: str) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
+def _optional_bool(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _decision_facts(
+    *,
+    spec: Mapping[str, str],
+    event_facts: Mapping[str, Any] | None,
+    event_value: bool | None = None,
+    fact: Mapping[str, Any] | None = None,
+    missing_items: Sequence[str] = (),
+) -> dict[str, Any]:
+    """持久化规则实际读取的最小结构化事实，不保存文书原文。"""
+
+    result: dict[str, Any] = {
+        "event_gate": spec["event"],
+        "event_value": event_value,
+        "evaluation_window_mature": (
+            _optional_bool(event_facts.get("evaluation_window_mature"))
+            if event_facts is not None
+            else None
+        ),
+        "document_fact_key": spec["document"],
+    }
+    if fact is not None:
+        result.update(
+            {
+                "document_presence": fact.get("presence"),
+                "document_completeness": fact.get("completeness"),
+                "document_id": fact.get("document_id"),
+                "source_type": fact.get("source_type"),
+            }
+        )
+    if missing_items:
+        result["missing_items"] = tuple(missing_items)
+    return result
+
+
 def _evaluate_rule(
     *,
     rule_id: str,
@@ -159,6 +199,7 @@ def _evaluate_rule(
             reason_code="event_fact_unavailable",
             findings="缺少手术相关事件事实，无法确认本规则是否适用。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(spec=spec, event_facts=None),
         )
     if event_facts.get("evaluation_window_mature") is False:
         return _result(
@@ -167,6 +208,7 @@ def _evaluate_rule(
             reason_code="evaluation_window_not_mature",
             findings="手术相关文书尚未到检查时点。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(spec=spec, event_facts=event_facts),
         )
 
     event_value = _event_value(event_facts, spec["event"])
@@ -178,6 +220,9 @@ def _evaluate_rule(
             reason_code="trigger_event_not_present",
             findings="未发现该规则要求的触发事件。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(
+                spec=spec, event_facts=event_facts, event_value=event_value
+            ),
         )
     if event_value is None:
         return _result(
@@ -186,6 +231,9 @@ def _evaluate_rule(
             reason_code="event_fact_unavailable",
             findings="触发事件事实不完整，无法确认本规则是否适用。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(
+                spec=spec, event_facts=event_facts, event_value=event_value
+            ),
         )
 
     fact = _safe_mapping(document_facts.get(spec["document"])) if document_facts else None
@@ -196,6 +244,9 @@ def _evaluate_rule(
             reason_code="semantic_fact_unavailable",
             findings="缺少该文书的权威存在性或完整性事实，无法作出内容质量结论。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(
+                spec=spec, event_facts=event_facts, event_value=event_value
+            ),
         )
 
     presence = fact.get("presence")
@@ -204,6 +255,12 @@ def _evaluate_rule(
     anchors = _safe_anchors(fact.get("anchors"))
     diagnostics["document_presence"] = presence
     diagnostics["document_completeness"] = completeness
+    decision_facts = _decision_facts(
+        spec=spec,
+        event_facts=event_facts,
+        event_value=event_value,
+        fact=fact,
+    )
     if rule_id == "LX0916-023":
         if presence == "present":
             return _result(
@@ -214,6 +271,7 @@ def _evaluate_rule(
                 evidence=evidence,
                 anchors=anchors,
                 diagnostics=diagnostics,
+                decision_facts=decision_facts,
             )
         if presence == "missing":
             return _result(
@@ -225,6 +283,7 @@ def _evaluate_rule(
                 suggestion="补充麻醉记录并关联本次麻醉事件。",
                 anchors=anchors,
                 diagnostics=diagnostics,
+                decision_facts=decision_facts,
             )
         return _result(
             rule_id=rule_id,
@@ -234,6 +293,7 @@ def _evaluate_rule(
             evidence=evidence,
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
 
     if rule_id == "LX0916-024" and presence == "missing":
@@ -245,6 +305,7 @@ def _evaluate_rule(
             evidence=evidence,
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
 
     if presence == "missing":
@@ -257,6 +318,7 @@ def _evaluate_rule(
             suggestion="补充必需文书并完成对应内容记录。",
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
     grounded_missing_items = validated_missing_items(spec["document"], fact)
     if rule_id in {"LX0916-024", "LX0916-025", "LX0916-026"}:
@@ -269,8 +331,16 @@ def _evaluate_rule(
                 evidence=evidence,
                 anchors=anchors,
                 diagnostics=diagnostics,
+                decision_facts=decision_facts,
             )
         diagnostics["missing_items"] = grounded_missing_items
+        decision_facts = _decision_facts(
+            spec=spec,
+            event_facts=event_facts,
+            event_value=event_value,
+            fact=fact,
+            missing_items=grounded_missing_items,
+        )
     if presence != "present" or completeness not in {"complete", "incomplete"}:
         return _result(
             rule_id=rule_id,
@@ -280,6 +350,7 @@ def _evaluate_rule(
             evidence=evidence,
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
     if completeness == "complete":
         return _result(
@@ -290,6 +361,7 @@ def _evaluate_rule(
             evidence=evidence,
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
     requirements = spec.get("requirements", "该文书对应的必填内容")
     missing_items = grounded_missing_items or ()
@@ -311,6 +383,7 @@ def _evaluate_rule(
         ),
         anchors=anchors,
         diagnostics=diagnostics,
+        decision_facts=decision_facts,
     )
 
 

@@ -577,3 +577,35 @@ def test_debug_snapshot_does_not_repeat_heavy_summary_payloads() -> None:
     assert "rule_results" not in snapshot["summary"]
     assert "performance_profile" not in snapshot["summary"]
     assert "last_retry_performance_profile" not in snapshot["summary"]
+
+
+def test_debug_snapshot_preserves_luxian_0916_semantic_failure_coordinates() -> None:
+    failures = [
+        {
+            "institute_id": "I-1",
+            "patient_id": "P-1",
+            "visit_id": "V-1",
+            "record_id": "R-1",
+            "code": "semantic_extraction_invalid",
+            "document_count": 3,
+            "llm_call_count": 1,
+        }
+    ]
+    snapshot = qc_sichuan._build_debug_snapshot(
+        {
+            "id": "job-0916",
+            "status": "completed",
+            "summary": {
+                "semantic_llm_call_count": 30,
+                "semantic_extraction_invalid_count": 1,
+                "semantic_extraction_failures": failures,
+            },
+            "items": [],
+        }
+    )
+
+    assert snapshot["summary"] == {
+        "semantic_llm_call_count": 30,
+        "semantic_extraction_invalid_count": 1,
+        "semantic_extraction_failures": failures,
+    }

@@ -305,10 +305,10 @@
               <div class="ds-row">
                 <div class="ds-row__left">
                   <div class="ds-row__label">
-                    模型 HTTP 槽位
+                    全局模型 HTTP 槽位
                   </div>
                   <div class="ds-row__hint">
-                    后端进程共享的模型请求上限；降低时不会中断正在执行的请求。
+                    所有质控集共享的模型请求上限；默认 40，降低时不会中断正在执行的请求。
                   </div>
                 </div>
                 <a-input-number

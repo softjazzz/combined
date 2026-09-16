@@ -205,22 +205,19 @@ def test_qc_batch_record_concurrency_defaults_to_sixteen_and_is_bounded(monkeypa
         Settings(_env_file=None)
 
 
-def test_luxian_0916_record_concurrency_is_independent_and_bounded(monkeypatch):
+def test_luxian_0916_has_no_independent_record_concurrency_setting(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
     settings = Settings(_env_file=None)
-    assert settings.LUXIAN_0916_RECORD_MAX_CONCURRENCY == 4
     assert settings.QC_BATCH_RECORD_MAX_CONCURRENCY == 16
+    assert not hasattr(settings, "LUXIAN_0916_RECORD_MAX_CONCURRENCY")
 
+    # 遗留环境变量不再形成第二套并发口径。
     monkeypatch.setenv("LUXIAN_0916_RECORD_MAX_CONCURRENCY", "8")
     settings = Settings(_env_file=None)
-    assert settings.LUXIAN_0916_RECORD_MAX_CONCURRENCY == 8
     assert settings.QC_BATCH_RECORD_MAX_CONCURRENCY == 16
-
-    monkeypatch.setenv("LUXIAN_0916_RECORD_MAX_CONCURRENCY", "0")
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None)
+    assert not hasattr(settings, "LUXIAN_0916_RECORD_MAX_CONCURRENCY")
 
 def test_luxian_family_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
     _clear_env(monkeypatch)

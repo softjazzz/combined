@@ -45,6 +45,7 @@ def _result(
     suggestion: str = "",
     anchors: tuple[Mapping[str, Any], ...] = (),
     diagnostics: Mapping[str, Any],
+    decision_facts: Mapping[str, Any],
 ) -> Luxian0916RuleResult:
     return Luxian0916RuleResult(
         rule_id=rule_id,
@@ -55,6 +56,7 @@ def _result(
         suggestion=suggestion,
         document_anchors=anchors,
         diagnostics=diagnostics,
+        decision_facts=decision_facts,
     )
 
 
@@ -66,6 +68,46 @@ def _is_discharge_window_ready(discharge_facts: Mapping[str, Any]) -> bool | Non
     if arranged is False and record_formed is False:
         return False
     return None
+
+
+def _optional_bool(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _decision_facts(
+    *,
+    document_key: str,
+    discharge_facts: Mapping[str, Any] | None,
+    discharge_window_ready: bool | None = None,
+    fact: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """持久化本规则实际消费的出院阶段与文书事实，不保存病历原文。"""
+
+    result: dict[str, Any] = {
+        "discharge_gate": "discharge_arranged_or_record_formed",
+        "discharge_arranged": (
+            _optional_bool(discharge_facts.get("discharge_arranged"))
+            if discharge_facts is not None
+            else None
+        ),
+        "discharge_record_formed": (
+            _optional_bool(discharge_facts.get("discharge_record_formed"))
+            if discharge_facts is not None
+            else None
+        ),
+        "discharge_window_ready": discharge_window_ready,
+        "document_fact_key": document_key,
+    }
+    if fact is not None:
+        result.update(
+            {
+                "document_presence": fact.get("presence"),
+                "document_completeness": fact.get("completeness"),
+                "document_id": fact.get("document_id"),
+                "source_type": fact.get("source_type"),
+            }
+        )
+    return result
 
 
 def _evaluate_rule(
@@ -83,6 +125,9 @@ def _evaluate_rule(
             reason_code="discharge_context_unavailable",
             findings="缺少出院安排和出院记录形成状态，无法确定检查时点。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(
+                document_key=document_key, discharge_facts=None
+            ),
         )
     ready = _is_discharge_window_ready(discharge_facts)
     diagnostics["discharge_window_ready"] = ready
@@ -93,6 +138,11 @@ def _evaluate_rule(
             reason_code="evaluation_window_not_mature",
             findings="患者仍处于普通住院阶段，尚未进入出院前检查时点。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(
+                document_key=document_key,
+                discharge_facts=discharge_facts,
+                discharge_window_ready=ready,
+            ),
         )
     if ready is None:
         return _result(
@@ -101,6 +151,11 @@ def _evaluate_rule(
             reason_code="discharge_context_unavailable",
             findings="出院安排或出院记录形成状态不完整，无法确定检查时点。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(
+                document_key=document_key,
+                discharge_facts=discharge_facts,
+                discharge_window_ready=ready,
+            ),
         )
 
     fact = _safe_mapping(document_facts.get(document_key)) if document_facts else None
@@ -111,6 +166,11 @@ def _evaluate_rule(
             reason_code="semantic_fact_unavailable",
             findings=f"已进入出院前检查时点，但缺少{subject}的权威事实。",
             diagnostics=diagnostics,
+            decision_facts=_decision_facts(
+                document_key=document_key,
+                discharge_facts=discharge_facts,
+                discharge_window_ready=ready,
+            ),
         )
     presence = fact.get("presence")
     completeness = fact.get("completeness")
@@ -118,6 +178,12 @@ def _evaluate_rule(
     anchors = _safe_anchors(fact.get("anchors"))
     diagnostics["document_presence"] = presence
     diagnostics["document_completeness"] = completeness
+    decision_facts = _decision_facts(
+        document_key=document_key,
+        discharge_facts=discharge_facts,
+        discharge_window_ready=ready,
+        fact=fact,
+    )
     if presence == "missing":
         return _result(
             rule_id=rule_id,
@@ -128,6 +194,7 @@ def _evaluate_rule(
             suggestion=f"补充{subject}并完成出院前核对。",
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
     if presence != "present" or completeness not in {"complete", "incomplete"}:
         return _result(
@@ -138,6 +205,7 @@ def _evaluate_rule(
             evidence=evidence,
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
     if completeness == "complete":
         return _result(
@@ -148,6 +216,7 @@ def _evaluate_rule(
             evidence=evidence,
             anchors=anchors,
             diagnostics=diagnostics,
+            decision_facts=decision_facts,
         )
     return _result(
         rule_id=rule_id,
@@ -158,6 +227,7 @@ def _evaluate_rule(
         suggestion=f"补全{subject}的必填内容。",
         anchors=anchors,
         diagnostics=diagnostics,
+        decision_facts=decision_facts,
     )
 
 

@@ -1337,7 +1337,11 @@ async def test_workspace_worker_dispatches_exact_luxian_0916_key_without_calling
     workspace = _DispatchWorkspace()
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "run_sichuan_workspace_batch_job", _run_legacy)
-    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0916_RECORD_MAX_CONCURRENCY=7))
+
+    async def _get_qc_service():
+        return SimpleNamespace(client=SimpleNamespace(http_max_concurrency=40))
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(luxian_0916_batch_worker, "run_luxian_0916_batch_job", _run_independent)
     monkeypatch.setattr(support_store, "capture_for_job", lambda *_args: None)
 
@@ -1347,7 +1351,7 @@ async def test_workspace_worker_dispatches_exact_luxian_0916_key_without_calling
     assert independent_calls == [
         (
             "job-0916",
-            {"workspace": workspace, "max_record_concurrency": 7},
+            {"workspace": workspace, "max_record_concurrency": 40},
         )
     ]
 

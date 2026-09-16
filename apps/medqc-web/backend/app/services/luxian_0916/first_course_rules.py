@@ -36,6 +36,7 @@ def _result(
     suggestion: str = "",
     anchors: tuple[Mapping[str, Any], ...] = (),
     diagnostics: Mapping[str, Any] | None = None,
+    decision_facts: Mapping[str, Any] | None = None,
 ) -> Luxian0916RuleResult:
     return Luxian0916RuleResult(
         rule_id=rule_id,
@@ -46,7 +47,75 @@ def _result(
         suggestion=suggestion,
         document_anchors=anchors,
         diagnostics=diagnostics or {},
+        decision_facts=decision_facts or {"source_type": "first_course_record"},
     )
+
+
+def _document_decision_facts(
+    row: Mapping[str, Any] | None = None,
+    *,
+    target_document_available: bool,
+    candidate_document_count: int | None = None,
+    primary_document_count: int | None = None,
+    evaluation_window_mature: bool | None = None,
+) -> dict[str, Any]:
+    """仅保留文书选择与检查时点，不将文书正文写入批量结果。"""
+
+    facts: dict[str, Any] = {
+        "source_type": "first_course_record",
+        "target_document_available": target_document_available,
+    }
+    if candidate_document_count is not None:
+        facts["candidate_document_count"] = candidate_document_count
+    if primary_document_count is not None:
+        facts["primary_document_count"] = primary_document_count
+    if evaluation_window_mature is not None:
+        facts["evaluation_window_mature"] = evaluation_window_mature
+    if row is not None:
+        document_id = _text(row.get("document_id") or row.get("id"))
+        if document_id:
+            facts["document_id"] = document_id
+        facts["document_selected"] = True
+    return facts
+
+
+def _field_decision_facts(
+    context: Mapping[str, Any], row: Mapping[str, Any], states: Mapping[str, tuple[bool, str]]
+) -> dict[str, Any]:
+    facts = _selected_document_decision_facts(context, row)
+    facts["field_states"] = {
+        field: "unavailable" if not available else "present" if value else "empty"
+        for field, (available, value) in states.items()
+    }
+    return facts
+
+
+def _selected_document_decision_facts(
+    context: Mapping[str, Any], row: Mapping[str, Any]
+) -> dict[str, Any]:
+    documents = context.get("documents")
+    rows = documents.get("first_course_record") if isinstance(documents, Mapping) else None
+    valid_rows = (
+        [item for item in rows if isinstance(item, Mapping)]
+        if isinstance(rows, Sequence) and not isinstance(rows, (str, bytes))
+        else []
+    )
+    return _document_decision_facts(
+        row,
+        target_document_available=True,
+        candidate_document_count=len(valid_rows),
+        primary_document_count=sum(item.get("is_primary") is True for item in valid_rows),
+    )
+
+
+def _semantic_quality_decision_facts(
+    facts: Mapping[str, Any], values: Mapping[str, str | None]
+) -> dict[str, Any]:
+    result = dict(facts)
+    result["semantic_quality_states"] = {
+        key: value if value is not None else "unavailable" for key, value in values.items()
+    }
+    return result
 
 
 def _first_course_row(
@@ -60,6 +129,7 @@ def _first_course_row(
             "first_course_document_source_missing",
             "未提供首次病程记录数据源，无法检查内容质量。",
             suggestion="补齐首次病程记录数据源后重新质控。",
+            decision_facts=_document_decision_facts(target_document_available=False),
         )
 
     rows = documents.get("first_course_record")
@@ -70,6 +140,7 @@ def _first_course_row(
             "first_course_document_source_invalid",
             "首次病程记录数据源格式无效，无法检查内容质量。",
             suggestion="修复首次病程记录数据源格式后重新质控。",
+            decision_facts=_document_decision_facts(target_document_available=False),
         )
 
     valid_rows = [item for item in rows if isinstance(item, Mapping)]
@@ -80,6 +151,10 @@ def _first_course_row(
             "first_course_document_source_invalid",
             "首次病程记录数据源不含可读取文书，无法检查内容质量。",
             suggestion="补齐可读取的首次病程记录后重新质控。",
+            decision_facts=_document_decision_facts(
+                target_document_available=False,
+                candidate_document_count=0,
+            ),
         )
     if not valid_rows:
         mature = context.get("first_course_evaluation_window_mature")
@@ -89,6 +164,11 @@ def _first_course_row(
                 "not_executed",
                 "evaluation_window_not_mature",
                 "首次病程记录尚未到内容检查时点。",
+                decision_facts=_document_decision_facts(
+                    target_document_available=False,
+                    candidate_document_count=0,
+                    evaluation_window_mature=False,
+                ),
             )
         if mature is not True:
             return None, _result(
@@ -97,6 +177,10 @@ def _first_course_row(
                 "first_course_evaluation_window_unknown",
                 "未提供首次病程记录检查时点，无法区分未形成文书与数据缺失。",
                 suggestion="补齐首次病程记录的检查时点。",
+                decision_facts=_document_decision_facts(
+                    target_document_available=False,
+                    candidate_document_count=0,
+                ),
             )
         return None, _result(
             rule_id,
@@ -104,6 +188,11 @@ def _first_course_row(
             "first_course_document_not_formed",
             "首次病程记录尚未形成；内容质量规则不评价文书是否按时形成。",
             suggestion="首次病程记录时效性请由独立时效规则检查。",
+            decision_facts=_document_decision_facts(
+                target_document_available=False,
+                candidate_document_count=0,
+                evaluation_window_mature=True,
+            ),
         )
 
     # 首次病程应为单份首程文书。多个候选且未给出主文书标记时，拒绝由行序猜测。
@@ -115,6 +204,11 @@ def _first_course_row(
             "first_course_document_ambiguous",
             "存在多份首次病程候选文书，无法确认应检查的首次病程记录。",
             suggestion="标记唯一首次病程主文书后重新质控。",
+            decision_facts=_document_decision_facts(
+                target_document_available=True,
+                candidate_document_count=len(valid_rows),
+                primary_document_count=len(primary_rows),
+            ),
         )
     return (primary_rows[0] if primary_rows else valid_rows[0]), None
 
@@ -159,7 +253,11 @@ def _semantic_fact(
 
 
 def _missing_semantic_result(
-    rule_id: str, row: Mapping[str, Any], fact_keys: tuple[str, ...]
+    rule_id: str,
+    context: Mapping[str, Any],
+    row: Mapping[str, Any],
+    fact_keys: tuple[str, ...],
+    decision_facts: Mapping[str, Any],
 ) -> Luxian0916RuleResult:
     return _result(
         rule_id,
@@ -169,6 +267,10 @@ def _missing_semantic_result(
         suggestion="补齐该首次病程的受控语义事实后重新质控。",
         anchors=_anchor(row, *fact_keys),
         diagnostics={"missing_semantic_facts": list(fact_keys)},
+        decision_facts=_semantic_quality_decision_facts(
+            decision_facts,
+            {key: None for key in fact_keys},
+        ),
     )
 
 
@@ -178,12 +280,18 @@ def _evaluate_010(context: Mapping[str, Any]) -> Luxian0916RuleResult:
         return early
     assert row is not None
     available, value = _field_state(context, row, "case_characteristic")
+    decision_facts = _field_decision_facts(
+        context,
+        row,
+        {"case_characteristic": (available, value)},
+    )
     if not available:
         return _result(
             "LX0916-010", "data_quality_gap", "first_course_structured_field_missing",
             "首次病程记录未提供病例特点结构化字段，无法判断是否缺失。",
             suggestion="补齐病例特点结构化字段后重新质控。",
             anchors=_anchor(row, "case_characteristic"),
+            decision_facts=decision_facts,
         )
     if not value:
         return _result(
@@ -192,12 +300,14 @@ def _evaluate_010(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             evidence=("首次病程记录的病例特点字段为空。",),
             suggestion="补充病例特点。",
             anchors=_anchor(row, "case_characteristic"),
+            decision_facts=decision_facts,
         )
     return _result(
         "LX0916-010", "compliant", "case_characteristic_present",
         "首次病程记录已填写病例特点。",
         evidence=("首次病程记录的病例特点字段已填写。",),
         anchors=_anchor(row, "case_characteristic"),
+        decision_facts=decision_facts,
     )
 
 
@@ -207,12 +317,18 @@ def _evaluate_011(context: Mapping[str, Any]) -> Luxian0916RuleResult:
         return early
     assert row is not None
     available, value = _field_state(context, row, "case_characteristic")
+    decision_facts = _field_decision_facts(
+        context,
+        row,
+        {"case_characteristic": (available, value)},
+    )
     if not available:
         return _result(
             "LX0916-011", "data_quality_gap", "first_course_structured_field_missing",
             "首次病程记录未提供病例特点结构化字段，无法评价是否已归纳提炼。",
             suggestion="补齐病例特点结构化字段后重新质控。",
             anchors=_anchor(row, "case_characteristic"),
+            decision_facts=decision_facts,
         )
     if not value:
         return _result(
@@ -220,10 +336,17 @@ def _evaluate_011(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             "首次病程记录未填写病例特点，无法体现病史、查体和辅助检查的归纳。",
             suggestion="补充并归纳病例特点。",
             anchors=_anchor(row, "case_characteristic"),
+            decision_facts=decision_facts,
         )
     quality = _semantic_fact(context, row, "case_characteristic_quality")
     if quality is None:
-        return _missing_semantic_result("LX0916-011", row, ("case_characteristic_quality",))
+        return _missing_semantic_result(
+            "LX0916-011",
+            context,
+            row,
+            ("case_characteristic_quality",),
+            decision_facts,
+        )
     if quality == "inadequate":
         return _result(
             "LX0916-011", "non_compliant", "case_characteristic_inadequate",
@@ -231,12 +354,20 @@ def _evaluate_011(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             suggestion="结合病史、查体和辅助检查归纳并完善病例特点。",
             anchors=_anchor(row, "case_characteristic"),
             diagnostics={"case_characteristic_quality": quality},
+            decision_facts=_semantic_quality_decision_facts(
+                decision_facts,
+                {"case_characteristic_quality": quality},
+            ),
         )
     return _result(
         "LX0916-011", "compliant", "case_characteristic_adequate",
         "病例特点已归纳且内容充分。",
         anchors=_anchor(row, "case_characteristic"),
         diagnostics={"case_characteristic_quality": quality},
+        decision_facts=_semantic_quality_decision_facts(
+            decision_facts,
+            {"case_characteristic_quality": quality},
+        ),
     )
 
 
@@ -251,6 +382,7 @@ def _evaluate_012(context: Mapping[str, Any]) -> Luxian0916RuleResult:
         "treatment_plan": "诊疗计划",
     }
     states = {field: _field_state(context, row, field) for field in fields}
+    decision_facts = _field_decision_facts(context, row, states)
     unavailable = [field for field, (available, _value) in states.items() if not available]
     if unavailable:
         return _result(
@@ -259,6 +391,7 @@ def _evaluate_012(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             suggestion="补齐首次病程的必要结构化字段后重新质控。",
             anchors=_anchor(row, *unavailable),
             diagnostics={"missing_fields": unavailable},
+            decision_facts=decision_facts,
         )
     missing = [label for field, label in fields.items() if not states[field][1]]
     if missing:
@@ -269,11 +402,13 @@ def _evaluate_012(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             suggestion="补充诊断依据、鉴别诊断和诊疗计划中的缺失内容。",
             anchors=_anchor(row, *[field for field, label in fields.items() if label in missing]),
             diagnostics={"missing_sections": missing},
+            decision_facts=decision_facts,
         )
     return _result(
         "LX0916-012", "compliant", "first_course_required_sections_present",
         "首次病程记录已填写诊断依据、鉴别诊断和诊疗计划。",
         anchors=_anchor(row, *fields),
+        decision_facts=decision_facts,
     )
 
 
@@ -287,6 +422,7 @@ def _evaluate_013(context: Mapping[str, Any]) -> Luxian0916RuleResult:
         "differential_diagnosis": "鉴别诊断",
     }
     states = {field: _field_state(context, row, field) for field in sections}
+    decision_facts = _field_decision_facts(context, row, states)
     unavailable = [field for field, (available, _value) in states.items() if not available]
     if unavailable:
         return _result(
@@ -295,6 +431,7 @@ def _evaluate_013(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             suggestion="补齐诊断依据和鉴别诊断结构化字段后重新质控。",
             anchors=_anchor(row, *unavailable),
             diagnostics={"missing_fields": unavailable},
+            decision_facts=decision_facts,
         )
     missing = [label for field, label in sections.items() if not states[field][1]]
     if missing:
@@ -304,11 +441,18 @@ def _evaluate_013(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             suggestion="补充与病例特点相对应的诊断依据和鉴别诊断分析。",
             anchors=_anchor(row, *[field for field, label in sections.items() if label in missing]),
             diagnostics={"missing_sections": missing},
+            decision_facts=decision_facts,
         )
     keys = ("diagnosis_basis_quality", "differential_diagnosis_quality")
     facts = {key: _semantic_fact(context, row, key) for key in keys}
     if any(value is None for value in facts.values()):
-        return _missing_semantic_result("LX0916-013", row, keys)
+        return _missing_semantic_result(
+            "LX0916-013",
+            context,
+            row,
+            keys,
+            decision_facts,
+        )
     inadequate = [key for key, value in facts.items() if value == "inadequate"]
     if inadequate:
         labels = {
@@ -325,12 +469,14 @@ def _evaluate_013(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             suggestion="补充与诊断结论相关的诊断依据和鉴别诊断分析。",
             anchors=_anchor(row, *[source_fields[key] for key in inadequate]),
             diagnostics=facts,
+            decision_facts=_semantic_quality_decision_facts(decision_facts, facts),
         )
     return _result(
         "LX0916-013", "compliant", "diagnostic_reasoning_adequate",
         "首次病程记录的诊断依据和鉴别诊断充分。",
         anchors=_anchor(row, "diagnose_based_on", "differential_diagnosis"),
         diagnostics=facts,
+        decision_facts=_semantic_quality_decision_facts(decision_facts, facts),
     )
 
 
@@ -340,12 +486,18 @@ def _evaluate_014(context: Mapping[str, Any]) -> Luxian0916RuleResult:
         return early
     assert row is not None
     available, value = _field_state(context, row, "treatment_plan")
+    decision_facts = _field_decision_facts(
+        context,
+        row,
+        {"treatment_plan": (available, value)},
+    )
     if not available:
         return _result(
             "LX0916-014", "data_quality_gap", "first_course_structured_field_missing",
             "首次病程记录未提供诊疗计划结构化字段，无法评价计划是否全面具体。",
             suggestion="补齐诊疗计划结构化字段后重新质控。",
             anchors=_anchor(row, "treatment_plan"),
+            decision_facts=decision_facts,
         )
     if not value:
         return _result(
@@ -353,10 +505,17 @@ def _evaluate_014(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             "首次病程记录未填写诊疗计划。",
             suggestion="补充诊疗计划。",
             anchors=_anchor(row, "treatment_plan"),
+            decision_facts=decision_facts,
         )
     quality = _semantic_fact(context, row, "treatment_plan_quality")
     if quality is None:
-        return _missing_semantic_result("LX0916-014", row, ("treatment_plan_quality",))
+        return _missing_semantic_result(
+            "LX0916-014",
+            context,
+            row,
+            ("treatment_plan_quality",),
+            decision_facts,
+        )
     if quality == "inadequate":
         return _result(
             "LX0916-014", "non_compliant", "treatment_plan_inadequate",
@@ -364,12 +523,20 @@ def _evaluate_014(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             suggestion="补充具体、完整的诊疗计划。",
             anchors=_anchor(row, "treatment_plan"),
             diagnostics={"treatment_plan_quality": quality},
+            decision_facts=_semantic_quality_decision_facts(
+                decision_facts,
+                {"treatment_plan_quality": quality},
+            ),
         )
     return _result(
         "LX0916-014", "compliant", "treatment_plan_adequate",
         "首次病程记录的诊疗计划全面且具体。",
         anchors=_anchor(row, "treatment_plan"),
         diagnostics={"treatment_plan_quality": quality},
+        decision_facts=_semantic_quality_decision_facts(
+            decision_facts,
+            {"treatment_plan_quality": quality},
+        ),
     )
 
 

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 from .contracts import Luxian0916RuleResult
@@ -28,6 +29,82 @@ _EVENT_KEY_BY_RULE = {
     "LX0916-019": "important_operations",
     "LX0916-020": "diagnosis_changes",
 }
+_DOCUMENTATION_FIELDS_BY_RULE = {
+    "LX0916-015": ("record_present", "complete"),
+    "LX0916-016": ("analysis_recorded", "specific_management_recorded"),
+    "LX0916-018": ("report_recorded", "disposition_recorded"),
+    "LX0916-019": ("record_present", "complete"),
+    "LX0916-020": ("reason_recorded", "basis_recorded"),
+}
+_APPROPRIATENESS_VALUES = frozenset({"reasonable", "unreasonable"})
+
+
+def _decision_facts_from_context(
+    context: Mapping[str, Any], rule_id: str
+) -> Mapping[str, Any]:
+    """持久化规则实际读取的受控事件事实，拒绝带出正文或模型原始输出。"""
+
+    event_key = _EVENT_KEY_BY_RULE[rule_id]
+    facts = context.get("event_facts")
+    states = context.get("event_source_state_by_rule")
+    source_state = states.get(rule_id) if isinstance(states, Mapping) else None
+    if not isinstance(facts, Mapping) or event_key not in facts:
+        return {
+            "event_key": event_key,
+            "source_state": (
+                source_state
+                if source_state in {"selected", "not_selected"}
+                else "unverified"
+            ),
+            "events": [],
+        }
+
+    rows = facts.get(event_key)
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        return {"event_key": event_key, "source_state": "invalid", "events": []}
+
+    source_state = "available"
+    documentation_fields = _DOCUMENTATION_FIELDS_BY_RULE.get(rule_id, ())
+    serialized_events: list[Mapping[str, Any]] = []
+    for event in rows:
+        if not isinstance(event, Mapping):
+            source_state = "invalid"
+            continue
+        documentation = event.get("documentation")
+        snapshot: dict[str, Any] = {
+            "trigger_confirmed": (
+                event.get("trigger_confirmed")
+                if isinstance(event.get("trigger_confirmed"), bool)
+                else None
+            ),
+            "evaluation_window_mature": (
+                event.get("evaluation_window_mature")
+                if isinstance(event.get("evaluation_window_mature"), bool)
+                else None
+            ),
+            "documentation": {
+                field: documentation.get(field)
+                for field in documentation_fields
+                if isinstance(documentation, Mapping)
+                and isinstance(documentation.get(field), bool)
+            },
+        }
+        if rule_id == "LX0916-017":
+            snapshot["appropriateness"] = (
+                event.get("appropriateness")
+                if event.get("appropriateness") in _APPROPRIATENESS_VALUES
+                else None
+            )
+        for field in ("event_type", "event_id", "document_id", "source_type"):
+            value = str(event.get(field) or "").strip()
+            if value and len(value) <= 160 and "\n" not in value and "\r" not in value:
+                snapshot[field] = value
+        serialized_events.append(snapshot)
+    return {
+        "event_key": event_key,
+        "source_state": source_state,
+        "events": serialized_events,
+    }
 
 
 def _result(
@@ -405,4 +482,10 @@ def execute_course_event_rules(
     selected = _RULE_IDS if rule_ids is None else tuple(
         rule_id for rule_id in _RULE_IDS if rule_id in set(rule_ids)
     )
-    return [_EVALUATORS[rule_id](context) for rule_id in selected]
+    return [
+        replace(
+            _EVALUATORS[rule_id](context),
+            decision_facts=_decision_facts_from_context(context, rule_id),
+        )
+        for rule_id in selected
+    ]

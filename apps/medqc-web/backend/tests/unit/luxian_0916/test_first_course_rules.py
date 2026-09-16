@@ -129,3 +129,76 @@ def test_first_course_can_use_controlled_semantic_presence_when_raw_row_has_no_s
     results = execute_first_course_rules(context)
 
     assert [result.status for result in results] == ["compliant"] * 5
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "context", "expected_fields", "expected_quality"),
+    (
+        (
+            "LX0916-010",
+            _context(case_characteristic=""),
+            {"case_characteristic": "empty"},
+            None,
+        ),
+        (
+            "LX0916-011",
+            _context(semantic_facts={"case_characteristic_quality": "inadequate"}),
+            {"case_characteristic": "present"},
+            {"case_characteristic_quality": "inadequate"},
+        ),
+        (
+            "LX0916-012",
+            _context(differential_diagnosis=""),
+            {
+                "diagnose_based_on": "present",
+                "differential_diagnosis": "empty",
+                "treatment_plan": "present",
+            },
+            None,
+        ),
+        (
+            "LX0916-013",
+            _context(semantic_facts={"diagnosis_basis_quality": "inadequate", "differential_diagnosis_quality": "adequate"}),
+            {"diagnose_based_on": "present", "differential_diagnosis": "present"},
+            {"diagnosis_basis_quality": "inadequate", "differential_diagnosis_quality": "adequate"},
+        ),
+        (
+            "LX0916-014",
+            _context(semantic_facts={"treatment_plan_quality": "adequate"}),
+            {"treatment_plan": "present"},
+            {"treatment_plan_quality": "adequate"},
+        ),
+    ),
+)
+def test_first_course_rules_persist_structured_decision_facts(
+    rule_id, context, expected_fields, expected_quality
+):
+    result = _run(rule_id, context)
+
+    facts = result.decision_facts
+    assert facts["source_type"] == "first_course_record"
+    assert facts["document_id"] == "fc-1"
+    assert facts["document_selected"] is True
+    assert facts["candidate_document_count"] == 1
+    assert facts["field_states"] == expected_fields
+    if expected_quality is not None:
+        assert facts["semantic_quality_states"] == expected_quality
+    assert "content" not in facts
+    assert "患者发热三日" not in str(facts)
+
+
+def test_first_course_early_result_persists_window_and_source_facts():
+    result = _run(
+        "LX0916-010",
+        {
+            "documents": {"first_course_record": []},
+            "first_course_evaluation_window_mature": False,
+        },
+    )
+
+    assert result.decision_facts == {
+        "source_type": "first_course_record",
+        "target_document_available": False,
+        "candidate_document_count": 0,
+        "evaluation_window_mature": False,
+    }

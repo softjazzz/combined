@@ -219,8 +219,6 @@ class Settings(BaseSettings):
     )
     # 批量质控任务同时处理的病历上限；单次任务可选择更低值。
     QC_BATCH_RECORD_MAX_CONCURRENCY: int = Field(default=16, ge=1, le=32)
-    # Luxian0916 独立任务的病历并发上限；不复用或改写 0609 的并发配置。
-    LUXIAN_0916_RECORD_MAX_CONCURRENCY: int = Field(default=4, ge=1, le=32)
     # 全进程共享的 LLM HTTP 出口预算；所有事件循环与后台线程共同受此上限约束。
     LLM_HTTP_MAX_CONCURRENCY: int = Field(default=40, ge=1, le=64)
     LLM_ENABLE_TRUNCATE: bool = Field(

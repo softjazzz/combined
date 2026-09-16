@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.services.luxian_0916.course_event_rules import execute_course_event_rules
@@ -66,6 +68,11 @@ def test_event_rules_report_confirmed_defects(rule_id, event_overrides, expected
     assert result.document_anchors
     assert result.document_anchors[0]["document_type"] == "daily_course_record"
     assert result.document_anchors[0]["document_id"] == f"document-{rule_id[-3:]}"
+    assert result.decision_facts["event_key"] == _EVENT_KEY_BY_RULE[rule_id]
+    assert result.decision_facts["source_state"] == "available"
+    assert result.decision_facts["events"]
+    if rule_id == "LX0916-017":
+        assert result.decision_facts["events"][0]["appropriateness"] == "unreasonable"
 
 
 @pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
@@ -117,6 +124,11 @@ def test_event_rules_describe_missing_event_facts_by_source_state(
     assert result.reason_code == expected_reason
     assert result.findings == expected_findings
     assert result.diagnostics["event_source_state"] == source_state
+    assert result.decision_facts == {
+        "event_key": _EVENT_KEY_BY_RULE[rule_id],
+        "source_state": source_state or "unverified",
+        "events": [],
+    }
 
 
 @pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
@@ -125,3 +137,76 @@ def test_event_rules_are_not_applicable_without_confirmed_trigger(rule_id):
 
     assert result.status == "not_applicable"
     assert result.reason_code == "trigger_event_absent"
+    assert result.decision_facts == {
+        "event_key": _EVENT_KEY_BY_RULE[rule_id],
+        "source_state": "available",
+        "events": [],
+    }
+
+
+def test_event_rules_persist_only_controlled_event_facts_for_final_decision():
+    rule_id = "LX0916-015"
+    result = _run(
+        rule_id,
+        _context(
+            rule_id,
+            documentation={"record_present": False, "complete": True, "note": "不应持久化"},
+            content="病历正文不应持久化",
+            raw_output="模型原始输出不应持久化",
+        ),
+    )
+
+    assert result.status == "non_compliant"
+    assert result.decision_facts == {
+        "event_key": "disease_changes",
+        "source_state": "available",
+        "events": [
+            {
+                "event_type": "disease_changes",
+                "event_id": "event-015",
+                "document_id": "document-015",
+                "source_type": "daily_course_record",
+                "trigger_confirmed": True,
+                "evaluation_window_mature": True,
+                "documentation": {"record_present": False, "complete": True},
+            }
+        ],
+    }
+    serialized = json.dumps(result.to_dict(), ensure_ascii=False)
+    assert "病历正文不应持久化" not in serialized
+    assert "模型原始输出不应持久化" not in serialized
+    assert "不应持久化" not in serialized
+
+
+def test_event_rules_persist_trigger_facts_for_early_data_gap():
+    rule_id = "LX0916-018"
+    result = _run(rule_id, _context(rule_id, trigger_confirmed=None))
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "event_trigger_unavailable"
+    assert result.decision_facts["event_key"] == "critical_values"
+    assert result.decision_facts["source_state"] == "available"
+    assert result.decision_facts["events"] == [
+        {
+            "event_type": "critical_values",
+            "event_id": "event-018",
+            "document_id": "document-018",
+            "source_type": "daily_course_record",
+            "trigger_confirmed": None,
+            "evaluation_window_mature": True,
+            "documentation": {"report_recorded": True, "disposition_recorded": True},
+        }
+    ]
+
+
+def test_event_rules_omit_optional_empty_identifiers_from_decision_facts():
+    rule_id = "LX0916-015"
+    result = _run(
+        rule_id,
+        _context(rule_id, event_id="", document_id=None, source_type=""),
+    )
+
+    event = result.decision_facts["events"][0]
+    assert "event_id" not in event
+    assert "document_id" not in event
+    assert "source_type" not in event

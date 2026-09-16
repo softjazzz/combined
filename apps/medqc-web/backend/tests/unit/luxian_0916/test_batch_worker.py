@@ -118,6 +118,10 @@ async def _semantic_generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
     }
 
 
+async def _invalid_semantic_generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+    return {"choices": [{"message": {"content": "not-json"}}]}
+
+
 @pytest.mark.asyncio
 async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     monkeypatch: pytest.MonkeyPatch,
@@ -150,6 +154,8 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     assert summary["status_counts"] == {"non_compliant": 2, "compliant": 62}
     assert summary["display_status_counts"] == summary["status_counts"]
     assert summary["success_count"] == 2
+    assert summary["max_parallel_records"] == 2
+    assert summary["progress"]["max_parallel_records"] == 2
     items = workspace.completed["items"]
     assert len(items) == 64
     first = items[0]
@@ -248,6 +254,71 @@ async def test_rule_failure_is_diagnostic_only_and_never_creates_illegal_custome
         }
     ]
     assert workspace.completed["summary"]["diagnostic_rule_failure_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_worker_persists_one_locatable_semantic_extraction_failure_per_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record(), _record()])
+    monkeypatch.setattr(
+        batch_worker,
+        "load_luxian_0916_bundle",
+        lambda **_kwargs: {
+            "structured_context": {},
+            "source_documents": [
+                {
+                    "document_id": "A-1",
+                    "source_table": "admission_record",
+                    "content": "受控测试文书",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        batch_worker,
+        "build_programmatic_evidence_payload",
+        lambda **_kwargs: {
+            "programmatic_timeline": {
+                "documents": {
+                    "admission_record": [
+                        {"document_id": "A-1", "content": "受控测试文书"}
+                    ]
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(
+        batch_worker,
+        "execute_luxian_0916",
+        lambda *_args: Luxian0916Execution(results=(_result("LX0916-001"),)),
+    )
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916",
+        workspace=workspace,
+        semantic_generate=_invalid_semantic_generate,
+    )
+
+    assert workspace.completed is not None
+    summary = workspace.completed["summary"]
+    assert summary["semantic_llm_call_count"] == 2
+    assert summary["semantic_extraction_invalid_count"] == 1
+    assert summary["semantic_extraction_failures"] == [
+        {
+            "institute_id": "I-1",
+            "patient_id": "P-1",
+            "visit_id": "V-1",
+            "record_id": "V-1",
+            "code": "semantic_extraction_invalid",
+            "document_count": 1,
+            "llm_call_count": 1,
+        }
+    ]
+    assert all(
+        "patient_name" not in item and "content" not in item
+        for item in summary["semantic_extraction_failures"]
+    )
 
 
 @pytest.mark.asyncio

@@ -27,12 +27,31 @@ def test_discharge_rules_report_compliant_from_complete_authoritative_fact(
     rule_id: str,
 ) -> None:
     result = execute_discharge_rules(
-        _context(rule_id, {"presence": "present", "completeness": "complete"}),
+        _context(
+            rule_id,
+            {
+                "presence": "present",
+                "completeness": "complete",
+                "document_id": "D-1",
+                "source_type": "discharge_record",
+            },
+        ),
         (rule_id,),
     )[0]
 
     assert result.status == "compliant"
     assert result.reason_code == "required_document_complete"
+    assert result.decision_facts == {
+        "discharge_gate": "discharge_arranged_or_record_formed",
+        "discharge_arranged": True,
+        "discharge_record_formed": False,
+        "discharge_window_ready": True,
+        "document_fact_key": _DOCUMENT_FOR_RULE[rule_id],
+        "document_presence": "present",
+        "document_completeness": "complete",
+        "document_id": "D-1",
+        "source_type": "discharge_record",
+    }
 
 
 @pytest.mark.parametrize("rule_id", _RULE_IDS)
@@ -55,6 +74,13 @@ def test_discharge_rules_wait_during_ordinary_inpatient_window(rule_id: str) -> 
 
     assert result.status == "not_executed"
     assert result.reason_code == "evaluation_window_not_mature"
+    assert result.decision_facts == {
+        "discharge_gate": "discharge_arranged_or_record_formed",
+        "discharge_arranged": False,
+        "discharge_record_formed": False,
+        "discharge_window_ready": False,
+        "document_fact_key": _DOCUMENT_FOR_RULE[rule_id],
+    }
 
 
 @pytest.mark.parametrize("rule_id", _RULE_IDS)

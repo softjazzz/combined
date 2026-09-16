@@ -813,6 +813,9 @@ _DEBUG_SNAPSHOT_SUMMARY_FIELDS = (
     "data_quality_gap_count",
     "rejected_by_system_count",
     "technical_error_internal_count",
+    "semantic_llm_call_count",
+    "semantic_extraction_invalid_count",
+    "semantic_extraction_failures",
     "total_tokens",
     "total_prompt_tokens",
     "total_completion_tokens",
@@ -1668,10 +1671,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
             from ..services.luxian_0916.batch_worker import run_luxian_0916_batch_job
 
+            qc_service = await get_qc_service()
             await run_luxian_0916_batch_job(
                 job_id,
                 workspace=workspace,
-                max_record_concurrency=get_settings().LUXIAN_0916_RECORD_MAX_CONCURRENCY,
+                # 0916 每份病历只发一次受控语义提取请求，直接复用系统全局
+                # HTTP 槽位；不再维护质控集专属的并发配置。
+                max_record_concurrency=qc_service.client.http_max_concurrency,
             )
         else:
             await run_sichuan_workspace_batch_job(

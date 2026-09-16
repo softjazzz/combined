@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.luxian_0916.admission_rules import execute_admission_rules
+from app.services.luxian_0916.contracts import Luxian0916RuleResult
 
 
 _RULE_IDS = tuple(f"LX0916-{number:03d}" for number in range(1, 10))
@@ -164,7 +165,76 @@ def test_result_contract_serializes_only_customer_deliverable_statuses() -> None
         "suggestion",
         "document_anchors",
         "diagnostics",
+        "decision_facts",
     }
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "record", "facts", "expected"),
+    (
+        (
+            "LX0916-001",
+            _record(patient={"prior_admission_count": 1}),
+            None,
+            {"prior_admission_count": 1},
+        ),
+        (
+            "LX0916-002",
+            _record(patient={"civil_capacity": "limited", "age_years": 13}, history_narrator="guardian"),
+            None,
+            {"civil_capacity": "limited", "age_years": 13, "history_narrator": "guardian"},
+        ),
+        (
+            "LX0916-008",
+            _record(patient={"age_years": 7}),
+            _facts(**{"LX0916-008": "complete"}),
+            {"age_years": 7, "semantic_state": "complete"},
+        ),
+    ),
+)
+def test_admission_rule_persists_only_minimal_decision_facts(
+    rule_id: str,
+    record: dict[str, object],
+    facts: dict[str, dict[str, str]] | None,
+    expected: dict[str, object],
+) -> None:
+    result = execute_admission_rules(_context(record, facts), rule_ids=(rule_id,))[0]
+
+    assert result.decision_facts
+    assert result.decision_facts["source_type"] == "admission_record"
+    assert result.decision_facts["document_id"] == "admission-001"
+    assert expected.items() <= result.decision_facts.items()
+    assert "content" not in result.decision_facts
+    assert "完整入院记录正文" not in str(result.decision_facts)
+
+
+def test_admission_early_result_keeps_a_nonempty_decision_snapshot() -> None:
+    result = execute_admission_rules(_context(None), rule_ids=("LX0916-003",))[0]
+
+    assert result.decision_facts == {
+        "source_type": "admission_record",
+        "target_document_available": False,
+    }
+
+
+def test_result_contract_rejects_raw_text_keys_but_keeps_controlled_context_keys() -> None:
+    result = Luxian0916RuleResult(
+        rule_id="LX0916-001",
+        status="compliant",
+        reason_code="requirement_satisfied",
+        findings="ok",
+        decision_facts={"context_available": True, "source_type": "admission_record"},
+    )
+
+    assert result.decision_facts["context_available"] is True
+    with pytest.raises(ValueError, match="forbidden decision_facts key"):
+        Luxian0916RuleResult(
+            rule_id="LX0916-001",
+            status="compliant",
+            reason_code="requirement_satisfied",
+            findings="ok",
+            decision_facts={"content": "病历正文"},
+        )
 
 
 @pytest.mark.parametrize("rule_id", ("LX0916-001", "LX0916-002", "LX0916-008"))
