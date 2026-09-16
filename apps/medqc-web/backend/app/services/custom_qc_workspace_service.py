@@ -3059,9 +3059,9 @@ class CustomQCWorkspaceService:
         """读取一份病历当前规则代次的唯一客户结果。
 
         这是单病历结果页唯一允许使用的读取入口。候选首先由三坐标
-        ``institute_id + patient_id + visit_id`` 限定，再从全院所有创建者的
-        已完成任务中选择当前规则代次最新的唯一根任务；不得以结果状态、
-        文案丰富度、证据数量或完整度来替换较新的任务。
+        ``institute_id + patient_id + visit_id`` 限定，再从全院所有创建者中
+        选择已为该病历写入 Canonical Envelope 的当前规则代次最新唯一根任务；
+        不得以批次整体状态、文案丰富度、证据数量或完整度替换较新的任务。
         """
 
         normalized_institute_id = _safe_text(institute_id)
@@ -3106,7 +3106,9 @@ class CustomQCWorkspaceService:
                     )
                     .where(
                         and_(
-                            self._batch_job_table.c.status == "completed",
+                            self._batch_job_table.c.status.in_(
+                                ("completed", "failed", "running", "queued", "canceled")
+                            ),
                             or_(
                                 self._batch_job_table.c.parent_job_id.is_(None),
                                 self._batch_job_table.c.parent_job_id == "",
@@ -3131,10 +3133,17 @@ class CustomQCWorkspaceService:
                 .mappings()
                 .all()
             )
-            candidates = [
-                self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
-                for row in root_rows
-            ]
+            candidates = []
+            for row in root_rows:
+                candidate = self._aggregate_parent_job(
+                    session,
+                    _row_to_batch_job(dict(row)),
+                )
+                if _safe_text(candidate.get("status")).lower() != "completed":
+                    # 批次可因其他病历失败、取消或仍在收尾，但精确 Envelope 的
+                    # 存在已证明当前病历独立交付完成。这里只投影读取状态，不改库。
+                    candidate = {**candidate, "status": "completed"}
+                candidates.append(candidate)
             selection = select_latest_authoritative_record_result_job(
                 candidates,
                 record_id=normalized_visit_id,
@@ -3157,8 +3166,7 @@ class CustomQCWorkspaceService:
             selected_job = selection.job
             envelope = self._load_record_result_envelope_items(
                 session,
-                job_id=_safe_text(selected_job.get("id")),
-                created_by=_safe_text(selected_job.get("created_by")),
+                root_job_id=_safe_text(selected_job.get("id")),
                 institute_id=normalized_institute_id,
                 patient_id=normalized_patient_id,
                 visit_id=normalized_visit_id,
@@ -4473,8 +4481,7 @@ class CustomQCWorkspaceService:
         self,
         session: Session,
         *,
-        job_id: str,
-        created_by: str,
+        root_job_id: str,
         institute_id: str,
         patient_id: str,
         visit_id: str,
@@ -4483,8 +4490,7 @@ class CustomQCWorkspaceService:
     ) -> Dict[str, Any]:
         return CanonicalResultStore(self._record_result_envelope_table).load_selected(
             session,
-            job_id=job_id,
-            created_by=created_by,
+            root_job_id=root_job_id,
             institute_id=institute_id,
             patient_id=patient_id,
             visit_id=visit_id,

@@ -64,8 +64,10 @@ class _Rows:
 class _ReadSession:
     def __init__(self, result_sets: list[list[dict[str, Any]]]):
         self._result_sets = iter(result_sets)
+        self.statements: list[Any] = []
 
-    def execute(self, _statement: Any) -> _Rows:
+    def execute(self, statement: Any) -> _Rows:
+        self.statements.append(statement)
         return _Rows(next(self._result_sets))
 
     def close(self) -> None:
@@ -897,6 +899,66 @@ def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_i
     assert result["reason_code"] == "canonical_result_envelope_missing"
     assert result["items"] == []
     assert result["result_rule_count"] == 0
+
+
+@pytest.mark.parametrize("task_status", ["running", "failed", "canceled"])
+def test_single_record_result_from_incomplete_task_is_ready_when_envelope_exists(
+    monkeypatch,
+    task_status,
+):
+    """病历池标为可查看的独立 Envelope，单病历详情也必须能够读取。"""
+
+    selected_job = {
+        **_selected_job(),
+        "status": task_status,
+    }
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": [
+            {
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+                "result_status": "compliant",
+                "is_compliant": True,
+            }
+        ],
+    }
+    session = _ReadSession(
+        [
+            [selected_job],
+            [{"envelope_json": json.dumps(envelope)}],
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService,
+        "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+
+    result = CustomQCWorkspaceService().get_latest_luxian_0609_record_result(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        expected_rule_ids=["LX0609-001"],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result["state"] == "ready"
+    assert result["record_ref"] == envelope["record_ref"]
+    assert result["result_rule_count"] == 1
+    root_query_params = session.statements[0].compile().params
+    assert any(
+        isinstance(value, (list, tuple)) and task_status in value
+        for value in root_query_params.values()
+    )
+    envelope_where = str(session.statements[1].whereclause)
+    assert "root_job_id" in envelope_where
+    assert "created_by" not in envelope_where
 
 
 def test_single_record_result_does_not_convert_database_read_error_to_not_found(monkeypatch):

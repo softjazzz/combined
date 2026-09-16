@@ -657,8 +657,7 @@ class CanonicalResultStore:
         self,
         session: Session,
         *,
-        job_id: str,
-        created_by: str,
+        root_job_id: str,
         institute_id: str,
         patient_id: str,
         visit_id: str,
@@ -671,8 +670,7 @@ class CanonicalResultStore:
                 session.execute(
                     select(table).where(
                         and_(
-                            table.c.job_id == job_id,
-                            table.c.created_by == created_by,
+                            table.c.root_job_id == root_job_id,
                             table.c.record_id == visit_id,
                             table.c.institute_id == institute_id,
                             table.c.patient_id == patient_id,
