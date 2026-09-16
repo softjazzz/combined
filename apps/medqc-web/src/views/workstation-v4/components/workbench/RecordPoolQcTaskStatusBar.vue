@@ -161,9 +161,12 @@ const emit = defineEmits<{
 
 const currentJob = ref<SichuanBatchJob | null>(null)
 const pollError = ref(false)
+const resultReadError = ref('')
 const exporting = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let requestSequence = 0
+
+const DELIVERY_CONTRACT_ERROR = '历史质控结果交付合同不完整，无法安全展示'
 
 async function exportCurrentBatch() {
   const jobId = String(currentJob.value?.id || '').trim()
@@ -185,7 +188,7 @@ async function exportCurrentBatch() {
   }
 }
 
-const isActive = computed(() => isBatchJobPollingActive(currentJob.value))
+const isActive = computed(() => !resultReadError.value && isBatchJobPollingActive(currentJob.value))
 const automaticRetrying = computed(() => isActive.value && currentJob.value?.status === 'failed')
 
 function finiteCount(value: unknown): number | null {
@@ -294,6 +297,7 @@ const progressPercent = computed(() => {
 
 const statusTitle = computed(() => {
   const status = currentJob.value?.status
+  if (resultReadError.value) return '质控结果暂不可查看'
   if (automaticRetrying.value) return '正在自动补跑失败项'
   if (status === 'queued') return '质控任务已进入队列'
   if (status === 'running') return '正在执行质控'
@@ -387,6 +391,7 @@ const workflowStages = computed<WorkflowStageItem[]>(() => {
 
 const stageText = computed(() => {
   const status = currentJob.value?.status
+  if (resultReadError.value) return resultReadError.value
   if (automaticRetrying.value) return '部分规则输出无效，系统正在自动补跑，已有有效结果会继续保留。'
   if (status === 'queued') return '系统正在分配执行资源，开始后将自动更新病历和质控点进度。'
   if (status === 'completed') return '质控结果已生成，请前往运行病历质控或终末病历质控查看。'
@@ -409,6 +414,7 @@ const terminalSummary = computed(() => {
 
 const tone = computed(() => {
   const status = currentJob.value?.status
+  if (resultReadError.value) return 'danger'
   if (status === 'completed') return 'success'
   if (automaticRetrying.value) return 'active'
   if (status === 'failed' || status === 'canceled') return 'danger'
@@ -436,8 +442,15 @@ async function refreshJob(sequence: number) {
     const wasCompleted = currentJob.value?.status === 'completed'
     currentJob.value = result.data
     pollError.value = false
+    resultReadError.value = ''
     if (!wasCompleted && result.data.status === 'completed') emit('completed')
   } else {
+    if (result.message?.includes(DELIVERY_CONTRACT_ERROR)) {
+      pollError.value = false
+      resultReadError.value = result.message
+      clearPollTimer()
+      return
+    }
     pollError.value = true
   }
   schedulePoll(sequence)
@@ -450,6 +463,7 @@ watch(
     clearPollTimer()
     currentJob.value = job
     pollError.value = false
+    resultReadError.value = ''
     if (job && props.autoPoll && isBatchJobPollingActive(job)) void refreshJob(requestSequence)
   },
   { immediate: true },

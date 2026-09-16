@@ -120,6 +120,35 @@ def test_luxian_0609_batch_detail_hydrates_validated_canonical_items_before_summ
     assert projected["summary"]["status_counts"] == {"compliant": 1}
     assert projected["summary"]["result_count"] == 1
 
+
+def test_luxian_0609_batch_detail_ignores_stale_internal_rule_results_after_canonical_hydration() -> None:
+    canonical_item = _canonical_item(
+        rule_id="LX0609-001",
+        status="compliant",
+        reason_code="requirement_satisfied",
+    )
+    raw_job = {
+        "id": "job-canonical",
+        "status": "completed",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_results": [{"rule_id": "INTERNAL-001", "items": []}],
+        "summary": {
+            "total_records": 1,
+            "rule_results": [{"rule_id": "INTERNAL-002", "items": []}],
+        },
+    }
+
+    hydrated = qc_sichuan._hydrate_luxian_canonical_batch_job_or_409(
+        workspace=_CanonicalReadStub([canonical_item]),
+        job=raw_job,
+    )
+    projected = qc_sichuan._workspace_batch_response_item(hydrated)
+
+    assert projected["status"] == "completed"
+    assert projected["summary"]["status_counts"] == {"compliant": 1}
+    assert projected["summary"]["result_count"] == 1
+    assert projected["items"][0]["rule_id"] == "LX0609-001"
+
 def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
     response = qc_sichuan._workspace_batch_response_item(
         {

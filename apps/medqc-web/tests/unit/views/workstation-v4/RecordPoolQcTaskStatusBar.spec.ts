@@ -170,6 +170,53 @@ describe('RecordPoolQcTaskStatusBar', () => {
     wrapper.unmount()
   })
 
+  it('stops polling and leaves the running presentation when completed results fail contract validation', async () => {
+    vi.useFakeTimers()
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: false,
+      message: '历史质控结果交付合同不完整，无法安全展示',
+    })
+    const wrapper = mount(RecordPoolQcTaskStatusBar, {
+      props: {
+        job: job({
+          status: 'running',
+          total_records: 11,
+          summary: {
+            total_records: 11,
+            success_count: 11,
+            failed_count: 0,
+            issue_records: 0,
+            compliant_records: 11,
+            total_tokens: 0,
+            total_processing_time: 0,
+            progress_percent: 100,
+            progress: {
+              processed_records: 11,
+              total_records: 11,
+              active_record_count: 0,
+              queued_record_count: 0,
+              max_parallel_records: 11,
+            },
+          },
+        }),
+        pollIntervalMs: 500,
+      },
+      global: { stubs: { AProgress: true } },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('质控结果暂不可查看')
+    expect(wrapper.text()).toContain('历史质控结果交付合同不完整，无法安全展示')
+    expect(wrapper.text()).not.toContain('正在执行质控')
+
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
   it('shows the real four-stage workflow and projected in-flight rule progress', async () => {
     mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,

@@ -563,6 +563,10 @@ def _hydrate_luxian_canonical_batch_job_or_409(
         ) from exc
     hydrated = dict(job)
     hydrated["items"] = canonical_items
+    hydrated["rule_results"] = []
+    hydrated_summary = dict(hydrated.get("summary") or {})
+    hydrated_summary.pop("rule_results", None)
+    hydrated["summary"] = hydrated_summary
     hydrated["children"] = []
     hydrated["child_jobs"] = []
     return hydrated
