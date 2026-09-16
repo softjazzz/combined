@@ -1,0 +1,134 @@
+import { defineComponent, h } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import RecordPoolQcTaskHistory from '@/views/workstation-v4/components/workbench/RecordPoolQcTaskHistory.vue'
+
+const listJobs = vi.fn()
+const getJob = vi.fn()
+const getDebug = vi.fn()
+
+vi.mock('@/services/sichuan-rule-workspace-service', () => ({
+  listSichuanWorkspaceBatchJobs: (...args: unknown[]) => listJobs(...args),
+  getSichuanWorkspaceBatchJob: (...args: unknown[]) => getJob(...args),
+  getSichuanWorkspaceBatchJobDebugSnapshot: (...args: unknown[]) => getDebug(...args),
+  exportSichuanWorkspaceBatchJob: vi.fn(),
+}))
+
+const passthrough = (name: string, tag = 'div') =>
+  defineComponent({
+    name,
+    setup(_props, { attrs, slots }) {
+      return () => h(tag, attrs, [slots.title?.(), slots.default?.()])
+    },
+  })
+
+describe('RecordPoolQcTaskHistory', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    listJobs.mockResolvedValue({
+      success: true,
+      data: {
+        total: 2,
+        page: 1,
+        page_size: 30,
+        items: [
+          {
+            id: 'record-pool-job',
+            rule_code: 'LX0609',
+            rule_name: '泸县0609质控',
+            rule_set_key: 'luxian_0609_qc_v1',
+            rule_set_name: '泸县0609质控点验证 v1',
+            scope: 'all',
+            status: 'completed',
+            total_records: 20,
+            created_at: '2026-09-16T06:18:52Z',
+            wall_clock_time: 311,
+            summary: { total_records: 20 },
+          },
+          {
+            id: 'other-job',
+            rule_code: 'SC',
+            rule_name: '其他规则任务',
+            rule_set_key: 'sc_content_full_v1',
+            scope: 'all',
+            status: 'completed',
+            total_records: 3,
+          },
+        ],
+      },
+    })
+    getJob.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'record-pool-job',
+        rule_code: 'LX0609',
+        rule_name: '泸县0609质控',
+        rule_set_key: 'luxian_0609_qc_v1',
+        scope: 'all',
+        status: 'completed',
+      },
+    })
+    getDebug.mockResolvedValue({
+      success: true,
+      data: {
+        job_id: 'record-pool-job',
+        status: 'completed',
+        scope: 'all',
+        rules: [],
+        recent_items: [],
+        recent_failed_records: [],
+      },
+    })
+  })
+
+  it('loads only record-pool QC jobs and opens their existing detail drawer', async () => {
+    const wrapper = mount(RecordPoolQcTaskHistory, {
+      global: {
+        stubs: {
+          AButton: passthrough('AButton', 'button'),
+          ADrawer: passthrough('ADrawer'),
+          ASpin: passthrough('ASpin'),
+          AEmpty: passthrough('AEmpty'),
+          SemanticRulesBatchResultDrawer: defineComponent({
+            name: 'SemanticRulesBatchResultDrawer',
+            props: {
+              open: Boolean,
+              batchJobDetail: Object,
+            },
+            setup(props) {
+              return () =>
+                h('div', {
+                  'data-testid': 'batch-job-detail-drawer',
+                  'data-open': String(props.open),
+                  'data-job-id': String((props.batchJobDetail as { id?: string } | null)?.id || ''),
+                })
+            },
+          }),
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="record-pool-qc-task-history-entry"]').trigger('click')
+    await flushPromises()
+
+    expect(listJobs).toHaveBeenCalledWith({ page: 1, page_size: 30 })
+    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
+    expect(wrapper.text()).not.toContain('其他规则任务')
+
+    await wrapper.get('.record-pool-task-history__item').trigger('click')
+    await flushPromises()
+
+    expect(getJob).toHaveBeenCalledWith('record-pool-job')
+    expect(getDebug).toHaveBeenCalledWith('record-pool-job', {
+      rule_job_id: undefined,
+      item_limit: undefined,
+    })
+    expect(wrapper.get('[data-testid="batch-job-detail-drawer"]').attributes('data-open')).toBe(
+      'true',
+    )
+    expect(wrapper.get('[data-testid="batch-job-detail-drawer"]').attributes('data-job-id')).toBe(
+      'record-pool-job',
+    )
+  })
+})

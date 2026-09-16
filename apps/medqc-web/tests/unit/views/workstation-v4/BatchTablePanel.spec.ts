@@ -169,6 +169,34 @@ describe('BatchTablePanel 病历池列表', () => {
     ).toBeTruthy()
   })
 
+  it('renders caller-provided record-pool toolbar actions before built-in QC actions', () => {
+    const wrapper = mount(BatchTablePanel, {
+      props: {
+        rows: [],
+        selectedRowKeys: [],
+        summaryText: '',
+        showPrimaryAction: true,
+      },
+      slots: {
+        'toolbar-actions': '<button data-testid="recent-qc-tasks">最近质控任务</button>',
+      },
+      global: {
+        stubs: {
+          ATable: TableStub,
+          AButton: defineComponent({
+            name: 'AButton',
+            setup(_props, { attrs, slots }) {
+              return () => h('button', attrs, slots.default?.())
+            },
+          }),
+          APopconfirm: PopconfirmStub,
+        },
+      },
+    })
+
+    expect(wrapper.get('[data-testid="recent-qc-tasks"]').text()).toBe('最近质控任务')
+  })
+
   it('shows a secondary full-filter QC action with the server total', () => {
     const wrapper = mount(BatchTablePanel, {
       props: {

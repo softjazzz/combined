@@ -301,6 +301,9 @@
                 @clear-filters="emit('clear-filters')"
                 @page-change="handleBatchPageChange"
               >
+                <template v-if="!isStageQueueMode" #toolbar-actions>
+                  <RecordPoolQcTaskHistory />
+                </template>
                 <template v-if="recordPoolQcTask && !isStageQueueMode" #task-status>
                   <RecordPoolQcTaskStatusBar
                     :job="recordPoolQcTask"
@@ -347,6 +350,7 @@ import {
 } from '@ant-design/icons-vue'
 
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
+import RecordPoolQcTaskHistory from './workbench/RecordPoolQcTaskHistory.vue'
 import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { SichuanBatchJob } from '../semantic-rules/types'

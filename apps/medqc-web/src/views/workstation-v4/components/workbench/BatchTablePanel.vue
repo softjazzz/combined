@@ -42,6 +42,7 @@
           v-if="showBatchActions"
           class="batch-table-panel__actions flex flex-wrap items-center gap-2"
         >
+          <slot name="toolbar-actions" />
           <a-button
             v-if="showPrimaryAction"
             size="small"

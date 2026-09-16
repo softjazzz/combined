@@ -125,6 +125,11 @@ const BatchTablePanelStub = defineComponent({
   setup(_props, { attrs, slots }) {
     return () =>
       h('div', attrs, [
+        h(
+          'div',
+          { 'data-testid': 'batch-table-toolbar-actions-slot' },
+          slots['toolbar-actions']?.(),
+        ),
         h('div', { 'data-testid': 'batch-table-task-status-slot' }, slots['task-status']?.()),
       ])
   },
@@ -220,6 +225,13 @@ function mountListView(overrides: Record<string, unknown> = {}) {
           },
           setup(props) {
             return () => h('div', { 'data-testid': 'frontpage-tender-drawer', open: props.open })
+          },
+        }),
+        RecordPoolQcTaskHistory: defineComponent({
+          name: 'RecordPoolQcTaskHistory',
+          setup() {
+            return () =>
+              h('button', { 'data-testid': 'record-pool-qc-task-history-entry' }, '最近质控任务')
           },
         }),
         InboxOutlined: true,
@@ -322,6 +334,13 @@ describe('WorkstationV4ListView filters', () => {
     const statusBar = table.findComponent({ name: 'RecordPoolQcTaskStatusBar' })
     expect(statusBar.exists()).toBe(true)
     expect(statusBar.props('job')).toEqual(task)
+  })
+
+  it('keeps a persistent recent QC task entry in the record-pool toolbar', () => {
+    const wrapper = mountListView()
+
+    expect(wrapper.find('[data-testid="record-pool-qc-task-history-entry"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('最近质控任务')
   })
 
   it('forwards the full server-filter QC action from the record pool', async () => {
