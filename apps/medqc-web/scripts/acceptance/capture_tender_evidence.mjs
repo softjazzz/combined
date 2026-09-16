@@ -26,7 +26,7 @@ function sleep(ms) {
 
 async function isFrontendReady() {
   try {
-    const res = await fetch(`${BASE_URL}/workstation-v4/login`, { method: 'GET' })
+    const res = await fetch(`${BASE_URL}/workstation-v5/login`, { method: 'GET' })
     return res.ok
   } catch {
     return false
@@ -134,7 +134,7 @@ async function newAuthenticatedPage(browser) {
   const auth = await login()
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   page.setDefaultTimeout(30000)
-  await page.goto(`${BASE_URL}/workstation-v4/login`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${BASE_URL}/workstation-v5/login`, { waitUntil: 'domcontentloaded' })
   await page.evaluate((authPayload) => {
     localStorage.setItem('medqc_access_token', authPayload.access_token)
     localStorage.setItem('medqc_refresh_token', authPayload.refresh_token)
@@ -182,7 +182,7 @@ async function capture(page, clause, title, fileName) {
 }
 
 async function openRecordDetailIfAvailable(page) {
-  await page.goto(`${BASE_URL}/workstation-v4/worklist`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${BASE_URL}/workstation-v5/worklist`, { waitUntil: 'domcontentloaded' })
   await waitForBodyText(page, /病历池|批量工作台|病历池列表/)
   const openRecord = page.locator('button:has-text("查看详情"), button:has-text("立即处理")').first()
   if (await openRecord.isVisible().catch(() => false)) {
@@ -212,34 +212,34 @@ async function run() {
     await openRecordDetailIfAvailable(page)
     await capture(page, '3.1.1', '病案首页与结算清单入口', '3.1.1-frontpage-settlement.png')
 
-    await page.goto(`${BASE_URL}/workstation-v4/rules?tab=coding`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/workstation-v5/rules?tab=coding`, { waitUntil: 'domcontentloaded' })
     await waitForBodyText(page, /编码质控规则管理|质控规则管理/)
     await capture(page, '3.3.1,3.4.1', '规则管理与 ICD 编码规范内涵质控', '3.3.1-3.4.1-rules.png')
 
-    await page.goto(`${BASE_URL}/workstation-v4`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/workstation-v5`, { waitUntil: 'domcontentloaded' })
     await page.getByTestId('qc-agent-home-entry').click()
     await page.getByTestId('qc-agent-message-input').fill('二型糖尿病怎么编码')
     await page.getByTestId('qc-agent-send-button').click()
     await page.waitForSelector('.qc-agent-icd-overview', { timeout: 30000 })
     await capture(page, '3.5.1', '智能编码助手结果', '3.5.1-icd-chatbot.png')
 
-    await page.goto(`${BASE_URL}/workstation-v4`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/workstation-v5`, { waitUntil: 'domcontentloaded' })
     await waitForBodyText(page, /质控首页概览|高优先级任务|病案问题/)
     await capture(page, '3.4.3,4.1.2', '工作台问题概览', '3.4.3-4.1.2-overview.png')
 
-    await page.goto(`${BASE_URL}/workstation-v4/drg/pre`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/workstation-v5/drg/pre`, { waitUntil: 'domcontentloaded' })
     await waitForBodyText(page, /事前分析|预判结果|抽取结果/)
     await capture(page, '6.1.1,6.2.1', '事前分析与预入组', '6.1.1-6.2.1-pre.png')
 
-    await page.goto(`${BASE_URL}/workstation-v4/grouper`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/workstation-v5/grouper`, { waitUntil: 'domcontentloaded' })
     await waitForBodyText(page, /分组器|本地化|CHS-DRG|DIP/)
     await capture(page, '6.2.2', '分组器本地化配置', '6.2.2-grouper.png')
 
-    await page.goto(`${BASE_URL}/workstation-v4/drg/payment`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/workstation-v5/drg/payment`, { waitUntil: 'domcontentloaded' })
     await waitForBodyText(page, /付费监测|预计支付|盈亏|支付率/)
     await capture(page, '6.2.3', '医保付费监测', '6.2.3-payment.png')
 
-    await page.goto(`${BASE_URL}/workstation-v4/drg/post`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/workstation-v5/drg/post`, { waitUntil: 'domcontentloaded' })
     await waitForBodyText(page, /事后分析|分析维度|导出报告/)
     await capture(page, '6.3.1', 'DRG/DIP 综合分析', '6.3.1-post-analysis.png')
 

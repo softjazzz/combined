@@ -134,7 +134,8 @@ function Test-HttpEndpoint([string]$url, [int]$timeoutSec = 8) {
 function Test-FrontendHealth([int]$port) {
   $baseTargets = @(
     "http://${HealthCheckHost}:$port/",
-    "http://${HealthCheckHost}:$port/@vite/client"
+    "http://${HealthCheckHost}:$port/@vite/client",
+    "http://${HealthCheckHost}:$port/workstation-v5"
   )
   foreach ($target in $baseTargets) {
     if (-not (Test-HttpEndpoint $target 10)) {
@@ -319,7 +320,7 @@ if ($runFrontend) {
   }
 
   if ($frontendReady) {
-    Write-Host "  frontend ok: http://${FrontendHost}:$FrontendPort" -ForegroundColor Green
+    Write-Host "  frontend ok: http://localhost:$FrontendPort/workstation-v5" -ForegroundColor Green
   } else {
     $isEsbuildEperm = $false
     try {

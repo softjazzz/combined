@@ -38,9 +38,9 @@ $backendDocs = Test-Url "$BackendBase/docs"
 Write-Host "[HTTP] $BackendBase/docs => ok=$($backendDocs.ok) status=$($backendDocs.status) msg=$($backendDocs.message)"
 
 $frontendRoot = Test-Url "$FrontendBase/"
-$frontendRoute = Test-Url "$FrontendBase/workstation-v4"
+$frontendRoute = Test-Url "$FrontendBase/workstation-v5"
 Write-Host "[HTTP] $FrontendBase/ => ok=$($frontendRoot.ok) status=$($frontendRoot.status) msg=$($frontendRoot.message)"
-Write-Host "[HTTP] $FrontendBase/workstation-v4 => ok=$($frontendRoute.ok) status=$($frontendRoute.status) msg=$($frontendRoute.message)"
+Write-Host "[HTTP] $FrontendBase/workstation-v5 => ok=$($frontendRoute.ok) status=$($frontendRoute.status) msg=$($frontendRoute.message)"
 Write-Host ""
 
 try {
@@ -57,4 +57,3 @@ try {
 } catch {
   Write-Host "[QC] /api/v1/qc/coding-qc/check => ok=False msg=$($_.Exception.Message)"
 }
-

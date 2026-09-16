@@ -225,7 +225,7 @@
           type="info"
           show-icon
           message="数据同步控制台已迁移到 Workstation V4"
-          description="正在跳转到 /workstation-v4/system-config ..."
+          description="正在跳转到 /workstation-v5/system-config ..."
         />
       </div>
     </div>
@@ -329,7 +329,7 @@ watch(activeTab, async (tab) => {
   if (tab !== 'data_sync') {
     return
   }
-  await router.push({ path: '/workstation-v4/system-config', query: { tab: 'dataSync' } })
+  await router.push({ path: '/workstation-v5/system-config', query: { tab: 'dataSync' } })
 })
 
 const modals = reactive({

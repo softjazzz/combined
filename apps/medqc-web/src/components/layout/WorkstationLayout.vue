@@ -78,43 +78,43 @@
             <template #title>
               <span class="font-medium">工作台</span>
             </template>
-            <a-menu-item key="/workstation-v4">
+            <a-menu-item key="/workstation-v5">
               <template #icon>
                 <House class="sidebar-icon" />
               </template>
               <span>工作台首页</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/worklist">
+            <a-menu-item key="/workstation-v5/worklist">
               <template #icon>
                 <FolderKanban class="sidebar-icon" />
               </template>
               <span>病历池</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/stats">
+            <a-menu-item key="/workstation-v5/stats">
               <template #icon>
                 <ChartNoAxesColumnIncreasing class="sidebar-icon" />
               </template>
               <span>统计分析</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/records/running">
+            <a-menu-item key="/workstation-v5/records/running">
               <template #icon>
                 <PlayCircle class="sidebar-icon" />
               </template>
               <span>运行病历质控</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/records/final">
+            <a-menu-item key="/workstation-v5/records/final">
               <template #icon>
                 <CircleCheck class="sidebar-icon" />
               </template>
               <span>终末病历质控</span>
             </a-menu-item>
-            <a-menu-item v-if="isDemoFeedbackAccount" key="/workstation-v4/qc-feedback-demo">
+            <a-menu-item v-if="isDemoFeedbackAccount" key="/workstation-v5/qc-feedback-demo">
               <template #icon>
                 <ReceiptText class="sidebar-icon" />
               </template>
               <span>质控反馈记录</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/customer-sample-validation">
+            <a-menu-item key="/workstation-v5/customer-sample-validation">
               <template #icon>
                 <FileSearch class="sidebar-icon" />
               </template>
@@ -151,25 +151,25 @@
             <template #title>
               <span class="font-medium">质控规则</span>
             </template>
-            <a-menu-item key="/workstation-v4/rules?tab=coding">
+            <a-menu-item key="/workstation-v5/rules?tab=coding">
               <template #icon>
                 <Pill class="sidebar-icon" />
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1">
+            <a-menu-item key="/workstation-v5/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1">
               <template #icon>
                 <Workflow class="sidebar-icon" />
               </template>
               <span>全病历质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=frontpage">
+            <a-menu-item key="/workstation-v5/rules?tab=frontpage">
               <template #icon>
                 <FileText class="sidebar-icon" />
               </template>
               <span>首页质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=settlement">
+            <a-menu-item key="/workstation-v5/rules?tab=settlement">
               <template #icon>
                 <ReceiptText class="sidebar-icon" />
               </template>
@@ -178,7 +178,7 @@
           </a-sub-menu>
 
           <!-- ICD 编码查询 -->
-          <a-menu-item key="/workstation-v4/icd" class="menu-item-base">
+          <a-menu-item key="/workstation-v5/icd" class="menu-item-base">
             <template #icon>
               <Search class="sidebar-icon" />
             </template>
@@ -193,31 +193,31 @@
             <template #title>
               <span class="font-medium">DRG/DIP 分析</span>
             </template>
-            <a-menu-item key="/workstation-v4/drg/pre">
+            <a-menu-item key="/workstation-v5/drg/pre">
               <template #icon>
                 <FileChartColumn class="sidebar-icon" />
               </template>
               <span>事前分析</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/drg/mid">
+            <a-menu-item key="/workstation-v5/drg/mid">
               <template #icon>
                 <Activity class="sidebar-icon" />
               </template>
               <span>事中监控</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/drg/payment">
+            <a-menu-item key="/workstation-v5/drg/payment">
               <template #icon>
                 <BadgeDollarSign class="sidebar-icon" />
               </template>
               <span>付费监测</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/drg/post">
+            <a-menu-item key="/workstation-v5/drg/post">
               <template #icon>
                 <ChartNoAxesColumnIncreasing class="sidebar-icon" />
               </template>
               <span>事后分析</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/grouper">
+            <a-menu-item key="/workstation-v5/grouper">
               <template #icon>
                 <GitFork class="sidebar-icon" />
               </template>
@@ -225,7 +225,7 @@
             </a-menu-item>
           </a-sub-menu>
 
-          <a-menu-item key="/workstation-v4/rules/custom-workspace" class="menu-item-base">
+          <a-menu-item key="/workstation-v5/rules/custom-workspace" class="menu-item-base">
             <template #icon>
               <Bolt class="sidebar-icon" />
             </template>
@@ -233,7 +233,7 @@
           </a-menu-item>
 
           <!-- 数据上传 -->
-          <a-menu-item key="/workstation-v4/upload" class="menu-item-base">
+          <a-menu-item key="/workstation-v5/upload" class="menu-item-base">
             <template #icon>
               <CloudUpload class="sidebar-icon" />
             </template>
@@ -241,7 +241,7 @@
           </a-menu-item>
 
           <!-- 系统配置 -->
-          <a-menu-item key="/workstation-v4/system-config" class="menu-item-base">
+          <a-menu-item key="/workstation-v5/system-config" class="menu-item-base">
             <template #icon>
               <Settings class="sidebar-icon" />
             </template>
@@ -272,7 +272,7 @@
           <a-breadcrumb class="hidden md:flex items-center whitespace-nowrap" separator="">
             <a-breadcrumb-item>
               <router-link
-                to="/workstation-v4"
+                to="/workstation-v5"
                 class="flex items-center gap-2 text-slate-700 hover:text-[#2b6cf6] transition-colors px-2 py-1 rounded-md hover:bg-slate-50"
               >
                 <HomeOutlined class="text-base" />
@@ -460,25 +460,25 @@ const openKeys = ref<string[]>([])
 const currentPageTitle = computed(() => {
   const path = route.path
   const titleMap: Record<string, string> = {
-    '/workstation-v4': '工作台',
-    '/workstation-v4/qc-overview': '工作台',
-    '/workstation-v4/worklist': '病历池',
-    '/workstation-v4/icd': 'ICD 编码查询',
-    '/workstation-v4/upload': '数据上传',
-    '/workstation-v4/stats': '统计分析',
-    '/workstation-v4/drg/pre': '事前分析',
-    '/workstation-v4/drg/mid': '事中监控',
-    '/workstation-v4/drg/payment': '付费监测',
-    '/workstation-v4/drg/post': '事后分析',
-    '/workstation-v4/grouper': '医保分组器',
-    '/workstation-v4/data': '数据管理',
-    '/workstation-v4/rules': '质控规则管理',
-    '/workstation-v4/rules/custom-workspace': '自定义质控点',
-    '/workstation-v4/records/running': '运行病历',
-    '/workstation-v4/records/final': '终末病历质控',
-    '/workstation-v4/qc-feedback-demo': '质控反馈记录',
-    '/workstation-v4/customer-sample-validation': '客户样本验证',
-    '/workstation-v4/system-config': '系统配置',
+    '/workstation-v5': '工作台',
+    '/workstation-v5/qc-overview': '工作台',
+    '/workstation-v5/worklist': '病历池',
+    '/workstation-v5/icd': 'ICD 编码查询',
+    '/workstation-v5/upload': '数据上传',
+    '/workstation-v5/stats': '统计分析',
+    '/workstation-v5/drg/pre': '事前分析',
+    '/workstation-v5/drg/mid': '事中监控',
+    '/workstation-v5/drg/payment': '付费监测',
+    '/workstation-v5/drg/post': '事后分析',
+    '/workstation-v5/grouper': '医保分组器',
+    '/workstation-v5/data': '数据管理',
+    '/workstation-v5/rules': '质控规则管理',
+    '/workstation-v5/rules/custom-workspace': '自定义质控点',
+    '/workstation-v5/records/running': '运行病历',
+    '/workstation-v5/records/final': '终末病历质控',
+    '/workstation-v5/qc-feedback-demo': '质控反馈记录',
+    '/workstation-v5/customer-sample-validation': '客户样本验证',
+    '/workstation-v5/system-config': '系统配置',
   }
   return titleMap[path] || '工作台'
 })
@@ -507,7 +507,7 @@ const isDemoFeedbackAccount = computed(
       .toLowerCase() === 'admin@medqc.com',
 )
 
-const isQcOverviewRoute = computed(() => route.path === '/workstation-v4/qc-overview')
+const isQcOverviewRoute = computed(() => route.path === '/workstation-v5/qc-overview')
 
 // 方法
 async function navigateTo(path: string, query?: Record<string, string>) {
@@ -549,13 +549,13 @@ const handleMenuOpenChange = (keys: string[]) => {
 }
 
 function goStageMenu(stage: 'frontpage_generate' | 'frontpage_qc' | 'settlement_qc') {
-  navigateTo('/workstation-v4/worklist', { stage })
+  navigateTo('/workstation-v5/worklist', { stage })
 }
 
 const handleLogout = async () => {
   await authStore.signOut()
-  if (route.path.startsWith('/workstation-v4')) {
-    router.push('/workstation-v4/login')
+  if (route.path.startsWith('/workstation-v5')) {
+    router.push('/workstation-v5/login')
     return
   }
   router.push('/auth/login')
@@ -565,36 +565,36 @@ const handleLogout = async () => {
 watch(
   () => route.fullPath,
   () => {
-    const base = route.path === '/workstation-v4/qc-overview' ? '/workstation-v4' : route.path
+    const base = route.path === '/workstation-v5/qc-overview' ? '/workstation-v5' : route.path
     const tab = String(route.query.tab || '').trim()
     if (
-      base === '/workstation-v4/rules' &&
+      base === '/workstation-v5/rules' &&
       ['coding', 'semantic', 'frontpage', 'settlement'].includes(tab)
     ) {
-      selectedKeys.value = [`/workstation-v4/rules?tab=${tab}`]
+      selectedKeys.value = [`/workstation-v5/rules?tab=${tab}`]
       return
     }
-    if (base === '/workstation-v4/rules') {
-      selectedKeys.value = ['/workstation-v4/rules?tab=coding']
+    if (base === '/workstation-v5/rules') {
+      selectedKeys.value = ['/workstation-v5/rules?tab=coding']
       return
     }
     const stage = String(route.query.stage || '').trim()
     if (
-      (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
+      (base === '/workstation-v5' || base === '/workstation-v5/worklist') &&
       stage === 'frontpage_generate'
     ) {
       selectedKeys.value = ['ws-stage-frontpage-generate']
       return
     }
     if (
-      (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
+      (base === '/workstation-v5' || base === '/workstation-v5/worklist') &&
       stage === 'frontpage_qc'
     ) {
       selectedKeys.value = ['ws-stage-frontpage-qc']
       return
     }
     if (
-      (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
+      (base === '/workstation-v5' || base === '/workstation-v5/worklist') &&
       stage === 'settlement_qc'
     ) {
       selectedKeys.value = ['ws-stage-settlement-qc']

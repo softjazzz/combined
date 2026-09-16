@@ -15,7 +15,7 @@ const showDemoAccounts = ref(false)
 
 const redirectTarget = computed(() => {
   const raw = route.query.redirect
-  return typeof raw === 'string' && raw.startsWith('/workstation-v4') ? raw : '/workstation-v4'
+  return typeof raw === 'string' && raw.startsWith('/workstation-v5') ? raw : '/workstation-v5'
 })
 
 const featurePills = ['首页生成', '编码校验', '证据溯源', 'DRG 预分组']

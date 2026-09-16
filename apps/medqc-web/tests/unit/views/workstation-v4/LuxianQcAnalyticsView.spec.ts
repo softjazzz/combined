@@ -150,7 +150,7 @@ describe('LuxianQcAnalyticsView', () => {
     await wrapper.get('.department-row').trigger('click')
 
     expect(routerPush).toHaveBeenCalledWith({
-      path: '/workstation-v4/stats',
+      path: '/workstation-v5/stats',
       query: {
         view: 'department',
         department: 'ICU',

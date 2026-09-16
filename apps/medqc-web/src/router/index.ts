@@ -1,11 +1,21 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
+const WORKSTATION_BASE_PATH = '/workstation-v5'
+const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
+
+function normalizeWorkstationPath(path: string) {
+  if (path === LEGACY_WORKSTATION_BASE_PATH || path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)) {
+    return `${WORKSTATION_BASE_PATH}${path.slice(LEGACY_WORKSTATION_BASE_PATH.length)}`
+  }
+  return path.startsWith(WORKSTATION_BASE_PATH) ? path : WORKSTATION_BASE_PATH
+}
+
 // 路由配置
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/workstation-v4',
+    redirect: '/workstation-v5',
   },
   // 认证相关路由
   {
@@ -62,7 +72,7 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'Dashboard',
         redirect: (to) => ({
-          path: '/workstation-v4',
+          path: '/workstation-v5',
           // 旧首页没有业务参数合同；保留原样 query/hash，避免丢失外部入口上下文。
           query: to.query,
           hash: to.hash,
@@ -126,7 +136,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'workstation/qc-overview',
-        redirect: '/workstation-v4/qc-overview',
+        redirect: '/workstation-v5/qc-overview',
         meta: {
           title: '问题集中点',
           permission: ['admin', 'qc_manager'],
@@ -946,7 +956,8 @@ const routes: RouteRecordRaw[] = [
     ],
   },
   {
-    path: '/workstation-v4/login',
+    path: '/workstation-v5/login',
+    alias: ['/workstation-v4/login'],
     name: 'WorkstationV4Login',
     component: () => import('@/views/workstation-v4/WorkstationLoginView.vue'),
     meta: {
@@ -954,13 +965,14 @@ const routes: RouteRecordRaw[] = [
       title: '工作台登录',
     },
   },
-  // 病案工作台 V4（科室侧边栏 + 表格）
+  // 病案工作台 V5（沿用已验证的工作台组件与内部路由名称）
   {
-    path: '/workstation-v4',
+    path: '/workstation-v5',
+    alias: ['/workstation-v4'],
     component: () => import('@/components/layout/WorkstationLayout.vue'),
     meta: {
       requiresAuth: true,
-      title: '病案工作台 V4',
+      title: '病案工作台 V5',
     },
     children: [
       {
@@ -1138,7 +1150,7 @@ const routes: RouteRecordRaw[] = [
   // 系统配置（数据库连接、同步管理）
   {
     path: '/system-config',
-    redirect: { path: '/workstation-v4/system-config' },
+    redirect: { path: '/workstation-v5/system-config' },
     meta: {
       requiresAuth: false,
       title: '数据同步配置',
@@ -1191,8 +1203,21 @@ async function getAuthStore() {
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
+  if (
+    to.path === LEGACY_WORKSTATION_BASE_PATH ||
+    to.path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)
+  ) {
+    next({
+      path: normalizeWorkstationPath(to.path),
+      query: to.query,
+      hash: to.hash,
+      replace: true,
+    })
+    return
+  }
+
   const authStore = await getAuthStore()
-  const isWorkstationRoute = to.path.startsWith('/workstation-v4')
+  const isWorkstationRoute = to.path.startsWith(WORKSTATION_BASE_PATH)
   const isWorkstationLogin = to.name === 'WorkstationV4Login'
 
   // 检查是否为演示模式（通过URL参数 ?demo=true）
@@ -1217,9 +1242,9 @@ router.beforeEach(async (to, from, next) => {
 
     if (authStore.isAuthenticated) {
       const redirect =
-        typeof to.query.redirect === 'string' && to.query.redirect.startsWith('/workstation-v4')
-          ? to.query.redirect
-          : '/workstation-v4'
+        typeof to.query.redirect === 'string'
+          ? normalizeWorkstationPath(to.query.redirect)
+          : WORKSTATION_BASE_PATH
       next(redirect)
       return
     }
@@ -1235,7 +1260,7 @@ router.beforeEach(async (to, from, next) => {
       if (!authStore.isAuthenticated) {
         if (isWorkstationRoute) {
           next({
-            path: '/workstation-v4/login',
+            path: '/workstation-v5/login',
             query: { redirect: to.fullPath },
           })
         } else {

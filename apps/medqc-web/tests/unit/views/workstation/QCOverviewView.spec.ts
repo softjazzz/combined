@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const apiGet = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({
   query: {} as Record<string, string>,
-  path: '/workstation-v4',
+  path: '/workstation-v5',
 }))
 const routerPush = vi.hoisted(() => vi.fn())
 const routerReplace = vi.hoisted(() => vi.fn())
@@ -261,13 +261,13 @@ describe('QCOverviewView', () => {
     expect(entries).toHaveLength(3)
     await entries[0].trigger('click')
     expect(routerPush).toHaveBeenLastCalledWith({
-      path: '/workstation-v4/worklist',
+      path: '/workstation-v5/worklist',
       query: { source: 'dashboard', department: undefined, keyword: undefined },
     })
     await entries[1].trigger('click')
-    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v4/records/running')
+    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v5/records/running')
     await entries[2].trigger('click')
-    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v4/records/final')
+    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v5/records/final')
   })
 
   it('以运营优先顺序展示四项 KPI，且只保留标题与数值', async () => {

@@ -132,19 +132,29 @@ describe('WorkstationLoginView', () => {
     await flushPromises()
 
     expect(signIn).toHaveBeenCalledWith('admin@medqc.com', 'admin888', 'admin')
-    expect(routerReplace).toHaveBeenCalledWith('/workstation-v4')
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v5')
     expect(message.success).toHaveBeenCalledWith('登录成功')
   })
 
   it('普通账号登录后仍遵守 redirect 参数', async () => {
-    routeQuery.redirect = '/workstation-v4/rules?tab=semantic'
+    routeQuery.redirect = '/workstation-v5/rules?tab=semantic'
     const wrapper = mountView()
 
     await wrapper.find('.login-normal').trigger('click')
     await flushPromises()
 
     expect(signIn).toHaveBeenCalledWith('doctor@medqc.com', 'doctor-pass', 'doctor')
-    expect(routerReplace).toHaveBeenCalledWith('/workstation-v4/rules?tab=semantic')
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v5/rules?tab=semantic')
+  })
+
+  it('旧 V4 redirect 参数会升级为 V5 地址', async () => {
+    routeQuery.redirect = '/workstation-v4/records/final?source=legacy'
+    const wrapper = mountView()
+
+    await wrapper.find('.login-normal').trigger('click')
+    await flushPromises()
+
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v5/records/final?source=legacy')
   })
 
   it('实施账号支持 sync_admin 简写登录', async () => {
@@ -154,6 +164,6 @@ describe('WorkstationLoginView', () => {
     await flushPromises()
 
     expect(signIn).toHaveBeenCalledWith('sync_admin@medqc.com', 'sync888', 'admin')
-    expect(routerReplace).toHaveBeenCalledWith('/workstation-v4')
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v5')
   })
 })

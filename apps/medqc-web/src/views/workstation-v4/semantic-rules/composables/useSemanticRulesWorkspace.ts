@@ -679,7 +679,7 @@ export function useSemanticRulesWorkspace() {
   }
 
   async function goCustomWorkspace() {
-    await router.push('/workstation-v4/rules/custom-workspace')
+    await router.push('/workstation-v5/rules/custom-workspace')
   }
 
   async function initialize() {

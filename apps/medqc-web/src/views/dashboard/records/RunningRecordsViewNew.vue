@@ -1068,7 +1068,7 @@ const jumpToWorkstation = (record: any, action: WorkstationLaunchAction) => {
     from_stage: fromStage,
   }
   if (taskId) query.task_id = taskId
-  router.push({ path: '/workstation-v4', query })
+  router.push({ path: '/workstation-v5', query })
 }
 
 const openCustomQCExperience = (record?: any) => {
@@ -1079,7 +1079,7 @@ const openCustomQCExperience = (record?: any) => {
     const taskId = String(record?.task_id || '').trim()
     if (taskId) query.visit_id = taskId
   }
-  router.push({ path: '/workstation-v4/custom-qc-experience', query })
+  router.push({ path: '/workstation-v5/custom-qc-experience', query })
 }
 
 const stageHint = computed(() => {

@@ -16,7 +16,12 @@ const showDemoAccounts = ref(false)
 
 const redirectTarget = computed(() => {
   const raw = route.query.redirect
-  return typeof raw === 'string' && raw.startsWith('/workstation-v4') ? raw : '/workstation-v4'
+  if (typeof raw !== 'string') return '/workstation-v5'
+  if (raw.startsWith('/workstation-v5')) return raw
+  if (raw.startsWith('/workstation-v4')) {
+    return `/workstation-v5${raw.slice('/workstation-v4'.length)}`
+  }
+  return '/workstation-v5'
 })
 
 const loginAccountAliases: Record<string, string> = {

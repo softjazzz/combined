@@ -31,7 +31,7 @@ describe('旧 Dashboard 首页路由', () => {
     } as never)
 
     expect(target).toEqual({
-      path: '/workstation-v4',
+      path: '/workstation-v5',
       query: { source: 'legacy-link', scene: 'final' },
       hash: '#recent-task',
     })
@@ -40,13 +40,25 @@ describe('旧 Dashboard 首页路由', () => {
   it('根入口直达工作台，不经过旧 Dashboard 形成循环', async () => {
     const rootRoute = router.getRoutes().find((route) => route.path === '/')
 
-    expect(rootRoute?.redirect).toBe('/workstation-v4')
+    expect(rootRoute?.redirect).toBe('/workstation-v5')
   })
 
   it('工作台入口保持原路径与参数', async () => {
-    const target = router.resolve({ path: '/workstation-v4', query: { entry: 'direct' } })
+    const target = router.resolve({ path: '/workstation-v5', query: { entry: 'direct' } })
 
-    expect(target.path).toBe('/workstation-v4')
+    expect(target.path).toBe('/workstation-v5')
     expect(target.query).toEqual({ entry: 'direct' })
   })
+
+  it(
+    '旧 V4 链接自动升级到对应的 V5 地址',
+    async () => {
+      await router.push('/workstation-v4/records/running?source=legacy')
+
+      expect(router.currentRoute.value.fullPath).toBe(
+        '/workstation-v5/records/running?source=legacy',
+      )
+    },
+    15_000,
+  )
 })

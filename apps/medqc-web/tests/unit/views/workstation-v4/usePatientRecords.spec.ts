@@ -57,7 +57,7 @@ describe('usePatientRecords workstation filters', () => {
   })
 
   it('uses the analytics drill-down department from the URL for the server query', async () => {
-    window.history.replaceState({}, '', '/workstation-v4?department=ICU&analytics_scope=final')
+    window.history.replaceState({}, '', '/workstation-v5?department=ICU&analytics_scope=final')
     const records = usePatientRecords()
 
     await records.fetchData()

@@ -17,10 +17,10 @@ const { default: router } = await import('@/router')
 describe('客户样本验证路由权限', () => {
   it('同步管理员可以进入客户样本验证及其配套页面', async () => {
     const paths = [
-      '/workstation-v4/customer-sample-validation',
-      '/workstation-v4/customer-sample-validation/synthetic-case/new',
-      '/workstation-v4/customer-sample-validation/tasks',
-      '/workstation-v4/customer-sample-validation/surgery-catalog',
+      '/workstation-v5/customer-sample-validation',
+      '/workstation-v5/customer-sample-validation/synthetic-case/new',
+      '/workstation-v5/customer-sample-validation/tasks',
+      '/workstation-v5/customer-sample-validation/surgery-catalog',
     ]
 
     for (const path of paths) {

@@ -7,7 +7,7 @@ test.use({
 })
 
 async function loginToWorkstationV4(page: Page) {
-  await page.goto('/workstation-v4/login')
+  await page.goto('/workstation-v5/login')
   await expect(page.getByRole('heading', { name: '登录工作台' })).toBeVisible()
 
   await page.getByPlaceholder('请输入用户名 / 手机号 / 邮箱').fill('admin')
@@ -15,7 +15,7 @@ async function loginToWorkstationV4(page: Page) {
   await page.locator('select').selectOption('admin')
   await page.getByRole('button', { name: '立即登录工作台' }).click()
 
-  await expect(page).toHaveURL(/\/workstation-v4(\/|$)/)
+  await expect(page).toHaveURL(/\/workstation-v5(\/|$)/)
   await expect(page.getByText('病案工作台 V4')).toBeVisible()
 }
 
@@ -25,7 +25,7 @@ test.describe('Workstation V4 admin pages', () => {
   })
 
   test('system-config page is reachable and shows extraction settings', async ({ page }) => {
-    await page.goto('/workstation-v4/system-config')
+    await page.goto('/workstation-v5/system-config')
 
     await expect(page.getByText('数据同步配置')).toBeVisible()
     await expect(page.getByText('首页抽取设置')).toBeVisible()
@@ -41,7 +41,7 @@ test.describe('Workstation V4 admin pages', () => {
   })
 
   test('data page is reachable and shows schema or stats content', async ({ page }) => {
-    await page.goto('/workstation-v4/data')
+    await page.goto('/workstation-v5/data')
 
     await expect(page.getByText('病案总数')).toBeVisible()
     await expect(page.getByText('表浏览')).toBeVisible()
@@ -51,7 +51,7 @@ test.describe('Workstation V4 admin pages', () => {
   })
 
   test('grouper page is reachable and shows core tabs', async ({ page }) => {
-    await page.goto('/workstation-v4/grouper')
+    await page.goto('/workstation-v5/grouper')
 
     await expect(page.getByText('医保分组器')).toBeVisible()
     await expect(page.getByText('CHS-DRG')).toBeVisible()
@@ -66,9 +66,9 @@ test.describe('Workstation V4 admin pages', () => {
   })
 
   test('optional drg subpage is reachable', async ({ page }) => {
-    await page.goto('/workstation-v4/drg/pre')
+    await page.goto('/workstation-v5/drg/pre')
 
-    await expect(page).toHaveURL(/\/workstation-v4\/drg\/pre/)
+    await expect(page).toHaveURL(/\/workstation-v5\/drg\/pre/)
     await expect(page.locator('body')).toContainText(/事前分析|DRG\/DIP|分组|监控/)
   })
 })

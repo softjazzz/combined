@@ -715,7 +715,7 @@ def build_gate(
                 else "尚未提供页面级自动化或人工验收证据，需验证规则集选择、任务执行、结果展示和证据跳转。"
             ),
             {
-                "target_page": "/workstation-v4/customer-sample-validation",
+                "target_page": "/workstation-v5/customer-sample-validation",
                 "expected_rule_set": "luxian_0609_qc_v1",
                 "evidence_file": str(CUSTOMER_SAMPLE_PAGE_EVIDENCE_PATH),
                 "capability_count": customer_sample_page["capability_count"],

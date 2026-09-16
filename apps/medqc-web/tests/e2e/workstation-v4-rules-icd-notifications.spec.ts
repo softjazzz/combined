@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 async function loginToWorkstationV4(page: Page) {
-  await page.goto('/workstation-v4/login')
+  await page.goto('/workstation-v5/login')
   await expect(page.getByRole('heading', { name: '登录工作台' })).toBeVisible()
 
   await page.getByPlaceholder('请输入用户名 / 手机号 / 邮箱').fill('admin')
@@ -9,7 +9,7 @@ async function loginToWorkstationV4(page: Page) {
   await page.locator('select').selectOption('admin')
   await page.getByRole('button', { name: '立即登录工作台' }).click()
 
-  await expect(page).not.toHaveURL(/\/workstation-v4\/login/)
+  await expect(page).not.toHaveURL(/\/workstation-v5\/login/)
   await expect(page.getByText('病案工作台 V4')).toBeVisible()
 }
 
@@ -19,7 +19,7 @@ async function openAndAssertRulesTab(
   heading: string,
   searchPlaceholder: string,
 ) {
-  await page.goto(`/workstation-v4/rules?tab=${tab}`)
+  await page.goto(`/workstation-v5/rules?tab=${tab}`)
 
   await expect(page.getByRole('heading', { name: heading })).toBeVisible()
   await expect(page.getByPlaceholder(searchPlaceholder)).toBeVisible()
@@ -61,7 +61,7 @@ test.describe('Workstation V4 rules / ICD / notifications', () => {
   })
 
   test('icd page exposes search and a usable tree/result area', async ({ page }) => {
-    await page.goto('/workstation-v4/icd')
+    await page.goto('/workstation-v5/icd')
 
     await expect(page.getByText('ICD 智能检索')).toBeVisible()
     await expect(page.getByPlaceholder('输入诊断名称或 ICD-10 编码...')).toBeVisible()
@@ -82,7 +82,7 @@ test.describe('Workstation V4 rules / ICD / notifications', () => {
   test('main workstation exposes notification entry and notification panel content', async ({
     page,
   }) => {
-    await page.goto('/workstation-v4')
+    await page.goto('/workstation-v5')
 
     await expect(page.getByText('优先处理池')).toBeVisible()
     await expect(page.getByText('批量工作台')).toBeVisible()

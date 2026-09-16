@@ -26,8 +26,8 @@ describe('运行与终末质控结果清单路由', () => {
   it('两个路径都使用共享结果清单视图，并传入不同的病历阶段', async () => {
     const running = router
       .getRoutes()
-      .find((route) => route.path === '/workstation-v4/records/running')
-    const final = router.getRoutes().find((route) => route.path === '/workstation-v4/records/final')
+      .find((route) => route.path === '/workstation-v5/records/running')
+    const final = router.getRoutes().find((route) => route.path === '/workstation-v5/records/final')
     const runningLoader = running?.components?.default
     const finalLoader = final?.components?.default
 

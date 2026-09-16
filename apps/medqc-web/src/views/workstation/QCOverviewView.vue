@@ -103,12 +103,12 @@
                 <span><strong>病历池</strong><small>查找病历 · 选择质控范围</small></span
                 ><ArrowRight :size="18" />
               </button>
-              <button type="button" @click="router.push('/workstation-v4/records/running')">
+              <button type="button" @click="router.push('/workstation-v5/records/running')">
                 <Activity :size="18" class="qc-home-shortcut-icon" aria-hidden="true" />
                 <span><strong>运行病历质控</strong><small>查看在院病历质控结果</small></span
                 ><ArrowRight :size="18" />
               </button>
-              <button type="button" @click="router.push('/workstation-v4/records/final')">
+              <button type="button" @click="router.push('/workstation-v5/records/final')">
                 <CircleCheckBig :size="18" class="qc-home-shortcut-icon" aria-hidden="true" />
                 <span><strong>终末病历质控</strong><small>查看已出院病历质控结果</small></span
                 ><ArrowRight :size="18" />
@@ -625,7 +625,7 @@ function applyRouteFilters() {
 
 function openRecordPool() {
   void router.push({
-    path: '/workstation-v4/worklist',
+    path: '/workstation-v5/worklist',
     query: {
       source: 'dashboard',
       department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,

@@ -931,7 +931,7 @@ function jumpToRulesList() {
 
 function goBack() {
   router.push(
-    scene.value === 'final' ? '/workstation-v4/records/final' : '/workstation-v4/records/running',
+    scene.value === 'final' ? '/workstation-v5/records/final' : '/workstation-v5/records/running',
   )
 }
 

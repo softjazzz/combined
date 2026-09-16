@@ -1587,11 +1587,11 @@ function handleClearFilters() {
 }
 
 function goToFinalRecords() {
-  router.push('/workstation-v4/records/final')
+  router.push('/workstation-v5/records/final')
 }
 
 function goToSichuanRules() {
-  router.push('/workstation-v4/rules?tab=semantic')
+  router.push('/workstation-v5/rules?tab=semantic')
 }
 
 const { currentRecordIndex, goToPrevRecord, goToNextRecord, goBackToList } = createDetailNavigation(

@@ -6,7 +6,7 @@
  * 检查三个端点在超时时间内是否全部返回 200：
  *   - /
  *   - /@vite/client
- *   - /workstation-v4
+ *   - /workstation-v5
  *
  * 注意：显式绕过 HTTP_PROXY 环境变量（Clash 等代理会劫持 localhost 请求）
  */
@@ -20,7 +20,7 @@ const host = '127.0.0.1'
 // 显式创建无代理 agent，绕过 HTTP_PROXY 环境变量
 const noProxyAgent = new http.Agent({ keepAlive: false })
 
-const endpoints = ['/', '/@vite/client', '/workstation-v4']
+const endpoints = ['/', '/@vite/client', '/workstation-v5']
 
 function checkEndpoint(path) {
   return new Promise((resolve) => {

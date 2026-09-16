@@ -2467,11 +2467,11 @@ async function toggleTodaySyncedInpatient() {
 }
 
 function goToFinalRecords() {
-  router.push('/workstation-v4/records/final')
+  router.push('/workstation-v5/records/final')
 }
 
 function goToSichuanRules() {
-  router.push('/workstation-v4/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1')
+  router.push('/workstation-v5/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1')
 }
 
 const { currentRecordIndex, goToPrevRecord, goToNextRecord, goBackToList } = createDetailNavigation(

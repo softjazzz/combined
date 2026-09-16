@@ -382,7 +382,7 @@ def build_evidence(
             evidence_scope=evidence_scope,
         ),
         "version": "2026-06-10",
-        "page": "/workstation-v4/customer-sample-validation",
+        "page": "/workstation-v5/customer-sample-validation",
         "rule_set_key": "luxian_0609_qc_v1",
         "source_state": source_state,
         "input_hashes": _input_hashes(source_paths),

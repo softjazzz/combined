@@ -63,7 +63,7 @@
 
           <a-menu-item
             v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
-            key="/workstation-v4"
+            key="/workstation-v5"
             class="menu-item-base"
           >
             <template #icon>
@@ -137,7 +137,7 @@
 
           <a-menu-item
             v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
-            key="/workstation-v4/rules/custom-workspace"
+            key="/workstation-v5/rules/custom-workspace"
             class="menu-item-base"
           >
             <template #icon>

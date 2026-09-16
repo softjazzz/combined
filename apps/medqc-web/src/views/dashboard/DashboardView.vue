@@ -241,7 +241,7 @@ function openWorkstationAction(
     from_stage: stage,
   }
   if (taskId) query.task_id = taskId
-  router.push({ path: '/workstation-v4', query })
+  router.push({ path: '/workstation-v5', query })
 }
 
 function openStageQueue(stage: WorkflowStageKey) {
@@ -258,10 +258,10 @@ function continueStage(card: WorkflowEntryCard) {
 // 处理快捷操作
 const handleQuickAction = (action: string) => {
   const routeMap: Record<string, string> = {
-    upload: '/workstation-v4/upload',
+    upload: '/workstation-v5/upload',
     analyze: '/dashboard/records/running',
     report: '/dashboard/records/final',
-    rules: '/workstation-v4/rules?tab=coding',
+    rules: '/workstation-v5/rules?tab=coding',
   }
   const target = routeMap[action]
   if (!target) return

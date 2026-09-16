@@ -615,7 +615,7 @@ function resetFilters() {
 }
 function openDepartmentReport(departmentName: string) {
   void router.push({
-    path: '/workstation-v4/stats',
+    path: '/workstation-v5/stats',
     query: {
       view: 'department',
       department: departmentName,
@@ -627,7 +627,7 @@ function openDepartmentReport(departmentName: string) {
 }
 function returnToHospitalAnalytics() {
   void router.push({
-    path: '/workstation-v4/stats',
+    path: '/workstation-v5/stats',
     query: {
       completed_from: dateRange.value?.[0],
       completed_to: dateRange.value?.[1],
@@ -637,7 +637,7 @@ function returnToHospitalAnalytics() {
 }
 function drillDown(filters: { department?: string; rule_id?: string }) {
   void router.push({
-    path: '/workstation-v4',
+    path: '/workstation-v5',
     query: {
       source: 'analytics',
       analytics_scope: 'final',

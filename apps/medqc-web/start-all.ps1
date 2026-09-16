@@ -21,6 +21,7 @@ $frontendErrLog = Join-Path $tmpDir "frontend-$FrontendMode-$FrontendPort.err.lo
 $backendLog = Join-Path $tmpDir "backend-$BackendPort.log"
 $backendErrLog = Join-Path $tmpDir "backend-$BackendPort.err.log"
 $frontendApiTarget = "http://${HealthCheckHost}:$BackendPort"
+$frontendEntryUrl = "http://localhost:$FrontendPort/workstation-v5"
 $frontendModeExplicit = $PSBoundParameters.ContainsKey("FrontendMode")
 
 function Write-Step([string]$msg) {
@@ -303,10 +304,16 @@ if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 40)) {
     exit 1
   }
 }
+if (-not (Wait-HttpOk "http://${HealthCheckHost}:$FrontendPort/workstation-v5" 20)) {
+  Write-Host "frontend entry failed to become healthy: $frontendEntryUrl" -ForegroundColor Red
+  exit 1
+}
 if ($FrontendMode -eq "dev") {
-  Write-Host "  frontend ok (dev + HMR): http://${FrontendHost}:$FrontendPort/" -ForegroundColor Green
+  Write-Host "  frontend ok (dev + HMR): $frontendEntryUrl" -ForegroundColor Green
 } elseif ($FrontendMode -eq "preview") {
-  Write-Host "  frontend ok (preview): http://${FrontendHost}:$FrontendPort/" -ForegroundColor Green
+  Write-Host "  frontend ok (preview): $frontendEntryUrl" -ForegroundColor Green
+} else {
+  Write-Host "  frontend ok (dist-python): $frontendEntryUrl" -ForegroundColor Green
 }
 
 Write-Host ""

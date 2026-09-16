@@ -572,7 +572,7 @@ const handleStartWork = async (record: TaskItem) => {
 
 const handleContinueWork = (record: TaskItem) => {
   // 跳转到工作站（带上任务上下文）
-  router.push({ path: '/workstation-v4', query: { taskId: record.id } })
+  router.push({ path: '/workstation-v5', query: { taskId: record.id } })
 }
 
 const handleViewDetail = async (record: TaskItem) => {

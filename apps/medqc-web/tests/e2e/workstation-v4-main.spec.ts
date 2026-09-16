@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:3000'
-const LOGIN_URL = `${BASE_URL}/workstation-v4/login`
-const WORKSTATION_URL = `${BASE_URL}/workstation-v4`
+const LOGIN_URL = `${BASE_URL}/workstation-v5/login`
+const WORKSTATION_URL = `${BASE_URL}/workstation-v5`
 
 async function expectAnyVisible(page: Page, selectors: string[], label: string) {
   for (const selector of selectors) {
@@ -25,7 +25,7 @@ async function loginWithDemoAccount(page: Page) {
     const demoButton = page.getByRole('button').filter({ hasText: '功能演示账号' }).first()
     if (await demoButton.isVisible().catch(() => false)) {
       await Promise.all([
-        page.waitForURL(/\/workstation-v4(?!\/login)(?:\?.*)?$/, { timeout: 20000 }),
+        page.waitForURL(/\/workstation-v5(?!\/login)(?:\?.*)?$/, { timeout: 20000 }),
         demoButton.click(),
       ])
       return
@@ -41,7 +41,7 @@ async function loginWithDemoAccount(page: Page) {
   }
 
   await Promise.all([
-    page.waitForURL(/\/workstation-v4(?!\/login)(?:\?.*)?$/, { timeout: 20000 }),
+    page.waitForURL(/\/workstation-v5(?!\/login)(?:\?.*)?$/, { timeout: 20000 }),
     page.getByRole('button', { name: /立即登录工作台/ }).click(),
   ])
 }
@@ -72,7 +72,7 @@ test.describe('Workstation V4 主链路', () => {
 
   test('登录后主页面、阶段入口、详情和三标签可用', async ({ page }) => {
     await loginWithDemoAccount(page)
-    await expect(page).toHaveURL(/\/workstation-v4(?!\/login)(?:\?.*)?$/, { timeout: 20000 })
+    await expect(page).toHaveURL(/\/workstation-v5(?!\/login)(?:\?.*)?$/, { timeout: 20000 })
     await waitForMainShell(page)
 
     await expect(page.getByText('待生成首页', { exact: true })).toBeVisible()

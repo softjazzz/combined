@@ -31,7 +31,7 @@ if exist "node_modules\.vite" (
   rmdir /s /q "node_modules\.vite" >nul 2>nul
 )
 
-echo [INFO] Starting HMR server at http://127.0.0.1:3000/workstation-v4
+echo [INFO] Starting HMR server at http://localhost:3000/workstation-v5
 echo.
 "%NPM_CMD%" run dev -- --host 127.0.0.1 --port 3000 --strictPort --force
 
@@ -41,4 +41,3 @@ echo.
 echo [INFO] Dev server exited with code %EXIT_CODE%.
 pause
 exit /b %EXIT_CODE%
-

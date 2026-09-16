@@ -226,7 +226,7 @@ def build_packages() -> dict[str, Any]:
                 "人工确认正确数、误报数、漏报数和不可判定原因必须进入报告。",
             ],
             "page_validation_tasks": [
-                "在 /workstation-v4/customer-sample-validation 选择 luxian_0609_qc_v1 执行。",
+                "在 /workstation-v5/customer-sample-validation 选择 luxian_0609_qc_v1 执行。",
                 "验证按规则、病历、科室查看结果，问题可追溯证据并定位病历原文。",
                 "验证导出验证报告包含命中、未命中、数据不足、规则不适用、需人工复核状态。",
             ],
