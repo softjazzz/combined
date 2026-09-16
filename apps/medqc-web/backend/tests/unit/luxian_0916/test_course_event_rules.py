@@ -32,6 +32,8 @@ def _event(rule_id: str, **overrides: object) -> dict:
     event = {
         "event_id": f"event-{rule_id[-3:]}",
         "event_type": _EVENT_KEY_BY_RULE[rule_id],
+        "document_id": f"document-{rule_id[-3:]}",
+        "source_type": "daily_course_record",
         "trigger_confirmed": True,
         "evaluation_window_mature": True,
         "documentation": _DOCUMENTATION_BY_RULE.get(rule_id, {}),
@@ -62,6 +64,8 @@ def test_event_rules_report_confirmed_defects(rule_id, event_overrides, expected
     assert result.status == "non_compliant"
     assert result.reason_code == expected_reason
     assert result.document_anchors
+    assert result.document_anchors[0]["document_type"] == "daily_course_record"
+    assert result.document_anchors[0]["document_id"] == f"document-{rule_id[-3:]}"
 
 
 @pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])

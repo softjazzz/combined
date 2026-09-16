@@ -12,10 +12,52 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 
-_MAX_TOTAL_CHARS = 12_000
-# 全量 32 条规则最多选择 18 份文书；该上限保证每类至少保留一份时仍不超过总量。
-_MAX_CHARS_PER_DOCUMENT = 650
-_MAX_COMPLETION_TOKENS = 1_600
+_MAX_TOTAL_CHARS = 20_000
+_DEFAULT_MAX_CHARS_PER_DOCUMENT = 800
+_MAX_CHARS_BY_SOURCE = {
+    "admission_record": 2_500,
+    "first_course_record": 2_200,
+    "daily_course_record": 1_000,
+    "surgery_inform_consent": 1_500,
+    "consent_form": 1_500,
+    "anesthesia_consent": 1_500,
+    "anesthesia_record": 1_000,
+    "surgery_record": 1_000,
+    "surgery_safecheck_record": 600,
+    "discharge_record": 3_200,
+    "discharge_orders": 1_500,
+    "exam_master": 1_200,
+    "exam_item_report": 400,
+    "labtest_master": 400,
+    "labtest_item_report": 800,
+    "inpat_drug_order": 400,
+    "inpat_nondrug_order": 200,
+}
+_SOURCE_PRIORITY = {
+    source_type: index
+    for index, source_type in enumerate(
+        (
+            "admission_record",
+            "first_course_record",
+            "daily_course_record",
+            "discharge_record",
+            "discharge_orders",
+            "surgery_inform_consent",
+            "consent_form",
+            "anesthesia_consent",
+            "anesthesia_record",
+            "surgery_record",
+            "surgery_safecheck_record",
+            "exam_master",
+            "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
+            "inpat_drug_order",
+            "inpat_nondrug_order",
+        )
+    )
+}
+_MAX_COMPLETION_TOKENS = 4_096
 
 _DOCUMENT_LIMITS = {
     "admission_record": 1,
@@ -200,7 +242,10 @@ def _selected_documents(
     }
     documents: list[dict[str, Any]] = []
     remaining = _MAX_TOTAL_CHARS
-    for source_type in sorted(requested_sources):
+    for source_type in sorted(
+        requested_sources,
+        key=lambda value: (_SOURCE_PRIORITY.get(value, len(_SOURCE_PRIORITY)), value),
+    ):
         rows = source_documents.get(source_type)
         if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
             continue
@@ -214,7 +259,10 @@ def _selected_documents(
             content = _text(raw_row)
             if not content or remaining <= 0:
                 continue
-            clipped = content[: min(_MAX_CHARS_PER_DOCUMENT, remaining)]
+            source_limit = _MAX_CHARS_BY_SOURCE.get(
+                source_type, _DEFAULT_MAX_CHARS_PER_DOCUMENT
+            )
+            clipped = content[: min(source_limit, remaining)]
             if not clipped:
                 continue
             document_id = str(raw_row.get("document_id") or raw_row.get("id") or f"{source_type}-{index + 1}").strip()
@@ -571,6 +619,7 @@ async def extract_luxian_0916_facts(
             _prompt(documents=documents, rule_ids=rule_ids),
             max_completion_tokens=_MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
+            response_format={"type": "json_object"},
         )
         choice = response["choices"][0]
         if choice.get("finish_reason") == "length":

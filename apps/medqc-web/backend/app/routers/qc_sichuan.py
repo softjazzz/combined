@@ -1658,8 +1658,12 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
     workspace = _sichuan_workspace_service()
     capture = capture_for_job(workspace, job_id)
     try:
-        get_batch_job = getattr(workspace, "get_batch_job", None)
-        job = get_batch_job(job_id=job_id) if callable(get_batch_job) else {}
+        get_batch_job_for_processing = getattr(workspace, "get_batch_job_for_processing", None)
+        job = (
+            get_batch_job_for_processing(job_id=job_id)
+            if callable(get_batch_job_for_processing)
+            else {}
+        )
         filters = job.get("filters") if isinstance(job, dict) and isinstance(job.get("filters"), dict) else {}
         if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0916_QC_RULE_SET_KEY:
             from ..services.luxian_0916.batch_worker import run_luxian_0916_batch_job

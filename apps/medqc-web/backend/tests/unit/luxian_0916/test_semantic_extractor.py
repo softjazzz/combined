@@ -62,7 +62,11 @@ async def test_extracts_only_minimal_target_documents_and_calls_model_once() -> 
     prompt, kwargs = calls[0]
     assert "F-1" in prompt and "S-1" in prompt
     assert "D-1" not in prompt and "L-1" not in prompt
-    assert kwargs == {"max_completion_tokens": 1600, "allow_length_retry": False}
+    assert kwargs == {
+        "max_completion_tokens": 4096,
+        "allow_length_retry": False,
+        "response_format": {"type": "json_object"},
+    }
     assert "病例特点" in prompt and "诊断依据及鉴别诊断" in prompt
     assert "手术同意书" in prompt and "麻醉同意书" in prompt
     assert "合规" in prompt and "不合规" in prompt
@@ -127,6 +131,55 @@ async def test_missing_readable_target_document_does_not_call_model() -> None:
         "document_count": 0,
         "llm_call_count": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_retains_admission_and_first_course_facts_for_realistic_document_lengths() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "semantic_facts": {
+                                    "LX0916-003": {
+                                        "state": "complete",
+                                        "document_id": "A-1",
+                                        "source_type": "admission_record",
+                                    },
+                                    "case_characteristic_quality": "adequate",
+                                },
+                                "event_facts": {},
+                                "document_facts": {},
+                                "discharge_facts": {},
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "admission_record": [
+                        {"document_id": "A-1", "content": "现病史完整。" * 300}
+                    ],
+                    "first_course_record": [
+                        {"document_id": "F-1", "content": "病例特点完整。" * 250}
+                    ],
+                }
+            }
+        },
+        rule_ids=("LX0916-003", "LX0916-011"),
+        generate=generate,
+    )
+
+    assert result["semantic_facts"]["LX0916-003"]["state"] == "complete"
+    assert result["semantic_facts"]["case_characteristic_quality"] == "adequate"
 
 
 @pytest.mark.asyncio
@@ -261,7 +314,7 @@ async def test_drops_incomplete_fact_from_truncated_document() -> None:
         evidence_payload={
             "programmatic_timeline": {
                 "documents": {
-                    "consent_form": [{"document_id": "AC-1", "content": "麻醉知情同意书。" * 100}]
+                    "consent_form": [{"document_id": "AC-1", "content": "麻醉知情同意书。" * 1000}]
                 }
             }
         },
@@ -343,7 +396,7 @@ async def test_removes_first_course_quality_when_its_only_selected_document_is_t
             "programmatic_timeline": {
                 "documents": {
                     "first_course_record": [
-                        {"document_id": "F-1", "content": "首次病程记录。" * 100}
+                        {"document_id": "F-1", "content": "首次病程记录。" * 1000}
                     ]
                 }
             }
@@ -392,7 +445,7 @@ async def test_removes_course_documentation_and_rationality_from_truncated_docum
             "programmatic_timeline": {
                 "documents": {
                     "daily_course_record": [
-                        {"document_id": "D-1", "content": "日常病程记录。" * 100}
+                        {"document_id": "D-1", "content": "日常病程记录。" * 1000}
                     ]
                 }
             }

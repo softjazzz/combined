@@ -126,6 +126,7 @@ def _event_anchor(event: Mapping[str, Any], *fields: str) -> Mapping[str, Any]:
     return {
         "event_type": str(event.get("event_type") or ""),
         "event_id": str(event.get("event_id") or ""),
+        "document_type": str(event.get("source_type") or ""),
         "document_id": str(event.get("document_id") or ""),
         "fields": list(fields),
     }

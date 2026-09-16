@@ -1318,9 +1318,12 @@ async def test_workspace_worker_dispatches_exact_luxian_0916_key_without_calling
     from app.services.qc_diagnostics import support_store
 
     class _DispatchWorkspace:
-        def get_batch_job(self, *, job_id: str):
+        def get_batch_job_for_processing(self, *, job_id: str):
             assert job_id == "job-0916"
             return {"filters": {"rule_set_key": "luxian_0916_qc_v1"}}
+
+        def get_batch_job(self, *, job_id: str, created_by: str):
+            raise AssertionError("worker dispatch must use the owner-free processing lookup")
 
     independent_calls = []
     legacy_calls = []
