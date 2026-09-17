@@ -297,6 +297,26 @@ def _bool_documentation(
     return values, None
 
 
+def _confirmed_documentation_defects(
+    events: tuple[Mapping[str, Any], ...], fields: tuple[str, ...]
+) -> tuple[list[str], tuple[Mapping[str, Any], ...]]:
+    """只归集已到检查时点且明确缺项的事件，其他事件不能遮蔽已确定的问题。"""
+
+    failed_fields: list[str] = []
+    anchors: list[Mapping[str, Any]] = []
+    for event in events:
+        if event.get("evaluation_window_mature") is not True:
+            continue
+        documentation = event.get("documentation")
+        if not isinstance(documentation, Mapping):
+            continue
+        event_defects = tuple(field for field in fields if documentation.get(field) is False)
+        if event_defects:
+            failed_fields.extend(field for field in event_defects if field not in failed_fields)
+            anchors.append(_event_anchor(event, *event_defects))
+    return failed_fields, tuple(anchors)
+
+
 def _evaluate_015(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     rows, early = _event_rows(context, "LX0916-015")
     if early:
@@ -306,28 +326,28 @@ def _evaluate_015(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     if early:
         return early
     assert events is not None
-    _, early = _maturity("LX0916-015", events)
-    if early:
-        return early
-    if any(event.get("evaluation_window_mature") is False for event in events):
-        return _not_mature_result("LX0916-015", events)
-    _, early = _documentation("LX0916-015", events, ("record_present", "complete"))
-    if early:
-        return early
-    values, early = _bool_documentation("LX0916-015", events, ("record_present", "complete"))
-    if early:
-        return early
-    assert values is not None
-    defects = [key for key, value in values.items() if not value]
+    fields = ("record_present", "complete")
+    defects, defect_anchors = _confirmed_documentation_defects(events, fields)
     if defects:
         return _result(
             "LX0916-015", "non_compliant", "disease_change_documentation_incomplete",
             "重要病情变化的病程记录缺失或不完整。",
             suggestion="补记重要病情变化及其完整病程记录。",
-            anchors=tuple(_event_anchor(event, *defects) for event in events),
+            anchors=defect_anchors,
             diagnostics={"failed_facts": defects},
         )
-    return _result("LX0916-015", "compliant", "disease_change_documentation_complete", "重要病情变化已记录且内容完整。", anchors=tuple(_event_anchor(event, "record_present", "complete") for event in events))
+    _, early = _maturity("LX0916-015", events)
+    if early:
+        return early
+    if any(event.get("evaluation_window_mature") is False for event in events):
+        return _not_mature_result("LX0916-015", events)
+    _, early = _documentation("LX0916-015", events, fields)
+    if early:
+        return early
+    _, early = _bool_documentation("LX0916-015", events, fields)
+    if early:
+        return early
+    return _result("LX0916-015", "compliant", "disease_change_documentation_complete", "重要病情变化已记录且内容完整。", anchors=tuple(_event_anchor(event, *fields) for event in events))
 
 
 def _evaluate_016(context: Mapping[str, Any]) -> Luxian0916RuleResult:
@@ -339,22 +359,21 @@ def _evaluate_016(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     if early:
         return early
     assert events is not None
+    fields = ("analysis_recorded", "specific_management_recorded")
+    defects, defect_anchors = _confirmed_documentation_defects(events, fields)
+    if defects:
+        return _result("LX0916-016", "non_compliant", "disease_change_analysis_or_management_missing", "病情变化未记录分析判断或具体处理意见。", suggestion="补充病情变化的分析判断和具体处理意见。", anchors=defect_anchors, diagnostics={"failed_facts": defects})
     _, early = _maturity("LX0916-016", events)
     if early:
         return early
     if any(event.get("evaluation_window_mature") is False for event in events):
         return _not_mature_result("LX0916-016", events)
-    fields = ("analysis_recorded", "specific_management_recorded")
     _, early = _documentation("LX0916-016", events, fields)
     if early:
         return early
-    values, early = _bool_documentation("LX0916-016", events, fields)
+    _, early = _bool_documentation("LX0916-016", events, fields)
     if early:
         return early
-    assert values is not None
-    defects = [key for key, value in values.items() if not value]
-    if defects:
-        return _result("LX0916-016", "non_compliant", "disease_change_analysis_or_management_missing", "病情变化未记录分析判断或具体处理意见。", suggestion="补充病情变化的分析判断和具体处理意见。", anchors=tuple(_event_anchor(event, *defects) for event in events), diagnostics={"failed_facts": defects})
     return _result("LX0916-016", "compliant", "disease_change_analysis_and_management_present", "病情变化已记录分析判断和具体处理意见。", anchors=tuple(_event_anchor(event, *fields) for event in events))
 
 

@@ -90,6 +90,43 @@ def test_event_rules_wait_for_mature_evaluation_window(rule_id):
     assert result.reason_code == "evaluation_window_not_mature"
 
 
+@pytest.mark.parametrize("other_maturity", [False, None])
+@pytest.mark.parametrize(
+    ("rule_id", "defect_documentation", "expected_reason"),
+    (
+        (
+            "LX0916-015",
+            {"record_present": False, "complete": True},
+            "disease_change_documentation_incomplete",
+        ),
+        (
+            "LX0916-016",
+            {"analysis_recorded": False, "specific_management_recorded": True},
+            "disease_change_analysis_or_management_missing",
+        ),
+    ),
+)
+def test_confirmed_mature_defect_is_not_hidden_by_later_immature_event(
+    rule_id, defect_documentation, expected_reason, other_maturity
+):
+    first = _event(rule_id, event_id="mature-defect", document_id="D-defect", documentation=defect_documentation)
+    second = _event(
+        rule_id,
+        event_id="immature",
+        document_id="D-immature",
+        evaluation_window_mature=other_maturity,
+        documentation={},
+    )
+    context = {"event_facts": {"disease_changes": [first, second]}}
+
+    result = _run(rule_id, context)
+
+    assert result.status == "non_compliant"
+    assert result.reason_code == expected_reason
+    assert [anchor["document_id"] for anchor in result.document_anchors] == ["D-defect"]
+    assert len(result.decision_facts["events"]) == 2
+
+
 @pytest.mark.parametrize(
     ("source_state", "expected_reason", "expected_findings"),
     (
