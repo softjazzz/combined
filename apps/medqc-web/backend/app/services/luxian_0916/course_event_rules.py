@@ -53,7 +53,7 @@ def _decision_facts_from_context(
             "event_key": event_key,
             "source_state": (
                 source_state
-                if source_state in {"selected", "not_selected"}
+                if source_state in {"selected", "not_selected", "partial"}
                 else "unverified"
             ),
             "events": [],
@@ -63,7 +63,7 @@ def _decision_facts_from_context(
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
         return {"event_key": event_key, "source_state": "invalid", "events": []}
 
-    source_state = "available"
+    source_state = "partial" if source_state == "partial" else "available"
     documentation_fields = _DOCUMENTATION_FIELDS_BY_RULE.get(rule_id, ())
     serialized_events: list[Mapping[str, Any]] = []
     for event in rows:
@@ -138,6 +138,8 @@ def _event_rows(
     if not isinstance(facts, Mapping) or event_key not in facts:
         states = context.get("event_source_state_by_rule")
         source_state = states.get(rule_id) if isinstance(states, Mapping) else None
+        if source_state == "partial":
+            return None, _partial_event_source_result(rule_id)
         if source_state == "selected":
             reason_code = "event_fact_unavailable"
             findings = "该规则相关资料已纳入本次受控核对，但未形成可验证的事件事实，无法确认是否触发病程记录检查。"
@@ -267,6 +269,17 @@ def _not_mature_result(rule_id: str, events: tuple[Mapping[str, Any], ...]) -> L
     )
 
 
+def _partial_event_source_result(rule_id: str) -> Luxian0916RuleResult:
+    return _result(
+        rule_id,
+        "data_quality_gap",
+        "event_source_partial",
+        "本次仅核对部分病程资料，无法确认是否还有其他触发事件或整体记录是否符合要求。",
+        suggestion="补齐未纳入或截断的病程资料后重新质控。",
+        diagnostics={"event_source_state": "partial"},
+    )
+
+
 def _bool_documentation(
     rule_id: str,
     events: tuple[Mapping[str, Any], ...],
@@ -322,9 +335,14 @@ def _evaluate_015(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     if early:
         return early
     assert rows is not None
-    events, early = _triggered_events("LX0916-015", rows)
-    if early:
-        return early
+    states = context.get("event_source_state_by_rule")
+    partial = isinstance(states, Mapping) and states.get("LX0916-015") == "partial"
+    if partial:
+        events = tuple(row for row in rows if row.get("trigger_confirmed") is True)
+    else:
+        events, early = _triggered_events("LX0916-015", rows)
+        if early:
+            return early
     assert events is not None
     fields = ("record_present", "complete")
     defects, defect_anchors = _confirmed_documentation_defects(events, fields)
@@ -336,6 +354,8 @@ def _evaluate_015(context: Mapping[str, Any]) -> Luxian0916RuleResult:
             anchors=defect_anchors,
             diagnostics={"failed_facts": defects},
         )
+    if partial:
+        return _partial_event_source_result("LX0916-015")
     _, early = _maturity("LX0916-015", events)
     if early:
         return early
@@ -355,14 +375,21 @@ def _evaluate_016(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     if early:
         return early
     assert rows is not None
-    events, early = _triggered_events("LX0916-016", rows)
-    if early:
-        return early
+    states = context.get("event_source_state_by_rule")
+    partial = isinstance(states, Mapping) and states.get("LX0916-016") == "partial"
+    if partial:
+        events = tuple(row for row in rows if row.get("trigger_confirmed") is True)
+    else:
+        events, early = _triggered_events("LX0916-016", rows)
+        if early:
+            return early
     assert events is not None
     fields = ("analysis_recorded", "specific_management_recorded")
     defects, defect_anchors = _confirmed_documentation_defects(events, fields)
     if defects:
         return _result("LX0916-016", "non_compliant", "disease_change_analysis_or_management_missing", "病情变化未记录分析判断或具体处理意见。", suggestion="补充病情变化的分析判断和具体处理意见。", anchors=defect_anchors, diagnostics={"failed_facts": defects})
+    if partial:
+        return _partial_event_source_result("LX0916-016")
     _, early = _maturity("LX0916-016", events)
     if early:
         return early

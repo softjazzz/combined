@@ -268,6 +268,9 @@ _COURSE_EVENT_SOURCE_TYPES_BY_KEY: dict[str, frozenset[str]] = {
 _EVENT_SELECTION_RULE_IDS = frozenset(
     f"LX0916-{number:03d}" for number in range(15, 21)
 )
+_PARTIAL_DAILY_COURSE_SELECTION_RULE_IDS = frozenset(
+    {"LX0916-015", "LX0916-016"}
+)
 
 Generate = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -308,26 +311,54 @@ def _empty_facts(
 
 def _event_source_state_by_rule(
     *,
+    evidence_payload: Mapping[str, Any],
     documents: Sequence[Mapping[str, Any]],
     rule_ids: Sequence[str],
 ) -> dict[str, str]:
-    """记录事件规则目标文书是否进入本次受控输入，不接受模型输出。"""
+    """记录目标文书的选择状态；015/016 额外核对当前来源行的覆盖范围。"""
 
     selected_sources = {
         str(document.get("source_type") or "").strip()
         for document in documents
     }
     selected_sources.discard("")
-    return {
-        rule_id: (
-            "selected"
-            if selected_sources.intersection(_SOURCES_BY_RULE[rule_id])
-            else "not_selected"
+    timeline = _mapping(evidence_payload.get("programmatic_timeline"))
+    source_documents = _mapping(timeline.get("documents"))
+    raw_daily_course_records = source_documents.get("daily_course_record")
+    raw_daily_course_count = (
+        len(raw_daily_course_records)
+        if isinstance(raw_daily_course_records, Sequence)
+        and not isinstance(raw_daily_course_records, (str, bytes))
+        else 0
+    )
+    selected_daily_course_records = [
+        document
+        for document in documents
+        if document.get("source_type") == "daily_course_record"
+    ]
+    daily_course_selection_is_partial = bool(selected_daily_course_records) and (
+        raw_daily_course_count > len(selected_daily_course_records)
+        or any(
+            bool(document.get("truncated"))
+            for document in selected_daily_course_records
         )
-        for raw_rule_id in rule_ids
-        for rule_id in (str(raw_rule_id).strip().upper(),)
-        if rule_id in _EVENT_SELECTION_RULE_IDS
-    }
+    )
+
+    states: dict[str, str] = {}
+    for raw_rule_id in rule_ids:
+        rule_id = str(raw_rule_id).strip().upper()
+        if rule_id not in _EVENT_SELECTION_RULE_IDS:
+            continue
+        if not selected_sources.intersection(_SOURCES_BY_RULE[rule_id]):
+            states[rule_id] = "not_selected"
+        elif (
+            rule_id in _PARTIAL_DAILY_COURSE_SELECTION_RULE_IDS
+            and daily_course_selection_is_partial
+        ):
+            states[rule_id] = "partial"
+        else:
+            states[rule_id] = "selected"
+    return states
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -900,6 +931,7 @@ async def extract_luxian_0916_facts(
 
     documents = _selected_documents(evidence_payload, rule_ids)
     event_source_state_by_rule = _event_source_state_by_rule(
+        evidence_payload=evidence_payload,
         documents=documents,
         rule_ids=rule_ids,
     )

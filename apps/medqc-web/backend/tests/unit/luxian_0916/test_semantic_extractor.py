@@ -1400,6 +1400,87 @@ async def test_returns_event_source_state_for_normal_extraction() -> None:
 
 
 @pytest.mark.asyncio
+async def test_marks_015_and_016_partial_when_daily_course_records_exceed_selection_limit(
+) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": _content()}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": f"D-{index}", "content": f"第{index}份病程记录。"}
+                        for index in range(1, 6)
+                    ]
+                }
+            }
+        },
+        rule_ids=("LX0916-015", "LX0916-016", "LX0916-017"),
+        generate=generate,
+    )
+
+    assert result["event_source_state_by_rule"] == {
+        "LX0916-015": "partial",
+        "LX0916-016": "partial",
+        "LX0916-017": "selected",
+    }
+
+
+@pytest.mark.asyncio
+async def test_keeps_015_and_016_selected_when_all_daily_course_records_are_selected(
+) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": _content()}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": f"D-{index}", "content": f"第{index}份病程记录。"}
+                        for index in range(1, 5)
+                    ]
+                }
+            }
+        },
+        rule_ids=("LX0916-015", "LX0916-016"),
+        generate=generate,
+    )
+
+    assert result["event_source_state_by_rule"] == {
+        "LX0916-015": "selected",
+        "LX0916-016": "selected",
+    }
+
+
+@pytest.mark.asyncio
+async def test_marks_015_and_016_partial_when_a_selected_daily_course_record_is_truncated(
+) -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {"choices": [{"message": {"content": _content()}}]}
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": "D-1", "content": "病程记录。" * 1000}
+                    ]
+                }
+            }
+        },
+        rule_ids=("LX0916-015", "LX0916-016"),
+        generate=generate,
+    )
+
+    assert result["event_source_state_by_rule"] == {
+        "LX0916-015": "partial",
+        "LX0916-016": "partial",
+    }
+
+
+@pytest.mark.asyncio
 async def test_returns_event_source_state_when_semantic_extraction_is_invalid() -> None:
     async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
         return {"choices": [{"message": {"content": "not json"}}]}

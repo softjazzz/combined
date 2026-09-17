@@ -127,6 +127,34 @@ def test_confirmed_mature_defect_is_not_hidden_by_later_immature_event(
     assert len(result.decision_facts["events"]) == 2
 
 
+@pytest.mark.parametrize("rule_id", ("LX0916-015", "LX0916-016"))
+@pytest.mark.parametrize("event_kind", ("none", "complete", "defect"))
+def test_partial_course_coverage_preserves_only_confirmed_defects(rule_id, event_kind):
+    key = _EVENT_KEY_BY_RULE[rule_id]
+    events = []
+    if event_kind != "none":
+        documentation = dict(_DOCUMENTATION_BY_RULE[rule_id])
+        if event_kind == "defect":
+            first_field = next(iter(documentation))
+            documentation[first_field] = False
+        events.append(_event(rule_id, document_id="selected-document", documentation=documentation))
+    result = _run(
+        rule_id,
+        {
+            "event_facts": {key: events},
+            "event_source_state_by_rule": {rule_id: "partial"},
+        },
+    )
+
+    if event_kind == "defect":
+        assert result.status == "non_compliant"
+        assert [anchor["document_id"] for anchor in result.document_anchors] == ["selected-document"]
+    else:
+        assert result.status == "data_quality_gap"
+        assert result.reason_code == "event_source_partial"
+    assert result.decision_facts["source_state"] == "partial"
+
+
 @pytest.mark.parametrize(
     ("source_state", "expected_reason", "expected_findings"),
     (
