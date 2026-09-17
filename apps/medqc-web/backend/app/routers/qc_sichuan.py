@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from datetime import datetime, timezone
 
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
@@ -553,10 +554,19 @@ def _hydrate_luxian_canonical_batch_job_or_409(
 ) -> Dict[str, Any]:
     """详情读取只消费通过 Envelope 校验的 Canonical 结果。"""
 
-    if str(job.get("status") or "").strip().lower() != "completed":
+    status = str(job.get("status") or "").strip().lower()
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    allow_partial = (
+        status == "failed"
+        and str(summary.get("execution_status") or "").strip().lower() == "partial_failed"
+    )
+    if status != "completed" and not allow_partial:
         return job
     try:
-        canonical_items = workspace._load_batch_job_canonical_items(job=job)
+        canonical_items = workspace._load_batch_job_canonical_items(
+            job=job,
+            allow_partial=allow_partial,
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
@@ -2144,9 +2154,14 @@ async def get_workspace_batch_job(
 ):
     workspace = _sichuan_workspace_service()
     shared_read = False
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    job = await run_in_threadpool(
+        workspace.get_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
     if not job:
-        job = _resolve_shared_sample_pool_latest_job(
+        job = await run_in_threadpool(
+            _resolve_shared_sample_pool_latest_job,
             workspace=workspace,
             job_id=job_id,
             current_user=current_user,
@@ -2156,7 +2171,8 @@ async def get_workspace_batch_job(
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
-        job = _hydrate_luxian_canonical_batch_job_or_409(
+        job = await run_in_threadpool(
+            _hydrate_luxian_canonical_batch_job_or_409,
             workspace=workspace,
             job=job,
         )
@@ -2165,11 +2181,11 @@ async def get_workspace_batch_job(
             response_data = _project_luxian_0916_shared_job(job)
         else:
             response_data = {
-                **_project_customer_safe_batch_job_or_409(job),
+                **await run_in_threadpool(_project_customer_safe_batch_job_or_409, job),
                 "read_only": True,
             }
     else:
-        response_data = _workspace_batch_response_item(job)
+        response_data = await run_in_threadpool(_workspace_batch_response_item, job)
     return success_response(
         data=response_data,
         message="获取四川规则批量任务详情成功",
@@ -2190,7 +2206,8 @@ async def get_latest_workspace_record_result(
     """返回全院范围内、同一三坐标病历的最新 LX0609 保存结果。"""
 
     workspace = _sichuan_workspace_service()
-    result = workspace.get_latest_luxian_0609_record_result(
+    result = await run_in_threadpool(
+        workspace.get_latest_luxian_0609_record_result,
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=record_id,

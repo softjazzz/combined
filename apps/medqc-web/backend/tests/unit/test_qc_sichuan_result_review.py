@@ -45,6 +45,7 @@ class _WorkspaceReviewStub:
         self,
         *,
         job: dict[str, Any],
+        allow_partial: bool = False,
     ) -> list[dict[str, Any]]:
         assert self.job is not None and job["id"] == self.job["id"]
         self.canonical_load_count += 1
@@ -57,7 +58,12 @@ class _CanonicalReadStub:
     def __init__(self, items: list[dict[str, Any]]) -> None:
         self.items = items
 
-    def _load_batch_job_canonical_items(self, *, job: dict[str, Any]):
+    def _load_batch_job_canonical_items(
+        self,
+        *,
+        job: dict[str, Any],
+        allow_partial: bool = False,
+    ):
         assert job["id"] == "job-canonical"
         return list(self.items)
 
@@ -148,6 +154,34 @@ def test_luxian_0609_batch_detail_ignores_stale_internal_rule_results_after_cano
     assert projected["summary"]["status_counts"] == {"compliant": 1}
     assert projected["summary"]["result_count"] == 1
     assert projected["items"][0]["rule_id"] == "LX0609-001"
+
+
+def test_luxian_0609_partial_failed_detail_uses_available_canonical_records() -> None:
+    canonical_item = _canonical_item(
+        rule_id="LX0609-001",
+        status="non_compliant",
+        reason_code="requirement_not_satisfied",
+    )
+    raw_job = {
+        "id": "job-canonical",
+        "status": "failed",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "items": [{"rule_id": "LX0609-001", "status": "technical_error"}],
+        "rule_results": [{"rule_id": "LX0609-001", "items": []}],
+        "summary": {
+            "execution_status": "partial_failed",
+            "rule_results": [{"rule_id": "LX0609-001", "items": []}],
+        },
+    }
+
+    hydrated = qc_sichuan._hydrate_luxian_canonical_batch_job_or_409(
+        workspace=_CanonicalReadStub([canonical_item]),
+        job=raw_job,
+    )
+
+    assert hydrated["items"] == [canonical_item]
+    assert hydrated["rule_results"] == []
+    assert "rule_results" not in hydrated["summary"]
 
 def test_projected_luxian_job_still_uses_safe_workspace_response() -> None:
     response = qc_sichuan._workspace_batch_response_item(

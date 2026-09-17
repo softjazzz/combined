@@ -702,10 +702,18 @@ class CanonicalResultStore:
         *,
         job: Dict[str, Any],
         session_factory: Callable[[], Session],
+        allow_partial: bool = False,
     ) -> List[Dict[str, Any]]:
         job_id = _safe_text(job.get("id"))
         created_by = _safe_text(job.get("created_by"))
-        if not job_id or not created_by or _safe_text(job.get("status")) != "completed":
+        status = _safe_text(job.get("status"))
+        summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+        is_partial_failure = (
+            allow_partial
+            and status == "failed"
+            and _safe_text(summary.get("execution_status")) == "partial_failed"
+        )
+        if not job_id or not created_by or (status != "completed" and not is_partial_failure):
             raise ValueError("批量质控任务尚未形成可导出的 Canonical 结果")
         filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
         rule_set_key = _safe_text(filters.get("rule_set_key"), LUXIAN_0609_RULE_SET_KEY)
@@ -781,8 +789,17 @@ class CanonicalResultStore:
                 canonical_items.append(normalized_item)
 
         actual_refs = set(rows_by_ref)
-        if expected_refs and actual_refs != expected_refs:
+        if expected_refs and (
+            (not is_partial_failure and actual_refs != expected_refs)
+            or (is_partial_failure and not actual_refs.issubset(expected_refs))
+        ):
             raise ValueError("批量质控 Canonical Envelope 病历集合不完整")
-        if not envelope_rows and int(job.get("total_records") or 0) > 0:
+        if is_partial_failure and len(actual_refs) != _to_int(job.get("success_count")):
+            raise ValueError("批量质控 Canonical Envelope 成功病历数量不一致")
+        if (
+            not envelope_rows
+            and int(job.get("total_records") or 0) > 0
+            and not (is_partial_failure and _to_int(job.get("success_count")) == 0)
+        ):
             raise ValueError("批量质控 Canonical Envelope 缺失")
         return canonical_items

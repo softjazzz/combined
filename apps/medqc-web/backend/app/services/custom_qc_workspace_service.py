@@ -4830,12 +4830,14 @@ class CustomQCWorkspaceService:
         *,
         job: Dict[str, Any],
         session_factory: Optional[Callable[[], Session]] = None,
+        allow_partial: bool = False,
     ) -> List[Dict[str, Any]]:
         return CanonicalResultStore(
             getattr(self, "_record_result_envelope_table", None)
         ).load_root_job_items(
             job=job,
             session_factory=session_factory or _session,
+            allow_partial=allow_partial,
         )
 
     def export_batch_job_html(self, *, job: Dict[str, Any]) -> str:

@@ -99,6 +99,7 @@ export function useSichuanBatchJobs() {
 
   let batchJobPollTimer: ReturnType<typeof setInterval> | number | null = null
   let batchJobPollTick = 0
+  let batchJobPollInFlight = false
   const lastObservedJobStatus = reactive<Record<string, string>>({})
 
   async function loadBatchJobs() {
@@ -159,15 +160,21 @@ export function useSichuanBatchJobs() {
     stopBatchJobPolling()
     batchJobPollTick = 0
     batchJobPollTimer = window.setInterval(async () => {
-      batchJobPollTick += 1
-      const shouldRefreshDebugSnapshot =
-        !batchJobDebugSnapshot.value || batchJobPollTick % DEBUG_SNAPSHOT_POLL_EVERY_N_TICKS === 0
-      const current = await fetchBatchJobDetail(jobId, {
-        includeDebugSnapshot: shouldRefreshDebugSnapshot,
-      })
-      await loadBatchJobs()
-      if (!current || !isBatchJobPollingActive(current)) {
-        stopBatchJobPolling()
+      if (batchJobPollInFlight) return
+      batchJobPollInFlight = true
+      try {
+        batchJobPollTick += 1
+        const shouldRefreshDebugSnapshot =
+          !batchJobDebugSnapshot.value || batchJobPollTick % DEBUG_SNAPSHOT_POLL_EVERY_N_TICKS === 0
+        const current = await fetchBatchJobDetail(jobId, {
+          includeDebugSnapshot: shouldRefreshDebugSnapshot,
+        })
+        await loadBatchJobs()
+        if (!current || !isBatchJobPollingActive(current)) {
+          stopBatchJobPolling()
+        }
+      } finally {
+        batchJobPollInFlight = false
       }
     }, BATCH_JOB_POLL_INTERVAL_MS)
   }

@@ -217,6 +217,31 @@ describe('useSichuanBatchJobs', () => {
     expect(batchJobDebugSnapshot.value).toBeNull()
   })
 
+  it('上一轮详情请求未完成时不应叠加新的轮询请求', async () => {
+    const fakeTimer = {} as ReturnType<typeof window.setInterval>
+    let pollCallback: (() => Promise<void>) | undefined
+    vi.spyOn(window, 'setInterval').mockImplementation((callback) => {
+      pollCallback = callback as () => Promise<void>
+      return fakeTimer
+    })
+    let resolveDetail: ((value: typeof batchJobResponse) => void) | undefined
+    getSichuanWorkspaceBatchJobMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDetail = resolve
+        }),
+    )
+
+    const { startBatchJobPolling } = useSichuanBatchJobs()
+    startBatchJobPolling('job-1')
+    const firstTick = pollCallback?.()
+    const overlappingTick = pollCallback?.()
+
+    expect(getSichuanWorkspaceBatchJobMock).toHaveBeenCalledTimes(1)
+    resolveDetail?.(batchJobResponse)
+    await Promise.all([firstTick, overlappingTick])
+  })
+
   it('自动补跑排队的短暂 failed 状态不停止轮询也不发送失败通知', async () => {
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval').mockImplementation(() => {})
     const fakeTimer = {} as ReturnType<typeof window.setInterval>

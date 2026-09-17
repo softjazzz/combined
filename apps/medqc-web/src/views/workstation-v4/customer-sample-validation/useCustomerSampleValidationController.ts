@@ -272,6 +272,7 @@ export function useCustomerSampleValidationController() {
   } | null>(null)
   let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
   let batchJobPollTick = 0
+  let batchJobPollInFlight = false
   let batchJobDebugRequestId = 0
   let currentQcTaskPollTimer: ReturnType<typeof setInterval> | null = null
   let luxianAggregatePollTimer: ReturnType<typeof setInterval> | null = null
@@ -2922,28 +2923,34 @@ export function useCustomerSampleValidationController() {
   function startBatchJobPolling(jobId: string) {
     stopBatchJobPolling()
     batchJobPollTimer = setInterval(async () => {
+      if (batchJobPollInFlight) return
       if (!batchResultOpen.value) {
         stopBatchJobPolling()
         return
       }
-      batchJobPollTick += 1
-      const result = await getSichuanWorkspaceBatchJob(jobId)
-      if (!result.success || !result.data) {
-        if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
-          stopBatchJobPolling()
-          markBatchJobReadFailure(jobId, result.message)
+      batchJobPollInFlight = true
+      try {
+        batchJobPollTick += 1
+        const result = await getSichuanWorkspaceBatchJob(jobId)
+        if (!result.success || !result.data) {
+          if (result.message?.includes(LEGACY_RESULT_CONTRACT_ERROR)) {
+            stopBatchJobPolling()
+            markBatchJobReadFailure(jobId, result.message)
+          }
+          return
         }
-        return
-      }
-      batchJobDetail.value = result.data
-      updateCurrentQcTask(result.data)
-      if (batchJobPollTick % 3 === 0 || !isBatchJobRunning(result.data)) {
-        void fetchBatchJobDebugSnapshot(jobId)
-      }
-      if (!isBatchJobRunning(result.data)) {
-        stopBatchJobPolling()
-        await loadPools()
-        await loadRecords()
+        batchJobDetail.value = result.data
+        updateCurrentQcTask(result.data)
+        if (batchJobPollTick % 3 === 0 || !isBatchJobRunning(result.data)) {
+          void fetchBatchJobDebugSnapshot(jobId)
+        }
+        if (!isBatchJobRunning(result.data)) {
+          stopBatchJobPolling()
+          await loadPools()
+          await loadRecords()
+        }
+      } finally {
+        batchJobPollInFlight = false
       }
     }, 3000)
   }
