@@ -1669,6 +1669,13 @@ async def run_sichuan_workspace_batch_job(
             }
 
         def _is_cancelled() -> bool:
+            lightweight_check = getattr(
+                workspace,
+                "is_batch_job_canceled_or_missing",
+                None,
+            )
+            if callable(lightweight_check):
+                return bool(lightweight_check(job_id=job_id))
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
             if not latest:
                 return True
@@ -1968,17 +1975,17 @@ async def run_sichuan_workspace_batch_job(
                 trace_state = {
                     "completed_batches": 0,
                     "completed_executor_keys": set(),
+                    "finished_executor_keys": set(),
                     "active_executor_keys": set(),
                     "total_batches": len(executor_batches),
                     "completed_rule_count": 0,
                     "total_rule_count": len(active_rule_ids),
+                    "terminal_state_persisted": False,
                 }
 
                 def _execution_trace_sink(trace: Dict[str, Any]) -> None:
-                    """仅回写族执行阶段，未完成Canonical结果绝不写入任务详情。"""
+                    """族阶段先在内存合并，每份病历只持久化一次终态。"""
                     try:
-                        if _is_cancelled():
-                            return
                         event = str((trace or {}).get("event") or "").strip().lower()
                         executor_key = str(
                             (trace or {}).get("executor_key") or ""
@@ -1989,6 +1996,7 @@ async def run_sichuan_workspace_batch_job(
                             trace_state["active_executor_keys"].add(executor_key)
                         elif event == "completed":
                             trace_state["active_executor_keys"].discard(executor_key)
+                            trace_state["finished_executor_keys"].add(executor_key)
                             if executor_key not in trace_state["completed_executor_keys"]:
                                 trace_state["completed_executor_keys"].add(executor_key)
                                 trace_state["completed_batches"] = min(
@@ -2008,6 +2016,16 @@ async def run_sichuan_workspace_batch_job(
                         else:
                             # failed 只是可见的执行失败阶段，绝不能伪装为完成进度。
                             trace_state["active_executor_keys"].discard(executor_key)
+                            trace_state["finished_executor_keys"].add(executor_key)
+                        should_persist_terminal_state = bool(
+                            not trace_state["terminal_state_persisted"]
+                            and trace_state["total_batches"] > 0
+                            and len(trace_state["finished_executor_keys"])
+                            >= trace_state["total_batches"]
+                        )
+                        if not should_persist_terminal_state:
+                            return
+                        trace_state["terminal_state_persisted"] = True
                         workspace.update_batch_job_progress(
                             job_id=job_id,
                             step_key="run",
@@ -3235,27 +3253,10 @@ async def run_sichuan_workspace_batch_job(
                     )
                 summary_patch = {
                     **summary_patch,
-                    "rule_results": _build_rule_results_snapshot(
-                        processed_records_count=processed_records_count,
-                        final=False,
-                    ),
                     "stream_state": _build_stream_state(record_result, processed_records_count),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
                 if is_failed_rule_retry:
-                    summary_patch["rule_results"] = merge_failed_rule_retry_rule_results(
-                        base_rule_results=list(
-                            retry_base_summary.get("rule_results") or []
-                        ),
-                        retry_rule_results=list(summary_patch["rule_results"]),
-                        merged_items=progress_items,
-                        merged_failures=progress_failures,
-                        total_records=int(
-                            retry_base_summary.get("total_records")
-                            or current.get("total_records")
-                            or total_records
-                        ),
-                    )
                     summary_patch["stream_state"] = {
                         **dict(summary_patch.get("stream_state") or {}),
                         "partial_item_count": len(progress_items),
@@ -3281,7 +3282,6 @@ async def run_sichuan_workspace_batch_job(
         if enable_incremental_results:
             initial_progress_patch = {
                 **initial_progress_patch,
-                "rule_results": _build_rule_results_snapshot(processed_records_count=0, final=False),
                 "stream_state": {
                     "enabled": True,
                     "processed_records": 0,
@@ -3299,23 +3299,12 @@ async def run_sichuan_workspace_batch_job(
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
             if is_failed_rule_retry:
-                initial_progress_patch["rule_results"] = (
-                    merge_failed_rule_retry_rule_results(
-                        base_rule_results=list(
-                            retry_base_summary.get("rule_results") or []
-                        ),
-                        retry_rule_results=list(
-                            initial_progress_patch["rule_results"]
-                        ),
-                        merged_items=retry_base_items,
-                        merged_failures=retry_base_failures,
-                        total_records=int(
-                            retry_base_summary.get("total_records")
-                            or current.get("total_records")
-                            or total_records
-                        ),
-                    )
-                )
+                # 自动补跑期间页面仍可从顶层 items 读取已完成结果；清空历史
+                # 嵌套副本和性能明细，避免每次进度更新重复序列化几十 MB。
+                # retry_base_summary 已在本次执行内存中保留，最终汇总会完整恢复。
+                initial_progress_patch["rule_results"] = []
+                initial_progress_patch["performance_profile"] = {}
+                initial_progress_patch["last_retry_performance_profile"] = {}
 
         workspace.update_batch_job_progress(
             job_id=job_id,
@@ -3732,6 +3721,16 @@ async def run_sichuan_workspace_batch_job(
                     },
                 }
             )
+        aggregate_progress_summary = {
+            key: value
+            for key, value in summary.items()
+            if key
+            not in {
+                "rule_results",
+                "performance_profile",
+                "last_retry_performance_profile",
+            }
+        }
         workspace.update_batch_job_progress(
             job_id=job_id,
             step_key="aggregate",
@@ -3739,7 +3738,12 @@ async def run_sichuan_workspace_batch_job(
             rule_count=total_rules,
             processed_records=total_records,
             total_records=total_records,
-            summary_patch=summary,
+            summary_patch={
+                **aggregate_progress_summary,
+                "rule_results": [],
+                "performance_profile": {},
+                "last_retry_performance_profile": {},
+            },
             progress_patch=_record_runtime_progress(total_records),
         )
         with diagnostic_capture.result_scope() if diagnostic_capture else nullcontext():

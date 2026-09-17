@@ -4286,13 +4286,17 @@ class CustomQCWorkspaceService:
         session = _session()
         try:
             row = session.execute(
-                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+                select(
+                    self._batch_job_table.c.id,
+                    self._batch_job_table.c.status,
+                    self._batch_job_table.c.summary_json,
+                ).where(self._batch_job_table.c.id == job_id)
             ).mappings().first()
             if not row:
                 return None
-            current = _row_to_batch_job(dict(row))
-            if current.get("status") == "canceled":
-                return current
+            current_status = _safe_text(row.get("status"))
+            if current_status == "canceled":
+                return {"id": job_id, "status": current_status}
 
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
@@ -4346,7 +4350,27 @@ class CustomQCWorkspaceService:
                 .values(**values)
             )
             session.commit()
-            return self.get_batch_job_for_processing(job_id=job_id)
+            # 进度写入是高频热路径。调用方只关心写入是否成功，不应在每次
+            # commit 后重新读取并反序列化可能达到几十 MB 的完整任务结果。
+            return {
+                "id": job_id,
+                "status": current_status,
+                "summary": merged_summary,
+            }
+        finally:
+            session.close()
+
+    def is_batch_job_canceled_or_missing(self, *, job_id: str) -> bool:
+        """取消轮询只读取状态列，避免反序列化完整批量结果。"""
+
+        session = _session()
+        try:
+            status = session.execute(
+                select(self._batch_job_table.c.status).where(
+                    self._batch_job_table.c.id == job_id
+                )
+            ).scalar_one_or_none()
+            return status is None or _safe_text(status) == "canceled"
         finally:
             session.close()
 

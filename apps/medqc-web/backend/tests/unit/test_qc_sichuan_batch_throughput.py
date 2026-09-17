@@ -3786,11 +3786,11 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sample_pool_id", [None, "pool-live-phase-001"])
-async def test_native_luxian_worker_persists_executor_phase_before_canonical_results(
+async def test_native_luxian_worker_coalesces_executor_phase_before_canonical_results(
     monkeypatch: pytest.MonkeyPatch,
     sample_pool_id: Optional[str],
 ) -> None:
-    """正式病历池与样本池的Native族阶段均实时回写，结果只在完整交付后写入。"""
+    """Native族阶段按病历合并为一次终态回写，结果只在完整交付后写入。"""
     workspace = _WorkspaceStub()
     original_update_progress = workspace.update_batch_job_progress
 
@@ -3828,6 +3828,14 @@ async def test_native_luxian_worker_persists_executor_phase_before_canonical_res
     observed_stream_states: List[Dict[str, Any]] = []
     observed_llm_contexts: List[Any] = []
 
+    def _capture_native_phase_updates(**kwargs: Any) -> None:
+        stream_state = dict((kwargs.get("summary_patch") or {}).get("stream_state") or {})
+        if stream_state.get("kind") == "native_executor_phase":
+            observed_stream_states.append(stream_state)
+        _update_incremental_progress(**kwargs)
+
+    workspace.update_batch_job_progress = _capture_native_phase_updates  # type: ignore[method-assign]
+
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
         observed_llm_contexts.append(current_llm_observation_context())
         trace_sink = kwargs.get("execution_trace_sink")
@@ -3839,9 +3847,6 @@ async def test_native_luxian_worker_persists_executor_phase_before_canonical_res
                 "rule_count": 1,
             }
         )
-        observed_stream_states.append(
-            dict((workspace.summary or {}).get("stream_state") or {})
-        )
         trace_sink(
             {
                 "event": "started",
@@ -3850,9 +3855,6 @@ async def test_native_luxian_worker_persists_executor_phase_before_canonical_res
             }
         )
         assert workspace.items == []
-        observed_stream_states.append(
-            dict((workspace.summary or {}).get("stream_state") or {})
-        )
         trace_sink(
             {
                 "event": "completed",
@@ -3861,9 +3863,6 @@ async def test_native_luxian_worker_persists_executor_phase_before_canonical_res
             }
         )
         assert workspace.items == []
-        observed_stream_states.append(
-            dict((workspace.summary or {}).get("stream_state") or {})
-        )
         return {
             "evaluation_results": [
                 {
@@ -3897,29 +3896,38 @@ async def test_native_luxian_worker_persists_executor_phase_before_canonical_res
     assert observed_llm_contexts[0].root_job_id == "parent-job-throughput-001"
     assert observed_llm_contexts[0].record_key_hash
     assert observed_llm_contexts[0].rule_set_key == qc_sichuan.LUXIAN_0609_RULE_SET_KEY
-    assert observed_stream_states, workspace.failed_records
-    assert observed_stream_states[0]["event"] == "failed"
-    assert observed_stream_states[0]["completed_batches"] == 0
-    assert observed_stream_states[0]["completed_rule_count"] == 0
-    assert observed_stream_states[0]["active_executor_keys"] == []
-    assert observed_stream_states[1] == {
+    assert observed_stream_states == [
+        {
         "enabled": True,
         "kind": "native_executor_phase",
-        "event": "started",
+        "event": "completed",
         "executor_key": "surgery_document",
-        "completed_batches": 0,
+        "completed_batches": 1,
         "total_batches": 2,
-        "active_executor_keys": ["surgery_document"],
+        "active_executor_keys": [],
         "record_id": "visit-001",
-        "updated_at": observed_stream_states[1]["updated_at"],
+        "updated_at": observed_stream_states[0]["updated_at"],
         "current_rule_count": 2,
-        "completed_rule_count": 0,
+        "completed_rule_count": 2,
         "total_rule_count": 2,
-    }
-    assert observed_stream_states[2]["event"] == "completed"
-    assert observed_stream_states[2]["completed_batches"] == 1
-    assert observed_stream_states[2]["completed_rule_count"] == 2
-    assert observed_stream_states[2]["active_executor_keys"] == []
+        }
+    ]
+    assert all(
+        "rule_results" not in update["summary_patch"]
+        for update in workspace.progress_updates
+        if update["step_key"] == "run"
+        and (update["summary_patch"].get("stream_state") or {}).get("kind")
+        != "native_executor_phase"
+    )
+    aggregate_updates = [
+        update for update in workspace.progress_updates if update["step_key"] == "aggregate"
+    ]
+    assert len(aggregate_updates) == 1
+    assert aggregate_updates[0]["summary_patch"]["rule_results"] == []
+    assert aggregate_updates[0]["summary_patch"]["performance_profile"] == {}
+    assert aggregate_updates[0]["summary_patch"]["last_retry_performance_profile"] == {}
+    assert workspace.summary["rule_results"]
+    assert workspace.summary["performance_profile"]
     assert workspace.job["status"] == "completed"
 
 

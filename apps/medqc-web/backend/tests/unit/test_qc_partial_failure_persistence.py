@@ -112,6 +112,77 @@ def test_partial_delivery_fails_closed_when_failure_identity_is_incomplete():
     assert selected_refs == ()
 
 
+def test_progress_update_does_not_reload_complete_result_payload(storage, monkeypatch):
+    service, engine, table = storage
+    with engine.begin() as connection:
+        connection.execute(
+            table.update()
+            .where(table.c.id == "partial-job")
+            .values(
+                summary_json=json.dumps({"existing": True}),
+                items_json=json.dumps([{"payload": "x" * 10000}]),
+            )
+        )
+
+    monkeypatch.setattr(
+        service,
+        "get_batch_job_for_processing",
+        lambda **_: pytest.fail("进度写入后不得重新加载完整任务结果"),
+    )
+
+    result = service.update_batch_job_progress(
+        job_id="partial-job",
+        step_key="run",
+        rule_index=1,
+        rule_count=2,
+        processed_records=1,
+        total_records=2,
+        summary_patch={"success_count": 1},
+    )
+
+    assert result == {
+        "id": "partial-job",
+        "status": "running",
+        "summary": {
+            "existing": True,
+            "success_count": 1,
+            "rule_count": 2,
+            "progress": {
+                "step_key": "run",
+                "rule_index": 1,
+                "rule_count": 2,
+                "processed_records": 1,
+                "total_records": 2,
+            },
+            "updated_at": result["summary"]["updated_at"],
+        },
+    }
+    with engine.connect() as connection:
+        row = connection.execute(
+            sa.select(table.c.items_json, table.c.summary_json).where(
+                table.c.id == "partial-job"
+            )
+        ).one()
+    assert len(json.loads(row.items_json)[0]["payload"]) == 10000
+    assert json.loads(row.summary_json)["progress"]["processed_records"] == 1
+
+
+def test_cancel_check_reads_only_task_status(storage):
+    service, engine, table = storage
+
+    assert service.is_batch_job_canceled_or_missing(job_id="partial-job") is False
+    assert service.is_batch_job_canceled_or_missing(job_id="missing-job") is True
+
+    with engine.begin() as connection:
+        connection.execute(
+            table.update()
+            .where(table.c.id == "partial-job")
+            .values(status="canceled")
+        )
+
+    assert service.is_batch_job_canceled_or_missing(job_id="partial-job") is True
+
+
 @pytest.mark.parametrize("all_failed", [False, True])
 def test_failed_job_persists_valid_items_and_operational_failure(storage, all_failed):
     service, engine, table = storage
