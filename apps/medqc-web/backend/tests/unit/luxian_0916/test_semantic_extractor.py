@@ -776,6 +776,40 @@ async def test_grounding_drops_event_facts_bound_to_unlocatable_document_id() ->
 
 
 @pytest.mark.asyncio
+async def test_unrequested_disease_changes_are_absent_from_prompt_and_output() -> None:
+    prompts: list[str] = []
+
+    async def generate(prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        prompts.append(prompt)
+        return {
+            "choices": [{"message": {"content": _content(extra={"event_facts": {
+                "disease_changes": [{
+                    "event_type": "disease_changes",
+                    "document_id": "D-1",
+                    "source_type": "daily_course_record",
+                    "appropriateness": "unknown",
+                }],
+                "exam_or_medication_orders": [{
+                    "event_type": "exam_or_medication_orders",
+                    "document_id": "D-1",
+                    "source_type": "daily_course_record",
+                    "trigger_confirmed": True,
+                }],
+            }})}}]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload=_payload(), rule_ids=("LX0916-017",), generate=generate
+    )
+
+    assert "disease_changes" not in prompts[0]
+    assert "exam_or_medication_orders" in prompts[0]
+    assert "disease_changes" not in result["event_facts"]
+    assert "exam_or_medication_orders" in result["event_facts"]
+    assert result["diagnostic"]["llm_call_count"] == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("extra", "failure_detail"),
     [
@@ -1167,7 +1201,7 @@ async def test_normalizes_confirmed_discharge_field_misplacement_and_null_approp
         evidence_payload=_payload(), rule_ids=("LX0916-011",), generate=generate
     )
 
-    assert result["event_facts"] == {"disease_changes": [{"event_type": "disease_changes"}]}
+    assert result["event_facts"] == {}
     assert result["discharge_facts"] == {
         "discharge_arranged": True,
         "discharge_record_formed": False,
@@ -1227,13 +1261,6 @@ async def test_normalizes_confirmed_surgery_safety_check_document_alias() -> Non
         },
         {"event_facts": {"discharge_arranged": "true"}},
         {"event_facts": {"unexpected": True}},
-        {
-            "event_facts": {
-                "disease_changes": [
-                    {"event_type": "disease_changes", "appropriateness": "unknown"}
-                ]
-            }
-        },
     ],
 )
 async def test_rejects_unconfirmed_normalization_variants(extra: dict[str, Any]) -> None:

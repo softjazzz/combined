@@ -48,14 +48,20 @@ def _decision_facts_from_context(
     facts = context.get("event_facts")
     states = context.get("event_source_state_by_rule")
     source_state = states.get(rule_id) if isinstance(states, Mapping) else None
+    if source_state == "structured_complete":
+        decision_source_state = "available"
+    elif isinstance(source_state, str) and source_state.startswith("structured_trigger_"):
+        decision_source_state = source_state
+    else:
+        decision_source_state = (
+            source_state
+            if source_state in {"selected", "not_selected", "partial"}
+            else "unverified"
+        )
     if not isinstance(facts, Mapping) or event_key not in facts:
         return {
             "event_key": event_key,
-            "source_state": (
-                source_state
-                if source_state in {"selected", "not_selected", "partial"}
-                else "unverified"
-            ),
+            "source_state": decision_source_state,
             "events": [],
         }
 
@@ -63,7 +69,12 @@ def _decision_facts_from_context(
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
         return {"event_key": event_key, "source_state": "invalid", "events": []}
 
-    source_state = "partial" if source_state == "partial" else "available"
+    source_state = (
+        decision_source_state
+        if isinstance(decision_source_state, str)
+        and decision_source_state.startswith("structured_trigger_")
+        else "partial" if source_state == "partial" else "available"
+    )
     documentation_fields = _DOCUMENTATION_FIELDS_BY_RULE.get(rule_id, ())
     serialized_events: list[Mapping[str, Any]] = []
     for event in rows:
@@ -99,6 +110,27 @@ def _decision_facts_from_context(
             value = str(event.get(field) or "").strip()
             if value and len(value) <= 160 and "\n" not in value and "\r" not in value:
                 snapshot[field] = value
+        for field in (
+            "event_source_type", "event_source_id", "related_source_type",
+            "related_source_id", "event_time", "event_kind", "lifecycle_state",
+        ):
+            value = str(event.get(field) or "").strip()
+            if value and len(value) <= 160 and "\n" not in value and "\r" not in value:
+                snapshot[field] = value
+        for field in ("related_source_ids", "critical_flags"):
+            raw_values = event.get(field)
+            if not isinstance(raw_values, Sequence) or isinstance(raw_values, (str, bytes)):
+                continue
+            values = [
+                str(value).strip()
+                for value in raw_values
+                if str(value).strip()
+                and len(str(value).strip()) <= 160
+                and "\n" not in str(value)
+                and "\r" not in str(value)
+            ]
+            if values:
+                snapshot[field] = values
         serialized_events.append(snapshot)
     return {
         "event_key": event_key,
@@ -135,9 +167,33 @@ def _event_rows(
 ) -> tuple[tuple[Mapping[str, Any], ...] | None, Luxian0916RuleResult | None]:
     facts = context.get("event_facts")
     event_key = _EVENT_KEY_BY_RULE[rule_id]
+    states = context.get("event_source_state_by_rule")
+    source_state = states.get(rule_id) if isinstance(states, Mapping) else None
+    structured_gap = {
+        "structured_trigger_source_unavailable": (
+            "structured_trigger_source_unavailable",
+            "病情变化触发来源读取失败，无法确认是否存在病危/病重医嘱或检验危急值。",
+        ),
+        "structured_trigger_source_partial": (
+            "structured_trigger_source_partial",
+            "病情变化触发来源读取被截断，无法确认是否存在全部病危/病重医嘱或检验危急值。",
+        ),
+        "structured_trigger_source_invalid": (
+            "structured_trigger_source_invalid",
+            "病情变化触发来源存在关键状态、坐标或关联字段缺失，无法安全确认触发条件。",
+        ),
+    }
+    if source_state in structured_gap:
+        reason_code, findings = structured_gap[source_state]
+        return None, _result(
+            rule_id,
+            "data_quality_gap",
+            reason_code,
+            findings,
+            suggestion="补齐病情变化触发来源后重新质控。",
+            diagnostics={"event_key": event_key, "event_source_state": source_state},
+        )
     if not isinstance(facts, Mapping) or event_key not in facts:
-        states = context.get("event_source_state_by_rule")
-        source_state = states.get(rule_id) if isinstance(states, Mapping) else None
         if source_state == "partial":
             return None, _partial_event_source_result(rule_id)
         if source_state == "selected":
@@ -216,13 +272,27 @@ def _triggered_events(
 
 
 def _event_anchor(event: Mapping[str, Any], *fields: str) -> Mapping[str, Any]:
-    return {
+    anchor: dict[str, Any] = {
         "event_type": str(event.get("event_type") or ""),
         "event_id": str(event.get("event_id") or ""),
         "document_type": str(event.get("source_type") or ""),
         "document_id": str(event.get("document_id") or ""),
         "fields": list(fields),
     }
+    for key in (
+        "event_source_type", "event_source_id", "related_source_type",
+        "related_source_id", "event_time", "event_kind", "lifecycle_state",
+    ):
+        value = str(event.get(key) or "").strip()
+        if value:
+            anchor[key] = value
+    for key in ("related_source_ids", "critical_flags"):
+        raw_values = event.get(key)
+        if isinstance(raw_values, Sequence) and not isinstance(raw_values, (str, bytes)):
+            values = [str(value).strip() for value in raw_values if str(value).strip()]
+            if values:
+                anchor[key] = values
+    return anchor
 
 
 def _maturity(

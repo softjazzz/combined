@@ -86,6 +86,28 @@ def _result(rule_id: str, *, status: str = "compliant") -> Luxian0916RuleResult:
     )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_structured_disease_change_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """批处理单测不连接真实 CDM；结构化来源由专属单测覆盖。"""
+
+    monkeypatch.setattr(
+        batch_worker,
+        "load_disease_change_015016_facts",
+        lambda **_kwargs: {
+            "event_facts": {"disease_changes": []},
+            "event_source_state_by_rule": {
+                "LX0916-015": "structured_complete",
+                "LX0916-016": "structured_complete",
+            },
+            "diagnostic": {
+                "code": "structured_disease_change_trigger_ready",
+                "event_count": 0,
+                "llm_call_count": 0,
+            },
+        },
+    )
+
+
 def _patch_loaders(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         batch_worker,
@@ -178,6 +200,24 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
 ) -> None:
     workspace = _Workspace(job=_job(), records=[_record(patient_id="P-2", visit_id="V-2"), _record()])
     _patch_loaders(monkeypatch)
+    captured_semantic_rule_ids: list[tuple[str, ...]] = []
+
+    async def extract(**kwargs: Any) -> dict[str, Any]:
+        captured_semantic_rule_ids.append(tuple(kwargs["rule_ids"]))
+        return {
+            "semantic_facts": {},
+            "event_facts": {},
+            "document_facts": {},
+            "discharge_facts": {},
+            "event_source_state_by_rule": {},
+            "diagnostic": {
+                "code": "semantic_extraction_ready",
+                "document_count": 0,
+                "llm_call_count": 0,
+            },
+        }
+
+    monkeypatch.setattr(batch_worker, "extract_luxian_0916_facts", extract)
 
     def execute(_context: dict[str, Any], rule_ids: tuple[str, ...]) -> Luxian0916Execution:
         assert rule_ids == tuple(rule.rule_id for rule in LUXIAN_0916_RULE_CATALOG)
@@ -200,6 +240,12 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     assert workspace.failed == []
     assert workspace.completed is not None
     assert workspace.completed["persist_record_envelopes"] is False
+    expected_shared_rule_ids = tuple(
+        rule.rule_id
+        for rule in LUXIAN_0916_RULE_CATALOG
+        if rule.rule_id not in {"LX0916-015", "LX0916-016"}
+    )
+    assert captured_semantic_rule_ids == [expected_shared_rule_ids, expected_shared_rule_ids]
     summary = workspace.completed["summary"]
     assert summary["status_counts"] == {"non_compliant": 2, "compliant": 62}
     assert summary["display_status_counts"] == summary["status_counts"]

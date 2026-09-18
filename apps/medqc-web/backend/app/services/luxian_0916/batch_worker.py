@@ -15,6 +15,10 @@ from ..qc_llm_client import SichuanQCLLMClient
 from ..sample_programmatic_evidence import build_programmatic_evidence_payload
 from .bundle_reader import load_luxian_0916_bundle
 from .contracts import Luxian0916RuleResult
+from .disease_change_015016 import (
+    load_disease_change_015016_facts,
+    merge_disease_change_015016_facts,
+)
 from .input_context import (
     add_luxian_0916_evidence_sources,
     build_luxian_0916_context,
@@ -30,6 +34,10 @@ from .semantic_extractor import (
 
 LUXIAN_0916_RULE_SET_KEY = "luxian_0916_qc_v1"
 _RULE_IDS = tuple(rule.rule_id for rule in LUXIAN_0916_RULE_CATALOG)
+_STRUCTURED_DISEASE_CHANGE_RULE_IDS = frozenset({"LX0916-015", "LX0916-016"})
+_SHARED_SEMANTIC_RULE_IDS = tuple(
+    rule_id for rule_id in _RULE_IDS if rule_id not in _STRUCTURED_DISEASE_CHANGE_RULE_IDS
+)
 _RULE_ORDER = {rule_id: index for index, rule_id in enumerate(_RULE_IDS)}
 _RULE_NAMES = {rule.rule_id: rule.name for rule in LUXIAN_0916_RULE_CATALOG}
 _SEMANTIC_FAILURE_STAGES = frozenset(
@@ -270,12 +278,25 @@ async def _execute_record(
         )
         extracted = await extract_luxian_0916_facts(
             evidence_payload=evidence_payload,
-            rule_ids=_RULE_IDS,
+            # 015/016 的触发由结构化来源独占；共享 Prompt 不再重复提取 disease_changes。
+            rule_ids=_SHARED_SEMANTIC_RULE_IDS,
             generate=semantic_generate,
         )
         context = merge_luxian_0916_semantic_facts(
             context=context,
             extracted=extracted,
+        )
+        # 015/016 的触发事实由本次住院三坐标的原始结构化行独立读取。
+        # 必须在共享模型事实合并后覆盖，防止旧 disease_changes 回流。
+        structured_disease_change = await asyncio.to_thread(
+            load_disease_change_015016_facts,
+            institute_id=identity["institute_id"],
+            patient_id=identity["patient_id"],
+            visit_id=identity["visit_id"],
+        )
+        context = merge_disease_change_015016_facts(
+            context=context,
+            structured_facts=structured_disease_change,
         )
         execution = await asyncio.to_thread(execute_luxian_0916, context, _RULE_IDS)
         outcome = _execution_to_record_outcome(
