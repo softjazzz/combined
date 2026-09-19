@@ -17,6 +17,8 @@ type ServiceResult<T> = {
 }
 
 const WORKSPACE_QUERY_TIMEOUT_MS = 60000
+// 整改草稿要等一次模型生成，单独放宽超时，避免误报为请求失败。
+const WORKSPACE_DRAFT_TIMEOUT_MS = 120000
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return extractApiErrorMessageFromError(error, fallback)
@@ -122,6 +124,36 @@ export async function getLatestLuxian0609RecordResult(record: {
       timeout: WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取该病历最近一次质控结果失败',
+  )
+}
+
+export interface QcRemediationDraftResult {
+  available: boolean
+  rule_id: string
+  draft?: string
+  reason?: string
+}
+
+/**
+ * 按需生成单条规则的整改草稿。
+ * 只读取该病历已保存的质控结果，不写入结果、不改变质控结论与权威建议。
+ */
+export async function requestLuxian0609RemediationDraft(
+  record: { instituteId: string; patientId: string; visitId: string },
+  ruleId: string,
+) {
+  return requestEnvelope<QcRemediationDraftResult>(
+    {
+      method: 'POST',
+      url: `/api/v1/qc/sichuan/workspace/records/${encodeURIComponent(record.visitId)}/latest-result/remediation-draft`,
+      params: {
+        institute_id: record.instituteId,
+        patient_id: record.patientId,
+      },
+      data: { rule_id: ruleId },
+      timeout: WORKSPACE_DRAFT_TIMEOUT_MS,
+    },
+    '生成整改草稿失败',
   )
 }
 

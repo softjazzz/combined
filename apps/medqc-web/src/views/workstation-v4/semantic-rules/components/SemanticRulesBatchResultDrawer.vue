@@ -10,10 +10,19 @@
     <div class="drawer-shell">
       <div class="drawer-head result-review-header">
         <div class="drawer-title-group">
-          <a-button class="drawer-back-button" @click="close"> 返回样本验证 </a-button>
+          <a-button
+            class="drawer-back-button"
+            @click="close"
+          >
+            返回样本验证
+          </a-button>
           <div>
-            <p class="drawer-eyebrow">批量任务结果</p>
-            <h2 class="drawer-title">任务详情</h2>
+            <p class="drawer-eyebrow">
+              批量任务结果
+            </p>
+            <h2 class="drawer-title">
+              任务详情
+            </h2>
           </div>
         </div>
         <div class="drawer-actions">
@@ -35,12 +44,20 @@
             停止任务
           </a-button>
           <a-dropdown v-if="batchJobDetail?.status === 'completed'">
-            <a-button :loading="batchJobDetailLoading"> 导出 HTML 明细 </a-button>
+            <a-button :loading="batchJobDetailLoading">
+              导出 HTML 明细
+            </a-button>
             <template #overlay>
               <a-menu @click="handleExportMenuClick">
-                <a-menu-item key="html"> 导出 HTML 明细 </a-menu-item>
-                <a-menu-item key="xlsx"> 导出 Excel </a-menu-item>
-                <a-menu-item key="csv"> 导出 CSV </a-menu-item>
+                <a-menu-item key="html">
+                  导出 HTML 明细
+                </a-menu-item>
+                <a-menu-item key="xlsx">
+                  导出 Excel
+                </a-menu-item>
+                <a-menu-item key="csv">
+                  导出 CSV
+                </a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
@@ -52,14 +69,22 @@
           >
             复核本次结果
           </a-button>
-          <a-button type="text" @click="close"> 关闭 </a-button>
+          <a-button
+            type="text"
+            @click="close"
+          >
+            关闭
+          </a-button>
         </div>
       </div>
 
       <div class="drawer-body">
         <BatchResultOverview :model="resultReviewOverviewModel" />
 
-        <section v-if="partialFailureItems.length" class="partial-failure-panel">
+        <section
+          v-if="partialFailureItems.length"
+          class="partial-failure-panel"
+        >
           <div class="partial-failure-head">
             <div>
               <strong>部分执行失败</strong>
@@ -91,7 +116,10 @@
           :class="`status-hero--${statusHero.tone}`"
         >
           <div class="status-hero-main">
-            <div v-if="statusHero.pulse" class="status-hero-pulse" />
+            <div
+              v-if="statusHero.pulse"
+              class="status-hero-pulse"
+            />
             <div>
               <div class="status-hero-title-row">
                 <span class="status-hero-title">{{ statusHero.title }}</span>
@@ -107,10 +135,16 @@
                   {{ batchJobDetail.rule_name || batchJobDetail.rule_code }}
                 </div>
               </div>
-              <div v-if="statusHero.description" class="status-hero-desc">
+              <div
+                v-if="statusHero.description"
+                class="status-hero-desc"
+              >
                 {{ statusHero.description }}
               </div>
-              <div v-if="isRunningBatchJob" class="status-hero-live">
+              <div
+                v-if="isRunningBatchJob"
+                class="status-hero-live"
+              >
                 <span>
                   已完成 {{ progressSummary?.processedRecords ?? 0 }} /
                   {{ progressSummary?.totalRecords ?? 0 }} 份病历
@@ -121,7 +155,10 @@
                 <span>{{ liveElapsedLabel }}</span>
                 <span v-if="streamUpdatedAtText">最近更新：{{ streamUpdatedAtText }}</span>
               </div>
-              <div v-if="isRunningBatchJob" class="status-hero-flow">
+              <div
+                v-if="isRunningBatchJob"
+                class="status-hero-flow"
+              >
                 <div
                   class="status-hero-flow-bar"
                   :style="{ width: `${progressSummary?.percent ?? 0}%` }"
@@ -130,7 +167,9 @@
             </div>
           </div>
           <div class="status-hero-side">
-            <div class="status-hero-percent">{{ progressSummary?.percent ?? 0 }}%</div>
+            <div class="status-hero-percent">
+              {{ progressSummary?.percent ?? 0 }}%
+            </div>
             <div class="status-hero-side-label">
               {{ progressSummary?.stepLabel || '准备中' }}
             </div>
@@ -141,14 +180,21 @@
           v-if="focusedSummaryCards.length && !isLuxian0609BatchJob"
           class="drawer-summary summary-grid-primary"
         >
-          <div v-for="item in focusedSummaryCards" :key="item.key" class="summary-card">
+          <div
+            v-for="item in focusedSummaryCards"
+            :key="item.key"
+            class="summary-card"
+          >
             <div class="summary-label">
               {{ item.label }}
             </div>
             <div class="summary-value">
               {{ item.value }}
             </div>
-            <div v-if="item.desc" class="summary-desc">
+            <div
+              v-if="item.desc"
+              class="summary-desc"
+            >
               {{ item.desc }}
             </div>
           </div>
@@ -158,7 +204,9 @@
           v-if="isFocusedRecordMode && !showResultReviewOverview && !isLuxian0609BatchJob"
           class="drawer-card focus-record-card"
         >
-          <div class="drawer-section-title">当前仅查看单份病历结果</div>
+          <div class="drawer-section-title">
+            当前仅查看单份病历结果
+          </div>
           <div class="focus-record-meta">
             <span v-if="isLuxian0609BatchJob">
               {{ focusedLuxianRecordLabel }}
@@ -171,16 +219,24 @@
           </div>
         </div>
 
-        <div v-if="luxianReviewReport" class="drawer-card luxian-review-card">
+        <div
+          v-if="luxianReviewReport"
+          class="drawer-card luxian-review-card"
+        >
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
-              <div class="drawer-section-title">结果复核建议</div>
+              <div class="drawer-section-title">
+                结果复核建议
+              </div>
               <span class="summary-mode-badge">
                 {{ luxianReviewSummaryText }}
               </span>
             </div>
           </div>
-          <div v-if="luxianReviewFindings.length" class="luxian-review-list">
+          <div
+            v-if="luxianReviewFindings.length"
+            class="luxian-review-list"
+          >
             <article
               v-for="finding in luxianReviewFindings"
               :key="finding.id || `${finding.record_ref}-${finding.rule_id}-${finding.risk_type}`"
@@ -205,7 +261,12 @@
               </small>
             </article>
           </div>
-          <div v-else class="luxian-review-empty">已完成复核，暂无高风险复核建议。</div>
+          <div
+            v-else
+            class="luxian-review-empty"
+          >
+            已完成复核，暂无高风险复核建议。
+          </div>
         </div>
 
         <div
@@ -220,28 +281,44 @@
               <div class="drawer-section-title">
                 {{ issueSectionTitle }}
               </div>
-              <span v-if="isFastScreenResult" class="summary-mode-badge">
+              <span
+                v-if="isFastScreenResult"
+                class="summary-mode-badge"
+              >
                 快速初筛结果（摘要版）
               </span>
             </div>
             <div class="drawer-section-actions">
-              <a-radio-group v-model:value="issueViewMode" size="small">
-                <a-radio-button value="business"> 业务视图 </a-radio-button>
+              <a-radio-group
+                v-model:value="issueViewMode"
+                size="small"
+              >
+                <a-radio-button value="business">
+                  业务视图
+                </a-radio-button>
                 <a-radio-button
                   v-if="enableRecordComparison && isFocusedSingleRecordScope"
                   value="compare"
                 >
                   病历原文对照
                 </a-radio-button>
-                <a-radio-button value="advanced"> 高级视图 </a-radio-button>
+                <a-radio-button value="advanced">
+                  高级视图
+                </a-radio-button>
               </a-radio-group>
-              <a-switch v-model:checked="showAllStatuses" size="small" />
+              <a-switch
+                v-model:checked="showAllStatuses"
+                size="small"
+              />
               <span class="drawer-section-meta">
                 {{ showAllStatuses ? '全部状态' : '仅问题项' }}
               </span>
             </div>
           </div>
-          <div class="issue-toolbar" :class="{ 'issue-toolbar--single': isSingleRecordIssueMode }">
+          <div
+            class="issue-toolbar"
+            :class="{ 'issue-toolbar--single': isSingleRecordIssueMode }"
+          >
             <div class="issue-focus-summary">
               {{ issueFocusSummary }}
             </div>
@@ -273,15 +350,21 @@
                 class="issue-filter-item"
                 :options="issueDefectLevelOptions"
               />
-              <a-button size="small" @click="resetIssueFilters"> 重置 </a-button>
+              <a-button
+                size="small"
+                @click="resetIssueFilters"
+              >
+                重置
+              </a-button>
             </div>
           </div>
-          <div v-if="isMultiRecordIssueMode" class="issue-record-switcher">
+          <div
+            v-if="isMultiRecordIssueMode"
+            class="issue-record-switcher"
+          >
             <div class="issue-record-switcher-head">
               <span>先选病历，再看质控点</span>
-              <small
-                >本次涉及 {{ issueRecordGroups.length }} 份病历，默认按病历分组展示结果。</small
-              >
+              <small>本次涉及 {{ issueRecordGroups.length }} 份病历，默认按病历分组展示结果。</small>
             </div>
             <div class="issue-record-tabs">
               <button
@@ -309,10 +392,11 @@
               </button>
             </div>
           </div>
-          <div v-if="selectedClusterKey || activeRuleFilterLabel" class="aggregation-active-tip">
-            <span v-if="selectedClusterKey"
-              >聚合簇：{{ resolveCustomerEvidenceText(selectedClusterKey) }}</span
-            >
+          <div
+            v-if="selectedClusterKey || activeRuleFilterLabel"
+            class="aggregation-active-tip"
+          >
+            <span v-if="selectedClusterKey">聚合簇：{{ resolveCustomerEvidenceText(selectedClusterKey) }}</span>
             <span v-if="selectedClusterKey && activeRuleFilterLabel">·</span>
             <span v-if="activeRuleFilterLabel">规则：{{ activeRuleFilterLabel }}</span>
             <a-button
@@ -343,9 +427,9 @@
           <div
             v-if="
               issueViewMode === 'compare' &&
-              enableRecordComparison &&
-              isFocusedSingleRecordScope &&
-              recordCompareCoordinates.visitId
+                enableRecordComparison &&
+                isFocusedSingleRecordScope &&
+                recordCompareCoordinates.visitId
             "
             class="issue-record-compare"
           >
@@ -391,7 +475,10 @@
                 <span>{{ group.title }}</span>
                 <em>{{ group.items.length }}</em>
               </div>
-              <template v-for="group in singleIssueNavGroups" :key="`items-${group.key}`">
+              <template
+                v-for="group in singleIssueNavGroups"
+                :key="`items-${group.key}`"
+              >
                 <button
                   v-for="item in group.items"
                   :key="`review-nav-${resolveIssueStableKey(item)}`"
@@ -439,9 +526,10 @@
                   v-if="!transfusionDocumentationSummary.complete"
                   class="transfusion-documentation-summary-statuses"
                 >
-                  <span v-for="entry in transfusionDocumentationSummary.entries" :key="entry.ruleId"
-                    >{{ entry.label }}：{{ entry.statusText }}</span
-                  >
+                  <span
+                    v-for="entry in transfusionDocumentationSummary.entries"
+                    :key="entry.ruleId"
+                  >{{ entry.label }}：{{ entry.statusText }}</span>
                 </div>
               </section>
               <div
@@ -455,8 +543,8 @@
                       <span class="issue-rule-code">
                         {{
                           selectedBusinessIssueCard.rule_code ||
-                          selectedBusinessIssueCard.rule_id ||
-                          '未知规则'
+                            selectedBusinessIssueCard.rule_id ||
+                            '未知规则'
                         }}
                       </span>
                       <span class="issue-detail-title-separator">·</span>
@@ -466,8 +554,8 @@
                       <span>{{ resolveIssueDisplayRecordRef(selectedBusinessIssueCard) }}</span>
                       <span>{{
                         selectedBusinessIssueCard.target_document_type ||
-                        selectedBusinessIssueCard.document_type ||
-                        '未知文书域'
+                          selectedBusinessIssueCard.document_type ||
+                          '未知文书域'
                       }}</span>
                       <span>{{ resolveIssueSeverityText(selectedBusinessIssueCard) }}</span>
                     </div>
@@ -482,7 +570,7 @@
                     <a-tag class="aggregation-count-tag">
                       {{
                         resolveDisplayStatusText(selectedBusinessIssueCard) ||
-                        resolveStatusText(selectedBusinessIssueCard.status)
+                          resolveStatusText(selectedBusinessIssueCard.status)
                       }}
                     </a-tag>
                   </div>
@@ -508,12 +596,17 @@
                     <em>复核或补充记录</em>
                   </div>
                 </div>
-                <div v-if="selectedIssuePatientContext" class="issue-patient-context-card">
+                <div
+                  v-if="selectedIssuePatientContext"
+                  class="issue-patient-context-card"
+                >
                   <div class="issue-patient-avatar">
                     {{ selectedIssuePatientContext.initial }}
                   </div>
                   <div class="issue-patient-context-main">
-                    <div class="issue-patient-context-kicker">当前病历</div>
+                    <div class="issue-patient-context-kicker">
+                      当前病历
+                    </div>
                     <div class="issue-patient-context-id">
                       {{ selectedIssuePatientContext.recordId }}
                     </div>
@@ -540,7 +633,10 @@
                     "
                     :model="selectedBusinessIssueCard.customer_display"
                   />
-                  <section v-else class="issue-detail-section issue-detail-section--conclusion">
+                  <section
+                    v-else
+                    class="issue-detail-section issue-detail-section--conclusion"
+                  >
                     <div class="issue-detail-section-title">
                       <span>01</span>
                       质控结论
@@ -651,72 +747,18 @@
                         {{ selectedBusinessIssueCard.evidence_summary }}
                       </p>
                     </section>
-                    <section v-if="!isLuxian0609BatchJob" class="suggestion-panel">
-                      <div class="issue-detail-section-title">
-                        <span>03</span>
-                        处理建议
-                      </div>
-                      <div class="issue-detail-text">
-                        <template
-                          v-if="
-                            hasStructuredText(selectedBusinessIssueCard.customer_suggestion_text)
-                          "
-                        >
-                          <p
-                            v-for="(paragraph, index) in resolveStructuredText(
-                              selectedBusinessIssueCard.customer_suggestion_text,
-                            ).summary"
-                            :key="`selected-suggestion-summary-${index}`"
-                          >
-                            {{ paragraph }}
-                          </p>
-                          <div
-                            v-for="(section, sectionIndex) in resolveStructuredText(
-                              selectedBusinessIssueCard.customer_suggestion_text,
-                            ).sections"
-                            :key="`selected-suggestion-section-${sectionIndex}`"
-                            class="structured-text-section"
-                          >
-                            <strong>{{ section.title }}</strong>
-                            <p
-                              v-for="(paragraph, index) in section.paragraphs"
-                              :key="`selected-suggestion-section-${sectionIndex}-p-${index}`"
-                            >
-                              {{ paragraph }}
-                            </p>
-                            <ul v-if="section.points.length">
-                              <li
-                                v-for="(point, index) in section.points"
-                                :key="`selected-suggestion-section-${sectionIndex}-point-${index}`"
-                              >
-                                {{ point }}
-                              </li>
-                            </ul>
-                          </div>
-                          <ul
-                            v-if="
-                              resolveStructuredText(
-                                selectedBusinessIssueCard.customer_suggestion_text,
-                              ).points.length
-                            "
-                          >
-                            <li
-                              v-for="(point, index) in resolveStructuredText(
-                                selectedBusinessIssueCard.customer_suggestion_text,
-                              ).points"
-                              :key="`selected-suggestion-point-${index}`"
-                            >
-                              {{ point }}
-                            </li>
-                          </ul>
-                        </template>
-                        <p v-else>
-                          {{
-                            selectedBusinessIssueCard.customer_suggestion_text ||
-                            '请结合病历原文确认。'
-                          }}
-                        </p>
-                      </div>
+                    <section
+                      v-if="selectedBusinessIssueCard.customer_suggestion_text"
+                      class="issue-detail-section"
+                    >
+                      <QcRemediationSuggestion
+                        :suggestion="selectedBusinessIssueCard.customer_suggestion_text"
+                        :status="resolveIssueCanonicalStatus(selectedBusinessIssueCard)"
+                        :rule-id="
+                          selectedBusinessIssueCard.rule_code || selectedBusinessIssueCard.rule_id
+                        "
+                        :record-context="recordCompareCoordinates"
+                      />
                     </section>
                   </div>
                 </div>
@@ -726,9 +768,7 @@
                 >
                   <div class="copy-evidence-head">
                     <strong>重复内容对照</strong>
-                    <span
-                      >用于核对两份病程/查房记录是否只是复制粘贴；重点看本次记录是否有新增病情变化、分析和诊疗计划。</span
-                    >
+                    <span>用于核对两份病程/查房记录是否只是复制粘贴；重点看本次记录是否有新增病情变化、分析和诊疗计划。</span>
                   </div>
                   <div
                     v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.legacyNotice"
@@ -788,7 +828,9 @@
                     v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.metric"
                     class="copy-evidence-column copy-evidence-column--metric"
                   >
-                    <div class="copy-evidence-label">重复度指标</div>
+                    <div class="copy-evidence-label">
+                      重复度指标
+                    </div>
                     <blockquote>
                       {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.metric }}
                     </blockquote>
@@ -797,7 +839,9 @@
                     v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.differenceGap"
                     class="copy-evidence-column copy-evidence-column--gap"
                   >
-                    <div class="copy-evidence-label">缺少差异说明</div>
+                    <div class="copy-evidence-label">
+                      缺少差异说明
+                    </div>
                     <blockquote>
                       {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.differenceGap }}
                     </blockquote>
@@ -824,13 +868,15 @@
                 <div
                   v-if="
                     isIssueExpanded(selectedBusinessIssueCard) &&
-                    hasEvidenceChain(selectedBusinessIssueCard)
+                      hasEvidenceChain(selectedBusinessIssueCard)
                   "
                   class="evidence-chain-panel"
                 >
                   <div class="evidence-chain-panel-head">
                     <div>
-                      <div class="evidence-chain-title">完整说明</div>
+                      <div class="evidence-chain-title">
+                        完整说明
+                      </div>
                       <div class="evidence-chain-subtitle">
                         展示来源证据、判断过程和质控确认口径
                       </div>
@@ -841,7 +887,9 @@
                       v-if="resolveTriggerFacts(selectedBusinessIssueCard).length"
                       class="evidence-chain-block"
                     >
-                      <div class="evidence-chain-block-title">触发事实</div>
+                      <div class="evidence-chain-block-title">
+                        触发事实
+                      </div>
                       <div
                         v-for="fact in resolveTriggerFacts(selectedBusinessIssueCard)"
                         :key="fact.key"
@@ -852,7 +900,9 @@
                       </div>
                     </div>
                     <div class="evidence-chain-block">
-                      <div class="evidence-chain-block-title">数据依赖</div>
+                      <div class="evidence-chain-block-title">
+                        数据依赖
+                      </div>
                       <div
                         v-for="row in resolveDependencyRows(selectedBusinessIssueCard)"
                         :key="row.key"
@@ -866,7 +916,9 @@
                       v-if="resolveDecisionRows(selectedBusinessIssueCard).length"
                       class="evidence-chain-block"
                     >
-                      <div class="evidence-chain-block-title">判断过程</div>
+                      <div class="evidence-chain-block-title">
+                        判断过程
+                      </div>
                       <div
                         v-for="row in resolveDecisionRows(selectedBusinessIssueCard)"
                         :key="row.key"
@@ -905,13 +957,19 @@
                   </a-button>
                 </div>
               </div>
-              <div v-else-if="businessIssueCards.length" class="issue-conclusion-list">
+              <div
+                v-else-if="businessIssueCards.length"
+                class="issue-conclusion-list"
+              >
                 <div
                   v-for="group in businessIssueCardGroups"
                   :key="group.key"
                   class="issue-record-result-group"
                 >
-                  <div v-if="shouldShowIssueRecordGroupHeader" class="issue-record-result-head">
+                  <div
+                    v-if="shouldShowIssueRecordGroupHeader"
+                    class="issue-record-result-head"
+                  >
                     <div>
                       <strong>{{ group.label }}</strong>
                       <span>{{ group.meta || '未返回科室/住院号' }}</span>
@@ -967,7 +1025,9 @@
                       </div>
                       <div class="issue-at-a-glance">
                         <div class="issue-glance-block issue-glance-block--conclusion">
-                          <div class="issue-glance-label">质控结论</div>
+                          <div class="issue-glance-label">
+                            质控结论
+                          </div>
                           <div class="issue-glance-text">
                             <template v-if="hasStructuredText(item.customer_findings_text)">
                               <p
@@ -999,7 +1059,9 @@
                           </div>
                         </div>
                         <div class="issue-glance-block">
-                          <div class="issue-glance-label">关键证据</div>
+                          <div class="issue-glance-label">
+                            关键证据
+                          </div>
                           <div
                             v-if="item.evidence_summary_parts.length"
                             class="issue-evidence-facts"
@@ -1037,45 +1099,26 @@
                             {{ item.evidence_summary }}
                           </span>
                         </div>
-                        <div class="issue-glance-block">
-                          <div class="issue-glance-label">处理建议</div>
-                          <div class="issue-glance-text">
-                            <template v-if="hasStructuredText(item.customer_suggestion_text)">
-                              <p
-                                v-for="(paragraph, index) in resolveStructuredText(
-                                  item.customer_suggestion_text,
-                                ).summary.slice(0, 2)"
-                                :key="`glance-suggestion-summary-${resolveIssueStableKey(item)}-${index}`"
-                              >
-                                {{ paragraph }}
-                              </p>
-                              <ul
-                                v-if="
-                                  resolveStructuredText(item.customer_suggestion_text).points.length
-                                "
-                              >
-                                <li
-                                  v-for="(point, index) in resolveStructuredText(
-                                    item.customer_suggestion_text,
-                                  ).points.slice(0, 2)"
-                                  :key="`glance-suggestion-point-${resolveIssueStableKey(item)}-${index}`"
-                                >
-                                  {{ point }}
-                                </li>
-                              </ul>
-                            </template>
-                            <p v-else>
-                              {{ item.customer_suggestion_text || '请结合病历原文确认。' }}
-                            </p>
-                          </div>
+                        <div
+                          v-if="item.customer_suggestion_text"
+                          class="issue-glance-block"
+                        >
+                          <QcRemediationSuggestion
+                            :suggestion="item.customer_suggestion_text"
+                            :status="resolveIssueCanonicalStatus(item)"
+                            :rule-id="item.rule_code || item.rule_id"
+                            :record-context="recordCompareCoordinates"
+                            dense
+                          />
                         </div>
                       </div>
-                      <div v-if="resolveCopyEvidenceCompare(item)" class="copy-evidence-compare">
+                      <div
+                        v-if="resolveCopyEvidenceCompare(item)"
+                        class="copy-evidence-compare"
+                      >
                         <div class="copy-evidence-head">
                           <strong>重复内容对照</strong>
-                          <span
-                            >用于核对前后记录是否只是复制粘贴，重点看本次记录有没有新增病情变化、分析和诊疗计划。</span
-                          >
+                          <span>用于核对前后记录是否只是复制粘贴，重点看本次记录有没有新增病情变化、分析和诊疗计划。</span>
                         </div>
                         <div
                           v-if="resolveCopyEvidenceCompare(item)?.legacyNotice"
@@ -1131,20 +1174,27 @@
                           v-if="resolveCopyEvidenceCompare(item)?.metric"
                           class="copy-evidence-column copy-evidence-column--metric"
                         >
-                          <div class="copy-evidence-label">重复度指标</div>
+                          <div class="copy-evidence-label">
+                            重复度指标
+                          </div>
                           <blockquote>{{ resolveCopyEvidenceCompare(item)?.metric }}</blockquote>
                         </div>
                         <div
                           v-if="resolveCopyEvidenceCompare(item)?.differenceGap"
                           class="copy-evidence-column copy-evidence-column--gap"
                         >
-                          <div class="copy-evidence-label">缺少差异说明</div>
+                          <div class="copy-evidence-label">
+                            缺少差异说明
+                          </div>
                           <blockquote>
                             {{ resolveCopyEvidenceCompare(item)?.differenceGap }}
                           </blockquote>
                         </div>
                       </div>
-                      <div v-if="hasEvidenceChain(item)" class="evidence-chain-strip">
+                      <div
+                        v-if="hasEvidenceChain(item)"
+                        class="evidence-chain-strip"
+                      >
                         <span>
                           状态口径：{{
                             resolveEvidenceStatusText(resolveIssueCanonicalStatus(item))
@@ -1166,7 +1216,9 @@
                       >
                         <div class="evidence-chain-panel-head">
                           <div>
-                            <div class="evidence-chain-title">证据链</div>
+                            <div class="evidence-chain-title">
+                              证据链
+                            </div>
                             <div class="evidence-chain-subtitle">
                               按触发事实、依赖数据、来源证据和判断口径展示
                             </div>
@@ -1176,8 +1228,13 @@
                           </a-tag>
                         </div>
                         <div class="evidence-chain-grid">
-                          <div v-if="resolveTriggerFacts(item).length" class="evidence-chain-block">
-                            <div class="evidence-chain-block-title">触发事实</div>
+                          <div
+                            v-if="resolveTriggerFacts(item).length"
+                            class="evidence-chain-block"
+                          >
+                            <div class="evidence-chain-block-title">
+                              触发事实
+                            </div>
                             <div
                               v-for="fact in resolveTriggerFacts(item)"
                               :key="fact.key"
@@ -1188,7 +1245,9 @@
                             </div>
                           </div>
                           <div class="evidence-chain-block">
-                            <div class="evidence-chain-block-title">数据依赖</div>
+                            <div class="evidence-chain-block-title">
+                              数据依赖
+                            </div>
                             <div
                               v-for="row in resolveDependencyRows(item)"
                               :key="row.key"
@@ -1198,8 +1257,13 @@
                               <strong>{{ row.value }}</strong>
                             </div>
                           </div>
-                          <div v-if="resolveDecisionRows(item).length" class="evidence-chain-block">
-                            <div class="evidence-chain-block-title">判断过程</div>
+                          <div
+                            v-if="resolveDecisionRows(item).length"
+                            class="evidence-chain-block"
+                          >
+                            <div class="evidence-chain-block-title">
+                              判断过程
+                            </div>
                             <div
                               v-for="row in resolveDecisionRows(item)"
                               :key="row.key"
@@ -1209,8 +1273,13 @@
                               <strong>{{ row.value }}</strong>
                             </div>
                           </div>
-                          <div v-if="resolveReviewRows(item).length" class="evidence-chain-block">
-                            <div class="evidence-chain-block-title">质控确认</div>
+                          <div
+                            v-if="resolveReviewRows(item).length"
+                            class="evidence-chain-block"
+                          >
+                            <div class="evidence-chain-block-title">
+                              质控确认
+                            </div>
                             <div
                               v-for="row in resolveReviewRows(item)"
                               :key="row.key"
@@ -1225,7 +1294,9 @@
                           v-if="resolveEvidenceChainItems(item, 1200).length"
                           class="evidence-chain-evidence-list"
                         >
-                          <div class="evidence-chain-block-title">关键证据</div>
+                          <div class="evidence-chain-block-title">
+                            关键证据
+                          </div>
                           <div
                             v-for="evidence in resolveEvidenceChainItems(item, 1200)"
                             :key="evidence.key"
@@ -1242,7 +1313,10 @@
                           </div>
                         </div>
                       </div>
-                      <div v-if="isIssueExpanded(item)" class="issue-conclusion-summary">
+                      <div
+                        v-if="isIssueExpanded(item)"
+                        class="issue-conclusion-summary"
+                      >
                         <div class="issue-conclusion-row">
                           <span class="issue-conclusion-label">结论</span>
                           <div class="issue-conclusion-structured">
@@ -1366,60 +1440,10 @@
                             <span v-else>无</span>
                           </div>
                         </div>
-                        <div class="issue-conclusion-row">
-                          <span class="issue-conclusion-label">建议</span>
-                          <div class="issue-conclusion-structured">
-                            <template v-if="hasStructuredText(item.customer_suggestion_text)">
-                              <p
-                                v-for="(paragraph, index) in resolveStructuredText(
-                                  item.customer_suggestion_text,
-                                ).summary"
-                                :key="`suggestion-summary-${index}`"
-                              >
-                                {{ paragraph }}
-                              </p>
-                              <div
-                                v-for="(section, sectionIndex) in resolveStructuredText(
-                                  item.customer_suggestion_text,
-                                ).sections"
-                                :key="`suggestion-section-${sectionIndex}`"
-                                class="structured-text-section"
-                              >
-                                <strong>{{ section.title }}</strong>
-                                <p
-                                  v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                                  :key="`suggestion-section-${sectionIndex}-p-${paragraphIndex}`"
-                                >
-                                  {{ paragraph }}
-                                </p>
-                                <ul v-if="section.points.length">
-                                  <li
-                                    v-for="(point, pointIndex) in section.points"
-                                    :key="`suggestion-section-${sectionIndex}-point-${pointIndex}`"
-                                  >
-                                    {{ point }}
-                                  </li>
-                                </ul>
-                              </div>
-                              <ul
-                                v-if="
-                                  resolveStructuredText(item.customer_suggestion_text).points.length
-                                "
-                              >
-                                <li
-                                  v-for="(point, index) in resolveStructuredText(
-                                    item.customer_suggestion_text,
-                                  ).points"
-                                  :key="`suggestion-point-${index}`"
-                                >
-                                  {{ point }}
-                                </li>
-                              </ul>
-                            </template>
-                            <span v-else>无</span>
-                          </div>
-                        </div>
-                        <div v-if="item.rewrite_example" class="issue-conclusion-row">
+                        <div
+                          v-if="item.rewrite_example"
+                          class="issue-conclusion-row"
+                        >
                           <span class="issue-conclusion-label">改写示例</span>
                           <div class="issue-conclusion-structured">
                             {{ item.rewrite_example }}
@@ -1427,10 +1451,18 @@
                         </div>
                       </div>
                       <div class="issue-conclusion-actions">
-                        <a-button type="link" size="small" @click="toggleIssueExpanded(item)">
+                        <a-button
+                          type="link"
+                          size="small"
+                          @click="toggleIssueExpanded(item)"
+                        >
                           {{ isIssueExpanded(item) ? '收起完整说明' : '展开完整说明' }}
                         </a-button>
-                        <a-button type="link" size="small" @click="openIssueDeepReview(item)">
+                        <a-button
+                          type="link"
+                          size="small"
+                          @click="openIssueDeepReview(item)"
+                        >
                           深度复核
                         </a-button>
                         <a-button
@@ -1446,19 +1478,27 @@
                   </TransitionGroup>
                 </div>
               </div>
-              <div v-else-if="isWaitingFirstResult" class="stream-waiting-card">
+              <div
+                v-else-if="isWaitingFirstResult"
+                class="stream-waiting-card"
+              >
                 <div class="stream-waiting-scan" />
                 <div class="stream-waiting-lines">
                   <span />
                   <span />
                   <span />
                 </div>
-                <div class="stream-waiting-text">正在等待首份病历结果</div>
+                <div class="stream-waiting-text">
+                  正在等待首份病历结果
+                </div>
                 <div class="stream-waiting-subtext">
                   {{ waitingFirstResultDescription }}
                 </div>
               </div>
-              <a-empty v-else :description="emptyIssueText" />
+              <a-empty
+                v-else
+                :description="emptyIssueText"
+              />
               <section
                 v-if="!showAllStatuses && noIssueEvidenceItems.length"
                 class="no-issue-evidence-panel"
@@ -1472,7 +1512,11 @@
                       条合规或不适用结果，以下展示可帮助核对系统为什么未列为问题。
                     </span>
                   </div>
-                  <a-button type="link" size="small" @click="showAllStatuses = true">
+                  <a-button
+                    type="link"
+                    size="small"
+                    @click="showAllStatuses = true"
+                  >
                     查看全部状态
                   </a-button>
                 </div>
@@ -1530,10 +1574,18 @@
           ghost
           class="drawer-advanced-collapse"
         >
-          <a-collapse-panel key="execution" header="技术详情：执行统计">
-            <div v-if="progressSummary" class="drawer-card drawer-card--nested">
+          <a-collapse-panel
+            key="execution"
+            header="技术详情：执行统计"
+          >
+            <div
+              v-if="progressSummary"
+              class="drawer-card drawer-card--nested"
+            >
               <div class="drawer-section-head">
-                <div class="drawer-section-title">任务进度</div>
+                <div class="drawer-section-title">
+                  任务进度
+                </div>
                 <div class="drawer-section-meta">
                   {{ progressSummary.stepLabel }}
                 </div>
@@ -1544,39 +1596,56 @@
                 :stroke-color="progressSummary.status === 'exception' ? '#ef4444' : '#2563eb'"
               />
               <div class="progress-meta">
-                <span
-                  >已处理 {{ progressSummary.processedRecords }} /
-                  {{ progressSummary.totalRecords }} 份病历</span
-                >
+                <span>已处理 {{ progressSummary.processedRecords }} /
+                  {{ progressSummary.totalRecords }} 份病历</span>
                 <span>规则 {{ progressSummary.ruleIndex }} / {{ progressSummary.ruleCount }}</span>
               </div>
             </div>
 
-            <div v-if="advancedSummaryCards.length" class="drawer-summary summary-grid-secondary">
-              <div v-for="item in advancedSummaryCards" :key="item.key" class="summary-card">
+            <div
+              v-if="advancedSummaryCards.length"
+              class="drawer-summary summary-grid-secondary"
+            >
+              <div
+                v-for="item in advancedSummaryCards"
+                :key="item.key"
+                class="summary-card"
+              >
                 <div class="summary-label">
                   {{ item.label }}
                 </div>
                 <div class="summary-value">
                   {{ item.value }}
                 </div>
-                <div v-if="item.desc" class="summary-desc">
+                <div
+                  v-if="item.desc"
+                  class="summary-desc"
+                >
                   {{ item.desc }}
                 </div>
               </div>
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel v-if="resultAggregation" key="aggregation" header="技术详情：结果聚合">
+          <a-collapse-panel
+            v-if="resultAggregation"
+            key="aggregation"
+            header="技术详情：结果聚合"
+          >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">结果聚合</div>
+                <div class="drawer-section-title">
+                  结果聚合
+                </div>
                 <div class="drawer-section-meta">
                   簇数 {{ resultAggregation.cluster_count || 0 }} · 重复命中
                   {{ resultAggregation.duplicate_hits || 0 }}
                 </div>
               </div>
-              <div v-if="aggregationBreakdownSections.length" class="aggregation-breakdown-grid">
+              <div
+                v-if="aggregationBreakdownSections.length"
+                class="aggregation-breakdown-grid"
+              >
                 <div
                   v-for="section in aggregationBreakdownSections"
                   :key="section.key"
@@ -1590,7 +1659,10 @@
                       {{ section.total }}
                     </div>
                   </div>
-                  <div v-if="section.items.length" class="aggregation-breakdown-items">
+                  <div
+                    v-if="section.items.length"
+                    class="aggregation-breakdown-items"
+                  >
                     <div
                       v-for="item in section.items"
                       :key="`${section.key}-${item.label}`"
@@ -1602,7 +1674,12 @@
                       </a-tag>
                     </div>
                   </div>
-                  <div v-else class="aggregation-breakdown-empty">暂无分解数据</div>
+                  <div
+                    v-else
+                    class="aggregation-breakdown-empty"
+                  >
+                    暂无分解数据
+                  </div>
                 </div>
               </div>
               <div class="aggregation-list">
@@ -1617,9 +1694,14 @@
                     <span class="aggregation-item-title">
                       {{ resolveCustomerEvidenceText(cluster.cluster_key) }}
                     </span>
-                    <a-tag class="aggregation-count-tag"> {{ cluster.records || 0 }} 次 </a-tag>
+                    <a-tag class="aggregation-count-tag">
+                      {{ cluster.records || 0 }} 次
+                    </a-tag>
                   </div>
-                  <div v-if="cluster.sample_evidence" class="aggregation-evidence">
+                  <div
+                    v-if="cluster.sample_evidence"
+                    class="aggregation-evidence"
+                  >
                     {{ resolveCustomerEvidenceText(cluster.sample_evidence) }}
                   </div>
                   <div class="aggregation-meta">
@@ -1627,20 +1709,35 @@
                   </div>
                 </div>
               </div>
-              <div v-if="selectedClusterKey" class="aggregation-active-tip">
+              <div
+                v-if="selectedClusterKey"
+                class="aggregation-active-tip"
+              >
                 已按聚合簇过滤：{{ resolveCustomerEvidenceText(selectedClusterKey) }}
-                <a-button type="link" size="small" @click.stop="clearClusterFilter">
+                <a-button
+                  type="link"
+                  size="small"
+                  @click.stop="clearClusterFilter"
+                >
                   清除
                 </a-button>
               </div>
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel key="rules" header="技术详情：规则结果">
+          <a-collapse-panel
+            key="rules"
+            header="技术详情：规则结果"
+          >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">规则结果概览</div>
-                <div v-if="activeRuleFilterLabel" class="drawer-section-meta">
+                <div class="drawer-section-title">
+                  规则结果概览
+                </div>
+                <div
+                  v-if="activeRuleFilterLabel"
+                  class="drawer-section-meta"
+                >
                   已按规则过滤：{{ activeRuleFilterLabel }}
                 </div>
               </div>
@@ -1658,9 +1755,19 @@
           </a-collapse-panel>
         </a-collapse>
 
-        <a-collapse v-if="canLoadDebugSnapshot" ghost class="drawer-advanced-collapse">
-          <a-collapse-panel key="debug" header="技术详情：调试快照">
-            <div v-if="!batchJobDebugSnapshot" class="drawer-card drawer-card--nested">
+        <a-collapse
+          v-if="canLoadDebugSnapshot"
+          ghost
+          class="drawer-advanced-collapse"
+        >
+          <a-collapse-panel
+            key="debug"
+            header="技术详情：调试快照"
+          >
+            <div
+              v-if="!batchJobDebugSnapshot"
+              class="drawer-card drawer-card--nested"
+            >
               <a-spin :spinning="batchJobDebugLoading">
                 <a-empty
                   :description="batchJobDebugLoading ? '正在加载调试快照…' : '调试快照暂未加载'"
@@ -1675,9 +1782,14 @@
                 </a-empty>
               </a-spin>
             </div>
-            <div v-else class="drawer-card drawer-card--nested">
+            <div
+              v-else
+              class="drawer-card drawer-card--nested"
+            >
               <div class="drawer-section-head">
-                <div class="drawer-section-title">执行调试快照</div>
+                <div class="drawer-section-title">
+                  执行调试快照
+                </div>
                 <div class="debug-toolbar">
                   <a-select
                     :value="selectedDebugRuleJobId || undefined"
@@ -1700,16 +1812,16 @@
                   <span class="debug-current-rule-value">
                     {{
                       batchJobDebugSnapshot.current_rule?.rule_code ||
-                      currentDebugRule?.rule_code ||
-                      '未定位'
+                        currentDebugRule?.rule_code ||
+                        '未定位'
                     }}
                   </span>
                 </div>
                 <div class="debug-current-rule-sub">
                   {{
                     batchJobDebugSnapshot.current_rule?.rule_name ||
-                    currentDebugRule?.rule_name ||
-                    '暂无规则名称'
+                      currentDebugRule?.rule_name ||
+                      '暂无规则名称'
                   }}
                 </div>
               </div>
@@ -1735,8 +1847,13 @@
                   <span class="debug-meta-value">{{ batchJobDebugSnapshot.status }}</span>
                 </div>
               </div>
-              <div v-if="debugProgressEntries.length" class="debug-pill-block">
-                <div class="debug-pill-title">current_rule.progress</div>
+              <div
+                v-if="debugProgressEntries.length"
+                class="debug-pill-block"
+              >
+                <div class="debug-pill-title">
+                  current_rule.progress
+                </div>
                 <div class="debug-pill-list">
                   <span
                     v-for="item in debugProgressEntries"
@@ -1747,8 +1864,13 @@
                   </span>
                 </div>
               </div>
-              <div v-if="debugDetailEntries.length" class="debug-pill-block">
-                <div class="debug-pill-title">current_rule.debug</div>
+              <div
+                v-if="debugDetailEntries.length"
+                class="debug-pill-block"
+              >
+                <div class="debug-pill-title">
+                  current_rule.debug
+                </div>
                 <div class="debug-pill-list">
                   <span
                     v-for="item in debugDetailEntries"
@@ -1789,18 +1911,25 @@
             <span>{{ resolveIssueDisplayRecordRef(selectedDeepReviewIssue) }}</span>
             <span>{{
               selectedDeepReviewIssue.target_document_type ||
-              selectedDeepReviewIssue.document_type ||
-              '未知文书域'
+                selectedDeepReviewIssue.document_type ||
+                '未知文书域'
             }}</span>
             <span>{{ selectedDeepReviewIssue.rule_family || 'general' }}</span>
             <span>{{ selectedDeepReviewIssue.defect_level || '未分级' }}</span>
             <span v-if="selectedDeepReviewIssue.refined">单条精审</span>
           </div>
-          <div v-if="hasEvidenceChain(selectedDeepReviewIssue)" class="deep-review-chain">
+          <div
+            v-if="hasEvidenceChain(selectedDeepReviewIssue)"
+            class="deep-review-chain"
+          >
             <div class="evidence-chain-panel-head">
               <div>
-                <div class="evidence-chain-title">证据链</div>
-                <div class="evidence-chain-subtitle">触发事实、依赖数据、来源证据和判断阈值</div>
+                <div class="evidence-chain-title">
+                  证据链
+                </div>
+                <div class="evidence-chain-subtitle">
+                  触发事实、依赖数据、来源证据和判断阈值
+                </div>
               </div>
               <a-tag class="evidence-chain-tag">
                 {{
@@ -1815,7 +1944,9 @@
                 v-if="resolveTriggerFacts(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">触发事实</div>
+                <div class="evidence-chain-block-title">
+                  触发事实
+                </div>
                 <div
                   v-for="fact in resolveTriggerFacts(selectedDeepReviewIssue)"
                   :key="fact.key"
@@ -1826,7 +1957,9 @@
                 </div>
               </div>
               <div class="evidence-chain-block">
-                <div class="evidence-chain-block-title">数据依赖</div>
+                <div class="evidence-chain-block-title">
+                  数据依赖
+                </div>
                 <div
                   v-for="row in resolveDependencyRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1840,7 +1973,9 @@
                 v-if="resolveDecisionRows(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">判断过程</div>
+                <div class="evidence-chain-block-title">
+                  判断过程
+                </div>
                 <div
                   v-for="row in resolveDecisionRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1854,7 +1989,9 @@
                 v-if="resolveAuditRows(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">执行信息</div>
+                <div class="evidence-chain-block-title">
+                  执行信息
+                </div>
                 <div
                   v-for="row in resolveAuditRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1869,7 +2006,9 @@
               v-if="resolveEvidenceChainItems(selectedDeepReviewIssue, 1600).length"
               class="evidence-chain-evidence-list"
             >
-              <div class="evidence-chain-block-title">关键证据</div>
+              <div class="evidence-chain-block-title">
+                关键证据
+              </div>
               <div
                 v-for="evidence in resolveEvidenceChainItems(selectedDeepReviewIssue, 1600)"
                 :key="evidence.key"
@@ -1886,10 +2025,17 @@
               </div>
             </div>
           </div>
-          <a-alert v-if="deepReviewError" type="warning" show-icon :message="deepReviewError" />
+          <a-alert
+            v-if="deepReviewError"
+            type="warning"
+            show-icon
+            :message="deepReviewError"
+          />
           <a-spin :spinning="deepReviewLoading">
             <div class="deep-review-section">
-              <div class="deep-review-label">复核结论</div>
+              <div class="deep-review-label">
+                复核结论
+              </div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('findings')).summary.length"
@@ -1921,7 +2067,10 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol v-if="section.points.length" class="issue-conclusion-points">
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-findings-point-${sectionIndex}-${index}`"
@@ -1946,7 +2095,9 @@
               </div>
             </div>
             <div class="deep-review-section">
-              <div class="deep-review-label">复核证据</div>
+              <div class="deep-review-label">
+                复核证据
+              </div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('evidence')).summary.length"
@@ -1978,7 +2129,10 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol v-if="section.points.length" class="issue-conclusion-points">
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-evidence-point-${sectionIndex}-${index}`"
@@ -2003,7 +2157,9 @@
               </div>
             </div>
             <div class="deep-review-section">
-              <div class="deep-review-label">复核建议</div>
+              <div class="deep-review-label">
+                复核建议
+              </div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('suggestion')).summary.length"
@@ -2035,7 +2191,10 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol v-if="section.points.length" class="issue-conclusion-points">
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-suggestion-point-${sectionIndex}-${index}`"
@@ -2075,6 +2234,7 @@
 
 <script setup lang="ts">
 import { FileArchive } from 'lucide-vue-next'
+import QcRemediationSuggestion from '@/views/workstation-v4/components/qc/QcRemediationSuggestion.vue'
 import {
   useSemanticRulesBatchResultDrawerController,
   type SemanticRulesBatchResultDrawerProps,

@@ -51,6 +51,7 @@ from ..services.luxian_0609_result_export_service import (
     export_single_record_result_html,
 )
 from ..services.custom_qc_sample_pool_service import CustomQCSamplePoolService
+from ..services.luxian_0609.remediation_draft import generate_remediation_draft
 from ..schemas.qc_sichuan import QcResultFeedbackRequest
 from ..services.qc_workspace.result_feedback_demo_store import (
     ResultFeedbackDemoConflict,
@@ -2217,6 +2218,55 @@ async def get_latest_workspace_record_result(
     return success_response(
         data=result,
         message="获取单病历最新质控结果成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/records/{record_id}/latest-result/remediation-draft")
+async def create_latest_workspace_record_remediation_draft(
+    request: Request,
+    record_id: str,
+    body: Dict[str, Any] = Body(...),
+    institute_id: str = Query(..., min_length=1, description="机构标识"),
+    patient_id: str = Query(..., min_length=1, description="患者标识"),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
+):
+    """按需生成单条规则的整改草稿。
+
+    只读取该病历已保存的最新结果，草稿不落库，也不改写质控结论与权威建议。
+    """
+
+    rule_id = str((body or {}).get("rule_id") or "").strip().upper()
+    if not rule_id:
+        raise HTTPException(status_code=400, detail="缺少规则编号")
+
+    workspace = _sichuan_workspace_service()
+    result = await run_in_threadpool(
+        workspace.get_latest_luxian_0609_record_result,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=record_id,
+    )
+    if str(result.get("state") or "") == "not_found":
+        raise HTTPException(status_code=404, detail="该病历暂无已保存质控结果或无访问权限")
+
+    item = next(
+        (
+            candidate
+            for candidate in list(result.get("items") or [])
+            if str(candidate.get("rule_id") or "").strip().upper() == rule_id
+        ),
+        None,
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="该病历最新结果中没有这条质控点")
+
+    draft = await generate_remediation_draft(item=item)
+    return success_response(
+        data=draft,
+        message="整改草稿生成完成" if draft.get("available") else "该结果暂不提供整改草稿",
         trace_id=get_trace_id(request),
     )
 

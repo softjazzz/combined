@@ -1,30 +1,59 @@
 <template>
-  <aside class="qc-review-preview" aria-label="复核预览" data-testid="qc-review-preview">
+  <aside
+    class="qc-review-preview"
+    aria-label="复核预览"
+    data-testid="qc-review-preview"
+  >
     <header class="preview-heading">
       <ClipboardCheck :size="18" />
       <h2>复核预览</h2>
-      <div v-if="row && ready && !loading && !loadError" class="preview-heading-actions">
+      <div
+        v-if="row && ready && !loading && !loadError"
+        class="preview-heading-actions"
+      >
         <QcDiagnosticExport
           v-if="loadedResult"
           :items="loadedResult.items"
           :context="diagnosticContext"
         />
         <div class="preview-primary-action">
-          <button type="button" class="full-result-button" @click="openFull">
+          <button
+            type="button"
+            class="full-result-button"
+            @click="openFull"
+          >
             <span class="full-result-label">
-              <FileText :size="17" aria-hidden="true" />
+              <FileText
+                :size="17"
+                aria-hidden="true"
+              />
               查看完整质控结果
             </span>
-            <ArrowRight :size="16" aria-hidden="true" />
+            <ArrowRight
+              :size="16"
+              aria-hidden="true"
+            />
           </button>
         </div>
       </div>
     </header>
-    <div v-if="!row" class="preview-state">请选择左侧病历，查看最近一次质控结果</div>
+    <div
+      v-if="!row"
+      class="preview-state"
+    >
+      请选择左侧病历，查看最近一次质控结果
+    </div>
     <template v-else>
-      <section class="patient-context" aria-label="当前患者">
+      <section
+        class="patient-context"
+        aria-label="当前患者"
+      >
         <h3>
-          <img class="patient-avatar" :src="patientAvatarSrc(row)" alt="" />{{
+          <img
+            class="patient-avatar"
+            :src="patientAvatarSrc(row)"
+            alt=""
+          >{{
             row.patientName || '患者信息待接入'
           }}
         </h3>
@@ -49,14 +78,33 @@
           </div>
         </dl>
       </section>
-      <div v-if="loading" class="preview-state" role="status">正在读取质控结果…</div>
-      <div v-else-if="loadError" class="preview-state" role="alert">
+      <div
+        v-if="loading"
+        class="preview-state"
+        role="status"
+      >
+        正在读取质控结果…
+      </div>
+      <div
+        v-else-if="loadError"
+        class="preview-state"
+        role="alert"
+      >
         <p>{{ loadError }}</p>
-        <button type="button" class="text-button" @click="loadResult">
+        <button
+          type="button"
+          class="text-button"
+          @click="loadResult"
+        >
           <RotateCcw :size="14" />重试
         </button>
       </div>
-      <div v-else-if="!ready" class="preview-state">暂无已保存质控结果，请先运行质控</div>
+      <div
+        v-else-if="!ready"
+        class="preview-state"
+      >
+        暂无已保存质控结果，请先运行质控
+      </div>
       <template v-else>
         <div class="status-tabs">
           <span>问题预览</span>
@@ -72,8 +120,16 @@
             />
           </div>
         </div>
-        <div class="preview-results" aria-live="polite">
-          <p v-if="!filteredItems.length" class="preview-state">该状态暂无质控项</p>
+        <div
+          class="preview-results"
+          aria-live="polite"
+        >
+          <p
+            v-if="!filteredItems.length"
+            class="preview-state"
+          >
+            该状态暂无质控项
+          </p>
           <article
             v-for="item in filteredItems.slice(0, 3)"
             :key="item.key"
@@ -82,17 +138,28 @@
           >
             <div class="item-heading">
               <div class="item-meta">
-                <span v-if="item.source_document" class="item-source">{{
+                <span
+                  v-if="item.source_document"
+                  class="item-source"
+                >{{
                   item.source_document
                 }}</span>
-                <span class="status-label" :data-tone="item.tone">{{ item.displayStatus }}</span>
+                <span
+                  class="status-label"
+                  :data-tone="item.tone"
+                >{{ item.displayStatus }}</span>
               </div>
               <h3 :title="item.rule_name || item.rule_id">
                 {{ displayRuleTitle(item) }}
               </h3>
             </div>
-            <p class="section-label">判定说明</p>
-            <p class="item-summary" :class="{ 'is-expanded': expandedItems.includes(item.key) }">
+            <p class="section-label">
+              判定说明
+            </p>
+            <p
+              class="item-summary"
+              :class="{ 'is-expanded': expandedItems.includes(item.key) }"
+            >
               {{ item.conclusionText || '暂无结论说明' }}
             </p>
             <p
@@ -109,45 +176,52 @@
             >
               {{ expandedItems.includes(item.key) ? '收起说明' : '查看完整说明' }}
             </button>
-            <div v-if="expandedItems.includes(item.key)" class="explanation-extra">
-              <p v-if="item.detail && item.detail !== item.conclusionText" class="full-text">
+            <div
+              v-if="expandedItems.includes(item.key)"
+              class="explanation-extra"
+            >
+              <p
+                v-if="item.detail && item.detail !== item.conclusionText"
+                class="full-text"
+              >
                 {{ item.detail }}
               </p>
-              <p v-if="item.actual" class="full-text">实际情况：{{ item.actual }}</p>
-              <p v-if="item.standard" class="full-text">质控标准：{{ item.standard }}</p>
+              <p
+                v-if="item.actual"
+                class="full-text"
+              >
+                实际情况：{{ item.actual }}
+              </p>
+              <p
+                v-if="item.standard"
+                class="full-text"
+              >
+                质控标准：{{ item.standard }}
+              </p>
             </div>
+            <QcRemediationSuggestion
+              v-if="item.suggestion"
+              :suggestion="item.suggestion"
+              :status="item.status"
+              :rule-id="item.rule_id"
+              :record-context="diagnosticContext"
+              dense
+            />
             <div class="preview-item-actions">
-              <details v-if="item.suggestion" class="suggestion-details">
-                <summary>处理建议</summary>
-                <div class="suggestion-content">
-                  <p
-                    v-for="(paragraph, index) in suggestionParagraphs(item.suggestion)"
-                    :key="index"
-                    class="full-text"
-                  >
-                    <template v-if="/^(修改对象|需要补充|推荐写法|注意事项)[：:]/u.test(paragraph)">
-                      <span class="suggestion-term">{{ paragraph.slice(0, 4) }}</span>
-                      <span class="suggestion-description">{{ paragraph.slice(5).trim() }}</span>
-                    </template>
-                    <template v-else>
-                      {{ paragraph }}
-                    </template>
-                  </p>
-                </div>
-              </details>
-              <button type="button" class="text-button" @click="openFull">
+              <button
+                type="button"
+                class="text-button"
+                @click="openFull"
+              >
                 原文核对<ArrowUpRight :size="14" />
               </button>
             </div>
           </article>
         </div>
         <footer class="preview-footer">
-          <span
-            >共 {{ viewItems.length }} 项 · 当前分组 {{ filteredItems.length }} 项<span
-              v-if="filteredItems.length > 3"
-              >，预览前 3 项</span
-            ></span
-          >
+          <span>共 {{ viewItems.length }} 项 · 当前分组 {{ filteredItems.length }} 项<span
+            v-if="filteredItems.length > 3"
+          >，预览前 3 项</span></span>
         </footer>
       </template>
     </template>
@@ -169,6 +243,7 @@ import {
   type SingleRecordQcResultTabKey,
 } from '../../customer-sample-validation/single-record-result-model'
 import type { QcRecordCarePhase, QcRecordResultRow } from './QcRecordResultTable.vue'
+import QcRemediationSuggestion from './QcRemediationSuggestion.vue'
 import { patientAvatarSrc } from './patient-avatar'
 
 const props = withDefaults(
@@ -194,13 +269,6 @@ function toggleExplanation(key: string) {
   expandedItems.value = expandedItems.value.includes(key)
     ? expandedItems.value.filter((entry) => entry !== key)
     : [...expandedItems.value, key]
-}
-// 仅在既有建议的明确标签前换行，不改写或删减建议内容。
-function suggestionParagraphs(text: string): string[] {
-  return text
-    .split(/\n+|(?=(?:修改对象|需要补充|推荐写法|注意事项)[：:])/u)
-    .map((part) => part.trim())
-    .filter(Boolean)
 }
 let requestSequence = 0
 const viewItems = computed(() => buildSingleRecordQcResultItems(items.value))
@@ -231,6 +299,7 @@ const diagnosticContext = computed(() => {
     patientName: row.patientName,
   }
 })
+
 
 function documentLabels(item: SingleRecordQcResultItem): string {
   return [
@@ -539,32 +608,6 @@ button {
   background: transparent;
   color: #2b6cf6;
   font-size: 12px;
-}
-.suggestion-details {
-  margin-top: 14px;
-  padding: 12px 0;
-  border-block: 1px solid #edf0f4;
-}
-.suggestion-details summary {
-  color: #465366;
-  font-size: 13px;
-  font-weight: 600;
-}
-.suggestion-hint {
-  float: right;
-  color: #7b8796;
-  font-size: 12px;
-  font-weight: 400;
-}
-.suggestion-details[open] .suggestion-hint {
-  display: none;
-}
-.suggestion-content {
-  padding: 4px 0;
-  font-size: 13px;
-  color: #526174;
-  line-height: 1.8;
-  font-weight: 400;
 }
 .document-label {
   display: flex;
