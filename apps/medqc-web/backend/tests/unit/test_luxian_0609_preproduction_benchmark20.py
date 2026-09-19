@@ -25,8 +25,12 @@ _DETERMINISTIC_RULE_IDS = frozenset(
 )
 _WITHHELD_RULE_IDS = frozenset(
     {
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
         "LX0609-025",
         "LX0609-028",
+        "LX0609-036",
         "LX0609-049",
         "LX0609-056",
         "LX0609-059",
@@ -56,13 +60,13 @@ def test_rule_attestations_use_authoritative_executable_phase_scope():
         if f"LX0609-{index:03d}" not in _WITHHELD_RULE_IDS
         and f"LX0609-{index:03d}" not in _CUSTOMER_EXCLUDED_RULE_IDS
     )
-    assert len(rule_ids) == 66
+    assert len(rule_ids) == 62
     assert not set(rule_ids).intersection(
         _WITHHELD_RULE_IDS | _CUSTOMER_EXCLUDED_RULE_IDS
     )
     assert set(executor_types) == set(rule_ids)
-    assert sum(item == "program" for item in executor_types.values()) == 43
-    assert sum(item == "llm" for item in executor_types.values()) == 23
+    assert sum(item == "program" for item in executor_types.values()) == 42
+    assert sum(item == "llm" for item in executor_types.values()) == 20
 
 
 @pytest.mark.parametrize(
@@ -148,8 +152,8 @@ def test_default_benchmark_output_exposes_full_customer_rule_scope() -> None:
     assert benchmark20._rule_scope_summary() == {
         "catalog_count": 77,
         "customer_delivery_count": 72,
-        "executable_count": 66,
-        "withheld_count": 6,
+        "executable_count": 62,
+        "withheld_count": 10,
     }
 
 
@@ -272,8 +276,8 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
     """锁定当前可执行规则的权威契约分类。"""
 
     rows = candidate["rows"]
-    assert len(_DETERMINISTIC_RULE_IDS) == 43
-    assert len(_SEMANTIC_RULE_IDS) == 23
+    assert len(_DETERMINISTIC_RULE_IDS) == 42
+    assert len(_SEMANTIC_RULE_IDS) == 20
     assert len(rows) == 20 * len(_RULE_IDS)
     decision_kinds = [row["decision_kind"] for row in rows]
     assert decision_kinds.count("deterministic") == (
@@ -354,8 +358,8 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         f"case-{index:02d}" for index in range(1, 21)
     ]
     assert batch["summary"]["case_count"] == 20
-    assert batch["summary"]["judgment_count"] == 1320
-    assert batch["summary"]["status_counts"] == {"compliant": 1320}
+    assert batch["summary"]["judgment_count"] == 1240
+    assert batch["summary"]["status_counts"] == {"compliant": 1240}
     assert batch["summary"]["llm_call_count"] == 20
     assert batch["summary"]["input_tokens"] == 200
     assert batch["summary"]["completion_tokens"] == 40
@@ -369,7 +373,7 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     assert batch["summary"]["latency_ms"]["p50"] == 10.5
     assert batch["summary"]["latency_ms"]["p95"] == 19.05
     assert batch["summary"]["rule_maturity"] == {
-        "rule_decision_count": 66,
+        "rule_decision_count": 62,
         "typed_shadow_adapter_count": 0,
         "legacy_projection_count": 0,
     }
@@ -377,8 +381,8 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         "mode": "full_customer",
         "catalog_count": 77,
         "customer_delivery_count": 72,
-        "executable_count": 66,
-        "withheld_count": 6,
+        "executable_count": 62,
+        "withheld_count": 10,
     }
     assert len(batch["selector_digest"]) == 64
     assert len(batch["rule_set_digest"]) == 64
@@ -388,14 +392,14 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         candidate_version="benchmark-test-v1",
         generated_at="2026-07-17T00:00:00Z",
     )
-    assert candidate["candidate_count"] == 1320
+    assert candidate["candidate_count"] == 1240
     _assert_candidate_decision_kind_contract(candidate)
     attestation_hashes = [
         evidence_hash
         for case in batch["cases"]
         for evidence_hash in case["evidence_attestations"].values()
     ]
-    assert len(attestation_hashes) == len(set(attestation_hashes)) == 1320
+    assert len(attestation_hashes) == len(set(attestation_hashes)) == 1240
     assert [row["evidence_ref_hashes"][0] for row in candidate["rows"]] == (
         attestation_hashes
     )
@@ -789,7 +793,7 @@ async def test_benchmark20_can_emit_diagnostic_batch_when_technical_error_is_all
 
     assert batch["summary"]["technical_error_count"] == 20
     assert batch["summary"]["status_counts"] == {
-        "compliant": 1300,
+        "compliant": 1220,
         "technical_error": 20,
     }
 

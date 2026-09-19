@@ -921,10 +921,10 @@ def test_non_compliant_result_gives_rule_specific_action_instead_of_generic_advi
     assert result["suggestion"] != "请按质控要求核对并完善相关记录。"
 
 
-def test_022_suggestion_provides_a_safe_writing_template() -> None:
-    decision = reduce_luxian_0609_rule_decision(
+def _defect_decision(rule_id: str) -> RuleDecision:
+    return reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-022",
+            rule_id=rule_id,
             snapshot_hash=SNAPSHOT_HASH,
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -935,14 +935,32 @@ def test_022_suggestion_provides_a_safe_writing_template() -> None:
         )
     )
 
-    result = render_luxian_0609_customer_result(decision=decision)
 
-    assert "修改对象：会诊记录单" in result["suggestion"]
-    assert "需要补充：针对当前病情的判断" in result["suggestion"]
-    assert "病情判断—具体措施—执行时点或条件—观察指标—复评或随访安排" in result[
-        "suggestion"
-    ]
-    assert "不要编造未核实事实" in result["suggestion"]
+def test_withheld_consultation_rules_no_longer_deliver_rule_specific_template() -> None:
+    """022 因会诊记录单来源缺失暂停，不再交付会诊记录单书写模板。"""
+
+    withheld = render_luxian_0609_customer_result(
+        decision=_defect_decision("LX0609-022")
+    )
+
+    assert "修改对象：会诊记录单" not in withheld["suggestion"]
+    assert "病情判断—具体措施" not in withheld["suggestion"]
+    assert withheld["suggestion"] == "请按质控要求核对并完善相关记录。"
+
+
+def test_surviving_consultation_rule_keeps_structured_action() -> None:
+    """023 保留为会诊族唯一可执行规则，模板中写明会诊意见来自正文语义提取。"""
+
+    result = render_luxian_0609_customer_result(
+        decision=_defect_decision("LX0609-023")
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "会诊意见按会诊执行记录正文语义提取" in result["findings"]
+    assert "会诊意见按会诊执行记录正文语义提取" in result["evidence"]
+    for section in ("修改对象：", "需要补充：", "推荐写法：", "注意事项："):
+        assert section in result["suggestion"]
+    assert "请在会诊意见执行记录中归纳具体措施" in result["suggestion"]
 
 
 DEFINED_RULE_IDS = tuple(

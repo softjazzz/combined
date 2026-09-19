@@ -75,8 +75,12 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
         for rule_id in selected
         if rule_id
         not in {
+            "LX0609-020",
+            "LX0609-021",
+            "LX0609-022",
             "LX0609-025",
             "LX0609-028",
+            "LX0609-036",
             "LX0609-049",
             "LX0609-056",
             "LX0609-059",
@@ -151,7 +155,8 @@ def test_consultation_typed_decisions_require_native_dispatch() -> None:
         native_async_rule_ids=("LX0609-021", "LX0609-022", "LX0609-023"),
     )
 
-    assert resolved == ("LX0609-021", "LX0609-022", "LX0609-023")
+    # 020/021/022 暂停后不再进入 Typed Decision 范围，023 仍要求 native 派发。
+    assert resolved == ("LX0609-023",)
 
 
 def test_new_native_rule_without_legacy_rollout_group_uses_its_typed_contract() -> None:

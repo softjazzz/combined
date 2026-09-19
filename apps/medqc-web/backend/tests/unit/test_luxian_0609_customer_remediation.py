@@ -19,6 +19,7 @@ from app.services.luxian_0609.decision_model import (
 from app.services.luxian_0609.decision_reducer import (
     reduce_luxian_0609_rule_decision,
 )
+from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 
 
 SNAPSHOT_HASH = "a" * 64
@@ -26,8 +27,14 @@ FACT_REF = "b" * 64
 
 
 def test_every_active_non_compliant_rule_has_structured_action() -> None:
-    assert len(ACTIVE_FORMAL_RULE_IDS) == 71
-    assert not set(ACTIVE_FORMAL_RULE_IDS) & set(PENDING_RULE_IDS)
+    # 正式范围以规则总表为准：active 与 pending 必须无交集且完整覆盖 77 条，
+    # 避免硬编码数量掩盖规则丢失或分区遗漏。
+    master_rule_ids = tuple(entry.rule_id for entry in load_luxian_0609_rule_master())
+    assert len(master_rule_ids) == 77
+    assert len(master_rule_ids) == len(set(master_rule_ids))
+    assert set(ACTIVE_FORMAL_RULE_IDS).isdisjoint(PENDING_RULE_IDS)
+    assert set(ACTIVE_FORMAL_RULE_IDS) | set(PENDING_RULE_IDS) == set(master_rule_ids)
+    assert len(ACTIVE_FORMAL_RULE_IDS) + len(PENDING_RULE_IDS) == 77
 
     for rule_id in ACTIVE_FORMAL_RULE_IDS:
         suggestion = build_customer_remediation_suggestion(
@@ -120,7 +127,7 @@ def test_non_terminal_states_have_action_semantics(
     expected: str,
 ) -> None:
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-022",
+        rule_id="LX0609-023",
         status=status,
         reason_code=reason_code,
     )
@@ -132,6 +139,8 @@ def test_non_terminal_states_have_action_semantics(
 
 
 def test_controlled_episode_facts_identify_the_consultations_to_revise() -> None:
+    """022 暂停后不再交付逐条会诊定位模板；受控事实仍由执行器产出。"""
+
     suggestion = build_customer_remediation_suggestion(
         rule_id="LX0609-022",
         status="non_compliant",
@@ -157,21 +166,17 @@ def test_controlled_episode_facts_identify_the_consultations_to_revise() -> None
         },
     )
 
-    assert "2026-07-21 10:30:00《会诊记录单》（第2次）" in suggestion
-    assert "2026-07-23 14:15:00《会诊记录单》（第4次）" in suggestion
-    assert "第2次）意见补充明确诊疗判断" in suggestion
-    assert "第4次）意见补充明确诊疗意见" in suggestion
-    assert "第1次、第3次" not in suggestion
+    assert suggestion == ""
 
 
 def test_non_compliant_consultation_advice_does_not_mix_data_gap_instructions() -> None:
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-021",
+        rule_id="LX0609-023",
         status="non_compliant",
         reason_code="requirement_violated",
     )
 
-    assert "修改对象：会诊申请单" in suggestion
+    assert "修改对象：会诊意见执行记录" in suggestion
     assert "请依据本次实际诊疗事实补充" in suggestion
     assert "不要编造未核实事实" in suggestion
     assert "资料不足时应标记待核实" not in suggestion
@@ -282,7 +287,7 @@ def test_renderer_structures_non_terminal_state_actions(
 ) -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-022",
+            rule_id="LX0609-023",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=applicability,
             evidence_state=evidence_state,

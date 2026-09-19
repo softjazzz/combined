@@ -163,24 +163,33 @@
       "source_document": "会诊记录",
       "qc_point": "有会诊记录单无请会诊执行记录",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "consultation_source_document_unavailable_customer_scope",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "核对后续病程是否记录会诊意见及执行情况；资料完整但未记录时不合规，医嘱和检查仅作辅助证据。"
+      "policy_summary": "核对会诊意见及执行情况需以会诊记录单为对照；客户确认系统内会诊文书实为请会诊执行记录，无独立会诊记录单来源，本质控点暂不执行，不得因该来源缺失生成数据不足或不合规结论。",
+      "pending_definition_note": "待院方提供可核查的会诊记录单来源并完成口径验收后再启用；会诊执行记录自身规范性由 LX0609-023 单独核对。"
     },
     {
       "rule_id": "LX0609-021",
       "source_document": "会诊记录",
       "qc_point": "会诊申请单会诊目的不明确",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "consultation_source_document_unavailable_customer_scope",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《会诊记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "源库未同步会诊申请单，缺少会诊目的来源，本质控点暂不执行；不得因申请单资料缺失生成数据不足或不合规结论。",
+      "pending_definition_note": "待院方提供会诊申请单数据源并完成口径验收后再启用。"
     },
     {
       "rule_id": "LX0609-022",
       "source_document": "会诊记录",
       "qc_point": "会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "consultation_source_document_unavailable_customer_scope",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "当前按客户已确认的《会诊记录》质控点执行；新增或变更口径须单独验收。"
+      "policy_summary": "源库未同步会诊记录单，会诊意见无独立结构化来源，本质控点暂不执行；不得因会诊意见来源缺失生成数据不足或不合规结论。",
+      "pending_definition_note": "待院方提供会诊记录单来源并完成口径验收后再启用。"
     },
     {
       "rule_id": "LX0609-023",
@@ -188,7 +197,7 @@
       "qc_point": "请会诊执行记录不规范，照抄会诊意见，未归纳总结或未明确具体执行情况",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "已记录但仅“遵嘱执行”、照抄会诊意见或未写具体落实内容时判不规范；医嘱和检查仅作辅助证据。"
+      "policy_summary": "会诊意见按会诊执行记录正文语义提取，再与病程、医嘱等执行痕迹比对；仅“遵嘱执行”、照抄会诊意见或未写具体落实内容时判不规范，医嘱和检查仅作辅助证据。"
     },
     {
       "rule_id": "LX0609-024",

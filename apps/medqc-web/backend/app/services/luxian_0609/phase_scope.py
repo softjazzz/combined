@@ -30,6 +30,25 @@ def _clean(value: object) -> str:
     return str(value or "").strip()
 
 
+_DEFAULT_PENDING_DEFINITION_MESSAGES = (
+    "本质控点当前不参与正式结论，未生成合规或问题判定。",
+    "待院方确认并发布业务口径后再启用本质控点。",
+)
+# 暂停原因的客户文案只在此处声明；总表只提供原因码，避免第二份暂停清单。
+_PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
+    "anesthesia_visit_sources_unavailable_customer_scope": (
+        "麻醉术前、术后访视记录数据源暂不可用，本质控点已暂停，未生成合规或问题判定。",
+        "待访视记录数据源接入并验收后再启用本质控点；当前不要求据此补写记录。",
+    ),
+    "consultation_source_document_unavailable_customer_scope": (
+        "系统内的会诊文书实际为请会诊执行记录，缺少可核查的会诊申请单或会诊记录单，"
+        "本质控点已暂停，未生成合规或问题判定。",
+        "待院方提供会诊申请单或会诊记录单来源并完成口径验收后再启用本质控点；"
+        "会诊执行记录自身的规范性由 LX0609-023 单独核对。",
+    ),
+}
+
+
 @dataclass(frozen=True)
 class Luxian0609PhaseScopeEntry:
     """供执行计划读取的总表只读投影。"""
@@ -108,6 +127,10 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
     wrapper = get_luxian_0609_rule(entry.rule_id)
     if wrapper is None:
         raise ValueError("pending rule is missing from the LX0609 catalog")
+    findings, suggestion = _PENDING_DEFINITION_CUSTOMER_MESSAGES.get(
+        entry.pending_reason_code,
+        _DEFAULT_PENDING_DEFINITION_MESSAGES,
+    )
     return {
         "rule_id": entry.rule_id,
         "rule_code": entry.rule_id,
@@ -121,18 +144,10 @@ def build_luxian_0609_pending_definition_result(rule_id: str) -> dict[str, objec
         "result_status": "not_executed",
         "display_status": "not_executed",
         "is_compliant": None,
-        "findings": (
-            "麻醉术前、术后访视记录数据源暂不可用，本质控点已暂停，未生成合规或问题判定。"
-            if entry.pending_reason_code == "anesthesia_visit_sources_unavailable_customer_scope"
-            else "本质控点当前不参与正式结论，未生成合规或问题判定。"
-        ),
+        "findings": findings,
         "facts": {},
         "evidence": [],
-        "suggestion": (
-            "待访视记录数据源接入并验收后再启用本质控点；当前不要求据此补写记录。"
-            if entry.pending_reason_code == "anesthesia_visit_sources_unavailable_customer_scope"
-            else "待院方确认并发布业务口径后再启用本质控点。"
-        ),
+        "suggestion": suggestion,
         "confidence": 0.0,
         "metadata": {
             "execution_source": "lx0609_phase_gate",

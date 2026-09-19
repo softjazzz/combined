@@ -24,9 +24,9 @@ def test_phase_scope_freezes_all_77_customer_rules() -> None:
     assert {entry.definition_version for entry in entries} == {
         "lx0609-defined-scope-2026-09-05-r3"
     }
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 70
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 67
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 0
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 7
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 10
     assert sum(entry.catalog_registered for entry in entries) == 77
 
 
@@ -59,6 +59,9 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
         for rule_id, entry in entries.items()
         if entry.phase_status == "pending_definition"
     } == {
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
         "LX0609-025",
         "LX0609-028",
         "LX0609-036",
@@ -134,14 +137,41 @@ def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
     assert pending == ("LX0609-049", "LX0609-059")
 
 
-def test_customer_delivery_scope_is_72_with_65_executable_and_7_withheld() -> None:
+def test_consultation_family_keeps_only_023_executable() -> None:
+    """会诊申请单/会诊记录单来源缺失，020/021/022 暂停，只保留 023。"""
+
+    entries = {entry.rule_id: entry for entry in load_luxian_0609_phase_scope()}
+
+    assert entries["LX0609-023"].phase_status == "phase_1_target"
+    for rule_id in ("LX0609-020", "LX0609-021", "LX0609-022"):
+        assert entries[rule_id].phase_status == "pending_definition"
+        assert (
+            entries[rule_id].pending_reason_code
+            == "consultation_source_document_unavailable_customer_scope"
+        )
+        result = build_luxian_0609_pending_definition_result(rule_id)
+        assert result["status"] == "not_executed"
+        assert result["is_compliant"] is None
+        assert "请会诊执行记录" in result["findings"]
+        assert "LX0609-023" in result["suggestion"]
+
+    executable, withheld = partition_luxian_0609_rule_scope(
+        ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")
+    )
+    assert executable == ("LX0609-023",)
+    assert withheld == ("LX0609-020", "LX0609-021", "LX0609-022")
+
+
+def test_customer_delivery_scope_is_72_with_62_executable_and_10_withheld() -> None:
     delivery = get_luxian_0609_customer_delivery_rule_ids()
     executable, withheld = get_luxian_0609_customer_execution_scope()
 
     assert len(delivery) == 72
-    assert len(executable) == 65
-    assert len(withheld) == 7
+    assert len(executable) == 62
+    assert len(withheld) == 10
     assert "LX0609-036" in withheld
+    assert {"LX0609-020", "LX0609-021", "LX0609-022"}.issubset(withheld)
+    assert "LX0609-023" in executable
     result = build_luxian_0609_pending_definition_result("LX0609-036")
     assert result["status"] == "not_executed"
     assert result["is_compliant"] is None

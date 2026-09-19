@@ -1506,7 +1506,8 @@ def test_021_customer_facts_allow_realistic_consultation_episode_count():
     )
 
 
-def test_022_safe_episode_facts_personalize_the_delivered_remediation() -> None:
+def test_withheld_022_keeps_safe_episode_projection_without_rule_template() -> None:
+    """022 暂停后仍投影受控事实，但不再交付会诊记录单整改模板。"""
     facts = {
         "verification_kind": "consultation_opinion_quality_check",
         "episode_count": 4,
@@ -1554,10 +1555,10 @@ def test_022_safe_episode_facts_personalize_the_delivered_remediation() -> None:
 
     assert result["status"] == "non_compliant"
     assert result["reason_code"] == "requirement_violated"
-    assert "修改对象：第2次、第4次会诊记录" in result["suggestion"]
-    assert "第2次意见补充明确诊疗判断" in result["suggestion"]
-    assert "第4次意见补充明确诊疗意见" in result["suggestion"]
-    assert "第1次、第3次" not in result["suggestion"]
+    assert result["suggestion"] == "请按质控要求核对并完善相关记录。"
+    assert "修改对象：" not in result["suggestion"]
+    assert "第2次意见补充明确诊疗判断" not in result["suggestion"]
+    assert result["customer_display_facts"]["semantic_state"] == "mixed"
 
 
 def test_021_episode_locator_is_renderable_but_document_ids_only_enter_customer_evidence() -> None:
@@ -1812,7 +1813,9 @@ def test_020_non_compliant_delivery_explains_missing_recommendation_and_locates_
         "共核对2次已完成会诊的2条建议：1条已找到明确执行记录，"
         "1条未找到对应执行记录。未闭环：第2次会诊的检查类建议。"
     )
-    assert "修改对象：每次会诊意见及对应执行记录" in result["suggestion"]
+    # 020 因会诊记录单来源缺失暂停，不再附带四段式结构化整改模板；
+    # 静态整改动作仍保留，供规则重新启用后直接复用。
+    assert "修改对象：" not in result["suggestion"]
     assert (
         "请针对结果列出的未闭环建议，在后续病程中补记具体执行措施、"
         "执行结果或未执行原因。"

@@ -381,8 +381,8 @@ def _current_rule_scope() -> tuple[tuple[str, ...], tuple[str, ...]]:
 def test_v2_default_gate_requires_exact_current_customer_rule_matrix() -> None:
     executable, pending = _current_rule_scope()
     assert len(golden_gate.get_luxian_0609_customer_delivery_rule_ids()) == 72
-    assert len(executable) == 66
-    assert len(pending) == 6
+    assert len(executable) == 62
+    assert len(pending) == 10
     assert len(golden_gate.load_luxian_0609_rule_contracts()) == 77
     assert golden_gate._validate_runtime_contract_identity(_runtime_manifest()) == executable
     batch, candidate, ledger = _v2_candidate_and_ledger(rule_ids=executable)
@@ -395,12 +395,12 @@ def test_v2_default_gate_requires_exact_current_customer_rule_matrix() -> None:
     )
 
     assert exit_code == golden_gate.EXIT_PASSED
-    assert summary["accepted_count"] == 66
+    assert summary["accepted_count"] == 62
     assert summary["rule_scope"] == {
         "catalog_count": 77,
         "customer_delivery_count": 72,
-        "executable_count": 66,
-        "withheld_count": 6,
+        "executable_count": 62,
+        "withheld_count": 10,
     }
 
 

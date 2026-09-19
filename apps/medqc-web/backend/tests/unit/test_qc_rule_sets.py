@@ -37,12 +37,12 @@ def test_luxian_0609_rule_set_should_expose_explicit_scope_counts():
 
     assert item["catalog_rule_count"] == 77
     assert item["customer_rule_count"] == 72
-    assert item["execution_rule_count"] == 66
-    assert item["withheld_rule_count"] == 6
+    assert item["execution_rule_count"] == 62
+    assert item["withheld_rule_count"] == 10
     assert len(item["catalog_rule_ids"]) == 77
     assert len(item["customer_rule_ids"]) == 72
-    assert len(item["execution_rule_ids"]) == 66
-    assert len(item["withheld_rule_ids"]) == 6
+    assert len(item["execution_rule_ids"]) == 62
+    assert len(item["withheld_rule_ids"]) == 10
 
 
 def test_sc_content_v1_rule_set_should_be_fixed_first_batch():

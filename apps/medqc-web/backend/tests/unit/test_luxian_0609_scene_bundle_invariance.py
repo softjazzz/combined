@@ -19,7 +19,7 @@ from app.services.sichuan_qc_service import SichuanQCService
 
 _CROSS_FAMILY_RULE_IDS = (
     "LX0609-016",  # 病程
-    "LX0609-021",  # 会诊
+    "LX0609-023",  # 会诊（020/021/022 因来源缺失暂停）
     "LX0609-033",  # 手术
     "LX0609-012",  # 检查检验
     "LX0609-045",  # 输血
@@ -28,7 +28,7 @@ _CROSS_FAMILY_RULE_IDS = (
 
 _FAMILY_REPRESENTATIVE_RULE_IDS = {
     "course": "LX0609-016",
-    "consultation": "LX0609-021",
+    "consultation": "LX0609-023",
     "surgery": "LX0609-033",
     "exam_lab": "LX0609-012",
     "transfusion": "LX0609-045",

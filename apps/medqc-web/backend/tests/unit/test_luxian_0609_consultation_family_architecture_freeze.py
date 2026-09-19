@@ -198,7 +198,13 @@ def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> 
     assert {item.executor_key for item in dependencies.values()} == {
         "consultation_quality"
     }
-    assert plan.native_rule_ids_for_executor("consultation_quality") == CONSULTATION_RULE_IDS
+    # 020/021/022 因会诊来源缺失暂停，本族只派发 023。
+    assert plan.native_rule_ids_for_executor("consultation_quality") == ("LX0609-023",)
+    assert plan.not_executed_rule_ids == (
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
+    )
     assert "LX0609-069" not in plan.native_rule_ids_for_executor(
         "consultation_quality"
     )

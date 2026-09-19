@@ -577,10 +577,11 @@ def test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them():
 @pytest.mark.parametrize(
     ("native_consultation_enabled", "execution_link_enabled", "expected_native", "expected_compatibility"),
     (
-        (False, False, (), ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")),
-        (False, True, (), ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")),
-        (True, False, ("LX0609-021", "LX0609-022"), ("LX0609-020", "LX0609-023")),
-        (True, True, ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"), ()),
+        # 020/021/022 因会诊来源缺失暂停，只剩 023 参与本族包计划。
+        (False, False, (), ("LX0609-023",)),
+        (False, True, (), ("LX0609-023",)),
+        (True, False, (), ("LX0609-023",)),
+        (True, True, ("LX0609-023",), ()),
     ),
 )
 def test_consultation_two_stage_package_dispatch(
