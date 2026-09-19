@@ -1032,6 +1032,42 @@ def test_023_all_no_trace_is_not_applicable_regardless_of_confidence():
     ) == ("not_applicable", "trigger_absent_complete")
 
 
+@pytest.mark.parametrize(
+    ("execution_state", "confidence", "expected"),
+    (
+        ("linked_specific", "high", ("compliant", "requirement_satisfied")),
+        ("linked_vague", "high", ("non_compliant", "requirement_violated")),
+        (
+            "linked_specific",
+            "low",
+            ("evaluation_unknown", "semantic_low_confidence"),
+        ),
+    ),
+)
+def test_023_structured_order_match_respects_specificity_and_confidence(
+    execution_state,
+    confidence,
+    expected,
+):
+    """医嘱匹配只在具体且高置信度时形成023合规结论。"""
+
+    completed = (_coverage_completed_recommendation(),)
+    assessment = episode._ExecutionAssessment(
+        "consultation_record-1#r1",
+        execution_state,
+        ("inpat_drug_order-1",),
+        confidence,
+        ("头孢哌酮舒巴坦",),
+        "no_trace",
+    )
+
+    assert episode._execution_quality_outcome(
+        assessments=(assessment,),
+        completed_recommendations=completed,
+        course_source_incomplete=False,
+    ) == expected
+
+
 def _window_session(
     *,
     rows_by_source,
@@ -3994,8 +4030,8 @@ async def test_020_generic_course_trace_is_compliant_but_023_is_non_compliant(mo
 
 
 @pytest.mark.asyncio
-async def test_020_requires_course_trace_even_when_structured_order_is_linked(monkeypatch):
-    """医嘱不能替代4.20.4要求的会诊后病程执行记录。"""
+async def test_023_accepts_specific_order_match_without_course_trace(monkeypatch):
+    """020仍要求病程闭环；023按新口径可由明确医嘱匹配证明具体执行。"""
 
     source_rows = {
         "consultation_record": _rows("会诊意见：建议加强抗感染治疗。", action_suffix=False),
@@ -4030,9 +4066,9 @@ async def test_020_requires_course_trace_even_when_structured_order_is_linked(mo
             "recommendation_ref": "consultation_record-1#r1",
             "execution_record_state": "no_trace",
             "trace_refs": [],
-            "execution_state": "absent",
-            "structured_action_refs": [],
-            "execution_quotes": [],
+            "execution_state": "linked_specific",
+            "structured_action_refs": ["inpat_drug_order-1"],
+            "execution_quotes": ["头孢哌酮舒巴坦"],
             "confidence": "high",
         }),
     )
@@ -4042,9 +4078,9 @@ async def test_020_requires_course_trace_even_when_structured_order_is_linked(mo
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
     assert result.llm_call_count == 2
-    # 结构化医嘱必须纳入 020/023 的会诊执行证据池，但不能替代病程追踪。
+    # 结构化医嘱不能替代020的病程存在性要求，但可作为023的具体执行证据。
     assert "头孢哌酮舒巴坦" in client.prompts[1]
 
 

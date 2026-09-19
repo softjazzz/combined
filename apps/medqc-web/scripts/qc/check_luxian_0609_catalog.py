@@ -18,6 +18,7 @@ DEPENDENCY_MATRIX_PATH = ROOT / "docs" / "0602" / "泸县0609质控点-执行依
 CATALOG_PATH = ROOT / "docs" / "0602" / "luxian_0609_formal_rule_catalog.json"
 CATALOG_MD_PATH = ROOT / "docs" / "0602" / "泸县0609质控点-正式上线规则清单.md"
 CATALOG_CSV_PATH = ROOT / "docs" / "0602" / "luxian_0609_formal_rule_catalog.csv"
+RULE_MASTER_PATH = ROOT / "backend" / "app" / "data" / "luxian_0609_rule_master_v1.json"
 
 RULE_SOURCE_PATHS = (
     ROOT / "backend" / "app" / "data" / "sichuan_rules_146.json",
@@ -67,7 +68,35 @@ ALLOWED_RESULT_STATUSES = {
     "data_quality_gap",
     "not_applicable",
     "needs_manual_review",
+    "not_executed",
 }
+
+
+def load_phase_statuses() -> dict[str, str]:
+    payload = json.loads(RULE_MASTER_PATH.read_text(encoding="utf-8"))
+    return {
+        str(item.get("rule_id") or "").strip().upper():
+        str(item.get("phase_status") or "active").strip()
+        for item in payload.get("rules") or []
+        if str(item.get("rule_id") or "").strip()
+    }
+
+
+def allowed_result_statuses_for(
+    qc_point_id: str,
+    *,
+    phase_statuses: dict[str, str],
+) -> list[str]:
+    statuses = [
+        "hit",
+        "not_hit",
+        "data_quality_gap",
+        "not_applicable",
+        "needs_manual_review",
+    ]
+    if phase_statuses.get(qc_point_id.upper()) == "pending_definition":
+        statuses.append("not_executed")
+    return statuses
 
 
 def read_customer_points() -> list[dict[str, Any]]:
@@ -259,6 +288,7 @@ def build_catalog() -> list[dict[str, Any]]:
     coverage_rows = parse_markdown_table(COVERAGE_MATRIX_PATH, 10)
     dependency_rows = parse_markdown_table(DEPENDENCY_MATRIX_PATH, 9)
     rule_catalog = load_rule_catalog()
+    phase_statuses = load_phase_statuses()
     catalog: list[dict[str, Any]] = []
 
     for point in points:
@@ -332,7 +362,10 @@ def build_catalog() -> list[dict[str, Any]]:
                     if rule_id.upper() in rule_catalog
                 }
             ),
-            "allowed_result_statuses": ["hit", "not_hit", "data_quality_gap", "not_applicable", "needs_manual_review"],
+            "allowed_result_statuses": allowed_result_statuses_for(
+                str(point["qc_point_id"]),
+                phase_statuses=phase_statuses,
+            ),
             "golden_cases": {
                 "positive": [],
                 "negative": [],
@@ -349,6 +382,7 @@ def build_catalog() -> list[dict[str, Any]]:
 
 def validate_catalog(catalog: list[dict[str, Any]]) -> list[str]:
     errors: list[str] = []
+    phase_statuses = load_phase_statuses()
     source_indexes = [int(item.get("source_index") or 0) for item in catalog]
     duplicate_indexes = [index for index, count in Counter(source_indexes).items() if count > 1]
     if len(catalog) != 49:
@@ -380,6 +414,11 @@ def validate_catalog(catalog: list[dict[str, Any]]) -> list[str]:
             for required_status in ("hit", "not_hit", "data_quality_gap"):
                 if required_status not in result_statuses:
                     errors.append(f"{qc_point_id} allowed_result_statuses 缺少 {required_status}。")
+            phase_is_pending = phase_statuses.get(qc_point_id.upper()) == "pending_definition"
+            if ("not_executed" in result_statuses) != phase_is_pending:
+                errors.append(
+                    f"{qc_point_id} allowed_result_statuses 与规则主表 phase_status 不一致。"
+                )
         evidence_fields = item.get("evidence_fields") or []
         for evidence_field in ("visit_id", "document_type", "matched_text", "evidence_summary", "suggestion", "risk_level"):
             if evidence_field not in evidence_fields:

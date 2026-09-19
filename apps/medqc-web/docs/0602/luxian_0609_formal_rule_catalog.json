@@ -1336,7 +1336,8 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review"
+      "needs_manual_review",
+      "not_executed"
     ],
     "golden_cases": {
       "positive": [],
@@ -1399,7 +1400,8 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review"
+      "needs_manual_review",
+      "not_executed"
     ],
     "golden_cases": {
       "positive": [],
@@ -1462,7 +1464,8 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review"
+      "needs_manual_review",
+      "not_executed"
     ],
     "golden_cases": {
       "positive": [],
@@ -1654,7 +1657,8 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review"
+      "needs_manual_review",
+      "not_executed"
     ],
     "golden_cases": {
       "positive": [],
@@ -1849,7 +1853,8 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review"
+      "needs_manual_review",
+      "not_executed"
     ],
     "golden_cases": {
       "positive": [],
@@ -2404,7 +2409,8 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review"
+      "needs_manual_review",
+      "not_executed"
     ],
     "golden_cases": {
       "positive": [],
@@ -3276,7 +3282,8 @@
       "not_hit",
       "data_quality_gap",
       "not_applicable",
-      "needs_manual_review"
+      "needs_manual_review",
+      "not_executed"
     ],
     "golden_cases": {
       "positive": [],

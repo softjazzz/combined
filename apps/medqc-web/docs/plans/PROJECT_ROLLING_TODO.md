@@ -263,9 +263,18 @@
   - 真实回放（2026-09-19，0910 样本池病历 286973 / visit 1926413，按 020-023 发起样本池质控）：020/021/022 返回 `not_executed` + `policy_definition_pending` 与会诊族暂停文案；023 返回 `non_compliant`，`conclusion` 为“会诊意见执行情况记录过于笼统（会诊意见按会诊执行记录正文语义提取）”，四段式整改建议不变。脚本：`.tmp/0910-full-audit/probe-consult-023-only-private.py`。
   - 回归：`pytest tests/unit tests/contract -k "luxian_0609 or qc_sample_pools"` 失败数由改动前 58 降为 41，无新增失败；其中 17 项为规则范围计数陈旧用例，本次同步更新（含 036 暂停遗留的 4 项）。
 - **边界与剩余风险**：
-  - 023 的执行痕迹主证据仍是会诊后病程/查房记录，医嘱、检查、检验、手术记录作为辅助结构化证据；客户口径若要改成“以医嘱为主”，需另行立项并重新验收。
+  - 023 同时评价会诊后病程/查房痕迹和高置信度的住院医嘱匹配；检查、检验、手术记录仍只作辅助结构化材料，不单独形成合规结论。
   - 020/021/022 的暂停是数据源缺口导致的临时状态；院方补齐申请单/记录单来源后，只需改总表 `phase_status` 并重跑验收。
-  - 与本改动无关的既有红灯仍在：`test_luxian_0609_mainline_services.py`(16)、`test_luxian_0609_consultation_family_architecture_freeze.py`(8)、`test_luxian_0609_surgery_*`(8)、`test_luxian_0609_preproduction_api.py`(1)、`test_luxian_0609_production_extension_boundary.py`(2) 等，未在本次范围内处理。
+  - 历史回归基线仍含其他既有红灯：`test_luxian_0609_mainline_services.py`、`test_luxian_0609_surgery_*`、`test_luxian_0609_preproduction_api.py`、`test_luxian_0609_production_extension_boundary.py` 等；会诊架构冻结测试的8个发布范围红灯纳入下述阻断修复。
+
+- **阻断修复（2026-09-19）**：
+  - 问题证据：023 已抽取到高置信度的会诊建议与医嘱关联，但最终判定只读取病程 `execution_record_state`，明确医嘱执行仍被交付为 `not_applicable`；会诊架构冻结测试仍按已暂停的020至022旧发布范围断言，形成8个失败；正式规则目录未允许阶段门禁实际交付的 `not_executed`。
+  - 根因：023 丢弃了同一 `_ExecutionAssessment` 中已校验的结构化医嘱关联；测试范围和正式目录没有随规则主表的 `phase_status` 同步。
+  - 最小方案：023 仅在病程无痕迹时接纳“高置信度 + `linked_specific` + 可定位住院药品/非药品医嘱引用”的执行证据，笼统关联仍判不合规，低置信度仍保持不可交付；检查、检验和手术等其他结构化材料不替代医嘱，020判定不变。正式目录的 `not_executed` 从唯一规则主表的 `pending_definition` 派生，不维护第二份暂停名单。架构冻结测试改为验证020至022在执行器之前暂停且零模型调用，023执行器行为由其公开入口测试覆盖。
+  - 文件范围：`native_consultation_episode_execution.py` 的既有023判定函数、正式目录生成器及JSON/CSV产物、会诊架构冻结测试、会诊执行器测试和规则目录测试。不得修改其他0609规则判定、聚合器或0916代码。
+  - 巨型文件检查：`native_consultation_episode_execution.py` 已超过Python文件预警线，但本次没有新增业务职责，只让现有023判定消费同一事实对象中已存在且已校验的结构化执行字段；拆出新模块会制造第二个事实所有者和额外转发层，因此保留在现有判定函数中，生产代码仅作小范围修改。
+  - 验收指标：明确医嘱匹配的公开入口病例中020保持不合规、023变为合规；020至022正式链统一交付 `not_executed` 且模型调用为0；目录生成校验通过，只有规则主表中暂停的001至049规则允许 `not_executed`；会诊执行器242项与架构冻结测试全部通过。
+  - 剩余风险：本次只承认明确且可定位的住院医嘱关联，不把无医嘱、笼统医嘱、低置信度关联或检查报告等其他结构化材料升级为合规；真实0910样本仍需在后续客户验收中核对建议类型与医嘱可执行性的业务覆盖。
 
 ### MEDQC-009：0916 私有原子事实 POC 的回放与独立验收合同
 

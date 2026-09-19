@@ -8,7 +8,6 @@ import pytest
 
 from app.services.luxian_0609 import execution
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
-from app.services.luxian_0609 import consultation_opinion_freeze
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     SourceEvidenceQueryError,
@@ -160,25 +159,6 @@ def _consultation_row(
     }
 
 
-def _episode_facts(*facts: dict[str, object]) -> dict[str, object]:
-    return {"consultation_event_facts": list(facts)}
-
-
-def _fact(
-    ref: str,
-    *,
-    opinion_state: str,
-) -> dict[str, object]:
-    return {
-        "ref": ref,
-        "scope": "ordinary",
-        "application_state": "clear",
-        "opinion_state": opinion_state,
-        "confidence": "high",
-        "recommendations": [],
-    }
-
-
 def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> None:
     """四个会诊客户规则只能形成一个 consultation_quality 正式批次。"""
 
@@ -215,340 +195,53 @@ def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> 
 
 
 @pytest.mark.asyncio
-async def test_formal_unified_chain_freezes_explicit_022_with_locatable_evidence(
+async def test_formal_unified_chain_delivers_paused_consultation_rules_without_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    row = _consultation_row(
-        "CONSULT-022-1",
-        "2026-07-02 09:30:00",
-        "感染科医师会诊后指出：考虑既往感染，继续保肝治疗，我科随访。",
-    )
-    client = RecordingClient()
+    """正式链必须在执行器之前交付020至022的暂停结果。"""
+
+    client = RecordingClient(RuntimeError("paused rules must not call the model"))
+    selected_rule_ids = ("LX0609-020", "LX0609-021", "LX0609-022")
     context, delivered = await _run_formal_chain(
         monkeypatch,
-        selected_rule_ids=("LX0609-022",),
+        selected_rule_ids=selected_rule_ids,
         session=_session(
-            selected_rule_ids=("LX0609-022",),
-            rows_by_source={"consultation_record": [row]},
-        ),
-        client=client,
-    )
-
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("compliant", "requirement_satisfied")
-    ]
-    assert context.native_results == []
-    assert context.native_llm_call_count == 0
-    assert client.prompts == []
-    assert [(item["status"], item["reason_code"]) for item in delivered["results"]] == [
-        ("compliant", "requirement_satisfied")
-    ]
-    raw_facts = dict(context.customer_display_facts)["LX0609-022"]
-    assert "source_document_ids" not in raw_facts
-    assert "source_document_id" not in raw_facts["episode_results"][0]
-    assert len(context.reduced_decisions[0].fact_refs) == 1
-    facts = delivered["results"][0]["customer_display_facts"]
-    assert "source_document_ids" not in facts
-    assert facts["episode_results"] == [
-        {
-            "episode_index": 1,
-            "semantic_state": "clear",
-            "record_time": "2026-07-02 09:30:00",
-            "document_title": "会诊记录单",
-        }
-    ]
-    assert [
-        (item["source_type"], item["source_document_id"])
-        for item in delivered["results"][0]["customer_evidence"]
-    ] == [("consultation_record", "CONSULT-022-1")]
-    assert "sha" not in repr(facts).lower()
-
-
-@pytest.mark.asyncio
-async def test_formal_unified_chain_freezes_mixed_022_episodes_and_prompt_usage(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    rows = [
-        _consultation_row("CONSULT-MIX-1", "2026-07-02 09:00:00", "第一次会诊意见。"),
-        _consultation_row("CONSULT-MIX-2", "2026-07-02 10:00:00", "第二次会诊意见。"),
-        _consultation_row("CONSULT-MIX-3", "2026-07-02 11:00:00", "第三次会诊意见。"),
-    ]
-    client = RecordingClient(
-        {
-            "episodes": [
-                {
-                    "episode_ref": f"consultation_record-{index}",
-                    "member_refs": [f"consultation_record-{index}"],
-                    "application_refs": [],
-                    "opinion_refs": [f"consultation_record-{index}"],
-                    "application_state": "absent",
-                    "opinion_state": state,
-                    "confidence": "high",
-                    "recommendations": [],
-                }
-                for index, state in enumerate(("clear", "vague", "missing"), 1)
-            ],
-            "non_target_refs": [],
-            "unresolved_refs": [],
-        }
-    )
-    context, delivered = await _run_formal_chain(
-        monkeypatch,
-        selected_rule_ids=("LX0609-022",),
-        session=_session(
-            selected_rule_ids=("LX0609-022",),
-            rows_by_source={"consultation_record": rows},
-        ),
-        client=client,
-    )
-
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("non_compliant", "requirement_violated")
-    ]
-    assert context.native_llm_call_count == 1
-    assert (
-        context.native_prompt_tokens,
-        context.native_completion_tokens,
-        context.native_total_tokens,
-    ) == (11, 5, 16)
-    assert context.native_prompt_tokens + context.native_completion_tokens == (
-        context.native_total_tokens
-    )
-    assert len(client.prompts) == 1
-    assert "member_refs" in client.prompts[0]
-    assert "consultation_event_facts" not in client.prompts[0]
-    assert all(
-        f'"ref": "consultation_record-{index}"' in client.prompts[0]
-        and row["record_content"] in client.prompts[0]
-        and row["document_id"] not in client.prompts[0]
-        for index, row in enumerate(rows, start=1)
-    )
-    assert (
-        delivered["total_prompt_tokens"],
-        delivered["total_completion_tokens"],
-        delivered["total_tokens"],
-    ) == (11, 5, 16)
-    assert delivered["total_prompt_tokens"] + delivered["total_completion_tokens"] == (
-        delivered["total_tokens"]
-    )
-    assert delivered["executor_breakdown"] == {"llm": 1}
-    raw_facts = dict(context.customer_display_facts)["LX0609-022"]
-    assert "source_document_ids" not in raw_facts
-    assert all(
-        "source_document_id" not in item
-        for item in raw_facts["episode_results"]
-    )
-    assert len(context.reduced_decisions[0].fact_refs) == 3
-    facts = delivered["results"][0]["customer_display_facts"]
-    assert "source_document_ids" not in facts
-    assert facts["episode_results"] == [
-        {
-            "episode_index": 1,
-            "semantic_state": "clear",
-            "record_time": "2026-07-02 09:00:00",
-            "document_title": "会诊记录单",
-        },
-        {
-            "episode_index": 2,
-            "semantic_state": "vague",
-            "record_time": "2026-07-02 10:00:00",
-            "document_title": "会诊记录单",
-        },
-        {
-            "episode_index": 3,
-            "semantic_state": "missing",
-            "record_time": "2026-07-02 11:00:00",
-            "document_title": "会诊记录单",
-        },
-    ]
-    assert {
-        (item["source_type"], item["source_document_id"])
-        for item in delivered["results"][0]["customer_evidence"]
-    } == {
-        ("consultation_record", "CONSULT-MIX-1"),
-        ("consultation_record", "CONSULT-MIX-2"),
-        ("consultation_record", "CONSULT-MIX-3"),
-    }
-    rerun_client = RecordingClient(
-        _episode_facts(
-            _fact("consultation_record-1", opinion_state="clear"),
-            _fact("consultation_record-2", opinion_state="vague"),
-            _fact("consultation_record-3", opinion_state="missing"),
-        )
-    )
-    # 本用例比较两次运行各自构建的提示词，必须先清除第一阶段事实冻结，
-    # 否则第二次运行复用冻结结果、不会再产生提示词。
-    consultation_opinion_freeze.reset_opinion_freeze(visit_id="freeze-visit")
-    await _run_formal_chain(
-        monkeypatch,
-        selected_rule_ids=("LX0609-022",),
-        session=_session(
-            selected_rule_ids=("LX0609-022",),
-            rows_by_source={"consultation_record": rows},
-        ),
-        client=rerun_client,
-    )
-    assert client.prompts == rerun_client.prompts
-
-
-@pytest.mark.asyncio
-async def test_formal_unified_chain_empty_complete_consultation_is_not_applicable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = RecordingClient()
-    context, delivered = await _run_formal_chain(
-        monkeypatch,
-        selected_rule_ids=("LX0609-022",),
-        session=_session(selected_rule_ids=("LX0609-022",)),
-        client=client,
-    )
-
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("not_applicable", "trigger_absent_complete")
-    ]
-    assert context.native_llm_call_count == 0
-    assert client.prompts == []
-    assert [(item["status"], item["reason_code"]) for item in delivered["results"]] == [
-        ("not_applicable", "trigger_absent_complete")
-    ]
-
-
-@pytest.mark.asyncio
-async def test_formal_unified_chain_non_target_consultation_keeps_excluding_evidence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    row = _consultation_row(
-        "CONSULT-NON-TARGET-1",
-        "2026-07-02 09:30:00",
-        "术前麻醉风险评估。",
-    )
-    client = RecordingClient()
-
-    context, delivered = await _run_formal_chain(
-        monkeypatch,
-        selected_rule_ids=("LX0609-021",),
-        session=_session(
-            selected_rule_ids=("LX0609-021",),
-            rows_by_source={"consultation_record": [row]},
-        ),
-        client=client,
-    )
-
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("not_applicable", "eligibility_not_met")
-    ]
-    assert len(context.reduced_decisions[0].fact_refs) == 1
-    assert client.prompts == []
-    assert [(item["status"], item["reason_code"]) for item in delivered["results"]] == [
-        ("not_applicable", "eligibility_not_met")
-    ]
-    assert [
-        (item["source_type"], item["source_document_id"])
-        for item in delivered["results"][0]["customer_evidence"]
-    ] == [("consultation_record", "CONSULT-NON-TARGET-1")]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("rule_id", "rows_by_source", "unavailable_sources", "expected_reason"),
-    [
-        ("LX0609-022", {}, frozenset({"consultation_record"}), "source_unavailable"),
-        (
-            "LX0609-020",
-            {
-                "consultation_record": [
-                    _consultation_row(
-                        "CONSULT-LINK-1",
-                        "2026-07-02 09:00:00",
-                        "请感染科会诊并提出诊疗意见。",
-                    )
-                ]
-            },
-            frozenset(),
-            "linkage_unresolved",
-        ),
-    ],
-)
-async def test_formal_unified_chain_source_or_linkage_gap_stays_data_gap(
-    monkeypatch: pytest.MonkeyPatch,
-    rule_id: str,
-    rows_by_source: dict[str, list[dict[str, str]]],
-    unavailable_sources: frozenset[str],
-    expected_reason: str,
-) -> None:
-    client = RecordingClient()
-    context, delivered = await _run_formal_chain(
-        monkeypatch,
-        selected_rule_ids=(rule_id,),
-        session=_session(
-            selected_rule_ids=(rule_id,),
-            rows_by_source=rows_by_source,
-            unavailable_sources=unavailable_sources,
-            evaluation_horizon_policy=(
-                "disabled" if rule_id == "LX0609-020" else None
-            ),
-            horizon_unavailable_reason=(
-                "authoritative_time_missing"
-                if rule_id == "LX0609-020"
-                else None
-            ),
-        ),
-        client=client,
-    )
-
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("data_gap", expected_reason)
-    ]
-    assert context.native_llm_call_count == 0
-    assert client.prompts == []
-    assert [(item["status"], item["reason_code"]) for item in delivered["results"]] == [
-        ("data_gap", expected_reason)
-    ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "response",
-    ["not-json", RuntimeError("synthetic transport failure")],
-    ids=("invalid_model_structure", "transport_error"),
-)
-async def test_formal_unified_chain_model_failures_are_technical_errors(
-    monkeypatch: pytest.MonkeyPatch,
-    response: object,
-) -> None:
-    client = RecordingClient(response)
-    context, delivered = await _run_formal_chain(
-        monkeypatch,
-        selected_rule_ids=("LX0609-022",),
-        session=_session(
-            selected_rule_ids=("LX0609-022",),
+            selected_rule_ids=selected_rule_ids,
             rows_by_source={
                 "consultation_record": [
                     _consultation_row(
-                        "CONSULT-ERROR-1",
-                        "2026-07-02 09:00:00",
-                        "会诊记录：请相关专科协助评估。",
+                        "CONSULT-PAUSED-1",
+                        "2026-07-02 09:30:00",
+                        "暂停规则不应读取或评价这份正文。",
                     )
                 ]
             },
+            error_sources=frozenset({"consultation_record"}),
         ),
         client=client,
     )
 
-    expected_reason = (
-        "model_transport_error"
-        if isinstance(response, BaseException)
-        else "model_invalid_output"
+    assert context.reduced_decisions == ()
+    assert [item["rule_id"] for item in context.native_results] == list(
+        selected_rule_ids
     )
-    assert [(item.final_state.value, item.reason_code) for item in context.reduced_decisions] == [
-        ("technical_error", expected_reason)
+    assert context.native_llm_call_count == 0
+    assert client.prompts == []
+    assert [
+        (
+            item["rule_id"],
+            item["status"],
+            item["metadata"]["reason_code"],
+            item["metadata"]["pending_reason_code"],
+        )
+        for item in delivered["results"]
+    ] == [
+        (
+            rule_id,
+            "not_executed",
+            "policy_definition_pending",
+            "consultation_source_document_unavailable_customer_scope",
+        )
+        for rule_id in selected_rule_ids
     ]
-    assert context.native_llm_call_count == 1
-    assert len(client.prompts) == 1
-    assert '"ref": "consultation_record-1"' in client.prompts[0]
-    assert "会诊记录：请相关专科协助评估。" in client.prompts[0]
-    assert "CONSULT-ERROR-1" not in client.prompts[0]
-    assert [(item["status"], item["reason_code"]) for item in delivered["results"]] == [
-        ("technical_error", expected_reason)
-    ]
-    assert all(item["status"] not in {"data_gap", "uncertain"} for item in delivered["results"])
+    assert delivered["executor_breakdown"] == {}

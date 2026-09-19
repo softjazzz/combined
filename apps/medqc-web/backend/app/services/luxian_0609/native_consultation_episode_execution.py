@@ -3397,6 +3397,7 @@ _RECORDED_TRACE_LEVELS = frozenset(
     {"specific_trace", "generic_trace", "copied_opinion"}
 )
 _VAGUE_TRACE_LEVELS = frozenset({"generic_trace", "copied_opinion"})
+_ORDER_EXECUTION_REF_PREFIXES = ("inpat_drug_order-", "inpat_nondrug_order-")
 
 
 def _execution_quality_outcome(
@@ -3406,11 +3407,12 @@ def _execution_quality_outcome(
     course_source_incomplete: bool,
     copied_opinion_refs: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
-    """S1／S5／S6：023 只评价已找到的执行痕迹是否规范。
+    """S1／S5／S6：023 评价已找到的病程或结构化医嘱痕迹是否规范。
 
     023 的评价对象是**已经找到的**执行痕迹：没有任何痕迹时不适用；已找到的
-    痕迹中存在笼统或照抄即不符合；已找到的痕迹全部具体即符合。未找到痕迹的
-    建议与无法判定的条目都不参与 023 判罚，因此 023 不再产出“不确定”。
+    痕迹中存在笼统或照抄即不符合；已找到的痕迹全部具体即符合。明确关联到
+    结构化医嘱时，该关联本身也是可评价的具体执行痕迹，但不能替代 020
+    对会诊后病程执行记录的存在性要求。未找到痕迹的建议不参与 023 判罚。
     S2 照抄由文本阈值独立判定：病程逐字照搬会诊意见时，即使模型没有选中该
     痕迹，023 仍判不符合。
     """
@@ -3423,6 +3425,21 @@ def _execution_quality_outcome(
     if not rows:
         return "evaluation_unknown", "semantic_low_confidence"
     if all(item.execution_record_state == "no_trace" for item in rows):
+        structured = tuple(
+            item
+            for item in rows
+            if item.execution_state in {"linked_specific", "linked_vague"}
+            and any(
+                ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
+                for ref in item.execution_refs
+            )
+        )
+        if structured:
+            if any(item.confidence != "high" for item in structured):
+                return "evaluation_unknown", "semantic_low_confidence"
+            if any(item.execution_state == "linked_vague" for item in structured):
+                return "non_compliant", "requirement_violated"
+            return "compliant", "requirement_satisfied"
         if course_source_incomplete:
             return "data_gap", "candidate_scope_incomplete"
         return "not_applicable", "trigger_absent_complete"
@@ -3598,8 +3615,8 @@ def _link_diagnostics(
     diagnostics: list[dict[str, Any]] = []
     for item in completed_recommendations:
         recommendation = item.recommendation
-        # 020/023 的主核对对象固定为会诊后的病程/查房；医嘱等不能作为
-        # “已记录执行情况”的替代来源，也不能主导资料缺口解释。
+        # 此诊断块只解释病程来源是否可核；023 的明确医嘱匹配已由
+        # execution_state/execution_refs 单独保存，不参与病程资料缺口解释。
         relevant_source_keys = _COURSE_EXECUTION_SOURCE_KEYS
         required_source_keys = _COURSE_EXECUTION_SOURCE_KEYS
         relevant_candidates = tuple(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -51,6 +52,30 @@ def _load_existing_rule_ids() -> set[str]:
             if rule_id:
                 rule_ids.add(rule_id)
     return rule_ids
+
+
+def _load_formal_catalog() -> dict[str, dict]:
+    repository_root = Path(__file__).resolve().parents[3]
+    payload = json.loads(
+        (repository_root / "docs" / "0602" / "luxian_0609_formal_rule_catalog.json")
+        .read_text(encoding="utf-8")
+    )
+    return {str(item["qc_point_id"]): item for item in payload}
+
+
+def _load_formal_catalog_csv_statuses() -> dict[str, set[str]]:
+    repository_root = Path(__file__).resolve().parents[3]
+    with (
+        repository_root / "docs" / "0602" / "luxian_0609_formal_rule_catalog.csv"
+    ).open(encoding="utf-8", newline="") as handle:
+        return {
+            str(item["qc_point_id"]): {
+                status.strip()
+                for status in str(item["allowed_result_statuses"]).split(";")
+                if status.strip()
+            }
+            for item in csv.DictReader(handle)
+        }
 
 
 @pytest.mark.unit
@@ -122,6 +147,25 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
     assert projected_by_id["LX0609-066"]["customer_policy"]["summary"]
     assert not wrapper_by_id["LX0609-070"].get("customer_text")
     assert projected_by_id["LX0609-070"]["customer_policy"]["summary"]
+
+
+@pytest.mark.unit
+def test_formal_catalog_allows_not_executed_only_for_phase_pending_rules():
+    """阶段暂停是正式交付状态，且只能由唯一规则主表派生。"""
+
+    catalog = _load_formal_catalog()
+    csv_statuses = _load_formal_catalog_csv_statuses()
+    pending_rule_ids = {
+        entry.rule_id
+        for entry in load_luxian_0609_rule_master()
+        if entry.phase_status == "pending_definition" and entry.rule_id in catalog
+    }
+
+    assert pending_rule_ids
+    for rule_id, item in catalog.items():
+        statuses = set(item["allowed_result_statuses"])
+        assert ("not_executed" in statuses) is (rule_id in pending_rule_ids)
+        assert csv_statuses[rule_id] == statuses
 
 
 @pytest.mark.unit
