@@ -24,7 +24,14 @@ class _Client:
         }
 
 
-def _session(summary=(), discussion=(), truncated=False, error_sources=()):
+def _session(
+    summary=(),
+    discussion=(),
+    surgery_records=(),
+    mr_surgeries=(),
+    truncated=False,
+    error_sources=(),
+):
     def reader(**kwargs):
         key = kwargs["source_key"]
         if key in set(error_sources):
@@ -34,6 +41,10 @@ def _session(summary=(), discussion=(), truncated=False, error_sources=()):
             if key == "presurg_summary"
             else discussion
             if key == "presurg_discussion"
+            else surgery_records
+            if key == "surgery_record"
+            else mr_surgeries
+            if key == "mr_surgery"
             else ()
         )
         return SnapshotSourceRows.create(
@@ -58,6 +69,33 @@ def _payload(*documents):
     import json
 
     return json.dumps({"documents": list(documents)}, ensure_ascii=False)
+
+
+def _surgery_record(*, document_id, name, begin, end=None):
+    return {
+        "document_id": document_id,
+        "surgery_name": name,
+        "surgery_begin_time": begin,
+        "surgery_end_time": end,
+        "surgery_process": "手术经过。",
+    }
+
+
+def _summary_items(*, text, procedure, missing=()):
+    fields = (
+        "brief_condition",
+        "preop_diagnosis",
+        "surgical_indication",
+        "planned_procedure",
+        "planned_anesthesia",
+        "precautions",
+        "surgeon_preop_visit",
+    )
+    items = {field: text for field in fields}
+    items["planned_procedure"] = procedure
+    for field in missing:
+        items[field] = None
+    return items
 
 
 @pytest.mark.asyncio
@@ -148,6 +186,254 @@ async def test_both_rules_share_one_call_and_missing_is_per_document():
         "defect",
     ]
     assert result.llm_call_count == 1 and len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_two_procedures_are_matched_and_checked_within_their_own_events():
+    first_name, second_name = "腹腔镜胆囊切除术", "腹腔镜阑尾切除术"
+    first_text = f"术前小结：拟行{first_name}，其余字段完整。"
+    second_text = f"术前小结：拟行{second_name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {
+                "document_id": "summary-first",
+                "record_time": "2026-01-01 07:00:00",
+                "record_content": first_text,
+            },
+            {
+                "document_id": "summary-second",
+                "record_time": "2026-01-01 10:00:00",
+                "record_content": second_text,
+            },
+        ),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-first",
+                name=first_name,
+                begin="2026-01-01 08:00:00+08:00",
+                end="2026-01-01 09:00:00+08:00",
+            ),
+            _surgery_record(
+                document_id="surgery-second",
+                name=second_name,
+                begin="2026-01-01 11:00:00+08:00",
+                end="2026-01-01 12:00:00+08:00",
+            ),
+        ),
+    )
+    client = _Client(
+        _payload(
+            {
+                "document_id": "summary-first",
+                "source_type": "presurg_summary",
+                "items": _summary_items(text=first_text, procedure=first_name),
+            },
+            {
+                "document_id": "summary-second",
+                "source_type": "presurg_summary",
+                "items": _summary_items(
+                    text=second_text, procedure=second_name, missing=("precautions",)
+                ),
+            },
+        )
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=client,
+    )
+    decision = result.decisions[0]
+    facts = dict(result.customer_display_facts)["LX0609-078"]
+    assert decision.qc_direction.value == "defect"
+    assert facts["missing_fields"] == ["precautions"]
+    assert [item["event_index"] for item in facts["documents"]] == [1, 2]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_same_name_surgeries_without_time_narrowing_are_data_gap():
+    name = "腹腔镜胆囊切除术"
+    text = f"术前小结：拟行{name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {"document_id": "summary", "record_time": "2026-01-01 07:00:00", "record_content": text},
+        ),
+        surgery_records=(
+            _surgery_record(document_id="surgery-first", name=name, begin="2026-01-01 08:00:00+08:00"),
+            _surgery_record(document_id="surgery-second", name=name, begin="2026-01-02 08:00:00+08:00"),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=name),
+                }
+            )
+        ),
+    )
+    assert result.decisions[0].reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_two_summary_roles_can_complete_one_surgery_only_within_the_event():
+    name = "腹腔镜胆囊切除术"
+    core_text = f"术前小结：拟行{name}，核心内容完整。"
+    visit_text = f"术者术前查看患者，拟行{name}。"
+    core = _summary_items(text=core_text, procedure=name, missing=("surgeon_preop_visit",))
+    visit = _summary_items(text=visit_text, procedure=name, missing=RULE_FIELDS_078_EXCEPT_VISIT)
+    visit["surgeon_preop_visit"] = "术者术前查看患者"
+    session = _session(
+        summary=(
+            {"document_id": "summary-core", "record_content": core_text},
+            {"document_id": "summary-visit", "record_content": visit_text},
+        ),
+        surgery_records=(
+            _surgery_record(document_id="surgery", name=name, begin="2026-01-01 08:00:00+08:00"),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {"document_id": "summary-core", "source_type": "presurg_summary", "items": core},
+                {"document_id": "summary-visit", "source_type": "presurg_summary", "items": visit},
+            )
+        ),
+    )
+    assert result.decisions[0].qc_direction.value == "satisfied"
+
+
+RULE_FIELDS_078_EXCEPT_VISIT = (
+    "brief_condition",
+    "preop_diagnosis",
+    "surgical_indication",
+    "planned_anesthesia",
+    "precautions",
+)
+
+
+@pytest.mark.asyncio
+async def test_document_that_names_two_surgeries_is_ambiguous():
+    first_name, second_name = "腹腔镜胆囊切除术", "腹腔镜阑尾切除术"
+    combined = f"{first_name}+{second_name}"
+    text = f"术前小结：拟行{combined}，其余字段完整。"
+    session = _session(
+        summary=({"document_id": "summary", "record_content": text},),
+        surgery_records=(
+            _surgery_record(document_id="surgery-first", name=first_name, begin="2026-01-01 08:00:00+08:00"),
+            _surgery_record(document_id="surgery-second", name=second_name, begin="2026-01-01 12:00:00+08:00"),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {"document_id": "summary", "source_type": "presurg_summary", "items": _summary_items(text=text, procedure=combined)}
+            )
+        ),
+    )
+    assert result.decisions[0].evidence_state.value == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_confirmed_missing_is_not_hidden_by_ambiguous_document_without_that_field():
+    first_name, second_name = "腹腔镜胆囊切除术", "腹腔镜阑尾切除术"
+    first_text = f"术前小结：拟行{first_name}，其余字段完整。"
+    ambiguous_name = f"{first_name}+{second_name}"
+    ambiguous_text = f"术前小结：拟行{ambiguous_name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {"document_id": "summary-first", "record_content": first_text},
+            {"document_id": "summary-ambiguous", "record_content": ambiguous_text},
+        ),
+        surgery_records=(
+            _surgery_record(document_id="surgery-first", name=first_name, begin="2026-01-01 08:00:00+08:00"),
+            _surgery_record(document_id="surgery-second", name=second_name, begin="2026-01-01 12:00:00+08:00"),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary-first",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(
+                        text=first_text,
+                        procedure=first_name,
+                        missing=("planned_anesthesia", "precautions"),
+                    ),
+                },
+                {
+                    "document_id": "summary-ambiguous",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(
+                        text=ambiguous_text,
+                        procedure=ambiguous_name,
+                        missing=("precautions",),
+                    ),
+                },
+            )
+        ),
+    )
+    assert result.decisions[0].qc_direction.value == "defect"
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_document_cannot_fill_confirmed_missing_field_across_events():
+    first_name, second_name = "腹腔镜胆囊切除术", "腹腔镜阑尾切除术"
+    first_text = f"术前小结：拟行{first_name}，其余字段完整。"
+    ambiguous_name = f"{first_name}+{second_name}"
+    ambiguous_text = f"术前小结：拟行{ambiguous_name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {"document_id": "summary-first", "record_content": first_text},
+            {"document_id": "summary-ambiguous", "record_content": ambiguous_text},
+        ),
+        surgery_records=(
+            _surgery_record(document_id="surgery-first", name=first_name, begin="2026-01-01 08:00:00+08:00"),
+            _surgery_record(document_id="surgery-second", name=second_name, begin="2026-01-01 12:00:00+08:00"),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary-first",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(
+                        text=first_text,
+                        procedure=first_name,
+                        missing=("planned_anesthesia",),
+                    ),
+                },
+                {
+                    "document_id": "summary-ambiguous",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(
+                        text=ambiguous_text, procedure=ambiguous_name
+                    ),
+                },
+            )
+        ),
+    )
+    assert result.decisions[0].qc_direction.value == "defect"
 
 
 @pytest.mark.asyncio

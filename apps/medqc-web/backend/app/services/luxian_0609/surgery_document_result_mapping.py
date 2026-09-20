@@ -305,7 +305,11 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
     }[rule_id]
     kind = raw.get("verification_kind")
     if (
-        kind not in {"preop_content_complete", "preop_content_incomplete"}
+        kind not in {
+            "preop_content_complete",
+            "preop_content_incomplete",
+            "preop_surgery_association_ambiguous",
+        }
         or raw.get("target_document") != target
         or raw.get("checked_fields") != list(allowed)
     ):
@@ -318,11 +322,51 @@ def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] 
         kind == "preop_content_incomplete" and not safe_missing
     ):
         return None
+    documents = raw.get("documents")
+    if not isinstance(documents, list):
+        return None
+    safe_documents: list[dict[str, Any]] = []
+    for document in documents:
+        if not isinstance(document, Mapping) or set(document) != {
+            "document_index",
+            "event_index",
+            "association_state",
+            "missing_fields",
+        }:
+            return None
+        document_index = document.get("document_index")
+        event_index = document.get("event_index")
+        association_state = document.get("association_state")
+        document_missing = document.get("missing_fields")
+        if (
+            not isinstance(document_index, int)
+            or document_index < 1
+            or event_index is not None
+            and (not isinstance(event_index, int) or event_index < 1)
+            or association_state not in {"matched", "not_required", "ambiguous"}
+            or not isinstance(document_missing, list)
+        ):
+            return None
+        safe_documents.append(
+            {
+                "document_index": document_index,
+                "event_index": event_index,
+                "association_state": association_state,
+                "missing_fields": list(
+                    dict.fromkeys(item for item in document_missing if item in allowed)
+                ),
+            }
+        )
+    if kind == "preop_surgery_association_ambiguous" and not any(
+        item["association_state"] == "ambiguous" for item in safe_documents
+    ):
+        return None
     return {
         "verification_kind": kind,
         "target_document": target,
         "checked_fields": list(allowed),
         "missing_fields": safe_missing,
+        "documents": safe_documents,
     }
 
 
@@ -372,5 +416,6 @@ def surgery_document_customer_fact_status_is_valid(
         "preop_discussion_missing": "non_compliant",
         "preop_content_complete": "compliant",
         "preop_content_incomplete": "non_compliant",
+        "preop_surgery_association_ambiguous": "data_gap",
     }.get(str(kind))
     return expected is not None and status == expected

@@ -232,8 +232,8 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "discharge_record",
     ),
     "LX0609-077": ("first_course_record_diagnosis",),
-    "LX0609-078": ("presurg_summary",),
-    "LX0609-079": ("presurg_discussion",),
+    "LX0609-078": ("presurg_summary", "surgery_record", "mr_surgery"),
+    "LX0609-079": ("presurg_discussion", "surgery_record", "mr_surgery"),
 }
 
 

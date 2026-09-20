@@ -98,3 +98,44 @@ def test_037_missing_anesthesia_visit_is_a_deliverable_defect() -> None:
     assert handled is True
     assert finalized["status"] == "non_compliant"
     assert finalized["reason_code"] == "required_document_missing"
+
+
+def test_preop_ambiguous_association_keeps_only_safe_event_coordinates() -> None:
+    raw_facts = {
+        "verification_kind": "preop_surgery_association_ambiguous",
+        "target_document": "presurg_summary",
+        "checked_fields": [
+            "brief_condition",
+            "preop_diagnosis",
+            "surgical_indication",
+            "planned_procedure",
+            "planned_anesthesia",
+            "precautions",
+            "surgeon_preop_visit",
+        ],
+        "missing_fields": [],
+        "documents": [
+            {
+                "document_index": 1,
+                "event_index": None,
+                "association_state": "ambiguous",
+                "missing_fields": [],
+                "document_id": "must-not-project",
+            }
+        ],
+    }
+    assert (
+        safe_surgery_document_customer_display_facts(
+            rule_id="LX0609-078", raw=raw_facts
+        )
+        is None
+    )
+
+    raw_facts["documents"][0].pop("document_id")
+    safe_facts = safe_surgery_document_customer_display_facts(
+        rule_id="LX0609-078", raw=raw_facts
+    )
+    assert safe_facts == raw_facts
+    assert surgery_document_customer_fact_status_is_valid(
+        rule_id="LX0609-078", status="data_gap", safe_facts=safe_facts
+    )

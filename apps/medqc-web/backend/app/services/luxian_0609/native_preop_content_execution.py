@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
+from zoneinfo import ZoneInfo
 
 from .course_quality.shared import clean_text, response_json_payload
 from .decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
@@ -20,6 +22,11 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .source_manifest import QueryStatus
+from .surgery_event_association import (
+    SurgeryEvent,
+    associate_preop_document_to_surgery_event,
+    build_performed_surgery_events,
+)
 
 
 RULE_FIELDS = {
@@ -242,6 +249,116 @@ def _validated_items(
     return parsed if set(parsed) == set(expected) else None
 
 
+def _document_record_time(row: Mapping[str, Any]) -> datetime | None:
+    """仅使用术前文书自身可靠的 record_time，绝不以提交时间猜测。"""
+
+    value = row.get("record_time")
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    if not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2})?",
+        normalized,
+    ):
+        return None
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed
+    return parsed.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+
+
+def _missing_fields_for_document(
+    *, rule_id: str, row: Mapping[str, Any], values: Mapping[str, Any]
+) -> set[str]:
+    return {
+        field
+        for field in RULE_FIELDS[rule_id]
+        if not (
+            rule_id == "LX0609-079"
+            and field == "recorder_signature"
+            and _has_structured_recorder_signature(row)
+        )
+        and values.get(field) is None
+    }
+
+
+def _association_state_for_rule(
+    *,
+    rule_id: str,
+    records: Sequence[tuple[str, Mapping[str, Any], str]],
+    parsed: Mapping[tuple[str, str], Mapping[str, Any]],
+    events: Sequence[SurgeryEvent],
+) -> tuple[set[str], bool, list[Mapping[str, Any]]]:
+    """按手术事件核对术前文书，返回确定缺项、是否歧义和安全展示。"""
+
+    source = RULE_SOURCES[rule_id]
+    grouped: dict[int, list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
+    ambiguous_values: list[Mapping[str, Any]] = []
+    display_documents: list[Mapping[str, Any]] = []
+    for document_index, (_ref, row, _text) in enumerate(records, start=1):
+        values = parsed[(source, _document_id(row))]
+        procedure_field = (
+            "planned_procedure" if rule_id == "LX0609-078" else "surgical_plan"
+        )
+        association = associate_preop_document_to_surgery_event(
+            events=events,
+            procedure_name=values.get(procedure_field),
+            record_time=_document_record_time(row),
+        )
+        if association.state == "matched" and association.event_index is not None:
+            grouped.setdefault(association.event_index, []).append((row, values))
+        elif association.state == "not_required":
+            # 没有已实施手术事件时保持既有内容核对语义，不凭此新增错误结论。
+            grouped.setdefault(0, []).append((row, values))
+        else:
+            ambiguous_values.append(values)
+        display_documents.append(
+            {
+                "document_index": document_index,
+                "event_index": association.event_index,
+                "association_state": association.state,
+                "missing_fields": sorted(
+                    _missing_fields_for_document(
+                        rule_id=rule_id, row=row, values=values
+                    )
+                ),
+            }
+        )
+
+    confirmed_missing: set[str] = set()
+    if rule_id == "LX0609-078":
+        # 客户来源存在“核心小结 + 术者术前查看”两行同属一台手术的稳定模式；
+        # 仅在已唯一关联的同一事件内部合并原子事实。
+        for documents in grouped.values():
+            for field in RULE_FIELDS[rule_id]:
+                if any(
+                    field not in _missing_fields_for_document(
+                        rule_id=rule_id, row=row, values=values
+                    )
+                    for row, values in documents
+                ):
+                    continue
+                confirmed_missing.add(field)
+    else:
+        # 讨论记录不跨文书补字段；即使同一事件也必须逐份自洽。
+        for documents in grouped.values():
+            for row, values in documents:
+                confirmed_missing.update(
+                    _missing_fields_for_document(
+                        rule_id=rule_id, row=row, values=values
+                    )
+                )
+
+    return confirmed_missing, bool(ambiguous_values), display_documents
+
+
 async def evaluate_preop_content_rules(
     *,
     rule_ids: Sequence[str],
@@ -377,56 +494,73 @@ async def evaluate_preop_content_rules(
             total_tokens=total_tokens,
             api_time=api_time,
         )
+    events, event_reason = build_performed_surgery_events(materials)
+    # 事件形成会读取并交叉核对两个来源；证据链必须同时保留，不能只投影
+    # 最终承载事件行的那个来源。
+    event_refs = tuple(
+        ref
+        for source_key in ("surgery_record", "mr_surgery")
+        for ref in _observation_refs(snapshot, source_key)
+    )
     decisions: list[RuleDecision] = []
     display: list[tuple[str, Mapping[str, Any]]] = []
     for rule in selected:
         if rule in terminal:
             decisions.append(terminal[rule])
             continue
-        missing: list[str] = []
-        refs = tuple(ref for ref, _, _ in records[rule])
-        for _ref, row, _text in records[rule]:
-            values = parsed[(RULE_SOURCES[rule], _document_id(row))]
-            for field in RULE_FIELDS[rule]:
-                if (
-                    rule == "LX0609-079"
-                    and field == "recorder_signature"
-                    and _has_structured_recorder_signature(row)
-                ):
-                    continue
-                if values.get(field) is not None:
-                    continue
-                missing.append(field)
-        status = (
-            "non_compliant"
-            if missing
-            else "compliant"
+        refs = tuple(
+            sorted({*(ref for ref, _, _ in records[rule]), *event_refs})
         )
+        if events is None:
+            decisions.append(
+                _decision(
+                    snapshot,
+                    rule,
+                    "data_gap",
+                    event_reason or "association_failed",
+                    refs,
+                )
+            )
+            continue
+        missing, has_ambiguous, documents = _association_state_for_rule(
+            rule_id=rule,
+            records=records[rule],
+            parsed=parsed,
+            events=events,
+        )
+        if has_ambiguous and not missing:
+            status, reason = "data_gap", "association_failed"
+        elif missing:
+            status, reason = "non_compliant", "requirement_violated"
+        else:
+            status, reason = "compliant", "requirement_satisfied"
         decisions.append(
             _decision(
                 snapshot,
                 rule,
                 status,
-                "requirement_violated"
-                if missing
-                else "requirement_satisfied",
+                reason,
                 refs,
             )
         )
-        if status != "data_gap":
-            display.append(
-                (
-                    rule,
-                    {
-                        "verification_kind": "preop_content_complete"
+        display.append(
+            (
+                rule,
+                {
+                    "verification_kind": (
+                        "preop_surgery_association_ambiguous"
+                        if status == "data_gap"
+                        else "preop_content_complete"
                         if not missing
-                        else "preop_content_incomplete",
-                        "target_document": RULE_SOURCES[rule],
-                        "checked_fields": list(RULE_FIELDS[rule]),
-                        "missing_fields": list(dict.fromkeys(missing)),
-                    },
-                )
+                        else "preop_content_incomplete"
+                    ),
+                    "target_document": RULE_SOURCES[rule],
+                    "checked_fields": list(RULE_FIELDS[rule]),
+                    "missing_fields": sorted(missing),
+                    "documents": documents,
+                },
             )
+        )
     return PreopContentExecution(
         tuple(decisions),
         tuple(display),

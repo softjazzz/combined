@@ -131,6 +131,23 @@ def _typed_029_session(
                         "surgery_begin_time": "2026-01-01 08:00:00+08",
                     },
                 )
+            elif surgery_mode == "c01_time_shell":
+                rows = (
+                    {
+                        "document_id": "surgery-time-shell",
+                        "surgery_begin_time": "2026-01-01 08:00:00+08",
+                        "record_time": "2026-01-02 11:00:00",
+                        "surgery_code": "51.2300",
+                        "surgery_name": "腹腔镜胆囊切除术",
+                    },
+                    {
+                        "document_id": "surgery-substantive",
+                        "surgery_begin_time": "2026-01-02 08:00:00+08",
+                        "surgery_code": "51.2300",
+                        "surgery_name": "腹腔镜胆囊切除术",
+                        "surgery_process": "手术经过完整。",
+                    },
+                )
             elif surgery_mode == "typed_datetime":
                 rows = (
                     {
@@ -238,6 +255,16 @@ def _typed_029_session(
                         "surgery_end_datetime": datetime(2026, 1, 1, 12, 0),
                         "surgery_code": "17.1300x002",
                         "surgery_name": "另一台手术",
+                        "surgical_level": "二级",
+                    },
+                )
+            if mr_surgery_mode == "c01_anchor":
+                rows = (
+                    {
+                        "surgery_id": "mr-surgery-c01",
+                        "surgery_begin_datetime": datetime(2026, 1, 2, 0, 0),
+                        "surgery_code": "51.2300",
+                        "surgery_name": "腹腔镜胆囊切除术",
                         "surgical_level": "二级",
                     },
                 )
@@ -602,6 +629,35 @@ async def test_typed_029_cross_source_one_to_two_events_requires_association():
 async def test_typed_029_duplicate_surgery_document_is_one_event():
     session = _typed_029_session(
         surgery_mode="duplicate_document",
+        summary_rows=({"record_content": "术前小结正文完整"},),
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_029_c01_time_shell_remains_one_event():
+    session = _typed_029_session(
+        surgery_mode="c01_time_shell",
+        mr_surgery_mode="c01_anchor",
         summary_rows=({"record_content": "术前小结正文完整"},),
     )
 

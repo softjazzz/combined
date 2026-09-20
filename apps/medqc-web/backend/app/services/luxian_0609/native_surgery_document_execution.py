@@ -29,7 +29,11 @@ from .source_evidence_reader import (
     has_qualified_traditional_surgery_row,
     has_trusted_performed_surgery,
 )
-from .surgery_event_association import count_associated_performed_surgery_events
+from .surgery_event_association import (
+    count_associated_performed_surgery_events,
+    procedure_matches_surgery,
+    summary_surgery_name_from_row,
+)
 from .surgery_applicability import resolve_surgery_applicability
 from .surgery_procedure_catalog import normalize_surgery_level
 from .source_registry import (
@@ -83,8 +87,8 @@ _TYPED_RULE_SOURCE_KEYS = {
         "rescue_record",
         "presurg_discussion",
     ),
-    "LX0609-078": ("presurg_summary",),
-    "LX0609-079": ("presurg_discussion",),
+    "LX0609-078": ("presurg_summary", "surgery_record", "mr_surgery"),
+    "LX0609-079": ("presurg_discussion", "surgery_record", "mr_surgery"),
 }
 
 _ANESTHESIA_CONSENT_RULE_IDS = frozenset({"LX0609-034", "LX0609-035"})
@@ -1513,63 +1517,6 @@ def _clean_presurg_body(value: Any) -> str:
     return candidate
 
 
-def _normalized_surgery_name(value: Any) -> str:
-    normalized = re.sub(r"[\s、，,。；;：:（）()\[\]【】]+", "", str(value or "")).casefold()
-    # 院方术式字典对“置入/植入”存在稳定同义写法；仅做术式名称规范化，
-    # 不把泛化的“手术/治疗”等词作为匹配依据。
-    return normalized.replace("置入术", "植入术")
-
-
-def _summary_surgery_name(value: Any) -> str:
-    text = _clean_presurg_body(value)
-    if not text:
-        return ""
-    match = re.search(
-        r"(?:手术名称|手术方式)\s*[:：]\s*(.*?)(?=\s*(?:手术时间|麻醉方式|手术医师|术者签名|医师签名)\s*[:：]|$)",
-        text,
-    )
-    return (match.group(1) if match else "").strip()
-
-
-def _summary_surgery_name_from_row(row: Mapping[str, Any]) -> str:
-    """优先读取结构化术式字段，正文没有可解析标题时再回退正文。"""
-
-    for field in (
-        "planned_surgery_name",
-        "surgery_name",
-        "planned_surgery",
-        "surgery_method",
-    ):
-        value = _clean_presurg_body(row.get(field))
-        if value:
-            return value
-    return _summary_surgery_name(row.get("record_content"))
-
-
-def _summary_matches_surgery(summary_name: str, surgery_name: Any) -> bool:
-    left = _normalized_surgery_name(summary_name)
-    right = _normalized_surgery_name(surgery_name)
-    if not left or not right:
-        return False
-    if left == right or left in right:
-        return True
-    components = [part for part in re.split(r"[+＋、，,；;]", left) if len(part) >= 4]
-    if not components:
-        return False
-    def component_matches(part: str) -> bool:
-        if part in right:
-            return True
-        # 源系统可能省略部位/入路修饰（如“颅内血肿清除术”→“血肿清除术”）。
-        # 仅允许长度足够的术式后缀，避免短关键词造成错误关联。
-        suffixes = [part[index:] for index in range(1, len(part) - 4)]
-        return any(len(suffix) >= 5 and suffix in right for suffix in suffixes)
-
-    matched = sum(1 for part in components if component_matches(part))
-    # 允许源系统在完整术式中插入部位/入路修饰，但至少要命中两个
-    # 有辨识度的术式片段；单一短词不作为安全关联依据。
-    return matched >= 2 and matched * 2 >= len(components)
-
-
 def _try_associate_single_presurg_summary_to_surgeries(
     *,
     summary_rows: Sequence[Mapping[str, Any]],
@@ -1578,7 +1525,7 @@ def _try_associate_single_presurg_summary_to_surgeries(
     """用术式名称将一份术前小结安全关联到手术记录；无法唯一匹配则返回 None。"""
     if len(summary_rows) != 1:
         return None
-    summary_name = _summary_surgery_name_from_row(summary_rows[0])
+    summary_name = summary_surgery_name_from_row(summary_rows[0])
     if not summary_name:
         return None
     try:
@@ -1592,7 +1539,11 @@ def _try_associate_single_presurg_summary_to_surgeries(
     ]
     if len(performed) < 2:
         return None
-    matches = [row for row in performed if _summary_matches_surgery(summary_name, row.get("surgery_name"))]
+    matches = [
+        row
+        for row in performed
+        if procedure_matches_surgery(summary_name, row.get("surgery_name"))
+    ]
     if len(matches) != 1:
         return None
     return len(performed), 1

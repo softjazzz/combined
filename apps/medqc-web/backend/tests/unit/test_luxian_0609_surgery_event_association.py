@@ -5,8 +5,11 @@ from datetime import datetime
 import pytest
 
 from app.services.luxian_0609.surgery_event_association import (
+    associate_preop_document_to_surgery_event,
+    build_performed_surgery_events,
     count_associated_performed_surgery_events,
 )
+from app.services.luxian_0609.evidence_material import EvidenceMaterialTruncated
 
 
 class _Materials:
@@ -26,6 +29,8 @@ def _record(
     name: str,
     code: str | None = None,
     begin: str = "2026-01-01 08:00:00+08:00",
+    end: str | None = None,
+    record_time: str | None = None,
     process: str | None = "手术经过。",
     content: str | None = None,
 ) -> dict:
@@ -34,6 +39,8 @@ def _record(
         "surgery_name": name,
         "surgery_code": code,
         "surgery_begin_time": begin,
+        "surgery_end_time": end,
+        "record_time": record_time,
         "surgery_process": process,
         "record_content": content,
     }
@@ -80,6 +87,7 @@ def test_duplicate_time_shell_is_removed_only_when_substantive_copy_exists() -> 
                 name="腹腔镜胆囊切除术",
                 code="51.2300",
                 begin="2026-01-01 07:00:00+08:00",
+                record_time="2026-01-01 11:00:00",
                 process=None,
                 content=None,
             ),
@@ -95,11 +103,256 @@ def test_duplicate_time_shell_is_removed_only_when_substantive_copy_exists() -> 
                 surgery_id="mr-cholecystectomy",
                 name="腹腔镜胆囊切除术",
                 code="51.2300",
+                # mr_surgery 在真实数据中常只有手术自然日；与手术记录的
+                # 具体时分不一致，但仍可作为同日实质记录的唯一锚点。
+                begin=datetime(2026, 1, 1, 0, 0),
             ),
         ),
     )
 
     assert count_associated_performed_surgery_events(materials) == (1, "")
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == "" and events is not None and len(events) == 1
+
+
+def test_prefixed_continuous_procedure_clause_matches_one_surgery() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(document_id="record", name="腹腔镜胆囊切除术"),
+            _record(
+                document_id="other",
+                name="腹腔镜阑尾切除术",
+                begin="2026-01-02 08:00:00+08:00",
+            ),
+        )
+    )
+    events, reason = build_performed_surgery_events(materials)
+    association = associate_preop_document_to_surgery_event(
+        events=events or (),
+        procedure_name="拟行腹腔镜胆囊切除术",
+        record_time=None,
+    )
+    assert reason == ""
+    assert (association.state, association.event_index) == ("matched", 1)
+
+
+def test_clause_that_contains_two_procedure_names_is_ambiguous() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(document_id="record", name="腹腔镜胆囊切除术"),
+            _record(
+                document_id="other",
+                name="腹腔镜阑尾切除术",
+                begin="2026-01-02 08:00:00+08:00",
+            ),
+        )
+    )
+    events, _reason = build_performed_surgery_events(materials)
+    association = associate_preop_document_to_surgery_event(
+        events=events or (),
+        procedure_name="拟行腹腔镜胆囊切除术及腹腔镜阑尾切除术",
+        record_time=None,
+    )
+    assert association.state == "ambiguous"
+
+
+def test_same_name_document_between_completed_and_next_surgery_matches_next() -> None:
+    name = "腹腔镜胆囊切除术"
+    materials = _Materials(
+        surgery_records=(
+            _record(
+                document_id="first",
+                name=name,
+                begin="2026-01-01 07:00:00+08:00",
+                record_time="2026-01-01 11:00:00",
+                end="2026-01-01 09:00:00+08:00",
+            ),
+            _record(
+                document_id="second",
+                name=name,
+                begin="2026-01-01 11:00:00+08:00",
+            ),
+        )
+    )
+    events, _reason = build_performed_surgery_events(materials)
+    association = associate_preop_document_to_surgery_event(
+        events=events or (),
+        procedure_name=name,
+        record_time=datetime(2026, 1, 1, 10, 0),
+    )
+    assert (association.state, association.event_index) == ("matched", 2)
+
+
+def test_truncated_surgery_records_do_not_fall_back_to_mr_surgery() -> None:
+    class _TruncatedRecordsMaterials(_Materials):
+        def rows(self, source_key: str):
+            if source_key == "surgery_record":
+                raise EvidenceMaterialTruncated("surgery_record")
+            return super().rows(source_key)
+
+    events, reason = build_performed_surgery_events(
+        _TruncatedRecordsMaterials(
+            mr_surgeries=(_mr(surgery_id="mr", name="腹腔镜胆囊切除术"),)
+        )
+    )
+    assert (events, reason) == (None, "source_truncated")
+
+
+def test_event_indexes_follow_reliable_start_time_not_input_order() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(
+                document_id="later",
+                name="腹腔镜阑尾切除术",
+                begin="2026-01-02 08:00:00+08:00",
+            ),
+            _record(
+                document_id="earlier",
+                name="腹腔镜胆囊切除术",
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+        )
+    )
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == "" and events is not None
+    assert [(event.event_index, event.surgery_name) for event in events] == [
+        (1, "腹腔镜胆囊切除术"),
+        (2, "腹腔镜阑尾切除术"),
+    ]
+
+
+def test_cross_source_event_set_mismatch_is_not_silently_preferred() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(
+                document_id="record",
+                name="腹腔镜胆囊切除术",
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+        ),
+        mr_surgeries=(
+            _mr(
+                surgery_id="mr-same-event",
+                name="腹腔镜胆囊切除术",
+                begin=datetime(2026, 1, 1, 8, 0),
+            ),
+            _mr(
+                surgery_id="mr-extra-event",
+                name="腹腔镜阑尾切除术",
+                begin=datetime(2026, 1, 2, 8, 0),
+            ),
+        ),
+    )
+    assert build_performed_surgery_events(materials) == (None, "association_failed")
+
+
+def test_one_formal_record_and_same_day_components_build_one_event() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(
+                document_id="record-composite",
+                name="胸腔镜下右肺上叶切除术+纵隔淋巴结清扫术",
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+        ),
+        mr_surgeries=(
+            _mr(
+                surgery_id="mr-lobectomy",
+                name="右肺上叶切除术",
+                begin=datetime(2026, 1, 1, 8, 0),
+            ),
+            _mr(
+                surgery_id="mr-nodes",
+                name="纵隔淋巴结清扫术",
+                begin=datetime(2026, 1, 1, 8, 0),
+            ),
+        ),
+    )
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == "" and events is not None and len(events) == 1
+
+
+def test_same_day_unrelated_mr_surgery_is_not_treated_as_composite() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(
+                document_id="record-cholecystectomy",
+                name="腹腔镜胆囊切除术",
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+        ),
+        mr_surgeries=(
+            _mr(
+                surgery_id="mr-cholecystectomy",
+                name="腹腔镜胆囊切除术",
+                begin=datetime(2026, 1, 1, 8, 0),
+            ),
+            _mr(
+                surgery_id="mr-appendectomy",
+                name="腹腔镜阑尾切除术",
+                begin=datetime(2026, 1, 1, 12, 0),
+            ),
+        ),
+    )
+    assert build_performed_surgery_events(materials) == (
+        None,
+        "association_failed",
+    )
+
+
+def test_same_name_rows_at_different_times_are_not_time_shell_duplicates() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(
+                document_id="substantive-first",
+                name="腹腔镜胆囊切除术",
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+            _record(
+                document_id="sparse-second",
+                name="腹腔镜胆囊切除术",
+                begin="2026-01-02 08:00:00+08:00",
+                process=None,
+                content=None,
+            ),
+        )
+    )
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == "" and events is not None and len(events) == 2
+
+
+def test_later_sparse_same_name_event_is_not_removed_by_first_event_mr_anchor() -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(
+                document_id="substantive-first",
+                name="腹腔镜胆囊切除术",
+                code="51.2300",
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+            _record(
+                document_id="sparse-second",
+                name="腹腔镜胆囊切除术",
+                code="51.2300",
+                begin="2026-01-02 08:00:00+08:00",
+                record_time="2026-01-02 12:00:00",
+                process=None,
+                content=None,
+            ),
+        ),
+        mr_surgeries=(
+            _mr(
+                surgery_id="mr-first",
+                name="腹腔镜胆囊切除术",
+                code="51.2300",
+                begin=datetime(2026, 1, 1, 8, 0),
+            ),
+        ),
+    )
+    assert build_performed_surgery_events(materials) == (
+        None,
+        "association_failed",
+    )
 
 
 @pytest.mark.parametrize("placeholder", ("无", "无。", "-", "不详", "未记录"))
@@ -114,7 +367,7 @@ def test_record_content_placeholders_do_not_make_time_shell_substantive(
                 code="51.2300",
                 process=None,
                 content=placeholder,
-                begin="2026-01-01 07:00:00+08:00",
+                begin="2026-01-01 08:00:00+08:00",
             ),
             _record(
                 document_id="record-substantive",
