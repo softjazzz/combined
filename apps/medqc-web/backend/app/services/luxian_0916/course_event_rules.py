@@ -30,13 +30,147 @@ _EVENT_KEY_BY_RULE = {
     "LX0916-020": "diagnosis_changes",
 }
 _DOCUMENTATION_FIELDS_BY_RULE = {
-    "LX0916-015": ("record_present", "complete"),
-    "LX0916-016": ("analysis_recorded", "specific_management_recorded"),
     "LX0916-018": ("report_recorded", "disposition_recorded"),
     "LX0916-019": ("record_present", "complete"),
     "LX0916-020": ("reason_recorded", "basis_recorded"),
 }
 _APPROPRIATENESS_VALUES = frozenset({"reasonable", "unreasonable"})
+_STAGE2_FACT_KINDS_BY_RULE = {
+    "LX0916-015": ("record_present", "time_recorded", "content_recorded"),
+    "LX0916-016": ("analysis_present", "management_present"),
+}
+_STAGE2_FACT_FIELDS = frozenset(
+    {"fact_kind", "state", "event_id", "source_type", "document_id", "clause_id"}
+)
+_STAGE2_FACT_STATES = frozenset({"present", "absent", "unknown"})
+_STAGE1_EVENT_FIELDS = (
+    "event_type",
+    "event_id",
+    "event_source_type",
+    "event_source_id",
+    "event_time",
+    "related_source_type",
+    "related_source_id",
+    "event_kind",
+    "lifecycle_state",
+)
+
+
+def _controlled_text(value: Any) -> str | None:
+    normalized = str(value or "").strip()
+    if (
+        not normalized
+        or len(normalized) > 160
+        or "\n" in normalized
+        or "\r" in normalized
+    ):
+        return None
+    return normalized
+
+
+def _controlled_stage2_fact(
+    fact: Any, event_id: str | None, fact_kinds: tuple[str, ...]
+) -> Mapping[str, Any] | None:
+    if not isinstance(fact, Mapping) or set(fact) != _STAGE2_FACT_FIELDS:
+        return None
+    if (
+        fact.get("fact_kind") not in fact_kinds
+        or fact.get("state") not in _STAGE2_FACT_STATES
+    ):
+        return None
+    controlled = {
+        "fact_kind": _controlled_text(fact.get("fact_kind")),
+        "state": _controlled_text(fact.get("state")),
+        "event_id": _controlled_text(fact.get("event_id")),
+        "source_type": _controlled_text(fact.get("source_type")),
+        "document_id": _controlled_text(fact.get("document_id")),
+        "clause_id": _controlled_text(fact.get("clause_id")),
+    }
+    if event_id is None or controlled["event_id"] != event_id:
+        return None
+    raw_coordinates = tuple(
+        fact.get(field) for field in ("source_type", "document_id", "clause_id")
+    )
+    coordinates = (
+        controlled["source_type"],
+        controlled["document_id"],
+        controlled["clause_id"],
+    )
+    if controlled["state"] == "present":
+        if any(value is None for value in coordinates):
+            return None
+    elif any(value is not None for value in raw_coordinates):
+        return None
+    return controlled
+
+
+def _stage2_event_facts(
+    event: Mapping[str, Any], rule_id: str
+) -> tuple[tuple[Mapping[str, Any], ...], bool]:
+    fact_kinds = _STAGE2_FACT_KINDS_BY_RULE[rule_id]
+    raw_facts = event.get("stage2_facts")
+    if not isinstance(raw_facts, Sequence) or isinstance(raw_facts, (str, bytes)):
+        return (), True
+    selected = tuple(
+        fact
+        for fact in raw_facts
+        if isinstance(fact, Mapping) and fact.get("fact_kind") in fact_kinds
+    )
+    facts = tuple(
+        controlled
+        for fact in selected
+        if (
+            controlled := _controlled_stage2_fact(
+                fact, _controlled_text(event.get("event_id")), fact_kinds
+            )
+        )
+        is not None
+    )
+    counts = {
+        kind: sum(fact["fact_kind"] == kind for fact in facts) for kind in fact_kinds
+    }
+    invalid = any(not isinstance(fact, Mapping) for fact in raw_facts)
+    return facts, invalid or len(facts) != len(selected) or set(counts.values()) != {1}
+
+
+def _stage2_decision_events(
+    rows: Sequence[Any], rule_id: str
+) -> list[Mapping[str, Any]]:
+    serialized_events: list[Mapping[str, Any]] = []
+    for event in rows:
+        if not isinstance(event, Mapping):
+            continue
+        trigger = event.get("trigger_confirmed")
+        snapshot: dict[str, Any] = {
+            "trigger_confirmed": trigger if isinstance(trigger, bool) else None
+        }
+        for field in _STAGE1_EVENT_FIELDS:
+            value = _controlled_text(event.get(field))
+            if value:
+                snapshot[field] = value
+        for field in ("related_source_ids", "critical_flags"):
+            raw_values = event.get(field)
+            if not isinstance(raw_values, Sequence) or isinstance(raw_values, (str, bytes)):
+                continue
+            values = [
+                value
+                for raw_value in raw_values
+                if (value := _controlled_text(raw_value)) is not None
+            ]
+            if values:
+                snapshot[field] = values
+        stage2_states = event.get("stage2_state_by_rule")
+        state = (
+            stage2_states.get(rule_id) if isinstance(stage2_states, Mapping) else None
+        )
+        snapshot["stage2_state"] = _controlled_text(state)
+        maturity = event.get("evaluation_window_mature")
+        snapshot["evaluation_window_mature"] = (
+            maturity if isinstance(maturity, bool) else None
+        )
+        snapshot["stage2_facts"] = list(_stage2_event_facts(event, rule_id)[0])
+        serialized_events.append(snapshot)
+    return serialized_events
 
 
 def _decision_facts_from_context(
@@ -75,6 +209,13 @@ def _decision_facts_from_context(
         and decision_source_state.startswith("structured_trigger_")
         else "partial" if source_state == "partial" else "available"
     )
+    if rule_id in _STAGE2_FACT_KINDS_BY_RULE:
+        return {
+            "event_key": event_key,
+            "source_state": source_state,
+            "events": _stage2_decision_events(rows, rule_id),
+        }
+
     documentation_fields = _DOCUMENTATION_FIELDS_BY_RULE.get(rule_id, ())
     serialized_events: list[Mapping[str, Any]] = []
     for event in rows:
@@ -202,7 +343,9 @@ def _event_rows(
             suggestion = "复核受控提取后重新质控。"
         elif source_state == "not_selected":
             reason_code = "event_source_unavailable"
-            findings = "本次受控输入未选出可读取的目标文书，无法确认是否触发病程记录检查。"
+            findings = (
+                "本次受控输入未选出可读取的目标文书，无法确认是否触发病程记录检查。"
+            )
             suggestion = "补充可读取的目标文书后重新质控。"
         else:
             reason_code = "event_source_unverified"
@@ -400,78 +543,152 @@ def _confirmed_documentation_defects(
     return failed_fields, tuple(anchors)
 
 
-def _evaluate_015(context: Mapping[str, Any]) -> Luxian0916RuleResult:
-    rows, early = _event_rows(context, "LX0916-015")
+def _stage2_fact_anchor(
+    event: Mapping[str, Any], fact: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    return {
+        "event_type": str(event.get("event_type") or ""),
+        "event_id": fact["event_id"],
+        "fact_kind": fact["fact_kind"],
+        "state": fact["state"],
+        "document_type": str(fact["source_type"]),
+        "document_id": str(fact["document_id"]),
+        "clause_id": str(fact["clause_id"]),
+    }
+
+
+def _evaluate_disease_change_stage2(
+    context: Mapping[str, Any], rule_id: str
+) -> Luxian0916RuleResult:
+    rows, early = _event_rows(context, rule_id)
     if early:
         return early
     assert rows is not None
     states = context.get("event_source_state_by_rule")
-    partial = isinstance(states, Mapping) and states.get("LX0916-015") == "partial"
+    partial = isinstance(states, Mapping) and states.get(rule_id) == "partial"
     if partial:
         events = tuple(row for row in rows if row.get("trigger_confirmed") is True)
     else:
-        events, early = _triggered_events("LX0916-015", rows)
+        events, early = _triggered_events(rule_id, rows)
         if early:
             return early
     assert events is not None
-    fields = ("record_present", "complete")
-    defects, defect_anchors = _confirmed_documentation_defects(events, fields)
-    if defects:
+
+    event_facts: list[
+        tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...], bool]
+    ] = []
+    defect_facts: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    unresolved_anchors: list[Mapping[str, Any]] = []
+    blocking_unresolved = False
+    unknown_facts_present = False
+    for event in events:
+        facts, invalid = _stage2_event_facts(event, rule_id)
+        event_facts.append((event, facts, invalid))
+        defect_facts.extend(
+            (event, fact) for fact in facts if fact["state"] == "absent"
+        )
+        unknown_facts = tuple(fact for fact in facts if fact["state"] == "unknown")
+        unknown_facts_present = unknown_facts_present or bool(unknown_facts)
+        unresolved_anchors.extend(
+            _event_anchor(event, str(fact["fact_kind"])) for fact in unknown_facts
+        )
+        stage2_states = event.get("stage2_state_by_rule")
+        if (
+            not isinstance(stage2_states, Mapping)
+            or stage2_states.get(rule_id) != "ready"
+            or invalid
+        ):
+            blocking_unresolved = True
+
+    maturity_values = tuple(event.get("evaluation_window_mature") for event in events)
+    maturity_unknown = any(
+        value is not True and value is not False for value in maturity_values
+    )
+    if maturity_unknown:
+        blocking_unresolved = True
+        defect_facts = []
+        unresolved_anchors.extend(
+            _event_anchor(event, "evaluation_window_mature")
+            for event in events
+            if event.get("evaluation_window_mature") is not True
+            and event.get("evaluation_window_mature") is not False
+        )
+    elif any(value is False for value in maturity_values):
+        return _not_mature_result(rule_id, events)
+
+    if blocking_unresolved:
         return _result(
-            "LX0916-015", "non_compliant", "disease_change_documentation_incomplete",
-            "重要病情变化的病程记录缺失或不完整。",
-            suggestion="补记重要病情变化及其完整病程记录。",
-            anchors=defect_anchors,
-            diagnostics={"failed_facts": defects},
+            rule_id,
+            "data_quality_gap",
+            "disease_change_stage2_fact_unavailable",
+            "触发事件的病程记录原子事实未完整形成，无法安全判断。",
+            suggestion="补齐事件关联病程记录的受控原子事实后重新质控。",
+            anchors=tuple(unresolved_anchors),
+        )
+    if defect_facts:
+        failed_facts = list(
+            dict.fromkeys(fact["fact_kind"] for _, fact in defect_facts)
+        )
+        if rule_id == "LX0916-015":
+            reason_code = "disease_change_documentation_incomplete"
+            findings = "重要病情变化的病程记录缺失或时间、内容不完整。"
+            suggestion = "补记重要病情变化及其记录时间和事件内容。"
+        else:
+            reason_code = "disease_change_analysis_or_management_missing"
+            findings = "病情变化未记录独立分析判断或具体处理意见。"
+            suggestion = "补充病情变化的独立分析判断和具体处理意见。"
+        return _result(
+            rule_id,
+            "non_compliant",
+            reason_code,
+            findings,
+            suggestion=suggestion,
+            anchors=tuple(
+                _event_anchor(event, str(fact["fact_kind"]))
+                for event, fact in defect_facts
+            ),
+            diagnostics={"failed_facts": failed_facts},
         )
     if partial:
-        return _partial_event_source_result("LX0916-015")
-    _, early = _maturity("LX0916-015", events)
-    if early:
-        return early
-    if any(event.get("evaluation_window_mature") is False for event in events):
-        return _not_mature_result("LX0916-015", events)
-    _, early = _documentation("LX0916-015", events, fields)
-    if early:
-        return early
-    _, early = _bool_documentation("LX0916-015", events, fields)
-    if early:
-        return early
-    return _result("LX0916-015", "compliant", "disease_change_documentation_complete", "重要病情变化已记录且内容完整。", anchors=tuple(_event_anchor(event, *fields) for event in events))
+        return _partial_event_source_result(rule_id)
+    if unknown_facts_present:
+        return _result(
+            rule_id,
+            "data_quality_gap",
+            "disease_change_stage2_fact_unavailable",
+            "触发事件的病程记录原子事实未完整形成，无法安全判断。",
+            suggestion="补齐事件关联病程记录的受控原子事实后重新质控。",
+            anchors=tuple(unresolved_anchors),
+        )
+
+    anchors = tuple(
+        _stage2_fact_anchor(event, fact)
+        for event, facts, _ in event_facts
+        for fact in facts
+    )
+    if rule_id == "LX0916-015":
+        return _result(
+            rule_id,
+            "compliant",
+            "disease_change_documentation_complete",
+            "重要病情变化已记录，且时间和事件内容完整。",
+            anchors=anchors,
+        )
+    return _result(
+        rule_id,
+        "compliant",
+        "disease_change_analysis_and_management_present",
+        "病情变化已记录独立分析判断和具体处理意见。",
+        anchors=anchors,
+    )
+
+
+def _evaluate_015(context: Mapping[str, Any]) -> Luxian0916RuleResult:
+    return _evaluate_disease_change_stage2(context, "LX0916-015")
 
 
 def _evaluate_016(context: Mapping[str, Any]) -> Luxian0916RuleResult:
-    rows, early = _event_rows(context, "LX0916-016")
-    if early:
-        return early
-    assert rows is not None
-    states = context.get("event_source_state_by_rule")
-    partial = isinstance(states, Mapping) and states.get("LX0916-016") == "partial"
-    if partial:
-        events = tuple(row for row in rows if row.get("trigger_confirmed") is True)
-    else:
-        events, early = _triggered_events("LX0916-016", rows)
-        if early:
-            return early
-    assert events is not None
-    fields = ("analysis_recorded", "specific_management_recorded")
-    defects, defect_anchors = _confirmed_documentation_defects(events, fields)
-    if defects:
-        return _result("LX0916-016", "non_compliant", "disease_change_analysis_or_management_missing", "病情变化未记录分析判断或具体处理意见。", suggestion="补充病情变化的分析判断和具体处理意见。", anchors=defect_anchors, diagnostics={"failed_facts": defects})
-    if partial:
-        return _partial_event_source_result("LX0916-016")
-    _, early = _maturity("LX0916-016", events)
-    if early:
-        return early
-    if any(event.get("evaluation_window_mature") is False for event in events):
-        return _not_mature_result("LX0916-016", events)
-    _, early = _documentation("LX0916-016", events, fields)
-    if early:
-        return early
-    _, early = _bool_documentation("LX0916-016", events, fields)
-    if early:
-        return early
-    return _result("LX0916-016", "compliant", "disease_change_analysis_and_management_present", "病情变化已记录分析判断和具体处理意见。", anchors=tuple(_event_anchor(event, *fields) for event in events))
+    return _evaluate_disease_change_stage2(context, "LX0916-016")
 
 
 def _evaluate_017(context: Mapping[str, Any]) -> Luxian0916RuleResult:
@@ -595,8 +812,10 @@ def execute_course_event_rules(
 ) -> list[Luxian0916RuleResult]:
     """直接形成事件触发病程规则的客户交付结果。"""
 
-    selected = _RULE_IDS if rule_ids is None else tuple(
-        rule_id for rule_id in _RULE_IDS if rule_id in set(rule_ids)
+    selected = (
+        _RULE_IDS
+        if rule_ids is None
+        else tuple(rule_id for rule_id in _RULE_IDS if rule_id in set(rule_ids))
     )
     return [
         replace(

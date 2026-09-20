@@ -43,6 +43,9 @@ _LAB_QUERY = text(
            item.test_id AS item_test_id,
            item.test_no AS item_test_no,
            item.item_id AS item_id,
+           item.item_name AS item_name,
+           item.result AS result,
+           item.unit AS unit,
            item.abnormal_indicator AS abnormal_indicator,
            item.report_time AS item_report_time,
            master.test_id AS master_test_id,
@@ -242,6 +245,27 @@ def _critical_lab_events(
                 {_clean(row.get("abnormal_indicator")).upper() for row in report_rows}
             )
         )
+        critical_items: list[dict[str, str]] = []
+        critical_context_complete = True
+        for row in report_rows:
+            item_id = _clean(row.get("item_id")) or _clean(row.get("item_document_id"))
+            item_name = _bounded_context_text(row.get("item_name"))
+            result = _bounded_context_text(row.get("result"))
+            unit = _bounded_context_text(row.get("unit"))
+            critical_flag = _clean(row.get("abnormal_indicator")).upper()
+            if not item_id or not item_name or not result:
+                critical_context_complete = False
+                critical_items = []
+                break
+            critical_items.append(
+                {
+                    "item_id": item_id,
+                    "item_name": item_name,
+                    "result": result,
+                    "unit": unit,
+                    "critical_flag": critical_flag,
+                }
+            )
         events.append(
             _event(
                 event_id=f"critical-lab:{test_id}",
@@ -252,6 +276,7 @@ def _critical_lab_events(
                 related_source_type="labtest_item_report",
                 related_source_ids=item_ids,
                 critical_flags=flags,
+                critical_items=(critical_items if critical_context_complete else ()),
             )
         )
     return events, issues
@@ -269,6 +294,7 @@ def _event(
     related_source_id: str | None = None,
     related_source_ids: Sequence[str] = (),
     critical_flags: Sequence[str] = (),
+    critical_items: Sequence[Mapping[str, str]] = (),
 ) -> dict[str, Any]:
     event: dict[str, Any] = {
         "event_type": "disease_changes",
@@ -292,6 +318,8 @@ def _event(
         event["related_source_ids"] = list(related_source_ids)
     if critical_flags:
         event["critical_flags"] = list(critical_flags)
+    if critical_items:
+        event["critical_items"] = [dict(item) for item in critical_items]
     return event
 
 
@@ -326,6 +354,15 @@ def _trusted_time(value: Any) -> str | None:
 
 def _clean(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _bounded_context_text(value: Any) -> str:
+    text_value = _clean(value)
+    if not text_value:
+        return ""
+    if "\n" in text_value or "\r" in text_value or len(text_value) > 160:
+        return ""
+    return text_value
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:

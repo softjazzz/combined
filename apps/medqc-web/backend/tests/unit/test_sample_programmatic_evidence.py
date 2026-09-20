@@ -5,6 +5,55 @@ from app.services.qc_input_adapters.running_final_bundle_adapter import (
 )
 
 
+class _FakeRows:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+    def first(self):
+        return self._rows[0] if self._rows else None
+
+
+class _FakeConnection:
+    def __init__(self, rows_by_table):
+        self._rows_by_table = rows_by_table
+        self.source_query_limits = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def execute(self, statement, params):
+        query = str(statement)
+        if "cdm.inpat_registration" in query:
+            return _FakeRows([])
+        table_name = next(
+            table_name
+            for table_name in self._rows_by_table
+            if f"cdm.{table_name}" in query
+        )
+        self.source_query_limits.append((table_name, params["limit"]))
+        rows = self._rows_by_table[table_name]
+        if isinstance(rows, Exception):
+            raise rows
+        return _FakeRows(rows)
+
+
+class _FakeEngine:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def connect(self):
+        return self._connection
+
+
 def test_build_programmatic_evidence_payload_should_flatten_structured_documents_and_render_titles():
     payload = build_programmatic_evidence_payload(
         bundle={
@@ -258,6 +307,159 @@ def test_build_programmatic_evidence_payload_should_reject_external_fallback_met
     assert timeline["admission_time"] == ""
     assert timeline["admission_time_basis"] == "missing"
     assert timeline["admission_time_trusted"] is False
+
+
+def test_fetch_source_table_fallback_items_should_report_readiness_without_changing_document_limit(
+    monkeypatch,
+):
+    source_tables = (
+        "first_course_record",
+        "daily_course_record",
+        "senior_course_record",
+        "rescue_record",
+    )
+    connection = _FakeConnection(
+        {
+            "first_course_record": [
+                {
+                    "document_id": "F1",
+                    "record_content": "首次病程记录",
+                    "case_characteristic": "病例特点正文",
+                },
+            ],
+            "daily_course_record": [
+                {"document_id": "D1", "record_content": "日常病程 1"},
+                {"document_id": "D2", "record_content": "日常病程 2"},
+                {"document_id": "D3", "record_content": "日常病程 3"},
+            ],
+            "senior_course_record": RuntimeError("源表不可用"),
+            "rescue_record": [],
+        }
+    )
+    monkeypatch.setattr(evidence_module, "_SOURCE_TABLES", source_tables)
+    monkeypatch.setattr(
+        evidence_module,
+        "_FALLBACK_DOC_FETCH_LIMITS",
+        {
+            "first_course_record": 2,
+            "daily_course_record": 2,
+            "senior_course_record": 2,
+            "rescue_record": 2,
+        },
+    )
+    monkeypatch.setattr(evidence_module, "engine", _FakeEngine(connection))
+    bundle_payload = {
+        "institute_id": "I1",
+        "visit_id": "V1",
+    }
+
+    fallback_items, fallback_meta = evidence_module._fetch_source_table_fallback_items(
+        bundle_payload
+    )
+
+    assert fallback_meta == {}
+    assert [item["document_id"] for item in fallback_items] == ["F1", "D1", "D2"]
+    assert fallback_items[0]["structured_sections"] == {
+        "case_characteristic": "病例特点正文"
+    }
+    assert bundle_payload["_source_table_readiness"] == {
+        "first_course_record": "complete",
+        "daily_course_record": "partial",
+        "senior_course_record": "unavailable",
+        "rescue_record": "complete",
+    }
+    assert set(connection.source_query_limits) == {
+        ("first_course_record", 3),
+        ("daily_course_record", 3),
+        ("senior_course_record", 3),
+        ("rescue_record", 3),
+    }
+
+
+def test_build_programmatic_evidence_payload_should_ignore_external_source_readiness_and_project_controlled_values(
+    monkeypatch,
+):
+    def fake_fetch_source_table_fallback_items(bundle_payload):
+        assert "_source_table_readiness" not in bundle_payload
+        bundle_payload["_source_table_readiness"] = {
+            "first_course_record": "complete",
+            "daily_course_record": "partial",
+            "senior_course_record": "invalid",
+            "unknown_table": "complete",
+        }
+        return [], {}
+
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        fake_fetch_source_table_fallback_items,
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "visit_id": "V1",
+            "_source_table_readiness": {
+                "first_course_record": "unavailable",
+                "daily_course_record": "complete",
+            },
+        }
+    )
+
+    assert payload["programmatic_timeline"]["source_readiness"] == {
+        "first_course_record": "complete",
+        "daily_course_record": "partial",
+    }
+
+
+def test_build_programmatic_evidence_payload_should_not_attest_readiness_without_controlled_query(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: ([], {}),
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "_source_table_readiness": {
+                "first_course_record": "complete",
+            }
+        }
+    )
+
+    assert payload["programmatic_timeline"]["source_readiness"] == {}
+
+
+def test_build_programmatic_evidence_payload_should_project_first_course_structured_sections_without_expanding_shared_text(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: ([], {}),
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "source_table": "first_course_record",
+                    "document_id": "F1",
+                    "record_time": "2026-09-16 08:00:00",
+                    "case_characteristic": "病例特点正文",
+                    "diagnose_based_on": "诊断依据正文",
+                }
+            ]
+        }
+    )
+
+    event = payload["programmatic_timeline"]["documents"]["first_course_record"][0]
+    assert event["structured_sections"] == {
+        "case_characteristic": "病例特点正文",
+        "diagnose_based_on": "诊断依据正文",
+    }
+    assert "病例特点正文" not in payload["primary_document_text"]
 
 
 def test_build_programmatic_evidence_payload_should_attest_approved_primary_timeline_fact():

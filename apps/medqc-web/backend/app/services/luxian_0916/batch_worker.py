@@ -19,6 +19,7 @@ from .disease_change_015016 import (
     load_disease_change_015016_facts,
     merge_disease_change_015016_facts,
 )
+from .disease_change_stage2 import extract_disease_change_stage2_facts
 from .input_context import (
     add_luxian_0916_evidence_sources,
     build_luxian_0916_context,
@@ -186,6 +187,11 @@ async def run_luxian_0916_batch_job(
             for outcome in outcomes
             if outcome.semantic_diagnostic
         ]
+        disease_change_stage2_diagnostics = [
+            outcome.disease_change_stage2_diagnostic
+            for outcome in outcomes
+            if outcome.disease_change_stage2_diagnostic
+        ]
         semantic_extraction_failures = _semantic_extraction_failures(outcomes)
         semantic_contract_retries = _semantic_contract_retries(outcomes)
         summary = {
@@ -211,6 +217,28 @@ async def run_luxian_0916_batch_job(
             "semantic_extraction_failures": semantic_extraction_failures,
             "semantic_contract_retry_count": len(semantic_contract_retries),
             "semantic_contract_retries": semantic_contract_retries,
+            "disease_change_stage2_llm_call_count": _diagnostic_total(
+                disease_change_stage2_diagnostics, "llm_call_count"
+            ),
+            "disease_change_stage2_prompt_tokens": _diagnostic_total(
+                disease_change_stage2_diagnostics, "prompt_tokens"
+            ),
+            "disease_change_stage2_completion_tokens": _diagnostic_total(
+                disease_change_stage2_diagnostics, "completion_tokens"
+            ),
+            "disease_change_stage2_total_tokens": _diagnostic_total(
+                disease_change_stage2_diagnostics, "total_tokens"
+            ),
+            "disease_change_stage2_model_elapsed_ms": _diagnostic_total(
+                disease_change_stage2_diagnostics, "model_elapsed_ms"
+            ),
+            "disease_change_stage2_failure_count": _diagnostic_total(
+                disease_change_stage2_diagnostics, "failure_count"
+            ),
+            "disease_change_stage2_usage_incomplete_count": sum(
+                item.get("usage_incomplete") is True
+                for item in disease_change_stage2_diagnostics
+            ),
             "progress": {
                 "step_key": "completed",
                 "processed_records": total_records,
@@ -237,6 +265,7 @@ class _RecordExecution:
         diagnostic_failures: Sequence[dict[str, Any]] = (),
         failed_records: Sequence[dict[str, Any]] = (),
         semantic_diagnostic: Mapping[str, Any] | None = None,
+        disease_change_stage2_diagnostic: Mapping[str, Any] | None = None,
         semantic_extraction_failure: Mapping[str, Any] | None = None,
         semantic_contract_retry: Mapping[str, Any] | None = None,
     ) -> None:
@@ -244,6 +273,9 @@ class _RecordExecution:
         self.diagnostic_failures = tuple(diagnostic_failures)
         self.failed_records = tuple(failed_records)
         self.semantic_diagnostic = dict(semantic_diagnostic or {})
+        self.disease_change_stage2_diagnostic = dict(
+            disease_change_stage2_diagnostic or {}
+        )
         self.semantic_extraction_failure = dict(semantic_extraction_failure or {})
         self.semantic_contract_retry = dict(semantic_contract_retry or {})
 
@@ -294,6 +326,20 @@ async def _execute_record(
             patient_id=identity["patient_id"],
             visit_id=identity["visit_id"],
         )
+        try:
+            stage2_output = await extract_disease_change_stage2_facts(
+                evidence_payload=evidence_payload,
+                structured_facts=structured_disease_change,
+                scene=_resolve_scene(record=record, job=job),
+                generate=semantic_generate,
+            )
+            if not isinstance(stage2_output, Mapping):
+                raise TypeError("Stage2 output must be a mapping")
+            structured_disease_change = dict(stage2_output)
+        except Exception:  # noqa: BLE001 - Stage2 异常只能降级 015/016
+            structured_disease_change = _stage2_internal_failure(
+                structured_disease_change
+            )
         context = merge_disease_change_015016_facts(
             context=context,
             structured_facts=structured_disease_change,
@@ -309,6 +355,9 @@ async def _execute_record(
             diagnostic_failures=outcome.diagnostic_failures,
             failed_records=outcome.failed_records,
             semantic_diagnostic=_mapping(extracted.get("diagnostic")),
+            disease_change_stage2_diagnostic=_mapping(
+                structured_disease_change.get("diagnostic")
+            ),
             semantic_extraction_failure=_semantic_extraction_failure(
                 identity=identity,
                 record=record,
@@ -588,6 +637,51 @@ def _nonnegative_int(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _diagnostic_total(diagnostics: Sequence[Mapping[str, Any]], key: str) -> int:
+    return sum(_nonnegative_int(item.get(key)) for item in diagnostics)
+
+
+def _stage2_internal_failure(
+    structured_facts: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Stage2 未预期异常的安全壳：保留触发事实，不泄露异常或病例正文。"""
+
+    result = dict(structured_facts)
+    event_facts = dict(_mapping(structured_facts.get("event_facts")))
+    protected_events: list[dict[str, Any]] = []
+    triggered_count = 0
+    for source_event in _sequence_of_mappings(event_facts.get("disease_changes")):
+        event = dict(source_event)
+        if event.get("trigger_confirmed") is True:
+            triggered_count += 1
+            event["stage2_state_by_rule"] = {
+                "LX0916-015": "internal_failure",
+                "LX0916-016": "internal_failure",
+            }
+            event.pop("stage2_facts", None)
+        protected_events.append(event)
+    event_facts["disease_changes"] = protected_events
+    result["event_facts"] = event_facts
+    result["diagnostic"] = {
+        "code": "disease_change_stage2_internal_failure",
+        "event_count": triggered_count,
+        "llm_call_count": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "model_elapsed_ms": 0,
+        "failure_count": triggered_count * len(_STRUCTURED_DISEASE_CHANGE_RULE_IDS),
+        "usage_incomplete": True,
+    }
+    return result
+
+
+def _sequence_of_mappings(value: Any) -> tuple[dict[str, Any], ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return ()
+    return tuple(dict(item) for item in value if isinstance(item, Mapping))
 
 
 def _mapping(value: Any) -> dict[str, Any]:

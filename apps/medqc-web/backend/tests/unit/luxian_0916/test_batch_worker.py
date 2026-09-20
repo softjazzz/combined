@@ -7,7 +7,10 @@ import pytest
 
 from app.services.luxian_0916 import batch_worker
 from app.services.luxian_0916.contracts import Luxian0916RuleResult
-from app.services.luxian_0916.orchestrator import Luxian0916Execution, Luxian0916RuleFailure
+from app.services.luxian_0916.orchestrator import (
+    Luxian0916Execution,
+    Luxian0916RuleFailure,
+)
 from app.services.luxian_0916.rule_catalog import LUXIAN_0916_RULE_CATALOG
 
 
@@ -105,6 +108,26 @@ def _isolate_structured_disease_change_source(monkeypatch: pytest.MonkeyPatch) -
                 "llm_call_count": 0,
             },
         },
+    )
+
+    async def extract_stage2(**kwargs: Any) -> dict[str, Any]:
+        result = dict(kwargs["structured_facts"])
+        result["diagnostic"] = {
+            "code": "disease_change_stage2_not_triggered",
+            "event_count": 0,
+            "llm_call_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "model_elapsed_ms": 0,
+            "failure_count": 0,
+        }
+        return result
+
+    monkeypatch.setattr(
+        batch_worker,
+        "extract_disease_change_stage2_facts",
+        extract_stage2,
     )
 
 
@@ -252,6 +275,8 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     assert summary["success_count"] == 2
     assert summary["max_parallel_records"] == 2
     assert summary["progress"]["max_parallel_records"] == 2
+    assert summary["disease_change_stage2_llm_call_count"] == 0
+    assert summary["disease_change_stage2_total_tokens"] == 0
     items = workspace.completed["items"]
     assert len(items) == 64
     first = items[0]
@@ -264,6 +289,219 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     assert first["document_anchors"] == [{"document_type": "admission_record", "document_id": "A-1"}]
     assert first["diagnostics"] == {"origin": "executor"}
     assert [item["visit_id"] for item in items[:32]] == ["V-1"] * 32
+
+
+@pytest.mark.asyncio
+async def test_batch_worker_runs_stage2_only_for_structured_triggers_and_summarizes_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record()])
+    _patch_loaders(monkeypatch)
+    event = {
+        "event_type": "disease_changes",
+        "event_id": "severity-order:ORDER-1",
+        "event_source_type": "inpat_nondrug_order",
+        "event_source_id": "ORDER-1",
+        "event_time": "2026-09-16 08:00:00",
+        "event_kind": "severity_critical",
+        "trigger_confirmed": True,
+    }
+    monkeypatch.setattr(
+        batch_worker,
+        "load_disease_change_015016_facts",
+        lambda **_kwargs: {
+            "event_facts": {"disease_changes": [event]},
+            "event_source_state_by_rule": {
+                "LX0916-015": "structured_complete",
+                "LX0916-016": "structured_complete",
+            },
+            "diagnostic": {"llm_call_count": 0},
+        },
+    )
+    captured: list[dict[str, Any]] = []
+
+    async def extract_stage2(**kwargs: Any) -> dict[str, Any]:
+        captured.append(kwargs)
+        enriched = {
+            **event,
+            "stage2_state_by_rule": {
+                "LX0916-015": "ready",
+                "LX0916-016": "ready",
+            },
+            "stage2_facts": [],
+        }
+        return {
+            "event_facts": {"disease_changes": [enriched]},
+            "event_source_state_by_rule": {
+                "LX0916-015": "structured_complete",
+                "LX0916-016": "structured_complete",
+            },
+            "diagnostic": {
+                "code": "disease_change_stage2_ready",
+                "event_count": 1,
+                "llm_call_count": 1,
+                "prompt_tokens": 120,
+                "completion_tokens": 30,
+                "total_tokens": 150,
+                "model_elapsed_ms": 250,
+                "failure_count": 0,
+            },
+        }
+
+    monkeypatch.setattr(
+        batch_worker, "extract_disease_change_stage2_facts", extract_stage2
+    )
+    observed_contexts: list[dict[str, Any]] = []
+
+    def execute(
+        context: dict[str, Any], _rule_ids: tuple[str, ...]
+    ) -> Luxian0916Execution:
+        observed_contexts.append(context)
+        return Luxian0916Execution(results=(_result("LX0916-015"),))
+
+    monkeypatch.setattr(batch_worker, "execute_luxian_0916", execute)
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=_semantic_generate
+    )
+
+    assert len(captured) == 1
+    assert captured[0]["evidence_payload"]["programmatic_timeline"]["documents"] == {}
+    assert captured[0]["scene"] == "running"
+    assert captured[0]["generate"] is _semantic_generate
+    assert observed_contexts[0]["event_facts"]["disease_changes"][0][
+        "stage2_state_by_rule"
+    ] == {"LX0916-015": "ready", "LX0916-016": "ready"}
+    assert workspace.completed is not None
+    summary = workspace.completed["summary"]
+    assert summary["disease_change_stage2_llm_call_count"] == 1
+    assert summary["disease_change_stage2_prompt_tokens"] == 120
+    assert summary["disease_change_stage2_completion_tokens"] == 30
+    assert summary["disease_change_stage2_total_tokens"] == 150
+    assert summary["disease_change_stage2_model_elapsed_ms"] == 250
+    assert summary["disease_change_stage2_failure_count"] == 0
+    assert summary["disease_change_stage2_usage_incomplete_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_batch_worker_contains_unexpected_stage2_failure_to_015016(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record()])
+    _patch_loaders(monkeypatch)
+    event = {
+        "event_type": "disease_changes",
+        "event_id": "severity-order:ORDER-1",
+        "event_source_type": "inpat_nondrug_order",
+        "event_source_id": "ORDER-1",
+        "event_time": "2026-09-16 08:00:00",
+        "event_kind": "severity_critical",
+        "trigger_confirmed": True,
+    }
+    monkeypatch.setattr(
+        batch_worker,
+        "load_disease_change_015016_facts",
+        lambda **_kwargs: {
+            "event_facts": {"disease_changes": [event]},
+            "event_source_state_by_rule": {
+                "LX0916-015": "structured_complete",
+                "LX0916-016": "structured_complete",
+            },
+            "diagnostic": {"llm_call_count": 0},
+        },
+    )
+
+    async def fail_stage2(**_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("private provider detail")
+
+    monkeypatch.setattr(
+        batch_worker, "extract_disease_change_stage2_facts", fail_stage2
+    )
+    observed: list[dict[str, Any]] = []
+
+    def execute(
+        context: dict[str, Any], _rule_ids: tuple[str, ...]
+    ) -> Luxian0916Execution:
+        observed.append(context)
+        return Luxian0916Execution(
+            results=tuple(_result(rule.rule_id) for rule in LUXIAN_0916_RULE_CATALOG)
+        )
+
+    monkeypatch.setattr(batch_worker, "execute_luxian_0916", execute)
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=_semantic_generate
+    )
+
+    assert workspace.failed == []
+    assert workspace.completed is not None
+    assert workspace.completed["summary"]["success_count"] == 1
+    assert workspace.completed["summary"]["disease_change_stage2_failure_count"] == 2
+    assert (
+        workspace.completed["summary"]["disease_change_stage2_usage_incomplete_count"]
+        == 1
+    )
+    protected_event = observed[0]["event_facts"]["disease_changes"][0]
+    assert protected_event["stage2_state_by_rule"] == {
+        "LX0916-015": "internal_failure",
+        "LX0916-016": "internal_failure",
+    }
+    assert "stage2_facts" not in protected_event
+
+
+@pytest.mark.asyncio
+async def test_batch_worker_contains_invalid_stage2_output_to_015016(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record()])
+    _patch_loaders(monkeypatch)
+    event = {
+        "event_type": "disease_changes",
+        "event_id": "severity-order:ORDER-1",
+        "event_source_type": "inpat_nondrug_order",
+        "event_source_id": "ORDER-1",
+        "event_time": "2026-09-16 08:00:00",
+        "event_kind": "severity_critical",
+        "trigger_confirmed": True,
+    }
+    monkeypatch.setattr(
+        batch_worker,
+        "load_disease_change_015016_facts",
+        lambda **_kwargs: {
+            "event_facts": {"disease_changes": [event]},
+            "event_source_state_by_rule": {
+                "LX0916-015": "structured_complete",
+                "LX0916-016": "structured_complete",
+            },
+        },
+    )
+
+    async def invalid_stage2(**_kwargs: Any) -> object:
+        return None
+
+    monkeypatch.setattr(
+        batch_worker, "extract_disease_change_stage2_facts", invalid_stage2
+    )
+    observed: list[dict[str, Any]] = []
+
+    def execute(
+        context: dict[str, Any], _rule_ids: tuple[str, ...]
+    ) -> Luxian0916Execution:
+        observed.append(context)
+        return Luxian0916Execution(results=(_result("LX0916-015"),))
+
+    monkeypatch.setattr(batch_worker, "execute_luxian_0916", execute)
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=_semantic_generate
+    )
+
+    assert workspace.failed == []
+    assert workspace.completed is not None
+    assert observed[0]["event_facts"]["disease_changes"][0]["stage2_state_by_rule"] == {
+        "LX0916-015": "internal_failure",
+        "LX0916-016": "internal_failure",
+    }
 
 
 @pytest.mark.asyncio
@@ -296,7 +534,10 @@ async def test_batch_worker_isolates_one_record_load_failure(
     assert workspace.failed == []
     assert workspace.completed is not None
     assert workspace.completed["persist_record_envelopes"] is False
-    assert workspace.completed["summary"]["execution_status"] == "completed_with_record_failures"
+    assert (
+        workspace.completed["summary"]["execution_status"]
+        == "completed_with_record_failures"
+    )
     assert workspace.completed["summary"]["success_count"] == 1
     assert workspace.completed["summary"]["failed_count"] == 1
     assert workspace.completed["items"][0]["visit_id"] == "OK"

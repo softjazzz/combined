@@ -75,6 +75,14 @@ _FALLBACK_DOC_FETCH_LIMITS = {
     "discharge_record": 5,
 }
 
+_SOURCE_READINESS_STATES = frozenset({"complete", "partial", "unavailable"})
+_FORMAL_COURSE_STRUCTURED_FIELDS = (
+    "case_characteristic",
+    "diagnose_based_on",
+    "differential_diagnosis",
+    "treatment_plan",
+)
+
 _ATTENDING_ROLE_MARKERS = ("主治医师", "主治查房", "attending physician")
 _SENIOR_ROLE_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房")
 _ATTENDING_EXCLUSION_MARKERS = (
@@ -158,6 +166,15 @@ def _item_text(item: dict[str, Any]) -> str:
             if text_value:
                 values.append(text_value)
     return " ".join(values)
+
+
+def _formal_course_structured_sections(item: dict[str, Any]) -> dict[str, str]:
+    nested = _safe_dict(item.get("structured_sections"))
+    return {
+        field: value
+        for field in _FORMAL_COURSE_STRUCTURED_FIELDS
+        if (value := _safe_text(item.get(field) or nested.get(field)))
+    }
 
 
 def _normalize_identity_text(value: Any) -> str:
@@ -488,6 +505,7 @@ def _build_event(item: dict[str, Any]) -> dict[str, Any]:
         "content_preview": content[:300],
         "raw_text": content,
         "content": content,
+        "structured_sections": _formal_course_structured_sections(item),
     }
 
 
@@ -629,9 +647,11 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
 
     fallback_items: list[dict[str, Any]] = []
     fallback_meta: dict[str, str] = {}
+    source_readiness: dict[str, str] = {}
     with engine.connect() as conn:
         for table_name in _SOURCE_TABLES:
             limit = int(_FALLBACK_DOC_FETCH_LIMITS.get(table_name, 20))
+            query_limit = limit + 1
             try:
                 if institute_id:
                     rows = conn.execute(
@@ -647,7 +667,7 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                         {
                             "institute_id": institute_id,
                             "visit_id": visit_id,
-                            "limit": limit,
+                            "limit": query_limit,
                         },
                     ).mappings().all()
                 else:
@@ -666,7 +686,7 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                         {
                             "visit_id": visit_id,
                             "patient_id": patient_id,
-                            "limit": limit,
+                            "limit": query_limit,
                         },
                     ).mappings().all()
                 if not rows:
@@ -681,11 +701,14 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                         ),
                         {
                             "visit_id": visit_id,
-                            "limit": limit,
+                            "limit": query_limit,
                         },
                     ).mappings().all()
             except Exception:
+                source_readiness[table_name] = "unavailable"
                 continue
+            source_readiness[table_name] = "partial" if len(rows) > limit else "complete"
+            rows = rows[:limit]
             for row in rows:
                 item = dict(row)
                 display_time = _safe_text(item.get("record_time") or item.get("submit_datetime") or item.get("update_time"))
@@ -707,8 +730,10 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                         "update_time": _safe_text(item.get("update_time")),
                         "content": row_text,
                         "text_preview": row_text[:400],
+                        "structured_sections": _formal_course_structured_sections(item),
                     }
                 )
+        bundle_payload["_source_table_readiness"] = source_readiness
         try:
             if institute_id:
                 registration = conn.execute(
@@ -846,9 +871,17 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
     bundle_payload = dict(bundle or {})
     # 调用方携带的同名元数据不可作为来源证明；仅接受本次受控源表查询写回的值。
     bundle_payload.pop("_source_table_fallback_meta", None)
+    bundle_payload.pop("_source_table_readiness", None)
     structured = _safe_dict(bundle_payload.get("structured_context"))
     inventory_items = _flatten_inventory_items(structured, bundle_payload)
     fallback_meta = _safe_dict(bundle_payload.get("_source_table_fallback_meta"))
+    raw_source_readiness = _safe_dict(bundle_payload.get("_source_table_readiness"))
+    source_readiness = {
+        table_name: status
+        for table_name in _SOURCE_TABLES
+        if (status := _safe_text(raw_source_readiness.get(table_name)))
+        in _SOURCE_READINESS_STATES
+    }
 
     documents: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in _SOURCE_TABLES}
     for raw_item in inventory_items:
@@ -903,6 +936,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
             "admission_time_trusted": admission_time_trusted,
             "discharge_time": discharge_time,
             "documents": documents,
+            "source_readiness": source_readiness,
             "risk_flags": _extract_risk_flags(
                 medical_text_value,
                 _safe_text(structured.get("summary")),

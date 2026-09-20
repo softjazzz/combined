@@ -16,11 +16,13 @@ _EVENT_KEY_BY_RULE = {
     "LX0916-020": "diagnosis_changes",
 }
 _DOCUMENTATION_BY_RULE = {
-    "LX0916-015": {"record_present": True, "complete": True},
-    "LX0916-016": {"analysis_recorded": True, "specific_management_recorded": True},
     "LX0916-018": {"report_recorded": True, "disposition_recorded": True},
     "LX0916-019": {"record_present": True, "complete": True},
     "LX0916-020": {"reason_recorded": True, "basis_recorded": True},
+}
+_STAGE2_FACT_KINDS_BY_RULE = {
+    "LX0916-015": ("record_present", "time_recorded", "content_recorded"),
+    "LX0916-016": ("analysis_present", "management_present"),
 }
 
 
@@ -30,9 +32,43 @@ def _run(rule_id: str, context: dict) -> object:
     return results[0]
 
 
+def _stage2_fact(
+    event_id: str,
+    fact_kind: str,
+    state: str = "present",
+    *,
+    document_id: str = "COURSE-1",
+) -> dict:
+    source_type = "daily_course_record" if state == "present" else None
+    coordinate_document_id = document_id if state == "present" else None
+    clause_id = f"{document_id}:{fact_kind}" if state == "present" else None
+    return {
+        "fact_kind": fact_kind,
+        "state": state,
+        "event_id": event_id,
+        "source_type": source_type,
+        "document_id": coordinate_document_id,
+        "clause_id": clause_id,
+    }
+
+
+def _stage2_facts(
+    event_id: str,
+    *,
+    states: dict[str, str] | None = None,
+) -> list[dict]:
+    states = states or {}
+    return [
+        _stage2_fact(event_id, fact_kind, states.get(fact_kind, "present"))
+        for fact_kinds in _STAGE2_FACT_KINDS_BY_RULE.values()
+        for fact_kind in fact_kinds
+    ]
+
+
 def _event(rule_id: str, **overrides: object) -> dict:
+    event_id = f"event-{rule_id[-3:]}"
     event = {
-        "event_id": f"event-{rule_id[-3:]}",
+        "event_id": event_id,
         "event_type": _EVENT_KEY_BY_RULE[rule_id],
         "document_id": f"document-{rule_id[-3:]}",
         "source_type": "daily_course_record",
@@ -41,26 +77,123 @@ def _event(rule_id: str, **overrides: object) -> dict:
         "documentation": _DOCUMENTATION_BY_RULE.get(rule_id, {}),
         "appropriateness": "reasonable",
     }
+    if rule_id in _STAGE2_FACT_KINDS_BY_RULE:
+        event.update(
+            {
+                "event_source_type": "inpat_nondrug_order",
+                "event_source_id": f"ORDER-{rule_id[-3:]}",
+                "event_time": "2026-09-16 08:00:00",
+                "stage2_state_by_rule": {
+                    "LX0916-015": "ready",
+                    "LX0916-016": "ready",
+                },
+                "stage2_facts": _stage2_facts(event_id),
+            }
+        )
     event.update(overrides)
     return event
 
 
 def _context(rule_id: str, **event_overrides: object) -> dict:
-    return {"event_facts": {_EVENT_KEY_BY_RULE[rule_id]: [_event(rule_id, **event_overrides)]}}
+    return {
+        "event_facts": {
+            _EVENT_KEY_BY_RULE[rule_id]: [_event(rule_id, **event_overrides)]
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    ("fact_kind", "rule_id", "expected_reason"),
+    [
+        (
+            "record_present",
+            "LX0916-015",
+            "disease_change_documentation_incomplete",
+        ),
+        (
+            "time_recorded",
+            "LX0916-015",
+            "disease_change_documentation_incomplete",
+        ),
+        (
+            "content_recorded",
+            "LX0916-015",
+            "disease_change_documentation_incomplete",
+        ),
+        (
+            "analysis_present",
+            "LX0916-016",
+            "disease_change_analysis_or_management_missing",
+        ),
+        (
+            "management_present",
+            "LX0916-016",
+            "disease_change_analysis_or_management_missing",
+        ),
+    ],
+)
+def test_disease_change_rules_report_each_confirmed_stage2_defect(
+    fact_kind, rule_id, expected_reason
+):
+    event_id = f"event-{rule_id[-3:]}"
+    result = _run(
+        rule_id,
+        _context(
+            rule_id,
+            stage2_facts=_stage2_facts(event_id, states={fact_kind: "absent"}),
+        ),
+    )
+
+    assert result.status == "non_compliant"
+    assert result.reason_code == expected_reason
+    assert result.diagnostics["failed_facts"] == [fact_kind]
+    assert result.document_anchors == (
+        {
+            "event_type": "disease_changes",
+            "event_id": event_id,
+            "document_type": "daily_course_record",
+            "document_id": f"document-{rule_id[-3:]}",
+            "fields": [fact_kind],
+            "event_source_type": "inpat_nondrug_order",
+            "event_source_id": f"ORDER-{rule_id[-3:]}",
+            "event_time": "2026-09-16 08:00:00",
+        },
+    )
 
 
 @pytest.mark.parametrize(
     ("rule_id", "event_overrides", "expected_reason"),
     [
-        ("LX0916-015", {"documentation": {"record_present": False, "complete": True}}, "disease_change_documentation_incomplete"),
-        ("LX0916-016", {"documentation": {"analysis_recorded": False, "specific_management_recorded": True}}, "disease_change_analysis_or_management_missing"),
-        ("LX0916-017", {"appropriateness": "unreasonable"}, "exam_or_medication_unreasonable"),
-        ("LX0916-018", {"documentation": {"report_recorded": True, "disposition_recorded": False}}, "critical_value_documentation_incomplete"),
-        ("LX0916-019", {"documentation": {"record_present": False, "complete": True}}, "important_operation_documentation_incomplete"),
-        ("LX0916-020", {"documentation": {"reason_recorded": True, "basis_recorded": False}}, "diagnosis_change_reason_or_basis_missing"),
+        (
+            "LX0916-017",
+            {"appropriateness": "unreasonable"},
+            "exam_or_medication_unreasonable",
+        ),
+        (
+            "LX0916-018",
+            {
+                "documentation": {
+                    "report_recorded": True,
+                    "disposition_recorded": False,
+                }
+            },
+            "critical_value_documentation_incomplete",
+        ),
+        (
+            "LX0916-019",
+            {"documentation": {"record_present": False, "complete": True}},
+            "important_operation_documentation_incomplete",
+        ),
+        (
+            "LX0916-020",
+            {"documentation": {"reason_recorded": True, "basis_recorded": False}},
+            "diagnosis_change_reason_or_basis_missing",
+        ),
     ],
 )
-def test_event_rules_report_confirmed_defects(rule_id, event_overrides, expected_reason):
+def test_existing_event_rules_report_confirmed_defects(
+    rule_id, event_overrides, expected_reason
+):
     result = _run(rule_id, _context(rule_id, **event_overrides))
 
     assert result.status == "non_compliant"
@@ -82,73 +215,119 @@ def test_event_rules_report_compliance_with_confirmed_complete_facts(rule_id):
     assert result.status == "compliant"
 
 
-@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
-def test_event_rules_wait_for_mature_evaluation_window(rule_id):
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(17, 21)])
+def test_existing_event_rules_wait_for_mature_evaluation_window(rule_id):
     result = _run(rule_id, _context(rule_id, evaluation_window_mature=False))
 
     assert result.status == "not_executed"
     assert result.reason_code == "evaluation_window_not_mature"
 
 
-@pytest.mark.parametrize("other_maturity", [False, None])
+@pytest.mark.parametrize("rule_id", ("LX0916-015", "LX0916-016"))
+def test_disease_change_rules_do_not_deliver_running_negative_results(rule_id):
+    result = _run(
+        rule_id,
+        _context(
+            rule_id,
+            evaluation_window_mature=False,
+            documentation={"record_present": False, "analysis_recorded": False},
+        ),
+    )
+
+    assert result.status == "not_executed"
+    assert result.reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.parametrize("rule_id", ("LX0916-015", "LX0916-016"))
+def test_disease_change_rules_require_explicit_maturity_before_negative_delivery(
+    rule_id,
+):
+    event_id = f"event-{rule_id[-3:]}"
+    defect_kind = _STAGE2_FACT_KINDS_BY_RULE[rule_id][0]
+    result = _run(
+        rule_id,
+        _context(
+            rule_id,
+            evaluation_window_mature=None,
+            stage2_facts=_stage2_facts(
+                event_id,
+                states={defect_kind: "absent"},
+            ),
+        ),
+    )
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "disease_change_stage2_fact_unavailable"
+
+
 @pytest.mark.parametrize(
-    ("rule_id", "defect_documentation", "expected_reason"),
+    ("rule_id", "defect_kind", "expected_reason"),
     (
         (
             "LX0916-015",
-            {"record_present": False, "complete": True},
+            "time_recorded",
             "disease_change_documentation_incomplete",
         ),
         (
             "LX0916-016",
-            {"analysis_recorded": False, "specific_management_recorded": True},
+            "management_present",
             "disease_change_analysis_or_management_missing",
         ),
     ),
 )
-def test_confirmed_mature_defect_is_not_hidden_by_later_immature_event(
-    rule_id, defect_documentation, expected_reason, other_maturity
+def test_confirmed_stage2_defect_is_not_hidden_by_unknown_event(
+    rule_id, defect_kind, expected_reason
 ):
-    first = _event(rule_id, event_id="mature-defect", document_id="D-defect", documentation=defect_documentation)
+    first_id = "confirmed-defect"
+    first = _event(
+        rule_id,
+        event_id=first_id,
+        stage2_facts=_stage2_facts(first_id, states={defect_kind: "absent"}),
+    )
+    second_id = "unknown-event"
     second = _event(
         rule_id,
-        event_id="immature",
-        document_id="D-immature",
-        evaluation_window_mature=other_maturity,
-        documentation={},
+        event_id=second_id,
+        stage2_facts=_stage2_facts(second_id, states={defect_kind: "unknown"}),
     )
-    context = {"event_facts": {"disease_changes": [first, second]}}
 
-    result = _run(rule_id, context)
+    result = _run(rule_id, {"event_facts": {"disease_changes": [first, second]}})
 
     assert result.status == "non_compliant"
     assert result.reason_code == expected_reason
-    assert [anchor["document_id"] for anchor in result.document_anchors] == ["D-defect"]
+    assert [anchor["event_id"] for anchor in result.document_anchors] == [first_id]
     assert len(result.decision_facts["events"]) == 2
 
 
 @pytest.mark.parametrize("rule_id", ("LX0916-015", "LX0916-016"))
 @pytest.mark.parametrize("event_kind", ("none", "complete", "defect"))
 def test_partial_course_coverage_preserves_only_confirmed_defects(rule_id, event_kind):
-    key = _EVENT_KEY_BY_RULE[rule_id]
     events = []
     if event_kind != "none":
-        documentation = dict(_DOCUMENTATION_BY_RULE[rule_id])
+        event_id = "selected-event"
+        states = {}
         if event_kind == "defect":
-            first_field = next(iter(documentation))
-            documentation[first_field] = False
-        events.append(_event(rule_id, document_id="selected-document", documentation=documentation))
+            states[_STAGE2_FACT_KINDS_BY_RULE[rule_id][0]] = "absent"
+        events.append(
+            _event(
+                rule_id,
+                event_id=event_id,
+                stage2_facts=_stage2_facts(event_id, states=states),
+            )
+        )
     result = _run(
         rule_id,
         {
-            "event_facts": {key: events},
+            "event_facts": {"disease_changes": events},
             "event_source_state_by_rule": {rule_id: "partial"},
         },
     )
 
     if event_kind == "defect":
         assert result.status == "non_compliant"
-        assert [anchor["document_id"] for anchor in result.document_anchors] == ["selected-document"]
+        assert [anchor["event_id"] for anchor in result.document_anchors] == [
+            "selected-event"
+        ]
     else:
         assert result.status == "data_quality_gap"
         assert result.reason_code == "event_source_partial"
@@ -209,15 +388,143 @@ def test_event_rules_are_not_applicable_without_confirmed_trigger(rule_id):
     }
 
 
-def test_event_rules_persist_only_controlled_event_facts_for_final_decision():
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing",
+        "duplicate",
+        "illegal_state",
+        "wrong_event",
+        "extra_field",
+        "negative_coordinate",
+        "present_coordinate_missing",
+    ),
+)
+def test_stage2_invalid_fact_contract_is_a_data_quality_gap(mutation):
     rule_id = "LX0916-015"
+    event_id = "event-015"
+    facts = _stage2_facts(event_id)
+    target_index = next(
+        index
+        for index, fact in enumerate(facts)
+        if fact["fact_kind"] == "time_recorded"
+    )
+    if mutation == "missing":
+        facts.pop(target_index)
+    elif mutation == "duplicate":
+        facts.append(dict(facts[target_index]))
+    elif mutation == "illegal_state":
+        facts[target_index]["state"] = "yes"
+    elif mutation == "wrong_event":
+        facts[target_index]["event_id"] = "another-event"
+    elif mutation == "extra_field":
+        facts[target_index]["quote"] = "不应由规则层接收的正文"
+    elif mutation == "negative_coordinate":
+        facts[target_index] = _stage2_fact(event_id, "time_recorded", "absent")
+        facts[target_index]["document_id"] = "FAKE-COURSE"
+    else:
+        facts[target_index]["document_id"] = None
+
+    result = _run(rule_id, _context(rule_id, stage2_facts=facts))
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "disease_change_stage2_fact_unavailable"
+
+
+def test_stage2_non_ready_state_is_a_data_quality_gap():
+    result = _run(
+        "LX0916-015",
+        _context(
+            "LX0916-015",
+            stage2_state_by_rule={
+                "LX0916-015": "contract_invalid",
+                "LX0916-016": "ready",
+            },
+        ),
+    )
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "disease_change_stage2_fact_unavailable"
+
+
+def test_stage2_non_ready_state_cannot_turn_stale_absent_fact_into_defect():
+    event_id = "event-015"
+    result = _run(
+        "LX0916-015",
+        _context(
+            "LX0916-015",
+            stage2_state_by_rule={
+                "LX0916-015": "contract_invalid",
+                "LX0916-016": "ready",
+            },
+            stage2_facts=_stage2_facts(event_id, states={"record_present": "absent"}),
+        ),
+    )
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "disease_change_stage2_fact_unavailable"
+
+
+def test_stage2_failure_for_015_does_not_contaminate_016():
+    event_id = "event-015"
+    event = _event(
+        "LX0916-015",
+        stage2_state_by_rule={
+            "LX0916-015": "contract_invalid",
+            "LX0916-016": "ready",
+        },
+        stage2_facts=[
+            fact
+            for fact in _stage2_facts(event_id)
+            if fact["fact_kind"] in _STAGE2_FACT_KINDS_BY_RULE["LX0916-016"]
+        ],
+    )
+
+    results = {
+        result.rule_id: result
+        for result in execute_course_event_rules(
+            {"event_facts": {"disease_changes": [event]}},
+            ["LX0916-015", "LX0916-016"],
+        )
+    }
+
+    assert results["LX0916-015"].status == "data_quality_gap"
+    assert results["LX0916-016"].status == "compliant"
+
+
+def test_plain_improvement_text_cannot_substitute_for_analysis_fact():
+    event_id = "event-016"
+    facts = [
+        fact
+        for fact in _stage2_facts(event_id)
+        if fact["fact_kind"] != "analysis_present"
+    ]
+    result = _run(
+        "LX0916-016",
+        _context(
+            "LX0916-016",
+            stage2_facts=facts,
+            content="患者病情好转",
+            analysis="病情好转",
+        ),
+    )
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "disease_change_stage2_fact_unavailable"
+
+
+def test_disease_change_decision_facts_and_anchors_keep_only_controlled_facts():
+    rule_id = "LX0916-015"
+    event_id = "event-015"
+    facts = _stage2_facts(event_id, states={"record_present": "absent"})
     result = _run(
         rule_id,
         _context(
             rule_id,
-            documentation={"record_present": False, "complete": True, "note": "不应持久化"},
+            stage2_facts=facts,
             content="病历正文不应持久化",
             raw_output="模型原始输出不应持久化",
+            prompt="提示词不应持久化",
         ),
     )
 
@@ -227,23 +534,41 @@ def test_event_rules_persist_only_controlled_event_facts_for_final_decision():
         "source_state": "available",
         "events": [
             {
-                "event_type": "disease_changes",
-                "event_id": "event-015",
-                "document_id": "document-015",
-                "source_type": "daily_course_record",
                 "trigger_confirmed": True,
+                "event_type": "disease_changes",
+                "event_id": event_id,
+                "event_source_type": "inpat_nondrug_order",
+                "event_source_id": "ORDER-015",
+                "event_time": "2026-09-16 08:00:00",
+                "stage2_state": "ready",
                 "evaluation_window_mature": True,
-                "documentation": {"record_present": False, "complete": True},
+                "stage2_facts": [
+                    _stage2_fact(event_id, "record_present", "absent"),
+                    _stage2_fact(event_id, "time_recorded"),
+                    _stage2_fact(event_id, "content_recorded"),
+                ],
             }
         ],
     }
+    assert result.document_anchors == (
+        {
+            "event_type": "disease_changes",
+            "event_id": event_id,
+            "document_type": "daily_course_record",
+            "document_id": "document-015",
+            "fields": ["record_present"],
+            "event_source_type": "inpat_nondrug_order",
+            "event_source_id": "ORDER-015",
+            "event_time": "2026-09-16 08:00:00",
+        },
+    )
     serialized = json.dumps(result.to_dict(), ensure_ascii=False)
     assert "病历正文不应持久化" not in serialized
     assert "模型原始输出不应持久化" not in serialized
-    assert "不应持久化" not in serialized
+    assert "提示词不应持久化" not in serialized
 
 
-def test_event_rules_persist_trigger_facts_for_early_data_gap():
+def test_existing_rule_persists_trigger_facts_for_early_data_gap():
     rule_id = "LX0916-018"
     result = _run(rule_id, _context(rule_id, trigger_confirmed=None))
 
@@ -264,8 +589,8 @@ def test_event_rules_persist_trigger_facts_for_early_data_gap():
     ]
 
 
-def test_event_rules_omit_optional_empty_identifiers_from_decision_facts():
-    rule_id = "LX0916-015"
+def test_existing_rule_omits_optional_empty_identifiers_from_decision_facts():
+    rule_id = "LX0916-018"
     result = _run(
         rule_id,
         _context(rule_id, event_id="", document_id=None, source_type=""),

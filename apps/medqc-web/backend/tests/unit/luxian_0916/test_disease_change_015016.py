@@ -30,6 +30,9 @@ def _lab(**overrides: object) -> dict[str, object]:
         "item_test_id": "TEST-1",
         "item_test_no": "NO-1",
         "item_id": "ITEM-1",
+        "item_name": "血钾",
+        "result": "2.7",
+        "unit": "mmol/L",
         "abnormal_indicator": "PL",
         "item_report_time": "2026-09-16 09:00:00",
         "master_test_id": "TEST-1",
@@ -142,6 +145,50 @@ def test_multiple_critical_items_in_one_report_are_one_event() -> None:
     assert events[0]["critical_flags"] == ["PH", "PL"]
 
 
+def test_critical_event_keeps_minimal_stage2_binding_context_in_memory() -> None:
+    facts = build_disease_change_015016_facts(
+        order_rows=[],
+        lab_rows=[
+            _lab(
+                item_id="ITEM-1",
+                item_name="血钾",
+                result="2.7",
+                unit="mmol/L",
+                abnormal_indicator="PL",
+            )
+        ],
+    )
+
+    event = facts["event_facts"]["disease_changes"][0]
+
+    assert event["critical_items"] == [
+        {
+            "item_id": "ITEM-1",
+            "item_name": "血钾",
+            "result": "2.7",
+            "unit": "mmol/L",
+            "critical_flag": "PL",
+        }
+    ]
+
+
+def test_missing_stage2_binding_context_does_not_change_stage1_trigger() -> None:
+    facts = build_disease_change_015016_facts(
+        order_rows=[],
+        lab_rows=[_lab(item_name="", result="2.7", abnormal_indicator="PL")],
+    )
+
+    events = facts["event_facts"]["disease_changes"]
+
+    assert len(events) == 1
+    assert events[0]["event_id"] == "critical-lab:TEST-1"
+    assert "critical_items" not in events[0]
+    assert facts["event_source_state_by_rule"] == {
+        "LX0916-015": "structured_complete",
+        "LX0916-016": "structured_complete",
+    }
+
+
 def test_conflicting_item_and_master_report_times_are_source_invalid() -> None:
     facts = build_disease_change_015016_facts(
         order_rows=[],
@@ -196,7 +243,7 @@ def test_source_partial_or_invalid_never_becomes_no_trigger() -> None:
         assert (result.status, result.reason_code) == ("data_quality_gap", reason)
 
 
-def test_trigger_without_trusted_time_is_data_gap_not_not_executed() -> None:
+def test_trigger_without_stage2_facts_is_data_gap_not_not_executed() -> None:
     facts = build_disease_change_015016_facts(
         order_rows=[_order(prescribed_datetime=None, planned_start_datetime=None)],
         lab_rows=[],
@@ -206,7 +253,7 @@ def test_trigger_without_trusted_time_is_data_gap_not_not_executed() -> None:
 
     assert (result.status, result.reason_code) == (
         "data_quality_gap",
-        "evaluation_window_unknown",
+        "disease_change_stage2_fact_unavailable",
     )
     assert result.status != "not_executed"
 
@@ -270,11 +317,34 @@ def test_result_anchor_and_decision_facts_preserve_event_and_document_coordinate
                     "event_source_type": "inpat_nondrug_order",
                     "event_source_id": "ORDER-1",
                     "event_time": "2026-09-16 08:00:00",
-                    "source_type": "daily_course_record",
-                    "document_id": "COURSE-1",
                     "trigger_confirmed": True,
                     "evaluation_window_mature": True,
-                    "documentation": {"record_present": False, "complete": True},
+                    "stage2_state_by_rule": {"LX0916-015": "ready"},
+                    "stage2_facts": [
+                        {
+                            "fact_kind": fact_kind,
+                            "state": "absent"
+                            if fact_kind == "record_present"
+                            else "present",
+                            "event_id": "severity-order:ORDER-1",
+                            "source_type": (
+                                None
+                                if fact_kind == "record_present"
+                                else "daily_course_record"
+                            ),
+                            "document_id": (
+                                None if fact_kind == "record_present" else "COURSE-1"
+                            ),
+                            "clause_id": (
+                                None if fact_kind == "record_present" else "COURSE-1:1"
+                            ),
+                        }
+                        for fact_kind in (
+                            "record_present",
+                            "time_recorded",
+                            "content_recorded",
+                        )
+                    ],
                 }
             ]
         },
@@ -283,9 +353,11 @@ def test_result_anchor_and_decision_facts_preserve_event_and_document_coordinate
     result = _result("LX0916-015", context)
 
     assert result.status == "non_compliant"
-    assert result.document_anchors[0]["event_source_type"] == "inpat_nondrug_order"
-    assert result.document_anchors[0]["event_source_id"] == "ORDER-1"
-    assert result.document_anchors[0]["document_type"] == "daily_course_record"
-    assert result.document_anchors[0]["document_id"] == "COURSE-1"
+    assert result.document_anchors[0]["event_id"] == "severity-order:ORDER-1"
+    assert result.document_anchors[0]["fields"] == ["record_present"]
+    assert result.document_anchors[0]["document_type"] == ""
+    assert result.document_anchors[0]["document_id"] == ""
     assert result.decision_facts["events"][0]["event_source_id"] == "ORDER-1"
-    assert result.decision_facts["events"][0]["document_id"] == "COURSE-1"
+    decision_facts = result.decision_facts["events"][0]["stage2_facts"]
+    assert decision_facts[0]["document_id"] is None
+    assert decision_facts[1]["document_id"] == "COURSE-1"
