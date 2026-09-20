@@ -138,8 +138,8 @@ const STRUCTURED_TYPE_GROUPS: Partial<Record<string, MedicalDocumentGroupKey>> =
   diagnosis: 'frontpage',
   mr_surgery: 'frontpage',
   mr_cost: 'frontpage',
-  admission_record: 'admission.record',
-  first_course_record: 'admission.first',
+  admission_record: 'admission',
+  first_course_record: 'admission',
   daily_course_record: 'course.other',
   senior_course_record: 'course.senior',
   course_record: 'course.other',
@@ -303,18 +303,10 @@ function classifyMedicalDocumentGroup(document: MedicalDocumentLike): MedicalDoc
     return { key: 'frontpage', label: MEDICAL_DOCUMENT_GROUP_LABELS.frontpage }
   }
   if (hasAny(identity, /first_course|首次病程/)) {
-    return {
-      key: 'admission.first',
-      label: MEDICAL_DOCUMENT_GROUP_LABELS['admission.first'],
-      parentKey: 'admission',
-    }
+    return { key: 'admission', label: MEDICAL_DOCUMENT_GROUP_LABELS.admission }
   }
   if (hasAny(identity, /admission|入院记录|入院/)) {
-    return {
-      key: 'admission.record',
-      label: MEDICAL_DOCUMENT_GROUP_LABELS['admission.record'],
-      parentKey: 'admission',
-    }
+    return { key: 'admission', label: MEDICAL_DOCUMENT_GROUP_LABELS.admission }
   }
   // “术前讨论”属于围术期文书，必须先于通用“讨论”关键词判断，
   // 避免 presurg_discussion 被归入会诊与讨论。

@@ -12,6 +12,13 @@ const documents: EditableMedicalRecordDocument[] = [
     content: '入院记录正文',
   },
   {
+    key: 'first-course-1',
+    document_type: 'first_course_record',
+    title: '首次病程记录',
+    record_time: '2026-07-29 09:00:00',
+    content: '首次病程记录正文',
+  },
+  {
     key: 'order-drug-1',
     source_table: 'inpat_drug_order',
     document_type: 'inpat_drug_order',
@@ -30,6 +37,24 @@ const documents: EditableMedicalRecordDocument[] = [
 ]
 
 describe('ReadonlyMedicalDocumentDirectory', () => {
+  it('入院记录与首次病程记录直接并列在一级目录下', () => {
+    const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+      props: { documents, selectedKey: 'admission-1' },
+    })
+
+    const admissionGroup = wrapper.get('[data-testid="record-document-group-toggle-admission"]')
+    expect(admissionGroup.text()).toContain('入院与首次病程')
+    expect(admissionGroup.text()).toContain('2')
+    expect(
+      wrapper.find('[data-testid="record-document-group-toggle-admission.record"]').exists(),
+    ).toBe(false)
+    expect(
+      wrapper.find('[data-testid="record-document-group-toggle-admission.first"]').exists(),
+    ).toBe(false)
+    expect(wrapper.text()).toContain('入院记录')
+    expect(wrapper.text()).toContain('首次病程记录')
+  })
+
   it('将多条医嘱折叠为一个目录项，点击后选择真实医嘱 key', async () => {
     const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
       props: { documents, selectedKey: 'order-drug-1' },

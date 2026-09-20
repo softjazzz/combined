@@ -86,9 +86,8 @@ describe('medicalDocumentDisplay', () => {
       label: '病案首页',
     })
     expect(resolveMedicalDocumentGroup({ document_type: 'first_course_record' })).toEqual({
-      key: 'admission.first',
-      label: '首次病程记录',
-      parentKey: 'admission',
+      key: 'admission',
+      label: '入院与首次病程',
     })
     expect(resolveMedicalDocumentGroup({ document_type: 'blood_application' })).toEqual({
       key: 'transfusion',
