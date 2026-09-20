@@ -1214,6 +1214,7 @@ def _candidate_documents(
     evidence_materials: Luxian0609EvidenceMaterialStore | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None,
     stay_window: _StayWindow,
+    keep_all_order_candidates: bool = False,
 ) -> _CandidateProjection:
     candidates: list[_CandidateDocument] = []
     source_complete_keys: set[str] = set()
@@ -1303,13 +1304,16 @@ def _candidate_documents(
             )
             if observation is None or observation.completeness is not SourceCompleteness.COMPLETE:
                 source_is_complete = False
-        source_limit = _MAX_ORDER_CANDIDATES_PER_SOURCE
-        if is_order_source and len(rows) > source_limit:
-            # 医嘱是 020/023 的辅助执行证据，真实病例中常为高频清单。
-            # 这里采用会诊后时间排序的固定上限候选集，避免“医嘱很多”
-            # 本身把所有建议都拖成资料不足；行级缺时间/缺内容仍会在
-            # 下方标记为来源不完整。
-            rows = rows[:source_limit]
+        if (
+            is_order_source
+            and not keep_all_order_candidates
+            and len(rows) > _MAX_ORDER_CANDIDATES_PER_SOURCE
+        ):
+            # 默认行为：源级固定上限。该截断发生在住院窗口与逐建议时序
+            # 过滤之前，只依据源表自然顺序，会漏掉真正位于会诊后的高频
+            # 医嘱；已完成会诊建议解析的二阶段投影改由 _execution_prompt
+            # 在逐建议时序过滤之后施加同一上限。
+            rows = rows[:_MAX_ORDER_CANDIDATES_PER_SOURCE]
         for index, row in enumerate(rows, start=1):
             observed_time = _row_time(row, source_key=source_key)
             text = _candidate_text(row=row, source_key=source_key)
@@ -2420,6 +2424,22 @@ def _consultation_execution_display_facts(
                     if recommendation_ref in copied_opinion_refs
                     else "missing"
                 )
+            if (
+                assessment.execution_record_state == "no_trace"
+                and assessment.execution_state
+                in {"linked_specific", "linked_vague"}
+                and any(
+                    ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
+                    for ref in assessment.execution_refs
+                )
+            ):
+                # 没有病程痕迹但明确关联到药品/非药品医嘱时，023 按医嘱动作
+                # 的具体程度呈现；检查、检验、手术不能升级客户展示口径。
+                return (
+                    "specific"
+                    if assessment.execution_state == "linked_specific"
+                    else "generic"
+                )
             return "unknown"
         return "generic" if recommendation_ref in copied_opinion_refs else "unknown"
 
@@ -2655,8 +2675,11 @@ def _execution_prompt(
     # 把这些已选来源从二阶段事实输入中静默丢失。
     prompt_candidates = tuple(candidates)
     candidates_by_ref = {candidate.ref: candidate for candidate in candidates}
+    candidate_rank = {
+        candidate.ref: index for index, candidate in enumerate(prompt_candidates)
+    }
     for item in completed:
-        related_refs: list[str] = []
+        included: list[_CandidateDocument] = []
         eligible_sources = _ACTION_TYPE_SOURCE_KEYS.get(
             item.recommendation.action_type,
             frozenset((*_EXECUTION_SOURCE_KEYS, "inpat_nondrug_order")),
@@ -2682,7 +2705,38 @@ def _execution_prompt(
                 # 仅做语义关联。唯有两侧均有精确时间且候选更早时才排除。
                 include = True
             if include:
-                related_refs.append(candidate.ref)
+                included.append(candidate)
+        # 医嘱是高频结构化事件，但源级前 N 条截断只反映源表自然顺序，会漏掉
+        # 会诊后的真实执行医嘱。限额改到逐建议时序过滤之后：每个医嘱来源按
+        # （时间, 原候选顺序）稳定排序，只保留距该建议最近的后置候选。
+        order_candidates_by_source: dict[str, list[_CandidateDocument]] = {}
+        for candidate in included:
+            if candidate.source_key in _ORDER_EXECUTION_SOURCE_KEYS:
+                order_candidates_by_source.setdefault(candidate.source_key, []).append(
+                    candidate
+                )
+        kept_order_refs: set[str] = set()
+        for per_source in order_candidates_by_source.values():
+            kept_order_refs.update(
+                candidate.ref
+                for candidate in sorted(
+                    per_source,
+                    key=lambda candidate: (
+                        candidate.observed_time.value,
+                        candidate_rank[candidate.ref],
+                    ),
+                )[:_MAX_ORDER_CANDIDATES_PER_SOURCE]
+            )
+        kept_refs = {
+            candidate.ref
+            for candidate in included
+            if candidate.source_key not in _ORDER_EXECUTION_SOURCE_KEYS
+        } | kept_order_refs
+        related_refs = [
+            candidate.ref for candidate in included if candidate.ref in kept_refs
+        ]
+        for candidate in included:
+            if candidate.ref in kept_refs:
                 documents_by_ref.setdefault(candidate.ref, {
                     "ref": candidate.ref,
                     "source": candidate.source_key,
@@ -3413,6 +3467,8 @@ def _execution_quality_outcome(
     痕迹中存在笼统或照抄即不符合；已找到的痕迹全部具体即符合。明确关联到
     结构化医嘱时，该关联本身也是可评价的具体执行痕迹，但不能替代 020
     对会诊后病程执行记录的存在性要求。未找到痕迹的建议不参与 023 判罚。
+    结构化医嘱关联只在**高置信**时算“已经找到”：中/低置信关联既不能升级为
+    合规，也不能当作已确认的笼统缺陷，等价于尚未确认存在可评价痕迹。
     S2 照抄由文本阈值独立判定：病程逐字照搬会诊意见时，即使模型没有选中该
     痕迹，023 仍判不符合。
     """
@@ -3428,15 +3484,14 @@ def _execution_quality_outcome(
         structured = tuple(
             item
             for item in rows
-            if item.execution_state in {"linked_specific", "linked_vague"}
+            if item.confidence == "high"
+            and item.execution_state in {"linked_specific", "linked_vague"}
             and any(
                 ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
                 for ref in item.execution_refs
             )
         )
         if structured:
-            if any(item.confidence != "high" for item in structured):
-                return "evaluation_unknown", "semantic_low_confidence"
             if any(item.execution_state == "linked_vague" for item in structured):
                 return "non_compliant", "requirement_violated"
             return "compliant", "requirement_satisfied"
@@ -4232,6 +4287,9 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     evidence_materials=evidence_materials,
                     evidence_snapshot=evidence_snapshot,
                     stay_window=execution_stay_window,
+                    # 建议时间已就绪：医嘱上限改到二阶段逐建议时序过滤之后
+                    # 施加，避免源级前 24 条把会诊后的真实执行医嘱截掉。
+                    keep_all_order_candidates=True,
                 )
                 documents_by_ref = {
                     _clean(item.get("ref")): item for item in documents
@@ -4275,6 +4333,14 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     item.source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
                     for item in projection.candidates
                 )
+                # 只有药品/非药品医嘱能让“没有任何病程候选”的来源组合进入
+                # 二阶段语义关联：明确关联到医嘱时，该关系本身是 023 可评价
+                # 的具体/笼统执行证据，但不能替代 020 要求的会诊后病程记录。
+                # 检查、检验、手术不是执行动作证据，不能独立支撑 023。
+                order_candidate_present = any(
+                    item.source_key in _ORDER_EXECUTION_SOURCE_KEYS
+                    for item in projection.candidates
+                )
                 if execution_source_technical:
                     for rule_id in stage_two_rule_ids:
                         statuses[rule_id] = ("technical_error", "source_query_error")
@@ -4295,10 +4361,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             "data_gap",
                             "candidate_scope_incomplete",
                         )
-                elif projection.candidates and not context_only_candidate_present:
-                    # 4.20.4 要求会诊后病程记录执行情况。只有医嘱、检查、
-                    # 检验或手术等结构化动作时，无法替代这份病程记录；该
-                    # 来源组合的 no_trace 是确定事实，无需交给模型关联。
+                elif (
+                    projection.candidates
+                    and not context_only_candidate_present
+                    and not order_candidate_present
+                ):
+                    # 4.20.4 要求会诊后病程记录执行情况。只有检查、检验或
+                    # 手术等非医嘱结构化动作时，无法替代这份病程记录，也不是
+                    # 023 可评价的医嘱执行证据；该来源组合的 no_trace 是确定
+                    # 事实，无需交给模型关联。
                     execution_assessments = tuple(
                         _ExecutionAssessment(
                             item.recommendation.recommendation_ref,
@@ -4371,11 +4442,22 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         for refs in allowed_refs.values()
                         for ref in refs
                     )
-                    if not allowed_context_candidate_present:
+                    allowed_order_candidate_present = any(
+                        ref in candidate_by_ref
+                        and candidate_by_ref[ref].source_key
+                        in _ORDER_EXECUTION_SOURCE_KEYS
+                        for refs in allowed_refs.values()
+                        for ref in refs
+                    )
+                    if (
+                        not allowed_context_candidate_present
+                        and not allowed_order_candidate_present
+                    ):
                         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
                             # projection 里的会诊前病程会在逐建议时序过滤后失去
-                            # 资格。此时即使仍有结构化动作，也没有 4.20.4 所需
-                            # 的会诊后病程记录，确定性收敛为 no_trace。
+                            # 资格。此时即使仍有结构化动作，也没有 4.20.4 所需的
+                            # 会诊后病程记录，也没有可评价的医嘱动作，确定性
+                            # 收敛为 no_trace。
                             execution_assessments = tuple(
                                 _ExecutionAssessment(
                                     item.recommendation.recommendation_ref,

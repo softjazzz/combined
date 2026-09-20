@@ -1037,10 +1037,16 @@ def test_023_all_no_trace_is_not_applicable_regardless_of_confidence():
     (
         ("linked_specific", "high", ("compliant", "requirement_satisfied")),
         ("linked_vague", "high", ("non_compliant", "requirement_violated")),
+        # 中/低置信关联不是“已经找到”的执行痕迹，023 不适用而不是不确定。
         (
             "linked_specific",
             "low",
-            ("evaluation_unknown", "semantic_low_confidence"),
+            ("not_applicable", "trigger_absent_complete"),
+        ),
+        (
+            "linked_specific",
+            "medium",
+            ("not_applicable", "trigger_absent_complete"),
         ),
     ),
 )
@@ -1063,6 +1069,75 @@ def test_023_structured_order_match_respects_specificity_and_confidence(
 
     assert episode._execution_quality_outcome(
         assessments=(assessment,),
+        completed_recommendations=completed,
+        course_source_incomplete=False,
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    ("structured_rows", "expected"),
+    (
+        # C29 形态：只有中置信结构化关联时，尚未确认存在可评价痕迹。
+        (
+            (("medium", "linked_specific"),),
+            ("not_applicable", "trigger_absent_complete"),
+        ),
+        # 低置信 absent 与中置信 linked_specific 混合，同样没有高置信痕迹。
+        (
+            (("low", "absent"), ("medium", "linked_specific")),
+            ("not_applicable", "trigger_absent_complete"),
+        ),
+        # 已确认的高置信具体痕迹不被中/低置信项抹掉。
+        (
+            (
+                ("high", "linked_specific"),
+                ("medium", "linked_vague"),
+                ("low", "linked_specific"),
+            ),
+            ("compliant", "requirement_satisfied"),
+        ),
+        # 高置信笼统痕迹不因同时存在中置信具体项而降级。
+        (
+            (("high", "linked_vague"), ("medium", "linked_specific")),
+            ("non_compliant", "requirement_violated"),
+        ),
+        # 既有边界：仅高置信具体/笼统。
+        (
+            (("high", "linked_specific"),),
+            ("compliant", "requirement_satisfied"),
+        ),
+        (
+            (("high", "linked_vague"),),
+            ("non_compliant", "requirement_violated"),
+        ),
+    ),
+)
+def test_023_structured_execution_uses_high_confidence_links_only(
+    structured_rows,
+    expected,
+):
+    """只有高置信结构化医嘱关联参与023判罚；中/低置信项等价于没有痕迹。"""
+
+    assessments = tuple(
+        episode._ExecutionAssessment(
+            f"consultation_record-1#r{index}",
+            execution_state,
+            () if execution_state == "absent" else ("inpat_drug_order-1",),
+            confidence,
+            (),
+            "no_trace",
+        )
+        for index, (confidence, execution_state) in enumerate(
+            structured_rows, start=1
+        )
+    )
+    completed = tuple(
+        _coverage_completed_recommendation(f"consultation_record-1#r{index}")
+        for index in range(1, len(structured_rows) + 1)
+    )
+
+    assert episode._execution_quality_outcome(
+        assessments=assessments,
         completed_recommendations=completed,
         course_source_incomplete=False,
     ) == expected
@@ -4082,6 +4157,357 @@ async def test_023_accepts_specific_order_match_without_course_trace(monkeypatch
     assert result.llm_call_count == 2
     # 结构化医嘱不能替代020的病程存在性要求，但可作为023的具体执行证据。
     assert "头孢哌酮舒巴坦" in client.prompts[1]
+
+
+def _no_course_source_rows(*, consultation_text, source_key, source_rows):
+    """会诊后没有任何 daily/senior 病程候选，只保留结构化执行候选。"""
+
+    rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    rows["consultation_record"] = [{
+        "document_id": "CONSULT-023",
+        "document_title": "会诊记录",
+        "record_time": "2026-07-20 01:00:00",
+        "record_content": consultation_text,
+    }]
+    rows[source_key] = [dict(row) for row in source_rows]
+    return rows
+
+
+def _single_recommendation_payload(*, action_type, source_quote):
+    """只含一条原子建议的第一阶段受控事实。"""
+
+    return _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[{
+            "recommendation_ref": "consultation_record-1#r1",
+            "action_type": action_type,
+            "source_quote": source_quote,
+            "normalized_action": source_quote,
+            "opinion_ref": "__AUTO__",
+        }],
+    )])
+
+
+def _single_recommendation_client(*, action_type, source_quote, execution):
+    """一条原子建议的第一阶段事实与固定第二阶段执行事实。"""
+
+    return _SequentialClient(
+        _single_recommendation_payload(
+            action_type=action_type, source_quote=source_quote
+        ),
+        execution,
+    )
+
+
+def _order_execution(*, candidate_ref, execution_state):
+    """模型按现有合同返回：病程无痕迹，仅保留结构化医嘱的动作关联。"""
+
+    return _execution({
+        "recommendation_ref": "consultation_record-1#r1",
+        "execution_record_state": "no_trace",
+        "trace_refs": [],
+        "execution_state": execution_state,
+        "structured_action_refs": [candidate_ref],
+        "execution_quotes": ["头孢哌酮舒巴坦"],
+        "confidence": "high",
+    })
+
+
+def _stage_two_candidate_texts(prompt: str) -> tuple[str, ...]:
+    """只读取二阶段提示词实际渲染的候选正文，不看建议原文。"""
+
+    try:
+        payload = json.loads(prompt.rsplit("输入：", 1)[1])
+    except (IndexError, TypeError, ValueError):
+        return ()
+    documents = payload.get("candidate_documents")
+    if not isinstance(documents, list):
+        return ()
+    return tuple(
+        str(document.get("text", ""))
+        for document in documents
+        if isinstance(document, dict)
+    )
+
+
+def _post_consultation_tail_order_rows():
+    """前24条是远离会诊的无关医嘱，第25条才是会诊后对应的非药品医嘱。"""
+
+    far_rows = [
+        {
+            "order_id": f"ORDER-023-FAR-{index}",
+            "order_name": f"会诊后无关医嘱{index}",
+            "prescribed_datetime": f"2026-07-22 08:{index - 1:02d}:00",
+        }
+        for index in range(1, episode._MAX_ORDER_CANDIDATES_PER_SOURCE + 1)
+    ]
+    target_row = {
+        "order_id": "ORDER-023-TARGET",
+        "order_name": "头皮针治疗",
+        "prescribed_datetime": "2026-07-20 03:00:00",
+    }
+    source_rows = _no_course_source_rows(
+        consultation_text="会诊意见：建议头皮针治疗。",
+        source_key="inpat_nondrug_order",
+        source_rows=[*far_rows, target_row],
+    )
+    return source_rows, far_rows, target_row
+
+
+class _EvidenceBoundStageClient:
+    """二阶段只关联提示词实际给出的候选，与被截断候选的真实模型行为一致。"""
+
+    def __init__(self, stage_one_payload, *, candidate_ref, candidate_text):
+        self.stage_one_payload = stage_one_payload
+        self.candidate_ref = candidate_ref
+        self.candidate_text = candidate_text
+        self.prompts: list[str] = []
+
+    async def generate(self, prompt: str):
+        self.prompts.append(prompt)
+        usage = {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}
+        if len(self.prompts) == 1:
+            return {
+                "content": _materialize_recommendation_quotes(
+                    self.stage_one_payload, prompt
+                ),
+                "usage": usage,
+            }
+        linked = any(
+            self.candidate_text in text for text in _stage_two_candidate_texts(prompt)
+        )
+        content = _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "no_trace",
+            "trace_refs": [],
+            "execution_state": "linked_specific" if linked else "absent",
+            "structured_action_refs": [self.candidate_ref] if linked else [],
+            "execution_quotes": [self.candidate_text] if linked else [],
+            "confidence": "high",
+        })
+        return {"content": content, "usage": usage}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action_type", "source_quote", "order_source", "order_row", "candidate_ref"),
+    (
+        (
+            "medication", "加强抗感染治疗", "inpat_drug_order",
+            {"order_id": "ORDER-023-DRUG", "generic_name": "头孢哌酮舒巴坦",
+             "order_name": "抗感染治疗", "start_time": "2026-07-20 03:00:00"},
+            "inpat_drug_order-1",
+        ),
+        (
+            "test", "复查血常规", "inpat_nondrug_order",
+            {"order_id": "ORDER-023-NONDRUG", "order_name": "复查血常规",
+             "prescribed_datetime": "2026-07-20 03:00:00"},
+            "inpat_nondrug_order-1",
+        ),
+    ),
+)
+@pytest.mark.parametrize(
+    "execution_state", ("linked_specific", "linked_vague"),
+)
+async def test_023_order_only_execution_is_judged_without_any_course_candidate(
+    monkeypatch,
+    action_type,
+    source_quote,
+    order_source,
+    order_row,
+    candidate_ref,
+    execution_state,
+):
+    """没有病程候选时，会诊后明确关联的住院医嘱仍必须进入023评价。
+
+    旧实现在候选投影阶段直接构造空 execution_refs 的 no_trace，使结构化医嘱
+    判定分支不可达，023 被错误收敛为 not_applicable。020 的病程要求不变。
+    """
+
+    source_rows = _no_course_source_rows(
+        consultation_text=f"会诊意见：建议{source_quote}。",
+        source_key=order_source,
+        source_rows=[order_row],
+    )
+    monkeypatch.setattr(
+        episode, "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _single_recommendation_client(
+        action_type=action_type,
+        source_quote=source_quote,
+        execution=_order_execution(
+            candidate_ref=candidate_ref, execution_state=execution_state
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+
+    is_specific = execution_state == "linked_specific"
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "compliant" if is_specific else "non_compliant",
+    ]
+    assert result.llm_call_count == 2
+    # 医嘱候选以短别名进入二阶段提示词，正文只暴露可辨识的结构化动作。
+    assert (
+        order_row.get("generic_name") or order_row["order_name"]
+    ) in client.prompts[1]
+    display = dict(result.customer_display_facts)["LX0609-023"]
+    assert display["relation_state"] == (
+        "specific_execution" if is_specific else "generic_or_copied_execution"
+    )
+    assert display[
+        "specific_execution_count" if is_specific else "generic_execution_count"
+    ] == 1
+    assert display["missing_execution_count"] == 0
+    evidence = display["recommendation_evidence"][0]
+    assert evidence["execution_state"] == ("specific" if is_specific else "generic")
+    assert [
+        item["source_type"] for item in evidence["execution_evidence"]
+    ] == [order_source]
+
+
+@pytest.mark.asyncio
+async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
+    monkeypatch,
+):
+    """会诊前医嘱不是会诊后的执行痕迹，023保持不适用且不发起二阶段调用。"""
+
+    source_rows = _no_course_source_rows(
+        consultation_text="会诊意见：建议加强抗感染治疗。",
+        source_key="inpat_drug_order",
+        source_rows=[{
+            "order_id": "ORDER-023-PRE",
+            "generic_name": "头孢哌酮舒巴坦",
+            "start_time": "2026-07-19 10:00:00",
+        }],
+    )
+    monkeypatch.setattr(
+        episode, "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _single_recommendation_client(
+        action_type="medication",
+        source_quote="加强抗感染治疗",
+        execution=_order_execution(
+            candidate_ref="inpat_drug_order-1",
+            execution_state="linked_specific",
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "not_applicable",
+    ]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
+    monkeypatch,
+):
+    """对应医嘱排在源行第25条以后时，仍必须进入二阶段并支撑023具体执行。
+
+    旧实现按源表自然顺序做前 24 条截断，会诊后真正对应的医嘱被截掉，
+    模型只能看到会诊前/无关医嘱，023 被错误落成 not_applicable。
+    """
+
+    source_rows, far_rows, target_row = _post_consultation_tail_order_rows()
+    monkeypatch.setattr(
+        episode, "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(
+            action_type="procedure", source_quote="头皮针治疗"
+        ),
+        candidate_ref=f"inpat_nondrug_order-{len(far_rows) + 1}",
+        candidate_text=target_row["order_name"],
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+
+    assert len(far_rows) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "compliant",
+    ]
+    assert result.llm_call_count == 2
+    assert any(
+        target_row["order_name"] in text
+        for text in _stage_two_candidate_texts(client.prompts[1])
+    )
+    display = dict(result.customer_display_facts)["LX0609-023"]
+    assert display["specific_execution_count"] == 1
+    assert [
+        item["source_type"]
+        for item in display["recommendation_evidence"][0]["execution_evidence"]
+    ] == ["inpat_nondrug_order"]
+
+
+def test_023_order_candidates_keep_nearest_post_consultation_per_recommendation(
+    monkeypatch,
+):
+    """每个建议的每个医嘱来源最多保留24条，保留的是时序最接近的会诊后候选。"""
+
+    source_rows, far_rows, target_row = _post_consultation_tail_order_rows()
+    monkeypatch.setattr(
+        episode, "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    projection = episode._candidate_documents(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        evidence_materials=None, evidence_snapshot=None,
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+        keep_all_order_candidates=True,
+    )
+    # 源级投影保留全部医嘱候选；限额只在逐建议时序过滤之后施加。
+    assert sum(
+        1 for item in projection.candidates
+        if item.source_key == "inpat_nondrug_order"
+    ) == len(far_rows) + 1
+    completed = (episode._CompletedRecommendation(
+        "consultation_record-1",
+        episode._Recommendation(
+            "consultation_record-1#r1", "procedure", "头皮针治疗",
+            "头皮针治疗", "consultation_record-1",
+        ),
+        episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+    ),)
+
+    prompt, allowed_refs = episode._execution_prompt(
+        completed=completed, candidates=projection.candidates
+    )
+
+    payload = json.loads(prompt.rsplit("输入：", 1)[1])
+    allowed = payload["recommendations"][0]["allowed_candidate_refs"]
+    assert len(allowed) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert len(allowed_refs["consultation_record-1#r1"]) == (
+        episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    )
+    rendered = _stage_two_candidate_texts(prompt)
+    assert len(rendered) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert any(target_row["order_name"] in text for text in rendered)
+    # 时序最远的会诊后无关医嘱被截掉，而不是截掉会诊后2小时的对应医嘱。
+    assert all(far_rows[-1]["order_name"] not in text for text in rendered)
+    assert any(far_rows[0]["order_name"] in text for text in rendered)
 
 
 @pytest.mark.asyncio
@@ -7879,26 +8305,51 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
     ("action_type", "source_key", "candidate_row", "execution_quote"),
     (
         (
-            "medication",
-            "inpat_drug_order",
+            "test",
+            "exam_item_report",
             {
-                "generic_name": "会诊后调整目标用药",
-                "start_time": "2026-07-20 02:00:00",
-                # 验证业务开始时间优先于同步/归档记录时间。
-                "record_time": "2026-07-20 18:00:00",
+                "document_id": "EXAM-0609-023",
+                "document_title": "检查报告",
                 "record_content": "复查血常规",
+                "exam_time": "2026-07-20 02:00:00",
+                # 验证业务事件时间优先于同步/归档记录时间。
+                "record_time": "2026-07-20 18:00:00",
             },
-            "会诊后调整目标用药",
+            "复查血常规",
         ),
-        ("test", "inpat_nondrug_order", {"order_name": "会诊后复查血常规", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "会诊后复查血常规"),
-        ("procedure", "inpat_nondrug_order", {"order_name": "会诊后完成目标操作", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "会诊后完成目标操作"),
-        ("transfer", "inpat_nondrug_order", {"order_name": "会诊后转入目标病区", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "会诊后转入目标病区"),
+        (
+            "test",
+            "labtest_item_report",
+            {
+                "document_id": "LAB-0609-023",
+                "document_title": "检验报告",
+                "record_content": "复查血常规",
+                "report_datetime": "2026-07-20 02:00:00",
+            },
+            "复查血常规",
+        ),
+        (
+            "procedure",
+            "surgery_record",
+            {
+                "document_id": "SURG-0609-023",
+                "document_title": "手术记录",
+                "record_content": "清创手术治疗",
+                "surgery_begin_time": "2026-07-20 02:00:00",
+            },
+            "清创手术治疗",
+        ),
     ),
 )
-async def test_structured_order_is_auxiliary_and_cannot_replace_course_execution_record(
+async def test_structured_non_order_evidence_cannot_replace_course_execution_record(
     monkeypatch, action_type, source_key, candidate_row, execution_quote,
 ):
-    """医嘱可作为辅助证据，但不能替代会诊后的病程执行记录。"""
+    """检查、检验、手术既不能替代会诊后病程执行记录，也不能让023可评价。
+
+    旧断言“结构化医嘱只作辅助、023 恒为不适用”已按最新客户口径更新：药品与
+    非药品医嘱可以独立支撑 023 的具体/笼统执行判定，见
+    test_023_order_only_execution_is_judged_without_any_course_candidate。
+    """
     source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
     source_rows["consultation_record"] = _rows("申请与明确会诊意见")
     source_rows[source_key] = [candidate_row]
@@ -8260,7 +8711,13 @@ def test_valid_course_trace_survives_misplaced_auxiliary_course_reference():
 
 
 @pytest.mark.asyncio
-async def test_direct_reader_keeps_nondrug_order_as_auxiliary_evidence_without_snapshot(monkeypatch):
+async def test_direct_reader_keeps_nondrug_order_as_structured_evidence_without_snapshot(monkeypatch):
+    """无 Snapshot 直读时，非药品医嘱仍只按结构化动作进入023执行评价。
+
+    旧断言“医嘱不能独立支撑023”已按最新客户口径更新；本用例保留原有的
+    “医嘱正文不作为文书正文候选”边界。
+    """
+
     source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
     source_rows["consultation_record"] = _rows("申请与明确会诊意见")
     source_rows["inpat_nondrug_order"] = [{
@@ -8297,9 +8754,11 @@ async def test_direct_reader_keeps_nondrug_order_as_auxiliary_evidence_without_s
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
+    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
+    assert result.llm_call_count == 2
+    # 医嘱只以结构化动作字段进入候选；本地正文不进入模型上下文。
+    assert "会诊后转入康复治疗" in client.prompts[1]
+    assert "不应作为正文候选" not in client.prompts[1]
 
 
 @pytest.mark.asyncio
