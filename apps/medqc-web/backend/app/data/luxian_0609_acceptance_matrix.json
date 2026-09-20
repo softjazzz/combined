@@ -4,7 +4,7 @@
   "rule_master_version": "2026-09-05-r3",
   "generated_from": {
     "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
-    "runtime_contract_hash": "2841eb8665e48f912b0ee4e75be0937fd194476f88dbaf1726a518b191eae355",
+    "runtime_contract_hash": "c2744c3a1b5b33257b5bdb20108296ecf406d3f2618ea957c2d23f4492f1c565",
     "synthetic_fixture_set": "0426-derived-v3"
   },
   "coverage_semantics": {
@@ -1319,7 +1319,7 @@
     },
     {
       "rule_id": "LX0609-023",
-      "title": "会诊记录：请会诊执行记录不规范，照抄会诊意见，未归纳总结或未明确具体执行情况",
+      "title": "会诊记录：会诊建议未找到执行证据，或执行记录未明确具体执行情况",
       "definition_status": "formal",
       "definition_phase": "phase_1_target",
       "definition_version": "lx0609-defined-scope-2026-09-05-r3",
@@ -1346,15 +1346,27 @@
           "expected_status": "data_gap"
         }
       },
-      "required_facts": ["会诊时间", "病程时间"],
-      "required_evidence": ["consultation_record", "daily_course_record"],
+      "required_facts": ["会诊执行记录正文", "后续病程时间与正文", "后续医嘱"],
+      "required_evidence": [
+        "consultation_record",
+        "daily_course_record",
+        "senior_course_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order"
+      ],
       "expected_executor": "consultation_quality",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 2,
       "semantic_contract": {
         "minimal_input": {
-          "documents": ["consultation_record", "daily_course_record"],
-          "facts": ["会诊时间", "病程时间"]
+          "documents": [
+            "consultation_record",
+            "daily_course_record",
+            "senior_course_record",
+            "inpat_drug_order",
+            "inpat_nondrug_order"
+          ],
+          "facts": ["会诊执行记录正文", "后续病程时间与正文", "后续医嘱"]
         },
         "controlled_status_enum": [
           "compliant",
@@ -3848,6 +3860,106 @@
         "minimal_input": {
           "documents": ["first_course_record", "first_course_record_diagnosis"],
           "facts": ["第一诊断", "鉴别诊断"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-078",
+      "title": "术前小结：术前小结内容不完整",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-078]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": ["术前小结正文"],
+      "required_evidence": ["presurg_summary"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["presurg_summary"],
+          "facts": ["术前小结正文"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown",
+          "not_executed"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-079",
+      "title": "术前讨论记录：术前讨论记录内容不完整",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-09-05-r3",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-079]"
+          ],
+          "expected_status": "data_gap"
+        }
+      },
+      "required_facts": ["术前讨论结构字段与正文/可核验内容"],
+      "required_evidence": ["presurg_discussion"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["presurg_discussion"],
+          "facts": ["术前讨论结构字段与正文/可核验内容"]
         },
         "controlled_status_enum": [
           "compliant",

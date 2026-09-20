@@ -19,10 +19,12 @@ SURGERY_DOCUMENT_CUSTOMER_RULE_IDS = frozenset(
         "LX0609-037",
         "LX0609-038",
         "LX0609-039",
+        "LX0609-078",
+        "LX0609-079",
     }
 )
 SURGERY_DOCUMENT_PUBLIC_FACT_REF_EVIDENCE_RULE_IDS = frozenset(
-    {"LX0609-034", "LX0609-036", "LX0609-039"}
+    {"LX0609-034", "LX0609-036", "LX0609-039", "LX0609-078", "LX0609-079"}
 )
 
 _CONSENT_FIELDS = (
@@ -287,6 +289,43 @@ def _safe_039(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _safe_preop_content(rule_id: str, raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    target = {"LX0609-078": "presurg_summary", "LX0609-079": "presurg_discussion"}[rule_id]
+    allowed = {
+        "LX0609-078": (
+            "brief_condition", "preop_diagnosis", "surgical_indication",
+            "planned_procedure", "planned_anesthesia", "precautions",
+            "surgeon_preop_visit",
+        ),
+        "LX0609-079": (
+            "preop_preparation", "surgical_indication", "surgical_plan",
+            "risk_and_prevention", "participants_with_titles", "specific_opinions",
+            "chair_summary", "discussion_date", "recorder_signature",
+        ),
+    }[rule_id]
+    kind = raw.get("verification_kind")
+    if (
+        kind not in {"preop_content_complete", "preop_content_incomplete"}
+        or raw.get("target_document") != target
+        or raw.get("checked_fields") != list(allowed)
+    ):
+        return None
+    missing = raw.get("missing_fields")
+    if not isinstance(missing, list):
+        return None
+    safe_missing = list(dict.fromkeys(item for item in missing if item in allowed))
+    if (kind == "preop_content_complete" and safe_missing) or (
+        kind == "preop_content_incomplete" and not safe_missing
+    ):
+        return None
+    return {
+        "verification_kind": kind,
+        "target_document": target,
+        "checked_fields": list(allowed),
+        "missing_fields": safe_missing,
+    }
+
+
 def safe_surgery_document_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
@@ -301,6 +340,8 @@ def safe_surgery_document_customer_display_facts(
         return _safe_036_037(normalized_rule_id, raw)
     if normalized_rule_id == "LX0609-038":
         return _safe_038(raw)
+    if normalized_rule_id in {"LX0609-078", "LX0609-079"}:
+        return _safe_preop_content(normalized_rule_id, raw)
     return _safe_039(raw)
 
 
@@ -329,5 +370,7 @@ def surgery_document_customer_fact_status_is_valid(
         "preop_discussion_surgeon_participation_confirmed": "compliant",
         "surgeon_not_in_preop_discussion": "non_compliant",
         "preop_discussion_missing": "non_compliant",
+        "preop_content_complete": "compliant",
+        "preop_content_incomplete": "non_compliant",
     }.get(str(kind))
     return expected is not None and status == expected

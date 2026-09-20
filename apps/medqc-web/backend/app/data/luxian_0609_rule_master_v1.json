@@ -647,6 +647,22 @@
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "沿用已确认规则 LX-011：首次病程中已写出的鉴别诊断应围绕第一诊断的临床问题展开。"
+    },
+    {
+      "rule_id": "LX0609-078",
+      "source_document": "术前小结",
+      "qc_point": "术前小结内容不完整",
+      "implementation_status": "active",
+      "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
+      "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-029单独交付。"
+    },
+    {
+      "rule_id": "LX0609-079",
+      "source_document": "术前讨论记录",
+      "qc_point": "术前讨论记录内容不完整",
+      "implementation_status": "active",
+      "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
+      "policy_summary": "以SC-085为来源证明，仅核对已存在且有可核验结构字段与正文内容的术前讨论记录；文书存在性及术者参加由LX0609-039单独交付。"
     }
   ]
 }

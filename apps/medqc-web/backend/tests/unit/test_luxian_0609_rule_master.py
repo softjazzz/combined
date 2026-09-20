@@ -24,13 +24,13 @@ def test_rule_master_derives_its_continuous_scope_from_its_own_entries() -> None
     payload = json.loads(rule_master_module._MASTER_PATH.read_text(encoding="utf-8"))
     assert isinstance(payload["rules"], list)
     extension = dict(payload["rules"][-1])
-    extension["rule_id"] = "LX0609-078"
+    extension["rule_id"] = "LX0609-080"
     payload["rules"].append(extension)
 
     entries = compile_luxian_0609_rule_master(payload)
 
     assert tuple(entry.rule_id for entry in entries) == tuple(
-        f"LX0609-{index:03d}" for index in range(1, 79)
+        f"LX0609-{index:03d}" for index in range(1, 81)
     )
 
 
@@ -61,7 +61,7 @@ def test_rule_master_rejects_noncontinuous_or_empty_scope(
     elif invalid_scope == "gap":
         payload["rules"][-1] = {
             **payload["rules"][-1],
-            "rule_id": "LX0609-079",
+            "rule_id": "LX0609-078",
         }
         match = "continuous ordered"
     elif invalid_scope == "reordered":
@@ -97,16 +97,16 @@ def test_rule_master_rejects_noncontinuous_or_empty_scope(
 
 
 @pytest.mark.unit
-def test_rule_master_is_the_complete_ordered_77_rule_scope():
+def test_rule_master_is_the_complete_ordered_79_rule_scope():
     entries = load_luxian_0609_rule_master()
 
     assert tuple(entry.rule_id for entry in entries) == tuple(
-        f"LX0609-{index:03d}" for index in range(1, 78)
+        f"LX0609-{index:03d}" for index in range(1, 80)
     )
-    assert len({entry.rule_id for entry in entries}) == 77
+    assert len({entry.rule_id for entry in entries}) == 79
     assert get_luxian_0609_rule_master_summary() == {
-        "total": 77,
-        "active": 77,
+        "total": 79,
+        "active": 79,
         "contract_ready": 0,
         "pending_definition": 0,
     }
@@ -153,10 +153,10 @@ def test_pending_rules_keep_customer_definition_gaps_visible():
 
 
 @pytest.mark.unit
-def test_rule_master_requires_complete_customer_policy_metadata_for_all_77_rules():
+def test_rule_master_requires_complete_customer_policy_metadata_for_all_79_rules():
     entries = load_luxian_0609_rule_master()
 
-    assert len(entries) == 77
+    assert len(entries) == 79
     assert all(entry.policy_sources for entry in entries)
     assert all("customer_confirmed" in entry.policy_sources for entry in entries)
     assert all(entry.policy_summary for entry in entries)

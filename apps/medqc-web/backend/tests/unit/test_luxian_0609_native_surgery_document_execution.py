@@ -2275,7 +2275,7 @@ async def test_strong_facts_run_each_selected_rule_once_in_customer_order():
     legacy_document_rule_ids = tuple(
         rule_id
         for rule_id in surgery_doc.SURGERY_DOCUMENT_RULE_IDS
-        if rule_id != "LX0609-029"
+        if rule_id not in {"LX0609-029", "LX0609-078", "LX0609-079"}
     )
     client = _Client([{"is_compliant": index % 2 == 0} for index in range(6)])
 
@@ -2775,10 +2775,57 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
         "not_applicable",
         "not_applicable",
         "data_gap",
+        "not_applicable",
+        "not_applicable",
     ]
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert secret not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_078_source_query_error_is_delivered_as_data_gap():
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "presurg_summary":
+            raise SourceEvidenceQueryError()
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-078",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-09-20T00:00:00+08:00",
+        row_reader=reader,
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-078",),
+        wrapper_rules=[_wrapper("LX0609-078")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-078",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        expected_rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        decisions=result.decisions,
+        evidence_materials=session.materials,
+    )
+
+    assert (reduced[0].final_state, reduced[0].reason_code) == (
+        "data_gap",
+        "source_readiness_unproven",
+    )
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

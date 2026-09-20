@@ -18,7 +18,7 @@ def test_matrix_is_generated_from_current_runtime_contract() -> None:
 
     assert committed == generated
     assert [rule["rule_id"] for rule in committed["rules"]] == [
-        f"LX0609-{index:03d}" for index in range(1, 78)
+        f"LX0609-{index:03d}" for index in range(1, 80)
     ]
 
 
@@ -26,12 +26,12 @@ def test_matrix_keeps_formal_and_temporary_tiers_separate() -> None:
     payload = _matrix()
     summary = acceptance.validate_acceptance_matrix(payload)
 
-    assert summary["rule_count"] == 77
-    assert summary["definition_tiers"] == {"formal": 69, "temporary": 8}
+    assert summary["rule_count"] == 79
+    assert summary["definition_tiers"] == {"formal": 71, "temporary": 8}
     assert summary["pending_definition_rule_count"] == 10
-    assert summary["bound_fixture_count"] == 259
-    assert summary["case_slots"]["covered"] == 239
-    assert summary["case_slots"]["missing"] == 5
+    assert summary["bound_fixture_count"] == 261
+    assert summary["case_slots"]["covered"] == 241
+    assert summary["case_slots"]["missing"] == 9
 
 
 def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> None:
@@ -42,7 +42,7 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
             if slot["coverage"] == "covered":
                 covered_slots.append((rule["rule_id"], slot_name, slot["fixture_refs"]))
 
-    assert len(covered_slots) == 239
+    assert len(covered_slots) == 241
     assert all(
         refs
         and all(
@@ -58,7 +58,7 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
         "compliant": 67,
         "confirmed_issue": 65,
         "not_applicable": 40,
-        "data_insufficient": 67,
+        "data_insufficient": 69,
     }
 
 
@@ -181,5 +181,5 @@ def test_report_states_fixture_coverage_is_not_execution_acceptance() -> None:
 
     assert "不以病例数量代替覆盖率" in report
     assert "不代表引擎执行已经通过" in report
-    assert "正式 69 条" in report
+    assert "正式 71 条" in report
     assert "临时 8 条" in report

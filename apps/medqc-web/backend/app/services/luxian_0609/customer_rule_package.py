@@ -71,6 +71,8 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
             "LX0609-038",
             "LX0609-039",
             "LX0609-040",
+            "LX0609-078",
+            "LX0609-079",
         ),
     },
     {

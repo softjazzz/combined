@@ -21,13 +21,13 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
 @pytest.mark.unit
-def test_dependency_inventory_covers_all_77_registered_rules_and_eight_families():
+def test_dependency_inventory_covers_all_79_registered_rules_and_eight_families():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
 
-    assert len(inventory) == 77
+    assert len(inventory) == 79
     assert tuple(item.rule_id for item in inventory) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
@@ -41,7 +41,7 @@ def test_dependency_inventory_covers_all_77_registered_rules_and_eight_families(
         "tumor_pathology",
         "extended_document",
     }
-    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 118
+    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 120
     assert all(item.applicable_documents for item in inventory)
     assert all(item.dependency_type for item in inventory)
 
@@ -101,6 +101,8 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-075",
         "LX0609-076",
         "LX0609-077",
+        "LX0609-078",
+        "LX0609-079",
         "LX0609-003",
         "LX0609-007",
         "LX0609-008",

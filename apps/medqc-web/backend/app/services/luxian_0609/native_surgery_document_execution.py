@@ -22,6 +22,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
 from .fact_schema import Assertion, EventStatus
 from .native_execution import build_luxian_0609_native_result
+from .native_preop_content_execution import evaluate_preop_content_rules
 from .planner import PlannedRule
 from .source_manifest import QueryStatus
 from .source_evidence_reader import (
@@ -46,6 +47,8 @@ SURGERY_DOCUMENT_RULE_IDS = (
     "LX0609-037",
     "LX0609-038",
     "LX0609-039",
+    "LX0609-078",
+    "LX0609-079",
 )
 EXECUTOR_KEY = "surgery_document"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_DOCUMENT_RULE_IDS)
@@ -80,6 +83,8 @@ _TYPED_RULE_SOURCE_KEYS = {
         "rescue_record",
         "presurg_discussion",
     ),
+    "LX0609-078": ("presurg_summary",),
+    "LX0609-079": ("presurg_discussion",),
 }
 
 _ANESTHESIA_CONSENT_RULE_IDS = frozenset({"LX0609-034", "LX0609-035"})
@@ -2291,8 +2296,40 @@ async def execute_luxian_0609_native_surgery_document_rules(
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
 
+    preop_content_rule_ids = tuple(
+        rule_id
+        for rule_id in selected
+        if rule_id in {"LX0609-078", "LX0609-079"}
+        and rule_id in typed_requested
+    )
+    preop_content_by_rule_id: dict[str, RuleDecision] = {}
+    preop_content_facts_by_rule_id: dict[str, Mapping[str, Any]] = {}
+    if preop_content_rule_ids:
+        assert evidence_snapshot is not None and evidence_materials is not None
+        preop_content = await evaluate_preop_content_rules(
+            rule_ids=preop_content_rule_ids,
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
+            llm_client=llm_client,
+        )
+        preop_content_by_rule_id = {
+            decision.rule_id: decision for decision in preop_content.decisions
+        }
+        preop_content_facts_by_rule_id = dict(preop_content.customer_display_facts)
+        llm_call_count += preop_content.llm_call_count
+        prompt_tokens += preop_content.prompt_tokens
+        completion_tokens += preop_content.completion_tokens
+        total_tokens += preop_content.total_tokens
+        api_time += preop_content.api_time
+
     for rule_id in selected:
         if rule_id in typed_requested:
+            if rule_id in preop_content_by_rule_id:
+                decisions.append(preop_content_by_rule_id[rule_id])
+                safe_facts = preop_content_facts_by_rule_id.get(rule_id)
+                if safe_facts is not None:
+                    customer_display_facts.append((rule_id, safe_facts))
+                continue
             assert evidence_snapshot is not None
             if rule_id == "LX0609-029":
                 assert evidence_materials is not None
