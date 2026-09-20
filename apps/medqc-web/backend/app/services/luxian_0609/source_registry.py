@@ -415,7 +415,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-018": ("diagnosis", "admission_record_diagnosis"),
     "LX0609-077": ("first_course_record_diagnosis",),
     "LX0609-078": ("presurg_summary", "surgery_record"),
-    "LX0609-079": ("presurg_discussion", "surgery_record"),
+    "LX0609-079": ("presurg_discussion",),
     # 027 需要同一快照内的病历阶段、恶性事实与正式出院记录。
     "LX0609-027": (
         "diagnosis", "discharge_record_diagnosis", "pathology_exam_report",

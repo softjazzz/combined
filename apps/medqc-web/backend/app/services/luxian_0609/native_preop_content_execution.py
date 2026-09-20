@@ -296,7 +296,7 @@ def _association_state_for_rule(
     parsed: Mapping[tuple[str, str], Mapping[str, Any]],
     events: Sequence[SurgeryEvent],
 ) -> tuple[set[str], bool, list[Mapping[str, Any]]]:
-    """按手术事件核对术前文书，返回确定缺项、是否歧义和安全展示。"""
+    """078按手术事件聚合；079逐份核对，返回缺项、歧义和安全展示。"""
 
     source = RULE_SOURCES[rule_id]
     grouped: dict[int, list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
@@ -304,26 +304,33 @@ def _association_state_for_rule(
     display_documents: list[Mapping[str, Any]] = []
     for document_index, (_ref, row, _text) in enumerate(records, start=1):
         values = parsed[(source, _document_id(row))]
-        procedure_field = (
-            "planned_procedure" if rule_id == "LX0609-078" else "surgical_plan"
-        )
-        association = associate_preop_document_to_surgery_event(
-            events=events,
-            procedure_name=values.get(procedure_field),
-            record_time=_document_record_time(row),
-        )
-        if association.state == "matched" and association.event_index is not None:
-            grouped.setdefault(association.event_index, []).append((row, values))
-        elif association.state == "not_required":
-            # 没有已实施手术事件时保持既有内容核对语义，不凭此新增错误结论。
-            grouped.setdefault(0, []).append((row, values))
+        if rule_id == "LX0609-079":
+            # 079 只核对每份术前讨论记录自身的九项内容，不跨文书补字段；
+            # 文书归属哪台手术不改变这些内容是否完整。
+            association_state, event_index = "not_required", None
+            grouped.setdefault(document_index, []).append((row, values))
         else:
-            ambiguous_values.append(values)
+            association = associate_preop_document_to_surgery_event(
+                events=events,
+                procedure_name=values.get("planned_procedure"),
+                record_time=_document_record_time(row),
+            )
+            association_state, event_index = (
+                association.state,
+                association.event_index,
+            )
+            if association.state == "matched" and association.event_index is not None:
+                grouped.setdefault(association.event_index, []).append((row, values))
+            elif association.state == "not_required":
+                # 没有已实施手术事件时保持既有内容核对语义，不凭此新增错误结论。
+                grouped.setdefault(0, []).append((row, values))
+            else:
+                ambiguous_values.append(values)
         display_documents.append(
             {
                 "document_index": document_index,
-                "event_index": association.event_index,
-                "association_state": association.state,
+                "event_index": event_index,
+                "association_state": association_state,
                 "missing_fields": sorted(
                     _missing_fields_for_document(
                         rule_id=rule_id, row=row, values=values
@@ -492,7 +499,11 @@ async def evaluate_preop_content_rules(
             total_tokens=total_tokens,
             api_time=api_time,
         )
-    events, event_reason = build_performed_surgery_events(materials)
+    events, event_reason = (
+        build_performed_surgery_events(materials)
+        if "LX0609-078" in active
+        else ((), "")
+    )
     # 运行病历仅以正式手术记录形成事件，不能依赖终末阶段才可能形成的
     # mr_surgery；证据引用也只保留本次实际读取的来源。
     event_refs = tuple(
@@ -507,9 +518,14 @@ async def evaluate_preop_content_rules(
             decisions.append(terminal[rule])
             continue
         refs = tuple(
-            sorted({*(ref for ref, _, _ in records[rule]), *event_refs})
+            sorted(
+                {
+                    *(ref for ref, _, _ in records[rule]),
+                    *(event_refs if rule == "LX0609-078" else ()),
+                }
+            )
         )
-        if events is None:
+        if rule == "LX0609-078" and events is None:
             decisions.append(
                 _decision(
                     snapshot,
@@ -524,7 +540,7 @@ async def evaluate_preop_content_rules(
             rule_id=rule,
             records=records[rule],
             parsed=parsed,
-            events=events,
+            events=events or (),
         )
         if has_ambiguous and not missing:
             status, reason = "data_gap", "association_failed"

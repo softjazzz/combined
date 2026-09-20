@@ -143,6 +143,33 @@ def test_running_preop_rules_do_not_request_mr_surgery():
     assert set(calls) == {"presurg_summary", "presurg_discussion", "surgery_record"}
 
 
+def test_079_only_reads_its_own_discussion_source():
+    calls = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == "surgery_record":
+            raise AssertionError("079 content completeness must not depend on surgery association")
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-079",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-09-20T00:00:00+08:00",
+        row_reader=reader,
+    )
+    assert calls == ["presurg_discussion"]
+
+
 @pytest.mark.asyncio
 async def test_both_rules_share_one_call_and_missing_is_per_document():
     summary_text = "术前诊断：胆囊炎。简要病情：腹痛。手术指征：反复发作。拟行腹腔镜胆囊切除术。拟全麻。注意事项：禁食。术者已查看患者。"
@@ -708,6 +735,48 @@ async def test_submitter_is_deterministic_recorder_signature_when_model_returns_
     )
     assert decision.reason_code == "requirement_satisfied"
     assert dict(result.customer_display_facts)["LX0609-079"]["missing_fields"] == []
+
+
+@pytest.mark.asyncio
+async def test_079_content_is_not_blocked_by_unmatched_multi_surgery_association():
+    row = _structured_discussion(submitter="王标")
+    session = _session(
+        discussion=(row,),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-first",
+                name="腹腔镜胆囊切除术",
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+            _surgery_record(
+                document_id="surgery-second",
+                name="腹腔镜阑尾切除术",
+                begin="2026-01-02 08:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-079",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "discussion-structured",
+                    "source_type": "presurg_discussion",
+                    "items": _complete_discussion_items(None),
+                }
+            )
+        ),
+    )
+    decision = result.decisions[0]
+    assert (decision.evidence_state.value, decision.qc_direction.value) == (
+        "sufficient",
+        "satisfied",
+    )
+    assert decision.reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-079"]
+    assert facts["documents"][0]["association_state"] == "not_required"
 
 
 @pytest.mark.asyncio
