@@ -158,6 +158,30 @@ _RECOMMENDATION_COVERAGE_STATES = frozenset({
     "complete", "partial", "no_trace", "unknown",
 })
 _RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer", "monitoring", "other"})
+# 监护类及明确院外/周期随访不进入 023 医嘱执行核对；住院内检查、治疗建议保留。
+_FOLLOW_UP_SCOPE_PATTERN = re.compile(
+    r"(?:门诊|出院(?:后)?|院外|长期|周期性|定期)"
+    r"[^。；\n]{0,16}(?:随访|复查)"
+    r"|(?:随访|复查)[^。；\n]{0,16}"
+    r"(?:门诊|出院(?:后)?|院外|长期|周期性|定期)"
+)
+_PURE_FOLLOW_UP_PATTERN = re.compile(
+    r"^[\s，,、;；:：。.!！？]*"
+    r"(?:建议|可|请|继续|安排|予以)?\s*"
+    r"(?:我科|本科|专科)?\s*"
+    r"(?:动态)?随访"
+    r"[\s，,、;；:：。.!！？]*$"
+)
+_FOLLOW_UP_INTERVAL_PATTERN = re.compile(
+    r"(?:每(?:隔)?\s*(?:(?:\d+|[一二两三四五六七八九十]+)"
+    r"\s*[-~至]\s*)?(?:\d+|[一二两三四五六七八九十]+)?"
+    r"\s*(?:年|个?月|季度))"
+    r"[^。；\n]{0,32}(?:随访|复查|查(?:看)?|检查|检验|完善)"
+    r"|(?:随访|复查|查(?:看)?|检查|检验|完善)"
+    r"[^。；\n]{0,32}(?:每(?:隔)?\s*(?:(?:\d+|[一二两三四五六七八九十]+)"
+    r"\s*[-~至]\s*)?(?:\d+|[一二两三四五六七八九十]+)?"
+    r"\s*(?:年|个?月|季度))"
+)
 _EXPLICIT_REQUEST_CLEAR_PATTERN = re.compile(
     r"(?:会诊目的|申请.{0,12}会诊).{0,80}"
     r"(?:评估.{0,24}(?:适应证|病情|方案)|明确.{0,24}(?:诊断|原因|方案)|"
@@ -676,6 +700,21 @@ def _partial_coverage_is_usable(
 
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").split())
+
+
+def _is_out_of_execution_check_scope(recommendation: "_Recommendation") -> bool:
+    """识别不要求通过住院医嘱核对执行情况的会诊建议。"""
+
+    if _clean(recommendation.action_type).lower() == "monitoring":
+        return True
+    source_quote = _clean(recommendation.source_quote)
+    if not source_quote:
+        return False
+    return bool(
+        _FOLLOW_UP_SCOPE_PATTERN.search(source_quote)
+        or _FOLLOW_UP_INTERVAL_PATTERN.search(source_quote)
+        or _PURE_FOLLOW_UP_PATTERN.fullmatch(source_quote)
+    )
 
 
 def _is_pure_signature_template(record_content: Any) -> bool:
@@ -2586,6 +2625,7 @@ def _completed_recommendations(
         completed.extend(
             _CompletedRecommendation(item.episode_ref, recommendation, opinion_time)
             for recommendation in item.recommendations
+            if not _is_out_of_execution_check_scope(recommendation)
         )
     if len(completed) > _MAX_TOTAL_RECOMMENDATIONS:
         raise _SourceGap()

@@ -2735,6 +2735,268 @@ def test_low_confidence_structured_link_keeps_unknown_execution_record_state():
     assert parsed[0].confidence == "medium"
 
 
+def _scope_test_completed_recommendations(
+    *, action_type: str, source_quote: str,
+) -> tuple[episode._CompletedRecommendation, ...]:
+    recommendation = episode._Recommendation(
+        "consultation_record-1#r1",
+        action_type,
+        source_quote,
+        source_quote,
+        "consultation_record-1",
+    )
+    model_episode = episode._Episode(
+        "consultation_record-1",
+        ("consultation_record-1",),
+        (),
+        ("consultation_record-1",),
+        "clear",
+        "clear",
+        "high",
+        (recommendation,),
+    )
+    return episode._completed_recommendations(
+        (model_episode,),
+        ({
+            "ref": "consultation_record-1",
+            "time": "2026-07-20 08:00:00",
+            "text": source_quote,
+        },),
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("action_type", "source_quote", "included"),
+    (
+        ("monitoring", "建议动态随访", False),
+        (
+            "test",
+            "建议门诊随访，每1-2年查胸部CT1次，我科随访",
+            False,
+        ),
+        ("other", "出院后门诊随访", False),
+        ("test", "建议出院后1个月复查肝功能", False),
+        ("other", "建议随访", False),
+        ("test", "建议完善血脂检查后随访", True),
+        ("other", "我科随访", False),
+        ("test", "我科建议复查血常规", True),
+        ("test", "建议动态复查血常规", True),
+        ("test", "复查血常规", True),
+        ("test", "复查肝功能", True),
+        ("test", "建议完善血脂，必要时完善TCD", True),
+        # 冻结 22 例中随访范围边界：A-E/F/G/I 应排除，H 保留。
+        pytest.param(
+            "monitoring",
+            "双侧少许胸腔积液暂无特殊处理,可随访",
+            False,
+            id="C04-pure-follow-up",
+        ),
+        pytest.param(
+            "monitoring",
+            "定期复查肾功电解质,肾病内科门诊随访",
+            False,
+            id="C08-periodic-outpatient-follow-up",
+        ),
+        pytest.param(
+            "test",
+            "建议门诊随访,每1-2年查胸部CT1次,我科随访",
+            False,
+            id="C11-long-term-outpatient-follow-up",
+        ),
+        pytest.param(
+            "monitoring",
+            "患者已完善动态心电图,无阵发性房颤,建议动态随访。",
+            False,
+            id="C18-completed-test-dynamic-follow-up",
+        ),
+        pytest.param(
+            "test",
+            "建议2周后复查尿常规,肾内科门诊随访",
+            False,
+            id="C30-outpatient-recheck-follow-up",
+        ),
+        pytest.param(
+            "monitoring",
+            "注意围术期气道保护,若有必要术后可送ICU继续监护治疗",
+            False,
+            id="C01-perioperative-monitoring",
+        ),
+        pytest.param(
+            "monitoring",
+            "术中注意呼吸循环稳定,加强动态血压及血气监测,麻醉深度监测,并注意恶性心律失常的处理",
+            False,
+            id="C04-intraoperative-monitoring",
+        ),
+        pytest.param(
+            "medication",
+            "给予抗癫痫药物治疗,我科随访。",
+            True,
+            id="C20-medication-with-follow-up",
+        ),
+        pytest.param(
+            "monitoring",
+            "建议术前继续给予吸氧,增加组织细胞氧储备,术前氧合指数》300,术前术后避免受凉,术后鼓励自主咳嗽咳痰",
+            False,
+            id="C25-perioperative-care",
+        ),
+    ),
+)
+def test_completed_recommendations_exclude_non_order_execution_scope(
+    action_type, source_quote, included,
+):
+    completed = _scope_test_completed_recommendations(
+        action_type=action_type,
+        source_quote=source_quote,
+    )
+
+    assert bool(completed) is included
+
+
+def test_mixed_follow_up_recommendations_share_filtered_prompt_and_display_scope():
+    recommendations = (
+        episode._Recommendation(
+            "consultation_record-1#r1",
+            "monitoring",
+            "建议动态随访",
+            "建议动态随访",
+            "consultation_record-1",
+        ),
+        episode._Recommendation(
+            "consultation_record-1#r2",
+            "medication",
+            "调整降压药",
+            "调整降压药",
+            "consultation_record-1",
+        ),
+        episode._Recommendation(
+            "consultation_record-1#r3",
+            "test",
+            "复查血常规",
+            "复查血常规",
+            "consultation_record-1",
+        ),
+    )
+    model_episode = episode._Episode(
+        "consultation_record-1",
+        ("consultation_record-1",),
+        (),
+        ("consultation_record-1",),
+        "clear",
+        "clear",
+        "high",
+        recommendations,
+    )
+    documents = ({
+        "ref": "consultation_record-1",
+        "time": "2026-07-20 08:00:00",
+        "text": "会诊意见：建议动态随访；调整降压药；复查血常规",
+        "document_id": "CONSULT-1",
+    },)
+    completed = episode._completed_recommendations(
+        (model_episode,),
+        documents,
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "daily_course_record-1",
+            "daily_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 9), True),
+            "安全后续病程",
+        ),
+    )
+
+    prompt, _ = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+    prompt_payload = json.loads(prompt.rsplit("输入：", 1)[1])
+    assessment_rows = tuple(
+        episode._ExecutionAssessment(
+            item.recommendation.recommendation_ref,
+            "absent",
+            (),
+            "high",
+            (),
+            "no_trace",
+            (),
+            (),
+        )
+        for item in completed
+    )
+    facts = episode._consultation_execution_display_facts(
+        rule_id="LX0609-023",
+        status="non_compliant",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=assessment_rows,
+        documents=documents,
+        candidates=candidates,
+    )
+
+    assert [item.recommendation.action_type for item in completed] == [
+        "medication",
+        "test",
+    ]
+    assert [item["recommendation_ref"] for item in prompt_payload["recommendations"]] == [
+        "consultation_record-1#r2",
+        "consultation_record-1#r3",
+    ]
+    assert facts["recommendation_count"] == 2
+    assert facts["missing_execution_count"] == 2
+    assert len(facts["recommendation_evidence"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_all_follow_up_recommendations_do_not_start_stage_two_or_count(
+    monkeypatch,
+):
+    rows = _rows("会诊意见：建议动态随访。", action_suffix=False)
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    monkeypatch.setattr(
+        episode,
+        "_resolve_execution_stay_window",
+        lambda **_: episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+    )
+    client = _Client(_payload(episodes=[
+        _episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "monitoring",
+                "source_quote": "建议动态随访",
+                "normalized_action": "动态随访",
+            }],
+        ),
+    ]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v-follow-up-only",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "not_applicable",
+        "not_applicable",
+    ]
+    assert len(client.prompts) == 1
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-020"]["recommendation_count"] == 0
+    assert facts["LX0609-020"]["missing_execution_count"] == 0
+    assert facts["LX0609-023"]["recommendation_count"] == 0
+    assert facts["LX0609-023"]["missing_execution_count"] == 0
+
+
 def test_many_document_events_share_bounded_stage_two_candidates_without_repeated_refs():
     episodes = tuple(
         episode._Episode(
@@ -7993,7 +8255,7 @@ def _copied_opinion_client(*, recommendation, execution_payload):
 async def test_s2_copied_course_opinion_is_non_compliant_without_adding_trace(monkeypatch):
     """S2：病程逐字照搬会诊意见即判 023-A；不因此给 020 补出一条执行痕迹。"""
 
-    opinion = "建议2周后复查尿常规，肾内科门诊随访"
+    opinion = "建议2周后复查尿常规并复查肝功能"
     source_rows = _copied_opinion_source_rows(
         opinion=f"会诊意见：{opinion}",
         course=opinion,
@@ -8007,7 +8269,7 @@ async def test_s2_copied_course_opinion_is_non_compliant_without_adding_trace(mo
         recommendation={
             "action_type": "test",
             "source_quote": opinion,
-            "normalized_action": "复查尿常规并肾内科门诊随访",
+            "normalized_action": "复查尿常规并复查肝功能",
         },
         execution_payload={"executions": [{
             "recommendation_ref": "consultation_record-1#r1",
