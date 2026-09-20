@@ -1510,7 +1510,7 @@ def test_document_field_preservation_rejects_time_or_identity_loss():
         )
 
 
-def test_upsert_to_local_derives_presurg_summary_content_without_overwriting_source_content(monkeypatch):
+def test_upsert_to_local_preserves_presurg_summary_source_and_structured_content(monkeypatch):
     executed_params: list[dict] = []
 
     class _FakeSession:
@@ -1558,7 +1558,9 @@ def test_upsert_to_local_derives_presurg_summary_content_without_overwriting_sou
                 "visit_id": "V1",
                 "document_id": "D2",
                 "record_content": "源端已提供完整正文",
-                "planned_surgery_name": "不应覆盖",
+                "planned_surgery_name": "右眼白内障超声乳化+人工晶体植入术",
+                "planned_surgery_time": "2026-04-09 00:00:00",
+                "planned_anesthesia_method": "表面麻醉",
             },
         ],
         primary_keys=["patient_id", "visit_id", "document_id"],
@@ -1572,7 +1574,12 @@ def test_upsert_to_local_derives_presurg_summary_content_without_overwriting_sou
         "麻醉方式：气管插管全麻\n"
         "术前准备：备血并完善术前检查"
     )
-    assert executed_params[1]["record_content"] == "源端已提供完整正文"
+    assert executed_params[1]["record_content"] == (
+        "拟实施手术：右眼白内障超声乳化+人工晶体植入术\n"
+        "手术时间：2026-04-09 00:00:00\n"
+        "麻醉方式：表面麻醉\n"
+        "记录内容：源端已提供完整正文"
+    )
 
 
 def test_upsert_to_local_derives_surgery_safecheck_content(monkeypatch):

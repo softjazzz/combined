@@ -283,8 +283,9 @@ _GLOBAL_COLUMN_ALIASES: Dict[str, Tuple[str, ...]] = {
 }
 
 # 部分手术相关源表以结构化章节保存正文。CDM 当前只保留通用文书列和
-# record_content；若不同步时不组装正文，这些章节会在列过滤阶段被静默丢弃。
-# 仅用于 record_content 为空时的展示/质控全文回填，顺序必须稳定。
+# record_content；若同步时不组装正文，这些章节会在列过滤阶段被静默丢弃。
+# 术前小结的结构化章节与叙述正文互补，必须合并保留；其他文书仍仅在正文
+# 为空时回填。字段顺序必须稳定，便于展示、质控和真实病例回放。
 _STRUCTURED_DOCUMENT_CONTENT_FIELDS: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
     "presurg_summary": (
         ("术前诊断", ("preoperative_diagnosis", "preop_diagnosis", "surgery_diagnosis", "diagnosis")),
@@ -946,13 +947,19 @@ def _apply_sync_derived_fields(
         normalized["consent_type"] = "blood_transfusion"
 
     if normalized_table in _STRUCTURED_DOCUMENT_CONTENT_FIELDS and "record_content" in existing_columns:
-        if not _first_non_empty(normalized, ("record_content",)):
-            structured_content = _compose_structured_document_content(
-                table_name=normalized_table,
-                normalized=normalized,
+        source_content = _first_non_empty(normalized, ("record_content",))
+        structured_content = _compose_structured_document_content(
+            table_name=normalized_table,
+            normalized=normalized,
+        )
+        if normalized_table == "presurg_summary" and structured_content:
+            normalized["record_content"] = (
+                f"{structured_content}\n记录内容：{source_content}"
+                if source_content
+                else structured_content
             )
-            if structured_content:
-                normalized["record_content"] = structured_content
+        elif not source_content and structured_content:
+            normalized["record_content"] = structured_content
 
 
 def _validate_document_field_preservation(
