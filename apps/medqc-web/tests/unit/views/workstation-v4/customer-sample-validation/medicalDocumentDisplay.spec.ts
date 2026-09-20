@@ -46,6 +46,20 @@ describe('medicalDocumentDisplay', () => {
     ).toEqual({ key: 'surgery', label: '手术与麻醉' })
   })
 
+  it.each([
+    { document_type: 'presurg_discussion', title: '术前讨论记录' },
+    { document_type: 'custom_document', title: '术前讨论记录' },
+  ])('将术前讨论记录归入手术麻醉分组', (document) => {
+    expect(
+      resolveMedicalDocumentGroup({
+        key: 'presurg-discussion',
+        content: '',
+        enabled: true,
+        ...document,
+      }),
+    ).toEqual({ key: 'surgery', label: '手术与麻醉' })
+  })
+
   it('使用同一套目录和规范标题区分上级医师与普通查房', () => {
     expect(
       resolveMedicalDocumentGroup({

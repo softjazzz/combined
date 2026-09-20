@@ -84,6 +84,7 @@ const TYPE_LABELS: Record<string, string> = {
   consultation_record: '会诊记录',
   surgery_record: '手术记录',
   presurg_summary: '术前小结',
+  presurg_discussion: '术前讨论记录',
   anesthesia_record: '麻醉记录',
   surgery_inform_consent: '手术知情同意书',
   exam_report: '检查报告',
@@ -207,6 +208,11 @@ function classifyMedicalDocumentGroup(document: MedicalDocumentLike): MedicalDoc
       label: MEDICAL_DOCUMENT_GROUP_LABELS['admission.record'],
       parentKey: 'admission',
     }
+  }
+  // “术前讨论”属于围术期文书，必须先于通用“讨论”关键词判断，
+  // 避免 presurg_discussion 被归入会诊与讨论。
+  if (hasAny(identity, /presurg[_ -]?discussion|preop(?:erative)?[_ -]?discussion|术前讨论/)) {
+    return { key: 'surgery', label: MEDICAL_DOCUMENT_GROUP_LABELS.surgery }
   }
   if (hasAny(identity, /consult|会诊|讨论/)) {
     return { key: 'consultation', label: MEDICAL_DOCUMENT_GROUP_LABELS.consultation }
