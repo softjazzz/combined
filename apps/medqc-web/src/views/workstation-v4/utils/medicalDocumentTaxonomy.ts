@@ -73,6 +73,7 @@ export const MEDICAL_DOCUMENT_GROUP_LABELS: Record<MedicalDocumentGroupKey, stri
 
 const TYPE_LABELS: Record<string, string> = {
   mr: '病案首页',
+  diagnosis: '诊断信息',
   mr_surgery: '病案首页',
   mr_cost: '病案首页',
   admission_record: '入院记录',
@@ -81,17 +82,32 @@ const TYPE_LABELS: Record<string, string> = {
   senior_course_record: '上级医师查房记录',
   course_record: '病程记录',
   rescue_record: '抢救记录',
+  summary_record: '阶段小结',
   consultation_record: '会诊记录',
+  diffcase_discussion_record: '疑难病例讨论记录',
   surgery_record: '手术记录',
   presurg_summary: '术前小结',
   presurg_discussion: '术前讨论记录',
+  postsurg_firstcourse_record: '术后首次病程记录',
+  surgery_safecheck_record: '手术安全核查记录单',
+  surgery_application: '手术申请单',
+  surgery_risk_assessment: '手术风险评估',
+  surgery_inventory_record: '手术物品清点记录',
   anesthesia_record: '麻醉记录',
+  preane_surveil_record: '麻醉术前访视记录',
+  postane_surveil_record: '麻醉术后访视记录',
+  anesthesia_consent: '麻醉知情同意书',
+  anesthesia_consent_form: '麻醉知情同意书',
   surgery_inform_consent: '手术知情同意书',
+  docpat_commu_record: '医患沟通记录',
   exam_report: '检查报告',
   lab_report: '检验报告',
   pathology_exam_report: '病理检查报告',
   pathology_exam_master: '病理检查申请单',
+  crisis_value_record: '危急值记录',
   blood_application: '输血申请单',
+  mr_bloodtrans: '输血首页摘要',
+  bloodtrans_record: '输血记录',
   blood_transfusion_consent: '输血治疗同意书',
   transfusion_record: '输血记录',
   blood_transfusion_record: '输血记录',
@@ -99,13 +115,97 @@ const TYPE_LABELS: Record<string, string> = {
   medical_order: '医嘱',
   inpat_drug_order: '用药医嘱',
   inpat_nondrug_order: '非药物医嘱',
+  inpat_bill_item: '住院费用/执行明细',
   discharge_record: '出院记录',
   death_record: '死亡记录',
   death_discussion: '死亡病例讨论记录',
   transfer_in_record: '转入记录',
   transfer_out_record: '转出记录',
+  handoff_record: '交班记录',
+  handover_record: '接班记录',
   physician_handoff: '医师交接记录',
   physician_change_event: '医师变更记录',
+  medical_insurance_settlement: '医保结算',
+  medical_insurance_settlement_cost: '医保结算明细',
+}
+
+/**
+ * 结构化文书类型是目录归属的权威输入。这里显式维护已由领域包返回的类型，
+ * 避免依赖英文键中的偶然关键词，也避免正文内容把文书带入错误目录。
+ */
+const STRUCTURED_TYPE_GROUPS: Partial<Record<string, MedicalDocumentGroupKey>> = {
+  mr: 'frontpage',
+  diagnosis: 'frontpage',
+  mr_surgery: 'frontpage',
+  mr_cost: 'frontpage',
+  admission_record: 'admission.record',
+  first_course_record: 'admission.first',
+  daily_course_record: 'course.other',
+  senior_course_record: 'course.senior',
+  course_record: 'course.other',
+  rescue_record: 'course.other',
+  summary_record: 'course.other',
+  consultation_record: 'consultation',
+  diffcase_discussion_record: 'consultation',
+  surgery_record: 'surgery',
+  presurg_summary: 'surgery',
+  presurg_discussion: 'surgery',
+  postsurg_firstcourse_record: 'surgery',
+  surgery_safecheck_record: 'surgery',
+  surgery_application: 'surgery',
+  surgery_risk_assessment: 'surgery',
+  surgery_inventory_record: 'surgery',
+  anesthesia_record: 'surgery',
+  preane_surveil_record: 'surgery',
+  postane_surveil_record: 'surgery',
+  anesthesia_consent: 'surgery',
+  anesthesia_consent_form: 'surgery',
+  surgery_inform_consent: 'surgery',
+  docpat_commu_record: 'surgery',
+  exam_report: 'exam_lab',
+  exam_master: 'exam_lab',
+  exam_item_report: 'exam_lab',
+  lab_report: 'exam_lab',
+  labtest_master: 'exam_lab',
+  labtest_item_report: 'exam_lab',
+  pathology_exam_report: 'exam_lab',
+  pathology_exam_master: 'exam_lab',
+  crisis_value_record: 'exam_lab',
+  blood_application: 'transfusion',
+  mr_bloodtrans: 'transfusion',
+  bloodtrans_record: 'transfusion',
+  blood_transfusion_consent: 'transfusion',
+  transfusion_record: 'transfusion',
+  blood_transfusion_record: 'transfusion',
+  transfusion_evaluation: 'transfusion',
+  medical_order: 'orders',
+  inpat_drug_order: 'orders',
+  inpat_nondrug_order: 'orders',
+  inpat_bill_item: 'orders',
+  discharge_record: 'discharge',
+  death_record: 'discharge',
+  death_discussion: 'discharge',
+  transfer_in_record: 'handoff',
+  transfer_out_record: 'handoff',
+  handoff_record: 'handoff',
+  handover_record: 'handoff',
+  physician_handoff: 'handoff',
+  physician_change_event: 'handoff',
+  medical_insurance_settlement: 'frontpage',
+  medical_insurance_settlement_cost: 'frontpage',
+}
+
+function medicalDocumentGroupFromKey(key: MedicalDocumentGroupKey): MedicalDocumentGroup {
+  const parentKey = key.startsWith('course.')
+    ? 'course'
+    : key.startsWith('admission.')
+      ? 'admission'
+      : undefined
+  return {
+    key,
+    label: MEDICAL_DOCUMENT_GROUP_LABELS[key],
+    ...(parentKey ? { parentKey } : {}),
+  }
 }
 
 function normalize(value: unknown): string {
@@ -152,7 +252,7 @@ function isOrdinaryRound(identity: string): boolean {
 }
 
 function isRound(identity: string): boolean {
-  return hasAny(identity, /查房|round|ward[_ -]?round|course[_ -]?note/) || isSeniorRound(identity)
+  return hasAny(identity, /查房|round|ward[_ -]?round|course[_ -]?note/)
 }
 
 export function resolveMedicalDocumentGroup(document: MedicalDocumentLike): MedicalDocumentGroup {
@@ -166,9 +266,16 @@ export function resolveMedicalDocumentGroup(document: MedicalDocumentLike): Medi
     document.source_table,
   ]
     .map(normalize)
-    .find((value) => Object.prototype.hasOwnProperty.call(TYPE_LABELS, value))
-  const group = classifyMedicalDocumentGroup(knownType ? { document_type: knownType } : metadata)
-  if (group.parentKey === 'course') {
+    .find(
+      (value) =>
+        Object.prototype.hasOwnProperty.call(TYPE_LABELS, value) ||
+        Object.prototype.hasOwnProperty.call(STRUCTURED_TYPE_GROUPS, value),
+    )
+  const structuredGroupKey = knownType ? STRUCTURED_TYPE_GROUPS[knownType] : undefined
+  const group = structuredGroupKey
+    ? medicalDocumentGroupFromKey(structuredGroupKey)
+    : classifyMedicalDocumentGroup(knownType ? { document_type: knownType } : metadata)
+  if (group.parentKey === 'course' && isRound(medicalDocumentIdentity(document))) {
     const identity = medicalDocumentIdentity(document)
     if (isSeniorRound(identity)) {
       return {
