@@ -115,6 +115,34 @@ async def test_empty_sources_are_not_applicable_without_model():
     assert result.llm_call_count == 0 and client.prompts == []
 
 
+def test_running_preop_rules_do_not_request_mr_surgery():
+    calls = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == "mr_surgery":
+            raise AssertionError("running preop rules must not request mr_surgery")
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-078", "LX0609-079"),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-09-20T00:00:00+08:00",
+        row_reader=reader,
+    )
+    assert "mr_surgery" not in calls
+    assert set(calls) == {"presurg_summary", "presurg_discussion", "surgery_record"}
+
+
 @pytest.mark.asyncio
 async def test_both_rules_share_one_call_and_missing_is_per_document():
     summary_text = "术前诊断：胆囊炎。简要病情：腹痛。手术指征：反复发作。拟行腹腔镜胆囊切除术。拟全麻。注意事项：禁食。术者已查看患者。"
@@ -186,6 +214,64 @@ async def test_both_rules_share_one_call_and_missing_is_per_document():
         "defect",
     ]
     assert result.llm_call_count == 1 and len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_real_client_compatible_generate_signature_is_used():
+    summary_text = "术前诊断：胆囊炎。简要病情：腹痛。手术指征：反复发作。拟行腹腔镜胆囊切除术。拟全麻。注意事项：禁食。术者已查看患者。"
+    payload = _payload(
+        {
+            "document_id": "summary-1",
+            "source_type": "presurg_summary",
+            "items": _summary_items(
+                text="术前诊断：胆囊炎",
+                procedure="拟行腹腔镜胆囊切除术",
+            ),
+        }
+    )
+
+    class _StrictClient:
+        def __init__(self):
+            self.kwargs = None
+
+        async def generate(
+            self,
+            prompt,
+            *,
+            max_completion_tokens=None,
+            allow_length_retry=True,
+            enable_thinking=None,
+        ):
+            self.kwargs = {
+                "max_completion_tokens": max_completion_tokens,
+                "allow_length_retry": allow_length_retry,
+                "enable_thinking": enable_thinking,
+            }
+            return {"content": payload, "usage": {}}
+
+    client = _StrictClient()
+    session = _session(
+        summary=({"document_id": "summary-1", "record_content": summary_text},),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-1",
+                name="腹腔镜胆囊切除术",
+                begin="2026-01-02 08:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=client,
+    )
+    assert result.llm_call_count == 1
+    assert client.kwargs == {
+        "max_completion_tokens": 4096,
+        "allow_length_retry": False,
+        "enable_thinking": False,
+    }
 
 
 @pytest.mark.asyncio
@@ -714,8 +800,9 @@ async def test_v2_schema_whitelists_only_discussion_suggestion():
     prompt, kwargs = client.prompts[0]
     assert "讨论建议：围术期密切观察。" in prompt
     assert "不得进入提示词" not in prompt
-    assert kwargs["temperature"] == 0
-    assert kwargs["top_p"] == 1
+    assert kwargs["max_completion_tokens"] == 4096
+    assert "temperature" not in kwargs
+    assert "top_p" not in kwargs
     assert kwargs["enable_thinking"] is False
 
 

@@ -436,10 +436,8 @@ async def evaluate_preop_content_rules(
     try:
         response = await llm_client.generate(
             _prompt(documents, active),
-            max_completion_tokens=900,
+            max_completion_tokens=4096,
             allow_length_retry=False,
-            temperature=0,
-            top_p=1,
             enable_thinking=False,
         )
     except TimeoutError:
@@ -495,11 +493,11 @@ async def evaluate_preop_content_rules(
             api_time=api_time,
         )
     events, event_reason = build_performed_surgery_events(materials)
-    # 事件形成会读取并交叉核对两个来源；证据链必须同时保留，不能只投影
-    # 最终承载事件行的那个来源。
+    # 运行病历仅以正式手术记录形成事件，不能依赖终末阶段才可能形成的
+    # mr_surgery；证据引用也只保留本次实际读取的来源。
     event_refs = tuple(
         ref
-        for source_key in ("surgery_record", "mr_surgery")
+        for source_key in ("surgery_record",)
         for ref in _observation_refs(snapshot, source_key)
     )
     decisions: list[RuleDecision] = []

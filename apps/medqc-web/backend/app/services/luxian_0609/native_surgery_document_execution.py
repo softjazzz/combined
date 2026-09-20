@@ -87,8 +87,8 @@ _TYPED_RULE_SOURCE_KEYS = {
         "rescue_record",
         "presurg_discussion",
     ),
-    "LX0609-078": ("presurg_summary", "surgery_record", "mr_surgery"),
-    "LX0609-079": ("presurg_discussion", "surgery_record", "mr_surgery"),
+    "LX0609-078": ("presurg_summary", "surgery_record"),
+    "LX0609-079": ("presurg_discussion", "surgery_record"),
 }
 
 _ANESTHESIA_CONSENT_RULE_IDS = frozenset({"LX0609-034", "LX0609-035"})

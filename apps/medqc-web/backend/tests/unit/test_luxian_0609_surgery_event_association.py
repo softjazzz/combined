@@ -79,7 +79,7 @@ def test_composite_components_on_one_natural_day_are_one_event() -> None:
     assert count_associated_performed_surgery_events(materials) == (1, "")
 
 
-def test_duplicate_time_shell_is_removed_only_when_substantive_copy_exists() -> None:
+def test_running_event_builder_does_not_use_mr_anchor_to_remove_different_time_shell() -> None:
     materials = _Materials(
         surgery_records=(
             _record(
@@ -112,7 +112,7 @@ def test_duplicate_time_shell_is_removed_only_when_substantive_copy_exists() -> 
 
     assert count_associated_performed_surgery_events(materials) == (1, "")
     events, reason = build_performed_surgery_events(materials)
-    assert reason == "" and events is not None and len(events) == 1
+    assert reason == "" and events is not None and len(events) == 2
 
 
 def test_prefixed_continuous_procedure_clause_matches_one_surgery() -> None:
@@ -221,7 +221,7 @@ def test_event_indexes_follow_reliable_start_time_not_input_order() -> None:
     ]
 
 
-def test_cross_source_event_set_mismatch_is_not_silently_preferred() -> None:
+def test_running_event_builder_uses_formal_records_without_mr_cross_check() -> None:
     materials = _Materials(
         surgery_records=(
             _record(
@@ -243,7 +243,9 @@ def test_cross_source_event_set_mismatch_is_not_silently_preferred() -> None:
             ),
         ),
     )
-    assert build_performed_surgery_events(materials) == (None, "association_failed")
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == "" and events is not None and len(events) == 1
+    assert events[0].surgery_name == "腹腔镜胆囊切除术"
 
 
 def test_one_formal_record_and_same_day_components_build_one_event() -> None:
@@ -272,7 +274,7 @@ def test_one_formal_record_and_same_day_components_build_one_event() -> None:
     assert reason == "" and events is not None and len(events) == 1
 
 
-def test_same_day_unrelated_mr_surgery_is_not_treated_as_composite() -> None:
+def test_running_event_builder_does_not_wait_for_mr_components() -> None:
     materials = _Materials(
         surgery_records=(
             _record(
@@ -294,10 +296,8 @@ def test_same_day_unrelated_mr_surgery_is_not_treated_as_composite() -> None:
             ),
         ),
     )
-    assert build_performed_surgery_events(materials) == (
-        None,
-        "association_failed",
-    )
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == "" and events is not None and len(events) == 1
 
 
 def test_same_name_rows_at_different_times_are_not_time_shell_duplicates() -> None:
@@ -321,7 +321,7 @@ def test_same_name_rows_at_different_times_are_not_time_shell_duplicates() -> No
     assert reason == "" and events is not None and len(events) == 2
 
 
-def test_later_sparse_same_name_event_is_not_removed_by_first_event_mr_anchor() -> None:
+def test_later_sparse_same_name_event_is_retained_without_mr_dependency() -> None:
     materials = _Materials(
         surgery_records=(
             _record(
@@ -349,10 +349,34 @@ def test_later_sparse_same_name_event_is_not_removed_by_first_event_mr_anchor() 
             ),
         ),
     )
-    assert build_performed_surgery_events(materials) == (
-        None,
-        "association_failed",
+    events, reason = build_performed_surgery_events(materials)
+    assert reason == "" and events is not None and len(events) == 2
+
+
+def test_running_event_builder_never_reads_mr_surgery() -> None:
+    class _RunningMaterials(_Materials):
+        def rows(self, source_key: str):
+            if source_key == "mr_surgery":
+                raise AssertionError("running preop rules must not read mr_surgery")
+            return super().rows(source_key)
+
+    events, reason = build_performed_surgery_events(
+        _RunningMaterials(
+            surgery_records=(
+                _record(
+                    document_id="first",
+                    name="腹腔镜胆囊切除术",
+                    begin="2026-01-01 08:00:00+08:00",
+                ),
+                _record(
+                    document_id="second",
+                    name="腹腔镜阑尾切除术",
+                    begin="2026-01-02 08:00:00+08:00",
+                ),
+            )
+        )
     )
+    assert reason == "" and events is not None and len(events) == 2
 
 
 @pytest.mark.parametrize("placeholder", ("无", "无。", "-", "不详", "未记录"))

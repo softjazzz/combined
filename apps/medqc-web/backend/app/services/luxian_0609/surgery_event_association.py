@@ -190,16 +190,13 @@ def count_associated_performed_surgery_events(
 def build_performed_surgery_events(
     materials: Luxian0609EvidenceMaterialStore,
 ) -> tuple[tuple[SurgeryEvent, ...] | None, str]:
-    """形成术前文书关联所需的规范化已实施手术事件。
+    """仅以运行期正式手术记录形成术前文书关联事件。
 
-    术前文书没有可用的手术外键时，不能把两种来源混成另一套事实链。
-    因此优先采用已实施且去除时间壳后的 ``surgery_record``；只有该来源
-    未产生事件时才回退到 ``mr_surgery``。本函数不改变既有计数器的跨源
-    严格双射语义。
+    ``mr_surgery`` 通常在终末病案阶段才形成，运行病历质控不能等待或依赖
+    该来源。这里仅使用已实施且去除同时间重复壳的 ``surgery_record``；
+    跨来源计数仍由 ``count_associated_performed_surgery_events`` 独立负责。
     """
 
-    surgery_records: tuple[Mapping[str, Any], ...] = ()
-    record_reason = ""
     try:
         rows = tuple(materials.rows("surgery_record"))
         performed = tuple(
@@ -212,54 +209,16 @@ def build_performed_surgery_events(
         )
         if deduplicated is None:
             return None, "association_failed"
-        surgery_records = deduplicated
-    except EvidenceMaterialTruncated:
-        # 正式手术记录截断时，mr_surgery 无法证明不存在被截掉的另一台手术。
-        return None, "source_truncated"
-    except EvidenceMaterialUnavailable:
-        record_reason = "source_unavailable"
-    mr_surgeries: tuple[Mapping[str, Any], ...] = ()
-    try:
-        rows = tuple(materials.rows("mr_surgery"))
-        performed = tuple(
-            row
-            for row in rows
-            if has_qualified_traditional_surgery_row(row)
-            and has_trusted_performed_surgery(source_key="mr_surgery", row=row)
-        )
-        deduplicated = _deduplicated_source_events("mr_surgery", performed)
-        if deduplicated is None:
-            return None, "association_failed"
-        mr_surgeries = deduplicated
     except EvidenceMaterialTruncated:
         return None, "source_truncated"
     except EvidenceMaterialUnavailable:
-        return (None, record_reason or "source_unavailable")
-    if surgery_records and mr_surgeries:
-        surgery_records = _remove_confirmed_unmatched_sparse_time_shells(
-            surgery_records, mr_surgeries
-        )
-        if not (
-            _has_strict_cross_source_bijection(surgery_records, mr_surgeries)
-            or _is_linkable_single_composite_event(surgery_records, mr_surgeries)
-        ):
-            return None, "association_failed"
-    if surgery_records:
-        return (
-            tuple(
-                SurgeryEvent(event_index=index, source_key="surgery_record", row=row)
-                for index, row in enumerate(
-                    _ordered_event_rows("surgery_record", surgery_records), start=1
-                )
-            ),
-            "",
-        )
+        return None, "source_unavailable"
     return (
-            tuple(
-                SurgeryEvent(event_index=index, source_key="mr_surgery", row=row)
-                for index, row in enumerate(
-                    _ordered_event_rows("mr_surgery", deduplicated), start=1
-                )
+        tuple(
+            SurgeryEvent(event_index=index, source_key="surgery_record", row=row)
+            for index, row in enumerate(
+                _ordered_event_rows("surgery_record", deduplicated), start=1
+            )
         ),
         "",
     )
