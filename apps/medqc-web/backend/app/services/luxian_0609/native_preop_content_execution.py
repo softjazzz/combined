@@ -154,12 +154,6 @@ def _source_text(source: str, row: Mapping[str, Any]) -> str:
         # 人员、患者标识等）交给模型。
         if suggestion := _discussion_suggestion(row.get("v2_schema")):
             values.append(f"讨论建议：{suggestion}")
-        # ``physician_sign`` 只有在源行明确提供时才是可核验内容。实际 CDM
-        # 讨论来源可能没有这个字段；``submitter`` 不得替代记录者签名。
-        if "physician_sign" in row and (
-            signature := clean_text(row.get("physician_sign"))
-        ):
-            values.append(f"记录者签名：{signature}")
     return "\n".join(values)
 
 
@@ -186,6 +180,12 @@ def _substantive(source: str, row: Mapping[str, Any]) -> str:
 
 def _document_id(row: Mapping[str, Any]) -> str:
     return clean_text(row.get("document_id"))
+
+
+def _has_structured_recorder_signature(row: Mapping[str, Any]) -> bool:
+    """客户确认 submitter 即术前讨论记录者的电子签名。"""
+
+    return bool(clean_text(row.get("submitter")))
 
 
 def _prompt(documents: Sequence[tuple[str, str, str]], selected: Sequence[str]) -> str:
@@ -384,28 +384,22 @@ async def evaluate_preop_content_rules(
             decisions.append(terminal[rule])
             continue
         missing: list[str] = []
-        unknown: list[str] = []
         refs = tuple(ref for ref, _, _ in records[rule])
         for _ref, row, _text in records[rule]:
             values = parsed[(RULE_SOURCES[rule], _document_id(row))]
             for field in RULE_FIELDS[rule]:
-                if values.get(field) is not None:
-                    continue
-                # CDM 讨论表没有可用的 ``physician_sign`` 时，不能把源字段
-                # 缺失误判为病历未签名；只有源行明示该字段为空才是明确缺项。
                 if (
                     rule == "LX0609-079"
                     and field == "recorder_signature"
-                    and "physician_sign" not in row
+                    and _has_structured_recorder_signature(row)
                 ):
-                    unknown.append(field)
-                else:
-                    missing.append(field)
+                    continue
+                if values.get(field) is not None:
+                    continue
+                missing.append(field)
         status = (
             "non_compliant"
             if missing
-            else "data_gap"
-            if unknown
             else "compliant"
         )
         decisions.append(
@@ -415,8 +409,6 @@ async def evaluate_preop_content_rules(
                 status,
                 "requirement_violated"
                 if missing
-                else "source_readiness_unproven"
-                if unknown
                 else "requirement_satisfied",
                 refs,
             )

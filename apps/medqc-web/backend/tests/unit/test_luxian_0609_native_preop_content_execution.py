@@ -84,7 +84,7 @@ async def test_both_rules_share_one_call_and_missing_is_per_document():
     session = _session(
         summary=({"document_id": "summary-1", "record_content": summary_text},),
         discussion=(
-            {"document_id": "discussion-1", "record_content": discussion_text, "physician_sign": ""},
+            {"document_id": "discussion-1", "record_content": discussion_text},
         ),
     )
     complete_summary = {
@@ -231,7 +231,7 @@ async def test_discussion_structured_fields_are_not_treated_as_blank_document():
                 "host_name": "王主任",
                 "host_summary": "同意手术方案。",
                 "discuss_staff": "李医生 主治医师",
-                "physician_sign": "赵医生",
+                "submitter": "赵医生",
                 "record_time": "2026-01-01 08:00:00",
             },
         )
@@ -253,7 +253,7 @@ async def test_discussion_structured_fields_are_not_treated_as_blank_document():
             "participants_with_titles": "参加讨论者：李医生 主治医师",
             "chair_summary": "主持人小结：同意手术方案。",
             "discussion_date": "讨论日期：2026-01-01 08:00:00",
-            "recorder_signature": "记录者签名：赵医生",
+            "recorder_signature": None,
         }
     )
     client = _Client(
@@ -272,13 +272,13 @@ async def test_discussion_structured_fields_are_not_treated_as_blank_document():
         llm_client=client,
     )
     assert result.decisions[0].qc_direction.value == "defect"
+    assert "recorder_signature" not in dict(result.customer_display_facts)["LX0609-079"][
+        "missing_fields"
+    ]
     assert result.llm_call_count == 1 and client.prompts
 
 
-_MISSING = object()
-
-
-def _structured_discussion(*, physician_sign_marker=_MISSING, v2_schema=None):
+def _structured_discussion(*, submitter="王标", v2_schema=None):
     row = {
         "document_id": "discussion-structured",
         "record_content": (
@@ -289,10 +289,8 @@ def _structured_discussion(*, physician_sign_marker=_MISSING, v2_schema=None):
         "host_summary": "同意上述手术方案。",
         "discuss_staff": "李医生 主治医师",
         "record_time": "2026-01-01 08:00:00",
-        "submitter": "不应作为记录者签名",
+        "submitter": submitter,
     }
-    if physician_sign_marker is not _MISSING:
-        row["physician_sign"] = physician_sign_marker
     if v2_schema is not None:
         row["v2_schema"] = v2_schema
     return row
@@ -313,8 +311,8 @@ def _complete_discussion_items(signature):
 
 
 @pytest.mark.asyncio
-async def test_missing_signature_source_is_data_gap_not_non_compliant():
-    row = _structured_discussion(physician_sign_marker=_MISSING)
+async def test_submitter_is_deterministic_recorder_signature_when_model_returns_null():
+    row = _structured_discussion(submitter="王标")
     client = _Client(
         _payload(
             {
@@ -333,16 +331,47 @@ async def test_missing_signature_source_is_data_gap_not_non_compliant():
     )
     decision = result.decisions[0]
     assert (decision.evidence_state.value, decision.qc_direction.value) == (
-        "data_gap",
-        "unknown",
+        "sufficient",
+        "satisfied",
     )
-    assert decision.reason_code == "source_readiness_unproven"
-    assert "不应作为记录者签名" not in client.prompts[0][0]
+    assert decision.reason_code == "requirement_satisfied"
+    assert dict(result.customer_display_facts)["LX0609-079"]["missing_fields"] == []
 
 
 @pytest.mark.asyncio
-async def test_explicit_blank_signature_is_non_compliant():
-    row = _structured_discussion(physician_sign_marker="")
+async def test_host_summary_signature_satisfies_when_submitter_is_empty():
+    row = _structured_discussion(
+        submitter="",
+        v2_schema=None,
+    )
+    row["host_summary"] = "同意上述手术方案。记录医师签名：赵医生。"
+    client = _Client(
+        _payload(
+            {
+                "document_id": "discussion-structured",
+                "source_type": "presurg_discussion",
+                "items": _complete_discussion_items("记录医师签名：赵医生"),
+            }
+        )
+    )
+    session = _session(discussion=(row,))
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-079",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=client,
+    )
+    decision = result.decisions[0]
+    assert (decision.evidence_state.value, decision.qc_direction.value) == (
+        "sufficient",
+        "satisfied",
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_submitter_and_body_signature_is_non_compliant():
+    row = _structured_discussion(submitter="")
+    row["submitter_id"] = "0446"
     client = _Client(
         _payload(
             {
@@ -359,7 +388,12 @@ async def test_explicit_blank_signature_is_non_compliant():
         materials=session.materials,
         llm_client=client,
     )
-    assert result.decisions[0].qc_direction.value == "defect"
+    decision = result.decisions[0]
+    assert (decision.evidence_state.value, decision.qc_direction.value) == (
+        "sufficient",
+        "defect",
+    )
+    assert decision.reason_code == "requirement_violated"
     assert dict(result.customer_display_facts)["LX0609-079"]["missing_fields"] == [
         "recorder_signature"
     ]
@@ -368,7 +402,7 @@ async def test_explicit_blank_signature_is_non_compliant():
 @pytest.mark.asyncio
 async def test_v2_schema_whitelists_only_discussion_suggestion():
     row = _structured_discussion(
-        physician_sign_marker="赵医生",
+        submitter="赵医生",
         v2_schema={
             "discuss_suggestion": "围术期密切观察。",
             "patient_name": "不得进入提示词",
@@ -402,7 +436,7 @@ async def test_v2_schema_whitelists_only_discussion_suggestion():
 @pytest.mark.asyncio
 async def test_json_v2_schema_still_whitelists_only_discussion_suggestion():
     row = _structured_discussion(
-        physician_sign_marker="赵医生",
+        submitter="赵医生",
         v2_schema='{"discuss_suggestion":"术后观察。","patient_name":"不得进入提示词"}',
     )
     client = _Client(
