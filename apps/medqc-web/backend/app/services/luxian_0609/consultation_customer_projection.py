@@ -173,6 +173,9 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
     allowed_relation_states = (
         {
             "specific_execution",
+            "execution_missing_or_generic",
+            "not_triggered",
+            # 兼容历史已保存结果；新执行器不再产出以下两个旧状态。
             "generic_or_copied_execution",
             "execution_record_absent",
             "source_incomplete",

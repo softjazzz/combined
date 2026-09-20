@@ -958,9 +958,12 @@ def test_surviving_consultation_rule_keeps_structured_action() -> None:
     assert result["status"] == "non_compliant"
     assert "会诊意见按会诊执行记录正文语义提取" in result["findings"]
     assert "会诊意见按会诊执行记录正文语义提取" in result["evidence"]
+    assert "照抄" not in result["findings"]
+    assert "照抄" not in result["evidence"]
+    assert "照抄" not in result["suggestion"]
     for section in ("修改对象：", "需要补充：", "推荐写法：", "注意事项："):
         assert section in result["suggestion"]
-    assert "请在会诊意见执行记录中归纳具体措施" in result["suggestion"]
+    assert "请在会诊意见执行记录中补充具体执行措施" in result["suggestion"]
 
 
 DEFINED_RULE_IDS = tuple(

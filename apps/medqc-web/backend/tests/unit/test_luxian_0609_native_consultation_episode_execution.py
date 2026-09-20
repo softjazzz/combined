@@ -946,7 +946,7 @@ def _coverage_outcome_inputs(count: int):
     return model_episode, recommendations
 
 
-def test_023_high_specific_is_not_dragged_unknown_by_low_ambiguous_trace():
+def test_023_specific_and_unknown_cannot_be_declared_fully_compliant():
     model_episode, completed = _coverage_outcome_inputs(2)
     assessments = (
         _coverage_outcome_assessment(
@@ -962,18 +962,17 @@ def test_023_high_specific_is_not_dragged_unknown_by_low_ambiguous_trace():
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
-    ) == ("compliant", "requirement_satisfied")
+    ) == ("data_gap", "linkage_unresolved")
 
 
-@pytest.mark.parametrize("trace_state", ("generic_trace", "copied_opinion"))
-def test_023_high_generic_or_copy_remains_non_compliant(trace_state):
+def test_023_high_generic_remains_non_compliant():
     model_episode, completed = _coverage_outcome_inputs(2)
     assessments = (
         _coverage_outcome_assessment(
             "consultation_record-1#r1", "specific_trace", "high"
         ),
         _coverage_outcome_assessment(
-            "consultation_record-1#r2", trace_state, "high"
+            "consultation_record-1#r2", "generic_trace", "high"
         ),
     )
 
@@ -985,13 +984,9 @@ def test_023_high_generic_or_copy_remains_non_compliant(trace_state):
     ) == ("non_compliant", "requirement_violated")
 
 
-@pytest.mark.parametrize("trace_state", ("generic_trace", "copied_opinion"))
 @pytest.mark.parametrize("confidence", ("medium", "low"))
-def test_023_vague_or_copied_trace_fails_regardless_of_confidence(
-    trace_state,
-    confidence,
-):
-    """023 只评价已找到的痕迹是否规范，不再按模型自报置信度退回不确定。"""
+def test_023_generic_trace_fails_regardless_of_confidence(confidence):
+    """023 已找到的笼统记录属于确定缺陷，不因模型信心值抹掉。"""
 
     model_episode, completed = _coverage_outcome_inputs(2)
     assessments = (
@@ -999,7 +994,7 @@ def test_023_vague_or_copied_trace_fails_regardless_of_confidence(
             "consultation_record-1#r1", "specific_trace", "high"
         ),
         _coverage_outcome_assessment(
-            "consultation_record-1#r2", trace_state, confidence
+            "consultation_record-1#r2", "generic_trace", confidence
         ),
     )
 
@@ -1011,8 +1006,8 @@ def test_023_vague_or_copied_trace_fails_regardless_of_confidence(
     ) == ("non_compliant", "requirement_violated")
 
 
-def test_023_all_no_trace_is_not_applicable_regardless_of_confidence():
-    """没有任何已找到的执行痕迹时 023 不适用，不再产出不确定。"""
+def test_023_any_confirmed_no_trace_is_non_compliant():
+    """来源完整时，任一建议确认无执行证据即判不合规。"""
 
     model_episode, completed = _coverage_outcome_inputs(2)
     assessments = (
@@ -1029,7 +1024,39 @@ def test_023_all_no_trace_is_not_applicable_regardless_of_confidence():
         episodes=(model_episode,),
         completed_recommendations=completed,
         assessments=assessments,
-    ) == ("not_applicable", "trigger_absent_complete")
+    ) == ("non_compliant", "requirement_violated")
+
+
+def test_023_specific_and_missing_is_non_compliant():
+    model_episode, completed = _coverage_outcome_inputs(2)
+    assessments = (
+        _coverage_outcome_assessment(
+            "consultation_record-1#r1", "specific_trace", "high"
+        ),
+        _coverage_outcome_assessment(
+            "consultation_record-1#r2", "no_trace", "high"
+        ),
+    )
+
+    assert episode._execution_outcome(
+        "LX0609-023",
+        episodes=(model_episode,),
+        completed_recommendations=completed,
+        assessments=assessments,
+    ) == ("non_compliant", "requirement_violated")
+
+
+def test_023_missing_evidence_with_incomplete_source_is_data_gap():
+    completed = (_coverage_completed_recommendation(),)
+    assessment = _coverage_outcome_assessment(
+        "consultation_record-1#r1", "no_trace", "high"
+    )
+
+    assert episode._execution_quality_outcome(
+        assessments=(assessment,),
+        completed_recommendations=completed,
+        source_incomplete_keys=frozenset({"exam_item_report"}),
+    ) == ("data_gap", "candidate_scope_incomplete")
 
 
 @pytest.mark.parametrize(
@@ -1037,16 +1064,16 @@ def test_023_all_no_trace_is_not_applicable_regardless_of_confidence():
     (
         ("linked_specific", "high", ("compliant", "requirement_satisfied")),
         ("linked_vague", "high", ("non_compliant", "requirement_violated")),
-        # 中/低置信关联不是“已经找到”的执行痕迹，023 不适用而不是不确定。
+        # 中/低置信关联不能证明建议已有执行证据。
         (
             "linked_specific",
             "low",
-            ("not_applicable", "trigger_absent_complete"),
+            ("data_gap", "linkage_unresolved"),
         ),
         (
             "linked_specific",
             "medium",
-            ("not_applicable", "trigger_absent_complete"),
+            ("data_gap", "linkage_unresolved"),
         ),
     ),
 )
@@ -1070,31 +1097,31 @@ def test_023_structured_order_match_respects_specificity_and_confidence(
     assert episode._execution_quality_outcome(
         assessments=(assessment,),
         completed_recommendations=completed,
-        course_source_incomplete=False,
+        source_incomplete_keys=frozenset(),
     ) == expected
 
 
 @pytest.mark.parametrize(
     ("structured_rows", "expected"),
     (
-        # C29 形态：只有中置信结构化关联时，尚未确认存在可评价痕迹。
+        # C29 形态：只有中置信结构化关联时，尚未确认存在执行证据。
         (
             (("medium", "linked_specific"),),
-            ("not_applicable", "trigger_absent_complete"),
+            ("data_gap", "linkage_unresolved"),
         ),
         # 低置信 absent 与中置信 linked_specific 混合，同样没有高置信痕迹。
         (
             (("low", "absent"), ("medium", "linked_specific")),
-            ("not_applicable", "trigger_absent_complete"),
+            ("data_gap", "linkage_unresolved"),
         ),
-        # 已确认的高置信具体痕迹不被中/低置信项抹掉。
+        # 仍有建议处于中/低置信状态时，不能宣称全部建议均有具体证据。
         (
             (
                 ("high", "linked_specific"),
                 ("medium", "linked_vague"),
                 ("low", "linked_specific"),
             ),
-            ("compliant", "requirement_satisfied"),
+            ("data_gap", "linkage_unresolved"),
         ),
         # 高置信笼统痕迹不因同时存在中置信具体项而降级。
         (
@@ -1139,7 +1166,7 @@ def test_023_structured_execution_uses_high_confidence_links_only(
     assert episode._execution_quality_outcome(
         assessments=assessments,
         completed_recommendations=completed,
-        course_source_incomplete=False,
+        source_incomplete_keys=frozenset(),
     ) == expected
 
 
@@ -2293,11 +2320,11 @@ async def test_same_document_generic_execution_is_not_a_020_execution_record(mon
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "not_applicable",
+        "non_compliant",
     ]
     assert [item["metadata"]["reason_code"] for item in result.results] == [
         "requirement_violated",
-        "trigger_absent_complete",
+        "requirement_violated",
     ]
     assert result.llm_call_count == 1
 
@@ -2392,7 +2419,10 @@ async def test_two_recommendations_one_specific_and_one_absent_is_020_non_compli
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
     assert result.llm_call_count == 2
     assert "recommendation_ref" in client.prompts[1]
     assert "source_quote" in client.prompts[1]
@@ -2426,7 +2456,7 @@ async def test_execution_prompt_forbids_planned_symptom_only_and_unrelated_treat
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
     assert "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗" in client.prompts[1]
 
 
@@ -4055,9 +4085,9 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
     [
         ("linked_specific", ("compliant", "compliant")),
         ("linked_vague", ("compliant", "non_compliant")),
-        ("absent", ("non_compliant", "not_applicable")),
-        # 023 不再产出不确定：该建议没有可评价的已找到痕迹时判不适用。
-        ("unknown", ("uncertain", "not_applicable")),
+        ("absent", ("non_compliant", "non_compliant")),
+        # 无法可靠判断是否存在执行证据时，023 不能宣称合规或不合规。
+        ("unknown", ("uncertain", "data_gap")),
     ],
 )
 async def test_020_023_execution_state_mapping(monkeypatch, execution_state, expected):
@@ -4321,7 +4351,7 @@ async def test_020_023_rechecks_only_low_confidence_execution_assessment_once(
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "compliant",
+        "non_compliant",
     ]
     assert result.llm_call_count == 3
     assert "consultation_record-1#r1" in client.prompts[2]
@@ -4622,7 +4652,7 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
     ) in client.prompts[1]
     display = dict(result.customer_display_facts)["LX0609-023"]
     assert display["relation_state"] == (
-        "specific_execution" if is_specific else "generic_or_copied_execution"
+        "specific_execution" if is_specific else "execution_missing_or_generic"
     )
     assert display[
         "specific_execution_count" if is_specific else "generic_execution_count"
@@ -4639,7 +4669,7 @@ async def test_023_order_only_execution_is_judged_without_any_course_candidate(
 async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
     monkeypatch,
 ):
-    """会诊前医嘱不是会诊后的执行痕迹，023保持不适用且不发起二阶段调用。"""
+    """会诊前医嘱不是会诊后的执行证据，023判未落实且不发起二阶段调用。"""
 
     source_rows = _no_course_source_rows(
         consultation_text="会诊意见：建议加强抗感染治疗。",
@@ -4671,7 +4701,7 @@ async def test_023_pre_consultation_order_only_candidate_is_not_an_execution(
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "not_applicable",
+        "non_compliant",
     ]
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
@@ -5318,7 +5348,7 @@ def test_020_023_display_limits_each_recommendation_refs_without_changing_semant
     safe_by_rule = dict(safe_facts)
     assert safe_by_rule["LX0609-020"]["relation_state"] == "association_unresolved"
     assert safe_by_rule["LX0609-023"]["relation_state"] == (
-        "generic_or_copied_execution"
+        "execution_missing_or_generic"
     )
     assert all(
         [
@@ -6082,7 +6112,7 @@ async def test_empty_course_artifact_does_not_make_020_source_incomplete(
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "not_applicable",
+        "non_compliant",
     ]
     assert result.llm_call_count == 2
 
@@ -6156,7 +6186,7 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
     assert "无关治疗或同部位一般治疗都不是已经执行" in client.prompts[1]
 
 
@@ -6233,8 +6263,7 @@ async def test_confirmed_missing_execution_is_not_hidden_by_another_unknown_reco
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        # 023 只评价已找到的痕迹；另一条建议无可评价痕迹时不适用。
-        "not_applicable",
+        "non_compliant",
     ]
 
 
@@ -6326,7 +6355,10 @@ async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stag
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
     assert result.llm_call_count == 1
 
 
@@ -6669,7 +6701,7 @@ async def test_020_023_window_filters_post_discharge_candidate_as_complete_absen
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
 
@@ -7116,8 +7148,7 @@ async def test_stage_two_shape_retry_does_not_add_missing_supplement_or_recheck(
     assert len(client.prompts) == 3
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        # 023 判据只看已找到的痕迹：已找到的痕迹为具体即符合。
-        "requirement_satisfied",
+        "linkage_unresolved",
     ]
     facts = dict(result.customer_display_facts)["LX0609-020"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
@@ -7155,7 +7186,10 @@ async def test_stage_two_shape_retry_skips_low_confidence_recheck():
     assert result.llm_call_count == 3
     assert len(client.prompts) == 3
     # 020 看到痕迹即成立；023 的已找到痕迹为具体即符合，均不再退回不确定。
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert [item["status"] for item in result.results] == [
+        "compliant",
+        "data_gap",
+    ]
 
 
 @pytest.mark.asyncio
@@ -7319,7 +7353,7 @@ async def test_020_023_omission_retry_preserves_parsed_and_marks_remaining_unkno
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "requirement_satisfied",
+        "linkage_unresolved",
     ]
     assert result.llm_call_count == 3
     facts = dict(result.customer_display_facts)["LX0609-020"]
@@ -7391,7 +7425,7 @@ async def test_020_023_invalid_or_failed_omission_retry_does_not_overwrite_first
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "requirement_satisfied",
+        "linkage_unresolved",
     ]
     assert result.llm_call_count == 3
     facts = dict(result.customer_display_facts)["LX0609-020"]
@@ -7579,7 +7613,7 @@ async def test_020_023_misplaced_course_ref_only_marks_its_recommendation_unknow
 
     assert [item.reason_code for item in result.decisions] == [
         "semantic_low_confidence",
-        "requirement_satisfied",
+        "linkage_unresolved",
     ]
     facts = dict(result.customer_display_facts)["LX0609-020"]
     assert [item["execution_state"] for item in facts["recommendation_results"]] == [
@@ -8222,7 +8256,7 @@ async def test_valid_stage_one_output_is_frozen_then_reused_without_model_call(
     assert len(sorted(tmp_path.glob("*.json"))) == 1
 
 
-# --- S2：照抄阈值由 Python 文本比对判定，不占用模型调用 ---
+# --- 023 不再判断照抄，只核对执行证据是否存在且具体 ---
 
 
 def _copied_opinion_source_rows(*, opinion: str, course: str):
@@ -8252,8 +8286,10 @@ def _copied_opinion_client(*, recommendation, execution_payload):
 
 
 @pytest.mark.asyncio
-async def test_s2_copied_course_opinion_is_non_compliant_without_adding_trace(monkeypatch):
-    """S2：病程逐字照搬会诊意见即判 023-A；不因此给 020 补出一条执行痕迹。"""
+async def test_repeated_recommendation_text_without_execution_evidence_is_missing(
+    monkeypatch,
+):
+    """相同文本不再触发照抄判据；没有执行证据仍按缺失判不合规。"""
 
     opinion = "建议2周后复查尿常规并复查肝功能"
     source_rows = _copied_opinion_source_rows(
@@ -8293,16 +8329,19 @@ async def test_s2_copied_course_opinion_is_non_compliant_without_adding_trace(mo
     facts = dict(result.customer_display_facts)
     assert facts["LX0609-020"]["generic_execution_count"] == 0
     assert facts["LX0609-020"]["missing_execution_count"] == 1
-    assert facts["LX0609-023"]["generic_execution_count"] == 1
+    assert facts["LX0609-023"]["generic_execution_count"] == 0
+    assert facts["LX0609-023"]["missing_execution_count"] == 1
     assert (
         facts["LX0609-023"]["recommendation_evidence"][0]["execution_state"]
-        == "generic"
+        == "missing"
     )
 
 
 @pytest.mark.asyncio
-async def test_s2_result_bearing_course_sentence_is_not_copied(monkeypatch):
-    """S2 反例：重合片段之外写明本次结果与时间时，不判照抄。"""
+async def test_specific_result_bearing_record_is_compliant_without_copy_comparison(
+    monkeypatch,
+):
+    """找到具体执行结果时直接合规，不再进行文本照抄比较。"""
 
     opinion = "复查免疫固定电泳、抗磷脂酶A2受体抗体检测"
     course = f"2025-07-31 {opinion}，结果未见异常"
@@ -8395,7 +8434,10 @@ async def test_untimed_unrelated_order_does_not_block_absent_test_recommendation
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
     assert result.llm_call_count == 2
     assert untimed_order not in client.prompts[1]
 
@@ -8439,7 +8481,10 @@ async def test_test_recommendation_absent_ignores_incomplete_unrelated_drug_sour
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
 
 
 @pytest.mark.asyncio
@@ -8458,7 +8503,10 @@ async def test_medication_recommendation_absent_is_data_gap_when_drug_source_inc
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "data_gap",
+    ]
 
 
 def test_order_candidates_over_course_limit_remain_available_as_compact_positive_evidence():
@@ -8532,7 +8580,10 @@ async def test_other_recommendation_absent_is_data_gap_when_needed_source_is_inc
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "data_gap",
+    ]
 
 
 @pytest.mark.asyncio
@@ -8555,10 +8606,12 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
     assert {item["metadata"]["reason_code"] for item in result.results} == {
         "requirement_violated",
-        "trigger_absent_complete",
     }
 
 
@@ -8640,7 +8693,10 @@ async def test_structured_non_order_evidence_cannot_replace_course_execution_rec
         evidence_materials=session.materials, evidence_snapshot=session.snapshot,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
 
@@ -8728,7 +8784,7 @@ async def test_structured_exam_with_course_respects_recommendation_time_scope(
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "not_applicable",
+        "non_compliant",
     ]
     assert result.llm_call_count == expected_calls
     assert len(client.prompts) == expected_calls
@@ -8821,7 +8877,7 @@ async def test_later_recommendation_without_post_consultation_course_is_determin
 
     assert [item["status"] for item in result.results] == [
         "non_compliant",
-        "compliant",
+        "data_gap",
     ]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
@@ -9045,7 +9101,10 @@ async def test_out_of_window_candidate_is_not_scope_gap_or_prompt_input(monkeypa
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
     assert result.llm_call_count == 2
     assert outside_text not in client.prompts[1]
 
@@ -9059,7 +9118,10 @@ async def test_complete_empty_candidate_sources_use_absence_without_second_call(
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "non_compliant",
+    ]
     assert result.llm_call_count == 1
 
 

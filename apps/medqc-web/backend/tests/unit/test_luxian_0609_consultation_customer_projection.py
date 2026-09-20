@@ -261,6 +261,59 @@ def test_023_projection_rejects_executor_counts_that_conflict_with_complete_evid
     assert safe_consultation_customer_display_facts(rule_id="LX0609-023", raw=raw) is None
 
 
+def test_023_projection_accepts_missing_or_generic_relation_state() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 1,
+        "relation_state": "execution_missing_or_generic",
+        "source_document_ids": ["CONSULT-1"],
+        "recommendation_evidence": [
+            {
+                "episode_index": 1,
+                "recommendation_index": 1,
+                "execution_state": "missing",
+                "opinion_refs": [],
+                "execution_refs": [],
+            }
+        ],
+    }
+
+    facts = safe_consultation_customer_display_facts(
+        rule_id="LX0609-023", raw=raw
+    )
+
+    assert facts is not None
+    assert facts["relation_state"] == "execution_missing_or_generic"
+    assert facts["missing_execution_count"] == 1
+    assert facts["recommendation_evidence"][0]["execution_state"] == "missing"
+
+
+def test_023_projection_accepts_no_triggered_recommendation_set() -> None:
+    raw = {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 0,
+        "recommendation_count": 0,
+        "specific_execution_count": 0,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "not_triggered",
+        "source_document_ids": [],
+        "recommendation_evidence": [],
+    }
+
+    facts = safe_consultation_customer_display_facts(
+        rule_id="LX0609-023", raw=raw
+    )
+
+    assert facts is not None
+    assert facts["relation_state"] == "not_triggered"
+    assert facts["recommendation_count"] == 0
+
+
 def test_023_legacy_projection_strips_private_document_ids() -> None:
     raw = {
         "failure_kind": "consultation_execution_too_generic",

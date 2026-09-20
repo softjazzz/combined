@@ -150,6 +150,8 @@ _EXECUTION_STATES = frozenset({"linked_specific", "linked_vague", "absent", "unk
 _EXECUTION_RECORD_STATES = frozenset({
     "specific_trace",
     "generic_trace",
+    # 兼容旧模型响应和冻结产物；解析后统一归并为 generic_trace，
+    # 当前 023 不再独立判断“照抄会诊意见”。
     "copied_opinion",
     "no_trace",
     "unknown",
@@ -253,16 +255,6 @@ _EMBEDDED_DECISION_DEFER_PATTERN = re.compile(
     r"(?:患者|家属).{0,16}(?:拒绝|不同意|暂不|暂缓|放弃|决定不|要求不)"
 )
 _TEXT_NORMALIZE_PATTERN = re.compile(r"[^\u4e00-\u9fffA-Za-z0-9]+")
-# S2 照抄阈值（我方口径标准汇编第三节 S2）：连续重合 ≥12 个汉字且占建议
-# 原文 ≥50% 即判 023-A 照抄。纯文本比对，不依赖模型选择了哪条痕迹。
-_COPIED_OVERLAP_MIN_CHARS = 12
-_COPIED_OVERLAP_RATIO = 0.5
-# S2 反例标记：病程写出本次执行的结果、报告或时间，说明它不是单纯照抄。
-_RESULT_OR_TIME_PATTERN = re.compile(
-    r"(?:未见异常|未见明显异常|阴性|阳性|回报|结果|报告已|已回报|"
-    r"复查(?:后|结果)|"
-    r"\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2})"
-)
 _EVALUATOR_VERSION = "consultation-episode-v2"
 _SIGNATURE_LABEL = (
     r"(?:(?:患者|家属|会诊(?:医师|医生)?|申请(?:医师|医生)?|"
@@ -442,7 +434,7 @@ class _ExecutionAssessment:
     recommendation_coverage_state: str = "unknown"
     coverage_confidence: str = "low"
     uncovered_source_quotes: tuple[str, ...] = ()
-    # 023 命中原因（023-A 照抄 / 023-B 笼统遵嘱 / 023-C 未写明具体执行）
+    # 023 命中原因（执行记录笼统 / 未找到执行证据）
     hit_rules: tuple[str, ...] = ()
     needs_manual_review: bool = False
 
@@ -2072,8 +2064,7 @@ def _episode_recommendations_are_grounded(
     """已解析建议的 source_quote 必须能由该建议所属意见文书逐字支持。
 
     问题证据：第一阶段模型可能给出 schema 完全合法、但在意见原文中并不存在
-    的摘录。S2 的照抄阈值直接用 source_quote 与病程文本做最大连续重合比对，
-    S6 又要求“声明痕迹必须逐字落地”，两者都建立在摘录可复现之上；一旦把
+    的摘录。后续逐建议执行核对和客户证据定位都建立在摘录可复现之上；一旦把
     无法落地的摘录冻结下来，后续所有判定都继承这个伪造证据，且因为冻结命中
     不再调用模型，错误会长期固化。
 
@@ -2287,7 +2278,6 @@ def _consultation_execution_display_facts(
     assessments: Sequence[_ExecutionAssessment] | None,
     documents: Sequence[Mapping[str, str]],
     candidates: Sequence[_CandidateDocument] = (),
-    copied_opinion_refs: frozenset[str] = frozenset(),
 ) -> Mapping[str, Any]:
     """解释020的关联结果或023的执行质量结果。"""
 
@@ -2301,8 +2291,8 @@ def _consultation_execution_display_facts(
     }
     relation_by_status_023 = {
         "compliant": "specific_execution",
-        "non_compliant": "generic_or_copied_execution",
-        "not_applicable": "execution_record_absent",
+        "non_compliant": "execution_missing_or_generic",
+        "not_applicable": "not_triggered",
         "data_gap": "source_incomplete",
         "evaluation_unknown": "association_unresolved",
         "technical_error": "source_error",
@@ -2375,8 +2365,21 @@ def _consultation_execution_display_facts(
             is_offending = (
                 rule_id == "LX0609-023"
                 and status == "non_compliant"
-                and assessment.execution_record_state
-                in {"generic_trace", "copied_opinion"}
+                and (
+                    assessment.execution_record_state == "generic_trace"
+                    or (
+                        assessment.execution_record_state == "no_trace"
+                        and not assessment.execution_refs
+                    )
+                    or (
+                        assessment.execution_record_state == "no_trace"
+                        and assessment.execution_state == "linked_vague"
+                        and any(
+                            ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
+                            for ref in assessment.execution_refs
+                        )
+                    )
+                )
             )
             recommendation = recommendations_by_ref.get(assessment.recommendation_ref)
             if (
@@ -2405,7 +2408,7 @@ def _consultation_execution_display_facts(
                 if is_offending:
                     offending_refs.append(candidate_ref)
         if offending_refs:
-            # 非合规证据最多保留 8 条，但实际笼统/照抄的会诊及执行文书
+            # 非合规证据最多保留 8 条，但实际缺失/笼统的会诊及执行文书
             # 必须优先保留；其余上下文按原顺序填充，避免末次缺陷被截掉。
             deduplicated: list[dict[str, str]] = []
             seen_refs: set[tuple[str, str]] = set()
@@ -2442,27 +2445,20 @@ def _consultation_execution_display_facts(
         }.values()
     )[:8]
     def _effective_execution_state(item: _CompletedRecommendation) -> str:
-        """逐条展示口径：S2 照抄命中按笼统/照抄呈现，其余沿用已找到的事实。"""
+        """逐条展示每条会诊建议的执行证据是否具体。"""
 
         recommendation_ref = item.recommendation.recommendation_ref
         assessment = assessments_by_recommendation.get(recommendation_ref)
         if assessment is not None:
             if assessment.execution_record_state == "specific_trace":
                 return "specific"
-            if assessment.execution_record_state in {
-                "generic_trace",
-                "copied_opinion",
-            }:
+            if assessment.execution_record_state == "generic_trace":
                 return "generic"
             if (
                 assessment.execution_record_state == "no_trace"
                 and not assessment.execution_refs
             ):
-                return (
-                    "generic"
-                    if recommendation_ref in copied_opinion_refs
-                    else "missing"
-                )
+                return "missing"
             if (
                 assessment.execution_record_state == "no_trace"
                 and assessment.execution_state
@@ -2480,7 +2476,7 @@ def _consultation_execution_display_facts(
                     else "generic"
                 )
             return "unknown"
-        return "generic" if recommendation_ref in copied_opinion_refs else "unknown"
+        return "unknown"
 
     effective_states = tuple(
         _effective_execution_state(item) for item in completed_recommendations
@@ -2827,9 +2823,9 @@ def _execution_prompt(
     ):
         return (
             "你只核对每条会诊建议在后续病程、查房或同一会诊文书内明确闭环决策中的执行痕迹，不得补充病历之外的信息。"
-            "execution_record_state只能是specific_trace/generic_trace/copied_opinion/no_trace/unknown："
+            "execution_record_state只能是specific_trace/generic_trace/no_trace/unknown："
             "specific_trace=明确写出按会诊意见采取的具体措施；generic_trace=仅写遵会诊意见执行或已按建议处理；"
-            "copied_opinion=照抄意见但没有归纳执行情况；no_trace=未见该建议的执行记录痕迹；unknown=无法判断。"
+            "no_trace=未见该建议的执行记录痕迹；unknown=无法判断。"
             + _EXECUTION_TRACE_BOUNDARY_PROMPT +
             "病程明确记载已经给予、已行、已实施的具体治疗、检查、固定、制动或监测措施，可判specific_trace；"
             "属于specific_trace时必须能由所引病程原文直接核实具体执行动作。"
@@ -2841,7 +2837,7 @@ def _execution_prompt(
             "course_overlap_candidate_refs只用于提醒优先核对可能相关的病程，不能单独证明存在执行痕迹；"
             "不得从全局candidate_documents或其他建议复制，也不得按source与序号合成ref。"
             "allowed_candidate_refs为空时必须返回execution_record_state=unknown、trace_refs=[]。"
-            "不得引用会诊申请或会诊意见的ref。specific_trace/generic_trace/copied_opinion必须返回至少一个trace_refs；"
+            "不得引用会诊申请或会诊意见的ref。specific_trace/generic_trace必须返回至少一个trace_refs；"
             "no_trace/unknown必须返回空trace_refs。confidence只能是high/medium/low。"
             "另须判断每条原始会诊建议是否被所选病程trace完整覆盖：recommendation_coverage_state只能是"
             "complete/partial/no_trace/unknown；complete和partial必须有trace_refs，no_trace必须无trace_refs。"
@@ -2858,7 +2854,6 @@ def _execution_prompt(
         "第一步先识别会诊后病程/查房中是否记录会诊意见及执行情况："
         "specific_trace=明确写出按会诊意见采取的具体措施；"
         "generic_trace=仅写遵会诊意见执行/已按建议处理等笼统表述；"
-        "copied_opinion=照抄会诊意见、没有归纳执行情况；"
         "no_trace=未见请会诊执行记录痕迹；unknown=无法判断。"
         + _EXECUTION_TRACE_BOUNDARY_PROMPT +
         "病程明确写出予以、给予、已行或已实施某项具体治疗、检查、固定、制动或监测措施，"
@@ -2884,7 +2879,7 @@ def _execution_prompt(
         "trace_refs和structured_action_refs只能逐字复制本条recommendation的allowed_candidate_refs中的ref；"
         "course_overlap_candidate_refs只用于提醒优先核对可能相关的病程，不能单独证明存在执行痕迹；"
         "不得从全局candidate_documents或其他建议复制，也不得按source与序号合成ref；绝不得引用会诊申请或会诊意见的ref。"
-        "specific_trace/generic_trace/copied_opinion必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
+        "specific_trace/generic_trace必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
         "allowed_candidate_refs为空时必须返回execution_record_state=unknown、execution_state=unknown、"
         "trace_refs=[]、structured_action_refs=[]、execution_quotes=[]。"
         "execution_quotes是可选的辅助摘录；已选择精确trace_refs或structured_action_refs时可以返回空数组。"
@@ -2907,7 +2902,7 @@ def _generic_trace_conflicts_with_completed_action(
     assessment: _ExecutionAssessment,
     candidates: Sequence[_CandidateDocument],
 ) -> bool:
-    if assessment.execution_record_state not in {"generic_trace", "copied_opinion"}:
+    if assessment.execution_record_state != "generic_trace":
         return False
     by_ref = {item.ref: item for item in candidates}
     return any(
@@ -2928,11 +2923,11 @@ def _trace_document_is_planned_only(
     安排，不能当作已经执行。判定只看模型自己选中的候选原文；任一选中候选
     出现明确完成或动作变更即不成立，不做跨文书推断。
 
-    病程直接复述会诊意见原文时属于“照抄意见”，不是尚未发生的安排，仍按
-    笼统执行痕迹处理，因此这里用本条建议原文做排除。
+    病程直接包含建议原文时，仍需根据是否写出已执行动作判断，不能仅凭文本
+    重合把计划性表述当成已执行痕迹，因此这里用本条建议原文做排除。
     """
 
-    if assessment.execution_record_state not in {"generic_trace", "copied_opinion"}:
+    if assessment.execution_record_state != "generic_trace":
         return False
     by_ref = {item.ref: item for item in candidates}
     documents = [by_ref[ref] for ref in assessment.trace_refs if ref in by_ref]
@@ -3133,6 +3128,10 @@ def _parse_executions(
         ):
             parsed.append(_unknown_execution_assessment(recommendation_ref))
             continue
+        if execution_record_state == "copied_opinion":
+            # 兼容旧模型响应；没有上游会诊原始意见时无法独立判断“照抄”，
+            # 只保留其“执行记录不具体”的语义。
+            execution_record_state = "generic_trace"
         refs = refs if isinstance(refs, list) else []
         trace_refs = raw_trace_refs if isinstance(raw_trace_refs, list) else []
         structured_refs = raw_structured_refs if isinstance(raw_structured_refs, list) else []
@@ -3230,7 +3229,7 @@ def _parse_executions(
             else:
                 execution_record_state = "no_trace"
         if (
-            execution_record_state in {"specific_trace", "generic_trace", "copied_opinion"} and not trace_refs
+            execution_record_state in {"specific_trace", "generic_trace"} and not trace_refs
         ) or (
             execution_record_state in {"no_trace", "unknown"} and trace_refs
         ):
@@ -3380,117 +3379,19 @@ def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
     return "evaluation_unknown", "semantic_output_unknown"
 
 
-def _longest_common_substring_length(left: str, right: str) -> int:
-    """S2 照抄阈值使用的连续重合长度；只处理短文本。"""
-
-    if not left or not right:
-        return 0
-    previous = [0] * (len(right) + 1)
-    best = 0
-    for left_index in range(1, len(left) + 1):
-        current = [0] * (len(right) + 1)
-        left_char = left[left_index - 1]
-        for right_index in range(1, len(right) + 1):
-            if left_char == right[right_index - 1]:
-                matched = previous[right_index - 1] + 1
-                current[right_index] = matched
-                if matched > best:
-                    best = matched
-        previous = current
-    return best
-
-
-def _copy_has_independent_result(*, course_text: str, source_quote: str) -> bool:
-    """S2 反例：重合片段之外另有针对本患者的独立事实（本次结果或时间）。
-
-    病程写出本次执行的结果或时间时，即使包含会诊建议的检查名，也不属于照抄。
-    """
-
-    normalized_source = _TEXT_NORMALIZE_PATTERN.sub("", source_quote)
-    for raw_sentence in re.split(r"[。！？\n]", course_text):
-        sentence = raw_sentence.strip()
-        if not sentence:
-            continue
-        normalized_sentence = _TEXT_NORMALIZE_PATTERN.sub("", sentence)
-        if not normalized_sentence:
-            continue
-        overlap = _longest_common_substring_length(
-            normalized_sentence, normalized_source
-        )
-        if overlap < _COPIED_OVERLAP_MIN_CHARS:
-            continue
-        if _RESULT_OR_TIME_PATTERN.search(sentence):
-            return True
-    return False
-
-
-def _standard_copied_opinion_refs(
-    *,
-    completed: Sequence[_CompletedRecommendation],
-    candidates: Sequence[_CandidateDocument],
-    allowed_refs: Mapping[str, frozenset[str]],
-) -> frozenset[str]:
-    """S2：病程连续重合 ≥12 汉字且占建议原文 ≥50% 时判 023-A 照抄。
-
-    照抄只由文本阈值判定，不依赖模型选了哪条痕迹：病程逐字搬用会诊意见
-    就是 023 要抓的缺陷。判定只读取该建议已授权的会诊后病程候选，避免跨
-    文书误判；命中后只影响 023，不新增 trace_refs，因此不改变 020。
-    """
-
-    course_documents = tuple(
-        item
-        for item in candidates
-        if item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
-    )
-    if not course_documents:
-        return frozenset()
-    hits: set[str] = set()
-    for item in completed:
-        source_quote = item.recommendation.source_quote
-        normalized_source = _TEXT_NORMALIZE_PATTERN.sub("", source_quote)
-        if len(normalized_source) < _COPIED_OVERLAP_MIN_CHARS:
-            continue
-        authorized = allowed_refs.get(
-            item.recommendation.recommendation_ref, frozenset()
-        )
-        for document in course_documents:
-            if document.ref not in authorized:
-                continue
-            normalized_course = _TEXT_NORMALIZE_PATTERN.sub("", document.text)
-            if not normalized_course:
-                continue
-            overlap = _longest_common_substring_length(
-                normalized_course, normalized_source
-            )
-            if overlap < _COPIED_OVERLAP_MIN_CHARS:
-                continue
-            if overlap / len(normalized_source) < _COPIED_OVERLAP_RATIO:
-                continue
-            if _copy_has_independent_result(
-                course_text=document.text, source_quote=source_quote
-            ):
-                continue
-            hits.add(item.recommendation.recommendation_ref)
-            break
-    return frozenset(hits)
-
-
 def _every_recommendation_has_trace(
     assessments: Sequence[_ExecutionAssessment] | None,
 ) -> bool:
     """每条建议都已选中受控来源中的执行痕迹。
 
-    020 只核对“会诊后病程是否记录了与该建议对应的执行痕迹”；是否笼统或
-    照抄由 023 单独评价，模型对痕迹具体程度的置信度不改变痕迹是否存在。
+    020 只核对“会诊后病程是否记录了与该建议对应的执行痕迹”；是否具体
+    由 023 单独评价，模型对痕迹具体程度的置信度不改变痕迹是否存在。
     """
 
     return bool(assessments) and all(item.trace_refs for item in assessments)
 
 
-_RECORDED_TRACE_LEVELS = frozenset(
-    {"specific_trace", "generic_trace", "copied_opinion"}
-)
-_VAGUE_TRACE_LEVELS = frozenset({"generic_trace", "copied_opinion"})
+_RECORDED_TRACE_LEVELS = frozenset({"specific_trace", "generic_trace"})
 _ORDER_EXECUTION_REF_PREFIXES = ("inpat_drug_order-", "inpat_nondrug_order-")
 
 
@@ -3498,58 +3399,82 @@ def _execution_quality_outcome(
     *,
     assessments: Sequence[_ExecutionAssessment] | None,
     completed_recommendations: Sequence[_CompletedRecommendation],
-    course_source_incomplete: bool,
-    copied_opinion_refs: frozenset[str] = frozenset(),
+    source_incomplete_keys: frozenset[str],
 ) -> tuple[str, str]:
-    """S1／S5／S6：023 评价已找到的病程或结构化医嘱痕迹是否规范。
+    """023 逐条核对会诊建议是否有具体执行证据。
 
-    023 的评价对象是**已经找到的**执行痕迹：没有任何痕迹时不适用；已找到的
-    痕迹中存在笼统或照抄即不符合；已找到的痕迹全部具体即符合。明确关联到
-    结构化医嘱时，该关联本身也是可评价的具体执行痕迹，但不能替代 020
-    对会诊后病程执行记录的存在性要求。未找到痕迹的建议不参与 023 判罚。
-    结构化医嘱关联只在**高置信**时算“已经找到”：中/低置信关联既不能升级为
-    合规，也不能当作已确认的笼统缺陷，等价于尚未确认存在可评价痕迹。
-    S2 照抄由文本阈值独立判定：病程逐字照搬会诊意见时，即使模型没有选中该
-    痕迹，023 仍判不符合。
+    任一建议明确缺少执行证据，或只找到笼统执行记录，即不合规；只有全部
+    建议都找到具体病程记录或高置信结构化医嘱时才合规。来源不完整或模型
+    未形成可靠逐条事实时返回资料不足，不能把未知当成“未执行”。
     """
 
     if not completed_recommendations:
         return "not_applicable", "trigger_absent_complete"
-    if copied_opinion_refs:
-        return "non_compliant", "requirement_violated"
     rows = tuple(assessments or ())
-    if not rows:
-        return "evaluation_unknown", "semantic_low_confidence"
-    if all(item.execution_record_state == "no_trace" for item in rows):
-        structured = tuple(
-            item
-            for item in rows
-            if item.confidence == "high"
-            and item.execution_state in {"linked_specific", "linked_vague"}
-            and any(
-                ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
-                for ref in item.execution_refs
-            )
+    if len(rows) != len(completed_recommendations):
+        return "data_gap", "linkage_unresolved"
+
+    has_confirmed_defect = False
+    recommendations_by_ref = {
+        item.recommendation.recommendation_ref: item.recommendation
+        for item in completed_recommendations
+    }
+    has_missing_evidence = False
+    has_missing_source_gap = False
+    has_unknown = False
+    for item in rows:
+        order_refs = tuple(
+            ref
+            for ref in item.execution_refs
+            if ref.startswith(_ORDER_EXECUTION_REF_PREFIXES)
         )
-        if structured:
-            if any(item.execution_state == "linked_vague" for item in structured):
-                return "non_compliant", "requirement_violated"
-            return "compliant", "requirement_satisfied"
-        if course_source_incomplete:
-            return "data_gap", "candidate_scope_incomplete"
-        return "not_applicable", "trigger_absent_complete"
-    recorded = tuple(
-        item
-        for item in rows
-        if item.execution_record_state in _RECORDED_TRACE_LEVELS
-    )
-    if not recorded:
-        # 既没有找到痕迹、也不是来源缺失：023 没有可评价对象。
-        return "not_applicable", "trigger_absent_complete"
-    if any(
-        item.execution_record_state in _VAGUE_TRACE_LEVELS for item in recorded
-    ):
+        if (
+            item.execution_record_state in {"generic_trace", "copied_opinion"}
+            and item.trace_refs
+        ):
+            # 已经找到的记录本身只有笼统表述，属于可直接确认的书写缺陷；
+            # copied_opinion 仅作为旧响应的兼容值，按“不具体”处理。
+            has_confirmed_defect = True
+            continue
+        if item.confidence != "high":
+            has_unknown = True
+            continue
+        if item.execution_record_state == "specific_trace" and item.trace_refs:
+            continue
+        if item.execution_record_state == "no_trace" and order_refs:
+            if item.execution_state == "linked_specific":
+                continue
+            if item.execution_state == "linked_vague":
+                has_confirmed_defect = True
+                continue
+            has_unknown = True
+            continue
+        if (
+            item.execution_record_state == "no_trace"
+            and not item.trace_refs
+            and not item.execution_refs
+            and item.execution_state == "absent"
+        ):
+            recommendation = recommendations_by_ref.get(item.recommendation_ref)
+            relevant_source_keys = _ACTION_TYPE_SOURCE_KEYS.get(
+                recommendation.action_type if recommendation is not None else "other",
+                frozenset(_EXECUTION_SOURCE_KEYS),
+            )
+            if relevant_source_keys.intersection(source_incomplete_keys):
+                has_missing_source_gap = True
+            else:
+                has_missing_evidence = True
+            continue
+        has_unknown = True
+
+    if has_confirmed_defect:
         return "non_compliant", "requirement_violated"
+    if has_missing_evidence:
+        return "non_compliant", "requirement_violated"
+    if has_missing_source_gap:
+        return "data_gap", "candidate_scope_incomplete"
+    if has_unknown:
+        return "data_gap", "linkage_unresolved"
     return "compliant", "requirement_satisfied"
 
 
@@ -3562,7 +3487,6 @@ def _execution_outcome(
     source_technical: bool = False,
     source_incomplete_keys: frozenset[str] = frozenset(),
     context_only_candidate_present: bool = False,
-    copied_opinion_refs: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -3603,8 +3527,7 @@ def _execution_outcome(
         return _execution_quality_outcome(
             assessments=assessments,
             completed_recommendations=completed_recommendations,
-            course_source_incomplete=course_source_incomplete,
-            copied_opinion_refs=copied_opinion_refs,
+            source_incomplete_keys=source_incomplete_keys,
         )
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
@@ -3620,7 +3543,7 @@ def _execution_outcome(
             return "technical_error", "source_query_error"
         return "evaluation_unknown", "semantic_low_confidence"
     complete_course_traces = all(
-        item.execution_record_state in {"specific_trace", "generic_trace", "copied_opinion"}
+        item.execution_record_state in {"specific_trace", "generic_trace"}
         and bool(item.trace_refs)
         for item in assessments
     )
@@ -3665,7 +3588,7 @@ def _diagnostic_unknown_reason(
         return "candidate_missing" if relevant_candidate_count == 0 else "candidate_available_but_unlinked"
     if assessment.execution_record_state == "no_trace" and assessment.execution_refs:
         return "structured_action_without_execution_trace"
-    if assessment.execution_record_state in {"generic_trace", "copied_opinion"}:
+    if assessment.execution_record_state == "generic_trace":
         return "generic_execution_only"
     if assessment.execution_state == "linked_vague":
         return "generic_structured_action"
@@ -3684,7 +3607,7 @@ def _diagnostic_link_state(
         return "no_candidate" if relevant_candidate_count == 0 else "ambiguous"
     if assessment.execution_record_state == "specific_trace":
         return "linked_specific"
-    if assessment.execution_record_state in {"generic_trace", "copied_opinion"}:
+    if assessment.execution_record_state == "generic_trace":
         return "linked_vague"
     if assessment.execution_record_state == "no_trace" and assessment.execution_refs:
         return "structured_action_only"
@@ -4233,7 +4156,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         episodes = _parse(payload, documents)
         if frozen is None:
             # 不可逐字落地的事实不得冻结：否则伪造摘录会被长期复用，
-            # 且 S2 照抄判定与 S6 痕迹落地都建立在摘录可复现之上。
+            # 且逐建议执行核对与客户证据定位都建立在摘录可复现之上。
             if not _episode_recommendations_are_grounded(episodes, documents):
                 raise _SemanticInvalid()
             freeze_state = save_opinion_payload(
@@ -4286,8 +4209,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     embedded_decision_refs: frozenset[str] = frozenset()
-    # S2 照抄命中集合：由文本阈值独立判定，不依赖模型选中了哪条执行痕迹。
-    copied_opinion_refs: frozenset[str] = frozenset()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
             for rule_id in stage_two_rule_ids:
@@ -4469,11 +4390,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
                             for ref in refs
                         )
-                    )
-                    copied_opinion_refs = _standard_copied_opinion_refs(
-                        completed=completed_recommendations,
-                        candidates=projection.candidates,
-                        allowed_refs=allowed_refs,
                     )
                     allowed_context_candidate_present = any(
                         ref in candidate_by_ref
@@ -4804,7 +4720,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         episodes=episodes,
                         completed_recommendations=completed_recommendations,
                         assessments=None,
-                        copied_opinion_refs=copied_opinion_refs,
                     )
         if execution_assessments is not None:
             execution_assessments = _apply_embedded_decision_traces(
@@ -4821,7 +4736,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     source_technical=execution_source_technical,
                     source_incomplete_keys=execution_source_incomplete_keys,
                     context_only_candidate_present=context_only_candidate_present,
-                    copied_opinion_refs=copied_opinion_refs,
                 )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,
@@ -4923,11 +4837,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         execution_candidate_projection.candidates
                         if execution_candidate_projection is not None
                         else ()
-                    ),
-                    copied_opinion_refs=(
-                        copied_opinion_refs
-                        if rule_id == "LX0609-023"
-                        else frozenset()
                     ),
                 ),
             )
