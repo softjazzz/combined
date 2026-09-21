@@ -98,18 +98,6 @@ function toNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(numeric) ? numeric : fallback
 }
 
-function buildDownloadUrl(path: string): string {
-  if (/^https?:\/\//.test(path)) {
-    return path
-  }
-
-  if (typeof window === 'undefined') {
-    return path
-  }
-
-  return new URL(path, window.location.origin).toString()
-}
-
 function formatIssueCategory(item: Record<string, unknown>): string {
   const raw =
     item.category || item.name || item.label || item.type || item.rule_type || item.document_type
@@ -255,10 +243,15 @@ export async function exportStatisticsReport(
       url: '/api/v1/reports/qc/export',
       data: {},
     })
+    const downloadResponse = await ApiService.requestRaw<Blob>({
+      method: 'GET',
+      url: payload.download_url,
+      responseType: 'blob',
+    })
 
     return {
       count: toNumber(payload.count),
-      downloadUrl: buildDownloadUrl(payload.download_url),
+      downloadUrl: URL.createObjectURL(downloadResponse.data),
     }
   } catch (error) {
     throw new Error(extractApiErrorMessageFromError(error, '导出统计报表失败'))

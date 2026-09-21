@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.exceptions import RequestValidationError
-from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
 import os
@@ -332,11 +331,6 @@ def create_app() -> FastAPI:
     # 医保付费监测
     app.include_router(payment_monitoring_router.router)
     app.include_router(product_activation_router.router)
-
-    # Static files: expose /downloads for exported reports
-    downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
-    os.makedirs(downloads_dir, exist_ok=True)
-    app.mount("/downloads", StaticFiles(directory=downloads_dir), name="downloads")
 
     # Include legacy routes afterwards to keep compatibility
     # Temporarily disabled to avoid route conflicts with semantic-rules

@@ -8,22 +8,31 @@
 - 统计数据
 """
 
+import json
+
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
-import time
 
 from app.core.access_control import enforce_default_auth
+from app.core.security import get_current_user
+from app.routers import reports as reports_module
 
 
 @pytest.fixture(autouse=True)
-def _bypass_default_auth_guard(client):
+def _bypass_default_auth_guard(client, monkeypatch, tmp_path):
     async def _noop_auth_gate():
         return None
 
+    async def _default_current_user():
+        return {"id": "reports-owner", "roles": ["qc_manager"]}
+
     client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
+    client.app.dependency_overrides[get_current_user] = _default_current_user
+    monkeypatch.setattr(reports_module, "_QC_EXPORT_DIR", tmp_path)
     yield
     client.app.dependency_overrides.pop(enforce_default_auth, None)
+    client.app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.unit
@@ -115,7 +124,7 @@ class TestReportsAPI:
         mock_response.data = []
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
-            with patch("app.routers.reports.async_execute", return_value=mock_response) as mock_execute:
+            with patch("app.routers.reports.async_execute", return_value=mock_response):
                 with patch("app.routers.reports.SichuanQCService") as mock_service:
                     mock_service.return_value.stats.return_value = {
                         "success_rate": 0.0,
@@ -280,8 +289,6 @@ class TestReportsAPI:
     @pytest.mark.asyncio
     async def test_qc_export_file_creation(self, client):
         """测试导出文件创建"""
-        import os
-
         mock_supabase = MagicMock()
         mock_response = MagicMock()
         mock_response.data = [
@@ -306,8 +313,81 @@ class TestReportsAPI:
 
                 # 验证文件路径格式
                 download_url = data["data"]["download_url"]
-                assert download_url.startswith("/downloads/")
-                assert download_url.endswith(".csv")
+                assert download_url.startswith("/api/v1/reports/qc/export/")
+                assert download_url.endswith("/download")
+
+    @pytest.mark.asyncio
+    async def test_qc_export_download_is_private_to_creator_or_admin(self, client):
+        mock_supabase = MagicMock()
+        mock_response = MagicMock()
+        mock_response.data = [
+            {
+                "record_id": "record-1",
+                "total_documents": 10,
+                "passed_count": 7,
+                "warning_count": 2,
+                "failed_count": 1,
+                "pending_count": 0,
+                "avg_qc_score": 85.5,
+                "last_analyzed_time": datetime.utcnow().isoformat(),
+            }
+        ]
+
+        with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
+            with patch("app.routers.reports.async_execute", return_value=mock_response):
+                created = client.post("/api/v1/reports/qc/export", json={})
+
+        assert created.status_code == 200
+        download_url = created.json()["data"]["download_url"]
+        export_id = created.json()["data"]["export_id"]
+        assert client.get(download_url).status_code == 200
+        assert client.get(download_url).content.startswith(b"record_id,")
+
+        # 即使应用级默认认证被测试替身绕过，下载端点自身仍要求身份认证。
+        client.app.dependency_overrides.pop(get_current_user)
+        assert client.get(download_url).status_code == 401
+
+        client.app.dependency_overrides[get_current_user] = lambda: {
+            "id": "another-user",
+            "roles": ["doctor"],
+        }
+        assert client.get(download_url).status_code == 403
+
+        client.app.dependency_overrides[get_current_user] = lambda: {
+            "id": "admin-user",
+            "roles": ["admin"],
+        }
+        admin_download = client.get(download_url)
+        assert admin_download.status_code == 200
+        assert admin_download.headers["cache-control"] == "no-store"
+        assert admin_download.headers["content-disposition"].endswith(f'qc_summary_{export_id}.csv"')
+
+        # /downloads 不再公开挂载，猜到旧文件路径也无法读取。
+        assert client.get(f"/downloads/qc_summary_{export_id}.csv").status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_qc_export_download_expiry_removes_private_artifacts(self, client, tmp_path):
+        mock_supabase = MagicMock()
+        mock_response = MagicMock()
+        mock_response.data = []
+
+        with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
+            with patch("app.routers.reports.async_execute", return_value=mock_response):
+                created = client.post("/api/v1/reports/qc/export", json={})
+
+        assert created.status_code == 200
+        payload = created.json()["data"]
+        export_id = payload["export_id"]
+        csv_path = tmp_path / f"{export_id}.csv"
+        metadata_path = tmp_path / f"{export_id}.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["expires_at"] = "2000-01-01T00:00:00+00:00"
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+        expired = client.get(payload["download_url"])
+        assert expired.status_code == 404
+        assert not csv_path.exists()
+        assert not metadata_path.exists()
 
     @pytest.mark.asyncio
     async def test_qc_summary_trace_id(self, client):
@@ -426,4 +506,3 @@ class TestReportsAPI:
         """测试趋势接口参数校验。"""
         response = client.get("/api/v1/reports/qc/trend?period=year")
         assert response.status_code == 400
-

@@ -1,16 +1,20 @@
 from collections import defaultdict
-from datetime import date, datetime, timedelta
-from fastapi import APIRouter, HTTPException, Query, Request
+from datetime import date, datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 import logging
 from typing import List, Dict, Any
 import time
 import csv
-import os
+import json
+from pathlib import Path
 from pydantic import BaseModel
+from uuid import UUID, uuid4
 
 from ..core.audit import audit_event
 from ..core.response import success_response, get_trace_id, StatusCode
 from ..core.pagination import REPORT_SCAN_LIMIT
+from ..core.security import get_current_user
 from ..core.supabase_client import get_supabase, async_execute
 from ..services.sichuan_qc_service import SichuanQCService
 
@@ -20,9 +24,80 @@ logger = logging.getLogger(__name__)
 _QC_SUMMARY_CACHE: Dict[str, Any] | None = None
 _QC_SUMMARY_CACHE_TS: float = 0.0
 _QC_SUMMARY_TTL_SECONDS = 10.0
+_QC_EXPORT_TTL = timedelta(hours=1)
+# 质控导出含病历统计信息，只能由受认证端点读取，不能放入静态目录。
+_QC_EXPORT_DIR = Path(__file__).resolve().parents[1] / "data" / "runtime" / "qc_exports"
 
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
+
+
+def _export_owner(current_user: Dict[str, Any]) -> str:
+    for key in ("id", "user_id", "email", "username"):
+        value = str(current_user.get(key) or "").strip()
+        if value and value != "anonymous":
+            return value
+    raise HTTPException(status_code=403, detail="当前用户没有质控报表导出权限")
+
+
+def _is_export_admin(current_user: Dict[str, Any]) -> bool:
+    roles = {str(role).strip().lower() for role in current_user.get("roles", []) if str(role).strip()}
+    single_role = str(current_user.get("role") or "").strip().lower()
+    if single_role:
+        roles.add(single_role)
+    return bool(roles.intersection({"admin", "super_admin"}))
+
+
+def _export_paths(export_id: str) -> tuple[Path, Path]:
+    try:
+        normalized_id = UUID(str(export_id)).hex
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("invalid export id") from exc
+    return (
+        _QC_EXPORT_DIR / f"{normalized_id}.csv",
+        _QC_EXPORT_DIR / f"{normalized_id}.json",
+    )
+
+
+def _metadata_expired(metadata: Dict[str, Any], *, now: datetime) -> bool:
+    raw_expires_at = metadata.get("expires_at")
+    if not isinstance(raw_expires_at, str):
+        return True
+    try:
+        expires_at = datetime.fromisoformat(raw_expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= now
+
+
+def _delete_export_files(csv_path: Path, metadata_path: Path) -> None:
+    for path in (csv_path, metadata_path):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            logger.warning("[reports] 无法删除过期质控导出文件: %s", path)
+
+
+def _cleanup_expired_exports(*, now: datetime | None = None) -> None:
+    current_time = now or datetime.now(timezone.utc)
+    _QC_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    stale_before = current_time.timestamp() - _QC_EXPORT_TTL.total_seconds()
+    for metadata_path in _QC_EXPORT_DIR.glob("*.json"):
+        try:
+            csv_path, expected_metadata_path = _export_paths(metadata_path.stem)
+            if expected_metadata_path != metadata_path:
+                continue
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            expired = not isinstance(metadata, dict) or _metadata_expired(metadata, now=current_time)
+        except (OSError, ValueError, json.JSONDecodeError):
+            csv_path = _QC_EXPORT_DIR / f"{metadata_path.stem}.csv"
+            expired = metadata_path.stat().st_mtime <= stale_before
+        if expired:
+            _delete_export_files(csv_path, metadata_path)
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -275,11 +350,16 @@ class ExportRequest(BaseModel):
 
 
 @router.post("/qc/export")
-async def qc_export(request: Request, payload: ExportRequest):
+async def qc_export(
+    request: Request,
+    payload: ExportRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     """导出质控汇总（CSV）。
 
     - 数据来源：`qc_statistics_view`（若 Supabase 可用），否则返回 503。
-    - 文件位置：`app/downloads/qc_summary_*.csv`，通过 `/downloads/*` 访问。
+    - 导出文件保存在私有运行目录；仅创建者或管理员可通过受认证下载端点读取。
+    - 文件自创建起保留一小时，下一次导出或下载时清理过期文件。
     """
     sb = get_supabase()
     if sb is None:
@@ -293,11 +373,10 @@ async def qc_export(request: Request, payload: ExportRequest):
     resp = await async_execute(q)
     rows: List[Dict[str, Any]] = list(resp.data or [])
 
-    export_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    filename = f"qc_summary_{export_id}.csv"
-    downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "downloads"))
-    os.makedirs(downloads_dir, exist_ok=True)
-    file_path = os.path.join(downloads_dir, filename)
+    _cleanup_expired_exports()
+    export_id = uuid4().hex
+    file_path, metadata_path = _export_paths(export_id)
+    owner = _export_owner(current_user)
 
     # 写 CSV
     headers = [
@@ -316,7 +395,22 @@ async def qc_export(request: Request, payload: ExportRequest):
         for r in rows:
             writer.writerow({k: r.get(k) for k in headers})
 
-    download_url = f"/downloads/{filename}"
+    created_at = datetime.now(timezone.utc)
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "export_id": export_id,
+                "owner": owner,
+                "created_at": created_at.isoformat(),
+                "expires_at": (created_at + _QC_EXPORT_TTL).isoformat(),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+
+    download_url = f"/api/v1/reports/qc/export/{export_id}/download"
     audit_event(
         request,
         action="reports.qc.export",
@@ -327,6 +421,7 @@ async def qc_export(request: Request, payload: ExportRequest):
             "export_rows": len(rows),
             "download_url": download_url,
         },
+        current_user=current_user,
     )
 
     return success_response(
@@ -341,3 +436,44 @@ async def qc_export(request: Request, payload: ExportRequest):
     )
 
 
+@router.get("/qc/export/{export_id}/download")
+async def download_qc_export(
+    export_id: str,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """下载私有质控汇总 CSV。"""
+    _cleanup_expired_exports()
+    try:
+        file_path, metadata_path = _export_paths(export_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="未找到质控导出文件") from None
+
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise HTTPException(status_code=404, detail="未找到质控导出文件") from None
+    if not isinstance(metadata, dict) or _metadata_expired(metadata, now=datetime.now(timezone.utc)):
+        _delete_export_files(file_path, metadata_path)
+        raise HTTPException(status_code=404, detail="质控导出文件已过期")
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="未找到质控导出文件")
+
+    owner = _export_owner(current_user)
+    if owner != metadata.get("owner") and not _is_export_admin(current_user):
+        raise HTTPException(status_code=403, detail="无权下载其他用户创建的质控报表")
+
+    audit_event(
+        request,
+        action="reports.qc.export.download",
+        resource=f"/api/v1/reports/qc/export/{export_id}/download",
+        outcome="success",
+        details={"export_id": export_id},
+        current_user=current_user,
+    )
+    return FileResponse(
+        path=str(file_path),
+        media_type="text/csv; charset=utf-8",
+        filename=f"qc_summary_{export_id}.csv",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )

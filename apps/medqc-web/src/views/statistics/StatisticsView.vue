@@ -569,7 +569,13 @@ const exportReport = async () => {
     exporting.value = true
 
     const result = await exportStatisticsReport('excel')
-    window.open(result.downloadUrl, '_blank', 'noopener')
+    const link = document.createElement('a')
+    link.href = result.downloadUrl
+    link.download = `质控统计报表_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(result.downloadUrl)
     message.success(`报表导出成功${result.count ? `，共 ${result.count} 条记录` : ''}`)
   } catch (error) {
     console.error('导出报表失败:', error)
