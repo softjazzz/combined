@@ -952,14 +952,12 @@ def _apply_sync_derived_fields(
             table_name=normalized_table,
             normalized=normalized,
         )
-        if normalized_table == "presurg_summary" and structured_content:
+        if structured_content:
             normalized["record_content"] = (
                 f"{structured_content}\n记录内容：{source_content}"
                 if source_content
                 else structured_content
             )
-        elif not source_content and structured_content:
-            normalized["record_content"] = structured_content
 
 
 def _validate_document_field_preservation(

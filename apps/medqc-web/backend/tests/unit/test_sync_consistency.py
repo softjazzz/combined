@@ -1733,6 +1733,89 @@ def test_upsert_to_local_derives_anesthesia_record_content(monkeypatch):
     assert "不得输出科室" not in content
 
 
+@pytest.mark.parametrize(
+    ("table_name", "record", "expected_structured_content", "unexpected_empty_label"),
+    (
+        (
+            "surgery_safecheck_record",
+            {
+                "surgery_method": "开颅血肿清除术",
+                "surgeon": "",
+                "anesthesia_method": None,
+                "surgeon_statement": "确认手术部位与患者身份",
+            },
+            "手术方式：开颅血肿清除术\n手术医师陈述：确认手术部位与患者身份",
+            "麻醉方式：",
+        ),
+        (
+            "anesthesia_record",
+            {
+                "surgery_name": "开颅血肿清除术",
+                "anesthesia_method": None,
+                "anesthesia_summary": "麻醉过程平稳",
+            },
+            "手术名称：开颅血肿清除术\n麻醉总结：麻醉过程平稳",
+            "麻醉方式：",
+        ),
+    ),
+)
+def test_upsert_to_local_preserves_structured_content_with_source_body_and_thin_table(
+    monkeypatch,
+    table_name,
+    record,
+    expected_structured_content,
+    unexpected_empty_label,
+):
+    """瘦表只能接收 record_content 时，正文和结构化字段必须一起保留。"""
+
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id", "record_content"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    source_content = "源端已提供完整正文"
+    source_record = {
+        "institute_id": "A",
+        "patient_id": "P1",
+        "visit_id": "V1",
+        "document_id": "D1",
+        "record_content": source_content,
+        **record,
+    }
+    for _ in range(2):
+        assert etl_sync.upsert_to_local(
+            table_name=table_name,
+            records=[source_record],
+            primary_keys=["patient_id", "visit_id", "document_id"],
+        ) == 1
+
+    expected = f"{expected_structured_content}\n记录内容：{source_content}"
+    assert [params["record_content"] for params in executed_params] == [expected, expected]
+    assert unexpected_empty_label not in expected
+
+
 def test_upsert_to_local_keeps_first_course_structured_fields(monkeypatch):
     executed_params: list[dict] = []
 
