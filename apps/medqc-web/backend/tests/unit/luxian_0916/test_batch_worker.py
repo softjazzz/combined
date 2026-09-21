@@ -14,6 +14,20 @@ from app.services.luxian_0916.orchestrator import (
 from app.services.luxian_0916.rule_catalog import LUXIAN_0916_RULE_CATALOG
 
 
+_REAL_BUILD_CRITICAL_VALUE_018_FACTS = batch_worker.build_critical_value_018_facts
+_REAL_EXTRACT_CRITICAL_VALUE_018_STAGE2_FACTS = (
+    batch_worker.extract_critical_value_018_stage2_facts
+)
+_REAL_EXECUTE_LUXIAN_0916 = batch_worker.execute_luxian_0916
+_FORMAL_COURSE_SOURCES = (
+    "first_course_record",
+    "daily_course_record",
+    "senior_course_record",
+    "postsurg_firstcourse_record",
+    "rescue_record",
+)
+
+
 class _Workspace:
     def __init__(self, *, job: dict[str, Any], records: list[dict[str, Any]]) -> None:
         self.job = job
@@ -200,6 +214,171 @@ async def _semantic_generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
 
 async def _invalid_semantic_generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
     return {"choices": [{"message": {"content": "not-json"}}]}
+
+
+def _critical_value_018_worker_evidence() -> dict[str, Any]:
+    documents = {source: [] for source in _FORMAL_COURSE_SOURCES}
+    documents["daily_course_record"] = [
+        {
+            "document_id": "COURSE-1",
+            "authored_at": "2026-09-16 08:30:00",
+            "content": "接获血钾危急值6.8 mmol/L报告并立即停用补钾、复查电解质。",
+        }
+    ]
+    return {
+        "programmatic_timeline": {
+            "documents": documents,
+            "source_readiness": {
+                source: "complete" for source in _FORMAL_COURSE_SOURCES
+            },
+            "structured_source_readiness": {
+                "labtest_master": "complete",
+                "labtest_item_report": "complete",
+            },
+            "structured_source_rows": {
+                "labtest_master": [
+                    {
+                        "test_id": "TEST-1",
+                        "test_no": "REPORT-1",
+                        "labtest_result_status": "已审核",
+                        "report_datetime": "2026-09-16 08:00:00",
+                    }
+                ],
+                "labtest_item_report": [
+                    {
+                        "test_id": "TEST-1",
+                        "test_no": "REPORT-1",
+                        "item_id": "ITEM-1",
+                        "item_name": "血钾",
+                        "result": "6.8",
+                        "unit": "mmol/L",
+                        "abnormal_indicator": "PH",
+                        "report_time": "2026-09-16 08:00:00",
+                    }
+                ],
+            },
+        }
+    }
+
+
+def _critical_value_018_model_response(*, disposition_state: str) -> dict[str, Any]:
+    present_coordinate = {
+        "source_type": "daily_course_record",
+        "document_id": "COURSE-1",
+        "clause_id": "COURSE-1:1",
+    }
+    disposition_coordinate = (
+        present_coordinate
+        if disposition_state == "present"
+        else {"source_type": None, "document_id": None, "clause_id": None}
+    )
+    return {
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "events": [
+                                {
+                                    "event_id": "critical-value:REPORT-1",
+                                    "facts": [
+                                        {
+                                            "fact_kind": "report_recorded",
+                                            "state": "present",
+                                            "event_id": "critical-value:REPORT-1",
+                                            **present_coordinate,
+                                        },
+                                        {
+                                            "fact_kind": "disposition_recorded",
+                                            "state": disposition_state,
+                                            "event_id": "critical-value:REPORT-1",
+                                            **disposition_coordinate,
+                                        },
+                                    ],
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+        },
+        "_api_time": 0.01,
+    }
+
+
+async def _run_real_critical_value_018_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    generate,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    evidence = _critical_value_018_worker_evidence()
+    scenes: list[str] = []
+
+    def load_bundle(**kwargs: Any) -> dict[str, Any]:
+        scenes.append(kwargs["scene"])
+        return {"structured_context": {}}
+
+    def build_evidence(**kwargs: Any) -> dict[str, Any]:
+        assert kwargs["strict_structured_source_limits"] == {
+            "labtest_master": 100,
+            "labtest_item_report": 400,
+        }
+        return evidence
+
+    async def extract_shared_semantic(**_kwargs: Any) -> dict[str, Any]:
+        return {
+            "semantic_facts": {},
+            "event_facts": {},
+            "document_facts": {},
+            "discharge_facts": {},
+            "event_source_state_by_rule": {},
+            "diagnostic": {"code": "semantic_extraction_ready", "llm_call_count": 0},
+        }
+
+    monkeypatch.setattr(
+        batch_worker,
+        "build_critical_value_018_facts",
+        _REAL_BUILD_CRITICAL_VALUE_018_FACTS,
+    )
+    monkeypatch.setattr(
+        batch_worker,
+        "extract_critical_value_018_stage2_facts",
+        _REAL_EXTRACT_CRITICAL_VALUE_018_STAGE2_FACTS,
+    )
+    monkeypatch.setattr(
+        batch_worker,
+        "execute_luxian_0916",
+        _REAL_EXECUTE_LUXIAN_0916,
+    )
+    monkeypatch.setattr(batch_worker, "load_luxian_0916_bundle", load_bundle)
+    monkeypatch.setattr(
+        batch_worker, "build_programmatic_evidence_payload", build_evidence
+    )
+    monkeypatch.setattr(
+        batch_worker, "extract_luxian_0916_facts", extract_shared_semantic
+    )
+    workspace = _Workspace(job=_job(), records=[_record()])
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=generate
+    )
+
+    assert scenes == ["running"]
+    assert workspace.failed == []
+    assert workspace.completed is not None
+    item = next(
+        item
+        for item in workspace.completed["items"]
+        if item["rule_id"] == "LX0916-018"
+    )
+    return item, workspace.completed["summary"]
 
 
 @pytest.mark.asyncio
@@ -524,6 +703,79 @@ async def test_batch_worker_contains_invalid_018_stage2_output_to_018(
     assert workspace.completed["summary"][
         "critical_value_018_stage2_failure_count"
     ] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("disposition_state", "expected_status", "expected_reason"),
+    (
+        (
+            "absent",
+            "non_compliant",
+            "critical_value_documentation_incomplete",
+        ),
+        ("present", "compliant", "critical_value_documentation_complete"),
+    ),
+)
+async def test_running_worker_delivers_real_018_pipeline_result(
+    monkeypatch: pytest.MonkeyPatch,
+    disposition_state: str,
+    expected_status: str,
+    expected_reason: str,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def generate(_prompt: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return _critical_value_018_model_response(
+            disposition_state=disposition_state
+        )
+
+    item, summary = await _run_real_critical_value_018_worker(
+        monkeypatch,
+        generate=generate,
+    )
+
+    assert item["status"] == expected_status
+    assert item["reason_code"] == expected_reason
+    assert len(calls) == 1
+    assert calls[0]["enable_thinking"] is False
+    assert summary["critical_value_018_stage2_llm_call_count"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_mode", ("provider_error", "contract_error"))
+async def test_running_worker_contains_real_018_stage2_failure_as_data_gap(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_mode: str,
+) -> None:
+    calls = 0
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if failure_mode == "provider_error":
+            raise RuntimeError("provider unavailable")
+        return {
+            "choices": [
+                {"finish_reason": "stop", "message": {"content": "{}"}}
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 1,
+                "total_tokens": 11,
+            },
+        }
+
+    item, summary = await _run_real_critical_value_018_worker(
+        monkeypatch,
+        generate=generate,
+    )
+
+    assert item["status"] == "data_quality_gap"
+    assert item["reason_code"] == "critical_value_stage2_fact_unavailable"
+    assert calls == 1
+    assert summary["critical_value_018_stage2_llm_call_count"] == 1
 
 
 @pytest.mark.asyncio
