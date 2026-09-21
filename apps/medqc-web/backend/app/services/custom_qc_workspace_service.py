@@ -4031,10 +4031,14 @@ class CustomQCWorkspaceService:
                 if isinstance(current_summary.get("progress"), dict)
                 else {}
             )
-            session.execute(
+            cancellation_update = session.execute(
                 update(self._batch_job_table)
                 .where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                    and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.created_by == created_by,
+                        self._batch_job_table.c.status.in_(["queued", "running"]),
+                    )
                 )
                 .values(
                     status="canceled",
@@ -4057,6 +4061,11 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
+            # 取消请求读取任务后可能等待完成事务释放行锁。若完成事务先提交，
+            # 条件更新必须保持 completed/failed 终态，不能再覆盖为 canceled。
+            if getattr(cancellation_update, "rowcount", 0) != 1:
+                session.rollback()
+                return self.get_batch_job(job_id=job_id, created_by=created_by)
             if str(current.get("job_kind") or "").strip().lower() == "parent":
                 child_ids = [
                     str(item or "").strip()
@@ -4456,6 +4465,12 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
+            # 取消请求可能在本次完成写入前已提交。此时 WHERE 不会命中，
+            # 不能让迟到的执行结果继续写入 Canonical Envelope。
+            if getattr(completion_update, "rowcount", 0) != 1:
+                session.rollback()
+                self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+                return
             envelope_items: Sequence[Dict[str, Any]] = (
                 items if persist_record_envelopes and not execution_failed else ()
             )

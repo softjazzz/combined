@@ -32,19 +32,27 @@ class _Rows:
         return self._row
 
 
+class _UpdateResult:
+    def __init__(self, rowcount: int) -> None:
+        self.rowcount = rowcount
+
+
 class _CompletionSession:
-    def __init__(self, row: dict[str, Any]) -> None:
+    def __init__(self, row: dict[str, Any], *, completion_rowcount: int = 1) -> None:
         self._row = row
+        self._completion_rowcount = completion_rowcount
         self.execute_count = 0
         self.commit_count = 0
         self.rollback_count = 0
         self.close_count = 0
+        self.executed_statements: list[Any] = []
 
-    def execute(self, _statement: Any) -> _Rows | None:
+    def execute(self, _statement: Any) -> _Rows | _UpdateResult:
+        self.executed_statements.append(_statement)
         self.execute_count += 1
         if self.execute_count == 1:
             return _Rows(self._row)
-        return None
+        return _UpdateResult(self._completion_rowcount)
 
     def commit(self) -> None:
         self.commit_count += 1
@@ -247,6 +255,89 @@ def test_complete_batch_job_commits_task_and_canonical_envelope_once(
     assert write_commit_counts == [0]
     assert session.commit_count == 1
     assert session.rollback_count == 0
+
+
+def test_complete_batch_job_canceled_before_completion_does_not_write_envelopes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """取消与完成竞争时，迟到结果不得进入正式病例结果。"""
+
+    session = _CompletionSession(
+        {
+            "id": "job-canceled",
+            "parent_job_id": "parent-canceled",
+            "created_by": "reviewer-1",
+            "filters_json": "{}",
+        },
+        completion_rowcount=0,
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    service = CustomQCWorkspaceService()
+    envelope_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        service,
+        "_write_record_result_envelopes",
+        lambda *_args, **kwargs: envelope_calls.append(kwargs),
+    )
+    refreshed_parent_ids: list[str | None] = []
+    monkeypatch.setattr(
+        service,
+        "refresh_parent_batch_job",
+        lambda *, parent_job_id: refreshed_parent_ids.append(parent_job_id),
+    )
+
+    service.complete_batch_job(
+        job_id="job-canceled",
+        summary={"total_records": 1, "success_count": 1},
+        items=[
+            {
+                "institute_id": "inst-1",
+                "patient_id": "patient-1",
+                "visit_id": "visit-1",
+                "rule_id": "LX0609-001",
+                "status": "compliant",
+            }
+        ],
+        failed_records=[],
+    )
+
+    assert envelope_calls == []
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
+    assert refreshed_parent_ids == ["parent-canceled"]
+
+
+def test_cancel_batch_job_does_not_overwrite_completion_that_won_the_lock_race(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """取消已读到 running 但完成先提交时，最终状态必须保持 completed。"""
+
+    session = _CompletionSession(
+        {
+            "id": "job-completed-first",
+            "parent_job_id": None,
+            "created_by": "reviewer-1",
+            "status": "running",
+            "summary_json": "{}",
+        },
+        completion_rowcount=0,
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    service = CustomQCWorkspaceService()
+    final_job = {
+        "id": "job-completed-first",
+        "created_by": "reviewer-1",
+        "status": "completed",
+    }
+    monkeypatch.setattr(service, "get_batch_job", lambda **_kwargs: final_job)
+
+    result = service.cancel_batch_job(job_id="job-completed-first", created_by="reviewer-1")
+
+    assert result == final_job
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
+    update_sql = str(session.executed_statements[1])
+    assert "status IN" in update_sql
 
 
 def test_complete_independent_result_can_skip_luxian_0609_canonical_envelope(
