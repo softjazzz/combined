@@ -136,6 +136,53 @@ def test_prefixed_continuous_procedure_clause_matches_one_surgery() -> None:
     assert (association.state, association.event_index) == ("matched", 1)
 
 
+def test_single_event_with_conflicting_explicit_procedure_is_ambiguous() -> None:
+    """单台已实施手术也不能覆盖术前文书中的明确术式冲突。"""
+
+    materials = _Materials(
+        surgery_records=(
+            _record(document_id="record", name="腹腔镜胆囊切除术"),
+        )
+    )
+    events, reason = build_performed_surgery_events(materials)
+
+    association = associate_preop_document_to_surgery_event(
+        events=events or (),
+        procedure_name="拟行腹腔镜阑尾切除术",
+        record_time=None,
+    )
+
+    assert reason == ""
+    assert (association.state, association.event_index) == ("ambiguous", None)
+
+
+@pytest.mark.parametrize(
+    ("procedure_name", "expected"),
+    [
+        ("拟行腹腔镜胆囊切除术", ("matched", 1)),
+        ("", ("matched", 1)),
+    ],
+)
+def test_single_event_keeps_matching_and_missing_procedure_fallbacks(
+    procedure_name: str, expected: tuple[str, int]
+) -> None:
+    materials = _Materials(
+        surgery_records=(
+            _record(document_id="record", name="腹腔镜胆囊切除术"),
+        )
+    )
+    events, reason = build_performed_surgery_events(materials)
+
+    association = associate_preop_document_to_surgery_event(
+        events=events or (),
+        procedure_name=procedure_name,
+        record_time=datetime(2026, 1, 1, 9, 0),
+    )
+
+    assert reason == ""
+    assert (association.state, association.event_index) == expected
+
+
 def test_clause_that_contains_two_procedure_names_is_ambiguous() -> None:
     materials = _Materials(
         surgery_records=(

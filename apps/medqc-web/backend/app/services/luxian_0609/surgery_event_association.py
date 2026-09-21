@@ -301,7 +301,15 @@ def associate_preop_document_to_surgery_event(
     if not events:
         return PreopDocumentAssociation(state="not_required")
     if len(events) == 1 and planned_surgery_time is None:
-        return PreopDocumentAssociation(state="matched", event_index=events[0].event_index)
+        event = events[0]
+        if (
+            normalize_surgery_name(procedure_name)
+            and not procedure_matches_surgery(procedure_name, event.surgery_name)
+        ):
+            # 单台已实施手术只能在术前文书没有明确术式，或明确术式一致时
+            # 作为回退锚点；不能覆盖已经存在的术式冲突。
+            return PreopDocumentAssociation(state="ambiguous")
+        return PreopDocumentAssociation(state="matched", event_index=event.event_index)
 
     named_candidates = [
         event
