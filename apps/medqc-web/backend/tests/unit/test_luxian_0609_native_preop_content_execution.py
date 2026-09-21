@@ -395,6 +395,252 @@ async def test_same_name_surgeries_without_time_narrowing_are_data_gap():
 
 
 @pytest.mark.asyncio
+async def test_same_name_surgeries_on_different_days_use_structured_planned_time():
+    name = "腹腔镜胆囊切除术"
+    text = f"术前小结：拟行{name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {
+                "document_id": "summary",
+                "record_content": text,
+                "planned_surgery_time": "2026-01-02 00:00:00",
+            },
+        ),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-first",
+                name=name,
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+            _surgery_record(
+                document_id="surgery-second",
+                name=name,
+                begin="2026-01-02 08:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=name),
+                }
+            )
+        ),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-078"]
+    assert result.decisions[0].qc_direction.value == "satisfied"
+    assert facts["documents"][0]["event_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_same_name_surgeries_use_planned_time_label_from_synced_content():
+    name = "腹腔镜胆囊切除术"
+    text = (
+        f"拟实施手术：{name}\n"
+        "手术时间：2026-01-02 00:00:00\n"
+        "术前小结其余字段完整。"
+    )
+    session = _session(
+        summary=({"document_id": "summary", "record_content": text},),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-first",
+                name=name,
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+            _surgery_record(
+                document_id="surgery-second",
+                name=name,
+                begin="2026-01-02 08:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=name),
+                }
+            )
+        ),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-078"]
+    assert result.decisions[0].qc_direction.value == "satisfied"
+    assert facts["documents"][0]["event_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_same_name_same_day_surgeries_require_exact_planned_minute():
+    name = "腹腔镜胆囊切除术"
+    text = f"术前小结：拟行{name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {
+                "document_id": "summary",
+                "record_content": text,
+                "planned_surgery_time": "2026-01-01 14:00:30",
+            },
+        ),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-first",
+                name=name,
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+            _surgery_record(
+                document_id="surgery-second",
+                name=name,
+                begin="2026-01-01 14:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=name),
+                }
+            )
+        ),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-078"]
+    assert result.decisions[0].qc_direction.value == "satisfied"
+    assert facts["documents"][0]["event_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_named_surgery_with_conflicting_planned_clock_time_is_data_gap():
+    name = "腹腔镜胆囊切除术"
+    text = f"术前小结：拟行{name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {
+                "document_id": "summary",
+                "record_content": text,
+                "planned_surgery_time": "2026-01-01 14:00:00",
+            },
+        ),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery",
+                name=name,
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=name),
+                }
+            )
+        ),
+    )
+    assert result.decisions[0].reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_same_name_same_day_surgeries_with_date_only_planned_time_are_data_gap():
+    name = "腹腔镜胆囊切除术"
+    text = f"术前小结：拟行{name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {
+                "document_id": "summary",
+                "record_content": text,
+                "planned_surgery_time": "2026-01-01 00:00:00",
+            },
+        ),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-first",
+                name=name,
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+            _surgery_record(
+                document_id="surgery-second",
+                name=name,
+                begin="2026-01-01 14:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=name),
+                }
+            )
+        ),
+    )
+    assert result.decisions[0].reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_named_surgery_with_conflicting_planned_date_is_data_gap():
+    name = "腹腔镜胆囊切除术"
+    text = f"术前小结：拟行{name}，其余字段完整。"
+    session = _session(
+        summary=(
+            {
+                "document_id": "summary",
+                "record_content": text,
+                "planned_surgery_time": "2026-01-02 00:00:00",
+            },
+        ),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery",
+                name=name,
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=name),
+                }
+            )
+        ),
+    )
+    assert result.decisions[0].reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
 async def test_two_summary_roles_can_complete_one_surgery_only_within_the_event():
     name = "腹腔镜胆囊切除术"
     core_text = f"术前小结：拟行{name}，核心内容完整。"

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 import re
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from .evidence_material import (
     EvidenceMaterialTruncated,
@@ -19,6 +20,10 @@ from .source_evidence_reader import (
 )
 
 _RECORD_CONTENT_PLACEHOLDERS = frozenset({"无", "无。", "-", "不详", "未记录"})
+_HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_PLANNED_SURGERY_TIME_TEXT = re.compile(
+    r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?(?:Z|[+-]\d{2}:?\d{2})?"
+)
 
 
 class SurgeryEvent:
@@ -104,6 +109,62 @@ def summary_surgery_name_from_row(row: Mapping[str, Any]) -> str:
         text,
     )
     return (match.group(1) if match else "").strip()
+
+
+def summary_planned_surgery_time_from_row(
+    row: Mapping[str, Any],
+) -> datetime | None:
+    """读取术前小结拟行手术时间，结构化字段优先、正文标签仅作回退。
+
+    该时间只用于在同名多台手术之间收窄候选。它不是已实施手术的证据，
+    因此允许源端日期型 ``00:00:00`` 值，但拒绝“今日急诊”等描述性文本。
+    """
+
+    for field in (
+        "planned_surgery_time",
+        "planned_surgery_datetime",
+        "surgery_datetime",
+        "surgery_time",
+    ):
+        if (parsed := _parse_planned_surgery_time(row.get(field))) is not None:
+            return parsed
+
+    text = _preop_text(row.get("record_content"))
+    if not text:
+        return None
+    match = re.search(
+        r"(?:^|[\r\n])\s*手术时间\s*[:：]\s*(?P<value>[^\r\n]+)",
+        text,
+    )
+    return _parse_planned_surgery_time(match.group("value")) if match else None
+
+
+def _parse_planned_surgery_time(value: Any) -> datetime | None:
+    """将源端计划时间归一为医院本地无时区墙钟时间。"""
+
+    if isinstance(value, datetime):
+        return (
+            value.replace(tzinfo=None)
+            if value.tzinfo is None
+            else value.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+        )
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if not isinstance(value, str):
+        return None
+    matched = _PLANNED_SURGERY_TIME_TEXT.fullmatch(value.strip())
+    if matched is None:
+        return None
+    normalized = matched.group(0).replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    return (
+        parsed.replace(tzinfo=None)
+        if parsed.tzinfo is None
+        else parsed.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+    )
 
 
 def _preop_text(value: Any) -> str:
@@ -229,17 +290,18 @@ def associate_preop_document_to_surgery_event(
     events: Sequence[SurgeryEvent],
     procedure_name: Any,
     record_time: datetime | None,
+    planned_surgery_time: datetime | None = None,
 ) -> PreopDocumentAssociation:
-    """以术式事实优先、文书时间仅作约束的保守关联。
+    """以术式事实优先、计划手术时间收窄候选的保守关联。
 
-    文书时间永不按“最近手术”猜测；它只排除已经明确结束的候选，或在
-    已完成上一台、下一台尚未实施的时间间隔中收窄到唯一下一台。
+    计划时间仅在已按名称筛选的候选中精确到分钟或自然日收窄，不能覆盖
+    明确术式冲突。文书记录时间保留旧有回退语义，永不按“最近手术”猜测。
     """
 
-    if len(events) == 1:
-        return PreopDocumentAssociation(state="matched", event_index=events[0].event_index)
     if not events:
         return PreopDocumentAssociation(state="not_required")
+    if len(events) == 1 and planned_surgery_time is None:
+        return PreopDocumentAssociation(state="matched", event_index=events[0].event_index)
 
     named_candidates = [
         event
@@ -247,6 +309,17 @@ def associate_preop_document_to_surgery_event(
         if procedure_matches_surgery(procedure_name, event.surgery_name)
     ]
     if named_candidates:
+        if planned_surgery_time is not None:
+            planned_candidate = _unique_event_for_planned_surgery_time(
+                named_candidates, planned_surgery_time
+            )
+            if planned_candidate is not None:
+                return PreopDocumentAssociation(
+                    state="matched", event_index=planned_candidate.event_index
+                )
+            # 有明确术式而计划时间无法落到其任何唯一候选时，不能再使用
+            # 文书记录时间把它猜测性地关联到一台已实施手术。
+            return PreopDocumentAssociation(state="ambiguous")
         candidates = _exclude_finished_before_document(named_candidates, record_time)
         if len(candidates) == 1:
             return PreopDocumentAssociation(
@@ -258,12 +331,56 @@ def associate_preop_document_to_surgery_event(
         # 已抽到术式事实但不能匹配，不能让时间把它强行绑到另一台手术。
         return PreopDocumentAssociation(state="ambiguous")
 
+    if planned_surgery_time is not None:
+        planned_candidate = _unique_event_for_planned_surgery_time(
+            events, planned_surgery_time
+        )
+        if planned_candidate is not None:
+            return PreopDocumentAssociation(
+                state="matched", event_index=planned_candidate.event_index
+            )
+        return PreopDocumentAssociation(state="ambiguous")
+
     interval_candidate = _next_event_in_completed_interval(events, record_time)
     if interval_candidate is not None:
         return PreopDocumentAssociation(
             state="matched", event_index=interval_candidate.event_index
         )
     return PreopDocumentAssociation(state="ambiguous")
+
+
+def _unique_event_for_planned_surgery_time(
+    events: Sequence[SurgeryEvent], planned_surgery_time: datetime
+) -> SurgeryEvent | None:
+    """按计划时间作确定性收窄，禁止用最近时间猜测。"""
+
+    has_explicit_clock_time = any(
+        (
+            planned_surgery_time.hour,
+            planned_surgery_time.minute,
+            planned_surgery_time.second,
+            planned_surgery_time.microsecond,
+        )
+    )
+    if has_explicit_clock_time:
+        minute_matches = [
+            event
+            for event in events
+            if (begin := _event_boundary(event, "begin")) is not None
+            and begin.replace(second=0, microsecond=0)
+            == planned_surgery_time.replace(second=0, microsecond=0)
+        ]
+        if len(minute_matches) == 1:
+            return minute_matches[0]
+        return None
+
+    same_day_matches = [
+        event
+        for event in events
+        if (begin := _event_boundary(event, "begin")) is not None
+        and begin.date() == planned_surgery_time.date()
+    ]
+    return same_day_matches[0] if len(same_day_matches) == 1 else None
 
 
 def _event_boundary(event: SurgeryEvent, boundary: str) -> datetime | None:

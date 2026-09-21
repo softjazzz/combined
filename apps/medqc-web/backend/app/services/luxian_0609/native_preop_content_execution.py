@@ -26,6 +26,7 @@ from .surgery_event_association import (
     SurgeryEvent,
     associate_preop_document_to_surgery_event,
     build_performed_surgery_events,
+    summary_planned_surgery_time_from_row,
 )
 
 
@@ -314,6 +315,7 @@ def _association_state_for_rule(
                 events=events,
                 procedure_name=values.get("planned_procedure"),
                 record_time=_document_record_time(row),
+                planned_surgery_time=summary_planned_surgery_time_from_row(row),
             )
             association_state, event_index = (
                 association.state,
