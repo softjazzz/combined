@@ -376,6 +376,68 @@ def test_fetch_source_table_fallback_items_should_report_readiness_without_chang
     }
 
 
+def test_build_programmatic_evidence_payload_projects_controlled_lab_rows(
+    monkeypatch,
+):
+    connection = _FakeConnection(
+        {
+            "labtest_master": [
+                {
+                    "test_id": "TEST-1",
+                    "report_datetime": "2026-09-16 08:00:00",
+                    "labtest_result_status": "已审核",
+                    "patient_name": "不应进入共享结构化投影",
+                }
+            ],
+            "labtest_item_report": [
+                {
+                    "test_id": "TEST-1",
+                    "test_no": "REPORT-1",
+                    "item_id": "ITEM-1",
+                    "item_name": "血钾",
+                    "result": "6.8",
+                    "unit": "mmol/L",
+                    "abnormal_indicator": "PH",
+                    "report_time": "2026-09-16 08:00:00",
+                    "patient_name": "不应进入共享结构化投影",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        evidence_module,
+        "_SOURCE_TABLES",
+        ("labtest_master", "labtest_item_report"),
+    )
+    monkeypatch.setattr(
+        evidence_module,
+        "_FALLBACK_DOC_FETCH_LIMITS",
+        {"labtest_master": 100, "labtest_item_report": 400},
+    )
+    monkeypatch.setattr(evidence_module, "engine", _FakeEngine(connection))
+
+    payload = build_programmatic_evidence_payload(
+        bundle={"institute_id": "I1", "patient_id": "P1", "visit_id": "V1"}
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["source_readiness"] == {
+        "labtest_master": "complete",
+        "labtest_item_report": "complete",
+    }
+    assert timeline["structured_source_rows"]["labtest_item_report"][0][
+        "abnormal_indicator"
+    ] == "PH"
+    assert (
+        "patient_name"
+        not in timeline["structured_source_rows"]["labtest_item_report"][0]
+    )
+    assert set(connection.source_query_limits) == {
+        ("labtest_master", 101),
+        ("labtest_item_report", 401),
+    }
+
+
 def test_build_programmatic_evidence_payload_should_ignore_external_source_readiness_and_project_controlled_values(
     monkeypatch,
 ):

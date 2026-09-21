@@ -107,6 +107,22 @@ def _isolate_structured_disease_change_source(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(
         batch_worker,
+        "build_critical_value_018_facts",
+        lambda **_kwargs: {
+            "event_facts": {"critical_values": []},
+            "event_source_state_by_rule": {
+                "LX0916-018": "critical_value_source_complete"
+            },
+            "diagnostic": {
+                "code": "critical_value_018_stage1_ready",
+                "event_count": 0,
+                "llm_call_count": 0,
+            },
+        },
+    )
+
+    monkeypatch.setattr(
+        batch_worker,
         "load_disease_change_015016_facts",
         lambda **_kwargs: {
             "event_facts": {"disease_changes": []},
@@ -278,7 +294,12 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     expected_shared_rule_ids = tuple(
         rule.rule_id
         for rule in LUXIAN_0916_RULE_CATALOG
-        if rule.rule_id not in {"LX0916-015", "LX0916-016"}
+        if rule.rule_id
+        not in {
+            "LX0916-015",
+            "LX0916-016",
+            "LX0916-018",
+        }
     )
     assert captured_semantic_rule_ids == [expected_shared_rule_ids, expected_shared_rule_ids]
     summary = workspace.completed["summary"]
@@ -293,6 +314,16 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     assert summary["progress"]["max_parallel_records"] == 2
     assert summary["disease_change_stage2_llm_call_count"] == 0
     assert summary["disease_change_stage2_total_tokens"] == 0
+    assert summary["critical_value_018_stage2_llm_call_count"] == 0
+    assert summary["critical_value_018_stage2_total_tokens"] == 0
+    assert summary["critical_value_018_stage2_model_parameters"] == [
+        {
+            "enable_thinking": False,
+            "max_completion_tokens": 2048,
+            "allow_length_retry": False,
+            "response_format": "json_object",
+        }
+    ]
     items = workspace.completed["items"]
     assert len(items) == 64
     first = items[0]
@@ -305,6 +336,187 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     assert first["document_anchors"] == [{"document_type": "admission_record", "document_id": "A-1"}]
     assert first["diagnostics"] == {"origin": "executor"}
     assert [item["visit_id"] for item in items[:32]] == ["V-1"] * 32
+
+
+@pytest.mark.asyncio
+async def test_batch_worker_runs_018_family_and_summarizes_actual_model_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record()])
+    _patch_loaders(monkeypatch)
+    event = {
+        "event_type": "critical_values",
+        "event_id": "critical-value:REPORT-1",
+        "trigger_confirmed": True,
+        "evaluation_window_mature": None,
+        "event_source_type": "labtest_item_report",
+        "event_source_id": "REPORT-1",
+        "event_time": "2026-09-16 08:00:00",
+        "event_kind": "critical_lab_report",
+        "related_source_type": "labtest_item_report",
+        "related_source_ids": ["ITEM-1"],
+        "critical_flags": ["PH"],
+        "critical_items": [
+            {
+                "item_id": "ITEM-1",
+                "item_name": "血钾",
+                "result": "6.8",
+                "unit": "mmol/L",
+                "critical_flag": "PH",
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        batch_worker,
+        "build_critical_value_018_facts",
+        lambda **_kwargs: {
+            "event_facts": {"critical_values": [event]},
+            "event_source_state_by_rule": {
+                "LX0916-018": "critical_value_source_complete"
+            },
+            "diagnostic": {"llm_call_count": 0},
+        },
+    )
+    captured: list[dict[str, Any]] = []
+
+    async def extract_018(**kwargs: Any) -> dict[str, Any]:
+        captured.append(kwargs)
+        enriched = {
+            **event,
+            "evaluation_window_mature": True,
+            "stage2_state_by_rule": {"LX0916-018": "ready"},
+            "stage2_facts": [],
+        }
+        return {
+            "event_facts": {"critical_values": [enriched]},
+            "event_source_state_by_rule": {
+                "LX0916-018": "critical_value_source_complete"
+            },
+            "diagnostic": {
+                "code": "critical_value_018_stage2_ready",
+                "llm_call_count": 1,
+                "prompt_tokens": 90,
+                "completion_tokens": 18,
+                "total_tokens": 108,
+                "model_elapsed_ms": 140,
+                "failure_count": 0,
+                "usage_incomplete": False,
+                "model_parameters": {
+                    "provider_code": "aliyun_bailian",
+                    "model": "qwen3.8-flash",
+                    "temperature": 0,
+                    "top_p": 1,
+                    "enable_thinking": False,
+                    "max_completion_tokens": 2048,
+                    "allow_length_retry": False,
+                    "response_format": "json_object",
+                },
+            },
+        }
+
+    monkeypatch.setattr(
+        batch_worker,
+        "extract_critical_value_018_stage2_facts",
+        extract_018,
+    )
+    observed_contexts: list[dict[str, Any]] = []
+
+    def execute(
+        context: dict[str, Any], _rule_ids: tuple[str, ...]
+    ) -> Luxian0916Execution:
+        observed_contexts.append(context)
+        return _complete_execution()
+
+    monkeypatch.setattr(batch_worker, "execute_luxian_0916", execute)
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=_semantic_generate
+    )
+
+    assert len(captured) == 1
+    assert captured[0]["scene"] == "running"
+    assert captured[0]["generate"] is _semantic_generate
+    assert observed_contexts[0]["event_facts"]["critical_values"][0][
+        "stage2_state_by_rule"
+    ] == {"LX0916-018": "ready"}
+    assert workspace.completed is not None
+    summary = workspace.completed["summary"]
+    assert summary["critical_value_018_stage2_llm_call_count"] == 1
+    assert summary["critical_value_018_stage2_prompt_tokens"] == 90
+    assert summary["critical_value_018_stage2_completion_tokens"] == 18
+    assert summary["critical_value_018_stage2_total_tokens"] == 108
+    assert summary["critical_value_018_stage2_model_elapsed_ms"] == 140
+    assert summary["critical_value_018_stage2_failure_count"] == 0
+    assert summary["critical_value_018_stage2_usage_incomplete_count"] == 0
+    assert summary["critical_value_018_stage2_model_parameters"] == [
+        {
+            "provider_code": "aliyun_bailian",
+            "model": "qwen3.8-flash",
+            "temperature": 0,
+            "top_p": 1,
+            "enable_thinking": False,
+            "max_completion_tokens": 2048,
+            "allow_length_retry": False,
+            "response_format": "json_object",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_batch_worker_contains_invalid_018_stage2_output_to_018(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record()])
+    _patch_loaders(monkeypatch)
+    event = {
+        "event_type": "critical_values",
+        "event_id": "critical-value:REPORT-1",
+        "trigger_confirmed": True,
+        "event_time": "2026-09-16 08:00:00",
+    }
+    monkeypatch.setattr(
+        batch_worker,
+        "build_critical_value_018_facts",
+        lambda **_kwargs: {
+            "event_facts": {"critical_values": [event]},
+            "event_source_state_by_rule": {
+                "LX0916-018": "critical_value_source_complete"
+            },
+        },
+    )
+
+    async def invalid_stage2(**_kwargs: Any) -> object:
+        return None
+
+    monkeypatch.setattr(
+        batch_worker,
+        "extract_critical_value_018_stage2_facts",
+        invalid_stage2,
+    )
+    observed: list[dict[str, Any]] = []
+
+    def execute(
+        context: dict[str, Any], _rule_ids: tuple[str, ...]
+    ) -> Luxian0916Execution:
+        observed.append(context)
+        return _complete_execution()
+
+    monkeypatch.setattr(batch_worker, "execute_luxian_0916", execute)
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=_semantic_generate
+    )
+
+    assert workspace.completed is not None
+    protected = observed[0]["event_facts"]["critical_values"][0]
+    assert protected["event_id"] == "critical-value:REPORT-1"
+    assert protected["stage2_state_by_rule"] == {
+        "LX0916-018": "internal_failure"
+    }
+    assert protected["evaluation_window_mature"] is False
+    assert workspace.completed["summary"][
+        "critical_value_018_stage2_failure_count"
+    ] == 1
 
 
 @pytest.mark.asyncio

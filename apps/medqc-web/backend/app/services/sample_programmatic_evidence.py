@@ -63,8 +63,8 @@ _FALLBACK_DOC_FETCH_LIMITS = {
     "surgery_inform_consent": 10,
     "exam_master": 20,
     "exam_item_report": 20,
-    "labtest_master": 20,
-    "labtest_item_report": 20,
+    "labtest_master": 100,
+    "labtest_item_report": 400,
     "pathology_exam_master": 10,
     "pathology_exam_report": 10,
     "inpat_drug_order": 30,
@@ -76,6 +76,29 @@ _FALLBACK_DOC_FETCH_LIMITS = {
 }
 
 _SOURCE_READINESS_STATES = frozenset({"complete", "partial", "unavailable"})
+_STRUCTURED_SOURCE_ROW_FIELDS = {
+    "labtest_master": (
+        "test_id",
+        "test_no",
+        "labtest_result_status",
+        "report_status",
+        "report_datetime",
+        "report_time",
+    ),
+    "labtest_item_report": (
+        "test_id",
+        "test_no",
+        "document_id",
+        "item_id",
+        "item_no",
+        "item_name",
+        "result",
+        "unit",
+        "abnormal_indicator",
+        "report_time",
+        "report_status",
+    ),
+}
 _FORMAL_COURSE_STRUCTURED_FIELDS = (
     "case_characteristic",
     "diagnose_based_on",
@@ -648,6 +671,7 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
     fallback_items: list[dict[str, Any]] = []
     fallback_meta: dict[str, str] = {}
     source_readiness: dict[str, str] = {}
+    structured_source_rows: dict[str, list[dict[str, Any]]] = {}
     with engine.connect() as conn:
         for table_name in _SOURCE_TABLES:
             limit = int(_FALLBACK_DOC_FETCH_LIMITS.get(table_name, 20))
@@ -709,6 +733,14 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                 continue
             source_readiness[table_name] = "partial" if len(rows) > limit else "complete"
             rows = rows[:limit]
+            if table_name in _STRUCTURED_SOURCE_ROW_FIELDS:
+                structured_source_rows[table_name] = [
+                    {
+                        field: row.get(field)
+                        for field in _STRUCTURED_SOURCE_ROW_FIELDS[table_name]
+                    }
+                    for row in rows
+                ]
             for row in rows:
                 item = dict(row)
                 display_time = _safe_text(item.get("record_time") or item.get("submit_datetime") or item.get("update_time"))
@@ -734,6 +766,7 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                     }
                 )
         bundle_payload["_source_table_readiness"] = source_readiness
+        bundle_payload["_structured_source_rows"] = structured_source_rows
         try:
             if institute_id:
                 registration = conn.execute(
@@ -872,6 +905,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
     # 调用方携带的同名元数据不可作为来源证明；仅接受本次受控源表查询写回的值。
     bundle_payload.pop("_source_table_fallback_meta", None)
     bundle_payload.pop("_source_table_readiness", None)
+    bundle_payload.pop("_structured_source_rows", None)
     structured = _safe_dict(bundle_payload.get("structured_context"))
     inventory_items = _flatten_inventory_items(structured, bundle_payload)
     fallback_meta = _safe_dict(bundle_payload.get("_source_table_fallback_meta"))
@@ -881,6 +915,18 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
         for table_name in _SOURCE_TABLES
         if (status := _safe_text(raw_source_readiness.get(table_name)))
         in _SOURCE_READINESS_STATES
+    }
+    raw_structured_source_rows = _safe_dict(
+        bundle_payload.get("_structured_source_rows")
+    )
+    structured_source_rows = {
+        table_name: [
+            _safe_dict(row)
+            for row in _safe_list(raw_structured_source_rows.get(table_name))
+            if _safe_dict(row)
+        ]
+        for table_name in _STRUCTURED_SOURCE_ROW_FIELDS
+        if table_name in raw_structured_source_rows
     }
 
     documents: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in _SOURCE_TABLES}
@@ -937,6 +983,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
             "discharge_time": discharge_time,
             "documents": documents,
             "source_readiness": source_readiness,
+            "structured_source_rows": structured_source_rows,
             "risk_flags": _extract_risk_flags(
                 medical_text_value,
                 _safe_text(structured.get("summary")),

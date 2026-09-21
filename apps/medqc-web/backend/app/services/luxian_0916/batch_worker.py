@@ -15,6 +15,11 @@ from ..qc_llm_client import SichuanQCLLMClient
 from ..sample_programmatic_evidence import build_programmatic_evidence_payload
 from .bundle_reader import load_luxian_0916_bundle
 from .contracts import Luxian0916RuleResult
+from .critical_value_018 import (
+    build_critical_value_018_facts,
+    merge_critical_value_018_facts,
+)
+from .critical_value_018_stage2 import extract_critical_value_018_stage2_facts
 from .disease_change_015016 import (
     load_disease_change_015016_facts,
     merge_disease_change_015016_facts,
@@ -39,8 +44,15 @@ from .semantic_extractor import (
 
 _RULE_IDS = tuple(rule.rule_id for rule in LUXIAN_0916_RULE_CATALOG)
 _STRUCTURED_DISEASE_CHANGE_RULE_IDS = frozenset({"LX0916-015", "LX0916-016"})
+_CRITICAL_VALUE_018_RULE_IDS = frozenset({"LX0916-018"})
 _SHARED_SEMANTIC_RULE_IDS = tuple(
-    rule_id for rule_id in _RULE_IDS if rule_id not in _STRUCTURED_DISEASE_CHANGE_RULE_IDS
+    rule_id
+    for rule_id in _RULE_IDS
+    if rule_id
+    not in (
+        _STRUCTURED_DISEASE_CHANGE_RULE_IDS
+        | _CRITICAL_VALUE_018_RULE_IDS
+    )
 )
 _RULE_ORDER = {rule_id: index for index, rule_id in enumerate(_RULE_IDS)}
 _RULE_NAMES = {rule.rule_id: rule.name for rule in LUXIAN_0916_RULE_CATALOG}
@@ -198,6 +210,11 @@ async def run_luxian_0916_batch_job(
             for outcome in outcomes
             if outcome.disease_change_stage2_diagnostic
         ]
+        critical_value_018_stage2_diagnostics = [
+            outcome.critical_value_018_stage2_diagnostic
+            for outcome in outcomes
+            if outcome.critical_value_018_stage2_diagnostic
+        ]
         semantic_extraction_failures = _semantic_extraction_failures(outcomes)
         semantic_contract_retries = _semantic_contract_retries(outcomes)
         summary = {
@@ -251,6 +268,31 @@ async def run_luxian_0916_batch_job(
                 item.get("usage_incomplete") is True
                 for item in disease_change_stage2_diagnostics
             ),
+            "critical_value_018_stage2_llm_call_count": _diagnostic_total(
+                critical_value_018_stage2_diagnostics, "llm_call_count"
+            ),
+            "critical_value_018_stage2_prompt_tokens": _diagnostic_total(
+                critical_value_018_stage2_diagnostics, "prompt_tokens"
+            ),
+            "critical_value_018_stage2_completion_tokens": _diagnostic_total(
+                critical_value_018_stage2_diagnostics, "completion_tokens"
+            ),
+            "critical_value_018_stage2_total_tokens": _diagnostic_total(
+                critical_value_018_stage2_diagnostics, "total_tokens"
+            ),
+            "critical_value_018_stage2_model_elapsed_ms": _diagnostic_total(
+                critical_value_018_stage2_diagnostics, "model_elapsed_ms"
+            ),
+            "critical_value_018_stage2_failure_count": _diagnostic_total(
+                critical_value_018_stage2_diagnostics, "failure_count"
+            ),
+            "critical_value_018_stage2_usage_incomplete_count": sum(
+                item.get("usage_incomplete") is True
+                for item in critical_value_018_stage2_diagnostics
+            ),
+            "critical_value_018_stage2_model_parameters": _diagnostic_parameters(
+                critical_value_018_stage2_diagnostics
+            ),
             "progress": {
                 "step_key": "completed",
                 "processed_records": total_records,
@@ -285,6 +327,7 @@ class _RecordExecution:
         failed_records: Sequence[dict[str, Any]] = (),
         semantic_diagnostic: Mapping[str, Any] | None = None,
         disease_change_stage2_diagnostic: Mapping[str, Any] | None = None,
+        critical_value_018_stage2_diagnostic: Mapping[str, Any] | None = None,
         semantic_extraction_failure: Mapping[str, Any] | None = None,
         semantic_contract_retry: Mapping[str, Any] | None = None,
     ) -> None:
@@ -294,6 +337,9 @@ class _RecordExecution:
         self.semantic_diagnostic = dict(semantic_diagnostic or {})
         self.disease_change_stage2_diagnostic = dict(
             disease_change_stage2_diagnostic or {}
+        )
+        self.critical_value_018_stage2_diagnostic = dict(
+            critical_value_018_stage2_diagnostic or {}
         )
         self.semantic_extraction_failure = dict(semantic_extraction_failure or {})
         self.semantic_contract_retry = dict(semantic_contract_retry or {})
@@ -329,13 +375,39 @@ async def _execute_record(
         )
         extracted = await extract_luxian_0916_facts(
             evidence_payload=evidence_payload,
-            # 015/016 的触发由结构化来源独占；共享 Prompt 不再重复提取 disease_changes。
+            # 015/016 与 018 已迁入独立族；共享 Prompt 不再重复提取其同名事件事实。
             rule_ids=_SHARED_SEMANTIC_RULE_IDS,
             generate=semantic_generate,
         )
         context = merge_luxian_0916_semantic_facts(
             context=context,
             extracted=extracted,
+        )
+        critical_value_018_stage1: Mapping[str, Any] = {}
+        try:
+            critical_value_018_stage1_output = build_critical_value_018_facts(
+                bundle=bundle,
+                evidence_payload=evidence_payload,
+            )
+            if not isinstance(critical_value_018_stage1_output, Mapping):
+                raise TypeError("Critical value 018 Stage1 output must be a mapping")
+            critical_value_018_stage1 = critical_value_018_stage1_output
+            critical_value_018 = await extract_critical_value_018_stage2_facts(
+                evidence_payload=evidence_payload,
+                structured_facts=critical_value_018_stage1,
+                scene=_resolve_scene(record=record, job=job),
+                generate=semantic_generate,
+            )
+            if not isinstance(critical_value_018, Mapping):
+                raise TypeError("Critical value 018 Stage2 output must be a mapping")
+        except Exception:  # noqa: BLE001 - 族内异常只能降级 018
+            critical_value_018 = _critical_value_018_internal_failure(
+                critical_value_018_stage1,
+                scene=_resolve_scene(record=record, job=job),
+            )
+        context = merge_critical_value_018_facts(
+            context=context,
+            structured_facts=critical_value_018,
         )
         # 015/016 的触发事实由本次住院三坐标的原始结构化行独立读取。
         # 必须在共享模型事实合并后覆盖，防止旧 disease_changes 回流。
@@ -376,6 +448,9 @@ async def _execute_record(
             semantic_diagnostic=_mapping(extracted.get("diagnostic")),
             disease_change_stage2_diagnostic=_mapping(
                 structured_disease_change.get("diagnostic")
+            ),
+            critical_value_018_stage2_diagnostic=_mapping(
+                critical_value_018.get("diagnostic")
             ),
             semantic_extraction_failure=_semantic_extraction_failure(
                 identity=identity,
@@ -662,6 +737,62 @@ def _nonnegative_int(value: Any) -> int:
 
 def _diagnostic_total(diagnostics: Sequence[Mapping[str, Any]], key: str) -> int:
     return sum(_nonnegative_int(item.get(key)) for item in diagnostics)
+
+
+def _diagnostic_parameters(
+    diagnostics: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """保留任务实际使用过的去重模型参数，不记录 Prompt 或病例内容。"""
+
+    distinct: list[dict[str, Any]] = []
+    for diagnostic in diagnostics:
+        parameters = _mapping(diagnostic.get("model_parameters"))
+        if parameters and parameters not in distinct:
+            distinct.append(parameters)
+    return distinct
+
+
+def _critical_value_018_internal_failure(
+    structured_facts: Mapping[str, Any], *, scene: str
+) -> dict[str, Any]:
+    """018 族未预期异常的安全壳，不伪造无危急值结论。"""
+
+    result = dict(structured_facts)
+    event_facts = dict(_mapping(structured_facts.get("event_facts")))
+    protected_events: list[dict[str, Any]] = []
+    triggered_count = 0
+    for source_event in _sequence_of_mappings(event_facts.get("critical_values")):
+        event = dict(source_event)
+        if event.get("trigger_confirmed") is True:
+            triggered_count += 1
+            event["evaluation_window_mature"] = scene == "final"
+            event["stage2_state_by_rule"] = {"LX0916-018": "internal_failure"}
+            event.pop("stage2_facts", None)
+        protected_events.append(event)
+    event_facts["critical_values"] = protected_events
+    result["event_facts"] = event_facts
+    states = _mapping(structured_facts.get("event_source_state_by_rule"))
+    if states.get("LX0916-018") != "critical_value_source_complete":
+        result["event_source_state_by_rule"] = {
+            **states,
+            "LX0916-018": "critical_value_source_invalid",
+        }
+    return {
+        **result,
+        "diagnostic": {
+            "code": "critical_value_018_internal_failure",
+            "event_count": triggered_count,
+            "llm_call_count": 0,
+            "attempt_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "model_elapsed_ms": 0,
+            "failure_count": max(1, triggered_count),
+            "usage_incomplete": True,
+            "model_parameters": {},
+        },
+    }
 
 
 def _stage2_internal_failure(

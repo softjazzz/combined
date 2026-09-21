@@ -23,6 +23,7 @@ _DOCUMENTATION_BY_RULE = {
 _STAGE2_FACT_KINDS_BY_RULE = {
     "LX0916-015": ("record_present", "time_recorded", "content_recorded"),
     "LX0916-016": ("analysis_present", "management_present"),
+    "LX0916-018": ("report_recorded", "disposition_recorded"),
 }
 
 
@@ -86,6 +87,7 @@ def _event(rule_id: str, **overrides: object) -> dict:
                 "stage2_state_by_rule": {
                     "LX0916-015": "ready",
                     "LX0916-016": "ready",
+                    "LX0916-018": "ready",
                 },
                 "stage2_facts": _stage2_facts(event_id),
             }
@@ -99,7 +101,13 @@ def _context(rule_id: str, **event_overrides: object) -> dict:
         "event_facts": {
             _EVENT_KEY_BY_RULE[rule_id]: [_event(rule_id, **event_overrides)]
         },
-        "event_source_state_by_rule": {rule_id: "selected"},
+        "event_source_state_by_rule": {
+            rule_id: (
+                "critical_value_source_complete"
+                if rule_id == "LX0916-018"
+                else "selected"
+            )
+        },
     }
 
 
@@ -173,10 +181,9 @@ def test_disease_change_rules_report_each_confirmed_stage2_defect(
         (
             "LX0916-018",
             {
-                "documentation": {
-                    "report_recorded": True,
-                    "disposition_recorded": False,
-                }
+                "stage2_facts": _stage2_facts(
+                    "event-018", states={"disposition_recorded": "absent"}
+                ),
             },
             "critical_value_documentation_incomplete",
         ),
@@ -220,10 +227,9 @@ def test_existing_event_rules_report_confirmed_defects(
         (
             "LX0916-018",
             {
-                "documentation": {
-                    "report_recorded": False,
-                    "disposition_recorded": True,
-                }
+                "stage2_facts": _stage2_facts(
+                    "event-018", states={"report_recorded": "absent"}
+                ),
             },
             "critical_value_documentation_incomplete",
         ),
@@ -277,6 +283,99 @@ def test_existing_event_rules_wait_for_mature_evaluation_window(rule_id):
 
     assert result.status == "not_executed"
     assert result.reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.parametrize("fact_kind", _STAGE2_FACT_KINDS_BY_RULE["LX0916-018"])
+def test_critical_value_rule_reports_each_confirmed_stage2_defect(fact_kind):
+    result = _run(
+        "LX0916-018",
+        _context(
+            "LX0916-018",
+            stage2_facts=_stage2_facts(
+                "event-018", states={fact_kind: "absent"}
+            ),
+        ),
+    )
+
+    assert result.status == "non_compliant"
+    assert result.reason_code == "critical_value_documentation_incomplete"
+    assert result.diagnostics["failed_facts"] == [fact_kind]
+    assert result.decision_facts["events"][0]["stage2_state"] == "ready"
+
+
+def test_critical_value_rule_does_not_hide_a_defect_behind_an_unknown_event():
+    defect = _event(
+        "LX0916-018",
+        event_id="critical-value:defect",
+        stage2_facts=_stage2_facts(
+            "critical-value:defect", states={"report_recorded": "absent"}
+        ),
+    )
+    unknown = _event(
+        "LX0916-018",
+        event_id="critical-value:unknown",
+        stage2_facts=_stage2_facts(
+            "critical-value:unknown", states={"disposition_recorded": "unknown"}
+        ),
+    )
+
+    result = _run(
+        "LX0916-018",
+        {
+            "event_facts": {"critical_values": [defect, unknown]},
+            "event_source_state_by_rule": {
+                "LX0916-018": "critical_value_source_complete"
+            },
+        },
+    )
+
+    assert result.status == "non_compliant"
+    assert result.reason_code == "critical_value_documentation_incomplete"
+    assert [anchor["event_id"] for anchor in result.document_anchors] == [
+        "critical-value:defect"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source_state", "expected_reason"),
+    (
+        (
+            "critical_value_source_unavailable",
+            "critical_value_source_unavailable",
+        ),
+        ("critical_value_source_partial", "critical_value_source_partial"),
+        ("critical_value_source_invalid", "critical_value_source_invalid"),
+    ),
+)
+def test_critical_value_rule_rejects_incomplete_stage1_coverage(
+    source_state, expected_reason
+):
+    result = _run(
+        "LX0916-018",
+        {
+            "event_facts": {"critical_values": []},
+            "event_source_state_by_rule": {"LX0916-018": source_state},
+        },
+    )
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == expected_reason
+
+
+def test_critical_value_rule_accepts_empty_complete_stage1_as_no_trigger():
+    result = _run(
+        "LX0916-018",
+        {
+            "event_facts": {"critical_values": []},
+            "event_source_state_by_rule": {
+                "LX0916-018": "critical_value_source_complete"
+            },
+        },
+    )
+
+    assert result.status == "not_applicable"
+    assert result.reason_code == "trigger_event_absent"
+    assert result.decision_facts["source_state"] == "available"
 
 
 @pytest.mark.parametrize("rule_id", ("LX0916-015", "LX0916-016"))
@@ -687,13 +786,18 @@ def test_existing_rule_persists_trigger_facts_for_early_data_gap():
     assert result.decision_facts["source_state"] == "available"
     assert result.decision_facts["events"] == [
         {
+            "trigger_confirmed": None,
             "event_type": "critical_values",
             "event_id": "event-018",
-            "document_id": "document-018",
-            "source_type": "daily_course_record",
-            "trigger_confirmed": None,
+            "event_source_type": "inpat_nondrug_order",
+            "event_source_id": "ORDER-018",
+            "event_time": "2026-09-16 08:00:00",
+            "stage2_state": "ready",
             "evaluation_window_mature": True,
-            "documentation": {"report_recorded": True, "disposition_recorded": True},
+            "stage2_facts": [
+                _stage2_fact("event-018", "report_recorded"),
+                _stage2_fact("event-018", "disposition_recorded"),
+            ],
         }
     ]
 

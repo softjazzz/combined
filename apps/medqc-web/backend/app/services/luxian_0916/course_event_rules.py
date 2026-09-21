@@ -38,6 +38,7 @@ _APPROPRIATENESS_VALUES = frozenset({"reasonable", "unreasonable"})
 _STAGE2_FACT_KINDS_BY_RULE = {
     "LX0916-015": ("record_present", "time_recorded", "content_recorded"),
     "LX0916-016": ("analysis_present", "management_present"),
+    "LX0916-018": ("report_recorded", "disposition_recorded"),
 }
 _STAGE2_FACT_FIELDS = frozenset(
     {"fact_kind", "state", "event_id", "source_type", "document_id", "clause_id"}
@@ -184,7 +185,11 @@ def _decision_facts_from_context(
     source_state = states.get(rule_id) if isinstance(states, Mapping) else None
     if source_state == "structured_complete":
         decision_source_state = "available"
+    elif source_state == "critical_value_source_complete":
+        decision_source_state = "available"
     elif isinstance(source_state, str) and source_state.startswith("structured_trigger_"):
+        decision_source_state = source_state
+    elif isinstance(source_state, str) and source_state.startswith("critical_value_source_"):
         decision_source_state = source_state
     else:
         decision_source_state = (
@@ -323,6 +328,20 @@ def _event_rows(
             "病情变化触发来源存在关键状态、坐标或关联字段缺失，无法安全确认触发条件。",
         ),
     }
+    critical_value_gap = {
+        "critical_value_source_unavailable": (
+            "critical_value_source_unavailable",
+            "危急值检验来源读取失败，无法确认是否存在危急值事件。",
+        ),
+        "critical_value_source_partial": (
+            "critical_value_source_partial",
+            "危急值检验来源读取或投影不完整，无法确认是否存在全部危急值事件。",
+        ),
+        "critical_value_source_invalid": (
+            "critical_value_source_invalid",
+            "危急值检验来源存在关键状态、坐标或关联字段缺失，无法安全确认触发条件。",
+        ),
+    }
     if source_state in structured_gap:
         reason_code, findings = structured_gap[source_state]
         return None, _result(
@@ -331,6 +350,16 @@ def _event_rows(
             reason_code,
             findings,
             suggestion="补齐病情变化触发来源后重新质控。",
+            diagnostics={"event_key": event_key, "event_source_state": source_state},
+        )
+    if source_state in critical_value_gap:
+        reason_code, findings = critical_value_gap[source_state]
+        return None, _result(
+            rule_id,
+            "data_quality_gap",
+            reason_code,
+            findings,
+            suggestion="补齐危急值检验来源后重新质控。",
             diagnostics={"event_key": event_key, "event_source_state": source_state},
         )
     if not isinstance(facts, Mapping) or event_key not in facts:
@@ -356,7 +385,11 @@ def _event_rows(
             suggestion="修复事件记录后重新质控。",
             diagnostics={"event_key": event_key},
         )
-    if not rows and source_state not in {"selected", "structured_complete"}:
+    if not rows and source_state not in {
+        "selected",
+        "structured_complete",
+        "critical_value_source_complete",
+    }:
         return None, _event_source_gap_result(
             rule_id, event_key=event_key, source_state=source_state
         )
@@ -395,7 +428,7 @@ def _incomplete_event_coverage_result(
 ) -> Luxian0916RuleResult | None:
     states = context.get("event_source_state_by_rule")
     source_state = states.get(rule_id) if isinstance(states, Mapping) else None
-    if source_state == "selected":
+    if source_state in {"selected", "critical_value_source_complete"}:
         return None
     return _event_source_gap_result(
         rule_id,
@@ -747,25 +780,90 @@ def _evaluate_018(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     if early:
         return early
     assert events is not None
-    _, early = _maturity("LX0916-018", events)
-    if early:
-        return early
-    if any(event.get("evaluation_window_mature") is False for event in events):
+    maturity_values = tuple(event.get("evaluation_window_mature") for event in events)
+    if any(value is not True and value is not False for value in maturity_values):
+        return _result(
+            "LX0916-018",
+            "data_quality_gap",
+            "critical_value_stage2_fact_unavailable",
+            "危急值事件的评价时间窗或病程原子事实未完整形成，无法安全判断。",
+            suggestion="补齐危急值事件关联病程的受控原子事实后重新质控。",
+            anchors=tuple(
+                _event_anchor(event, "evaluation_window_mature")
+                for event in events
+                if event.get("evaluation_window_mature") is not True
+                and event.get("evaluation_window_mature") is not False
+            ),
+        )
+    if any(value is False for value in maturity_values):
         return _not_mature_result("LX0916-018", events)
-    fields = ("report_recorded", "disposition_recorded")
-    _, early = _documentation("LX0916-018", events, fields)
-    if early:
-        return early
-    values, early = _bool_documentation("LX0916-018", events, fields)
-    if early:
-        return early
-    assert values is not None
-    defects = [key for key, value in values.items() if not value]
-    if defects:
-        return _result("LX0916-018", "non_compliant", "critical_value_documentation_incomplete", "危急值报告或处理记录不完整。", suggestion="补充危急值报告及处理记录。", anchors=tuple(_event_anchor(event, *defects) for event in events), diagnostics={"failed_facts": defects})
+
+    ready_facts: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    defect_facts: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    unresolved_anchors: list[Mapping[str, Any]] = []
+    blocking_unresolved = False
+    for event in events:
+        facts, invalid = _stage2_event_facts(event, "LX0916-018")
+        stage2_states = event.get("stage2_state_by_rule")
+        stage2_ready = (
+            isinstance(stage2_states, Mapping)
+            and stage2_states.get("LX0916-018") == "ready"
+            and not invalid
+        )
+        if not stage2_ready:
+            blocking_unresolved = True
+            unresolved_anchors.append(_event_anchor(event, "stage2_facts"))
+            continue
+        ready_facts.extend((event, fact) for fact in facts)
+        defect_facts.extend(
+            (event, fact) for fact in facts if fact["state"] == "absent"
+        )
+        unknown_facts = tuple(fact for fact in facts if fact["state"] == "unknown")
+        if unknown_facts:
+            blocking_unresolved = True
+            unresolved_anchors.extend(
+                _event_anchor(event, str(fact["fact_kind"]))
+                for fact in unknown_facts
+            )
+
+    if defect_facts:
+        failed_facts = list(
+            dict.fromkeys(fact["fact_kind"] for _, fact in defect_facts)
+        )
+        return _result(
+            "LX0916-018",
+            "non_compliant",
+            "critical_value_documentation_incomplete",
+            "危急值报告或处理记录不完整。",
+            suggestion="补充危急值报告及处理记录。",
+            anchors=tuple(
+                _event_anchor(event, str(fact["fact_kind"]))
+                for event, fact in defect_facts
+            ),
+            diagnostics={"failed_facts": failed_facts},
+        )
+    if blocking_unresolved:
+        return _result(
+            "LX0916-018",
+            "data_quality_gap",
+            "critical_value_stage2_fact_unavailable",
+            "危急值事件的病程原子事实未完整形成，无法安全判断。",
+            suggestion="补齐危急值事件关联病程的受控原子事实后重新质控。",
+            anchors=tuple(unresolved_anchors),
+        )
     if coverage_gap := _incomplete_event_coverage_result(context, "LX0916-018"):
         return coverage_gap
-    return _result("LX0916-018", "compliant", "critical_value_documentation_complete", "危急值报告及处理记录完整。", anchors=tuple(_event_anchor(event, *fields) for event in events))
+    return _result(
+        "LX0916-018",
+        "compliant",
+        "critical_value_documentation_complete",
+        "危急值报告及处理记录完整。",
+        anchors=tuple(
+            _stage2_fact_anchor(event, fact)
+            for event, fact in ready_facts
+            if fact["state"] == "present"
+        ),
+    )
 
 
 def _evaluate_019(context: Mapping[str, Any]) -> Luxian0916RuleResult:
