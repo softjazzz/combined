@@ -204,10 +204,9 @@ def _decision_facts_from_context(
         return {"event_key": event_key, "source_state": "invalid", "events": []}
 
     source_state = (
-        decision_source_state
-        if isinstance(decision_source_state, str)
-        and decision_source_state.startswith("structured_trigger_")
-        else "partial" if source_state == "partial" else "available"
+        "available"
+        if decision_source_state in {"available", "selected"}
+        else decision_source_state
     )
     if rule_id in _STAGE2_FACT_KINDS_BY_RULE:
         return {
@@ -335,29 +334,8 @@ def _event_rows(
             diagnostics={"event_key": event_key, "event_source_state": source_state},
         )
     if not isinstance(facts, Mapping) or event_key not in facts:
-        if source_state == "partial":
-            return None, _partial_event_source_result(rule_id)
-        if source_state == "selected":
-            reason_code = "event_fact_unavailable"
-            findings = "该规则相关资料已纳入本次受控核对，但未形成可验证的事件事实，无法确认是否触发病程记录检查。"
-            suggestion = "复核受控提取后重新质控。"
-        elif source_state == "not_selected":
-            reason_code = "event_source_unavailable"
-            findings = (
-                "本次受控输入未选出可读取的目标文书，无法确认是否触发病程记录检查。"
-            )
-            suggestion = "补充可读取的目标文书后重新质控。"
-        else:
-            reason_code = "event_source_unverified"
-            findings = "未验证本次受控输入是否选出该规则的目标文书，无法确认是否触发病程记录检查。"
-            suggestion = "核对事件来源选择与受控事实后重新质控。"
-        return None, _result(
-            rule_id,
-            "data_quality_gap",
-            reason_code,
-            findings,
-            suggestion=suggestion,
-            diagnostics={"event_key": event_key, "event_source_state": source_state},
+        return None, _event_source_gap_result(
+            rule_id, event_key=event_key, source_state=source_state
         )
     rows = facts.get(event_key)
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
@@ -378,7 +356,52 @@ def _event_rows(
             suggestion="修复事件记录后重新质控。",
             diagnostics={"event_key": event_key},
         )
+    if not rows and source_state not in {"selected", "structured_complete"}:
+        return None, _event_source_gap_result(
+            rule_id, event_key=event_key, source_state=source_state
+        )
     return tuple(rows), None
+
+
+def _event_source_gap_result(
+    rule_id: str, *, event_key: str, source_state: Any
+) -> Luxian0916RuleResult:
+    if source_state == "partial":
+        return _partial_event_source_result(rule_id)
+    if source_state == "selected":
+        reason_code = "event_fact_unavailable"
+        findings = "该规则相关资料已纳入本次受控核对，但未形成可验证的事件事实，无法确认是否触发病程记录检查。"
+        suggestion = "复核受控提取后重新质控。"
+    elif source_state == "not_selected":
+        reason_code = "event_source_unavailable"
+        findings = "本次受控输入未选出可读取的目标文书，无法确认是否触发病程记录检查。"
+        suggestion = "补充可读取的目标文书后重新质控。"
+    else:
+        reason_code = "event_source_unverified"
+        findings = "未验证本次受控输入是否选出该规则的目标文书，无法确认是否触发病程记录检查。"
+        suggestion = "核对事件来源选择与受控事实后重新质控。"
+    return _result(
+        rule_id,
+        "data_quality_gap",
+        reason_code,
+        findings,
+        suggestion=suggestion,
+        diagnostics={"event_key": event_key, "event_source_state": source_state},
+    )
+
+
+def _incomplete_event_coverage_result(
+    context: Mapping[str, Any], rule_id: str
+) -> Luxian0916RuleResult | None:
+    states = context.get("event_source_state_by_rule")
+    source_state = states.get(rule_id) if isinstance(states, Mapping) else None
+    if source_state == "selected":
+        return None
+    return _event_source_gap_result(
+        rule_id,
+        event_key=_EVENT_KEY_BY_RULE[rule_id],
+        source_state=source_state,
+    )
 
 
 def _triggered_events(
@@ -487,8 +510,8 @@ def _partial_event_source_result(rule_id: str) -> Luxian0916RuleResult:
         rule_id,
         "data_quality_gap",
         "event_source_partial",
-        "本次仅核对部分病程资料，无法确认是否还有其他触发事件或整体记录是否符合要求。",
-        suggestion="补齐未纳入或截断的病程资料后重新质控。",
+        "本次仅核对部分事件相关资料，无法确认是否还有其他触发事件或整体记录是否符合要求。",
+        suggestion="补齐未纳入、读取失败或截断的事件相关资料后重新质控。",
         diagnostics={"event_source_state": "partial"},
     )
 
@@ -710,6 +733,8 @@ def _evaluate_017(context: Mapping[str, Any]) -> Luxian0916RuleResult:
         return _result("LX0916-017", "data_quality_gap", "semantic_fact_unavailable", "未提供检查或用药合理性的受控语义事实，无法判断是否存在不合理检查或用药。", suggestion="补齐检查或用药合理性的受控语义事实后重新质控。", anchors=tuple(_event_anchor(event, "appropriateness") for event in events))
     if "unreasonable" in states:
         return _result("LX0916-017", "non_compliant", "exam_or_medication_unreasonable", "存在经受控事实确认的不合理检查或用药。", suggestion="复核检查或用药指征，并记录调整依据。", anchors=tuple(_event_anchor(event, "appropriateness") for event in events if event.get("appropriateness") == "unreasonable"), diagnostics={"appropriateness": states})
+    if coverage_gap := _incomplete_event_coverage_result(context, "LX0916-017"):
+        return coverage_gap
     return _result("LX0916-017", "compliant", "exam_or_medication_reasonable", "现有检查或用药均经受控事实确认合理。", anchors=tuple(_event_anchor(event, "appropriateness") for event in events))
 
 
@@ -738,6 +763,8 @@ def _evaluate_018(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     defects = [key for key, value in values.items() if not value]
     if defects:
         return _result("LX0916-018", "non_compliant", "critical_value_documentation_incomplete", "危急值报告或处理记录不完整。", suggestion="补充危急值报告及处理记录。", anchors=tuple(_event_anchor(event, *defects) for event in events), diagnostics={"failed_facts": defects})
+    if coverage_gap := _incomplete_event_coverage_result(context, "LX0916-018"):
+        return coverage_gap
     return _result("LX0916-018", "compliant", "critical_value_documentation_complete", "危急值报告及处理记录完整。", anchors=tuple(_event_anchor(event, *fields) for event in events))
 
 
@@ -766,6 +793,8 @@ def _evaluate_019(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     defects = [key for key, value in values.items() if not value]
     if defects:
         return _result("LX0916-019", "non_compliant", "important_operation_documentation_incomplete", "重要操作未记录或记录不规范。", suggestion="补记重要操作并完善记录要素。", anchors=tuple(_event_anchor(event, *defects) for event in events), diagnostics={"failed_facts": defects})
+    if coverage_gap := _incomplete_event_coverage_result(context, "LX0916-019"):
+        return coverage_gap
     return _result("LX0916-019", "compliant", "important_operation_documentation_complete", "重要操作已记录且记录完整。", anchors=tuple(_event_anchor(event, *fields) for event in events))
 
 
@@ -794,6 +823,8 @@ def _evaluate_020(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     defects = [key for key, value in values.items() if not value]
     if defects:
         return _result("LX0916-020", "non_compliant", "diagnosis_change_reason_or_basis_missing", "修正或补充诊断未记录理由和依据。", suggestion="补充修正或补充诊断的理由和诊断依据。", anchors=tuple(_event_anchor(event, *defects) for event in events), diagnostics={"failed_facts": defects})
+    if coverage_gap := _incomplete_event_coverage_result(context, "LX0916-020"):
+        return coverage_gap
     return _result("LX0916-020", "compliant", "diagnosis_change_reason_and_basis_present", "修正或补充诊断已记录理由和依据。", anchors=tuple(_event_anchor(event, *fields) for event in events))
 
 

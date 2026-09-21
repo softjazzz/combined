@@ -95,6 +95,8 @@ _SOURCES_BY_RULE: dict[str, tuple[str, ...]] = {
         "daily_course_record",
         "exam_master",
         "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
         "inpat_drug_order",
         "inpat_nondrug_order",
     ),
@@ -103,7 +105,7 @@ _SOURCES_BY_RULE: dict[str, tuple[str, ...]] = {
         "labtest_master",
         "labtest_item_report",
     ),
-    "LX0916-019": ("daily_course_record",),
+    "LX0916-019": ("daily_course_record", "surgery_record"),
     "LX0916-020": ("daily_course_record",),
     "LX0916-021": ("surgery_inform_consent", "consent_form"),
     # 当前病历包把手术与麻醉知情文书共同归入 surgery_inform_consent，
@@ -263,6 +265,8 @@ _COURSE_EVENT_SOURCE_TYPES_BY_KEY: dict[str, frozenset[str]] = {
             "daily_course_record",
             "exam_master",
             "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
             "inpat_drug_order",
             "inpat_nondrug_order",
         }
@@ -270,15 +274,29 @@ _COURSE_EVENT_SOURCE_TYPES_BY_KEY: dict[str, frozenset[str]] = {
     "critical_values": frozenset(
         {"daily_course_record", "labtest_master", "labtest_item_report"}
     ),
-    "important_operations": frozenset({"daily_course_record"}),
+    "important_operations": frozenset({"daily_course_record", "surgery_record"}),
     "diagnosis_changes": frozenset({"daily_course_record"}),
 }
 _EVENT_SELECTION_RULE_IDS = frozenset(
     f"LX0916-{number:03d}" for number in range(15, 21)
 )
-_PARTIAL_DAILY_COURSE_SELECTION_RULE_IDS = frozenset(
-    {"LX0916-015", "LX0916-016"}
-)
+_EVENT_SOURCE_GROUPS_BY_RULE: dict[str, tuple[tuple[str, ...], ...]] = {
+    "LX0916-015": (("daily_course_record",),),
+    "LX0916-016": (("daily_course_record",),),
+    "LX0916-017": (
+        ("daily_course_record",),
+        ("exam_master", "exam_item_report"),
+        ("labtest_master", "labtest_item_report"),
+        ("inpat_drug_order",),
+        ("inpat_nondrug_order",),
+    ),
+    "LX0916-018": (
+        ("daily_course_record",),
+        ("labtest_master", "labtest_item_report"),
+    ),
+    "LX0916-019": (("daily_course_record",), ("surgery_record",)),
+    "LX0916-020": (("daily_course_record",),),
+}
 
 Generate = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -323,7 +341,7 @@ def _event_source_state_by_rule(
     documents: Sequence[Mapping[str, Any]],
     rule_ids: Sequence[str],
 ) -> dict[str, str]:
-    """记录目标文书的选择状态；015/016 额外核对当前来源行的覆盖范围。"""
+    """证明每条事件规则实际送模资料的覆盖范围。"""
 
     selected_sources = {
         str(document.get("source_type") or "").strip()
@@ -332,25 +350,22 @@ def _event_source_state_by_rule(
     selected_sources.discard("")
     timeline = _mapping(evidence_payload.get("programmatic_timeline"))
     source_documents = _mapping(timeline.get("documents"))
-    raw_daily_course_records = source_documents.get("daily_course_record")
-    raw_daily_course_count = (
-        len(raw_daily_course_records)
-        if isinstance(raw_daily_course_records, Sequence)
-        and not isinstance(raw_daily_course_records, (str, bytes))
-        else 0
-    )
-    selected_daily_course_records = [
-        document
-        for document in documents
-        if document.get("source_type") == "daily_course_record"
-    ]
-    daily_course_selection_is_partial = bool(selected_daily_course_records) and (
-        raw_daily_course_count > len(selected_daily_course_records)
-        or any(
-            bool(document.get("truncated"))
-            for document in selected_daily_course_records
+    source_readiness = _mapping(timeline.get("source_readiness"))
+    locatable_coordinates = _locatable_document_coordinates(timeline)
+    completeness_by_source = {
+        source_type: _source_selection_is_complete(
+            source_type=source_type,
+            source_documents=source_documents,
+            source_readiness=source_readiness,
+            selected_documents=documents,
+            locatable_coordinates=locatable_coordinates,
         )
-    )
+        for rule_id in rule_ids
+        for group in _EVENT_SOURCE_GROUPS_BY_RULE.get(
+            str(rule_id).strip().upper(), ()
+        )
+        for source_type in group
+    }
 
     states: dict[str, str] = {}
     for raw_rule_id in rule_ids:
@@ -359,14 +374,101 @@ def _event_source_state_by_rule(
             continue
         if not selected_sources.intersection(_SOURCES_BY_RULE[rule_id]):
             states[rule_id] = "not_selected"
-        elif (
-            rule_id in _PARTIAL_DAILY_COURSE_SELECTION_RULE_IDS
-            and daily_course_selection_is_partial
-        ):
-            states[rule_id] = "partial"
         else:
-            states[rule_id] = "selected"
+            groups = _EVENT_SOURCE_GROUPS_BY_RULE[rule_id]
+            states[rule_id] = (
+                "selected"
+                if all(
+                    _source_group_is_complete(
+                        group,
+                        source_documents=source_documents,
+                        completeness_by_source=completeness_by_source,
+                    )
+                    for group in groups
+                )
+                else "partial"
+            )
     return states
+
+
+def _source_group_is_complete(
+    group: Sequence[str],
+    *,
+    source_documents: Mapping[str, Any],
+    completeness_by_source: Mapping[str, bool],
+) -> bool:
+    """同一组内来源可替代，但任何已出现的来源都必须完整送模。"""
+
+    sources_with_rows = {
+        source_type
+        for source_type in group
+        if _source_row_count(source_documents.get(source_type)) > 0
+    }
+    if any(not completeness_by_source.get(source_type, False) for source_type in sources_with_rows):
+        return False
+    return any(completeness_by_source.get(source_type, False) for source_type in group)
+
+
+def _source_selection_is_complete(
+    *,
+    source_type: str,
+    source_documents: Mapping[str, Any],
+    source_readiness: Mapping[str, Any],
+    selected_documents: Sequence[Mapping[str, Any]],
+    locatable_coordinates: set[tuple[str, str]] | None,
+) -> bool:
+    rows_value = source_documents.get(source_type)
+    rows = (
+        tuple(rows_value)
+        if isinstance(rows_value, Sequence)
+        and not isinstance(rows_value, (str, bytes))
+        else ()
+    )
+    readiness = str(source_readiness.get(source_type) or "").strip().lower()
+    if readiness in {"partial", "unavailable"}:
+        return False
+    if not rows:
+        return readiness == "complete"
+
+    raw_coordinates: list[tuple[str, str]] = []
+    for raw_row in rows:
+        if not isinstance(raw_row, Mapping):
+            return False
+        document_id = str(raw_row.get("document_id") or raw_row.get("id") or "").strip()
+        coordinate = (source_type, document_id)
+        if (
+            not document_id
+            or not _text(raw_row)
+            or (
+                locatable_coordinates is not None
+                and coordinate not in locatable_coordinates
+            )
+        ):
+            return False
+        raw_coordinates.append(coordinate)
+    if len(set(raw_coordinates)) != len(raw_coordinates):
+        return False
+
+    selected = [
+        document
+        for document in selected_documents
+        if document.get("source_type") == source_type
+    ]
+    selected_coordinates = [
+        (source_type, str(document.get("document_id") or "").strip())
+        for document in selected
+    ]
+    return (
+        len(selected) == len(rows)
+        and set(selected_coordinates) == set(raw_coordinates)
+        and all(document.get("truncated") is not True for document in selected)
+    )
+
+
+def _source_row_count(value: Any) -> int:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return len(value)
+    return 0
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:

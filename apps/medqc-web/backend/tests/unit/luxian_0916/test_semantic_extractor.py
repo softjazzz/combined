@@ -1427,9 +1427,12 @@ async def test_returns_event_source_state_for_normal_extraction() -> None:
 
 
 @pytest.mark.asyncio
-async def test_marks_015_and_016_partial_when_daily_course_records_exceed_selection_limit(
+async def test_marks_every_daily_course_event_rule_partial_when_records_exceed_selection_limit(
 ) -> None:
+    prompts: list[str] = []
+
     async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        prompts.append(_prompt)
         return {"choices": [{"message": {"content": _content()}}]}
 
     result = await extract_luxian_0916_facts(
@@ -1437,21 +1440,31 @@ async def test_marks_015_and_016_partial_when_daily_course_records_exceed_select
             "programmatic_timeline": {
                 "documents": {
                     "daily_course_record": [
-                        {"document_id": f"D-{index}", "content": f"第{index}份病程记录。"}
+                        {
+                            "document_id": f"D-{index}",
+                            "content": (
+                                "第五篇病程记录了重要操作事件。"
+                                if index == 5
+                                else f"第{index}份普通病程记录。"
+                            ),
+                        }
                         for index in range(1, 6)
                     ]
                 }
             }
         },
-        rule_ids=("LX0916-015", "LX0916-016", "LX0916-017"),
+        rule_ids=("LX0916-015", "LX0916-016", "LX0916-017", "LX0916-019", "LX0916-020"),
         generate=generate,
     )
 
     assert result["event_source_state_by_rule"] == {
         "LX0916-015": "partial",
         "LX0916-016": "partial",
-        "LX0916-017": "selected",
+        "LX0916-017": "partial",
+        "LX0916-019": "partial",
+        "LX0916-020": "partial",
     }
+    assert "第五篇病程记录了重要操作事件" not in prompts[0]
 
 
 @pytest.mark.asyncio
@@ -1482,7 +1495,7 @@ async def test_keeps_015_and_016_selected_when_all_daily_course_records_are_sele
 
 
 @pytest.mark.asyncio
-async def test_marks_015_and_016_partial_when_a_selected_daily_course_record_is_truncated(
+async def test_marks_daily_course_event_rules_partial_when_selected_content_is_truncated(
 ) -> None:
     async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
         return {"choices": [{"message": {"content": _content()}}]}
@@ -1497,14 +1510,342 @@ async def test_marks_015_and_016_partial_when_a_selected_daily_course_record_is_
                 }
             }
         },
-        rule_ids=("LX0916-015", "LX0916-016"),
+        rule_ids=("LX0916-015", "LX0916-016", "LX0916-019", "LX0916-020"),
         generate=generate,
     )
 
     assert result["event_source_state_by_rule"] == {
         "LX0916-015": "partial",
         "LX0916-016": "partial",
+        "LX0916-019": "partial",
+        "LX0916-020": "partial",
     }
+
+
+@pytest.mark.asyncio
+async def test_marks_017_partial_when_one_authoritative_order_source_failed() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {"exam_or_medication_orders": []}
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": "D-1", "content": "未见检查或用药事件。"}
+                    ],
+                    "exam_master": [],
+                    "exam_item_report": [],
+                    "labtest_master": [],
+                    "labtest_item_report": [],
+                    "inpat_drug_order": [],
+                    "inpat_nondrug_order": [],
+                },
+                "source_readiness": {
+                    "daily_course_record": "complete",
+                    "exam_master": "complete",
+                    "exam_item_report": "unavailable",
+                    "labtest_master": "complete",
+                    "labtest_item_report": "complete",
+                    "inpat_drug_order": "complete",
+                    "inpat_nondrug_order": "unavailable",
+                },
+            }
+        },
+        rule_ids=("LX0916-017",),
+        generate=generate,
+    )
+
+    assert result["event_facts"] == {"exam_or_medication_orders": []}
+    assert result["event_source_state_by_rule"] == {"LX0916-017": "partial"}
+
+
+@pytest.mark.asyncio
+async def test_017_accepts_the_complete_exam_item_source_as_master_source_substitute() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {"exam_or_medication_orders": []}
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": "D-1", "content": "未见检查或用药事件。"}
+                    ],
+                    "exam_master": [],
+                    "exam_item_report": [],
+                    "labtest_master": [],
+                    "labtest_item_report": [],
+                    "inpat_drug_order": [],
+                    "inpat_nondrug_order": [],
+                },
+                "source_readiness": {
+                    "daily_course_record": "complete",
+                    "exam_master": "unavailable",
+                    "exam_item_report": "complete",
+                    "labtest_master": "complete",
+                    "labtest_item_report": "complete",
+                    "inpat_drug_order": "complete",
+                    "inpat_nondrug_order": "complete",
+                },
+            }
+        },
+        rule_ids=("LX0916-017",),
+        generate=generate,
+    )
+
+    assert result["event_source_state_by_rule"] == {"LX0916-017": "selected"}
+
+
+@pytest.mark.asyncio
+async def test_marks_017_partial_when_exam_rows_exceed_the_per_source_limit() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {"exam_or_medication_orders": []}
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": "D-1", "content": "普通病程。"}
+                    ],
+                    "exam_master": [
+                        {"document_id": f"EXAM-{index}", "content": "检查报告。"}
+                        for index in range(1, 4)
+                    ],
+                    "exam_item_report": [],
+                    "labtest_master": [],
+                    "labtest_item_report": [],
+                    "inpat_drug_order": [],
+                    "inpat_nondrug_order": [],
+                },
+                "source_readiness": {
+                    "daily_course_record": "complete",
+                    "exam_master": "complete",
+                    "exam_item_report": "complete",
+                    "labtest_master": "complete",
+                    "labtest_item_report": "complete",
+                    "inpat_drug_order": "complete",
+                    "inpat_nondrug_order": "complete",
+                },
+            }
+        },
+        rule_ids=("LX0916-017",),
+        generate=generate,
+    )
+
+    assert result["event_source_state_by_rule"] == {"LX0916-017": "partial"}
+
+
+@pytest.mark.asyncio
+async def test_marks_017_partial_when_an_event_may_be_in_truncated_exam_tail() -> None:
+    prompts: list[str] = []
+
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        prompts.append(_prompt)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {"exam_or_medication_orders": []}
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": "D-1", "content": "普通病程。"}
+                    ],
+                    "exam_master": [
+                        {
+                            "document_id": "EXAM-1",
+                            "content": "检查正文。" * 300 + "尾部记录了异常检查事件。",
+                        }
+                    ],
+                    "exam_item_report": [],
+                    "labtest_master": [],
+                    "labtest_item_report": [],
+                    "inpat_drug_order": [],
+                    "inpat_nondrug_order": [],
+                },
+                "source_readiness": {
+                    "daily_course_record": "complete",
+                    "exam_master": "complete",
+                    "exam_item_report": "complete",
+                    "labtest_master": "complete",
+                    "labtest_item_report": "complete",
+                    "inpat_drug_order": "complete",
+                    "inpat_nondrug_order": "complete",
+                },
+            }
+        },
+        rule_ids=("LX0916-017",),
+        generate=generate,
+    )
+
+    assert result["event_facts"] == {"exam_or_medication_orders": []}
+    assert result["event_source_state_by_rule"] == {"LX0916-017": "partial"}
+    assert "尾部记录了异常检查事件" not in prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_marks_017_partial_when_global_budget_truncates_a_nonempty_lab_source() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={
+                                "event_facts": {"exam_or_medication_orders": []}
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    documents = {
+        "admission_record": [{"document_id": "A-1", "content": "A" * 3_000}],
+        "first_course_record": [{"document_id": "F-1", "content": "F" * 3_000}],
+        "daily_course_record": [{"document_id": "D-1", "content": "普通病程。"}],
+        "discharge_record": [{"document_id": "OUT-1", "content": "O" * 4_000}],
+        "surgery_inform_consent": [
+            {"document_id": f"SC-{index}", "content": "S" * 2_000}
+            for index in range(2)
+        ],
+        "consent_form": [
+            {"document_id": f"C-{index}", "content": "C" * 2_000}
+            for index in range(2)
+        ],
+        "anesthesia_record": [
+            {"document_id": f"AR-{index}", "content": "R" * 1_200}
+            for index in range(2)
+        ],
+        "surgery_record": [
+            {"document_id": f"SR-{index}", "content": "Q" * 1_200}
+            for index in range(2)
+        ],
+        "surgery_safecheck_record": [
+            {"document_id": f"SS-{index}", "content": "K" * 800}
+            for index in range(2)
+        ],
+        "labtest_master": [{"document_id": "LM-1", "content": "M" * 400}],
+        "labtest_item_report": [
+            {"document_id": "LI-1", "content": "I" * 800}
+        ],
+    }
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": documents,
+                "source_readiness": {
+                    "daily_course_record": "complete",
+                    "exam_master": "complete",
+                    "exam_item_report": "complete",
+                    "labtest_master": "complete",
+                    "labtest_item_report": "complete",
+                    "inpat_drug_order": "complete",
+                    "inpat_nondrug_order": "complete",
+                },
+            }
+        },
+        rule_ids=(
+            "LX0916-001",
+            "LX0916-010",
+            "LX0916-017",
+            "LX0916-021",
+            "LX0916-023",
+            "LX0916-025",
+            "LX0916-026",
+            "LX0916-031",
+        ),
+        generate=generate,
+    )
+
+    assert result["event_facts"] == {"exam_or_medication_orders": []}
+    assert result["event_source_state_by_rule"] == {"LX0916-017": "partial"}
+
+
+@pytest.mark.asyncio
+async def test_marks_019_partial_when_surgery_record_source_failed() -> None:
+    async def generate(_prompt: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": _content(
+                            extra={"event_facts": {"important_operations": []}}
+                        )
+                    }
+                }
+            ]
+        }
+
+    result = await extract_luxian_0916_facts(
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "daily_course_record": [
+                        {"document_id": "D-1", "content": "未见重要操作事件。"}
+                    ],
+                    "surgery_record": [],
+                },
+                "source_readiness": {
+                    "daily_course_record": "complete",
+                    "surgery_record": "unavailable",
+                },
+            }
+        },
+        rule_ids=("LX0916-019",),
+        generate=generate,
+    )
+
+    assert result["event_source_state_by_rule"] == {"LX0916-019": "partial"}
 
 
 @pytest.mark.asyncio

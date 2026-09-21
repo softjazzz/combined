@@ -98,7 +98,8 @@ def _context(rule_id: str, **event_overrides: object) -> dict:
     return {
         "event_facts": {
             _EVENT_KEY_BY_RULE[rule_id]: [_event(rule_id, **event_overrides)]
-        }
+        },
+        "event_source_state_by_rule": {rule_id: "selected"},
     }
 
 
@@ -206,6 +207,61 @@ def test_existing_event_rules_report_confirmed_defects(
     assert result.decision_facts["events"]
     if rule_id == "LX0916-017":
         assert result.decision_facts["events"][0]["appropriateness"] == "unreasonable"
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "event_overrides", "expected_reason"),
+    [
+        (
+            "LX0916-017",
+            {"appropriateness": "unreasonable"},
+            "exam_or_medication_unreasonable",
+        ),
+        (
+            "LX0916-018",
+            {
+                "documentation": {
+                    "report_recorded": False,
+                    "disposition_recorded": True,
+                }
+            },
+            "critical_value_documentation_incomplete",
+        ),
+        (
+            "LX0916-019",
+            {"documentation": {"record_present": True, "complete": False}},
+            "important_operation_documentation_incomplete",
+        ),
+        (
+            "LX0916-020",
+            {"documentation": {"reason_recorded": False, "basis_recorded": True}},
+            "diagnosis_change_reason_or_basis_missing",
+        ),
+    ],
+)
+def test_existing_event_rules_preserve_confirmed_defects_with_partial_coverage(
+    rule_id, event_overrides, expected_reason
+):
+    context = _context(rule_id, **event_overrides)
+    context["event_source_state_by_rule"] = {rule_id: "partial"}
+
+    result = _run(rule_id, context)
+
+    assert result.status == "non_compliant"
+    assert result.reason_code == expected_reason
+    assert result.decision_facts["source_state"] == "partial"
+
+
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(17, 21)])
+def test_existing_event_rules_do_not_report_compliant_from_partial_coverage(rule_id):
+    context = _context(rule_id)
+    context["event_source_state_by_rule"] = {rule_id: "partial"}
+
+    result = _run(rule_id, context)
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "event_source_partial"
+    assert result.decision_facts["source_state"] == "partial"
 
 
 @pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
@@ -377,7 +433,13 @@ def test_event_rules_describe_missing_event_facts_by_source_state(
 
 @pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(15, 21)])
 def test_event_rules_are_not_applicable_without_confirmed_trigger(rule_id):
-    result = _run(rule_id, {"event_facts": {_EVENT_KEY_BY_RULE[rule_id]: []}})
+    result = _run(
+        rule_id,
+        {
+            "event_facts": {_EVENT_KEY_BY_RULE[rule_id]: []},
+            "event_source_state_by_rule": {rule_id: "selected"},
+        },
+    )
 
     assert result.status == "not_applicable"
     assert result.reason_code == "trigger_event_absent"
@@ -386,6 +448,53 @@ def test_event_rules_are_not_applicable_without_confirmed_trigger(rule_id):
         "source_state": "available",
         "events": [],
     }
+
+
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(17, 21)])
+def test_existing_event_rules_do_not_treat_empty_partial_extraction_as_no_trigger(
+    rule_id,
+):
+    result = _run(
+        rule_id,
+        {
+            "event_facts": {_EVENT_KEY_BY_RULE[rule_id]: []},
+            "event_source_state_by_rule": {rule_id: "partial"},
+        },
+    )
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == "event_source_partial"
+    assert result.decision_facts == {
+        "event_key": _EVENT_KEY_BY_RULE[rule_id],
+        "source_state": "partial",
+        "events": [],
+    }
+
+
+@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(17, 21)])
+@pytest.mark.parametrize("event_shape", ("missing", "empty"))
+@pytest.mark.parametrize(
+    ("source_state", "expected_reason"),
+    (
+        ("not_selected", "event_source_unavailable"),
+        (None, "event_source_unverified"),
+    ),
+)
+def test_existing_event_rules_apply_the_same_coverage_gate_to_missing_and_empty_facts(
+    rule_id, event_shape, source_state, expected_reason
+):
+    context = {
+        "event_facts": (
+            {} if event_shape == "missing" else {_EVENT_KEY_BY_RULE[rule_id]: []}
+        )
+    }
+    if source_state is not None:
+        context["event_source_state_by_rule"] = {rule_id: source_state}
+
+    result = _run(rule_id, context)
+
+    assert result.status == "data_quality_gap"
+    assert result.reason_code == expected_reason
 
 
 @pytest.mark.parametrize(
