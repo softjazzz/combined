@@ -24,6 +24,13 @@ _HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 _PLANNED_SURGERY_TIME_TEXT = re.compile(
     r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?(?:Z|[+-]\d{2}:?\d{2})?"
 )
+_PROCEDURE_NARRATIVE_PREFIXES = (
+    "计划实施",
+    "计划行",
+    "拟实施",
+    "拟行",
+    "拟施",
+)
 
 
 class SurgeryEvent:
@@ -69,24 +76,59 @@ def procedure_matches_surgery(procedure_name: Any, surgery_name: Any) -> bool:
     right = normalize_surgery_name(surgery_name)
     if not left or not right:
         return False
-    if left == right or left in right:
-        return True
-    # 原子事实必须是连续原文片段，常会保留“拟行/手术方案”等前缀；
-    # 仅当完整术式本身具有足够辨识度时允许反向包含。
-    if len(right) >= 5 and right in left:
+    if _same_or_approved_prefix_variant(left, right):
         return True
     components = [part for part in re.split(r"[+＋、，,；;]", left) if len(part) >= 4]
     if not components:
         return False
+    surgery_components = [
+        part for part in re.split(r"[+＋、，,；;]", right) if len(part) >= 4
+    ]
 
     def component_matches(part: str) -> bool:
-        if part in right:
-            return True
-        suffixes = [part[index:] for index in range(1, len(part) - 4)]
-        return any(len(suffix) >= 5 and suffix in right for suffix in suffixes)
+        return any(
+            _same_or_approved_prefix_variant(part, surgery_component)
+            for surgery_component in surgery_components
+        )
 
     matched = sum(1 for part in components if component_matches(part))
+    if len(components) == 1:
+        # 单一术式可对应同一次复合手术中的同名组件；“全/次全”等
+        # 身份性差异不会通过 `_same_or_approved_prefix_variant`。
+        return matched == 1
     return matched >= 2 and matched * 2 >= len(components)
+
+
+def _same_or_approved_prefix_variant(left: str, right: str) -> bool:
+    """只忽略计划叙述前缀，禁止任意子串或手术入路等价。"""
+
+    if left == right:
+        return True
+    for longer, shorter in ((left, right), (right, left)):
+        if longer.endswith(shorter) and _is_procedure_narrative_prefix(
+            longer[: -len(shorter)]
+        ):
+            return True
+    return False
+
+
+def _is_procedure_narrative_prefix(value: str) -> bool:
+    """确认被忽略部分仅含“拟行/计划行”等叙述性前缀。"""
+
+    remaining = value
+    while remaining:
+        prefix = next(
+            (
+                candidate
+                for candidate in _PROCEDURE_NARRATIVE_PREFIXES
+                if remaining.startswith(candidate)
+            ),
+            None,
+        )
+        if prefix is None:
+            return False
+        remaining = remaining[len(prefix) :]
+    return bool(value)
 
 
 def summary_surgery_name_from_row(row: Mapping[str, Any]) -> str:

@@ -449,6 +449,71 @@ async def test_single_surgery_conflicting_explicit_procedure_is_data_gap_without
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("actual_name", "documented_name"),
+    (
+        ("全子宫切除术", "次全子宫切除术"),
+        ("次全子宫切除术", "全子宫切除术"),
+        ("胆囊切除术", "腹腔镜胆囊切除术"),
+        ("腹腔镜胆囊切除术", "胆囊切除术"),
+        ("肾镜取石术", "经皮肾镜取石术"),
+    ),
+)
+async def test_single_surgery_identity_variant_is_data_gap_without_event_attribution(
+    actual_name, documented_name
+):
+    """“全切”与“次全切”是不同术式，不能被共享关联函数吞没。"""
+
+    text = f"术前小结：拟行{documented_name}，其余字段完整。"
+    session = _session(
+        summary=({"document_id": "summary", "record_content": text},),
+        surgery_records=(
+            _surgery_record(
+                document_id="surgery-actual",
+                name=actual_name,
+                begin="2026-01-01 08:00:00+08:00",
+            ),
+        ),
+    )
+    result = await evaluate_preop_content_rules(
+        rule_ids=("LX0609-078",),
+        snapshot=session.snapshot,
+        materials=session.materials,
+        llm_client=_Client(
+            _payload(
+                {
+                    "document_id": "summary",
+                    "source_type": "presurg_summary",
+                    "items": _summary_items(text=text, procedure=documented_name),
+                }
+            )
+        ),
+    )
+
+    decision = result.decisions[0]
+    facts = dict(result.customer_display_facts)["LX0609-078"]
+    assert (
+        decision.applicability.value,
+        decision.evidence_state.value,
+        decision.qc_direction.value,
+        decision.reason_code,
+    ) == (
+        "unknown",
+        "data_gap",
+        "unknown",
+        "association_failed",
+    )
+    assert facts["documents"] == [
+        {
+            "document_index": 1,
+            "event_index": None,
+            "association_state": "ambiguous",
+            "missing_fields": [],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_same_name_surgeries_on_different_days_use_structured_planned_time():
     name = "腹腔镜胆囊切除术"
     text = f"术前小结：拟行{name}，其余字段完整。"

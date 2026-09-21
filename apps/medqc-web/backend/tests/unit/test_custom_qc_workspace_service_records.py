@@ -657,6 +657,8 @@ def test_refresh_parent_batch_job_persists_completed_status_after_children_finis
     executed = []
 
     class _Result:
+        rowcount = 1
+
         def mappings(self):
             return self
 
@@ -669,6 +671,9 @@ def test_refresh_parent_batch_job_persists_completed_status_after_children_finis
             return _Result()
 
         def commit(self):
+            return None
+
+        def rollback(self):
             return None
 
         def close(self):
@@ -694,6 +699,49 @@ def test_refresh_parent_batch_job_persists_completed_status_after_children_finis
 
     update_statement = next(statement for statement in executed if statement.is_update)
     assert update_statement.compile().params["status"] == "completed"
+
+
+@pytest.mark.parametrize(
+    ("parent_status", "expected_status", "expected_cancellable"),
+    [
+        ("canceled", "canceled", False),
+        ("running", "completed", False),
+    ],
+)
+def test_aggregate_parent_job_preserves_parent_cancellation_over_child_projection(
+    monkeypatch, parent_status, expected_status, expected_cancellable,
+):
+    """父任务取消是终态，completed/canceled 子任务组合不得覆盖它。"""
+
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {"id": "child-completed", "status": "completed", "summary": {}},
+                {"id": "child-canceled", "status": "canceled", "summary": {}},
+            ]
+
+    class _Session:
+        def execute(self, _statement):
+            return _Rows()
+
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(
+        workspace_module,
+        "_row_to_batch_job",
+        lambda row, include_items=True: row,
+    )
+
+    aggregate = service._aggregate_parent_job(
+        _Session(),
+        {"id": "parent-1", "job_kind": "parent", "status": parent_status, "summary": {}},
+    )
+
+    assert aggregate["status"] == expected_status
+    assert aggregate["progress"]["step_key"] == expected_status
+    assert aggregate["cancellable"] is expected_cancellable
 
 
 def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis():

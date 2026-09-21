@@ -2258,7 +2258,12 @@ class CustomQCWorkspaceService:
         canceled = sum(1 for item in statuses if item == "canceled")
         running = sum(1 for item in statuses if item == "running")
         queued = sum(1 for item in statuses if item == "queued")
-        if running or queued:
+        parent_status = str(parent_job.get("status") or "").strip().lower()
+        # 父任务已取消时，子任务的迟到收尾只能保留子任务自身结果；
+        # 父任务读取投影不得重新将其解释为 completed。
+        if parent_status == "canceled":
+            aggregate_status = "canceled"
+        elif running or queued:
             aggregate_status = "running" if running else "queued"
         elif failed:
             aggregate_status = "failed"
@@ -2331,7 +2336,9 @@ class CustomQCWorkspaceService:
             "progress": parent_summary.get("progress") or {},
             "children": child_jobs,
             "child_jobs": child_jobs,
-            "cancellable": any(status in {"queued", "running"} for status in statuses),
+            "cancellable": parent_status != "canceled" and any(
+                status in {"queued", "running"} for status in statuses
+            ),
             "success_count": success_count,
             "failed_count": failed_count,
             "issue_records": issue_records,
@@ -2371,7 +2378,7 @@ class CustomQCWorkspaceService:
             }
             if status in {"completed", "failed", "canceled"}:
                 values["finished_at"] = now
-            session.execute(
+            parent_update = session.execute(
                 update(self._batch_job_table)
                 .where(
                     and_(
@@ -2381,6 +2388,12 @@ class CustomQCWorkspaceService:
                 )
                 .values(**values)
             )
+            # 与子任务完成相同，父任务取消与最后一个子任务收尾可能竞争。
+            # 只有状态条件更新成功，才允许在同一事务内写入正式 Envelope；
+            # 否则不得由迟到刷新重新交付父任务结果。
+            if getattr(parent_update, "rowcount", 0) != 1:
+                session.rollback()
+                return
             if status == "completed":
                 canonical_items = [
                     item

@@ -1,12 +1,14 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 import logging
 from typing import List, Dict, Any
 import time
 import csv
 import json
+import os
+import stat
 from pathlib import Path
 from pydantic import BaseModel
 from uuid import UUID, uuid4
@@ -82,6 +84,49 @@ def _delete_export_files(csv_path: Path, metadata_path: Path) -> None:
             logger.warning("[reports] 无法删除过期质控导出文件: %s", path)
 
 
+def _read_export_artifact(path: Path) -> bytes:
+    """只从私有导出目录读取稳定的普通文件，不跟随链接或重解析入口。"""
+
+    file_stat = path.lstat()
+    if path.is_symlink() or (
+        getattr(file_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    ):
+        raise FileNotFoundError(path)
+    if not stat.S_ISREG(file_stat.st_mode) or path.resolve().parent != _QC_EXPORT_DIR.resolve():
+        raise FileNotFoundError(path)
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        opened_stat = os.fstat(descriptor)
+        current_stat = path.lstat()
+        if path.is_symlink() or (
+            getattr(current_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            raise FileNotFoundError(path)
+        if (opened_stat.st_dev, opened_stat.st_ino) != (
+            current_stat.st_dev,
+            current_stat.st_ino,
+        ):
+            raise FileNotFoundError(path)
+        with os.fdopen(descriptor, "rb", closefd=True) as handle:
+            descriptor = -1
+            return handle.read()
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _path_is_stale(path: Path, *, stale_before: float) -> bool:
+    try:
+        return path.stat().st_mtime <= stale_before
+    except FileNotFoundError:
+        return False
+    except OSError:
+        logger.warning("[reports] 无法检查质控导出文件更新时间: %s", path)
+        return False
+
+
 def _cleanup_expired_exports(*, now: datetime | None = None) -> None:
     current_time = now or datetime.now(timezone.utc)
     _QC_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -93,10 +138,25 @@ def _cleanup_expired_exports(*, now: datetime | None = None) -> None:
                 continue
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             expired = not isinstance(metadata, dict) or _metadata_expired(metadata, now=current_time)
+        except FileNotFoundError:
+            # glob 后文件可能已被另一个清理者删除。
+            continue
         except (OSError, ValueError, json.JSONDecodeError):
             csv_path = _QC_EXPORT_DIR / f"{metadata_path.stem}.csv"
-            expired = metadata_path.stat().st_mtime <= stale_before
+            expired = _path_is_stale(metadata_path, stale_before=stale_before)
         if expired:
+            _delete_export_files(csv_path, metadata_path)
+
+    # CSV 先写入、metadata 后写入。只回收超过 TTL 且没有 metadata 的文件，
+    # 让正在创建的导出在一个 TTL 内不受并发清理影响。
+    for csv_path in _QC_EXPORT_DIR.glob("*.csv"):
+        try:
+            expected_csv_path, metadata_path = _export_paths(csv_path.stem)
+        except ValueError:
+            continue
+        if expected_csv_path != csv_path or metadata_path.exists():
+            continue
+        if _path_is_stale(csv_path, stale_before=stale_before):
             _delete_export_files(csv_path, metadata_path)
 
 
@@ -396,19 +456,23 @@ async def qc_export(
             writer.writerow({k: r.get(k) for k in headers})
 
     created_at = datetime.now(timezone.utc)
-    metadata_path.write_text(
-        json.dumps(
-            {
-                "export_id": export_id,
-                "owner": owner,
-                "created_at": created_at.isoformat(),
-                "expires_at": (created_at + _QC_EXPORT_TTL).isoformat(),
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
-    )
+    try:
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "export_id": export_id,
+                    "owner": owner,
+                    "created_at": created_at.isoformat(),
+                    "expires_at": (created_at + _QC_EXPORT_TTL).isoformat(),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+    except (OSError, UnicodeError):
+        _delete_export_files(file_path, metadata_path)
+        raise
 
     download_url = f"/api/v1/reports/qc/export/{export_id}/download"
     audit_event(
@@ -450,18 +514,21 @@ async def download_qc_export(
         raise HTTPException(status_code=404, detail="未找到质控导出文件") from None
 
     try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        metadata = json.loads(_read_export_artifact(metadata_path))
+    except (OSError, json.JSONDecodeError, UnicodeError):
         raise HTTPException(status_code=404, detail="未找到质控导出文件") from None
     if not isinstance(metadata, dict) or _metadata_expired(metadata, now=datetime.now(timezone.utc)):
         _delete_export_files(file_path, metadata_path)
         raise HTTPException(status_code=404, detail="质控导出文件已过期")
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="未找到质控导出文件")
 
     owner = _export_owner(current_user)
     if owner != metadata.get("owner") and not _is_export_admin(current_user):
-        raise HTTPException(status_code=403, detail="无权下载其他用户创建的质控报表")
+        raise HTTPException(status_code=403, detail="无权下载其他用户生成的质控报表")
+
+    try:
+        file_content = _read_export_artifact(file_path)
+    except OSError:
+        raise HTTPException(status_code=404, detail="未找到质控导出文件") from None
 
     audit_event(
         request,
@@ -471,9 +538,12 @@ async def download_qc_export(
         details={"export_id": export_id},
         current_user=current_user,
     )
-    return FileResponse(
-        path=str(file_path),
+    return Response(
+        content=file_content,
         media_type="text/csv; charset=utf-8",
-        filename=f"qc_summary_{export_id}.csv",
-        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'attachment; filename="qc_summary_{export_id}.csv"',
+        },
     )

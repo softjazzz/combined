@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -96,3 +97,47 @@ def test_result_detail_rejects_path_and_non_uuid_identifiers(monkeypatch, tmp_pa
     ):
         response = client.get(f"/api/v1/qc/sichuan/results/{unsafe_id}")
         assert response.status_code in {404, 422}
+
+
+def test_saved_result_rejects_symlink_even_when_target_is_in_storage_directory(monkeypatch, tmp_path):
+    client, _current_user, storage_dir = _client(monkeypatch, tmp_path)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    result_id = str(uuid.uuid4())
+    target = storage_dir / "ordinary-result.json"
+    target.write_text(
+        json.dumps({"id": result_id, "created_by": "owner-1", "payload": {}}),
+        encoding="utf-8",
+    )
+    link = storage_dir / f"{result_id}.json"
+    try:
+        os.symlink(target.name, link)
+    except OSError as exc:
+        pytest.skip(f"当前 Windows 环境不允许创建符号链接: {exc}")
+
+    assert link.is_symlink()
+    assert link.resolve().parent == storage_dir.resolve()
+    assert not qc_sichuan._is_saved_qc_result_file_within_directory(link, storage_dir)
+    assert client.get(f"/api/v1/qc/sichuan/results/{result_id}").status_code == 404
+
+
+def test_saved_result_rejects_link_entry_when_platform_cannot_create_symlink(monkeypatch, tmp_path):
+    """无符号链接权限的 Windows 测试环境也要覆盖拒绝分支。"""
+
+    client, _current_user, storage_dir = _client(monkeypatch, tmp_path)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    result_id = str(uuid.uuid4())
+    candidate = storage_dir / f"{result_id}.json"
+    candidate.write_text(
+        json.dumps({"id": result_id, "created_by": "owner-1", "payload": {}}),
+        encoding="utf-8",
+    )
+    path_type = type(candidate)
+    original_is_symlink = path_type.is_symlink
+    monkeypatch.setattr(
+        path_type,
+        "is_symlink",
+        lambda path: path == candidate or original_is_symlink(path),
+    )
+
+    assert not qc_sichuan._is_saved_qc_result_file_within_directory(candidate, storage_dir)
+    assert client.get(f"/api/v1/qc/sichuan/results/{result_id}").status_code == 404

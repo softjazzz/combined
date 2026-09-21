@@ -9,10 +9,14 @@
 """
 
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from uuid import uuid4
 
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
@@ -388,6 +392,167 @@ class TestReportsAPI:
         assert expired.status_code == 404
         assert not csv_path.exists()
         assert not metadata_path.exists()
+
+    def test_cleanup_ignores_metadata_removed_after_enumeration(self, monkeypatch, tmp_path):
+        """并发清理删除 metadata 后，本轮清理不应因再次 stat 而失败。"""
+        export_id = uuid4().hex
+        csv_path = tmp_path / f"{export_id}.csv"
+        metadata_path = tmp_path / f"{export_id}.json"
+        csv_path.write_text("record_id\nrecord-1\n", encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps({"expires_at": "2999-01-01T00:00:00+00:00"}),
+            encoding="utf-8",
+        )
+
+        original_read_text = type(metadata_path).read_text
+
+        def remove_metadata_before_read(path, *args, **kwargs):
+            if path == metadata_path:
+                path.unlink()
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(type(metadata_path), "read_text", remove_metadata_before_read)
+
+        reports_module._cleanup_expired_exports(now=datetime.now(timezone.utc))
+
+        assert csv_path.exists()
+        assert not metadata_path.exists()
+
+    def test_cleanup_tolerates_csv_removed_before_expired_metadata(self, tmp_path):
+        """CSV 先被另一清理者删除时，过期 metadata 仍可安全清除。"""
+        export_id = uuid4().hex
+        csv_path = tmp_path / f"{export_id}.csv"
+        metadata_path = tmp_path / f"{export_id}.json"
+        csv_path.write_text("record_id\nrecord-1\n", encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps({"expires_at": "2000-01-01T00:00:00+00:00"}),
+            encoding="utf-8",
+        )
+        csv_path.unlink()
+
+        reports_module._cleanup_expired_exports(now=datetime.now(timezone.utc))
+
+        assert not csv_path.exists()
+        assert not metadata_path.exists()
+
+    def test_cleanup_is_idempotent_for_two_competing_cleaners(self, monkeypatch, tmp_path):
+        """两个清理者处理同一过期导出时，双方都能正常完成。"""
+        export_id = uuid4().hex
+        csv_path = tmp_path / f"{export_id}.csv"
+        metadata_path = tmp_path / f"{export_id}.json"
+        csv_path.write_text("record_id\nrecord-1\n", encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps({"expires_at": "2000-01-01T00:00:00+00:00"}),
+            encoding="utf-8",
+        )
+        current_time = datetime.now(timezone.utc)
+        barrier = Barrier(2)
+        original_read_text = type(metadata_path).read_text
+
+        def synchronize_metadata_read(path, *args, **kwargs):
+            content = original_read_text(path, *args, **kwargs)
+            if path == metadata_path:
+                barrier.wait(timeout=5)
+            return content
+
+        monkeypatch.setattr(type(metadata_path), "read_text", synchronize_metadata_read)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(reports_module._cleanup_expired_exports, now=current_time)
+                for _ in range(2)
+            ]
+            for future in futures:
+                future.result()
+
+        assert not csv_path.exists()
+        assert not metadata_path.exists()
+
+    def test_qc_export_removes_csv_when_metadata_write_fails(self, client, monkeypatch, tmp_path):
+        """metadata 写入失败不能留下不可下载、不可回收的 CSV。"""
+        mock_supabase = MagicMock()
+        mock_response = MagicMock()
+        mock_response.data = []
+        original_write_text = type(tmp_path).write_text
+
+        def fail_metadata_write(path, data, *args, **kwargs):
+            if path.suffix == ".json":
+                raise OSError("metadata write failed")
+            return original_write_text(path, data, *args, **kwargs)
+
+        monkeypatch.setattr(type(tmp_path), "write_text", fail_metadata_write)
+
+        with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
+            with patch("app.routers.reports.async_execute", return_value=mock_response):
+                response = client.post("/api/v1/reports/qc/export", json={})
+
+        assert response.status_code == 500
+        assert list(tmp_path.glob("*.csv")) == []
+        assert list(tmp_path.glob("*.json")) == []
+
+    def test_cleanup_reclaims_only_old_orphan_csvs(self, tmp_path):
+        """无 metadata 的 CSV 仅在超过 TTL 后回收，避免清理正在创建的导出。"""
+        old_orphan = tmp_path / f"{uuid4().hex}.csv"
+        young_orphan = tmp_path / f"{uuid4().hex}.csv"
+        old_orphan.write_text("record_id\nold\n", encoding="utf-8")
+        young_orphan.write_text("record_id\nyoung\n", encoding="utf-8")
+        current_time = datetime.now(timezone.utc)
+        old_timestamp = (current_time - reports_module._QC_EXPORT_TTL - timedelta(seconds=1)).timestamp()
+        os.utime(old_orphan, (old_timestamp, old_timestamp))
+
+        reports_module._cleanup_expired_exports(now=current_time)
+
+        assert not old_orphan.exists()
+        assert young_orphan.exists()
+
+    def test_cleanup_preserves_valid_report_even_if_csv_is_old(self, tmp_path):
+        """仍有有效 metadata 的报表不应被孤儿回收逻辑删除。"""
+        export_id = uuid4().hex
+        csv_path = tmp_path / f"{export_id}.csv"
+        metadata_path = tmp_path / f"{export_id}.json"
+        csv_path.write_text("record_id\nrecord-1\n", encoding="utf-8")
+        current_time = datetime.now(timezone.utc)
+        old_timestamp = (current_time - reports_module._QC_EXPORT_TTL - timedelta(seconds=1)).timestamp()
+        os.utime(csv_path, (old_timestamp, old_timestamp))
+        metadata_path.write_text(
+            json.dumps({"expires_at": (current_time + timedelta(minutes=5)).isoformat()}),
+            encoding="utf-8",
+        )
+
+        reports_module._cleanup_expired_exports(now=current_time)
+
+        assert csv_path.exists()
+        assert metadata_path.exists()
+
+    @pytest.mark.parametrize("artifact_suffix", (".json", ".csv"))
+    def test_qc_export_download_rejects_link_or_reparse_artifacts(
+        self,
+        client,
+        monkeypatch,
+        tmp_path,
+        artifact_suffix,
+    ):
+        """metadata 和 CSV 任一为链接入口时，下载都必须拒绝。"""
+
+        mock_supabase = MagicMock()
+        mock_response = MagicMock()
+        mock_response.data = []
+        with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
+            with patch("app.routers.reports.async_execute", return_value=mock_response):
+                created = client.post("/api/v1/reports/qc/export", json={})
+
+        assert created.status_code == 200
+        payload = created.json()["data"]
+        linked_path = tmp_path / f"{payload['export_id']}{artifact_suffix}"
+        path_type = type(linked_path)
+        original_is_symlink = path_type.is_symlink
+        monkeypatch.setattr(
+            path_type,
+            "is_symlink",
+            lambda path: path == linked_path or original_is_symlink(path),
+        )
+
+        assert client.get(payload["download_url"]).status_code == 404
 
     @pytest.mark.asyncio
     async def test_qc_summary_trace_id(self, client):

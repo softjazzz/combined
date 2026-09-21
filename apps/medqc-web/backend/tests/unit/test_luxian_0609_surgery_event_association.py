@@ -8,6 +8,7 @@ from app.services.luxian_0609.surgery_event_association import (
     associate_preop_document_to_surgery_event,
     build_performed_surgery_events,
     count_associated_performed_surgery_events,
+    procedure_matches_surgery,
 )
 from app.services.luxian_0609.evidence_material import EvidenceMaterialTruncated
 
@@ -21,6 +22,28 @@ class _Materials:
 
     def rows(self, source_key: str):
         return self._rows[source_key]
+
+
+@pytest.mark.parametrize(
+    ("documented_name", "performed_name", "expected"),
+    (
+        ("腹腔镜胆囊切除术", "腹腔镜胆囊切除术", True),
+        ("拟行腹腔镜胆囊切除术", "腹腔镜胆囊切除术", True),
+        ("腹腔镜胆囊切除术", "腹腔镜胆囊切除术+腹腔引流术", True),
+        ("腹腔镜胆囊切除术", "胆囊切除术", False),
+        ("胆囊切除术", "腹腔镜胆囊切除术", False),
+        ("经皮肾镜取石术", "肾镜取石术", False),
+        ("全子宫切除术", "次全子宫切除术", False),
+        ("次全子宫切除术", "全子宫切除术", False),
+        ("腹腔镜胆囊切除术", "腹腔镜阑尾切除术", False),
+    ),
+)
+def test_procedure_match_uses_controlled_variants_without_arbitrary_substrings(
+    documented_name: str,
+    performed_name: str,
+    expected: bool,
+) -> None:
+    assert procedure_matches_surgery(documented_name, performed_name) is expected
 
 
 def _record(

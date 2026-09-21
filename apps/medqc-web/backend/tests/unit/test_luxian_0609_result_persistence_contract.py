@@ -64,6 +64,33 @@ class _CompletionSession:
         self.close_count += 1
 
 
+class _ParentRefreshSession:
+    """模拟父刷新时，取消请求已使状态条件 UPDATE 不命中的竞争窗口。"""
+
+    def __init__(self, parent_row: dict[str, Any], *, parent_update_rowcount: int) -> None:
+        self._parent_row = parent_row
+        self._parent_update_rowcount = parent_update_rowcount
+        self.execute_count = 0
+        self.commit_count = 0
+        self.rollback_count = 0
+        self.close_count = 0
+
+    def execute(self, _statement: Any) -> _Rows | _UpdateResult:
+        self.execute_count += 1
+        if self.execute_count == 1:
+            return _Rows(self._parent_row)
+        return _UpdateResult(self._parent_update_rowcount)
+
+    def commit(self) -> None:
+        self.commit_count += 1
+
+    def rollback(self) -> None:
+        self.rollback_count += 1
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
 class _EmptyRows:
     def mappings(self) -> "_EmptyRows":
         return self
@@ -305,6 +332,91 @@ def test_complete_batch_job_canceled_before_completion_does_not_write_envelopes(
     assert session.commit_count == 0
     assert session.rollback_count == 1
     assert refreshed_parent_ids == ["parent-canceled"]
+
+
+def test_refresh_parent_canceled_before_final_child_does_not_write_envelopes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """最后一个子任务迟到收尾时，已取消父任务不能交付 Canonical 结果。"""
+
+    session = _ParentRefreshSession(
+        {"id": "parent-canceled", "job_kind": "parent", "status": "running", "summary_json": "{}"},
+        parent_update_rowcount=0,
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(
+        service,
+        "_aggregate_parent_job",
+        lambda *_args, **_kwargs: {
+            "id": "parent-canceled",
+            "job_kind": "parent",
+            "status": "completed",
+            "summary": {"progress": {"step_key": "completed"}},
+            "children": [
+                {
+                    "items": [
+                        {
+                            "institute_id": "inst-1",
+                            "patient_id": "patient-1",
+                            "visit_id": "visit-1",
+                            "rule_id": "LX0609-001",
+                            "status": "compliant",
+                        }
+                    ]
+                }
+            ],
+        },
+    )
+    envelope_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        service,
+        "_write_record_result_envelopes",
+        lambda *_args, **kwargs: envelope_calls.append(kwargs),
+    )
+
+    service.refresh_parent_batch_job(parent_job_id="parent-canceled")
+
+    assert envelope_calls == []
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
+    assert session.close_count == 1
+
+
+def test_refresh_parent_completed_writes_envelopes_before_single_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """未取消的父任务仍须在状态更新后、同一提交前交付 Canonical 结果。"""
+
+    session = _ParentRefreshSession(
+        {"id": "parent-completed", "job_kind": "parent", "status": "running", "summary_json": "{}"},
+        parent_update_rowcount=1,
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    service = CustomQCWorkspaceService()
+    monkeypatch.setattr(
+        service,
+        "_aggregate_parent_job",
+        lambda *_args, **_kwargs: {
+            "id": "parent-completed",
+            "job_kind": "parent",
+            "status": "completed",
+            "summary": {"progress": {"step_key": "completed"}},
+            "children": [{"items": [{"rule_id": "LX0609-001", "status": "compliant"}]}],
+        },
+    )
+    write_commit_counts: list[int] = []
+    monkeypatch.setattr(
+        service,
+        "_write_record_result_envelopes",
+        lambda *_args, **_kwargs: write_commit_counts.append(session.commit_count),
+    )
+
+    service.refresh_parent_batch_job(parent_job_id="parent-completed")
+
+    assert write_commit_counts == [0]
+    assert session.commit_count == 1
+    assert session.rollback_count == 0
 
 
 def test_cancel_batch_job_does_not_overwrite_completion_that_won_the_lock_race(

@@ -4,6 +4,7 @@ import uuid
 import json
 import hashlib
 import logging
+import stat
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
@@ -520,6 +521,13 @@ def _saved_qc_result_model(data: Dict[str, Any]) -> Optional[str]:
 
 def _is_saved_qc_result_file_within_directory(filepath: Path, base_dir: Path) -> bool:
     try:
+        # 结果目录内的符号链接或 Windows 重解析点也不得作为可读取结果入口，
+        # 即使其解析后仍落在目录内。
+        file_stat = filepath.lstat()
+        if filepath.is_symlink() or (
+            getattr(file_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            return False
         return filepath.is_file() and filepath.resolve().parent == base_dir.resolve()
     except OSError:
         return False
