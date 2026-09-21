@@ -350,7 +350,10 @@ def test_complete_independent_result_can_skip_luxian_0609_canonical_envelope(
             "id": "job-0916",
             "parent_job_id": None,
             "created_by": "reviewer-1",
-            "filters_json": '{"rule_set_key":"luxian_0916_qc_v1"}',
+            "filters_json": (
+                '{"rule_set_key":"luxian_0916_qc_v1",'
+                '"rule_ids":["LX0916-001"]}'
+            ),
         }
     )
     monkeypatch.setattr(workspace_module, "_session", lambda: session)
@@ -364,7 +367,15 @@ def test_complete_independent_result_can_skip_luxian_0609_canonical_envelope(
 
     service.complete_batch_job(
         job_id="job-0916",
-        summary={"total_records": 1, "success_count": 1},
+        summary={
+            "rule_count": 1,
+            "total_records": 1,
+            "success_count": 1,
+            "failed_count": 0,
+            "completed_rule_count": 1,
+            "failed_rule_count": 0,
+            "execution_status": "completed",
+        },
         items=[
             {
                 "institute_id": "inst-1",
@@ -373,6 +384,7 @@ def test_complete_independent_result_can_skip_luxian_0609_canonical_envelope(
                 "rule_id": "LX0916-001",
                 "status": "data_quality_gap",
                 "reason_code": "semantic_fact_unavailable",
+                "findings": "",
             }
         ],
         failed_records=[],
