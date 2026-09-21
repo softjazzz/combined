@@ -20,6 +20,10 @@ from .disease_change_015016 import (
     merge_disease_change_015016_facts,
 )
 from .disease_change_stage2 import extract_disease_change_stage2_facts
+from .execution_integrity import (
+    LUXIAN_0916_RULE_SET_KEY,
+    validate_luxian_0916_task_delivery,
+)
 from .input_context import (
     add_luxian_0916_evidence_sources,
     build_luxian_0916_context,
@@ -33,7 +37,6 @@ from .semantic_extractor import (
 )
 
 
-LUXIAN_0916_RULE_SET_KEY = "luxian_0916_qc_v1"
 _RULE_IDS = tuple(rule.rule_id for rule in LUXIAN_0916_RULE_CATALOG)
 _STRUCTURED_DISEASE_CHANGE_RULE_IDS = frozenset({"LX0916-015", "LX0916-016"})
 _SHARED_SEMANTIC_RULE_IDS = tuple(
@@ -156,17 +159,20 @@ async def run_luxian_0916_batch_job(
             *(execute_record(record) for record in hydrated_records),
         )
         items = [item for outcome in outcomes for item in outcome.items]
-        diagnostic_failures = [
-            failure for outcome in outcomes for failure in outcome.diagnostic_failures
+        rule_failures = [
+            failure for outcome in outcomes for failure in outcome.rule_failures
         ]
         failed_records = [
             failure for outcome in outcomes for failure in outcome.failed_records
         ]
-        all_failures = [*diagnostic_failures, *failed_records]
+        all_failures = [*rule_failures, *failed_records]
         items.sort(key=_item_sort_key)
         all_failures.sort(key=_failure_sort_key)
 
-        completed_records = sum(1 for outcome in outcomes if not outcome.failed_records)
+        failed_record_identities = {
+            _record_identity_from_item(failure) for failure in all_failures
+        }
+        completed_records = total_records - len(failed_record_identities)
         issue_records = len(
             {
                 _record_identity_from_item(item)
@@ -196,20 +202,26 @@ async def run_luxian_0916_batch_job(
         semantic_contract_retries = _semantic_contract_retries(outcomes)
         summary = {
             "execution_status": (
-                "completed_with_record_failures" if failed_records else "completed"
+                "partial_failed"
+                if all_failures and items
+                else "failed"
+                if all_failures
+                else "completed"
             ),
             "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
             "rule_count": len(_RULE_IDS),
             "total_records": total_records,
             "max_parallel_records": concurrency,
             "success_count": completed_records,
-            "failed_count": len(failed_records),
-            "failed_record_count": len(failed_records),
+            "failed_count": len(failed_record_identities),
+            "failed_record_count": len(failed_record_identities),
+            "completed_rule_count": len(items),
+            "failed_rule_count": len(all_failures),
             "issue_records": issue_records,
             "compliant_records": compliant_records,
             "status_counts": status_counts,
             "display_status_counts": status_counts,
-            "diagnostic_rule_failure_count": len(diagnostic_failures),
+            "diagnostic_rule_failure_count": len(rule_failures),
             "semantic_llm_call_count": sum(
                 int(item.get("llm_call_count") or 0) for item in semantic_diagnostics
             ),
@@ -246,6 +258,13 @@ async def run_luxian_0916_batch_job(
                 "max_parallel_records": concurrency,
             },
         }
+        validate_luxian_0916_task_delivery(
+            summary=summary,
+            items=items,
+            failures=all_failures,
+            expected_rule_ids=_RULE_IDS,
+            expected_record_refs=hydrated_records,
+        )
         workspace.complete_batch_job(
             job_id=job_id,
             summary=summary,
@@ -262,7 +281,7 @@ class _RecordExecution:
         self,
         *,
         items: Sequence[dict[str, Any]] = (),
-        diagnostic_failures: Sequence[dict[str, Any]] = (),
+        rule_failures: Sequence[dict[str, Any]] = (),
         failed_records: Sequence[dict[str, Any]] = (),
         semantic_diagnostic: Mapping[str, Any] | None = None,
         disease_change_stage2_diagnostic: Mapping[str, Any] | None = None,
@@ -270,7 +289,7 @@ class _RecordExecution:
         semantic_contract_retry: Mapping[str, Any] | None = None,
     ) -> None:
         self.items = tuple(items)
-        self.diagnostic_failures = tuple(diagnostic_failures)
+        self.rule_failures = tuple(rule_failures)
         self.failed_records = tuple(failed_records)
         self.semantic_diagnostic = dict(semantic_diagnostic or {})
         self.disease_change_stage2_diagnostic = dict(
@@ -352,7 +371,7 @@ async def _execute_record(
         )
         return _RecordExecution(
             items=outcome.items,
-            diagnostic_failures=outcome.diagnostic_failures,
+            rule_failures=outcome.rule_failures,
             failed_records=outcome.failed_records,
             semantic_diagnostic=_mapping(extracted.get("diagnostic")),
             disease_change_stage2_diagnostic=_mapping(
@@ -371,13 +390,15 @@ async def _execute_record(
         )
     except Exception as exc:  # noqa: BLE001 - 单病历必须隔离
         return _RecordExecution(
-            failed_records=(
+            failed_records=tuple(
                 {
                     **identity,
                     "record_id": str(record.get("record_id") or identity["visit_id"]),
                     "error_phase": "record_execution",
+                    "rule_id": rule_id,
                     "error_type": type(exc).__name__,
-                },
+                }
+                for rule_id in _RULE_IDS
             ),
         )
 
@@ -401,7 +422,7 @@ def _execution_to_record_outcome(
         }
         for failure in execution.failures
     ]
-    return _RecordExecution(items=items, diagnostic_failures=failures)
+    return _RecordExecution(items=items, rule_failures=failures)
 
 
 def _transport_item(

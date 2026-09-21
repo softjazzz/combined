@@ -50,6 +50,11 @@ from .luxian_0609_rule_catalog import (
 )
 from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .luxian_0609_result_export_service import customer_evidence_summary
+from .luxian_0916.execution_integrity import (
+    LUXIAN_0916_RULE_IDS,
+    LUXIAN_0916_RULE_SET_KEY,
+    validate_luxian_0916_task_delivery,
+)
 from .luxian_0609.customer_renderer import (
     compliant_customer_finding,
     customer_finding_from_controlled_facts,
@@ -4393,7 +4398,30 @@ class CustomQCWorkspaceService:
             parent_job_id = _safe_text(row.get("parent_job_id"))
             now = _now_utc()
             execution_failed = summary.get("execution_status") in {"partial_failed", "failed"}
-            if execution_failed:
+            filters = _safe_json_loads(row.get("filters_json"), {})
+            filters = filters if isinstance(filters, dict) else {}
+            rule_set_key = _safe_text(filters.get("rule_set_key"))
+            if rule_set_key == LUXIAN_0916_RULE_SET_KEY:
+                configured_rule_ids = filters.get("rule_ids")
+                expected_rule_ids = (
+                    configured_rule_ids
+                    if isinstance(configured_rule_ids, list) and configured_rule_ids
+                    else LUXIAN_0916_RULE_IDS
+                )
+                configured_record_refs = filters.get("record_refs")
+                expected_record_refs = (
+                    configured_record_refs
+                    if isinstance(configured_record_refs, list)
+                    else []
+                )
+                validate_luxian_0916_task_delivery(
+                    summary=summary,
+                    items=items,
+                    failures=failed_records,
+                    expected_rule_ids=expected_rule_ids,
+                    expected_record_refs=expected_record_refs,
+                )
+            elif execution_failed:
                 validate_failed_task_items(summary, items, failed_records)
             merged_summary = {
                 **(summary or {}),
@@ -4433,8 +4461,6 @@ class CustomQCWorkspaceService:
             )
             envelope_record_refs: Optional[Sequence[CaseRef]] = None
             if execution_failed:
-                filters = _safe_json_loads(row.get("filters_json"), {})
-                filters = filters if isinstance(filters, dict) else {}
                 if _safe_text(filters.get("rule_set_key")) == LUXIAN_0609_RULE_SET_KEY:
                     scoped_rule_ids = list(filters.get("scoped_customer_rule_ids") or [])
                     expected_rule_ids = [

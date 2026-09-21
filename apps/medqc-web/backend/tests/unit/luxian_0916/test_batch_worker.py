@@ -89,6 +89,18 @@ def _result(rule_id: str, *, status: str = "compliant") -> Luxian0916RuleResult:
     )
 
 
+def _complete_execution(
+    *, statuses: dict[str, str] | None = None
+) -> Luxian0916Execution:
+    statuses = statuses or {}
+    return Luxian0916Execution(
+        results=tuple(
+            _result(rule.rule_id, status=statuses.get(rule.rule_id, "compliant"))
+            for rule in LUXIAN_0916_RULE_CATALOG
+        )
+    )
+
+
 @pytest.fixture(autouse=True)
 def _isolate_structured_disease_change_source(monkeypatch: pytest.MonkeyPatch) -> None:
     """批处理单测不连接真实 CDM；结构化来源由专属单测覆盖。"""
@@ -273,6 +285,10 @@ async def test_batch_worker_preserves_rule_contract_and_finishes_all_records(
     assert summary["status_counts"] == {"non_compliant": 2, "compliant": 62}
     assert summary["display_status_counts"] == summary["status_counts"]
     assert summary["success_count"] == 2
+    assert summary["failed_count"] == 0
+    assert summary["completed_rule_count"] == 64
+    assert summary["failed_rule_count"] == 0
+    assert summary["execution_status"] == "completed"
     assert summary["max_parallel_records"] == 2
     assert summary["progress"]["max_parallel_records"] == 2
     assert summary["disease_change_stage2_llm_call_count"] == 0
@@ -357,7 +373,7 @@ async def test_batch_worker_runs_stage2_only_for_structured_triggers_and_summari
         context: dict[str, Any], _rule_ids: tuple[str, ...]
     ) -> Luxian0916Execution:
         observed_contexts.append(context)
-        return Luxian0916Execution(results=(_result("LX0916-015"),))
+        return _complete_execution()
 
     monkeypatch.setattr(batch_worker, "execute_luxian_0916", execute)
 
@@ -488,7 +504,7 @@ async def test_batch_worker_contains_invalid_stage2_output_to_015016(
         context: dict[str, Any], _rule_ids: tuple[str, ...]
     ) -> Luxian0916Execution:
         observed.append(context)
-        return Luxian0916Execution(results=(_result("LX0916-015"),))
+        return _complete_execution()
 
     monkeypatch.setattr(batch_worker, "execute_luxian_0916", execute)
 
@@ -524,7 +540,7 @@ async def test_batch_worker_isolates_one_record_load_failure(
     monkeypatch.setattr(
         batch_worker,
         "execute_luxian_0916",
-        lambda *_args: Luxian0916Execution(results=(_result("LX0916-001"),)),
+        lambda *_args: _complete_execution(),
     )
 
     await batch_worker.run_luxian_0916_batch_job(
@@ -534,27 +550,26 @@ async def test_batch_worker_isolates_one_record_load_failure(
     assert workspace.failed == []
     assert workspace.completed is not None
     assert workspace.completed["persist_record_envelopes"] is False
-    assert (
-        workspace.completed["summary"]["execution_status"]
-        == "completed_with_record_failures"
-    )
+    assert workspace.completed["summary"]["execution_status"] == "partial_failed"
     assert workspace.completed["summary"]["success_count"] == 1
     assert workspace.completed["summary"]["failed_count"] == 1
+    assert workspace.completed["summary"]["completed_rule_count"] == 32
+    assert workspace.completed["summary"]["failed_rule_count"] == 32
     assert workspace.completed["items"][0]["visit_id"] == "OK"
-    assert workspace.completed["failed_records"] == [
-        {
-            "institute_id": "I-1",
-            "patient_id": "P-1",
-            "visit_id": "BROKEN",
-            "record_id": "BROKEN",
-            "error_phase": "record_execution",
-            "error_type": "LookupError",
-        }
-    ]
+    assert len(workspace.completed["failed_records"]) == 32
+    assert {
+        failure["rule_id"] for failure in workspace.completed["failed_records"]
+    } == {rule.rule_id for rule in LUXIAN_0916_RULE_CATALOG}
+    assert all(
+        failure["visit_id"] == "BROKEN"
+        and failure["error_phase"] == "record_execution"
+        and failure["error_type"] == "LookupError"
+        for failure in workspace.completed["failed_records"]
+    )
 
 
 @pytest.mark.asyncio
-async def test_rule_failure_is_diagnostic_only_and_never_creates_illegal_customer_status(
+async def test_rule_failure_marks_partial_failed_without_illegal_customer_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = _Workspace(job=_job(), records=[_record()])
@@ -563,7 +578,18 @@ async def test_rule_failure_is_diagnostic_only_and_never_creates_illegal_custome
         batch_worker,
         "execute_luxian_0916",
         lambda *_args: Luxian0916Execution(
-            results=(_result("LX0916-001", status="data_quality_gap"),),
+            results=tuple(
+                _result(
+                    rule.rule_id,
+                    status=(
+                        "data_quality_gap"
+                        if rule.rule_id == "LX0916-001"
+                        else "compliant"
+                    ),
+                )
+                for rule in LUXIAN_0916_RULE_CATALOG
+                if rule.rule_id != "LX0916-002"
+            ),
             failures=(Luxian0916RuleFailure("LX0916-002", "TimeoutError"),),
         ),
     )
@@ -574,7 +600,7 @@ async def test_rule_failure_is_diagnostic_only_and_never_creates_illegal_custome
 
     assert workspace.completed is not None
     assert workspace.completed["persist_record_envelopes"] is False
-    assert [item["status"] for item in workspace.completed["items"]] == ["data_quality_gap"]
+    assert workspace.completed["items"][0]["status"] == "data_quality_gap"
     assert all(
         item["status"] not in {"technical_error", "uncertain"}
         for item in workspace.completed["items"]
@@ -591,13 +617,53 @@ async def test_rule_failure_is_diagnostic_only_and_never_creates_illegal_custome
         }
     ]
     assert workspace.completed["summary"]["diagnostic_rule_failure_count"] == 1
+    assert workspace.completed["summary"]["execution_status"] == "partial_failed"
+    assert workspace.completed["summary"]["success_count"] == 0
+    assert workspace.completed["summary"]["failed_count"] == 1
+    assert workspace.completed["summary"]["completed_rule_count"] == 31
+    assert workspace.completed["summary"]["failed_rule_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_all_rule_failures_mark_task_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _Workspace(job=_job(), records=[_record()])
+    _patch_loaders(monkeypatch)
+    monkeypatch.setattr(
+        batch_worker,
+        "execute_luxian_0916",
+        lambda *_args: Luxian0916Execution(
+            results=(),
+            failures=tuple(
+                Luxian0916RuleFailure(rule.rule_id, "TimeoutError")
+                for rule in LUXIAN_0916_RULE_CATALOG
+            ),
+        ),
+    )
+
+    await batch_worker.run_luxian_0916_batch_job(
+        "job-0916", workspace=workspace, semantic_generate=_semantic_generate
+    )
+
+    assert workspace.completed is not None
+    assert workspace.completed["items"] == []
+    assert len(workspace.completed["failed_records"]) == 32
+    assert workspace.completed["summary"]["execution_status"] == "failed"
+    assert workspace.completed["summary"]["success_count"] == 0
+    assert workspace.completed["summary"]["failed_count"] == 1
+    assert workspace.completed["summary"]["completed_rule_count"] == 0
+    assert workspace.completed["summary"]["failed_rule_count"] == 32
 
 
 @pytest.mark.asyncio
 async def test_batch_worker_persists_one_locatable_semantic_extraction_failure_per_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = _Workspace(job=_job(), records=[_record(), _record()])
+    workspace = _Workspace(
+        job=_job(),
+        records=[_record(), _record(patient_id="P-2", visit_id="V-2")],
+    )
     monkeypatch.setattr(
         batch_worker,
         "load_luxian_0916_bundle",
@@ -628,7 +694,7 @@ async def test_batch_worker_persists_one_locatable_semantic_extraction_failure_p
     monkeypatch.setattr(
         batch_worker,
         "execute_luxian_0916",
-        lambda *_args: Luxian0916Execution(results=(_result("LX0916-001"),)),
+        lambda *_args: _complete_execution(),
     )
 
     await batch_worker.run_luxian_0916_batch_job(
@@ -640,7 +706,7 @@ async def test_batch_worker_persists_one_locatable_semantic_extraction_failure_p
     assert workspace.completed is not None
     summary = workspace.completed["summary"]
     assert summary["semantic_llm_call_count"] == 2
-    assert summary["semantic_extraction_invalid_count"] == 1
+    assert summary["semantic_extraction_invalid_count"] == 2
     assert summary["semantic_extraction_failures"] == [
         {
             "institute_id": "I-1",
@@ -651,7 +717,17 @@ async def test_batch_worker_persists_one_locatable_semantic_extraction_failure_p
             "document_count": 1,
             "llm_call_count": 1,
             "failure_stage": "json_syntax",
-        }
+        },
+        {
+            "institute_id": "I-1",
+            "patient_id": "P-2",
+            "visit_id": "V-2",
+            "record_id": "V-2",
+            "code": "semantic_extraction_invalid",
+            "document_count": 1,
+            "llm_call_count": 1,
+            "failure_stage": "json_syntax",
+        },
     ]
     assert all(
         "patient_name" not in item and "content" not in item
@@ -686,7 +762,7 @@ async def test_batch_worker_persists_locatable_successful_contract_retry(
     monkeypatch.setattr(
         batch_worker,
         "execute_luxian_0916",
-        lambda *_args: Luxian0916Execution(results=(_result("LX0916-001"),)),
+        lambda *_args: _complete_execution(),
     )
 
     await batch_worker.run_luxian_0916_batch_job(
