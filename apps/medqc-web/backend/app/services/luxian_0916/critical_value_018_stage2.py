@@ -129,7 +129,7 @@ async def _extract(
         if event.get("trigger_confirmed") is True
     ]
     for index in indices:
-        events[index]["evaluation_window_mature"] = scene == "final"
+        events[index]["evaluation_window_mature"] = True
 
     stage1_gap = _stage1_gap_state(structured_facts)
     if stage1_gap is not None:
@@ -845,7 +845,7 @@ def _internal_failure_output(
         if event.get("trigger_confirmed") is True
     ]
     for index in indices:
-        events[index]["evaluation_window_mature"] = scene == "final"
+        events[index]["evaluation_window_mature"] = True
     outcomes = {index: _Outcome("internal_failure") for index in indices}
     _apply_outcomes(events, outcomes)
     output["diagnostic"] = _diagnostic_from_outcomes(

@@ -1,4 +1,9 @@
+import pytest
+
 from app.services import sample_programmatic_evidence as evidence_module
+from app.services.luxian_0916.critical_value_018 import (
+    build_critical_value_018_facts,
+)
 from app.services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from app.services.qc_input_adapters.running_final_bundle_adapter import (
     adapt_bundle_to_evidence_payload,
@@ -43,6 +48,8 @@ class _FakeConnection:
         rows = self._rows_by_table[table_name]
         if isinstance(rows, Exception):
             raise rows
+        if callable(rows):
+            rows = rows(params)
         return _FakeRows(rows)
 
 
@@ -379,49 +386,66 @@ def test_fetch_source_table_fallback_items_should_report_readiness_without_chang
 def test_build_programmatic_evidence_payload_projects_controlled_lab_rows(
     monkeypatch,
 ):
-    connection = _FakeConnection(
-        {
-            "labtest_master": [
-                {
-                    "test_id": "TEST-1",
-                    "report_datetime": "2026-09-16 08:00:00",
-                    "labtest_result_status": "已审核",
-                    "patient_name": "不应进入共享结构化投影",
-                }
-            ],
-            "labtest_item_report": [
-                {
-                    "test_id": "TEST-1",
-                    "test_no": "REPORT-1",
-                    "item_id": "ITEM-1",
-                    "item_name": "血钾",
-                    "result": "6.8",
-                    "unit": "mmol/L",
-                    "abnormal_indicator": "PH",
-                    "report_time": "2026-09-16 08:00:00",
-                    "patient_name": "不应进入共享结构化投影",
-                }
-            ],
-        }
-    )
+    rows_by_table = {
+        "labtest_master": [
+            {
+                "test_id": "TEST-1",
+                "report_datetime": "2026-09-16 08:00:00",
+                "labtest_result_status": "已审核",
+                "patient_name": "不应进入共享结构化投影",
+            }
+        ],
+        "labtest_item_report": [
+            {
+                "test_id": "TEST-1",
+                "test_no": "REPORT-1",
+                "item_id": "ITEM-1",
+                "item_name": "血钾",
+                "result": "6.8",
+                "unit": "mmol/L",
+                "abnormal_indicator": "PH",
+                "report_time": "2026-09-16 08:00:00",
+                "patient_name": "不应进入共享结构化投影",
+            }
+        ],
+    }
     monkeypatch.setattr(
         evidence_module,
         "_SOURCE_TABLES",
         ("labtest_master", "labtest_item_report"),
     )
-    monkeypatch.setattr(
-        evidence_module,
-        "_FALLBACK_DOC_FETCH_LIMITS",
-        {"labtest_master": 100, "labtest_item_report": 400},
+    default_connection = _FakeConnection(rows_by_table)
+    monkeypatch.setattr(evidence_module, "engine", _FakeEngine(default_connection))
+
+    default_payload = build_programmatic_evidence_payload(
+        bundle={"institute_id": "I1", "patient_id": "P1", "visit_id": "V1"}
     )
+
+    assert evidence_module._FALLBACK_DOC_FETCH_LIMITS["labtest_master"] == 20
+    assert evidence_module._FALLBACK_DOC_FETCH_LIMITS["labtest_item_report"] == 20
+    assert set(default_connection.source_query_limits) == {
+        ("labtest_master", 21),
+        ("labtest_item_report", 21),
+    }
+    assert default_payload["programmatic_timeline"]["structured_source_rows"] == {}
+
+    connection = _FakeConnection(rows_by_table)
     monkeypatch.setattr(evidence_module, "engine", _FakeEngine(connection))
 
     payload = build_programmatic_evidence_payload(
-        bundle={"institute_id": "I1", "patient_id": "P1", "visit_id": "V1"}
+        bundle={"institute_id": "I1", "patient_id": "P1", "visit_id": "V1"},
+        strict_structured_source_limits={
+            "labtest_master": 100,
+            "labtest_item_report": 400,
+        },
     )
 
     timeline = payload["programmatic_timeline"]
     assert timeline["source_readiness"] == {
+        "labtest_master": "complete",
+        "labtest_item_report": "complete",
+    }
+    assert timeline["structured_source_readiness"] == {
         "labtest_master": "complete",
         "labtest_item_report": "complete",
     }
@@ -436,6 +460,67 @@ def test_build_programmatic_evidence_payload_projects_controlled_lab_rows(
         ("labtest_master", 101),
         ("labtest_item_report", 401),
     }
+
+
+@pytest.mark.parametrize("weak_match", ("patient_visit", "visit_only"))
+def test_strict_lab_projection_rejects_weak_identity_fallback(
+    monkeypatch, weak_match
+):
+    weak_row = {
+        "source_table": "labtest_item_report",
+        "institute_id": "OTHER-I",
+        "patient_id": "OTHER-P",
+        "visit_id": "V1",
+        "test_id": "TEST-WEAK",
+        "test_no": "REPORT-WEAK",
+        "item_id": "ITEM-WEAK",
+        "item_name": "血钾",
+        "result": "6.8",
+        "unit": "mmol/L",
+        "abnormal_indicator": "PH",
+        "report_time": "2026-09-16 08:00:00",
+    }
+
+    def rows_for_query(params):
+        identity_keys = frozenset(params) - {"limit"}
+        if identity_keys == {"institute_id", "patient_id", "visit_id"}:
+            return []
+        if weak_match == "patient_visit" and identity_keys == {
+            "patient_id",
+            "visit_id",
+        }:
+            return [weak_row]
+        if weak_match == "visit_only" and identity_keys == {"visit_id"}:
+            return [weak_row]
+        return []
+
+    connection = _FakeConnection({"labtest_item_report": rows_for_query})
+    monkeypatch.setattr(evidence_module, "_SOURCE_TABLES", ("labtest_item_report",))
+    monkeypatch.setattr(evidence_module, "engine", _FakeEngine(connection))
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "institute_id": "I1",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "source_documents": [weak_row],
+        },
+        strict_structured_source_limits={"labtest_item_report": 400},
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["source_readiness"]["labtest_item_report"] == "partial"
+    assert (
+        timeline["structured_source_readiness"]["labtest_item_report"]
+        == "partial"
+    )
+    assert timeline["structured_source_rows"]["labtest_item_report"] == []
+    assert connection.source_query_limits == [("labtest_item_report", 401)]
+    result = build_critical_value_018_facts(bundle={}, evidence_payload=payload)
+    assert result["event_facts"]["critical_values"] == []
+    assert result["event_source_state_by_rule"]["LX0916-018"] == (
+        "critical_value_source_partial"
+    )
 
 
 def test_build_programmatic_evidence_payload_should_ignore_external_source_readiness_and_project_controlled_values(

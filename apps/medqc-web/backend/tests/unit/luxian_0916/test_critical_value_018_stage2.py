@@ -161,7 +161,8 @@ async def test_no_trigger_is_zero_call() -> None:
 
 
 @pytest.mark.asyncio
-async def test_one_event_uses_one_controlled_call_and_grounded_facts() -> None:
+@pytest.mark.parametrize("scene", ("running", "final"))
+async def test_one_event_uses_one_controlled_call_and_grounded_facts(scene) -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
 
     async def generate(prompt: str, **kwargs: Any) -> dict[str, Any]:
@@ -171,7 +172,7 @@ async def test_one_event_uses_one_controlled_call_and_grounded_facts() -> None:
     result = await extract_critical_value_018_stage2_facts(
         evidence_payload=_evidence(),
         structured_facts=_structured(events=[_event()]),
-        scene="final",
+        scene=scene,
         generate=generate,
         model_parameters={
             "provider_code": "aliyun_bailian",
@@ -453,4 +454,4 @@ async def test_missing_usage_is_reported_without_raw_response() -> None:
     assert result["diagnostic"]["completion_tokens"] == 0
     assert result["event_facts"]["critical_values"][0][
         "evaluation_window_mature"
-    ] is False
+    ] is True

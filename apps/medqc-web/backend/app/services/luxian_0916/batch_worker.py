@@ -45,6 +45,10 @@ from .semantic_extractor import (
 _RULE_IDS = tuple(rule.rule_id for rule in LUXIAN_0916_RULE_CATALOG)
 _STRUCTURED_DISEASE_CHANGE_RULE_IDS = frozenset({"LX0916-015", "LX0916-016"})
 _CRITICAL_VALUE_018_RULE_IDS = frozenset({"LX0916-018"})
+_CRITICAL_VALUE_018_STRICT_SOURCE_LIMITS = {
+    "labtest_master": 100,
+    "labtest_item_report": 400,
+}
 _SHARED_SEMANTIC_RULE_IDS = tuple(
     rule_id
     for rule_id in _RULE_IDS
@@ -364,6 +368,9 @@ async def _execute_record(
             build_programmatic_evidence_payload,
             bundle=bundle,
             medical_text=str(record.get("medical_text") or ""),
+            strict_structured_source_limits=(
+                _CRITICAL_VALUE_018_STRICT_SOURCE_LIMITS
+            ),
         )
         evidence_payload = add_luxian_0916_evidence_sources(
             bundle=bundle,
@@ -765,7 +772,7 @@ def _critical_value_018_internal_failure(
         event = dict(source_event)
         if event.get("trigger_confirmed") is True:
             triggered_count += 1
-            event["evaluation_window_mature"] = scene == "final"
+            event["evaluation_window_mature"] = True
             event["stage2_state_by_rule"] = {"LX0916-018": "internal_failure"}
             event.pop("stage2_facts", None)
         protected_events.append(event)

@@ -165,10 +165,17 @@ def _patch_loaders(monkeypatch: pytest.MonkeyPatch) -> None:
         "load_luxian_0916_bundle",
         lambda **_kwargs: {"structured_context": {}},
     )
+    def build_evidence(**kwargs: Any) -> dict[str, Any]:
+        assert kwargs["strict_structured_source_limits"] == {
+            "labtest_master": 100,
+            "labtest_item_report": 400,
+        }
+        return {"programmatic_timeline": {"documents": {}}}
+
     monkeypatch.setattr(
         batch_worker,
         "build_programmatic_evidence_payload",
-        lambda **_kwargs: {"programmatic_timeline": {"documents": {}}},
+        build_evidence,
     )
 
 
@@ -513,7 +520,7 @@ async def test_batch_worker_contains_invalid_018_stage2_output_to_018(
     assert protected["stage2_state_by_rule"] == {
         "LX0916-018": "internal_failure"
     }
-    assert protected["evaluation_window_mature"] is False
+    assert protected["evaluation_window_mature"] is True
     assert workspace.completed["summary"][
         "critical_value_018_stage2_failure_count"
     ] == 1

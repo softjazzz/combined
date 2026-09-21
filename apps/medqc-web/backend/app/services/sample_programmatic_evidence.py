@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
@@ -63,8 +64,8 @@ _FALLBACK_DOC_FETCH_LIMITS = {
     "surgery_inform_consent": 10,
     "exam_master": 20,
     "exam_item_report": 20,
-    "labtest_master": 100,
-    "labtest_item_report": 400,
+    "labtest_master": 20,
+    "labtest_item_report": 20,
     "pathology_exam_master": 10,
     "pathology_exam_report": 10,
     "inpat_drug_order": 30,
@@ -625,11 +626,24 @@ def _resolve_admission_time(
     return "", "missing", False
 
 
-def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _flatten_inventory_items(
+    structured: dict[str, Any],
+    bundle_payload: dict[str, Any],
+    *,
+    strict_structured_source_limits: Mapping[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    def fetch_fallback_items() -> tuple[list[dict[str, Any]], dict[str, str]]:
+        if strict_structured_source_limits is None:
+            return _fetch_source_table_fallback_items(bundle_payload)
+        return _fetch_source_table_fallback_items(
+            bundle_payload,
+            strict_structured_source_limits=strict_structured_source_limits,
+        )
+
     inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
     if inventory_items:
         items = [_safe_dict(item) for item in inventory_items if _safe_dict(item)]
-        fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
+        fallback_items, fallback_meta = fetch_fallback_items()
         if fallback_meta:
             bundle_payload["_source_table_fallback_meta"] = fallback_meta
         return _merge_fallback_items(items, fallback_items)
@@ -645,11 +659,11 @@ def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[st
             item.setdefault("document_type", source_table)
             flattened.append(item)
     if flattened:
-        fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
+        fallback_items, fallback_meta = fetch_fallback_items()
         if fallback_meta:
             bundle_payload["_source_table_fallback_meta"] = fallback_meta
         return _merge_fallback_items(flattened, fallback_items)
-    fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
+    fallback_items, fallback_meta = fetch_fallback_items()
     if fallback_meta:
         bundle_payload["_source_table_fallback_meta"] = fallback_meta
     if fallback_items:
@@ -661,7 +675,11 @@ def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[st
     return []
 
 
-def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, str]]:
+def _fetch_source_table_fallback_items(
+    bundle_payload: dict[str, Any],
+    *,
+    strict_structured_source_limits: Mapping[str, int] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
     institute_id = _safe_text(bundle_payload.get("institute_id"))
     visit_id = _safe_text(bundle_payload.get("visit_id"))
     patient_id = _safe_text(bundle_payload.get("patient_id"))
@@ -671,69 +689,112 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
     fallback_items: list[dict[str, Any]] = []
     fallback_meta: dict[str, str] = {}
     source_readiness: dict[str, str] = {}
+    structured_source_readiness: dict[str, str] = {}
     structured_source_rows: dict[str, list[dict[str, Any]]] = {}
     with engine.connect() as conn:
         for table_name in _SOURCE_TABLES:
-            limit = int(_FALLBACK_DOC_FETCH_LIMITS.get(table_name, 20))
+            strict_limit = (strict_structured_source_limits or {}).get(table_name)
+            strict_mode = (
+                strict_limit is not None
+                and table_name in _STRUCTURED_SOURCE_ROW_FIELDS
+            )
+            limit = (
+                max(1, int(strict_limit))
+                if strict_mode
+                else int(_FALLBACK_DOC_FETCH_LIMITS.get(table_name, 20))
+            )
             query_limit = limit + 1
+            if strict_mode and not all((institute_id, patient_id, visit_id)):
+                source_readiness[table_name] = "unavailable"
+                structured_source_readiness[table_name] = "unavailable"
+                continue
             try:
-                if institute_id:
+                if strict_mode:
                     rows = conn.execute(
                         text(
                             f"""
                             SELECT *
                             FROM cdm.{table_name}
                             WHERE institute_id = :institute_id
+                              AND patient_id = :patient_id
                               AND visit_id = :visit_id
                             LIMIT :limit
                             """
                         ),
                         {
                             "institute_id": institute_id,
+                            "patient_id": patient_id,
                             "visit_id": visit_id,
                             "limit": query_limit,
                         },
                     ).mappings().all()
                 else:
-                    rows = []
-                if not rows and patient_id:
-                    rows = conn.execute(
-                        text(
-                            f"""
-                            SELECT *
-                            FROM cdm.{table_name}
-                            WHERE visit_id = :visit_id
-                              AND patient_id = :patient_id
-                            LIMIT :limit
-                            """
-                        ),
-                        {
-                            "visit_id": visit_id,
-                            "patient_id": patient_id,
-                            "limit": query_limit,
-                        },
-                    ).mappings().all()
-                if not rows:
-                    rows = conn.execute(
-                        text(
-                            f"""
-                            SELECT *
-                            FROM cdm.{table_name}
-                            WHERE visit_id = :visit_id
-                            LIMIT :limit
-                            """
-                        ),
-                        {
-                            "visit_id": visit_id,
-                            "limit": query_limit,
-                        },
-                    ).mappings().all()
+                    if institute_id:
+                        rows = conn.execute(
+                            text(
+                                f"""
+                                SELECT *
+                                FROM cdm.{table_name}
+                                WHERE institute_id = :institute_id
+                                  AND visit_id = :visit_id
+                                LIMIT :limit
+                                """
+                            ),
+                            {
+                                "institute_id": institute_id,
+                                "visit_id": visit_id,
+                                "limit": query_limit,
+                            },
+                        ).mappings().all()
+                    else:
+                        rows = []
+                    if not rows and patient_id:
+                        rows = conn.execute(
+                            text(
+                                f"""
+                                SELECT *
+                                FROM cdm.{table_name}
+                                WHERE visit_id = :visit_id
+                                  AND patient_id = :patient_id
+                                LIMIT :limit
+                                """
+                            ),
+                            {
+                                "visit_id": visit_id,
+                                "patient_id": patient_id,
+                                "limit": query_limit,
+                            },
+                        ).mappings().all()
+                    if not rows:
+                        rows = conn.execute(
+                            text(
+                                f"""
+                                SELECT *
+                                FROM cdm.{table_name}
+                                WHERE visit_id = :visit_id
+                                LIMIT :limit
+                                """
+                            ),
+                            {
+                                "visit_id": visit_id,
+                                "limit": query_limit,
+                            },
+                        ).mappings().all()
             except Exception:
                 source_readiness[table_name] = "unavailable"
+                if strict_mode:
+                    structured_source_readiness[table_name] = "unavailable"
                 continue
-            source_readiness[table_name] = "partial" if len(rows) > limit else "complete"
+            source_partial = len(rows) > limit
             rows = rows[:limit]
-            if table_name in _STRUCTURED_SOURCE_ROW_FIELDS:
+            if strict_mode and not rows and _bundle_has_source_material(
+                bundle_payload, table_name
+            ):
+                source_partial = True
+            source_state = "partial" if source_partial else "complete"
+            source_readiness[table_name] = source_state
+            if strict_mode:
+                structured_source_readiness[table_name] = source_state
                 structured_source_rows[table_name] = [
                     {
                         field: row.get(field)
@@ -766,6 +827,9 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                     }
                 )
         bundle_payload["_source_table_readiness"] = source_readiness
+        bundle_payload["_structured_source_readiness"] = (
+            structured_source_readiness
+        )
         bundle_payload["_structured_source_rows"] = structured_source_rows
         try:
             if institute_id:
@@ -820,6 +884,25 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
             fallback_meta["admission_datetime"] = _safe_text(registration.get("admission_datetime"))
             fallback_meta["discharge_datetime"] = _safe_text(registration.get("discharge_datetime"))
     return fallback_items, fallback_meta
+
+
+def _bundle_has_source_material(
+    bundle_payload: Mapping[str, Any], source_table: str
+) -> bool:
+    structured = _safe_dict(bundle_payload.get("structured_context"))
+    inventories = (
+        _safe_list(bundle_payload.get("source_documents")),
+        _safe_list(structured.get("document_inventory")),
+    )
+    if any(
+        _item_source_table(item) == source_table
+        for inventory in inventories
+        for raw_item in inventory
+        if (item := _safe_dict(raw_item))
+    ):
+        return True
+    documents = _safe_dict(structured.get("documents"))
+    return bool(_safe_list(documents.get(source_table)))
 
 
 def _fetch_detail_service_fallback_items(visit_id: str) -> list[dict[str, Any]]:
@@ -900,20 +983,39 @@ def _build_supplement_text(
     return "\n".join(line for line in lines if line)
 
 
-def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medical_text: str = "") -> dict[str, Any]:
+def build_programmatic_evidence_payload(
+    *,
+    bundle: dict[str, Any] | None,
+    medical_text: str = "",
+    strict_structured_source_limits: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
     bundle_payload = dict(bundle or {})
     # 调用方携带的同名元数据不可作为来源证明；仅接受本次受控源表查询写回的值。
     bundle_payload.pop("_source_table_fallback_meta", None)
     bundle_payload.pop("_source_table_readiness", None)
+    bundle_payload.pop("_structured_source_readiness", None)
     bundle_payload.pop("_structured_source_rows", None)
     structured = _safe_dict(bundle_payload.get("structured_context"))
-    inventory_items = _flatten_inventory_items(structured, bundle_payload)
+    inventory_items = _flatten_inventory_items(
+        structured,
+        bundle_payload,
+        strict_structured_source_limits=strict_structured_source_limits,
+    )
     fallback_meta = _safe_dict(bundle_payload.get("_source_table_fallback_meta"))
     raw_source_readiness = _safe_dict(bundle_payload.get("_source_table_readiness"))
     source_readiness = {
         table_name: status
         for table_name in _SOURCE_TABLES
         if (status := _safe_text(raw_source_readiness.get(table_name)))
+        in _SOURCE_READINESS_STATES
+    }
+    raw_structured_source_readiness = _safe_dict(
+        bundle_payload.get("_structured_source_readiness")
+    )
+    structured_source_readiness = {
+        table_name: status
+        for table_name in _STRUCTURED_SOURCE_ROW_FIELDS
+        if (status := _safe_text(raw_structured_source_readiness.get(table_name)))
         in _SOURCE_READINESS_STATES
     }
     raw_structured_source_rows = _safe_dict(
@@ -983,6 +1085,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
             "discharge_time": discharge_time,
             "documents": documents,
             "source_readiness": source_readiness,
+            "structured_source_readiness": structured_source_readiness,
             "structured_source_rows": structured_source_rows,
             "risk_flags": _extract_risk_flags(
                 medical_text_value,

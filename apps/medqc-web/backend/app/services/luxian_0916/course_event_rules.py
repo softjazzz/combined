@@ -780,24 +780,6 @@ def _evaluate_018(context: Mapping[str, Any]) -> Luxian0916RuleResult:
     if early:
         return early
     assert events is not None
-    maturity_values = tuple(event.get("evaluation_window_mature") for event in events)
-    if any(value is not True and value is not False for value in maturity_values):
-        return _result(
-            "LX0916-018",
-            "data_quality_gap",
-            "critical_value_stage2_fact_unavailable",
-            "危急值事件的评价时间窗或病程原子事实未完整形成，无法安全判断。",
-            suggestion="补齐危急值事件关联病程的受控原子事实后重新质控。",
-            anchors=tuple(
-                _event_anchor(event, "evaluation_window_mature")
-                for event in events
-                if event.get("evaluation_window_mature") is not True
-                and event.get("evaluation_window_mature") is not False
-            ),
-        )
-    if any(value is False for value in maturity_values):
-        return _not_mature_result("LX0916-018", events)
-
     ready_facts: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     defect_facts: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     unresolved_anchors: list[Mapping[str, Any]] = []

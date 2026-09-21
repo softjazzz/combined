@@ -39,8 +39,9 @@ def build_critical_value_018_facts(
 
     ``programmatic_timeline.documents`` 是展示/语义投影，会丢弃 PL/PH 等字段；
     因此优先读取共享证据中的受控 ``structured_source_rows``，并以共享 Bundle
-    的原始库存作兼容回退。同时用 timeline 的 ``source_readiness`` 拒绝查询
-    失败或条数截断。无法证明覆盖时绝不把空事件解释为“无危急值”。
+    的原始库存作兼容回退。同时用 timeline 的
+    ``structured_source_readiness`` 拒绝三坐标不完整、严格查询失败或条数截断。
+    无法证明覆盖时绝不把空事件解释为“无危急值”。
     """
 
     (
@@ -308,6 +309,9 @@ def _trusted_time(value: Any) -> str | None:
 
 def _source_readiness(evidence_payload: Mapping[str, Any], source: str) -> str:
     timeline = _mapping(evidence_payload.get("programmatic_timeline"))
+    structured_readiness = _mapping(timeline.get("structured_source_readiness"))
+    if source in structured_readiness:
+        return _clean(structured_readiness.get(source)).lower()
     readiness = _mapping(timeline.get("source_readiness"))
     return _clean(readiness.get(source)).lower()
 

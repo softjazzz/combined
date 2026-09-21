@@ -277,12 +277,39 @@ def test_event_rules_report_compliance_with_confirmed_complete_facts(rule_id):
     assert result.status == "compliant"
 
 
-@pytest.mark.parametrize("rule_id", [f"LX0916-0{number}" for number in range(17, 21)])
+@pytest.mark.parametrize("rule_id", ("LX0916-017", "LX0916-019", "LX0916-020"))
 def test_existing_event_rules_wait_for_mature_evaluation_window(rule_id):
     result = _run(rule_id, _context(rule_id, evaluation_window_mature=False))
 
     assert result.status == "not_executed"
     assert result.reason_code == "evaluation_window_not_mature"
+
+
+@pytest.mark.parametrize(
+    ("states", "expected_status", "expected_reason"),
+    (
+        ({}, "compliant", "critical_value_documentation_complete"),
+        (
+            {"disposition_recorded": "absent"},
+            "non_compliant",
+            "critical_value_documentation_incomplete",
+        ),
+    ),
+)
+def test_critical_value_rule_delivers_running_results_without_maturity_wait(
+    states, expected_status, expected_reason
+):
+    result = _run(
+        "LX0916-018",
+        _context(
+            "LX0916-018",
+            evaluation_window_mature=False,
+            stage2_facts=_stage2_facts("event-018", states=states),
+        ),
+    )
+
+    assert result.status == expected_status
+    assert result.reason_code == expected_reason
 
 
 @pytest.mark.parametrize("fact_kind", _STAGE2_FACT_KINDS_BY_RULE["LX0916-018"])
