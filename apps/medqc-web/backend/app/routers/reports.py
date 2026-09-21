@@ -104,10 +104,15 @@ def _read_export_artifact(path: Path) -> bytes:
             getattr(current_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
         ):
             raise FileNotFoundError(path)
-        if (opened_stat.st_dev, opened_stat.st_ino) != (
-            current_stat.st_dev,
-            current_stat.st_ino,
-        ):
+        if not stat.S_ISREG(opened_stat.st_mode):
+            raise FileNotFoundError(path)
+
+        initial_identity = (file_stat.st_dev, file_stat.st_ino)
+        opened_identity = (opened_stat.st_dev, opened_stat.st_ino)
+        current_identity = (current_stat.st_dev, current_stat.st_ino)
+        # 初始目录项、实际打开的描述符和打开后的目录项必须指向同一文件。
+        # 否则攻击者可在首次 lstat 与 os.open 之间把普通文件替换为另一个普通文件。
+        if initial_identity != opened_identity or opened_identity != current_identity:
             raise FileNotFoundError(path)
         with os.fdopen(descriptor, "rb", closefd=True) as handle:
             descriptor = -1
@@ -119,7 +124,7 @@ def _read_export_artifact(path: Path) -> bytes:
 
 def _path_is_stale(path: Path, *, stale_before: float) -> bool:
     try:
-        return path.stat().st_mtime <= stale_before
+        return path.lstat().st_mtime <= stale_before
     except FileNotFoundError:
         return False
     except OSError:
@@ -136,7 +141,7 @@ def _cleanup_expired_exports(*, now: datetime | None = None) -> None:
             csv_path, expected_metadata_path = _export_paths(metadata_path.stem)
             if expected_metadata_path != metadata_path:
                 continue
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata = json.loads(_read_export_artifact(metadata_path))
             expired = not isinstance(metadata, dict) or _metadata_expired(metadata, now=current_time)
         except FileNotFoundError:
             # glob 后文件可能已被另一个清理者删除。

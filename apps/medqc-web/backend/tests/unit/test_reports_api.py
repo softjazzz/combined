@@ -404,14 +404,14 @@ class TestReportsAPI:
             encoding="utf-8",
         )
 
-        original_read_text = type(metadata_path).read_text
+        original_reader = reports_module._read_export_artifact
 
-        def remove_metadata_before_read(path, *args, **kwargs):
+        def remove_metadata_before_read(path):
             if path == metadata_path:
                 path.unlink()
-            return original_read_text(path, *args, **kwargs)
+            return original_reader(path)
 
-        monkeypatch.setattr(type(metadata_path), "read_text", remove_metadata_before_read)
+        monkeypatch.setattr(reports_module, "_read_export_artifact", remove_metadata_before_read)
 
         reports_module._cleanup_expired_exports(now=datetime.now(timezone.utc))
 
@@ -447,15 +447,15 @@ class TestReportsAPI:
         )
         current_time = datetime.now(timezone.utc)
         barrier = Barrier(2)
-        original_read_text = type(metadata_path).read_text
+        original_reader = reports_module._read_export_artifact
 
-        def synchronize_metadata_read(path, *args, **kwargs):
-            content = original_read_text(path, *args, **kwargs)
+        def synchronize_metadata_read(path):
+            content = original_reader(path)
             if path == metadata_path:
                 barrier.wait(timeout=5)
             return content
 
-        monkeypatch.setattr(type(metadata_path), "read_text", synchronize_metadata_read)
+        monkeypatch.setattr(reports_module, "_read_export_artifact", synchronize_metadata_read)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = [
@@ -523,6 +523,51 @@ class TestReportsAPI:
 
         assert csv_path.exists()
         assert metadata_path.exists()
+
+    def test_read_export_artifact_rejects_plain_file_replaced_before_open(self, monkeypatch, tmp_path):
+        """首次检查后、open 前替换为另一普通文件时必须拒绝。"""
+        artifact_path = tmp_path / "artifact.csv"
+        replacement_path = tmp_path / "replacement.csv"
+        artifact_path.write_bytes(b"original")
+        replacement_path.write_bytes(b"replacement")
+        original_open = os.open
+
+        def replace_before_open(path, flags):
+            os.replace(replacement_path, artifact_path)
+            return original_open(path, flags)
+
+        monkeypatch.setattr(reports_module.os, "open", replace_before_open)
+
+        with pytest.raises(FileNotFoundError):
+            reports_module._read_export_artifact(artifact_path)
+
+    def test_read_export_artifact_rejects_plain_file_replaced_after_open(self, monkeypatch, tmp_path):
+        """打开描述符后、复查目录项前换代时必须拒绝。"""
+        artifact_path = tmp_path / "artifact.csv"
+        replacement_path = tmp_path / "replacement.csv"
+        artifact_path.write_bytes(b"original")
+        replacement_path.write_bytes(b"replacement")
+        original_open = os.open
+        path_type = type(artifact_path)
+        original_lstat = path_type.lstat
+
+        def replace_after_open(path, flags):
+            descriptor = original_open(path, flags)
+            # Windows 默认不允许替换仍被打开的文件。用真实替代文件的目录项
+            # 模拟 open 之后发生的原子换代，验证描述符和当前目录项的身份绑定。
+            monkeypatch.setattr(
+                path_type,
+                "lstat",
+                lambda candidate: replacement_path.lstat()
+                if candidate == artifact_path
+                else original_lstat(candidate),
+            )
+            return descriptor
+
+        monkeypatch.setattr(reports_module.os, "open", replace_after_open)
+
+        with pytest.raises(FileNotFoundError):
+            reports_module._read_export_artifact(artifact_path)
 
     @pytest.mark.parametrize("artifact_suffix", (".json", ".csv"))
     def test_qc_export_download_rejects_link_or_reparse_artifacts(

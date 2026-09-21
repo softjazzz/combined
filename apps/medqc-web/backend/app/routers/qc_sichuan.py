@@ -4,6 +4,7 @@ import uuid
 import json
 import hashlib
 import logging
+import os
 import stat
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
@@ -528,9 +529,68 @@ def _is_saved_qc_result_file_within_directory(filepath: Path, base_dir: Path) ->
             getattr(file_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
         ):
             return False
-        return filepath.is_file() and filepath.resolve().parent == base_dir.resolve()
+        return stat.S_ISREG(file_stat.st_mode) and filepath.parent.resolve() == base_dir.resolve()
     except OSError:
         return False
+
+
+def _saved_qc_result_file_identity(file_stat: os.stat_result) -> tuple[int, int]:
+    """返回打开前后必须保持一致的目录项身份。"""
+
+    return (file_stat.st_dev, file_stat.st_ino)
+
+
+def _read_saved_qc_result_file(filepath: Path, base_dir: Path) -> Any:
+    """从已绑定身份的描述符读取历史结果，阻止检查后路径被替换。
+
+    ``detail``、``history``、``latest`` 共用这一边界：先拒绝链接、重解析点、
+    非普通文件和目录外路径；随后以 ``lstat -> open -> fstat/lstat`` 绑定初始
+    目录项、打开描述符和当前目录项为同一文件，最后才解析 JSON。
+    """
+
+    initial_stat = filepath.lstat()
+    if filepath.is_symlink() or (
+        getattr(initial_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    ):
+        raise OSError("历史质控结果不允许使用链接或重解析点")
+    if not stat.S_ISREG(initial_stat.st_mode):
+        raise OSError("历史质控结果必须是普通文件")
+    if filepath.parent.resolve() != base_dir.resolve():
+        raise OSError("历史质控结果位于存储目录之外")
+
+    open_flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        open_flags |= os.O_NOFOLLOW
+    file_descriptor = os.open(filepath, open_flags)
+    try:
+        opened_stat = os.fstat(file_descriptor)
+        current_stat = filepath.lstat()
+        if filepath.is_symlink() or (
+            getattr(current_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            raise OSError("历史质控结果在读取期间变为链接或重解析点")
+        if not stat.S_ISREG(opened_stat.st_mode) or not stat.S_ISREG(current_stat.st_mode):
+            raise OSError("历史质控结果在读取期间不再是普通文件")
+        initial_identity = _saved_qc_result_file_identity(initial_stat)
+        if (
+            _saved_qc_result_file_identity(opened_stat) != initial_identity
+            or _saved_qc_result_file_identity(current_stat) != initial_identity
+        ):
+            raise OSError("历史质控结果在读取期间被替换")
+
+        with os.fdopen(file_descriptor, "r", encoding="utf-8", closefd=False) as file:
+            return json.load(file)
+    finally:
+        os.close(file_descriptor)
+
+
+def _saved_qc_result_sort_mtime(filepath: Path) -> float:
+    """排序不得跟随链接；并发消失的目录项排到末尾后由受控读取跳过。"""
+
+    try:
+        return filepath.lstat().st_mtime
+    except OSError:
+        return float("-inf")
 
 
 def _load_saved_qc_result_by_id(result_id: str) -> Optional[Dict[str, Any]]:
@@ -540,13 +600,16 @@ def _load_saved_qc_result_by_id(result_id: str) -> Optional[Dict[str, Any]]:
     if not base_dir.exists():
         return None
     candidates = [base_dir / f"{result_id}.json"]
-    candidates.extend(sorted(base_dir.glob(f"{result_id}_*.json"), key=lambda path: path.stat().st_mtime, reverse=True))
+    candidates.extend(
+        sorted(
+            base_dir.glob(f"{result_id}_*.json"),
+            key=_saved_qc_result_sort_mtime,
+            reverse=True,
+        )
+    )
     for candidate in candidates:
         try:
-            if not _is_saved_qc_result_file_within_directory(candidate, base_dir):
-                continue
-            with candidate.open("r", encoding="utf-8") as file:
-                data = json.load(file)
+            data = _read_saved_qc_result_file(candidate, base_dir)
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning("读取质控结果文件失败 %s: %s", candidate, exc)
             continue
@@ -2917,15 +2980,16 @@ async def get_qc_history(
             )
 
         # 读取所有JSON文件
-        all_files = sorted(base_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        all_files = sorted(
+            base_dir.glob("*.json"),
+            key=_saved_qc_result_sort_mtime,
+            reverse=True,
+        )
         records = []
 
         for filepath in all_files:
             try:
-                if not _is_saved_qc_result_file_within_directory(filepath, base_dir):
-                    continue
-                with filepath.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
+                data = _read_saved_qc_result_file(filepath, base_dir)
                 if not isinstance(data, dict) or not _can_read_saved_qc_result(data, current_user):
                     continue
 
@@ -3018,13 +3082,14 @@ async def get_latest_qc_result(
         if not base_dir.exists():
             raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="暂无质控结果")
 
-        all_files = sorted(base_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        all_files = sorted(
+            base_dir.glob("*.json"),
+            key=_saved_qc_result_sort_mtime,
+            reverse=True,
+        )
         for filepath in all_files:
             try:
-                if not _is_saved_qc_result_file_within_directory(filepath, base_dir):
-                    continue
-                with filepath.open("r", encoding="utf-8") as file:
-                    data = json.load(file)
+                data = _read_saved_qc_result_file(filepath, base_dir)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("读取质控结果文件失败 %s: %s", filepath, exc)
                 continue

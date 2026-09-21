@@ -457,6 +457,10 @@ async def test_single_surgery_conflicting_explicit_procedure_is_data_gap_without
         ("胆囊切除术", "腹腔镜胆囊切除术"),
         ("腹腔镜胆囊切除术", "胆囊切除术"),
         ("肾镜取石术", "经皮肾镜取石术"),
+        (
+            "全子宫切除术+双侧输卵管切除术+盆腔粘连松解术",
+            "次全子宫切除术+双侧输卵管切除术+盆腔粘连松解术",
+        ),
     ),
 )
 async def test_single_surgery_identity_variant_is_data_gap_without_event_attribution(

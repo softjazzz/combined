@@ -31,6 +31,7 @@ _PROCEDURE_NARRATIVE_PREFIXES = (
     "拟行",
     "拟施",
 )
+_COMPOUND_PROCEDURE_SEPARATOR = re.compile(r"[+＋、，,；;]")
 
 
 class SurgeryEvent:
@@ -66,37 +67,53 @@ def normalize_surgery_name(value: Any) -> str:
     normalized = re.sub(
         r"[\s、，,。；;：:（）()\[\]【】]+", "", str(value or "")
     ).casefold()
-    return normalized.replace("置入术", "植入术")
+    return normalized
 
 
 def procedure_matches_surgery(procedure_name: Any, surgery_name: Any) -> bool:
     """以术式事实作主键的保守匹配，避免单一短词误关联。"""
 
-    left = normalize_surgery_name(procedure_name)
-    right = normalize_surgery_name(surgery_name)
-    if not left or not right:
+    components = _normalized_procedure_components(procedure_name)
+    surgery_components = _normalized_procedure_components(surgery_name)
+    if not components or not surgery_components:
         return False
-    if _same_or_approved_prefix_variant(left, right):
-        return True
-    components = [part for part in re.split(r"[+＋、，,；;]", left) if len(part) >= 4]
-    if not components:
-        return False
-    surgery_components = [
-        part for part in re.split(r"[+＋、，,；;]", right) if len(part) >= 4
-    ]
 
-    def component_matches(part: str) -> bool:
-        return any(
-            _same_or_approved_prefix_variant(part, surgery_component)
-            for surgery_component in surgery_components
-        )
-
-    matched = sum(1 for part in components if component_matches(part))
     if len(components) == 1:
         # 单一术式可对应同一次复合手术中的同名组件；“全/次全”等
         # 身份性差异不会通过 `_same_or_approved_prefix_variant`。
-        return matched == 1
-    return matched >= 2 and matched * 2 >= len(components)
+        return any(
+            _same_or_approved_prefix_variant(components[0], surgery_component)
+            for surgery_component in surgery_components
+        )
+
+    # 多组成项必须逐一建立双向一对一对应。共同的附加术式不能掩盖
+    # “全子宫/次全子宫”等明确核心术式冲突，也不把额外术式静默忽略。
+    if len(components) != len(surgery_components):
+        return False
+    unmatched_surgery_components = list(surgery_components)
+    for component in components:
+        matching_index = next(
+            (
+                index
+                for index, surgery_component in enumerate(unmatched_surgery_components)
+                if _same_or_approved_prefix_variant(component, surgery_component)
+            ),
+            None,
+        )
+        if matching_index is None:
+            return False
+        unmatched_surgery_components.pop(matching_index)
+    return not unmatched_surgery_components
+
+
+def _normalized_procedure_components(value: Any) -> tuple[str, ...]:
+    """先在原始术式文本上拆分，再逐项归一化，保留组成项边界。"""
+
+    return tuple(
+        normalized
+        for part in _COMPOUND_PROCEDURE_SEPARATOR.split(str(value or ""))
+        if (normalized := normalize_surgery_name(part))
+    )
 
 
 def _same_or_approved_prefix_variant(left: str, right: str) -> bool:
