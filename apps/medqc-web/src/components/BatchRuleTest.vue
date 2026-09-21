@@ -2057,6 +2057,7 @@ import {
 } from '@/utils/sampleMedicalRecords'
 import { loadCustomRules } from '@/utils/custom-rules-loader'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
+import { ApiService } from '@/services/apiService'
 
 // Props
 interface Props {
@@ -3133,17 +3134,11 @@ const getComplianceBadgeClass = (rate: number) => {
 
 const saveQCResultToServer = async (payload: Record<string, any>) => {
   try {
-    const response = await fetch(apiEndpoints.value.save, {
+    await ApiService.requestRaw({
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+      url: apiEndpoints.value.save,
+      data: payload,
     })
-
-    if (!response.ok) {
-      throw new Error(await response.text())
-    }
   } catch (error) {
     console.warn('自动保存质控结果失败', error)
   }

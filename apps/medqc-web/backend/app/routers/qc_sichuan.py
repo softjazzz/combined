@@ -469,6 +469,86 @@ class SaveQCResultRequest(BaseModel):
     model: Optional[str] = None  # 使用的模型名称
 
 
+_SAVED_QC_RESULT_ADMIN_ROLES = {"admin", "sync_admin", "super_admin"}
+
+
+def _saved_qc_results_directory() -> Path:
+    """文件型历史质控结果的唯一存储根目录。"""
+
+    return Path(__file__).resolve().parent.parent / "storage" / "qc_results"
+
+
+def _normalize_saved_qc_result_id(value: str) -> str:
+    """仅接受服务端生成的规范 UUID，杜绝把路由参数当作路径或 glob。"""
+
+    normalized = str(value or "").strip().lower()
+    try:
+        parsed = str(uuid.UUID(normalized))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise HTTPException(status_code=404, detail="质控结果不存在") from exc
+    if parsed != normalized:
+        raise HTTPException(status_code=404, detail="质控结果不存在")
+    return parsed
+
+
+def _can_read_all_saved_qc_results(current_user: Optional[Dict[str, Any]]) -> bool:
+    return bool(_extract_user_roles(current_user).intersection(_SAVED_QC_RESULT_ADMIN_ROLES))
+
+
+def _can_read_saved_qc_result(data: Dict[str, Any], current_user: Dict[str, Any]) -> bool:
+    if _can_read_all_saved_qc_results(current_user):
+        return True
+    owner_id = str(data.get("created_by") or "").strip()
+    return bool(owner_id) and owner_id == _current_user_id(current_user)
+
+
+def _saved_qc_result_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    """兼容历史空值，避免保存了 ``payload: null`` 的旧文件导致读取 500。"""
+
+    payload = data.get("payload")
+    return payload if isinstance(payload, dict) else {}
+
+
+def _saved_qc_result_model(data: Dict[str, Any]) -> Optional[str]:
+    payload = _saved_qc_result_payload(data)
+    evaluation_summary = payload.get("evaluation_summary")
+    evaluation_summary = evaluation_summary if isinstance(evaluation_summary, dict) else {}
+    llm_info = payload.get("llm_info") or data.get("llm_info") or {}
+    llm_info = llm_info if isinstance(llm_info, dict) else {}
+    return data.get("model") or evaluation_summary.get("model") or llm_info.get("model")
+
+
+def _is_saved_qc_result_file_within_directory(filepath: Path, base_dir: Path) -> bool:
+    try:
+        return filepath.is_file() and filepath.resolve().parent == base_dir.resolve()
+    except OSError:
+        return False
+
+
+def _load_saved_qc_result_by_id(result_id: str) -> Optional[Dict[str, Any]]:
+    """在唯一根目录内按规范 UUID 精确定位，不使用用户输入拼接路径。"""
+
+    base_dir = _saved_qc_results_directory()
+    if not base_dir.exists():
+        return None
+    candidates = [base_dir / f"{result_id}.json"]
+    candidates.extend(sorted(base_dir.glob(f"{result_id}_*.json"), key=lambda path: path.stat().st_mtime, reverse=True))
+    for candidate in candidates:
+        try:
+            if not _is_saved_qc_result_file_within_directory(candidate, base_dir):
+                continue
+            with candidate.open("r", encoding="utf-8") as file:
+                data = json.load(file)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("读取质控结果文件失败 %s: %s", candidate, exc)
+            continue
+        if not isinstance(data, dict):
+            continue
+        if str(data.get("id") or "").strip().lower() == result_id:
+            return data
+    return None
+
+
 def _grade_from_rate(rate: float) -> str:
     return "A" if rate >= 90 else "B" if rate >= 75 else "C"
 
@@ -2758,13 +2838,16 @@ async def export_workspace_batch_job(
 
 
 @router.post("/results/save")
-async def save_qc_result(request: Request, req: SaveQCResultRequest):
+async def save_qc_result(
+    request: Request,
+    req: SaveQCResultRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     try:
-        base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
+        base_dir = _saved_qc_results_directory()
         base_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         result_id = str(uuid.uuid4())
-        filename = f"{result_id}_{req.mode}_{timestamp}.json"
+        filename = f"{result_id}.json"
         filepath = base_dir / filename
 
         payload = {
@@ -2781,6 +2864,7 @@ async def save_qc_result(request: Request, req: SaveQCResultRequest):
             "payload": req.payload,
             "metadata": req.metadata,
             "model": req.model,  # 保存使用的模型名称
+            "created_by": _current_user_id(current_user),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
 
@@ -2788,7 +2872,8 @@ async def save_qc_result(request: Request, req: SaveQCResultRequest):
             json.dump(payload, f, ensure_ascii=False, indent=2)
 
         return success_response(
-            data={"id": result_id, "path": str(filepath)},
+            # 保持既有字段形状，但不再泄露服务器文件系统绝对路径。
+            data={"id": result_id, "path": f"/api/v1/qc/sichuan/results/{result_id}"},
             message="质控结果保存成功",
             trace_id=get_trace_id(request),
         )
@@ -2805,11 +2890,12 @@ async def get_qc_history(
     mode: Optional[str] = Query(None),  # 新增：质控模式筛选 (optimized_batch/sequential_batch)
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
-    has_issues: Optional[bool] = Query(None)
+    has_issues: Optional[bool] = Query(None),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """获取质控结果历史列表"""
     try:
-        base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
+        base_dir = _saved_qc_results_directory()
         if not base_dir.exists():
             return success_response(
                 data={
@@ -2828,14 +2914,21 @@ async def get_qc_history(
 
         for filepath in all_files:
             try:
+                if not _is_saved_qc_result_file_within_directory(filepath, base_dir):
+                    continue
                 with filepath.open("r", encoding="utf-8") as f:
                     data = json.load(f)
+                if not isinstance(data, dict) or not _can_read_saved_qc_result(data, current_user):
+                    continue
 
                 # 提取摘要信息
                 stats = data.get("stats", {})
+                stats = stats if isinstance(stats, dict) else {}
                 metadata = data.get("metadata", {})
-                payload = data.get("payload", {})
+                metadata = metadata if isinstance(metadata, dict) else {}
+                payload = _saved_qc_result_payload(data)
                 evaluation_summary = payload.get("evaluation_summary", {})
+                evaluation_summary = evaluation_summary if isinstance(evaluation_summary, dict) else {}
 
                 # 应用筛选条件
                 if document_type and data.get("document_type") != document_type:
@@ -2864,12 +2957,7 @@ async def get_qc_history(
                 total_rules = evaluation_summary.get("total_rules") or stats.get("total", len(data.get("rule_ids", [])))
 
                 # 获取模型名称（优先从 evaluation_summary，其次顶层 model，最后从 llm_info 中获取）
-                llm_info = payload.get("llm_info") or data.get("llm_info") or {}
-                model = (
-                    evaluation_summary.get("model")
-                    or data.get("model")
-                    or llm_info.get("model")
-                )
+                model = _saved_qc_result_model(data)
 
                 record = {
                     "id": data.get("id", filepath.stem),
@@ -2912,85 +3000,53 @@ async def get_qc_history(
 
 
 @router.get("/results/latest")
-async def get_latest_qc_result(request: Request):
+async def get_latest_qc_result(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     """获取最新一次质控结果"""
     try:
-        base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
+        base_dir = _saved_qc_results_directory()
         if not base_dir.exists():
             raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="暂无质控结果")
 
-        # 获取最新的文件
         all_files = sorted(base_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not all_files:
-            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="暂无质控结果")
-
-        latest_file = all_files[0]
-        with latest_file.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        return success_response(
-            data=data,
-            message="获取最新质控结果成功",
-            trace_id=get_trace_id(request),
-        )
+        for filepath in all_files:
+            try:
+                if not _is_saved_qc_result_file_within_directory(filepath, base_dir):
+                    continue
+                with filepath.open("r", encoding="utf-8") as file:
+                    data = json.load(file)
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("读取质控结果文件失败 %s: %s", filepath, exc)
+                continue
+            if not isinstance(data, dict) or not _can_read_saved_qc_result(data, current_user):
+                continue
+            return success_response(
+                data=data,
+                message="获取最新质控结果成功",
+                trace_id=get_trace_id(request),
+            )
+        raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="暂无质控结果")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取最新质控结果失败: {e}")
 
 
-@router.get("/results/{result_id:path}")
-async def get_qc_result_detail(request: Request, result_id: str):
+@router.get("/results/{result_id}")
+async def get_qc_result_detail(
+    request: Request,
+    result_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     """获取指定ID的质控结果详情"""
     try:
-        base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
-        if not base_dir.exists():
+        normalized_result_id = _normalize_saved_qc_result_id(result_id)
+        data = _load_saved_qc_result_by_id(normalized_result_id)
+        if not data or not _can_read_saved_qc_result(data, current_user):
             raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="质控结果不存在")
-
-        # 首先尝试直接匹配文件名（result_id.json）
-        direct_match = base_dir / f"{result_id}.json"
-        if direct_match.exists():
-            with direct_match.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            payload = data.get("payload", {})
-            evaluation_summary = payload.get("evaluation_summary", {})
-            llm_info = payload.get("llm_info") or data.get("llm_info") or {}
-            model = (
-                data.get("model")
-                or evaluation_summary.get("model")
-                or llm_info.get("model")
-            )
-            if model and not data.get("model"):
-                data["model"] = model
-
-            return success_response(
-                data=data,
-                message="获取质控结果详情成功",
-                trace_id=get_trace_id(request),
-            )
-
-        # 如果直接匹配失败，尝试查找以result_id开头的文件（result_id_*.json）
-        matching_files = list(base_dir.glob(f"{result_id}_*.json"))
-        if not matching_files:
-            # 最后尝试查找包含result_id的文件
-            matching_files = [f for f in base_dir.glob("*.json") if result_id in f.stem]
-
-        if not matching_files:
-            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail=f"质控结果不存在: {result_id}")
-
-        filepath = matching_files[0]
-        with filepath.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        payload = data.get("payload", {})
-        evaluation_summary = payload.get("evaluation_summary", {})
-        llm_info = payload.get("llm_info") or data.get("llm_info") or {}
-        model = (
-            data.get("model")
-            or evaluation_summary.get("model")
-            or llm_info.get("model")
-        )
+        model = _saved_qc_result_model(data)
         if model and not data.get("model"):
             data["model"] = model
 
