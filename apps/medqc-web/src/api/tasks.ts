@@ -34,6 +34,7 @@ async function request<T = any>(
 export type TaskType = 'one_time' | 'scheduled'
 export type TaskStatus = 'draft' | 'sampling' | 'assigned' | 'in_progress' | 'completed' | 'cancelled'
 export type TaskTab = 'all' | 'created' | 'received'
+export type TaskTodo = 'assigned' | 'in_progress' | 'due_soon'
 export type SamplingMethod = 'all' | 'count' | 'percentage'
 export type AssignMethod = 'keep' | 'by_department' | 'by_ratio' | 'by_type'
 
@@ -101,6 +102,13 @@ export interface TaskStats {
     cancelled: number
 }
 
+export interface TaskTodoStats {
+    as_of: string
+    assigned: number
+    in_progress: number
+    due_soon: number
+}
+
 // ============= API 函数 =============
 
 /** 获取任务列表 */
@@ -108,6 +116,8 @@ export async function getTaskList(params?: {
     tab?: TaskTab
     status?: TaskStatus
     keyword?: string
+    todo?: TaskTodo
+    as_of?: string
     page?: number
     page_size?: number
 }) {
@@ -134,6 +144,11 @@ export async function getTaskStats(params?: { tab?: TaskTab }) {
         method: 'GET',
         url: `${BASE_URL}/stats${query ? `?${query}` : ''}`,
     })
+}
+
+/** 获取当前用户全部场景的任务待办统计 */
+export async function getTaskTodoStats() {
+    return request<TaskTodoStats>({ method: 'GET', url: `${BASE_URL}/todo-stats` })
 }
 
 /** 获取任务详情 */

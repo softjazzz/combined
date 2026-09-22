@@ -12,6 +12,8 @@
           </button>
         </section>
 
+        <HomeTaskTodos v-if="canReadTasks" />
+
         <section
           v-if="loadError"
           class="qc-home-notice qc-home-notice--error"
@@ -388,6 +390,7 @@ import {
 } from 'lucide-vue-next'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
+import HomeTaskTodos from './HomeTaskTodos.vue'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePhysicianItem,
@@ -438,6 +441,7 @@ const CONCLUSION_STATUS_META = [
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const taskReadRoles = new Set(['admin', 'qc_manager', 'qc_staff', 'doctor'])
 // 首次进入即处于加载态，避免请求尚未发起时短暂展示无内容的页面框架。
 const loading = ref(true)
 const loadError = ref(false)
@@ -450,6 +454,7 @@ const syncingFromRoute = ref(false)
 const homeData = ref<WorkstationHomePayload | null>(null)
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
+const canReadTasks = computed(() => authStore.userRoles.some((role) => taskReadRoles.has(role)))
 const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true)
 const departmentOptions = computed(() => homeData.value?.department_options ?? [])
 const scopeHospitalText = computed(() =>

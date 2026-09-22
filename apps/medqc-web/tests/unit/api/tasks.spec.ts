@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { ApiService } from '@/services/apiService'
-import { getTaskStats } from '@/api/tasks'
+import { getTaskList, getTaskStats, getTaskTodoStats } from '@/api/tasks'
 
 vi.mock('@/services/apiService', () => ({ ApiService: { requestRaw: vi.fn() } }))
 
@@ -49,6 +49,38 @@ describe('任务统计 API', () => {
     expect(ApiService.requestRaw).toHaveBeenCalledWith({
       method: 'GET',
       url: '/api/v1/tasks/stats',
+    })
+  })
+
+  it('获取个人待办统计并按服务端时点编码下钻条件', async () => {
+    const todoStats = {
+      as_of: '2026-09-22T07:30:00+00:00',
+      assigned: 2,
+      in_progress: 1,
+      due_soon: 3,
+    }
+    vi.mocked(ApiService.requestRaw).mockResolvedValueOnce(response(todoStats))
+
+    await expect(getTaskTodoStats()).resolves.toEqual({
+      success: true,
+      data: todoStats,
+      message: undefined,
+    })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url: '/api/v1/tasks/todo-stats',
+    })
+
+    await getTaskList({
+      tab: 'received',
+      todo: 'due_soon',
+      as_of: todoStats.as_of,
+      page: 2,
+    })
+    expect(ApiService.requestRaw).toHaveBeenLastCalledWith({
+      method: 'GET',
+      url:
+        '/api/v1/tasks?tab=received&todo=due_soon&as_of=2026-09-22T07%3A30%3A00%2B00%3A00&page=2',
     })
   })
 })

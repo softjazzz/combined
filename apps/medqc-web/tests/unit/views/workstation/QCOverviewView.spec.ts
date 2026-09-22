@@ -9,7 +9,7 @@ const routeState = vi.hoisted(() => ({
 }))
 const routerPush = vi.hoisted(() => vi.fn())
 const routerReplace = vi.hoisted(() => vi.fn())
-const authState = vi.hoisted(() => ({ isDemoAccount: false }))
+const authState = vi.hoisted(() => ({ isDemoAccount: false, roles: ['admin'] as string[] }))
 
 vi.mock('@/services/apiService', () => ({
   ApiService: { get: apiGet },
@@ -38,6 +38,7 @@ vi.mock('vue-router', async () => {
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     user: { is_demo_account: authState.isDemoAccount },
+    userRoles: authState.roles,
   }),
 }))
 
@@ -167,6 +168,32 @@ describe('QCOverviewView', () => {
     routerReplace.mockClear()
     routeState.query = {}
     authState.isDemoAccount = false
+    authState.roles = ['admin']
+  })
+
+  it.each(['admin', 'qc_manager', 'qc_staff', 'doctor'])(
+    '任务 READ 角色 %s 挂载独立待办模块，临床概览失败不影响挂载',
+    async (role) => {
+      authState.roles = [role]
+      apiGet.mockResolvedValue({ success: false, error: 'network failed', data: null })
+      const wrapper = mountView()
+      await flushHomeLoad()
+
+      expect(wrapper.findComponent({ name: 'HomeTaskTodos' }).exists()).toBe(true)
+      expect(wrapper.find('[data-testid="home-load-error"]').exists()).toBe(true)
+    },
+  )
+
+  it.each([
+    { label: 'sync_admin', roles: ['sync_admin'] },
+    { label: 'super_admin', roles: ['super_admin'] },
+    { label: 'sync_admin/super_admin', roles: ['sync_admin', 'super_admin'] },
+  ])('角色 $label 无任务 READ 权限时不挂载待办模块', async ({ roles }) => {
+      authState.roles = roles
+      const wrapper = mountView()
+      await flushHomeLoad()
+
+      expect(wrapper.findComponent({ name: 'HomeTaskTodos' }).exists()).toBe(false)
   })
 
   it('以客户可读范围和真实 KPI 展示概况，不重复病历池', async () => {

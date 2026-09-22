@@ -10,6 +10,35 @@
       </p>
     </div>
 
+    <div
+      v-if="invalidTodoQuery"
+      data-testid="task-todo-invalid"
+      role="alert"
+      class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-8 text-sm text-red-700"
+    >
+      <span>待办链接无效，未加载无范围任务列表。</span>
+      <a-button
+        size="small"
+        @click="void clearTodoScope()"
+      >
+        清除无效范围
+      </a-button>
+    </div>
+    <div
+      v-else-if="activeTodo"
+      data-testid="task-todo-scope"
+      class="flex items-center justify-between gap-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 mb-8 text-sm text-blue-800"
+    >
+      <span>待办范围：{{ todoScopeLabel }} · 全部场景 · 基准 {{ formatDate(todoAsOf || '') }}</span>
+      <a-button
+        data-testid="clear-task-todo"
+        size="small"
+        @click="void clearTodoScope()"
+      >
+        清除待办范围
+      </a-button>
+    </div>
+
     <!-- 任务统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
@@ -207,6 +236,23 @@
         </a-button>
       </div>
 
+      <div
+        v-if="listError"
+        data-testid="task-list-error"
+        role="alert"
+        class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 mb-5 text-sm text-red-700"
+      >
+        <span>任务列表暂不可用：{{ listError }}</span>
+        <a-button
+          data-testid="retry-task-list"
+          size="small"
+          :loading="loading"
+          @click="fetchTasks"
+        >
+          重试
+        </a-button>
+      </div>
+
       <ProStandardTable
         :columns="columns"
         :data-source="tasks"
@@ -362,13 +408,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getTaskList, getTaskStats, getTaskProgress, updateTask } from '@/api/tasks'
-import type { TaskItem, TaskStats, TaskProgress, TaskStatus } from '@/api/tasks'
+import type { TaskItem, TaskStats, TaskProgress, TaskStatus, TaskTodo } from '@/api/tasks'
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -386,6 +432,7 @@ import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 // 响应式数据
 const loading = ref(false)
@@ -394,6 +441,13 @@ const searchKeyword = ref('')
 type DateRange = [Dayjs, Dayjs] | null
 const dateRange = ref<DateRange>(null)
 const tasks = ref<TaskItem[]>([])
+const listError = ref('')
+const initialTodoQuery = parseTodoQuery(route.query.todo, route.query.as_of)
+const activeTodo = ref<TaskTodo | undefined>(initialTodoQuery.todo)
+const todoAsOf = ref<string | undefined>(initialTodoQuery.asOf)
+const invalidTodoQuery = ref(initialTodoQuery.invalid)
+let syncingTodoRoute = false
+let listRequestId = 0
 
 // 统计
 const taskStats = ref<TaskStats | null>(null)
@@ -411,6 +465,15 @@ const completionRate = computed(() => {
   const total = taskStats.value.total
   if (!total) return 0
   return Math.round((taskStats.value.completed / total) * 1000) / 10
+})
+
+const todoScopeLabel = computed(() => {
+  const labels: Record<TaskTodo, string> = {
+    assigned: '未开始任务',
+    in_progress: '进行中任务',
+    due_soon: '24 小时内到期',
+  }
+  return activeTodo.value ? labels[activeTodo.value] : ''
 })
 
 // 详情抽屉
@@ -501,6 +564,71 @@ const formatDate = (dateStr: string) => {
   }
 }
 
+function parseTaskTodo(value: unknown): TaskTodo | undefined {
+  return value === 'assigned' || value === 'in_progress' || value === 'due_soon'
+    ? value
+    : undefined
+}
+
+function parseAsOf(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) || Number.isNaN(Date.parse(value))) return undefined
+  return value
+}
+
+function parseTodoQuery(todoValue: unknown, asOfValue: unknown) {
+  const todo = parseTaskTodo(todoValue)
+  const asOf = parseAsOf(asOfValue)
+  const hasTodo = todoValue !== undefined
+  const hasAsOf = asOfValue !== undefined
+  return {
+    todo,
+    asOf: todo ? asOf : undefined,
+    invalid: (hasTodo && !todo) || (hasAsOf && (!todo || !asOf)),
+  }
+}
+
+function syncTodoFromRoute(todoValue: unknown, asOfValue: unknown) {
+  const nextQuery = parseTodoQuery(todoValue, asOfValue)
+  activeTodo.value = nextQuery.todo
+  todoAsOf.value = nextQuery.asOf
+  invalidTodoQuery.value = nextQuery.invalid
+}
+
+function clearLocalFilters() {
+  selectedStatus.value = undefined
+  searchKeyword.value = ''
+  dateRange.value = null
+  pagination.value.current = 1
+}
+
+function queryWithoutTodo() {
+  const query = { ...route.query }
+  delete query.todo
+  delete query.as_of
+  return query
+}
+
+function invalidateTaskList() {
+  listRequestId += 1
+  tasks.value = []
+  pagination.value.total = 0
+  listError.value = ''
+  loading.value = false
+}
+
+async function clearTodoRoute() {
+  if (route.query.todo === undefined && route.query.as_of === undefined) return
+  invalidateTaskList()
+  syncingTodoRoute = true
+  syncTodoFromRoute(undefined, undefined)
+  try {
+    await router.replace({ query: queryWithoutTodo() })
+  } finally {
+    syncingTodoRoute = false
+  }
+}
+
 const formatStatValue = (value: number | null, suffix = '') => {
   if (statsLoading.value) return '加载中'
   if (value === null) return '不可用'
@@ -534,27 +662,45 @@ const fetchStats = async () => {
 }
 
 const fetchTasks = async () => {
+  const requestId = ++listRequestId
+  listError.value = ''
+  if (invalidTodoQuery.value) {
+    tasks.value = []
+    pagination.value.total = 0
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     const res = await getTaskList({
       tab: 'received',
+      todo: activeTodo.value,
+      as_of: activeTodo.value ? todoAsOf.value : undefined,
       keyword: searchKeyword.value || undefined,
       status: selectedStatus.value,
       page: pagination.value.current,
       page_size: pagination.value.pageSize,
     })
 
+    if (requestId !== listRequestId) return
     if (res.success && res.data) {
       const data = res.data
       tasks.value = data.items || []
       pagination.value.total = data.total || 0
     } else {
-      message.error(res.message || '获取任务列表失败')
+      tasks.value = []
+      pagination.value.total = 0
+      listError.value = res.message || '获取任务列表失败'
+      message.error(listError.value)
     }
-  } catch (error) {
-    message.error('获取数据失败')
+  } catch {
+    if (requestId !== listRequestId) return
+    tasks.value = []
+    pagination.value.total = 0
+    listError.value = '网络异常或服务器不可用'
+    message.error(listError.value)
   } finally {
-    loading.value = false
+    if (requestId === listRequestId) loading.value = false
   }
 }
 
@@ -570,7 +716,7 @@ const handleStartTask = () => {
   }
 }
 
-const handleViewByStatus = (status: TaskStatus) => {
+const handleViewByStatus = async (status: TaskStatus) => {
   if (statsLoading.value) {
     message.warning('任务统计正在加载，请稍后重试')
     return
@@ -589,9 +735,9 @@ const handleViewByStatus = (status: TaskStatus) => {
     message.info('没有待处理的事项')
     return
   }
+  clearLocalFilters()
+  await clearTodoRoute()
   selectedStatus.value = status
-  searchKeyword.value = ''
-  dateRange.value = null
   handleFilter()
 }
 
@@ -604,11 +750,15 @@ const handleFilter = () => {
   fetchTasks()
 }
 
-const handleResetFilter = () => {
-  selectedStatus.value = undefined
-  searchKeyword.value = ''
-  dateRange.value = null
+const clearTodoScope = async () => {
   pagination.value.current = 1
+  await clearTodoRoute()
+  fetchTasks()
+}
+
+const handleResetFilter = async () => {
+  clearLocalFilters()
+  await clearTodoRoute()
   fetchTasks()
 }
 
@@ -660,6 +810,17 @@ const handleTableChange = (pag: TablePaginationConfig) => {
   if (pag.pageSize) pagination.value.pageSize = pag.pageSize
   fetchTasks()
 }
+
+watch(
+  [() => route.query.todo, () => route.query.as_of],
+  ([todoValue, asOfValue]) => {
+    if (syncingTodoRoute) return
+    invalidateTaskList()
+    syncTodoFromRoute(todoValue, asOfValue)
+    clearLocalFilters()
+    void fetchTasks()
+  },
+)
 
 onMounted(() => {
   fetchTasks()

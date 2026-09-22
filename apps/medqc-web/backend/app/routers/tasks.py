@@ -15,7 +15,7 @@
 import uuid
 import logging
 import random
-from datetime import datetime
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional, Dict, Any, List, Literal
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
@@ -42,6 +42,7 @@ from ..core.permissions import (
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 logger = logging.getLogger(__name__)
+SHANGHAI_TZ = timezone(timedelta(hours=8))
 
 
 
@@ -58,6 +59,68 @@ def _get_task_scope_user_id(current_user: dict) -> str:
     if not user_id or not str(user_id).strip():
         raise HTTPException(status_code=401, detail="当前用户缺少有效身份")
     return str(user_id)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_todo_as_of(value: Optional[str]) -> datetime:
+    if value is None:
+        return _utc_now()
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        raise HTTPException(status_code=422, detail="as_of 必须是带时区的 ISO 时间")
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="as_of 必须包含时区")
+    try:
+        as_of = parsed.astimezone(timezone.utc)
+        as_of + timedelta(hours=24)
+    except (OverflowError, ValueError):
+        raise HTTPException(status_code=422, detail="as_of 超出支持范围")
+    return as_of
+
+
+def _parse_task_deadline(value: Any) -> Optional[datetime]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if len(text) == 10:
+        try:
+            return datetime.combine(date.fromisoformat(text), time.max, SHANGHAI_TZ).astimezone(
+                timezone.utc
+            )
+        except (OverflowError, ValueError):
+            return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        parsed = parsed.replace(tzinfo=SHANGHAI_TZ)
+    try:
+        return parsed.astimezone(timezone.utc)
+    except (OverflowError, ValueError):
+        return None
+
+
+def _task_matches_todo(task: dict, todo: str, as_of: datetime) -> bool:
+    status = task.get("status")
+    if todo in {"assigned", "in_progress"}:
+        return status == todo
+    if status not in {"assigned", "in_progress"}:
+        return False
+    deadline = _parse_task_deadline(task.get("deadline"))
+    return deadline is not None and as_of < deadline <= as_of + timedelta(hours=24)
+
+
+def _task_todo_counts(rows: List[dict], as_of: datetime) -> Dict[str, int]:
+    return {
+        "assigned": sum(row.get("status") == "assigned" for row in rows),
+        "in_progress": sum(row.get("status") == "in_progress" for row in rows),
+        "due_soon": sum(_task_matches_todo(row, "due_soon", as_of) for row in rows),
+    }
 
 
 async def _apply_task_tab_scope(sb, query, tab: str, current_user: dict):
@@ -101,6 +164,7 @@ async def create_task(
     """
     创建质控抽查任务
     """
+    creator_id = _get_task_scope_user_id(current_user)
     task_id = str(uuid.uuid4())
     task_number = _generate_task_number()
 
@@ -121,7 +185,7 @@ async def create_task(
         "progress": 0,
         "total_records": 0,
         "completed_records": 0,
-        "creator_id": current_user.get("user_id", ""),
+        "creator_id": creator_id,
         "creator_name": current_user.get("display_name", ""),
         "deadline": task_data.deadline,
         "created_at": datetime.now().isoformat(),
@@ -159,6 +223,10 @@ async def list_tasks(
     ),
     status: Optional[str] = Query(None, description="任务状态"),
     keyword: Optional[str] = Query(None, description="搜索关键词"),
+    todo: Optional[Literal["assigned", "in_progress", "due_soon"]] = Query(
+        None, description="个人待办范围"
+    ),
+    as_of: Optional[str] = Query(None, description="待办判断时点（带时区 ISO 时间）"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     current_user: dict = Depends(get_current_user),
@@ -166,12 +234,19 @@ async def list_tasks(
     """
     获取任务列表（支持按标签/状态/关键词筛选）
     """
+    if todo and tab != "received":
+        raise HTTPException(status_code=422, detail="todo 仅支持 received 标签")
+    todo_as_of = _parse_todo_as_of(as_of) if todo or as_of is not None else None
+
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
 
     try:
-        query = sb.table('qc_tasks').select('*', count='exact')
+        if todo:
+            query = sb.table('qc_tasks').select('*')
+        else:
+            query = sb.table('qc_tasks').select('*', count='exact')
 
         query = await _apply_task_tab_scope(sb, query, tab, current_user)
         if query is None:
@@ -187,12 +262,22 @@ async def list_tasks(
                 f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
             )
 
+        query = query.order('created_at', desc=True)
         offset = (page - 1) * page_size
-        query = query.order('created_at', desc=True).range(offset, offset + page_size - 1)
+        if not todo:
+            query = query.range(offset, offset + page_size - 1)
 
         resp = await async_execute(query)
         data = list(getattr(resp, 'data', None) or [])
-        total = getattr(resp, 'count', None) or len(data)
+        if todo:
+            data = [
+                row for row in data
+                if _task_matches_todo(row, todo, todo_as_of)
+            ]
+            total = len(data)
+            data = data[offset:offset + page_size]
+        else:
+            total = getattr(resp, 'count', None) or len(data)
 
         return paginated_response(
             items=data, total=total, page=page, page_size=page_size,
@@ -253,6 +338,40 @@ async def get_task_stats(
             "cancelled": status_counts.get("cancelled", 0),
         },
         message="获取任务统计成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/todo-stats")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def get_task_todo_stats(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """获取当前用户收到任务的待办计数。"""
+    _get_task_scope_user_id(current_user)
+    as_of = _utc_now()
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+
+    try:
+        query = sb.table("qc_tasks").select("id,status,deadline")
+        query = await _apply_task_tab_scope(sb, query, "received", current_user)
+        rows = []
+        if query is not None:
+            resp = await async_execute(query)
+            rows = list(getattr(resp, "data", None) or [])
+        counts = _task_todo_counts(rows, as_of)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"获取任务待办统计失败: {exc}")
+        raise HTTPException(status_code=500, detail="获取任务待办统计失败，请稍后重试") from exc
+
+    return success_response(
+        data={"as_of": as_of.isoformat(), **counts},
+        message="获取任务待办统计成功",
         trace_id=get_trace_id(request),
     )
 
